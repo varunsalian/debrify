@@ -1,3 +1,4 @@
+import '../features/search/presentation/search_focus_controller.dart';
 import '../features/search/presentation/keyword_focus_controller.dart';
 import '../features/search/presentation/keyword_source_tabs.dart';
 import '../features/search/presentation/keyword_search_page.dart';
@@ -413,14 +414,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool get _titleSearchPolicyReady => _metadataFeatureController.current.ready;
   String _titleSearchText = '';
   bool _titleSearchComposing = false;
-  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'search_field');
+  late final _searchFocus = SearchFocusController(
+    onSourcesVisibilityChanged: () {
+      if (mounted) setState(() {});
+    },
+  );
+  FocusNode get _searchFocusNode => _searchFocus.field;
   final TvSearchFocusHandoff _searchSubmitFocus = TvSearchFocusHandoff();
   // DPAD focus targets for the Catalog / Keyword / Lists selector, so the
   // toggle is reachable with a remote (arrow-up from the search field).
-  final FocusNode _modeCatalogNode = FocusNode(debugLabel: 'mode_catalog');
-  final FocusNode _modeKeywordNode = FocusNode(debugLabel: 'mode_keyword');
-  final FocusNode _modeListsNode = FocusNode(debugLabel: 'mode_lists');
-  final FocusNode _modeDropdownNode = FocusNode(debugLabel: 'mode_dropdown');
+  FocusNode get _modeCatalogNode => _searchFocus.catalog;
+  FocusNode get _modeKeywordNode => _searchFocus.keyword;
+  FocusNode get _modeListsNode => _searchFocus.lists;
+  FocusNode get _modeDropdownNode => _searchFocus.dropdown;
 
   // Dedicated MDBList list-search state. Lists is its own Search mode; it
   // never runs as part of Catalog search. Each result card hands off via
@@ -539,8 +545,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Whether the unified (non-TV) catalog Sources bar under the field is shown.
   /// Driven by search-field focus with a delayed hide (see
   /// [_onSearchFocusForSources]) so a click on the button isn't lost.
-  bool _catalogSourcesBarShown = false;
-  Timer? _catalogSourcesHideTimer;
+  bool get _catalogSourcesBarShown => _searchFocus.sourcesVisible;
 
   /// Source tab strip (All / per-source), single-select on top of the
   /// Providers multi-select. Null = All.
@@ -2688,13 +2693,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _titleSearch.removeListener(_publishTitleSuggestions);
     _titleSearch.dispose();
     _titleSuggestions.dispose();
-    _catalogSourcesHideTimer?.cancel();
     _searchFocusNode.removeListener(_onSearchFocusForSources);
-    _searchFocusNode.dispose();
-    _modeCatalogNode.dispose();
-    _modeKeywordNode.dispose();
-    _modeListsNode.dispose();
-    _modeDropdownNode.dispose();
+    _searchFocus.dispose();
     _disposeListsNodes();
     _discSourceNode.dispose();
     _discFocused.dispose();
@@ -5386,11 +5386,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// avoid stealing focus from the user in [_maybeAutoFocusBoard].
   bool _boardHasFocus() {
     bool anyOf(List<FocusNode> ns) => ns.any((n) => n.hasFocus);
-    if (_searchFocusNode.hasFocus ||
-        _modeCatalogNode.hasFocus ||
-        _modeKeywordNode.hasFocus ||
-        _modeListsNode.hasFocus ||
-        _modeDropdownNode.hasFocus ||
+    if (_searchFocus.hasFocus ||
         _discSourceNode.hasFocus ||
         // Spotlight's hero is a focus target the rail lists know nothing
         // about; without this the arrival machinery thinks the board is
@@ -5514,124 +5510,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  void _focusContent() {
-    // Discover tab: enter on the Source dropdown (the leading filter); Down from
-    // there drops into the grid.
-    if (widget.discoverMode) {
-      _discSourceNode.requestFocus();
-      return;
-    }
-    // Dedicated Search tab: land on the results when they're on-screen, else the
-    // field (the blank prompt has nothing focusable below it). Only focus board
-    // rows when a query is actually showing them — otherwise their nodes aren't
-    // mounted and focus would be stranded.
-    if (widget.searchMode) {
-      if (_mode == SearchMode.keyword) {
-        if (_kwToolbarVisible) {
-          _kwToolbarNodes.first.requestFocus();
-        } else {
-          _searchFocusNode.requestFocus();
-        }
-        return;
-      }
-      if (_mode == SearchMode.lists) {
-        if (_listsResults.isNotEmpty && _listsNodes.isNotEmpty) {
-          _listsNodes.first.requestFocus();
-        } else {
-          _searchFocusNode.requestFocus();
-        }
-        return;
-      }
-      // Only when result rows are actually mounted. Mid-search is fine now:
-      // the board clears at search start and rows stream in, so a non-empty
-      // _rowNodes always belongs to the CURRENT query (never a stale set).
-      if (_catalogQuery.isNotEmpty &&
-          _rowNodes.isNotEmpty &&
-          _rowNodes.first.isNotEmpty) {
-        if (_spotlightKey.currentState != null) {
-          _spotlightKey.currentState!.focusShelf(0);
-        } else {
-          _rowNodes.first.first.requestFocus();
-        }
-      } else {
-        _searchFocusNode.requestFocus();
-      }
-      return;
-    }
-    if (_mode == SearchMode.keyword) {
-      // Toolbar + result rows render together, so entering the content lands on
-      // the toolbar first (Down then reaches the rows). When it isn't visible
-      // (loading / error / pre-search) nothing below is focusable, so keep the
-      // search field rather than a stale, detached result node.
-      if (_kwToolbarVisible) {
-        _kwToolbarNodes.first.requestFocus();
-      } else {
-        _searchFocusNode.requestFocus();
-      }
-      return;
-    }
-    if (_mode == SearchMode.lists) {
-      if (_listsResults.isNotEmpty && _listsNodes.isNotEmpty) {
-        _listsNodes.first.requestFocus();
-      } else {
-        _searchFocusNode.requestFocus();
-      }
-      return;
-    }
-    // Same top-of-board target the auto-focus "settle to the top" uses, so
-    // remote entry and auto-focus always agree on the landing card.
-    final top = _topBoardFocusNode();
-    if (top != null) {
-      top.requestFocus();
-      return;
-    }
-    // Board tab with nothing focusable (empty catalogs). The search field is in
-    // the tree on desktop/mobile (persistent bar) but not on the chrome-free TV
-    // board — bounce to the sidebar there so the remote never lands nowhere.
-    // While the board is still LOADING, though, do nothing: content (and the
-    // arrival auto-focus) is moments away, and bouncing to the rail here is
-    // exactly the "sidebar opened by itself" the dead-focus recovery used to
-    // produce when an arrow landed mid-load.
-    if (!widget.isTelevision) {
-      _searchFocusNode.requestFocus();
-    } else if (!_loading) {
-      MainPageBridge.focusTvSidebar?.call();
-    }
-  }
+  void _focusContent() => _searchFocus.focusContent(
+    discoverMode: widget.discoverMode,
+    searchMode: widget.searchMode,
+    isTelevision: widget.isTelevision,
+    mode: _mode,
+    discoverSource: _discSourceNode,
+    keywordToolbar: _kwToolbarVisible ? _kwToolbarNodes.first : null,
+    listsResult: _listsResults.isNotEmpty && _listsNodes.isNotEmpty
+        ? _listsNodes.first
+        : null,
+    catalogResult:
+        _catalogQuery.isNotEmpty &&
+            _rowNodes.isNotEmpty &&
+            _rowNodes.first.isNotEmpty
+        ? _rowNodes.first.first
+        : null,
+    focusCatalogShelf: _spotlightKey.currentState == null
+        ? null
+        : () => _spotlightKey.currentState!.focusShelf(0),
+    topBoardNode: _topBoardFocusNode,
+    loading: _loading,
+    focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+  );
 
-  /// Focus the Catalog/Keyword/Lists toggle, landing on the segment for the
-  /// current mode so its highlight lines up with where the remote cursor sits.
-  void _focusModeToggle() {
-    if (_useCompactModeMenu) {
-      _modeDropdownNode.requestFocus();
-      return;
-    }
-    (switch (_mode) {
-      SearchMode.catalog => _modeCatalogNode,
-      SearchMode.keyword => _modeKeywordNode,
-      SearchMode.lists => _modeListsNode,
-    }).requestFocus();
-  }
+  void _focusModeToggle() =>
+      _searchFocus.focusMode(_mode, compact: _useCompactModeMenu);
 
-  /// Three labelled segments need more room than the two-mode selector did.
-  /// Collapse to one dropdown only when the available header width cannot
-  /// carry them comfortably. The TV threshold also protects 720-wide logical
-  /// canvases, where the centered search field would otherwise be crushed.
-  bool get _useCompactModeMenu {
-    if (!kMdblistEnabled) return false;
-    final width = MediaQuery.sizeOf(context).width;
-    if (widget.isTelevision) return width < 900;
-    return width < 342;
-  }
+  bool get _useCompactModeMenu => SearchFocusController.useCompactModeMenu(
+    listsEnabled: kMdblistEnabled,
+    isTelevision: widget.isTelevision,
+    width: MediaQuery.sizeOf(context).width,
+  );
 
-  /// Return focus to the search field with the caret at the end of the text, so
-  /// leaving the toggle leftward and pressing right again jumps straight back.
-  void _focusSearchFieldAtEnd() {
-    _searchFocusNode.requestFocus();
-    _searchController.selection = TextSelection.collapsed(
-      offset: _searchController.text.length,
-    );
-  }
+  void _focusSearchFieldAtEnd() =>
+      _searchFocus.focusFieldAtEnd(_searchController);
 
   /// Whether the keyword results toolbar (Sort/Filters/Sources/…) is on-screen,
   /// so focus can route into it between the search field and the result rows.
@@ -10930,21 +10843,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// and hiding synchronously would unmount the button before its onTap fires
   /// (the bug where "clicking Sources does nothing"). The delay keeps it up
   /// long enough for the tap; a re-focus within the window cancels the hide.
-  void _onSearchFocusForSources() {
-    if (_searchFocusNode.hasFocus) {
-      _catalogSourcesHideTimer?.cancel();
-      if (!_catalogSourcesBarShown) {
-        setState(() => _catalogSourcesBarShown = true);
-      }
-    } else {
-      _catalogSourcesHideTimer?.cancel();
-      _catalogSourcesHideTimer = Timer(const Duration(milliseconds: 250), () {
-        if (mounted && _catalogSourcesBarShown) {
-          setState(() => _catalogSourcesBarShown = false);
-        }
-      });
-    }
-  }
+  void _onSearchFocusForSources() => _searchFocus.onFieldFocusForSources();
 
   /// On the unified (non-TV) layout there's no dedicated Search tab, so the
   /// catalog Sources button lives just under the search field and appears while

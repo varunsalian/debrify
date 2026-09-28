@@ -6,6 +6,31 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: shared Search focus/navigation — 2026-09-28
+
+Base revision: `c031fb5f`. `SearchFocusController` (130 lines) now owns the
+query/mode focus nodes, content-entry policy, caret return, responsive selector
+thresholds and delayed Sources visibility timer. Production route handlers delegate
+to it with current targets; result/board nodes and text remain borrowed. No data
+access or duplicate query state was introduced. SearchScreen shrinks
+**13,245 → 13,144 lines**. Home/Discover composition and lifecycle remain open.
+
+Review preserves Discover-first entry, Search's visible-result gates, Spotlight
+shelf entry, Home layout target selection, empty-TV/sidebar and loading/no-op
+behavior, selector labels/thresholds, 250ms blur delay and refocus cancellation.
+The route retains listener registration timing and resource teardown placement;
+controller disposal cancels pending hides and is idempotent.
+
+**234 targeted tests pass** (`flutter test test/features/search
+ test/tv_search_focus_handoff_test.dart`), including three new checks covering
+entry/selection/caret behavior, timer/refocus/disposal and selector breakpoints.
+`flutter analyze` retains the **same 838 diagnostic identities** as the preceding
+checkpoint; no additions/removals. Architecture check passes **514 migrated files**;
+formatting and `git diff --check` pass. Receipts:
+`.git/refactor-evidence/phase5/search-navigation-{tests,analyze}.txt`.
+No full-suite rerun for this presentation-only checkpoint; the next combined C+D
+gate remains pending. No emulator used; device/performance acceptance stays pending.
+
 ## Batch C checkpoint: Keyword focus ownership — 2026-09-28
 
 Base revision: `3a4c717c`. `KeywordFocusController` (167 lines) owns Keyword row,
