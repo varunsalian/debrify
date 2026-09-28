@@ -1,3 +1,4 @@
+import '../features/home/application/home_detail_dependencies.dart';
 import '../features/home/presentation/home_detail_menus.dart';
 import '../features/home/presentation/home_detail_presentation.dart';
 import '../features/home/presentation/home_catalog_play_action.dart';
@@ -251,8 +252,6 @@ import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
 import '../models/trakt_continue_watching_item.dart';
 import '../features/home/application/home_trakt_continuation_dependencies.dart';
-import '../services/trakt/trakt_service.dart';
-import '../services/simkl/simkl_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/tracking_source_policy.dart';
 import '../utils/continue_watching_presentation.dart';
@@ -10306,6 +10305,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
     // Choose the layout at opening time, as before, rather than on a route rebuild.
     final mergedDetail = _mergedSeriesPage;
+    final readers = ref.read(homeDetailReadersProvider(_profileSessionOwner));
+    bool detailCurrent() => detailRoute.isActive;
     unawaited(
       detailRoute.push(
         Navigator.of(context),
@@ -10386,7 +10387,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               (_isTraktAuthenticated &&
                   imdb != null &&
                   MediaIdentity.isImdb(imdb))
-              ? () => TraktService.instance.fetchTitleStatus(imdb, item.type)
+              ? () => readers.trakt(imdb, item.type, isCurrent: detailCurrent)
               : null,
           simklAction: (action, {rating}) => _handleDetailSimklQuickAction(
             item,
@@ -10395,10 +10396,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             presetRating: rating,
           ),
           simklStatus: (_isSimklAuthenticated && imdb != null)
-              ? () => SimklService.instance.fetchTitleStatus(
-                  imdb,
-                  contentType: item.type,
-                )
+              ? () => readers.simkl(imdb, item.type, isCurrent: detailCurrent)
               : null,
           mdblistAction: (action, {rating}) => _handleDetailMdblistQuickAction(
             item,
@@ -10410,14 +10408,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               (_isMdblistAuthenticated &&
                   imdb != null &&
                   MediaIdentity.isImdb(imdb))
-              ? () => MdblistService.instance.fetchTitleStatus(imdb, item.type)
+              ? () => readers.mdblist(imdb, item.type, isCurrent: detailCurrent)
               : null,
           recommendations: imdb != null && MediaIdentity.isImdb(imdb)
-              ? () => _stremio.getRecommendations(imdbId: imdb, type: item.type)
+              ? () => readers.recommendations(
+                  imdb,
+                  item.type,
+                  isCurrent: detailCurrent,
+                )
               : null,
           openRecommendation: (rec) => _openItem(rec, rec.sourceAddon ?? addon),
           enrich: (id, type) =>
-              _stremio.fetchMetaDetails(imdbId: id, type: type),
+              readers.metadata(id, type, isCurrent: detailCurrent),
         ),
       ),
     );

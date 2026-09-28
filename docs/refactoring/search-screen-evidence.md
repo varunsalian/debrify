@@ -6,6 +6,35 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: detail reader injection — 2026-09-28
+
+All five `_openItem` loaders now use the 73-line `HomeDetailReaders` and a
+52-line profile-family Riverpod factory. The factory captures the opening profile
+scope; the plain reader receives callbacks, performs no eager reads, and rejects
+requests/results for retired routes or profiles. Authentication/identity gates
+stay at their original route-build point. Existing service errors, timing,
+recommendation ordering and singleton cache ownership are retained. Simkl receives
+the combined continuation guard through its existing service API. Two obsolete
+service imports are removed from the screen. This is dependency separation, not
+facade reduction: the root is 14,261 lines after explicit guard wiring.
+
+Validation: **89 affected tests pass**, including 20 new reader cases covering
+lazy dispatch, exact ID/type/value forwarding, route/profile retirement and error
+propagation, plus four real Home detail-route cases across both layouts. Existing
+composition, playback, tracker-menu and detail-action tests pass. The initial
+nullable generic inference compile error was corrected; final analysis matches
+all **848** baseline diagnostic identities. **472** migrated files pass architecture
+checks; changed code is formatted and diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/detail-readers-final-tests.txt` and
+`detail-readers-final-analyze.txt`.
+
+Review: the stateless provider owns no resource or competing cache; service-owned
+reads may finish after route closure, with results rejected at the route boundary.
+The wrapper does not prove transitive cache/credential safety for the unguarded
+Trakt/MDBList/Stremio APIs. Those reachable continuations remain in A's closing
+audit, alongside opening orchestration and mutation/reset contracts. No native,
+performance, whole-batch or final migration completion is claimed.
+
 ## Batch A checkpoint: detail menu ownership — 2026-09-28
 
 The 106-line `HomeDetailMenus` now owns all three detail-menu builders and their

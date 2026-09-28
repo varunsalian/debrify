@@ -1,3 +1,5 @@
+import 'package:debrify/features/home/application/home_detail_dependencies.dart';
+import 'package:debrify/features/home/data/home_detail_readers.dart';
 import 'package:debrify/features/home/presentation/home_catalog_playback_bridge.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -86,6 +88,71 @@ void main() {
   });
   tearDownAll(() => images.delete(recursive: true));
   for (final merged in [false, true]) {
+    for (final retire in [false, true]) {
+      testWidgets(
+        'detail metadata uses injected reader and route guard: merged=$merged retired=$retire',
+        (tester) async {
+          final home = HomeFixture(tester);
+          final release = Completer<StremioMeta?>();
+          final calls = <String>[];
+          final readers = HomeDetailReaders(
+            isOwnerCurrent: () => true,
+            trakt: (_, _, _) async => null,
+            simkl: (_, _, _) async => null,
+            mdblist: (_, _, _) async => null,
+            recommendations: (_, _, _) async => [],
+            metadata: (id, type, current) {
+              calls.add('$id:$type');
+              return release.future;
+            },
+          );
+          await home.mount(
+            initialPreferences: {'merged_series_page_enabled': merged},
+            wrap: (child) => ProviderScope(
+              overrides: [
+                homeCatalogOriginRepositoryProvider.overrideWith(
+                  (ref, owner) => ReadyOrigin(),
+                ),
+                homeDetailReadersProvider.overrideWith((ref, owner) => readers),
+              ],
+              child: child,
+            ),
+          );
+          await home.settle();
+          await home.focusFast();
+          await home.key(LogicalKeyboardKey.enter);
+          await home.settle();
+          final enrich = merged
+              ? tester
+                    .widget<MergedDetailScreen>(find.byType(MergedDetailScreen))
+                    .metaEnricher!
+              : tester
+                    .widget<CatalogItemDetailScreen>(
+                      find.byType(CatalogItemDetailScreen),
+                    )
+                    .metaEnricher!;
+          final pending = enrich('tt987', 'series');
+          expect(calls, contains('tt987:series'));
+          if (retire) {
+            home.navigator.currentState!.pop();
+            await home.settle();
+          }
+          const enriched = StremioMeta(
+            id: 'tt987',
+            name: 'Enriched',
+            type: 'series',
+          );
+          await home.drive(() => release.complete(enriched));
+          expect(await pending, retire ? isNull : same(enriched));
+          final count = calls.length;
+          if (retire) {
+            expect(await enrich('tt987', 'series'), isNull);
+            expect(calls, hasLength(count));
+          }
+          await home.dispose();
+        },
+      );
+    }
     for (final retire in [false, true]) {
       testWidgets(
         'real source editor retires with detail: merged=$merged retired=$retire',
