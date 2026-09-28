@@ -141,4 +141,34 @@ void main() {
       expect(await resolver.resolve(direct), isNull);
     },
   );
+  test(
+    'superseded switch stops provider requests while the profile stays active',
+    () async {
+      final owner = ProfileSessionMemory.captureOwner();
+      var generation = 1;
+      final f = fixture.Fixture('debrid', 'pack');
+      f.onRequest = (_) {
+        generation = 2;
+      };
+      final client = MockClient(f.respond);
+      addTearDown(client.close);
+      final resolver = SourcePlaylistResolver(
+        owner: owner,
+        provider: 'debrid',
+        canContinue: () => true,
+        chooseProvider: (_) async => 'debrid',
+      );
+      final result = await http.runWithClient(
+        () => resolver.resolve(
+          fixture.torrent,
+          canContinue: () => generation == 1,
+        ),
+        () => client,
+      );
+      expect(result, isNull);
+      expect(f.requests, hasLength(1));
+      expect(ProfileSessionMemory.captureOwner(), owner);
+      expect(f.paths.where((path) => path.contains('/delete')), isEmpty);
+    },
+  );
 }

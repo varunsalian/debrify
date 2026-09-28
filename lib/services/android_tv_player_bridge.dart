@@ -1825,7 +1825,8 @@ class AndroidTvPlayerBridge {
     MovieMetadataProvider? onRequestMovieMetadata,
     Future<String?> Function(int)? onResolveStremioSource,
     Future<List<Map<String, dynamic>>?> Function(int)? onResolveSourcePlaylist,
-    Future<List<Map<String, dynamic>>?> Function(int)? onResolveStartupSourcePlaylist,
+    Future<List<Map<String, dynamic>>?> Function(int)?
+    onResolveStartupSourcePlaylist,
     Future<void> Function(int)? onCommitStremioSource,
     void Function(int)? onCommitPlaybackProgressSource,
     PlaybackFinishedCallback? onStartupSourcesExhausted,
@@ -1855,6 +1856,8 @@ class AndroidTvPlayerBridge {
     Future<Map<String, dynamic>?> Function(Map<String, dynamic>)?
     onRequestIptvBrowse,
     void Function() Function()? retainSourceSession,
+    ProfileSessionOwner? sourceOwner,
+    bool Function()? canContinue,
   }) async {
     if (!Platform.isAndroid) {
       return false;
@@ -1863,12 +1866,27 @@ class AndroidTvPlayerBridge {
       return false;
     }
 
-    final launchScope = ProfileRuntime.scope.value;
+    bool active() =>
+        (canContinue?.call() ?? true) &&
+        (sourceOwner == null ||
+            sourceOwner == ProfileSessionMemory.captureOwner());
+    void checkCurrent() {
+      if (!active()) {
+        throw StateError('Native playback launch retired');
+      }
+    }
+
+    if (!active()) return false;
+    final launchScope = sourceOwner?.scope ?? ProfileRuntime.scope.value;
 
     final sessionId = await TvPlaybackRecovery.allocateSessionId();
+    if (!active()) return false;
     await _progressDrain;
+    if (!active()) return false;
     await _progressSession?.closeAndDrain();
+    if (!active()) return false;
     await _sourcePersistenceSession?.closeAndDrain();
+    if (!active()) return false;
     final oldLockOwner = _nativePlaybackLockOwner;
     if (oldLockOwner != null) {
       _endNativePlayback(oldLockOwner);
@@ -1880,9 +1898,9 @@ class AndroidTvPlayerBridge {
       onRetired: retainSourceSession?.call(),
     );
     _sourcePersistenceSession = persistenceSession;
-    final profileOwner = ProfileSessionMemory.captureOwner();
-    final progressSession = onProgress == null &&
-            onCommitPlaybackProgressSource == null
+    final profileOwner = sourceOwner ?? ProfileSessionMemory.captureOwner();
+    final progressSession =
+        onProgress == null && onCommitPlaybackProgressSource == null
         ? null
         : NativePlaybackProgressSession(
             id: persistenceSession.id,
@@ -1927,6 +1945,7 @@ class AndroidTvPlayerBridge {
     try {
       // Get custom font info for Android TV player
       final fontInfo = await _getCustomFontInfo();
+      checkCurrent();
 
       // Add font info to payload
       final payloadWithFont = Map<String, dynamic>.from(payload);
@@ -1936,7 +1955,7 @@ class AndroidTvPlayerBridge {
       // continuing the same unlocked profile rather than cold-starting into
       // an unguarded profile session.
       if (ProfileRuntime.isProfileCommitted) {
-        final scope = ProfileRuntime.capture();
+        final scope = launchScope ?? ProfileRuntime.capture();
         payloadWithFont['playbackOwnerProfileId'] = scope.profileId;
         payloadWithFont['playbackOwnerDataGeneration'] = scope.dataGeneration;
       }
@@ -1951,7 +1970,9 @@ class AndroidTvPlayerBridge {
       // block a launch — tuning is strictly optional.
       try {
         final patience = await StorageService.getNetworkConnectPatience();
+        checkCurrent();
         final buffer = await StorageService.getNetworkBufferSize();
+        checkCurrent();
         if (patience != 'standard') {
           payloadWithFont['networkPatience'] = patience;
         }
@@ -1961,6 +1982,7 @@ class AndroidTvPlayerBridge {
         // Android TV IPTV decoder preference ('auto' = platform order
         // untouched, so it is only sent when the user picked otherwise).
         final iptvDecoder = await StorageService.getIptvDecoderMode();
+        checkCurrent();
         if (iptvDecoder != 'auto') {
           payloadWithFont['iptvDecoder'] = iptvDecoder;
         }
@@ -1968,17 +1990,21 @@ class AndroidTvPlayerBridge {
         debugPrint('AndroidTvPlayerBridge: network tuning read failed: $e');
       }
 
+      checkCurrent();
       final bool? launched = await NativeProfileProjection.withPlayerLaunch(
         launchScope,
-        () => _channel.invokeMethod<bool>('launchTorrentPlayback', {
-          'payload': payloadWithFont,
-          if (launchScope != null)
-            'nativePlayerProfile': {
-              'profileId': launchScope.profileId,
-              'dataGeneration': launchScope.dataGeneration,
-              'sessionEpoch': launchScope.sessionEpoch,
-            },
-        }),
+        () {
+          checkCurrent();
+          return _channel.invokeMethod<bool>('launchTorrentPlayback', {
+            'payload': payloadWithFont,
+            if (launchScope != null)
+              'nativePlayerProfile': {
+                'profileId': launchScope.profileId,
+                'dataGeneration': launchScope.dataGeneration,
+                'sessionEpoch': launchScope.sessionEpoch,
+              },
+          });
+        },
       );
       if (launched == true) {
         return true;

@@ -118,7 +118,7 @@ void main() {
                 return await TorrentPlaybackService.resolveRecoverySource(
                       fixture.torrent,
                       provider: 'debrid',
-                      sourceBindings: owner,
+                      owner: owner.owner,
                     ) !=
                     null;
               }

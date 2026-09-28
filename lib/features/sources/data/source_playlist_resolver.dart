@@ -25,16 +25,22 @@ class SourcePlaylistResolver {
   bool get isCurrent =>
       owner == ProfileSessionMemory.captureOwner() && canContinue();
 
-  Future<List<PlaylistEntry>?> resolve(Torrent source) {
-    Future<List<PlaylistEntry>?> run() => _resolve(source);
+  Future<List<PlaylistEntry>?> resolve(
+    Torrent source, {
+    bool Function()? canContinue,
+  }) {
+    Future<List<PlaylistEntry>?> run() => _resolve(source, canContinue);
     final scope = owner.scope;
     return scope == null
         ? ProfileRuntime.withoutCapturedScope(run)
         : ProfileRuntime.withCapturedScope(scope, run);
   }
 
-  Future<List<PlaylistEntry>?> _resolve(Torrent source) async {
-    bool active() => isCurrent;
+  Future<List<PlaylistEntry>?> _resolve(
+    Torrent source,
+    bool Function()? canContinue,
+  ) async {
+    bool active() => isCurrent && (canContinue?.call() ?? true);
     if (!active()) return null;
     if (IptvSourceSearch.isDeferredXtreamSeries(source)) {
       final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(

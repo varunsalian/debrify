@@ -1,3 +1,5 @@
+import 'profiles/profile_session_memory.dart';
+import '../models/source_playlist_resolver.dart';
 import '../features/sources/data/source_playlist.dart';
 import '../features/sources/models/acquired_source.dart';
 import '../features/sources/data/provider_source_actions.dart';
@@ -276,6 +278,8 @@ class TorrentPlaybackService {
             meta: meta,
           ),
           retainSourceSession: committer.retain,
+          sourceOwner: committer.bindings.owner,
+          canContinue: () => committer.isCurrent,
           onQuickPlayNextEpisode: _nextEpisodeHandlerFor(
             context,
             meta,
@@ -609,6 +613,8 @@ class TorrentPlaybackService {
           context,
           args,
           retainSourceSession: committer.retain,
+          sourceOwner: committer.bindings.owner,
+          canContinue: () => committer!.isCurrent,
           onPlayerHandoff: loader?.dismiss,
           onQuickPlayNextEpisode: nextEpisodeHandler,
         );
@@ -3092,60 +3098,70 @@ class TorrentPlaybackService {
     Torrent source, {
     required String? provider,
     AutomaticSourceBindings? sourceBindings,
+    ProfileSessionOwner? owner,
     bool Function()? canContinue,
     int? season,
     int? episode,
   }) async {
-    final bindingOwner = sourceBindings ?? AutomaticSourceBindings.capture();
-    bool active() => bindingOwner.isCurrent && (canContinue?.call() ?? true);
-    if (!active()) return null;
-    if (IptvSourceSearch.isDeferredXtreamSeries(source)) {
-      final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(
-        source,
+    final bindingOwner =
+        sourceBindings ??
+        AutomaticSourceBindings(owner ?? ProfileSessionMemory.captureOwner());
+    Future<List<PlaylistEntry>?> resolve() async {
+      bool active() => bindingOwner.isCurrent && (canContinue?.call() ?? true);
+      if (!active()) return null;
+      if (IptvSourceSearch.isDeferredXtreamSeries(source)) {
+        final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(
+          source,
+          season: season,
+          episode: episode,
+        );
+        if (!active() || resolution.source == null) return null;
+        source = resolution.source!;
+      }
+      try {
+        await DirectSourceAuthorization.authorize(source);
+      } catch (_) {
+        return null;
+      }
+      if (!active()) return null;
+      if (source.streamType == StreamType.directUrl) {
+        if (source.directUrl?.isNotEmpty != true) return null;
+        return [
+          PlaylistEntry(
+            url: source.directUrl!,
+            title: source.displayTitle,
+            httpHeaders: source.httpHeaders ?? const {},
+          ),
+        ];
+      }
+      if (provider == null) return null;
+      final (resolved, _) = await _probeCandidates(
+        provider,
+        [source],
+        sourceBindings: bindingOwner,
+        isCancelled: () => !active(),
         season: season,
         episode: episode,
+        rules: QuickPlayRules.debrifyDefault(
+          isMovie: season == null,
+        ).copyWith(tryNextOnFailure: false, maxAttempts: 1),
       );
-      if (!active() || resolution.source == null) return null;
-      source = resolution.source!;
-    }
-    try {
-      await DirectSourceAuthorization.authorize(source);
-    } catch (_) {
-      return null;
-    }
-    if (!active()) return null;
-    if (source.streamType == StreamType.directUrl) {
-      if (source.directUrl?.isNotEmpty != true) return null;
+      if (resolved == null) return null;
+      if (resolved.playlist?.isNotEmpty == true) return resolved.playlist;
+      if (resolved.playUrl?.isNotEmpty != true) return null;
       return [
         PlaylistEntry(
-          url: source.directUrl!,
-          title: source.displayTitle,
-          httpHeaders: source.httpHeaders ?? const {},
+          url: resolved.playUrl!,
+          title: resolved.title,
+          httpHeaders: resolved.httpHeaders ?? const {},
         ),
       ];
     }
-    if (provider == null) return null;
-    final (resolved, _) = await _probeCandidates(
-      provider,
-      [source],
-      sourceBindings: bindingOwner,
-      isCancelled: () => !active(),
-      season: season,
-      episode: episode,
-      rules: QuickPlayRules.debrifyDefault(
-        isMovie: season == null,
-      ).copyWith(tryNextOnFailure: false, maxAttempts: 1),
-    );
-    if (resolved == null) return null;
-    if (resolved.playlist?.isNotEmpty == true) return resolved.playlist;
-    if (resolved.playUrl?.isNotEmpty != true) return null;
-    return [
-      PlaylistEntry(
-        url: resolved.playUrl!,
-        title: resolved.title,
-        httpHeaders: resolved.httpHeaders ?? const {},
-      ),
-    ];
+
+    final scope = bindingOwner.owner.scope;
+    return scope == null
+        ? ProfileRuntime.withoutCapturedScope(resolve)
+        : ProfileRuntime.withCapturedScope(scope, resolve);
   }
 
   /// Builds the [SeriesSourceFetcher] a series play hands to the player: the
@@ -5713,7 +5729,7 @@ class TorrentPlaybackService {
     int? startIndex,
     List<Torrent>? stremioSources,
     int? stremioCurrentSourceIndex,
-    Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist,
+    SourcePlaylistResolve? resolveSourceToPlaylist,
     bool startupFailoverEnabled = false,
     String? startupResolverProvider,
     Future<void> Function(Torrent)? onStremioSourceCommitted,
@@ -5728,8 +5744,10 @@ class TorrentPlaybackService {
   }) => VideoPlayerLaunchArgs(
     // External apps receive only the URL, not media-server session headers.
     // Continuous shuffle also needs the in-app episode-fetch/EOF callbacks.
-    disableExternalPlayer: (meta?.initialContinuousShuffle ?? false) ||
-        (httpHeaders?.keys.any((key) => key.toLowerCase() == 'x-emby-token') ?? false),
+    disableExternalPlayer:
+        (meta?.initialContinuousShuffle ?? false) ||
+        (httpHeaders?.keys.any((key) => key.toLowerCase() == 'x-emby-token') ??
+            false),
     initialContinuousShuffle: meta?.initialContinuousShuffle ?? false,
     videoUrl: videoUrl,
     httpHeaders: httpHeaders,
@@ -5756,12 +5774,24 @@ class TorrentPlaybackService {
     contentYear: meta?.year,
     addonId: meta?.addonId,
     suppressTrackerAutoSync: meta?.hasStremioEpisodeIdentity ?? false,
-    traktScrobble: meta?.hasStremioEpisodeIdentity == true ? false : meta?.traktScrobble ?? false,
-    traktProgressPercent: meta?.hasStremioEpisodeIdentity == true ? null : meta?.traktProgressPercent,
-    simklScrobble: meta?.hasStremioEpisodeIdentity == true ? false : meta?.simklScrobble ?? false,
-    simklProgressPercent: meta?.hasStremioEpisodeIdentity == true ? null : meta?.simklProgressPercent,
-    mdblistScrobble: meta?.hasStremioEpisodeIdentity == true ? false : meta?.mdblistScrobble ?? false,
-    mdblistProgressPercent: meta?.hasStremioEpisodeIdentity == true ? null : meta?.mdblistProgressPercent,
+    traktScrobble: meta?.hasStremioEpisodeIdentity == true
+        ? false
+        : meta?.traktScrobble ?? false,
+    traktProgressPercent: meta?.hasStremioEpisodeIdentity == true
+        ? null
+        : meta?.traktProgressPercent,
+    simklScrobble: meta?.hasStremioEpisodeIdentity == true
+        ? false
+        : meta?.simklScrobble ?? false,
+    simklProgressPercent: meta?.hasStremioEpisodeIdentity == true
+        ? null
+        : meta?.simklProgressPercent,
+    mdblistScrobble: meta?.hasStremioEpisodeIdentity == true
+        ? false
+        : meta?.mdblistScrobble ?? false,
+    mdblistProgressPercent: meta?.hasStremioEpisodeIdentity == true
+        ? null
+        : meta?.mdblistProgressPercent,
     resumePolicy: meta?.resumePolicy ?? PlaybackResumePolicy.sourceSpecific,
     // Debrid torrent ids let the player back-fill poster/IMDb onto a saved
     // Playlist-library entry and power the in-player "Fix Metadata" action
@@ -5816,7 +5846,7 @@ class TorrentPlaybackService {
   /// one; a torrent switch silently uses the default/first-configured provider
   /// (matching Home's _createSourcePlaylistResolver) and fails gracefully
   /// (null) when none is configured.
-  static Future<List<PlaylistEntry>?> Function(Torrent) _lazyProviderResolver(
+  static SourcePlaylistResolve _lazyProviderResolver(
     SourceBindingCommitter committer,
   ) => _resolverFor(null, committer);
 
@@ -5968,6 +5998,8 @@ class TorrentPlaybackService {
         context,
         args,
         retainSourceSession: committer.retain,
+        sourceOwner: committer.bindings.owner,
+        canContinue: () => committer!.isCurrent,
         onPlayerHandoff: overlay?.dismiss,
         onQuickPlayNextEpisode: nextEpisodeHandler,
       );
@@ -6202,7 +6234,7 @@ class TorrentPlaybackService {
   /// Builds the in-player source-switch resolver: given another [Torrent] the
   /// user picked, add it to [provider] and return its playlist (so switching
   /// sources works without leaving the player).
-  static Future<List<PlaylistEntry>?> Function(Torrent) _resolverFor(
+  static SourcePlaylistResolve _resolverFor(
     String? provider,
     SourceBindingCommitter committer,
   ) => SourcePlaylistResolver(

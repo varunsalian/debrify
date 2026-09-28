@@ -1,3 +1,4 @@
+import '../models/source_playlist_resolver.dart';
 import '../widgets/playback_startup_view.dart';
 import '../utils/episode_playback_request.dart';
 import '../utils/show_shuffle.dart';
@@ -324,7 +325,7 @@ class VideoPlayerScreen extends StatefulWidget {
   final int? stremioCurrentSourceIndex;
   final Future<String?> Function(Torrent)? resolveStremioSource;
   // Torrent search source switching: resolves a Torrent to a full playlist
-  final Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist;
+  final SourcePlaylistResolve? resolveSourceToPlaylist;
   final bool startupFailoverEnabled;
   final String? startupResolverProvider;
   final Future<void> Function(Torrent)? onStremioSourceCommitted;
@@ -1253,6 +1254,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Torrent? _openedWatchSource;
   int _watchOpenEpoch = 0;
   List<PlaylistEntry>? _pendingSourcePlaylist;
+  int _sourcePlaylistResolution = 0;
   // Overrides for sources after Stremio TV channel switch
   List<Torrent>? _stremioSourcesOverride;
   Future<String?> Function(Torrent)? _resolveStremioSourceOverride;
@@ -8994,7 +8996,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           '$sourceFields route=playlist',
         );
         try {
-          resolvedPlaylist = await widget.resolveSourceToPlaylist!(source);
+          resolvedPlaylist = await widget.resolveSourceToPlaylist!(
+            source,
+            canContinue: () => mounted && !_screenDisposed,
+          );
         } catch (e) {
           debugPrint(
             '[StartupFailover] event=resolve_result platform=flutter '
@@ -9179,6 +9184,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _hideSourceSheet() {
+    _sourcePlaylistResolution++;
     setState(() {
       _showSourceSheet = false;
     });
@@ -9187,8 +9193,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<String?> Function(Torrent) _buildSourceSheetResolver() {
     if (widget.resolveSourceToPlaylist != null) {
       return (Torrent torrent) async {
-        final playlist = await widget.resolveSourceToPlaylist!(torrent);
-        if (playlist == null || playlist.isEmpty) return null;
+        final generation = ++_sourcePlaylistResolution;
+        bool active() =>
+            mounted &&
+            !_screenDisposed &&
+            _showSourceSheet &&
+            generation == _sourcePlaylistResolution;
+        final playlist = await widget.resolveSourceToPlaylist!(
+          torrent,
+          canContinue: active,
+        );
+        if (!active() || playlist == null || playlist.isEmpty) return null;
         _pendingSourcePlaylist = playlist;
         final firstUrl = playlist.first.url;
         return firstUrl.isNotEmpty ? firstUrl : null;
@@ -14497,7 +14512,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!request.isCurrent) return EpisodePlaybackOutcome.cancelled;
     List<PlaylistEntry>? playlist;
     try {
-      playlist = await widget.resolveSourceToPlaylist!(t);
+      playlist = await widget.resolveSourceToPlaylist!(
+        t,
+        canContinue: () => request.isCurrent,
+      );
     } catch (_) {
       playlist = null;
     }

@@ -1,3 +1,4 @@
+import 'package:debrify/services/video_player_launcher.dart';
 import 'dart:async';
 
 import 'package:debrify/services/profiles/profile_runtime.dart';
@@ -100,6 +101,44 @@ void main() {
       expect(find.text('New route'), findsOneWidget);
       expect(routes.pushed.last.isCurrent, isTrue);
       await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'retired launch owner releases handoff once without opening a player',
+    (tester) async {
+      ProfileRuntime.debugReset();
+      ProfileRuntime.initializeLegacy();
+      addTearDown(ProfileRuntime.debugReset);
+      final owner = ProfileSessionMemory.captureOwner();
+      final routes = Routes();
+      late BuildContext page;
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [routes],
+          home: Builder(
+            builder: (context) {
+              page = context;
+              return const Text('Origin');
+            },
+          ),
+        ),
+      );
+      ProfileSessionMemory.clearAll();
+      var handoffs = 0;
+      await VideoPlayerLauncher.push(
+        page,
+        const VideoPlayerLaunchArgs(
+          videoUrl: 'https://example.test/movie.mp4',
+          title: 'Movie',
+        ),
+        sourceOwner: owner,
+        onPlayerHandoff: () {
+          handoffs++;
+        },
+      );
+      expect(handoffs, 1);
+      expect(routes.pushed, hasLength(1));
+      expect(tester.takeException(), isNull);
     },
   );
 }

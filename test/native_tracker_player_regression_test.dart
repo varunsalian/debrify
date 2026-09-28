@@ -1,3 +1,4 @@
+import 'package:debrify/services/profiles/profile_playback_preparation.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -415,4 +416,90 @@ void main() {
       );
     }
   }
+  test(
+    'native initial lazy URL rejects retirement during provider response',
+    () async {
+      await StorageService.saveApiKey('original-rd');
+      var active = true;
+      var requests = 0;
+      final client = MockClient((request) async {
+        requests++;
+        expect(request.url.path, endsWith('/unrestrict/link'));
+        active = false;
+        return http.Response(
+          jsonEncode({'download': 'https://ready/movie.mp4'}),
+          200,
+        );
+      });
+      addTearDown(client.close);
+      final args = VideoPlayerLaunchArgs(
+        videoUrl: '',
+        title: 'Movie',
+        contentType: 'movie',
+        playlist: const [
+          PlaylistEntry(
+            url: '',
+            title: 'Movie.mkv',
+            restrictedLink: 'https://locked',
+          ),
+        ],
+      );
+      await expectLater(
+        http.runWithClient(
+          () => VideoPlayerLauncher.debugNativePlaybackSession(
+            args,
+            [],
+            canContinue: () => active,
+          ),
+          () => client,
+        ),
+        throwsA(isA<PlaybackPreparationRetired>()),
+      );
+      expect(requests, 1);
+    },
+  );
+
+  test(
+    'retired native redirect cannot populate the URL cache for the next launch',
+    () async {
+      var active = true;
+      var requests = 0;
+      final client = MockClient((_) async {
+        requests++;
+        if (requests == 1) active = false;
+        return http.Response(
+          '',
+          302,
+          headers: {'location': 'https://ready/movie.mp4'},
+        );
+      });
+      addTearDown(client.close);
+      final args = VideoPlayerLaunchArgs(
+        videoUrl: 'https://redirect.test/native-retirement',
+        title: 'Movie',
+        contentType: 'movie',
+      );
+      await http.runWithClient(() async {
+        await expectLater(
+          VideoPlayerLauncher.debugNativePlaybackSession(
+            args,
+            [],
+            canContinue: () => active,
+          ),
+          throwsA(anything),
+        );
+        active = true;
+        final payload = await VideoPlayerLauncher.debugNativePlaybackSession(
+          args,
+          [],
+          canContinue: () => active,
+        );
+        expect(
+          (payload['items'] as List).single['url'],
+          'https://ready/movie.mp4',
+        );
+      }, () => client);
+      expect(requests, 2);
+    },
+  );
 }

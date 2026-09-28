@@ -6,6 +6,47 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch B checkpoint: native preparation ownership — 2026-09-28
+
+Base revision: `6aa15644`. All three Sources launch paths now pass their captured
+profile owner and committer lifetime into player preparation. The plain
+`ProfilePlaybackPreparation` runs in the origin scope and accepts local writes
+inside the existing preference barrier, using the existing handoff drain. Native
+launch checks retirement before platform dispatch; recovery receives the original
+owner. Resolver callbacks compose player lifetime with the existing native switch
+token, and the in-app source sheet rejects dismissed/superseded requests. Lazy
+provider URL resolution stops subsequent work on retirement and cannot publish a
+retired redirect into the shared cache. Existing platform payloads, source ordering,
+provider cleanup and retained native commit leases are preserved.
+
+Seven new cases cover real origin-scope writes, barrier retirement, accepted-write
+drain, request supersession, initial native URL retirement, redirect-cache rejection
+and exactly-once loader handoff without opening a retired player route. Existing
+real-profile recovery scenarios now exercise the explicit owner argument. Focused
+integration: **29 passes**. Affected regression run: **831 passes and four previously
+observed manual-source contract failures**. Analyzer: **841 identities**, no additions
+and three removed async-context infos. Architecture: **504 files pass**. Diff checks
+pass. A formatter transplant initially split related hunks; compile checks caught
+it, complete changed methods were restored, and the corrected verification above
+supersedes those failed intermediate runs.
+
+Receipts: `.git/refactor-evidence/phase5/native-owner-regression-fixed.txt`,
+`native-owner-integration-tests.txt`, `native-owner-analyze-final-3.txt` and
+`native-owner-payload-tests.txt`. The shared resolver signature/native admission
+changes warranted a full integration run. `full-native-owner-c4.jsonl` completed
+with **10,205 successes / 22 failures / 29 errors / 20 skips**. Exact comparison
+against `full-channel-native-retry-c4.jsonl` finds **no new failures/errors, missing
+tests or newly skipped tests**, with all **seven added cases passing**. Receipt:
+`native-owner-full-comparison.txt`. Application and test files remained fixed
+throughout the run. No failure allowlist was changed. Device discovery currently lists macOS,
+Chrome and an iPad, with no running Android TV device; this is not device acceptance.
+Android debug build (`flutter build apk --debug --no-pub`) passed;
+receipt: `native-owner-android-build.txt`. This verifies compilation, not playback
+interaction. Available emulator inventory includes `codex_sources_refactor_tv` and
+`debrify_tv`, but neither was exercised in this checkpoint. Remaining B work includes
+external-player/DeoVR dispatch admission, native metadata preparation review and
+actual device validation. C–E remain open.
+
 ## Batch B checkpoint: channel actions and native source lifetime — 2026-09-28
 
 Base revision: `cb597482`. Shared channel merge/create/persistence moves from the

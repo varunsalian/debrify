@@ -1,3 +1,5 @@
+import 'package:debrify/services/profiles/profile_playback_preparation.dart';
+import 'package:debrify/services/profiles/profile_local_writes.dart';
 import 'package:debrify/services/android_tv_player_bridge.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -519,6 +521,110 @@ void main() {
       expect((await pins(origin)).single.torrentHash, 'fallback');
       writer.close();
       expect(writer.isCurrent, isFalse);
+    },
+  );
+  test(
+    'playback preparation writes to origin from a foreign callback scope',
+    () async {
+      final preparation = ProfilePlaybackPreparation(
+        owner: ProfileSessionMemory.captureOwner(),
+        canContinue: () => true,
+      );
+      await ProfileRuntime.withCapturedScope(
+        incoming,
+        () => preparation.write(
+          () => StorageService.saveContinueWatchingItem(
+            imdbId: 'tt123',
+            title: 'Original',
+            contentType: 'movie',
+          ),
+        ),
+      );
+      final original = await ProfileRuntime.withCapturedScope(
+        origin,
+        StorageService.getContinueWatchingItems,
+      );
+      final other = await ProfileRuntime.withCapturedScope(
+        incoming,
+        StorageService.getContinueWatchingItems,
+      );
+      expect(original.single['title'], 'Original');
+      expect(other, isEmpty);
+    },
+  );
+  test(
+    'playback preparation rejects a write retired at the mutation barrier',
+    () async {
+      final preparation = ProfilePlaybackPreparation(
+        owner: ProfileSessionMemory.captureOwner(),
+        canContinue: () => true,
+      );
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final barrier = ProfilePreferences.captureMutationSnapshot((_) async {
+        entered.complete();
+        await release.future;
+      });
+      await entered.future;
+      var wrote = false;
+      final pending = preparation.write(() async {
+        wrote = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      ProfileRuntime.publish(incoming);
+      release.complete();
+      await barrier;
+      await pending;
+      expect(wrote, isFalse);
+      await expectLater(
+        preparation.run(() async {}),
+        throwsA(isA<PlaybackPreparationRetired>()),
+      );
+    },
+  );
+  test(
+    'accepted preparation write drains in origin after profile retirement',
+    () async {
+      final preparation = ProfilePlaybackPreparation(
+        owner: ProfileSessionMemory.captureOwner(),
+        canContinue: () => true,
+      );
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final pending = preparation.write(() async {
+        entered.complete();
+        await release.future;
+        await StorageService.saveContinueWatchingItem(
+          imdbId: 'tt123',
+          title: 'Accepted',
+          contentType: 'movie',
+        );
+      });
+      await entered.future;
+      ProfileRuntime.publish(incoming);
+      var drained = false;
+      final drain = ProfileLocalWrites.drain().then((_) {
+        drained = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(drained, isFalse);
+      release.complete();
+      await pending;
+      await drain;
+      expect(
+        (await ProfileRuntime.withCapturedScope(
+          origin,
+          StorageService.getContinueWatchingItems,
+        )).single['title'],
+        'Accepted',
+      );
+      expect(
+        await ProfileRuntime.withCapturedScope(
+          incoming,
+          StorageService.getContinueWatchingItems,
+        ),
+        isEmpty,
+      );
     },
   );
 }

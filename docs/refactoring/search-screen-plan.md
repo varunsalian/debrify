@@ -132,7 +132,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | Batch | Current status |
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
-| B | Provider/manual acquisition, automatic bindings, saved cloud preparation, downloads/ZIPs, playlist persistence and channel actions are wired and reviewed. Native source commits now survive Android launch return and retire with the native session. Full retry: 10,198 passes, unchanged historical failures/errors/skips, no missing tests or new regressions; 62 added cases pass. Remaining: native preparation/recovery owner propagation, switch-generation cancellation and device checks. |
+| B | Provider/manual acquisition, automatic bindings, saved cloud preparation, downloads/ZIPs, playlist persistence and channel actions are wired and reviewed. Native source commits now survive Android launch return and retire with the native session. Original-owner preparation/recovery and switch-generation cancellation are wired. Latest full gate: 10,205 passes, unchanged historical failures/errors/skips, no missing tests or new regressions; seven added cases pass. Remaining: external-player/DeoVR dispatch, native metadata preparation review and device checks. |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
@@ -279,8 +279,17 @@ native session on launch return. The borrowed launcher/Android bridge may carry
 an optional retain/release callback into the existing source persistence session;
 release it exactly once after drain/retirement, preserving failed-launch fallback.
 This bounded lifetime correction adds no native payload fields or platform code.
-The rest of launch preparation, recovery owner propagation and switch generation
-remains B work; actual device verification is still required.
+The same bounded exception now covers original-profile preparation in
+`lib/services/video_player_launcher.dart`, native launch admission in
+`lib/services/android_tv_player_bridge.dart`, and request cancellation at the
+existing source-switch callbacks in `lib/screens/video_player_screen.dart` and
+`lib/services/media_server_library_playback.dart`. Their unrelated engine, UI and
+tracking responsibilities remain borrowed legacy code for the B/D audit; this is
+not permission to relocate screen logic or rewrite those services. The plain
+`ProfilePlaybackPreparation` uses the existing captured scope, preference barrier
+and local-write drain. A shared resolver typedef carries an optional request guard;
+no new state framework or native payload schema is introduced. Native/device
+verification remains required before this boundary is accepted.
 
 Completed channel boundary:
 Channel creation/cache updates now use `DebrifyTvChannelActions` and the named
@@ -292,15 +301,12 @@ it owns only presentation/local focus state and stays within the 800-line ceilin
 The shared operation is 310 lines, bridge 51 and result model 53; all are measured.
 
 Concrete remaining B paths:
-- `VideoPlayerLauncher` preparation and native automatic recovery: pass the
-  originating owner rather than recapturing after handoff; retain player/session
-  and source-switch generation checks across queued native work. The recovery
-  helper accepts an owner now, but its native caller still needs that wiring.
+- Finish review of external-player/DeoVR asynchronous dispatch and native metadata
+  preparation admission. Original-owner propagation and native recovery/source
+  switch cancellation are now wired; do not repeat the completed provider audit.
 - Relevant native/device checks and the combined A+B integration gate. Ordered
-  engine teardown remains D; do not re-audit unrelated engine/provider internals. Preserve
-request order, source-switch behavior and accepted download ownership while
-closing those gaps. Do not re-extract completed binding/data operations or reopen
-unrelated provider internals. Ordered native teardown remains D.
+  engine teardown remains D. Preserve request order, source-switch behavior and
+  accepted download ownership; do not re-extract completed binding/data operations.
 
 ## Starting point
 

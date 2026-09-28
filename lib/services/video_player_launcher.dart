@@ -1,3 +1,6 @@
+import 'profiles/profile_playback_preparation.dart';
+import 'profiles/profile_session_memory.dart';
+import '../models/source_playlist_resolver.dart';
 import '../utils/show_shuffle.dart';
 import 'failed_saved_source.dart';
 import 'torrent_playback_service.dart';
@@ -82,7 +85,11 @@ void _cacheResolvedStream(String? resumeId, String url) {
 /// Resolve redirects for a URL (for TV player HLS streams).
 /// Returns the final URL after following redirects, or original URL if no redirect.
 /// Only resolves URLs that look like they might be short redirect URLs.
-Future<String> _resolveRedirectUrl(String url) async {
+Future<String> _resolveRedirectUrl(
+  String url, {
+  bool Function()? canContinue,
+}) async {
+  if (canContinue?.call() == false) return '';
   debugPrint('[RedirectResolver] Input URL: $url');
 
   // Check cache first
@@ -145,6 +152,7 @@ Future<String> _resolveRedirectUrl(String url) async {
           .send(request)
           .timeout(const Duration(seconds: 5));
 
+      if (canContinue?.call() == false) return '';
       debugPrint('[RedirectResolver] Response status: ${response.statusCode}');
       debugPrint('[RedirectResolver] Response headers: ${response.headers}');
 
@@ -187,6 +195,7 @@ Future<String> _resolveRedirectUrl(String url) async {
   }
 
   // No redirect or error - use original URL
+  if (canContinue?.call() == false) return '';
   _redirectCache[url] = url;
   debugPrint('[RedirectResolver] Final URL (no change): $url');
   return url;
@@ -272,7 +281,7 @@ class VideoPlayerLaunchArgs {
   final int? stremioCurrentSourceIndex;
   final Future<String?> Function(Torrent)? resolveStremioSource;
   // Torrent search source switching: resolves a Torrent to a full playlist
-  final Future<List<PlaylistEntry>?> Function(Torrent)? resolveSourceToPlaylist;
+  final SourcePlaylistResolve? resolveSourceToPlaylist;
 
   /// Startup failover is an automatic Quick Play behavior. Explicit source
   /// launches still validate their selected row, but must never advance.
@@ -592,8 +601,12 @@ class VideoPlayerLauncher {
     VideoPlayerLaunchArgs args,
     List<Map<String, dynamic>> updates, {
     MdblistService? mdblistService,
+    bool Function()? canContinue,
   }) async {
-    final built = await _AndroidTvPlaybackPayloadBuilder(args).build();
+    final built = await _AndroidTvPlaybackPayloadBuilder(
+      args,
+      canContinue: canContinue,
+    ).build();
     if (built == null) throw StateError('Native payload could not be built');
     final payload = built.payload;
     final initial = payload.toMap();
@@ -827,10 +840,18 @@ class VideoPlayerLauncher {
     bool isTrailer = false,
     VoidCallback? onPlayerHandoff,
     VoidCallback Function()? retainSourceSession,
+    ProfileSessionOwner? sourceOwner,
+    bool Function()? canContinue,
   }) async {
     // Exactly-once relay for [onPlayerHandoff]. _push fires one of these at
     // its launch points; the finally is the safety net so an exception mid
     // launch-prep can never strand the caller's loader.
+    final preparation = sourceOwner == null
+        ? null
+        : ProfilePlaybackPreparation(
+            owner: sourceOwner,
+            canContinue: canContinue ?? () => true,
+          );
     var handedOff = false;
     void handoffNow() {
       if (handedOff) return;
@@ -850,7 +871,7 @@ class VideoPlayerLauncher {
     }
 
     try {
-      await _push(
+      Future<void> launch() => _push(
         context,
         originalArgs,
         onQuickPlayNextEpisode: onQuickPlayNextEpisode,
@@ -858,16 +879,24 @@ class VideoPlayerLauncher {
         handoffNow: handoffNow,
         handoffWhenCovered: handoffWhenCovered,
         retainSourceSession: retainSourceSession,
+        preparation: preparation,
       );
+      if (preparation == null) {
+        await launch();
+      } else {
+        await preparation.run(launch);
+      }
+    } on PlaybackPreparationRetired {
+      // The original launch retired before acceptance; finally releases its loader.
     } on NativePlayerSettingsUnavailable catch (error) {
       // No player opened, so no return observer will balance the launch signal.
       // Clear sync's playback gate even if the route/loader has gone away.
       if (!isTrailer) MainPageBridge.notifyContentPlaybackStopped();
       handoffNow();
-      if (context.mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text(error.message.toString())),
-        );
+      if (context.mounted && (preparation?.isCurrent ?? true)) {
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(SnackBar(content: Text(error.message.toString())));
       }
     } finally {
       handoffNow();
@@ -882,23 +911,32 @@ class VideoPlayerLauncher {
     required VoidCallback handoffNow,
     required VoidCallback handoffWhenCovered,
     VoidCallback Function()? retainSourceSession,
+    ProfilePlaybackPreparation? preparation,
   }) async {
     // Apply the tracker master switches to catalog content with stable IDs.
+    bool active() => context.mounted && (preparation?.isCurrent ?? true);
+    Future<void> write(Future<void> Function() action) =>
+        preparation?.write(action) ?? action();
+    if (!active()) return;
     var args = originalArgs;
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(args.contentImdbId);
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(
+      args.contentImdbId,
+    );
+    if (!active()) return;
     final defaultPlayerMode = await StorageService.getDefaultPlayerMode();
-    if (!context.mounted) return;
+    if (!context.mounted || !active()) return;
     if (shouldExplainExternalPlayerFallback(args, defaultPlayerMode)) {
       final useDebrifyPlayer = await showAuthenticatedWebDavPlayerNotice(
         context,
       );
-      if (!context.mounted || !useDebrifyPlayer) return;
+      if (!context.mounted || !active() || !useDebrifyPlayer) return;
     }
     if (!args.traktScrobble &&
         !args.suppressTraktAutoSync &&
         args.contentImdbId != null &&
         args.stremioTvChannels == null) {
       final isAuth = await TraktService.instance.isAuthenticated();
+      if (!active()) return;
       if (trackingPolicy.scrobbles(TrackingSource.trakt) && isAuth) {
         args = VideoPlayerLaunchArgs(
           videoUrl: args.videoUrl,
@@ -981,7 +1019,11 @@ class VideoPlayerLauncher {
         // Clean up any existing local Continue Watching entry (Trakt tracks it now)
         if (!trackingPolicy.forcesLocalCompletion &&
             !trackingPolicy.nativeIdentity) {
-          await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+          await write(
+            () =>
+                StorageService.removeContinueWatchingItem(args.contentImdbId!),
+          );
+          if (!active()) return;
         }
       }
     }
@@ -997,6 +1039,7 @@ class VideoPlayerLauncher {
         args.contentImdbId != null &&
         args.stremioTvChannels == null) {
       final isAuth = await SimklService.instance.isAuthenticated();
+      if (!active()) return;
       if (trackingPolicy.scrobbles(TrackingSource.simkl) && isAuth) {
         args = VideoPlayerLaunchArgs(
           videoUrl: args.videoUrl,
@@ -1081,7 +1124,11 @@ class VideoPlayerLauncher {
         // tracks it now, so leaving the local entry would duplicate it. Mirrors
         // the Trakt branch above.
         if (!trackingPolicy.forcesLocalCompletion) {
-          await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+          await write(
+            () =>
+                StorageService.removeContinueWatchingItem(args.contentImdbId!),
+          );
+          if (!active()) return;
         }
       }
     }
@@ -1103,6 +1150,7 @@ class VideoPlayerLauncher {
         Future<bool>.value(trackingPolicy.scrobbles(TrackingSource.mdblist)),
         MdblistService.instance.isAuthenticated(),
       ]);
+      if (!active()) return;
       mdblistSyncEnabled = results[0];
       mdblistAuthenticated = results[1];
     }
@@ -1135,7 +1183,10 @@ class VideoPlayerLauncher {
       );
       if (!trackingPolicy.forcesLocalCompletion &&
           !trackingPolicy.nativeIdentity) {
-        await StorageService.removeContinueWatchingItem(args.contentImdbId!);
+        await write(
+          () => StorageService.removeContinueWatchingItem(args.contentImdbId!),
+        );
+        if (!active()) return;
       }
     }
 
@@ -1158,14 +1209,17 @@ class VideoPlayerLauncher {
           mdblistScrobble: args.mdblistScrobble,
         ) &&
         args.stremioTvChannels == null) {
-      await StorageService.saveContinueWatchingItem(
-        imdbId: args.contentImdbId!,
-        title: args.contentTitle ?? args.title,
-        contentType: args.contentType!,
-        posterUrl: args.posterUrl,
-        year: args.contentYear,
-        addonId: args.addonId,
+      await write(
+        () => StorageService.saveContinueWatchingItem(
+          imdbId: args.contentImdbId!,
+          title: args.contentTitle ?? args.title,
+          contentType: args.contentType!,
+          posterUrl: args.posterUrl,
+          year: args.contentYear,
+          addonId: args.addonId,
+        ),
       );
+      if (!active()) return;
     }
 
     // Starting a saved title graduates it from My Watchlist into whichever
@@ -1173,12 +1227,15 @@ class VideoPlayerLauncher {
     // this on the shared pre-launch path so opening details alone changes
     // nothing and native Android TV playback follows the same rule.
     if (args.contentType != null && args.stremioTvChannels == null) {
-      await StorageService.removeMyWatchlistItemForPlayback(
-        imdbId: args.contentImdbId,
-        contentType: args.contentType!,
-        title: args.contentTitle ?? args.title,
-        addonId: args.addonId,
+      await write(
+        () => StorageService.removeMyWatchlistItemForPlayback(
+          imdbId: args.contentImdbId,
+          contentType: args.contentType!,
+          title: args.contentTitle ?? args.title,
+          addonId: args.addonId,
+        ),
       );
+      if (!active()) return;
     }
 
     // Real packs retain the existing Trakt/Simkl launch-time snapshots because
@@ -1200,6 +1257,7 @@ class VideoPlayerLauncher {
       unawaited(_seedMdblistEpisodeProgress(args.contentImdbId!));
     }
 
+    if (!context.mounted || !active()) return;
     AnalyticsService.trackInBackground('playback_started', <String, Object?>{
       'content_type': args.contentType ?? 'unknown',
       'provider': _analyticsProviderLabel(args),
@@ -1271,12 +1329,14 @@ class VideoPlayerLauncher {
     }
 
     final isTv = await _isAndroidTv(args.isAndroidTvOverride);
+    if (!active()) return;
     if (isTv) {
       final launched = await _launchOnAndroidTv(
         args,
         onQuickPlayNextEpisode: onQuickPlayNextEpisode,
         isTrailer: isTrailer,
         retainSourceSession: retainSourceSession,
+        preparation: preparation,
       );
       if (launched) {
         handoffWhenCovered();
@@ -1289,6 +1349,7 @@ class VideoPlayerLauncher {
     // In-app player: pop the loader and push the player in the same frame, so
     // there's no between-screens gap and the loader never sits under the
     // player route.
+    if (!context.mounted || !active()) return;
     handoffNow();
     // FrozenLegacyPageRoute: the player is an excluded surface, and this one
     // push serves every launcher call site — the route's LegacyThemeBoundary
@@ -2258,12 +2319,17 @@ class VideoPlayerLauncher {
     Future<void> Function(Map<String, dynamic> result)? onQuickPlayNextEpisode,
     bool isTrailer = false,
     VoidCallback Function()? retainSourceSession,
+    ProfilePlaybackPreparation? preparation,
   }) async {
+    bool sessionActive() => preparation?.isCurrent ?? true;
+    if (!sessionActive()) return false;
     // Route IPTV playlists to dedicated IPTV launcher
     if (args.iptvChannels != null && args.iptvChannels!.isNotEmpty) {
       return _launchIptvOnAndroidTv(args);
     }
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(args.contentImdbId);
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(
+      args.contentImdbId,
+    );
 
     // Reset Trakt scrobble state for clean session
     _traktHeartbeatTimer?.cancel();
@@ -2295,15 +2361,27 @@ class VideoPlayerLauncher {
           contentTitle: args.contentTitle ?? args.title,
         );
       }
-      final builder = _AndroidTvPlaybackPayloadBuilder(args);
+      final builder = _AndroidTvPlaybackPayloadBuilder(
+        args,
+        canContinue: sessionActive,
+      );
+      if (!sessionActive()) {
+        unawaited(serverWatch.close());
+        return false;
+      }
       final result = await builder.build();
-      if (result == null) {
+      if (result == null || !sessionActive()) {
         unawaited(serverWatch.close());
         return false;
       }
       builtPayload = result.payload;
       await _initializeNativeMdblist(result.payload);
 
+      if (!sessionActive()) {
+        unawaited(serverWatch.close());
+        await _closeNativeMdblist(result.payload);
+        return false;
+      }
       // TVMaze may discover a stable show id after native playback starts.
       // Resolver callbacks read this mutable payload value at invocation time
       // so source switches and dynamically fetched episodes inherit it.
@@ -2312,7 +2390,12 @@ class VideoPlayerLauncher {
 
       final resolver = _AndroidTvPlaylistResolver(
         entries: result.entries,
-        resolveEntry: (entry) => _resolveEntryUrl(entry, args),
+        resolveEntry: (entry, {canContinue}) {
+          bool active() => sessionActive() && (canContinue?.call() ?? true);
+          Future<String> resolve() =>
+              _resolveEntryUrl(entry, args, canContinue: active);
+          return preparation == null ? resolve() : preparation.run(resolve);
+        },
       );
       playbackResolver = resolver;
 
@@ -2371,9 +2454,13 @@ class VideoPlayerLauncher {
       sourcePlaylistResolverForTv;
       if (currentStremioSources.isNotEmpty && resolveSourceToPlaylist != null) {
         sourcePlaylistResolverForTv = (int sourceIndex, {bool automaticRecovery = false}) async {
+          if (!sessionActive()) return null;
           // Claim a switch token up front so a slower, superseded resolve can't
           // repoint the resolver at a stale source after a newer switch wins.
           final switchToken = resolver.beginSwitch();
+          bool active() =>
+              sessionActive() && resolver.isLatestSwitch(switchToken);
+          if (!active()) return null;
           if (sourceIndex < 0 || sourceIndex >= currentStremioSources.length) {
             debugPrint(
               'VideoPlayerLauncher: source playlist index out of range: $sourceIndex',
@@ -2386,6 +2473,7 @@ class VideoPlayerLauncher {
           );
           try {
             await DirectSourceAuthorization.authorize(torrent);
+            if (!active()) return null;
             await serverWatch.prepare(
               torrent,
               contentTitle: args.contentTitle ?? args.title,
@@ -2393,6 +2481,7 @@ class VideoPlayerLauncher {
           } catch (_) {
             return null;
           }
+          if (!active()) return null;
           if (automaticRecovery &&
               !await recoveryPreflight.allows(
                 torrent,
@@ -2403,6 +2492,8 @@ class VideoPlayerLauncher {
               ? await TorrentPlaybackService.resolveRecoverySource(
                   torrent,
                   provider: args.startupResolverProvider,
+                  owner: preparation?.owner,
+                  canContinue: active,
                   season: args.contentType == 'series'
                       ? args.contentSeason
                       : null,
@@ -2410,8 +2501,10 @@ class VideoPlayerLauncher {
                       ? args.contentEpisode
                       : null,
                 )
-              : await resolveSourceToPlaylist(torrent);
-          if (playlistEntries == null || playlistEntries.isEmpty) return null;
+              : await resolveSourceToPlaylist(torrent, canContinue: active);
+          if (!active() || playlistEntries == null || playlistEntries.isEmpty) {
+            return null;
+          }
 
           // Use SeriesPlaylist to detect series and compute season/episode
           final seriesPlaylist = playlistEntries.length > 1
@@ -2478,6 +2571,7 @@ class VideoPlayerLauncher {
             }
           }
 
+          if (!active()) return null;
           // Build originalIndex → episode lookup for correct matching
           // (allEpisodes is sorted by season/episode, not by original entry order)
           final episodeByIndex = <int, SeriesEpisode>{};
@@ -2497,6 +2591,7 @@ class VideoPlayerLauncher {
                   ),
                 ])
               : const <Map<String, double>>[];
+          if (!active()) return null;
           final sourceTraktProgress = sourceTrackerMaps.isNotEmpty
               ? sourceTrackerMaps[0]
               : const <String, double>{};
@@ -2649,7 +2744,7 @@ class VideoPlayerLauncher {
 
           // Update the stream resolver so lazy loading works for the new
           // playlist — but only if this switch is still the latest one.
-          if (!resolver.isLatestSwitch(switchToken)) {
+          if (!active()) {
             debugPrint(
               'VideoPlayerLauncher: source playlist $sourceIndex superseded '
               'before apply — discarding stale resolve',
@@ -2666,6 +2761,20 @@ class VideoPlayerLauncher {
           };
           return [meta, ...items];
         };
+      }
+
+      final unscopedPlaylistResolver = sourcePlaylistResolverForTv;
+      if (preparation != null && unscopedPlaylistResolver != null) {
+        sourcePlaylistResolverForTv =
+            (index, {automaticRecovery = false}) async {
+              if (!preparation.isCurrent) return null;
+              return preparation.run(
+                () => unscopedPlaylistResolver(
+                  index,
+                  automaticRecovery: automaticRecovery,
+                ),
+              );
+            };
       }
 
       final sourceCommit = args.onStremioSourceCommitted;
@@ -2920,7 +3029,10 @@ class VideoPlayerLauncher {
             if (stale()) return false;
             List<PlaylistEntry>? entries;
             try {
-              entries = await resolveSourceToPlaylist(t);
+              entries = await resolveSourceToPlaylist(
+                t,
+                canContinue: () => sessionActive() && !stale(),
+              );
             } catch (_) {
               entries = null;
             }
@@ -3330,9 +3442,17 @@ class VideoPlayerLauncher {
         }
       }
 
+      if (!sessionActive()) {
+        unawaited(serverWatch.close());
+        await _closeNativeMdblist(result.payload);
+        resolver.dispose();
+        return false;
+      }
       final launched = await AndroidTvPlayerBridge.launchTorrentPlayback(
         payload: payloadMap,
         retainSourceSession: retainSourceSession,
+        sourceOwner: preparation?.owner,
+        canContinue: sessionActive,
         onProgress: (progress) {
           final season = (progress['season'] as num?)?.toInt();
           final episode = (progress['episode'] as num?)?.toInt();
@@ -3452,12 +3572,18 @@ class VideoPlayerLauncher {
         onStartupSourcesExhausted: args.onStartupSourcesExhausted,
         onRequestMoreSources: moreSourcesProviderForTv,
         onStartupSourceFailed: (index, reason) async {
+          if (!sessionActive()) return;
           if (index < 0 || index >= currentStremioSources.length) return;
-          await FailedSavedSource.forget(
+          Future<void> forget() => FailedSavedSource.forget(
             args.contentImdbId,
             currentStremioSources[index],
             reason: reason,
           );
+          if (preparation == null) {
+            await forget();
+          } else {
+            await preparation.write(forget);
+          }
         },
         onRequestAddonSources: addonSourcesProviderForTv,
         onRequestEpisodeFetch: episodeFetchProviderForTv,
@@ -4808,8 +4934,16 @@ class VideoPlayerLauncher {
 
   static Future<String> _resolveEntryUrl(
     PlaylistEntry entry,
-    VideoPlayerLaunchArgs args,
-  ) async {
+    VideoPlayerLaunchArgs args, {
+    bool Function()? canContinue,
+  }) async {
+    void checkCurrent() {
+      if (canContinue?.call() == false) {
+        throw const PlaybackPreparationRetired();
+      }
+    }
+
+    checkCurrent();
     if (entry.url.isNotEmpty) {
       // Keep protected URLs attached to their declared headers and origin.
       // The player handles redirects; the legacy URL-only resolver cannot.
@@ -4818,7 +4952,7 @@ class VideoPlayerLauncher {
       }
       // For direct stream URLs, resolve redirects to get final URL
       // (needed for HLS streams behind short URL redirects like USATV)
-      return await _resolveRedirectUrl(entry.url);
+      return await _resolveRedirectUrl(entry.url, canContinue: canContinue);
     }
 
     final provider = entry.provider?.toLowerCase();
@@ -4836,7 +4970,10 @@ class VideoPlayerLauncher {
       if (fileId == null || (torrentId == null && webDownloadId == null)) {
         throw Exception('Torbox file metadata missing');
       }
-      final apiKey = await StorageService.getTorboxApiKey();
+      final apiKey = await StorageService.getTorboxApiKey(
+        canContinue: canContinue,
+      );
+      checkCurrent();
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('Missing Torbox API key');
       }
@@ -4854,8 +4991,10 @@ class VideoPlayerLauncher {
           apiKey: apiKey,
           torrentId: torrentId!,
           fileId: fileId,
+          canContinue: canContinue,
         );
       }
+      checkCurrent();
       if (url.isEmpty) {
         throw Exception('Torbox returned an empty stream URL');
       }
@@ -4870,7 +5009,11 @@ class VideoPlayerLauncher {
         throw Exception('PikPak file metadata missing');
       }
       final pikpak = PikPakApiService.instance;
-      final fileData = await pikpak.getFileDetails(fileId);
+      final fileData = await pikpak.getFileDetails(
+        fileId,
+        canContinue: canContinue,
+      );
+      checkCurrent();
       final url = pikpak.getStreamingUrl(fileData);
       if (url == null || url.isEmpty) {
         throw Exception('PikPak returned an empty stream URL');
@@ -4881,7 +5024,10 @@ class VideoPlayerLauncher {
     // Premiumize cloud-browser lazy resolution: re-fetch a fresh direct link by
     // cloud item id (items saved from the cloud browser have no infohash).
     if (entry.premiumizeItemId != null && entry.premiumizeItemId!.isNotEmpty) {
-      final apiKey = await StorageService.getPremiumizeApiKey();
+      final apiKey = await StorageService.getPremiumizeApiKey(
+        canContinue: canContinue,
+      );
+      checkCurrent();
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('Missing Premiumize API key');
       }
@@ -4889,6 +5035,7 @@ class VideoPlayerLauncher {
         apiKey,
         entry.premiumizeItemId!,
       );
+      checkCurrent();
       if (file == null || file.link.isEmpty) {
         throw Exception('File not found in Premiumize cloud');
       }
@@ -4903,11 +5050,15 @@ class VideoPlayerLauncher {
       final hash = entry.premiumizeHash;
       final path = entry.premiumizePath;
       if (hash != null && hash.isNotEmpty && path != null && path.isNotEmpty) {
-        final apiKey = await StorageService.getPremiumizeApiKey();
+        final apiKey = await StorageService.getPremiumizeApiKey(
+          canContinue: canContinue,
+        );
+        checkCurrent();
         if (apiKey == null || apiKey.isEmpty) {
           throw Exception('Missing Premiumize API key');
         }
         final files = await PremiumizeService.resolveFilesByHash(apiKey, hash);
+        checkCurrent();
         final match = files.firstWhere(
           (f) => f.path == path,
           orElse: () => throw Exception('File not found in Premiumize cloud'),
@@ -4920,15 +5071,19 @@ class VideoPlayerLauncher {
     }
 
     if (entry.restrictedLink != null && entry.restrictedLink!.isNotEmpty) {
-      final apiKey = await StorageService.getApiKey();
+      final apiKey = await StorageService.getApiKey(canContinue: canContinue);
+      checkCurrent();
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('Missing Real Debrid API key');
       }
       final unrestrictResult = await DebridService.unrestrictLink(
         apiKey,
         entry.restrictedLink!,
+        canContinue: canContinue,
       );
+      checkCurrent();
       final url = unrestrictResult['download']?.toString() ?? '';
+      checkCurrent();
       if (url.isEmpty) {
         throw Exception('Real Debrid returned an empty stream URL');
       }
@@ -4942,11 +5097,19 @@ class VideoPlayerLauncher {
       if (lockedLink == null || lockedLink.isEmpty) {
         throw Exception('AllDebrid link metadata missing');
       }
-      final apiKey = await StorageService.getAllDebridApiKey();
+      final apiKey = await StorageService.getAllDebridApiKey(
+        canContinue: canContinue,
+      );
+      checkCurrent();
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('Missing AllDebrid API key');
       }
-      final url = await AllDebridService.unlockLink(apiKey, lockedLink);
+      final url = await AllDebridService.unlockLink(
+        apiKey,
+        lockedLink,
+        canContinue: canContinue,
+      );
+      checkCurrent();
       if (url.isEmpty) {
         throw Exception('AllDebrid returned an empty stream URL');
       }
@@ -5283,7 +5446,11 @@ class _LauncherEntry {
 
 class _AndroidTvPlaylistResolver {
   List<_LauncherEntry> entries;
-  final Future<String> Function(PlaylistEntry entry) resolveEntry;
+  final Future<String> Function(
+    PlaylistEntry entry, {
+    bool Function()? canContinue,
+  })
+  resolveEntry;
 
   // Monotonic token for in-flight source switches. The native side already
   // discards stale playlist RESULTS via its own resolution token, but the Dart
@@ -5293,8 +5460,9 @@ class _AndroidTvPlaylistResolver {
   // lazy resolution. Each switch captures a token via [beginSwitch]; a late
   // [replaceEntries] whose token is no longer current is ignored.
   int _switchSeq = 0;
+  bool _disposed = false;
   int beginSwitch() => ++_switchSeq;
-  bool isLatestSwitch(int token) => token == _switchSeq;
+  bool isLatestSwitch(int token) => !_disposed && token == _switchSeq;
 
   _AndroidTvPlaylistResolver({
     required this.entries,
@@ -5305,7 +5473,7 @@ class _AndroidTvPlaylistResolver {
   /// Pass the [switchToken] from [beginSwitch] so a stale (superseded) switch
   /// that resolves late is skipped instead of overwriting a newer source.
   void replaceEntries(List<PlaylistEntry> playlistEntries, {int? switchToken}) {
-    if (switchToken != null && switchToken != _switchSeq) {
+    if (_disposed || (switchToken != null && switchToken != _switchSeq)) {
       debugPrint(
         'AndroidTvPlaylistResolver: skipping stale replaceEntries '
         '(token $switchToken != current $_switchSeq)',
@@ -5332,6 +5500,9 @@ class _AndroidTvPlaylistResolver {
   Future<Map<String, dynamic>?> handleRequest(
     Map<String, dynamic> request,
   ) async {
+    final token = _switchSeq;
+    bool active() => isLatestSwitch(token);
+    if (!active()) return null;
     debugPrint(
       'AndroidTvPlaylistResolver: handleRequest called with: $request',
     );
@@ -5374,7 +5545,8 @@ class _AndroidTvPlaylistResolver {
     debugPrint(
       'AndroidTvPlaylistResolver: resolving entry for: ${target.entry.title}',
     );
-    final url = await resolveEntry(target.entry);
+    final url = await resolveEntry(target.entry, canContinue: active);
+    if (!active()) return null;
     debugPrint(
       'AndroidTvPlaylistResolver: resolved URL: ${url.isNotEmpty ? url.substring(0, min(50, url.length)) : "EMPTY"}',
     );
@@ -5397,6 +5569,7 @@ class _AndroidTvPlaylistResolver {
   }
 
   void dispose() {
+    _disposed = true;
     _clearResolvedStreams(entries.map((e) => e.resumeId));
   }
 }
@@ -5404,11 +5577,14 @@ class _AndroidTvPlaylistResolver {
 class _AndroidTvPlaybackPayloadBuilder {
   final VideoPlayerLaunchArgs args;
 
-  const _AndroidTvPlaybackPayloadBuilder(this.args);
+  final bool Function()? canContinue;
+  const _AndroidTvPlaybackPayloadBuilder(this.args, {this.canContinue});
 
   Future<_AndroidTvPlaybackPayloadResult?> build() async {
+    if (canContinue?.call() == false) return null;
     final playlistEntries = _normalizePlaylist();
     final seriesPlaylist = await _buildSeriesPlaylist(playlistEntries);
+    if (canContinue?.call() == false) return null;
     final contentType = _determineContentType(seriesPlaylist, playlistEntries);
     final startupRules =
         args.startupFailoverEnabled && args.stremioSources?.isNotEmpty == true
@@ -5892,6 +6068,7 @@ class _AndroidTvPlaybackPayloadBuilder {
         final resolved = await VideoPlayerLauncher._resolveEntryUrl(
           entry,
           args,
+          canContinue: canContinue,
         );
         if (resolved.isEmpty) {
           throw Exception('Failed to resolve initial stream');
