@@ -6,6 +6,25 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Classic favorite rows — 2026-09-28
+
+Base: `b5d11287`. `HomeClassicFavoriteRows` (221 lines) owns all six Classic
+favorite row variants, their tags, artwork and shared cell/poster stack. Host
+callbacks retain playback, preview lifecycle and navigation ownership. Root:
+**11,590 → 11,405 lines**.
+
+Review preserves lazy item/node/setting reads, captured Watchlist/custom-list
+snapshots, fixed row counts, artwork fallbacks, badges, progress, TV/mobile styling,
+directional callbacks and live-versus-VOD preview behavior. No wrapper element or
+new state owner was added. **85 tests pass**: 84 existing card/favorites-screen/
+progressive/pagination cases and a new widget test proving lazy item selection,
+rendered-item action capture and clearing live preview on VOD focus.
+Analysis retains **836 identical diagnostic identities**; architecture passes
+**540 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/classic-favorites-{tests,focused,analyze-final}.txt`.
+No emulator used. Catalog/continuation composition and route/resource boundaries,
+D lifecycle/facade reduction, and E final acceptance remain pending.
+
 ## Batch C checkpoint: Home rail composition — 2026-09-28
 
 Base: `97272d47`. `HomeRailComposition` (75 lines) owns non-empty rail projection,

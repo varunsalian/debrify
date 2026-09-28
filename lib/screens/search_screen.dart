@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_classic_favorite_rows.dart';
 import '../features/home/presentation/home_rail_composition.dart';
 import '../features/home/presentation/home_stage_favorite_cards.dart';
 import '../features/home/presentation/home_classic_navigation.dart';
@@ -42,7 +43,6 @@ import '../features/home/application/home_local_history_removal_dependencies.dar
 import '../features/home/presentation/home_continuation_row.dart';
 import '../features/home/presentation/home_catalog_row.dart';
 import '../features/home/presentation/home_catalog_row_header.dart';
-import '../features/home/presentation/home_favorite_row.dart';
 import '../features/home/application/home_post_playback_refresh_controller.dart';
 import '../features/discover/presentation/discover_panels.dart';
 import '../features/discover/presentation/discover_content.dart';
@@ -182,7 +182,6 @@ import '../features/search/models/search_session.dart';
 import '../features/search/models/lists_search_state.dart';
 import '../features/search/models/search_mode.dart';
 import '../features/search/presentation/search_mode_toggle.dart';
-import '../features/home/presentation/category_tag.dart';
 import '../features/search/application/keyword_providers.dart';
 import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
@@ -11312,260 +11311,76 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  Widget _buildWatchlistRow(HomeFavoriteRowRef ref, String homeRowId) {
-    final tv = widget.isTelevision;
-    final isMovies = ref.kind == HomeFavoriteKind.watchlistMovies;
-    final items = isMovies ? _watchlistMovieItems : _watchlistSeriesItems;
-    final nodes = isMovies ? _watchlistMovieNodes : _watchlistSeriesNodes;
-    return _buildFavRowShell(
-      title: isMovies ? 'Watchlist Movies' : 'Watchlist Series',
-      tags: [
-        CategoryTag(
-          isMovies ? 'Movies' : 'Series',
-          icon: Icons.bookmark_rounded,
-        ),
-      ],
-      itemCount: items.length,
-      cellBuilder: (col, posterW, cellH) {
-        final item = items[col];
-        return HomeFavoriteCell(
-          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-          isTelevision: tv,
-          column: col,
-          rowNodes: nodes,
-          onUp: _favRowOnUp(homeRowId, col),
-          onDown: _favRowOnDown(homeRowId, col),
-          child: HomeArtPoster(
-            imageUrl: item.poster,
-            title: item.name,
-            showTitle: !_hideHomeCardTitlesAndRatings,
-            isTelevision: tv,
-            focusNode: nodes[col],
-            onOpen: () => _openMyWatchlistItem(item),
-            onFocused: _clearHeroLiveIptv,
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildFavRowShell({
-    required String title,
-    required List<Widget> tags,
-    required int itemCount,
-    required Widget Function(int col, double posterW, double cellH) cellBuilder,
-  }) => buildHomeFavoriteRow(
-    context,
+  HomeClassicFavoriteRows _classicFavoriteRows(
+    String rowId,
+    List<FocusNode> Function() nodes,
+  ) => HomeClassicFavoriteRows(
+    context: context,
     isTelevision: widget.isTelevision,
     posterWidth: _railPosterW(context),
     captionBand: _homeArtPosterCaptionBand,
-    title: title,
-    tags: tags,
-    itemCount: itemCount,
-    cellBuilder: cellBuilder,
+    showTitle: () => !_hideHomeCardTitlesAndRatings,
+    nodes: nodes,
+    up: (col) => _favRowOnUp(rowId, col),
+    down: (col) => _favRowOnDown(rowId, col),
+    sidebar: () => MainPageBridge.focusTvSidebar?.call(),
+    clearLive: _clearHeroLiveIptv,
+    previewLive: _setHeroLiveIptv,
   );
 
-  /// The "Debrify TV" row of favourited keyword channels, styled to match the
-  /// catalog rows (same poster-shaped cards + title below).
-  Widget _buildTvFavRow(String homeRowId) {
-    final tv = widget.isTelevision;
-    return _buildFavRowShell(
-      title: 'Debrify TV',
-      tags: const [
-        CategoryTag('Channels'),
-        // Make it explicit this row is the user's STARRED channels, not every
-        // channel — otherwise people expect all channels here.
-        CategoryTag('Favorites', icon: Icons.star_rounded),
-      ],
-      itemCount: _tvFavChannels.length,
-      cellBuilder: (col, posterW, cellH) {
-        final channel = _tvFavChannels[col];
-        final number = channel.channelNumber > 0
-            ? channel.channelNumber
-            : col + 1;
-        return HomeFavoriteCell(
-          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-          isTelevision: tv,
-          column: col,
-          rowNodes: _tvFavNodes,
-          onUp: _favRowOnUp(homeRowId, col),
-          onDown: _favRowOnDown(homeRowId, col),
-          // Debrify channels have no artwork — the glyph fallback + channel
-          // number badge is the intended look.
-          child: HomeArtPoster(
-            imageUrl: null,
-            title: channel.name,
-            showTitle: !_hideHomeCardTitlesAndRatings,
-            badge: '$number',
-            isTelevision: tv,
-            focusNode: _tvFavNodes[col],
-            onOpen: () => _playChannel(channel),
-            onFocused: _clearHeroLiveIptv,
-          ),
-        );
-      },
-    );
+  Widget _buildWatchlistRow(HomeFavoriteRowRef ref, String homeRowId) {
+    final movies = ref.kind == HomeFavoriteKind.watchlistMovies;
+    final items = movies ? _watchlistMovieItems : _watchlistSeriesItems;
+    final nodes = movies ? _watchlistMovieNodes : _watchlistSeriesNodes;
+    return _classicFavoriteRows(
+      homeRowId,
+      () => nodes,
+    ).watchlist(movies: movies, items: items, onOpen: _openMyWatchlistItem);
   }
 
-  /// The "Stremio TV" row of favourited channels. Each card shows the channel's
-  /// current now-playing item poster (rotating on the same schedule as the Home
-  /// / Stremio TV screens); tapping opens the channel.
-  Widget _buildStremioTvFavRow(String homeRowId) {
-    final tv = widget.isTelevision;
-    return _buildFavRowShell(
-      title: 'Stremio TV',
-      tags: const [
-        CategoryTag('Channels'),
-        CategoryTag('Favorites', icon: Icons.star_rounded),
-      ],
-      itemCount: _stvFavChannels.length,
-      cellBuilder: (col, posterW, cellH) {
-        final channel = _stvFavChannels[col];
-        final item = _stvNowPlaying(channel)?.item;
-        // Prefer the 2:3 poster for this poster-shaped tile; fall back to the
-        // (landscape) background so channels whose now-playing meta lacks a
-        // poster still show art instead of a blank glyph.
-        final art = _firstNonEmpty(item?.poster, item?.background);
-        return HomeFavoriteCell(
-          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-          isTelevision: tv,
-          column: col,
-          rowNodes: _stvFavNodes,
-          onUp: _favRowOnUp(homeRowId, col),
-          onDown: _favRowOnDown(homeRowId, col),
-          child: HomeArtPoster(
-            imageUrl: art,
-            title: channel.displayName,
-            showTitle: !_hideHomeCardTitlesAndRatings,
-            live: true,
-            isTelevision: tv,
-            focusNode: _stvFavNodes[col],
-            onOpen: () => _playStremioTvChannel(channel),
-            onFocused: _clearHeroLiveIptv,
-          ),
-        );
-      },
-    );
-  }
+  Widget _buildTvFavRow(String homeRowId) =>
+      _classicFavoriteRows(homeRowId, () => _tvFavNodes).debrify(
+        count: _tvFavChannels.length,
+        itemAt: (col) => _tvFavChannels[col],
+        onOpen: _playChannel,
+      );
 
-  /// The "IPTV" row of favourited live channels. Cards show the channel logo
-  /// (glyph fallback); tapping plays the stream directly.
-  Widget _buildIptvFavRow(String homeRowId) {
-    final tv = widget.isTelevision;
-    return _buildFavRowShell(
-      title: 'IPTV',
-      tags: const [
-        CategoryTag('Live'),
-        CategoryTag('Favorites', icon: Icons.star_rounded),
-      ],
-      itemCount: _iptvFavChannels.length,
-      cellBuilder: (col, posterW, cellH) {
-        final channel = _iptvFavChannels[col];
-        return HomeFavoriteCell(
-          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-          isTelevision: tv,
-          column: col,
-          rowNodes: _iptvFavNodes,
-          onUp: _favRowOnUp(homeRowId, col),
-          onDown: _favRowOnDown(homeRowId, col),
-          child: HomeArtPoster(
-            imageUrl: channel.logoUrl,
-            title: channel.name,
-            showTitle: !_hideHomeCardTitlesAndRatings,
-            // Logos are usually square/wide, not 2:3 — contain so they aren't
-            // cropped; the gradient shows around them.
-            imageFit: BoxFit.contain,
-            isTelevision: tv,
-            focusNode: _iptvFavNodes[col],
-            onOpen: () => _playIptvChannel(channel),
-            // DPAD focus retunes the Home hero's boxed video region to this
-            // channel's live stream — same HeroTrailerBackdrop(live: true)
-            // mechanism the IPTV page's own inline preview uses.
-            onFocused: () => _setHeroLiveIptv(channel),
-          ),
-        );
-      },
-    );
-  }
+  Widget _buildStremioTvFavRow(String homeRowId) =>
+      _classicFavoriteRows(homeRowId, () => _stvFavNodes).stremio(
+        count: _stvFavChannels.length,
+        itemAt: (col) => _stvFavChannels[col],
+        nowPlaying: (channel) => _stvNowPlaying(channel)?.item,
+        onOpen: _playStremioTvChannel,
+      );
 
-  /// An opted-in IPTV custom list as a Home row. Same cell stack as the IPTV
-  /// favourites row, but content-aware: play routes by the stored content
-  /// type (lists can hold VOD/series alongside live), and only a live entry
-  /// retunes the hero's live preview on focus.
+  Widget _buildIptvFavRow(String homeRowId) =>
+      _classicFavoriteRows(homeRowId, () => _iptvFavNodes).iptv(
+        title: 'IPTV',
+        customList: false,
+        count: _iptvFavChannels.length,
+        itemAt: (col) => _iptvFavChannels[col],
+        onOpen: _playIptvChannel,
+      );
+
   Widget _buildIptvListRow(HomeFavoriteRowRef ref, String homeRowId) {
-    final tv = widget.isTelevision;
     final row = _iptvListRows[ref.list];
     final nodes = _iptvListFocus.nodesFor(row.listId);
-    return _buildFavRowShell(
+    return _classicFavoriteRows(homeRowId, () => nodes).iptv(
       title: row.title,
-      tags: const [
-        CategoryTag('IPTV'),
-        CategoryTag('List', icon: Icons.playlist_play_rounded),
-      ],
-      itemCount: row.channels.length,
-      cellBuilder: (col, posterW, cellH) {
-        final channel = row.channels[col];
-        final live = channel.isLive;
-        return HomeFavoriteCell(
-          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-          isTelevision: tv,
-          column: col,
-          rowNodes: nodes,
-          onUp: _favRowOnUp(homeRowId, col),
-          onDown: _favRowOnDown(homeRowId, col),
-          child: HomeArtPoster(
-            imageUrl: channel.logoUrl,
-            title: channel.name,
-            showTitle: !_hideHomeCardTitlesAndRatings,
-            // Logos are usually square/wide, not 2:3 — contain so they aren't
-            // cropped; the gradient shows around them.
-            imageFit: BoxFit.contain,
-            isTelevision: tv,
-            focusNode: nodes[col],
-            onOpen: () => _playIptvListChannel(channel),
-            onFocused: live
-                ? () => _setHeroLiveIptv(channel)
-                : _clearHeroLiveIptv,
-          ),
-        );
-      },
+      customList: true,
+      count: row.channels.length,
+      itemAt: (col) => row.channels[col],
+      onOpen: _playIptvListChannel,
     );
   }
 
-  /// The "Playlist" row of the user's saved items. Cards show the item poster
-  /// with a resume-progress bar; tapping opens the full action menu
-  /// ([_onPlaylistItemTap]) — this row is a complete playlist manager on its own.
-  Widget _buildPlaylistFavRow(String homeRowId) {
-    final tv = widget.isTelevision;
-    return _buildFavRowShell(
-      title: 'Playlist',
-      tags: const [CategoryTag('Saved')],
-      itemCount: _playlistItems.length,
-      cellBuilder: (col, posterW, cellH) {
-        final item = _playlistItems[col];
-        final posterUrl = item.posterUrl;
-        final title = item.title;
-        return HomeFavoriteCell(
-          onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-          isTelevision: tv,
-          column: col,
-          rowNodes: _playlistFavNodes,
-          onUp: _favRowOnUp(homeRowId, col),
-          onDown: _favRowOnDown(homeRowId, col),
-          child: HomeArtPoster(
-            imageUrl: posterUrl,
-            title: title,
-            showTitle: !_hideHomeCardTitlesAndRatings,
-            progress: _playlistController.current.progressFor(item),
-            isTelevision: tv,
-            focusNode: _playlistFavNodes[col],
-            onOpen: () => _onPlaylistItemTap(item),
-            onFocused: _clearHeroLiveIptv,
-          ),
-        );
-      },
-    );
-  }
+  Widget _buildPlaylistFavRow(String homeRowId) =>
+      _classicFavoriteRows(homeRowId, () => _playlistFavNodes).playlist(
+        count: _playlistItems.length,
+        itemAt: (col) => _playlistItems[col],
+        progress: (item) => _playlistController.current.progressFor(item),
+        onOpen: _onPlaylistItemTap,
+      );
 
   Widget _message(
     IconData icon,
