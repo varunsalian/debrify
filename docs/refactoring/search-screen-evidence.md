@@ -6,6 +6,22 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Lists route navigation — 2026-09-28
+
+Base: `d1c4b3dc`. `ListsNavigation` (66 lines) owns list-grid and list-items route
+construction. Search still supplies accepted open/play actions and return refresh.
+Root: **11,007 → 10,970 lines**.
+
+Review preserves copied result snapshots, the grid route's navigator for nested
+items, route-build-time TV/restriction reads, MDBList action provenance, and the
+original refresh-before-return-callback sequence (refresh is not newly awaited).
+**11 affected tests pass**: production Lists screens, rail keyboard behavior and
+MDBList Discover screens. Analysis retains **836 identical diagnostic identities**;
+architecture passes **548 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/lists-navigation-{tests,analyze}.txt`.
+No emulator used. Remaining navigation/action composition, lifecycle/facade
+reduction and final acceptance remain pending.
+
 ## Batch D checkpoint: catalog continuation focus — 2026-09-28
 
 Base: `e4bd4c60`. `HomeContinuationFocus` owns both continuation action nodes,

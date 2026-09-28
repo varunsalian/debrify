@@ -1,3 +1,4 @@
+import '../features/search/presentation/lists_navigation.dart';
 import '../features/search/presentation/catalog_search_prompt.dart';
 import '../features/search/presentation/lists_search_rail.dart';
 import '../features/search/presentation/lists_focus.dart';
@@ -291,7 +292,6 @@ import 'see_all/continue_watching_see_all_screen.dart';
 import 'see_all/trakt_see_all_screen.dart';
 import 'see_all/simkl_see_all_screen.dart';
 import 'see_all/mdblist_see_all_screen.dart';
-import 'see_all/mdblist_lists_see_all_screen.dart';
 import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../models/mdblist_continue_watching.dart';
@@ -9597,68 +9597,31 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return _buildBoard();
   }
 
-  /// Open the full grid of every list that matched the current search. The rail
-  /// already holds the complete `/lists/search` result set, so this hands that
-  /// list straight to the See-All screen (no refetch, no paging).
-  ///
-  /// Unlike the rail tap (which jumps to the Discover tab), opening a list from
-  /// this grid PUSHES the list's items on top of the grid, so Back retraces
-  /// list items → grid → search results — letting the user browse several
-  /// lists in a row.
-  void _openListsSeeAll() {
-    final query = _listsQuery;
-    final results = List<MdblistListChoice>.of(_listsResults);
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (gridCtx) => MdblistListsSeeAllScreen(
-          query: query,
-          lists: results,
-          isTelevision: widget.isTelevision,
-          // Push onto the grid's navigator so Back returns here.
-          onOpen: (list) => _openMdblistListItems(gridCtx, list),
-        ),
-      ),
-    );
-  }
+  late final _listsNavigation = ListsNavigation(
+    isTelevision: () => widget.isTelevision,
+    pikpakOnly: () => _pikpakOnly,
+    isBound: _isBound,
+    onOpen: (item) => _openItem(
+      item,
+      _addonForContinue(item.sourceAddon?.id),
+      isMdblistSource: true,
+    ),
+    onQuickPlay: (item) => _onCatalogPlay(
+      item,
+      _addonForContinue(item.sourceAddon?.id),
+      isMdblistSource: true,
+    ),
+    afterReturn: _afterSeeAllReturn,
+  );
 
-  /// Push an MDBList list's items as a standalone screen (non-embedded
-  /// [MdblistSeeAllScreen]) above [pushCtx]'s route. Reuses the exact item-open
-  /// and quick-play handlers the Discover tab wires for MDBList items, so a
-  /// title opens / quick-plays identically — just with a Back that returns to
-  /// whatever was under the route (the lists grid, or the Search board on TV)
-  /// instead of a tab switch. [onReturn] runs after the route pops.
+  void _openListsSeeAll() =>
+      _listsNavigation.openGrid(context, _listsQuery, _listsResults);
+
   void _openMdblistListItems(
     BuildContext pushCtx,
     MdblistListChoice list, {
     VoidCallback? onReturn,
-  }) {
-    Navigator.of(pushCtx)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => MdblistSeeAllScreen(
-              initialList: list,
-              isTelevision: widget.isTelevision,
-              isBound: _isBound,
-              onOpen: (item) => _openItem(
-                item,
-                _addonForContinue(item.sourceAddon?.id),
-                isMdblistSource: true,
-              ),
-              onQuickPlay: _pikpakOnly
-                  ? null
-                  : (item) => _onCatalogPlay(
-                      item,
-                      _addonForContinue(item.sourceAddon?.id),
-                      isMdblistSource: true,
-                    ),
-            ),
-          ),
-        )
-        .then((_) {
-          _afterSeeAllReturn();
-          onReturn?.call();
-        });
-  }
+  }) => _listsNavigation.openItems(pushCtx, list, onReturn: onReturn);
 
   Widget _buildListsSearch() => buildListsSearchContent(
     context,
