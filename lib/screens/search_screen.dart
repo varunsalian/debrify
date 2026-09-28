@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_continuation_nodes.dart';
 import '../features/home/presentation/home_see_all_navigation.dart';
 import '../features/home/application/home_refresh_queue.dart';
 import '../features/home/presentation/home_favorite_nodes.dart';
@@ -787,8 +788,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _episodeArtworkController.current[HomeEpisodeArtworkSource.local] ??
       const {};
 
-  final List<FocusNode> _cwMovieNodes = [];
-  final List<FocusNode> _cwSeriesNodes = [];
+  final _continuationNodes = HomeContinuationNodes();
+  List<FocusNode> get _cwMovieNodes =>
+      _continuationNodes.movies(HomeContinuationKind.local);
+  List<FocusNode> get _cwSeriesNodes =>
+      _continuationNodes.series(HomeContinuationKind.local);
 
   // Per-provider "one Continue Watching row" preferences. When a provider is
   // merged, its MOVIES slot carries the combined recency-ordered list (the
@@ -822,8 +826,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Map<String, double> get _iptvCwProgress => _iptvContinuation.progress;
   Map<String, String> get _iptvCwEpisode => _iptvContinuation.episode;
   Map<String, IptvCwEntry> get _iptvCwByKey => _iptvContinuation.byKey;
-  final List<FocusNode> _iptvCwMovieNodes = [];
-  final List<FocusNode> _iptvCwSeriesNodes = [];
+  List<FocusNode> get _iptvCwMovieNodes =>
+      _continuationNodes.movies(HomeContinuationKind.iptv);
+  List<FocusNode> get _iptvCwSeriesNodes =>
+      _continuationNodes.series(HomeContinuationKind.iptv);
 
   /// Set when a real content player launches (any path — in-app route, native
   /// TV activity, external app; never trailers), consumed by
@@ -861,8 +867,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Map<String, String> get _traktEpisodeArtwork =>
       _episodeArtworkController.current[HomeEpisodeArtworkSource.trakt] ??
       const {};
-  final List<FocusNode> _traktMovieNodes = [];
-  final List<FocusNode> _traktSeriesNodes = [];
+  List<FocusNode> get _traktMovieNodes =>
+      _continuationNodes.movies(HomeContinuationKind.trakt);
+  List<FocusNode> get _traktSeriesNodes =>
+      _continuationNodes.series(HomeContinuationKind.trakt);
 
   // SIMKL Continue Watching rows ("Simkl Movies" / "Simkl Shows") — a parallel
   // strip below the Trakt rows, built from the account's paused playback
@@ -883,8 +891,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _episodeArtworkController.current[HomeEpisodeArtworkSource.simkl] ??
       const {};
 
-  final List<FocusNode> _simklMovieNodes = [];
-  final List<FocusNode> _simklSeriesNodes = [];
+  List<FocusNode> get _simklMovieNodes =>
+      _continuationNodes.movies(HomeContinuationKind.simkl);
+  List<FocusNode> get _simklSeriesNodes =>
+      _continuationNodes.series(HomeContinuationKind.simkl);
   HomeMdblistContinuationController get _mdblistContinuationController =>
       _continuationBindings.mdblist;
   HomeMdblistContinuation get _mdblistContinuation =>
@@ -897,8 +907,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Map<String, String> get _mdblistEpisode => _mdblistContinuation.episode;
   Map<String, MdblistContinueWatchingItem> get _mdblistByImdb =>
       _mdblistContinuation.byImdb;
-  final List<FocusNode> _mdblistMovieNodes = [];
-  final List<FocusNode> _mdblistSeriesNodes = [];
+  List<FocusNode> get _mdblistMovieNodes =>
+      _continuationNodes.movies(HomeContinuationKind.mdblist);
+  List<FocusNode> get _mdblistSeriesNodes =>
+      _continuationNodes.series(HomeContinuationKind.mdblist);
   // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
   // keyword channels, shown between Continue Watching and the catalog rows.
   // Channels have no artwork, so they render as Stremio-shaped cards with a
@@ -2336,31 +2348,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _catalogSourcesBtnFocus.dispose();
 
     _disposeNodes();
-    for (final n in [
-      ..._cwMovieNodes,
-      ..._cwSeriesNodes,
-      ..._iptvCwMovieNodes,
-      ..._iptvCwSeriesNodes,
-      ..._traktMovieNodes,
-      ..._traktSeriesNodes,
-      ..._simklMovieNodes,
-      ..._simklSeriesNodes,
-      ..._mdblistMovieNodes,
-      ..._mdblistSeriesNodes,
-    ]) {
-      n.dispose();
-    }
+    _continuationNodes.disposeNodes();
     _favoriteNodes.disposeNodes();
-    _cwMovieNodes.clear();
-    _cwSeriesNodes.clear();
-    _iptvCwMovieNodes.clear();
-    _iptvCwSeriesNodes.clear();
-    _traktMovieNodes.clear();
-    _traktSeriesNodes.clear();
-    _simklMovieNodes.clear();
-    _simklSeriesNodes.clear();
-    _mdblistMovieNodes.clear();
-    _mdblistSeriesNodes.clear();
+    _continuationNodes.clearNodes();
     _favoriteNodes.clearNodes();
     super.dispose();
   }
@@ -2401,45 +2391,29 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Reconcile nodes against accepted rows without refetching continuation data.
   void _reconcileContinuationLayout() {
     setState(() {
-      _syncCwNodes(
-        _cwMovieNodes,
-        _cwMergeLocal ? _cwAll.length : _cwMovies.length,
-        'movie',
+      _continuationNodes.resize(
+        HomeContinuationKind.local,
+        movies: _cwMergeLocal ? _cwAll.length : _cwMovies.length,
+        series: _cwMergeLocal ? 0 : _cwSeries.length,
+        requestFocus: _requestRowFocus,
       );
-      _syncCwNodes(
-        _cwSeriesNodes,
-        _cwMergeLocal ? 0 : _cwSeries.length,
-        'series',
+      _continuationNodes.resize(
+        HomeContinuationKind.trakt,
+        movies: _cwMergeTrakt ? _traktAll.length : _traktMovies.length,
+        series: _cwMergeTrakt ? 0 : _traktSeries.length,
+        requestFocus: _requestRowFocus,
       );
-      _syncCwNodes(
-        _traktMovieNodes,
-        _cwMergeTrakt ? _traktAll.length : _traktMovies.length,
-        'tmovie',
+      _continuationNodes.resize(
+        HomeContinuationKind.simkl,
+        movies: _cwMergeSimkl ? _simklAll.length : _simklMovies.length,
+        series: _cwMergeSimkl ? 0 : _simklSeries.length,
+        requestFocus: _requestRowFocus,
       );
-      _syncCwNodes(
-        _traktSeriesNodes,
-        _cwMergeTrakt ? 0 : _traktSeries.length,
-        'tseries',
-      );
-      _syncCwNodes(
-        _simklMovieNodes,
-        _cwMergeSimkl ? _simklAll.length : _simklMovies.length,
-        'smovie',
-      );
-      _syncCwNodes(
-        _simklSeriesNodes,
-        _cwMergeSimkl ? 0 : _simklSeries.length,
-        'sseries',
-      );
-      _syncCwNodes(
-        _mdblistMovieNodes,
-        _cwMergeMdblist ? _mdblistAll.length : _mdblistMovies.length,
-        'mdbmovie',
-      );
-      _syncCwNodes(
-        _mdblistSeriesNodes,
-        _cwMergeMdblist ? 0 : _mdblistSeries.length,
-        'mdbseries',
+      _continuationNodes.resize(
+        HomeContinuationKind.mdblist,
+        movies: _cwMergeMdblist ? _mdblistAll.length : _mdblistMovies.length,
+        series: _cwMergeMdblist ? 0 : _mdblistSeries.length,
+        requestFocus: _requestRowFocus,
       );
     });
   }
@@ -2924,15 +2898,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     beforeRows: (next) {
       // Keep the same nodes on refresh. Merged mode uses the movies slot for
       // every item; disabled rows release their nodes before data publication.
-      _syncCwNodes(
-        _cwMovieNodes,
-        _cwMergeLocal ? next.data.items.length : next.movies.length,
-        'movie',
-      );
-      _syncCwNodes(
-        _cwSeriesNodes,
-        _cwMergeLocal ? 0 : next.series.length,
-        'series',
+      _continuationNodes.resize(
+        HomeContinuationKind.local,
+        movies: _cwMergeLocal ? next.data.items.length : next.movies.length,
+        series: _cwMergeLocal ? 0 : next.series.length,
+        requestFocus: _requestRowFocus,
       );
     },
     onRows: (next, current) {
@@ -2967,8 +2937,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return _iptvContinuationController.load(
       isCurrent: () => mounted,
       beforeRows: (next) {
-        _syncCwNodes(_iptvCwMovieNodes, next.movies.length, 'iptv-movie');
-        _syncCwNodes(_iptvCwSeriesNodes, next.series.length, 'iptv-series');
+        _continuationNodes.resize(
+          HomeContinuationKind.iptv,
+          movies: next.movies.length,
+          series: next.series.length,
+          requestFocus: _requestRowFocus,
+        );
       },
       onRows: () {
         setState(() {});
@@ -3008,42 +2982,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // ([_onPlaybackReturned]) refreshes. Refresh here too for the in-app path
     // (series detail / in-app player) so a resumed position updates the shelf.
     await _refreshAfterPlayback();
-  }
-
-  /// Resize a Continue Watching row's focus-node list to [count], preserving
-  /// the surviving prefix. This used to dispose-and-recreate ALL the row's
-  /// nodes on any length change — and these re-sync on every return from
-  /// playback/detail (the CW list almost always changes then), so it destroyed
-  /// the very node focus was sitting on: primary focus died with it and the
-  /// remote went dead until app relaunch. Now only a shrinking tail is
-  /// disposed, and if focus sat in that tail it's handed to the nearest
-  /// survivor.
-  void _syncCwNodes(List<FocusNode> nodes, int count, String tag) {
-    if (nodes.length == count) return;
-    if (count < nodes.length) {
-      var tailHadFocus = false;
-      for (var i = count; i < nodes.length; i++) {
-        if (nodes[i].hasFocus) {
-          tailHadFocus = true;
-          break;
-        }
-      }
-      while (nodes.length > count) {
-        nodes.removeLast().dispose();
-      }
-      // After the disposal so the dying node can't fight the handoff; a row
-      // emptied to zero has no survivor — the dead-focus reclaim listener
-      // picks that case up. Mounted-aware move: the last survivor's cell may
-      // be virtualized out, and requestFocus on a detached node latches a
-      // focus-when-reparented that would yank focus when it scrolls back in.
-      if (tailHadFocus && count > 0) {
-        _requestRowFocus(nodes, count - 1);
-      }
-    } else {
-      for (var i = nodes.length; i < count; i++) {
-        nodes.add(FocusNode(debugLabel: 'search_cw_${tag}_$i'));
-      }
-    }
   }
 
   /// Focus a card in the Continue Watching row at [cwIndex] (index into the
@@ -4010,15 +3948,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         isCurrent: () => mounted,
         beforeConnectedRows: _ensureCwMergeFlags,
         beforeRows: (next) {
-          _syncCwNodes(
-            _traktMovieNodes,
-            _cwMergeTrakt ? next.all.length : next.movies.length,
-            'tmovie',
-          );
-          _syncCwNodes(
-            _traktSeriesNodes,
-            _cwMergeTrakt ? 0 : next.series.length,
-            'tseries',
+          _continuationNodes.resize(
+            HomeContinuationKind.trakt,
+            movies: _cwMergeTrakt ? next.all.length : next.movies.length,
+            series: _cwMergeTrakt ? 0 : next.series.length,
+            requestFocus: _requestRowFocus,
           );
         },
         onRows: (next, connected, hadRows, current) {
@@ -4424,15 +4358,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         isCurrent: () => mounted,
         ensureLayout: _ensureCwMergeFlags,
         beforeRows: (next) {
-          _syncCwNodes(
-            _simklMovieNodes,
-            _cwMergeSimkl ? next.all.length : next.movies.length,
-            'smovie',
-          );
-          _syncCwNodes(
-            _simklSeriesNodes,
-            _cwMergeSimkl ? 0 : next.series.length,
-            'sseries',
+          _continuationNodes.resize(
+            HomeContinuationKind.simkl,
+            movies: _cwMergeSimkl ? next.all.length : next.movies.length,
+            series: _cwMergeSimkl ? 0 : next.series.length,
+            requestFocus: _requestRowFocus,
           );
         },
         onRows: (next, hadRows, current) {
@@ -4518,15 +4448,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     trace: debugPrint,
     onDisabled: () => setState(() {}),
     beforeRows: (next) {
-      _syncCwNodes(
-        _mdblistMovieNodes,
-        _cwMergeMdblist ? next.all.length : next.movies.length,
-        'mdbmovie',
-      );
-      _syncCwNodes(
-        _mdblistSeriesNodes,
-        _cwMergeMdblist ? 0 : next.series.length,
-        'mdbseries',
+      _continuationNodes.resize(
+        HomeContinuationKind.mdblist,
+        movies: _cwMergeMdblist ? next.all.length : next.movies.length,
+        series: _cwMergeMdblist ? 0 : next.series.length,
+        requestFocus: _requestRowFocus,
       );
     },
     onRows: (next, hadRows) {

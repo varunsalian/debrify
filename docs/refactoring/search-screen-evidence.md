@@ -6,6 +6,24 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: continuation focus pools — 2026-09-28
+
+Base: `5cf9fa74`. `HomeContinuationNodes` (94 lines) owns the ten movie/series
+focus pools, labels, resize policy and phased cleanup. The five loaders and layout
+refresh use its typed family API, retaining the existing accepted/merged counts.
+Root accessors borrow the same lists. Root: **10,162 → 10,088 lines**.
+
+Review preserves surviving-prefix identity, movie-before-series resizing, disposal
+before tail-focus handoff, empty-row recovery ownership and the explicit local,
+IPTV, Trakt, Simkl, MDBList disposal order. Favorite disposal still runs between
+continuation disposal and clearing. **41 tests pass** across five continuation
+screen families, layout, board viewport and a new focused-tail/merged-row case.
+Final analysis retains **836 identical diagnostic identities**; architecture passes
+**560 files**; changed-code formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/continuation-nodes-{tests,analyze-final}.txt`.
+No emulator used. Remaining feature composition, lifecycle/facade reduction,
+C/D integration and final acceptance are pending.
+
 ## Batch D checkpoint: continuation provider bindings — 2026-09-28
 
 Base: `2e9288bd`. `HomeContinuationBindings` (95 lines) retains local, IPTV,
