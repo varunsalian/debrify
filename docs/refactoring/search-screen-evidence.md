@@ -6,6 +6,40 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: Simkl movie-rewatch write ownership — 2026-09-28
+
+The catalog movie-rewatch reader now forwards its view/profile guard through
+Simkl authentication, cached status/library reads, credential migration and the
+whole-title unwatched write. The existing four-second read/write deadlines also
+retire the operation's guard: `Future.timeout` alone did not prevent a delayed
+credential read from submitting its POST after the caller continued. Late status
+responses no longer warm the library cache for a retired request. An already
+submitted POST keeps same-profile invalidation even after its view/deadline ends;
+a changed profile session suppresses that response's cache/revision publication.
+
+Optional guards preserve existing unguarded callers, endpoint/payload contracts,
+matching/failure rules and timeouts. No new state owner, transport or retry policy
+was added. Changes to the shared legacy Simkl service are limited to this reachable
+call chain; other tracker/coordinator/reset mutations remain separately pending.
+
+Validation: **124 affected tests pass**, including eleven new cases reusing the
+real two-profile registry/credential fixture. Tests cover originating-account
+headers despite a foreign ambient scope, exact removal payload, completed versus
+watching status, view/profile retirement during reads and writes, server failure,
+unmatched IDs, a late status response after timeout, accepted-write invalidation
+after timeout, and an actual credential migration held behind a preference
+snapshot barrier past the deadline. The latter retains the unsealed credential
+and submits no late write. Existing Simkl, native-identity/episode, reset, tracker
+menu, catalog resolver and presentation checks pass. Analyzer identities remain
+**848**; **462** migrated files pass architecture checks. Only changed service
+members were formatted. No allowances were changed.
+
+Receipts: `.git/refactor-evidence/phase5/simkl-rewatch-final-tests.txt` and
+`simkl-rewatch-final-analyze.txt`. Initial checks identified multiline-brace lints
+and one nonexistent test-path argument; final checks correct both. This closes
+`HomeCatalogPlaybackReaders.prepareMovieRewatch`'s reachable write review, not
+Batch A or final native/performance acceptance.
+
 ## Batch A checkpoint: catalog Play/Sources presentation — 2026-09-28
 
 `HomeCatalogPlayAction` now owns origin/policy preparation sequencing, resolving

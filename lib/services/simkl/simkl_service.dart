@@ -123,13 +123,21 @@ class SimklService {
     SimklCalendarService.instance.invalidate();
   }
 
-  Future<Map<String, dynamic>?> _cachedLibAllAll() async {
+  Future<Map<String, dynamic>?> _cachedLibAllAll({
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
     final at = _libCacheAt;
     if (at != null && DateTime.now().difference(at) < _libTtl) {
       return _libCacheData;
     }
     final generation = _libCacheGeneration;
-    final data = await fetchAllItemsOrNull('all', 'all');
+    final data = await fetchAllItemsOrNull(
+      'all',
+      'all',
+      canContinue: canContinue,
+    );
+    if (canContinue?.call() == false) return null;
     // Only cache authoritative results, and only if no write invalidated the
     // cache while this fetch was in flight — a transient failure or a
     // superseded fetch shouldn't poison/clobber the cache.
@@ -253,16 +261,28 @@ class SimklService {
   /// library fetch failed) so callers keep whatever they last showed instead
   /// of wrongly rendering "no status". A genuine "not in any list" is a
   /// non-null status with a null [SimklTitleStatus.currentStatus].
-  Future<SimklTitleStatus?> fetchTitleStatus(String imdbId, {String? contentType}) async {
-    if (!await isAuthenticated()) return null;
+  Future<SimklTitleStatus?> fetchTitleStatus(
+    String imdbId, {
+    String? contentType,
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false ||
+        !await isAuthenticated(canContinue: canContinue) ||
+        canContinue?.call() == false) {
+      return null;
+    }
     try {
-      final data = await _cachedLibAllAll();
-      if (data == null) return null;
+      final data = await _cachedLibAllAll(canContinue: canContinue);
+      if (data == null || canContinue?.call() == false) return null;
       for (final bucketKey in const ['movies', 'shows', 'anime']) {
         final items = (data[bucketKey] as List<dynamic>?) ?? const [];
         for (final raw in items) {
           if (raw is! Map<String, dynamic>) continue;
-          if (contentType != null && ((bucketKey == 'movies' || raw['anime_type'] == 'movie') != (contentType == 'movie'))) continue;
+          if (contentType != null &&
+              ((bucketKey == 'movies' || raw['anime_type'] == 'movie') !=
+                  (contentType == 'movie'))) {
+            continue;
+          }
           final content =
               (raw['show'] ?? raw['movie']) as Map<String, dynamic>?;
           final ids = content?['ids'] as Map<String, dynamic>?;
@@ -322,9 +342,12 @@ class SimklService {
 
   /// Check if the user is authenticated (has a stored access token).
   /// Simkl tokens don't expire, so unlike Trakt there's no refresh check.
-  Future<bool> isAuthenticated() async {
-    final token = await StorageService.getSimklAccessToken();
-    return token != null && token.isNotEmpty;
+  Future<bool> isAuthenticated({bool Function()? canContinue}) async {
+    if (canContinue?.call() == false) return false;
+    final token = await StorageService.getSimklAccessToken(
+      canContinue: canContinue,
+    );
+    return token != null && token.isNotEmpty && canContinue?.call() != false;
   }
 
   /// Revoke local auth state. Simkl has no documented revoke endpoint for
@@ -524,16 +547,23 @@ class SimklService {
   /// show yet" from "the bucket is genuinely empty".
   Future<Map<String, dynamic>?> fetchAllItemsOrNull(
     String type,
-    String status,
-  ) async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return null;
+    String status, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
+    final token = await StorageService.getSimklAccessToken(
+      canContinue: canContinue,
+    );
+    if (token == null || token.isEmpty || canContinue?.call() == false) {
+      return null;
+    }
     final uri = _apiUri('/sync/all-items/$type/$status', {'extended': 'full'});
     final data = await _getOrNull(
       uri,
       headers: _apiHeaders(accessToken: token),
       label: 'fetchAllItems $type/$status',
     );
+    if (canContinue?.call() == false) return null;
     return data is Map<String, dynamic> ? data : null;
   }
 
@@ -755,23 +785,38 @@ class SimklService {
   /// `POST /sync/history/remove` with no season/episode nesting. Simkl's
   /// current API defines that shape as the canonical "Remove from list"
   /// operation: it clears the watchlist status and any title-level history.
-  Future<bool> removeFromList(String imdbId, String type) async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return false;
+  Future<bool> removeFromList(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return false;
+    final owner = canContinue == null
+        ? null
+        : ProfileSessionMemory.captureOwner();
+    final token = await StorageService.getSimklAccessToken(
+      canContinue: canContinue,
+    );
+    if (token == null || token.isEmpty || canContinue?.call() == false) {
+      return false;
+    }
     final typeKey = _typeKey(type);
     final result = await _postOrNull(
       '/sync/history/remove',
       {
         typeKey: [
-          {
-            'ids': MediaIdentity.apiIds(imdbId),
-          },
+          {'ids': MediaIdentity.apiIds(imdbId)},
         ],
       },
       token: token,
       label: 'removeFromList $typeKey',
     );
-    if (!_wasMatched(result, typeKey)) return false;
+    // The POST is accepted: refresh this profile even if its view/deadline
+    // retired, but never publish cache revisions into another profile session.
+    if ((owner != null && owner != ProfileSessionMemory.captureOwner()) ||
+        !_wasMatched(result, typeKey)) {
+      return false;
+    }
     _invalidateLibraryCache();
     StorageService.movieFinishedRevision.value++;
     if (type == 'series') {
@@ -791,8 +836,11 @@ class SimklService {
   /// Existing watched-action name retained for callers that mean "make this
   /// whole title unwatched". At title granularity Simkl performs that operation
   /// by removing the item from the library, so it shares [removeFromList].
-  Future<bool> markUnwatched(String imdbId, String type) =>
-      removeFromList(imdbId, type);
+  Future<bool> markUnwatched(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) => removeFromList(imdbId, type, canContinue: canContinue);
 
   /// Mark a single episode watched via `POST /sync/history` with the nested
   /// `seasons[].episodes[]` shape.

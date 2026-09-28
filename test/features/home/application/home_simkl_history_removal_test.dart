@@ -1,3 +1,6 @@
+import 'package:debrify/features/home/data/home_catalog_playback_readers.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
@@ -334,4 +337,214 @@ void main() {
     );
     expect(requests, 0);
   });
+  const movie = StremioMeta(id: 'tt123', name: 'Fixture', type: 'movie');
+  String library([String status = 'completed']) => jsonEncode({
+    'movies': [
+      {
+        'status': status,
+        'movie': {
+          'ids': {'imdb': 'tt123'},
+        },
+      },
+    ],
+  });
+  for (final scenario in [
+    'completed',
+    'watching',
+    'retire-read',
+    'profile-read',
+    'retire-write',
+    'profile-write',
+    'failed-write',
+    'not-found',
+  ]) {
+    test(
+      'rewatch preparation preserves owner and response rules: $scenario',
+      () async {
+        final readers = HomeCatalogPlaybackReaders(
+          ProfileSessionMemory.captureOwner(),
+        );
+        var current = true;
+        final requests = <String>[];
+        var revisionBeforeReply = StorageService.movieFinishedRevision.value;
+        await http.runWithClient(
+          () => ProfileRuntime.withCapturedScope(
+            other,
+            () => readers.prepareMovieRewatch(
+              movie,
+              'tt123',
+              isCurrent: () => current,
+            ),
+          ),
+          () => MockClient((request) async {
+            expect(request.headers['authorization'], 'Bearer origin-token');
+            requests.add(request.method);
+            if (request.method == 'GET') {
+              expect(request.url.path, '/sync/all-items/all/all');
+              if (scenario == 'retire-read') current = false;
+              if (scenario == 'profile-read') {
+                ProfileSessionMemory.clearAll();
+                ProfileRuntime.publish(other);
+              }
+              revisionBeforeReply = StorageService.movieFinishedRevision.value;
+              return http.Response(
+                library(scenario == 'watching' ? 'watching' : 'completed'),
+                200,
+              );
+            }
+            expect(request.url.path, '/sync/history/remove');
+            expect(jsonDecode(request.body), {
+              'movies': [
+                {
+                  'ids': {'imdb': 'tt123'},
+                },
+              ],
+            });
+            if (scenario == 'retire-write') current = false;
+            if (scenario == 'profile-write') {
+              ProfileSessionMemory.clearAll();
+              ProfileRuntime.publish(other);
+            }
+            revisionBeforeReply = StorageService.movieFinishedRevision.value;
+            return http.Response(
+              scenario == 'not-found' ? '{"not_found":{"movies":[{}]}}' : '{}',
+              scenario == 'failed-write' ? 500 : 200,
+            );
+          }),
+        );
+        final writes = ![
+          'watching',
+          'retire-read',
+          'profile-read',
+        ].contains(scenario);
+        expect(requests, ['GET', if (writes) 'POST']);
+        expect(
+          StorageService.movieFinishedRevision.value,
+          revisionBeforeReply +
+              (['completed', 'retire-write'].contains(scenario) ? 1 : 0),
+        );
+      },
+    );
+  }
+  test(
+    'timed-out status response cannot submit a late write or warm library cache',
+    () async {
+      final readers = HomeCatalogPlaybackReaders(
+        ProfileSessionMemory.captureOwner(),
+      );
+      final release = Completer<http.Response>();
+      var reads = 0, writes = 0;
+      await http.runWithClient(
+        () async {
+          await readers.prepareMovieRewatch(
+            movie,
+            'tt123',
+            isCurrent: () => true,
+          );
+          expect(reads, 1);
+          release.complete(http.Response(library(), 200));
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          await SimklService.instance.fetchTitleStatus(
+            'tt123',
+            contentType: 'movie',
+          );
+          expect(reads, 2);
+          expect(writes, 0);
+        },
+        () => MockClient((request) async {
+          if (request.method == 'POST') {
+            writes++;
+            return http.Response('{}', 200);
+          }
+          reads++;
+          return reads == 1 ? release.future : http.Response(library(), 200);
+        }),
+      );
+    },
+  );
+  test(
+    'timed-out accepted write still invalidates its originating profile cache',
+    () async {
+      final readers = HomeCatalogPlaybackReaders(
+        ProfileSessionMemory.captureOwner(),
+      );
+      final release = Completer<http.Response>();
+      var reads = 0;
+      final revision = StorageService.movieFinishedRevision.value;
+      await http.runWithClient(
+        () async {
+          await readers.prepareMovieRewatch(
+            movie,
+            'tt123',
+            isCurrent: () => true,
+          );
+          expect(StorageService.movieFinishedRevision.value, revision);
+          release.complete(http.Response('{}', 200));
+          await Future<void>.delayed(const Duration(milliseconds: 40));
+          expect(StorageService.movieFinishedRevision.value, revision + 1);
+          await SimklService.instance.fetchTitleStatus(
+            'tt123',
+            contentType: 'movie',
+          );
+          expect(reads, 2);
+        },
+        () => MockClient((request) async {
+          if (request.method == 'POST') return release.future;
+          reads++;
+          return http.Response(library(), 200);
+        }),
+      );
+    },
+  );
+  test(
+    'write timeout retires credential migration waiting on the preference barrier',
+    () async {
+      ProfileRuntime.debugReset();
+      ProfileRuntime.initializeLegacy();
+      SharedPreferences.setMockInitialValues({});
+      await StorageService.setSimklAccessToken('legacy-token');
+      final readers = HomeCatalogPlaybackReaders(
+        ProfileSessionMemory.captureOwner(),
+      );
+      final release = Completer<void>(), entered = Completer<void>();
+      Future<void>? snapshot;
+      var writes = 0;
+      await http.runWithClient(
+        () async {
+          await readers.prepareMovieRewatch(
+            movie,
+            'tt123',
+            isCurrent: () => true,
+          );
+          expect(entered.isCompleted, isTrue);
+          release.complete();
+          await snapshot;
+          await Future<void>.delayed(const Duration(milliseconds: 40));
+          expect(writes, 0);
+          expect(
+            (await SharedPreferences.getInstance()).getString(
+              'simkl_access_token',
+            ),
+            'unsealed-token',
+          );
+        },
+        () => MockClient((request) async {
+          if (request.method == 'POST') {
+            writes++;
+            return http.Response('{}', 200);
+          }
+          await (await SharedPreferences.getInstance()).setString(
+            'simkl_access_token',
+            'unsealed-token',
+          );
+          snapshot = ProfilePreferences.captureMutationSnapshot((_) async {
+            entered.complete();
+            await release.future;
+          });
+          await entered.future;
+          return http.Response(library(), 200);
+        }),
+      );
+    },
+  );
 }

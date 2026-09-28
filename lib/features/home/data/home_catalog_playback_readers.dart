@@ -52,19 +52,29 @@ class HomeCatalogPlaybackReaders {
     String id, {
     required bool Function() isCurrent,
   }) async {
-    final status = await _read(
-      () => SimklService.instance
-          .fetchTitleStatus(id, contentType: item.type)
-          .timeout(const Duration(seconds: 4), onTimeout: () => null),
-      isCurrent,
-    );
-    if (status?.currentStatus != 'completed') return;
-    await _read(
-      () => SimklService.instance
-          .markUnwatched(id, 'movie')
-          .timeout(const Duration(seconds: 4), onTimeout: () => false),
-      isCurrent,
-    );
+    var pending = true;
+    bool current() =>
+        pending && isCurrent() && owner == ProfileSessionMemory.captureOwner();
+    try {
+      final status = await _read(
+        () => SimklService.instance
+            .fetchTitleStatus(id, contentType: item.type, canContinue: current)
+            .timeout(const Duration(seconds: 4), onTimeout: () => null),
+        current,
+      );
+      if (status?.currentStatus != 'completed') return;
+      await _read(
+        () => SimklService.instance
+            .markUnwatched(id, 'movie', canContinue: current)
+            .timeout(const Duration(seconds: 4), onTimeout: () => false),
+        current,
+      );
+    } finally {
+      // Future.timeout does not cancel credential reads or transport. Prevent
+      // timed-out work that has not submitted its write from submitting later.
+      // An already accepted POST retains same-profile cache invalidation.
+      pending = false;
+    }
   }
 
   Future<({int season, int episode})?> nextEpisode(
