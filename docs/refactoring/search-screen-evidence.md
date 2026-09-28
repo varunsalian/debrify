@@ -6,6 +6,37 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: Trakt Continue Watching removal — 2026-09-28
+
+Home row/detail removal now uses the owner-keyed `HomeTraktHistoryRemoval`
+dependency. It captures the originating profile for the entire operation and
+returns cancellation separately from remote failure. The existing service still
+removes playback IDs sequentially, then title history, with the original
+any-success result. Optional guards now reach removal's DELETE/POST sends,
+identity lookup, 401 refresh/resend and credential read/migration. Other callers
+retain unguarded defaults; no transport, retry or credential subsystem is replaced.
+Already sent requests and accepted credential refreshes retain their existing
+completion policy; retirement prevents subsequent removal writes and UI feedback.
+
+Validation: 115 affected tests pass, including 15 new actual-transport/factory
+cases. Movie/show payloads, request order, partial failures, empty playback IDs,
+foreign ambient scopes with distinct bound account credentials, retirement before
+and during writes, active 401 retry and retirement during refresh are covered.
+A held preference snapshot verifies retirement cannot seal a legacy credential
+or send a removal after the commit barrier. Existing scrobble preference,
+credential refresh/disconnect, vault, CW merge/parse, real Home and detail-dispatch
+tests also pass. Initial new fixture failures exposed missing registry/account
+setup; the final tests use real profile registries and bound encrypted credentials.
+Analyzer identities match all 848 prior diagnostics; 458 files pass architecture
+checks. Only changed members of oversized legacy services were formatted.
+
+Receipts: `.git/refactor-evidence/phase5/trakt-removal-targeted.txt` and
+`trakt-removal-analyze.txt`. Shared methods receive optional guard parameters with
+unchanged default behavior; affected transport/auth tests cover those defaults.
+The full suite remains at the scheduled integration gate. This closes the Trakt
+remote-removal boundary, not all tracker/detail actions: Simkl/MDBList operations,
+rating-dialog returns and exact detail-route ownership remain in batch A.
+
 ## Batch A checkpoint: IPTV history removal — 2026-09-28
 
 `_removeIptvCwItem` now dispatches through `HomeIptvHistoryRemoval`, injected by

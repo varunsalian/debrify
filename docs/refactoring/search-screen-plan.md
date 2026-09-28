@@ -128,7 +128,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 
 | Batch | Current status |
 | --- | --- |
-| A | In progress; resume resolver ownership/capacity and Continue Watching hold/menu workflow implemented and reviewed (111 and 27 affected tests pass); local history removal implemented with scoped writes/lifecycle drain (31 affected tests pass); source-edit/add workflow implemented and reviewed (36 affected tests pass); detail tracker dispatch/refresh and quick-play wiring reviewed (84 affected tests pass); catalog playback target resolution reviewed (121 affected tests pass); IPTV history removal reviewed (58 affected tests pass); remaining action audit is enumerated below |
+| A | In progress; resume resolver ownership/capacity and Continue Watching hold/menu workflow implemented and reviewed (111 and 27 affected tests pass); local history removal implemented with scoped writes/lifecycle drain (31 affected tests pass); source-edit/add workflow implemented and reviewed (36 affected tests pass); detail tracker dispatch/refresh and quick-play wiring reviewed (84 affected tests pass); catalog playback target resolution reviewed (121 affected tests pass); IPTV history removal reviewed (58 affected tests pass); Trakt remote removal boundary reviewed (115 affected tests pass); remaining action audit is enumerated below |
 | B | Pending remaining boundaries; substantial Sources extraction already complete |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
@@ -142,7 +142,7 @@ or provider per entry point. Record destinations and evidence as each row closes
 
 | Remaining workflow / production entries | Required closing evidence |
 | --- | --- |
-| Tracker removal: `_removeFromTraktContinueWatching`, `_removeTraktCwItem`, `_removeSimklCwItem`, `_removeMdblistCwItem` | Captured account/profile through accepted operations; retirement prevents follow-up writes, navigation and refresh into another session; retain each provider's removal semantics and failure feedback. |
+| Tracker removal: `_removeFromTraktContinueWatching`, `_removeTraktCwItem`, `_removeSimklCwItem`, `_removeMdblistCwItem` | Trakt remote boundary implemented with originating-account capture, guarded sequential writes/401 resend and suppressed retired feedback (115 affected tests). Simkl/MDBList and detail-route ownership remain open; retain each provider's semantics and failure feedback. |
 | IPTV history removal: `_removeIptvCwItem` | Closed: `HomeIptvHistoryRemoval` and scoped factory wired; movie/series deletion, actual separate-profile databases, retirement and sync tombstones verified (58 affected tests). Existing database transaction/drain retained. |
 | Detail mutations: `_handleDetailQuickAction`, `_handleDetailSimklQuickAction`, `_handleDetailMdblistQuickAction`, including rating dialogs and clear-progress | Audit only actions reachable through these handlers; guarded dialog returns, credential/profile ownership and actual writes; preserve refresh ordering already covered by the dispatch bridge. |
 | Catalog action composition: `_onCatalogPlay`, tracker quick-play entries and `_openItem` detail callbacks | Finish UI/data separation around the reviewed target resolver and existing player/Sources bridges; preserve loader cancellation, promised episode, exact launch arguments and retirement across metadata/dialog awaits. Include `HomeCatalogPlaybackReaders.prepareMovieRewatch`'s reachable Simkl write. |

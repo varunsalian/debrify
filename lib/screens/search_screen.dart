@@ -244,7 +244,8 @@ import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/tvos_top_shelf_service.dart';
 import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
-import '../services/trakt/trakt_continue_watching_service.dart';
+import '../models/trakt_continue_watching_item.dart';
+import '../features/home/application/home_trakt_continuation_dependencies.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/simkl/simkl_service.dart';
 import '../services/video_player_launcher.dart';
@@ -4818,12 +4819,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     String imdbId, {
     bool popDetail = true,
   }) async {
+    if (!_catalogNavigationCurrent()) return;
     final cwItem = _traktByImdb[imdbId];
     if (cwItem == null) return;
-    final removed = await TraktContinueWatchingService.instance.removeItem(
-      cwItem,
-    );
-    if (!mounted) return;
+    final removed = await ref
+        .read(homeTraktHistoryRemovalProvider(_profileSessionOwner))
+        .remove(cwItem, isCurrent: _catalogNavigationCurrent);
+    if (!mounted || removed == null || !_catalogNavigationCurrent()) return;
     if (!removed) {
       _snack('Failed to remove from Trakt Continue Watching');
       return;

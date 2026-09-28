@@ -125,15 +125,24 @@ class TraktContinueWatchingService {
   /// Remove [item] from Trakt Continue Watching: delete every playback entry,
   /// then remove the title from watch history so shows don't reappear via the
   /// authoritative Up Next feed. Returns true if anything was removed.
-  Future<bool> removeItem(TraktContinueWatchingItem item) async {
+  Future<bool> removeItem(
+    TraktContinueWatchingItem item, {
+    bool Function()? canContinue,
+  }) async {
     var anySuccess = false;
     for (final pbId in item.playbackIds) {
-      final ok = await _traktService.removePlaybackItem(pbId);
+      if (canContinue?.call() == false) return false;
+      final ok = await _traktService.removePlaybackItem(
+        pbId,
+        canContinue: canContinue,
+      );
       if (ok) anySuccess = true;
     }
+    if (canContinue?.call() == false) return false;
     final historyRemoved = await _traktService.removeFromHistory(
       item.id,
       item.meta.type,
+      canContinue: canContinue,
     );
     return anySuccess || historyRemoved;
   }

@@ -675,9 +675,13 @@ class TraktService {
     String path,
     Map<String, dynamic> body, {
     bool requireScrobbleEnabled = false,
+    bool Function()? canContinue,
   }) async {
-    var accessToken = await StorageService.getTraktAccessToken();
-    if (accessToken == null) return null;
+    if (canContinue?.call() == false) return null;
+    var accessToken = await StorageService.getTraktAccessToken(
+      canContinue: canContinue,
+    );
+    if (accessToken == null || canContinue?.call() == false) return null;
 
     try {
       // Players retain launch-time flags. Recheck the current profile's
@@ -690,6 +694,7 @@ class TraktService {
           )) {
         return null;
       }
+      if (canContinue?.call() == false) return null;
       var response = await http
           .post(
             Uri.parse('$kTraktApiBaseUrl$path'),
@@ -700,11 +705,14 @@ class TraktService {
 
       // If unauthorized, try refreshing the token once
       if (response.statusCode == 401) {
+        if (canContinue?.call() == false) return null;
         final refreshed = await refreshAccessToken();
-        if (!refreshed) return null;
+        if (!refreshed || canContinue?.call() == false) return null;
 
-        accessToken = await StorageService.getTraktAccessToken();
-        if (accessToken == null) return null;
+        accessToken = await StorageService.getTraktAccessToken(
+          canContinue: canContinue,
+        );
+        if (accessToken == null || canContinue?.call() == false) return null;
 
         // The preference may have changed while the refresh was in flight.
         if (requireScrobbleEnabled &&
@@ -713,6 +721,7 @@ class TraktService {
             )) {
           return null;
         }
+        if (canContinue?.call() == false) return null;
         response = await http
             .post(
               Uri.parse('$kTraktApiBaseUrl$path'),
@@ -893,10 +902,12 @@ class TraktService {
     String imdbId,
     String type, {
     Map<String, dynamic>? extraItemFields,
+    bool Function()? canContinue,
   }) async {
+    if (canContinue?.call() == false) return false;
     type = type == 'show' ? 'series' : type;
     final ids = await _idsForContent(imdbId, type);
-    if (ids == null) return false;
+    if (ids == null || canContinue?.call() == false) return false;
     final apiKey = type == 'series' ? 'shows' : 'movies';
     final item = <String, dynamic>{
       'ids': ids,
@@ -905,8 +916,12 @@ class TraktService {
     final body = {
       apiKey: [item],
     };
-    final response = await _authenticatedPost(path, body);
-    if (response == null) return false;
+    final response = await _authenticatedPost(
+      path,
+      body,
+      canContinue: canContinue,
+    );
+    if (response == null || canContinue?.call() == false) return false;
     final ok = response.statusCode >= 200 && response.statusCode < 300;
     if (!ok) {
       debugPrint('Trakt: Sync action failed (${response.statusCode})');
@@ -939,8 +954,16 @@ class TraktService {
   Future<bool> addToHistory(String imdbId, String type) =>
       _syncAction('/sync/history', imdbId, type);
 
-  Future<bool> removeFromHistory(String imdbId, String type) =>
-      _syncAction('/sync/history/remove', imdbId, type);
+  Future<bool> removeFromHistory(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) => _syncAction(
+    '/sync/history/remove',
+    imdbId,
+    type,
+    canContinue: canContinue,
+  );
 
   Future<bool> rateItem(String imdbId, String type, int rating) => _syncAction(
     '/sync/ratings',
@@ -1078,9 +1101,15 @@ class TraktService {
     }
   }
 
-  Future<http.Response?> _authenticatedDelete(String path) async {
-    var accessToken = await StorageService.getTraktAccessToken();
-    if (accessToken == null) return null;
+  Future<http.Response?> _authenticatedDelete(
+    String path, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
+    var accessToken = await StorageService.getTraktAccessToken(
+      canContinue: canContinue,
+    );
+    if (accessToken == null || canContinue?.call() == false) return null;
 
     try {
       var response = await http
@@ -1091,11 +1120,14 @@ class TraktService {
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 401) {
+        if (canContinue?.call() == false) return null;
         final refreshed = await refreshAccessToken();
-        if (!refreshed) return null;
+        if (!refreshed || canContinue?.call() == false) return null;
 
-        accessToken = await StorageService.getTraktAccessToken();
-        if (accessToken == null) return null;
+        accessToken = await StorageService.getTraktAccessToken(
+          canContinue: canContinue,
+        );
+        if (accessToken == null || canContinue?.call() == false) return null;
 
         response = await http
             .delete(
@@ -1114,8 +1146,14 @@ class TraktService {
 
   /// Remove a playback entry by its ID.
   /// Returns true if successfully deleted (204 No Content).
-  Future<bool> removePlaybackItem(int playbackId) async {
-    final response = await _authenticatedDelete('/sync/playback/$playbackId');
+  Future<bool> removePlaybackItem(
+    int playbackId, {
+    bool Function()? canContinue,
+  }) async {
+    final response = await _authenticatedDelete(
+      '/sync/playback/$playbackId',
+      canContinue: canContinue,
+    );
     if (response == null || response.statusCode != 204) {
       debugPrint('Trakt: removePlaybackItem failed (${response?.statusCode})');
       return false;

@@ -7021,7 +7021,9 @@ class StorageService {
 
   static Future<String?> getTraktAccessToken({
     bool forRemoteTransfer = false,
+    bool Function()? canContinue,
   }) async {
+    if (canContinue?.call() == false) return null;
     if (forRemoteTransfer) {
       final credential = await ProfileCredentialFacade.readForRemoteTransfer(
         _traktAccessTokenKey,
@@ -7029,7 +7031,11 @@ class StorageService {
       if (credential.handled) return credential.value;
     }
     final prefs = await ProfilePreferences.instance();
-    return SecretVault.getString(prefs, _traktAccessTokenKey);
+    return SecretVault.getString(
+      prefs,
+      _traktAccessTokenKey,
+      canContinue: canContinue,
+    );
   }
 
   static Future<bool> hasTraktCredential({bool Function()? canContinue}) =>
