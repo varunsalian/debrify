@@ -1,3 +1,5 @@
+import '../../services/tracker_title_actions.dart';
+import '../../services/profile_tracker_title_actions.dart';
 import '../../ui/core/progress_reset_dialog.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../services/profiles/profile_session_memory.dart';
@@ -6,8 +8,6 @@ import '../../models/custom_series_identity.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/tracking_source.dart';
 import '../../services/trakt/trakt_service.dart';
-import '../../services/watched_action_coordinator.dart';
-import '../../services/series_progress_reset_service.dart';
 import '../clear_provider_progress_dialog.dart';
 
 /// Actions available in the Trakt episode overflow menu.
@@ -114,9 +114,15 @@ Future<int?> showTraktRatingDialog(BuildContext context) {
 Future<Map<String, dynamic>?> showTraktCustomListPickerDialog(
   BuildContext context, {
   bool Function()? isCurrent,
+  TrackerTitleActions? actions,
 }) async {
   if (!context.mounted || !(isCurrent?.call() ?? true)) return null;
-  final lists = await TraktService.instance.fetchCustomLists();
+  final writer =
+      actions ??
+      ProfileTrackerTitleActions(ProfileSessionMemory.captureOwner());
+  final lists = await writer.customLists(
+    isCurrent: () => context.mounted && (isCurrent?.call() ?? true),
+  );
   if (!context.mounted || !(isCurrent?.call() ?? true)) return null;
   if (lists.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -222,6 +228,7 @@ Future<void> handleTraktMenuAction(
   /// before.
   int? presetRating,
   bool Function()? isCurrent,
+  TrackerTitleActions? actions,
 }) async {
   final owner = ProfileSessionMemory.captureOwner();
   bool current() =>
@@ -229,10 +236,23 @@ Future<void> handleTraktMenuAction(
       owner == ProfileSessionMemory.captureOwner() &&
       (isCurrent?.call() ?? true);
   if (!current()) return;
+  final writer = actions ?? ProfileTrackerTitleActions(owner);
   Future<void> run() async {
-    final traktService = TraktService.instance;
     final imdbId = item.effectiveImdbId ?? item.id;
     final type = item.type;
+    Future<bool> mutate(
+      TrackerTitleMutation mutation, {
+      int? rating,
+      String? listId,
+    }) => writer.mutate(
+      TrackingSource.trakt,
+      mutation,
+      imdbId,
+      type,
+      rating: rating,
+      listId: listId,
+      isCurrent: current,
+    );
     bool success = false;
     String actionLabel = '';
 
@@ -243,34 +263,35 @@ Future<void> handleTraktMenuAction(
           item,
           TrackingSource.trakt,
           isCurrent: current,
+          reset: () => writer.reset(
+            item.progressId ?? item.id,
+            item.name,
+            isMovie: item.type == 'movie',
+            provider: TrackingSource.trakt,
+            isCurrent: current,
+          ),
         );
         return;
       case TraktItemMenuAction.addToWatchlist:
         actionLabel = 'Added to Trakt Watchlist';
-        success = await traktService.addToWatchlist(imdbId, type);
+        success = await mutate(TrackerTitleMutation.addToWatchlist);
       case TraktItemMenuAction.addToCollection:
         actionLabel = 'Added to Trakt Collection';
-        success = await traktService.addToCollection(imdbId, type);
+        success = await mutate(TrackerTitleMutation.addToCollection);
       case TraktItemMenuAction.markWatched:
         actionLabel = 'Marked as Watched';
-        success = (await WatchedActionCoordinator.setTitleWatched(
-          imdbId: imdbId,
-          contentType: type,
-          watched: true,
-          // Trakt-branded surface: writes to Trakt even when Trakt is unticked
-          // in Scrobble. See WatchedActionCoordinator.forceTargets.
-          forceTargets: const {TrackingSource.trakt},
-        )).success;
+        success = await mutate(TrackerTitleMutation.markWatched);
       case TraktItemMenuAction.rate:
         if (!context.mounted || !current()) return;
         final rating = presetRating ?? await showTraktRatingDialog(context);
         if (rating == null || !current()) return;
         actionLabel = 'Rated $rating/10 on Trakt';
-        success = await traktService.rateItem(imdbId, type, rating);
+        success = await mutate(TrackerTitleMutation.rate, rating: rating);
       case TraktItemMenuAction.addToList:
         if (!context.mounted || !current()) return;
         final list = await showTraktCustomListPickerDialog(
           context,
+          actions: writer,
           isCurrent: current,
         );
         if (list == null || !current()) return;
@@ -279,25 +300,23 @@ Future<void> handleTraktMenuAction(
             list['ids']?['trakt']?.toString();
         if (listSlug == null || listSlug.isEmpty) return;
         actionLabel = 'Added to Trakt list "${list['name']}"';
-        success = await traktService.addToCustomList(listSlug, imdbId, type);
+        success = await mutate(
+          TrackerTitleMutation.addToCustomList,
+          listId: listSlug,
+        );
       // Remove actions — not used by add-only menu but handled for completeness
       case TraktItemMenuAction.removeFromWatchlist:
         actionLabel = 'Removed from Watchlist';
-        success = await traktService.removeFromWatchlist(imdbId, type);
+        success = await mutate(TrackerTitleMutation.removeFromWatchlist);
       case TraktItemMenuAction.removeFromCollection:
         actionLabel = 'Removed from Collection';
-        success = await traktService.removeFromCollection(imdbId, type);
+        success = await mutate(TrackerTitleMutation.removeFromCollection);
       case TraktItemMenuAction.markUnwatched:
         actionLabel = 'Marked as Unwatched';
-        success = (await WatchedActionCoordinator.setTitleWatched(
-          imdbId: imdbId,
-          contentType: type,
-          watched: false,
-          forceTargets: const {TrackingSource.trakt},
-        )).success;
+        success = await mutate(TrackerTitleMutation.markUnwatched);
       case TraktItemMenuAction.removeRating:
         actionLabel = 'Rating Removed';
-        success = await traktService.removeRating(imdbId, type);
+        success = await mutate(TrackerTitleMutation.removeRating);
       case TraktItemMenuAction.removeFromList:
         return; // No context for which list to remove from
       case TraktItemMenuAction.removeFromPlayback:
@@ -325,17 +344,12 @@ Future<void> handleTraktMenuAction(
               ),
             ],
           ),
-          reset: () {
-            Future<List<String>> run() => SeriesProgressResetService.clear(
-              imdbId,
-              item.name,
-              isMovie: item.type == 'movie',
-            );
-            final scope = owner.scope;
-            return scope == null
-                ? run()
-                : ProfileRuntime.withCapturedScope(scope, run);
-          },
+          reset: () => writer.reset(
+            imdbId,
+            item.name,
+            isMovie: item.type == 'movie',
+            isCurrent: current,
+          ),
           message: (failures) => failures.isEmpty
               ? 'Watch progress cleared.'
               : 'Could not fully clear: ${failures.join(', ')}. Please retry.',

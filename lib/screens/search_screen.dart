@@ -1,3 +1,4 @@
+import '../features/home/application/home_detail_action_dependencies.dart';
 import '../features/home/application/home_detail_dependencies.dart';
 import '../features/home/presentation/home_detail_menus.dart';
 import '../features/home/presentation/home_detail_presentation.dart';
@@ -10449,6 +10450,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           context,
           item,
           action,
+          actions: ref.read(homeDetailActionsProvider(_profileSessionOwner)),
           isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
         );
         return;
@@ -10458,17 +10460,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         context,
         item.withSourceAddon(addon),
         action,
-        onSelectSource: (item) => _openSourceBinding(
-          item,
-          isCurrent: () => detailRoute.isActive,
-        ),
+        onSelectSource: (item) =>
+            _openSourceBinding(item, isCurrent: () => detailRoute.isActive),
         onEditSource: (item) => _handleEditOrSelectSource(
           item,
           isCurrent: () => detailRoute.isActive,
         ),
         onPlayRandomEpisode: (m) => _playRandomEpisodeFromDetail(m, addon),
         onSearchPacks: _searchPacksFromDetail,
-        onAddToStremioTv: (item) => _addToStremioTvFromDetail(item, detailRoute),
+        onAddToStremioTv: (item) =>
+            _addToStremioTvFromDetail(item, detailRoute),
+        actions: ref.read(homeDetailActionsProvider(_profileSessionOwner)),
         presetRating: presetRating,
         isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
       );
@@ -10486,6 +10488,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       context,
       item,
       action,
+      actions: ref.read(homeDetailActionsProvider(_profileSessionOwner)),
       presetRating: presetRating,
       isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
       removeContinueWatching: () => ref
@@ -10511,6 +10514,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       context,
       item,
       action,
+      actions: ref.read(homeDetailActionsProvider(_profileSessionOwner)),
       presetRating: presetRating,
       isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
     ),

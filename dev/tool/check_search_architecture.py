@@ -15,6 +15,8 @@ FEATURES = ("search", "home", "discover", "sources", "stremio_tv")
 # The original screen/parts are tracked temporary exceptions in the phase plan;
 # add a retained facade here once its migration is complete.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
+    "lib/services/tracker_title_actions.dart",
+    "lib/services/profile_tracker_title_actions.dart",
     "lib/models/home_collection_rows.dart",
     "lib/models/youtube_resolved_streams.dart",
     "lib/services/home_collection_rows.dart",

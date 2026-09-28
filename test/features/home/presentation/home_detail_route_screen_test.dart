@@ -1,3 +1,8 @@
+import 'package:debrify/features/home/application/home_detail_action_dependencies.dart';
+import 'package:debrify/services/tracker_title_actions.dart';
+import 'package:debrify/models/tracking_source.dart';
+import 'package:debrify/services/simkl/simkl_menu_helpers.dart';
+import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
 import 'package:debrify/features/home/application/home_detail_dependencies.dart';
 import 'package:debrify/features/home/data/home_detail_readers.dart';
 import 'package:debrify/features/home/presentation/home_catalog_playback_bridge.dart';
@@ -74,6 +79,27 @@ class WaitingDetailSources extends Fake implements HomeSourceEditingRepository {
   }
 }
 
+class WaitingDetailActions extends Fake implements TrackerTitleActions {
+  final release = Completer<bool>();
+  final calls = <(TrackingSource, TrackerTitleMutation, String, String)>[];
+  bool Function()? current;
+
+  @override
+  Future<bool> mutate(
+    TrackingSource tracker,
+    TrackerTitleMutation mutation,
+    String id,
+    String type, {
+    int? rating,
+    String? listId,
+    required bool Function() isCurrent,
+  }) {
+    calls.add((tracker, mutation, id, type));
+    current = isCurrent;
+    return release.future;
+  }
+}
+
 void main() {
   late Directory images;
   setUpAll(() async {
@@ -88,6 +114,82 @@ void main() {
   });
   tearDownAll(() => images.delete(recursive: true));
   for (final merged in [false, true]) {
+    for (final tracker in [
+      TrackingSource.trakt,
+      TrackingSource.simkl,
+      TrackingSource.mdblist,
+    ]) {
+      testWidgets(
+        'real detail injects $tracker mutation and retires feedback: merged=$merged',
+        (tester) async {
+          final home = HomeFixture(tester);
+          final actions = WaitingDetailActions();
+          await home.mount(
+            initialPreferences: {'merged_series_page_enabled': merged},
+            wrap: (child) => ProviderScope(
+              overrides: [
+                homeCatalogOriginRepositoryProvider.overrideWith(
+                  (ref, owner) => ReadyOrigin(),
+                ),
+                homeDetailActionsProvider.overrideWith((ref, owner) => actions),
+              ],
+              child: child,
+            ),
+          );
+          await home.settle();
+          await home.focusFast();
+          await home.key(LogicalKeyboardKey.enter);
+          await home.settle();
+          late void Function() dispatch;
+          if (merged) {
+            final detail = tester.widget<MergedDetailScreen>(
+              find.byType(MergedDetailScreen),
+            );
+            dispatch = () {
+              unawaited(switch (tracker) {
+                TrackingSource.trakt => detail.onTraktAction!(
+                  TraktItemMenuAction.addToWatchlist,
+                ),
+                TrackingSource.simkl => detail.onSimklAction!(
+                  SimklItemMenuAction.moveToPlanToWatch,
+                ),
+                _ => detail.onMdblistAction!(
+                  MdblistItemMenuAction.addToWatchlist,
+                ),
+              });
+            };
+          } else {
+            final detail = tester.widget<CatalogItemDetailScreen>(
+              find.byType(CatalogItemDetailScreen),
+            );
+            dispatch = () {
+              switch (tracker) {
+                case TrackingSource.trakt:
+                  detail.onTraktAction!(TraktItemMenuAction.addToWatchlist);
+                case TrackingSource.simkl:
+                  detail.onSimklAction!(SimklItemMenuAction.moveToPlanToWatch);
+                default:
+                  detail.onMdblistAction!(MdblistItemMenuAction.addToWatchlist);
+              }
+            };
+          }
+          await home.drive(dispatch);
+          expect(actions.calls, [
+            (tracker, TrackerTitleMutation.addToWatchlist, 'tt123', 'movie'),
+          ]);
+          expect(actions.current!(), isTrue);
+          home.navigator.currentState!.pop();
+          await home.settle();
+          expect(actions.current!(), isFalse);
+          await home.drive(() => actions.release.complete(true));
+          await home.settle();
+          expect(find.byType(SnackBar), findsNothing);
+          await home.drive(dispatch);
+          expect(actions.calls, hasLength(1));
+          await home.dispose();
+        },
+      );
+    }
     for (final retire in [false, true]) {
       testWidgets(
         'detail metadata uses injected reader and route guard: merged=$merged retired=$retire',

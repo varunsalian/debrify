@@ -6,6 +6,46 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: injected tracker title mutations — 2026-09-28
+
+Home detail actions now obtain `TrackerTitleActions` through the profile-family
+`homeDetailActionsProvider`. The plain shared `ProfileTrackerTitleActions` adapter
+owns tracker command dispatch, branded watched/unwatched targets, Simkl drop
+cleanup, custom-list reads and reset invocation. Its dependencies remain existing
+services; it owns no caches, credentials or competing state. The contract is 44
+lines and the implementation 211; both are measured by the architecture guard.
+Shared legacy menu callers use the same adapter through a compatibility default.
+
+The Trakt/Simkl/MDBList helpers retain their labels, confirmations, rating/list
+selection, navigation callbacks and feedback. Home keeps its reviewed refresh
+bridge and route guard. Provider resets preserve the original progress identity;
+global reset retains its previous identity and confirmation. Every accepted command
+runs in the injected owner's scope; retired dependencies reject new commands and
+retired routes suppress feedback. Simkl drop now forwards existing continuation
+guards so retirement between status update and cleanup prevents a later request.
+No service framework, duplicate state or extra DI system was introduced.
+
+Validation: 70 existing menu/reset/detail checks pass; the updated real-route suite
+passes 22 tests, including six new injected-action/retirement cases across all three
+trackers and both detail layouts. Another 33 related menu/reset/data tests pass;
+the final data suite passes eight cases. Its tests verify actual forced tracker
+writes with scrobbling disabled, local completion, ordered Simkl cleanup,
+retirement and real origin-scoped persistence from a foreign ambient scope.
+These groups overlap; their counts are not additive. Analyzer diagnostic identities
+remain 845; architecture checks pass 476 measured files and diff checks pass.
+Only changed legacy members were formatted. Receipts in
+`.git/refactor-evidence/phase5/`: `detail-actions-existing-tests.txt`,
+`detail-actions-route-tests.txt`, `detail-actions-final-related-tests.txt`,
+`detail-actions-data-final-tests-2.txt`, `detail-actions-final-analyze-2.txt`.
+
+Review: production Home wiring uses the overridden contract in executable tests,
+and the shared menu helpers no longer invoke tracker mutations directly. Existing
+modal-return tests retain the production transport checks. A captured scope and
+result guard do not by themselves prove every transitive write safe: Batch A
+still requires the watched-action sequence and remaining credential/transport,
+MDBList and persistence checks. Do not reopen completed menu composition merely
+for naming changes. The A+B full-suite gate and device acceptance remain pending.
+
 ## Batch A checkpoint: accepted reset deletion and tracker continuation — 2026-09-28
 
 The reset service now includes its complete local deletion sequence in the
