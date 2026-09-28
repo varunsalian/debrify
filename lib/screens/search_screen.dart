@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_rail_composition.dart';
 import '../features/home/presentation/home_stage_favorite_cards.dart';
 import '../features/home/presentation/home_classic_navigation.dart';
 import '../features/home/presentation/home_stage_navigation.dart';
@@ -6449,60 +6450,30 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// FocusNode lists are reused from the classic board's per-row lists — only
   /// one view is ever mounted, and reuse keeps node counts synced through
   /// paging for free.
-  List<HomeRail> get _canonicalCanvasRails {
-    final rails = <HomeRail>[];
-    if (_cwVisible) {
-      final cwRows = _cwRows;
-      for (var i = 0; i < cwRows.length; i++) {
-        if (cwRows[i].items.isEmpty) continue;
-        rails.add(HomeRail(cw: cwRows[i], cwIndex: i));
-      }
-    }
-    for (final ref in _favRowKinds) {
-      if (_canvasFavItemCount(ref) == 0) continue;
-      rails.add(HomeRail(favKind: ref));
-    }
-    for (var i = 0; i < _sections.length; i++) {
-      if (_sections[i].items.isEmpty || i >= _rowNodes.length) continue;
-      rails.add(HomeRail(sectionIndex: i));
-    }
-    return HomeRowOrder.defaults(rails, _canvasRailRowId);
-  }
+  List<HomeRail> get _canonicalCanvasRails => HomeRailComposition.canonical(
+    continuation: _cwVisible ? _cwRows : const [],
+    favorites: _favRowKinds,
+    favoriteCount: _canvasFavItemCount,
+    sectionCount: _sections.length,
+    nodeRowCount: _rowNodes.length,
+    sectionHasItems: (index) => _sections[index].items.isNotEmpty,
+    rowId: _canvasRailRowId,
+  );
 
-  /// The canonical rails, globally sorted by the user's saved row ids.
-  List<HomeRail> get _canvasRails {
-    final rails = _canonicalCanvasRails;
-    return _homeRowOrderActive
-        ? HomeRowOrder.apply(rails, _effectiveHomeRowOrder, _canvasRailRowId)
-        : rails;
-  }
+  List<HomeRail> _orderedHomeRails(List<HomeRail> rails) => _homeRowOrderActive
+      ? HomeRowOrder.apply(rails, _effectiveHomeRowOrder, _canvasRailRowId)
+      : rails;
 
-  /// Classic renders the same globally ordered rails as every stage layout,
-  /// plus focusless Trakt placeholders while that account is loading.
-  List<HomeRail> get _classicHomeRails {
-    var rails = _canonicalCanvasRails;
-    if (_traktReserving) {
-      final skeletons = <HomeRail>[];
-      if (!_homeDisabled.contains('trakt:movies')) {
-        skeletons.add(const HomeRail(traktSkeletonIndex: 0));
-      }
-      // Merged Trakt renders one combined row, so reserve one slot, not two.
-      if (!_cwMergeTrakt && !_homeDisabled.contains('trakt:shows')) {
-        skeletons.add(const HomeRail(traktSkeletonIndex: 1));
-      }
-      // In the built-in order placeholders belong after the real CW block and
-      // before favourites/sections. Build that canonical sequence first, then
-      // let a saved order move the placeholders wherever the user requested.
-      rails = HomeRowOrder.insertAfterLeadingRun(
-        rails,
-        skeletons,
-        (rail) => rail.cw != null,
-      );
-    }
-    return _homeRowOrderActive
-        ? HomeRowOrder.apply(rails, _effectiveHomeRowOrder, _canvasRailRowId)
-        : rails;
-  }
+  List<HomeRail> get _canvasRails => _orderedHomeRails(_canonicalCanvasRails);
+
+  List<HomeRail> get _classicHomeRails => _orderedHomeRails(
+    HomeRailComposition.classic(
+      canonical: _canonicalCanvasRails,
+      reserveTrakt: _traktReserving,
+      mergeTrakt: _cwMergeTrakt,
+      disabled: _homeDisabled,
+    ),
+  );
 
   String _canvasRailRowId(HomeRail rail) {
     if (rail.cw != null) return rail.cw!.rowId;
@@ -6545,33 +6516,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   final HomeStageHoldLatch _stageHold = HomeStageHoldLatch();
 
-  /// The queue: every Continue Watching row flattened to (row, column) pairs
-  /// in board order. Nodes come from the CW rows themselves — which is why
-  /// [_stageRails] drops CW rails on Tonight (a node may be mounted once).
-  List<HomeTonightQueueEntry> get _tonightQueue {
-    final out = <HomeTonightQueueEntry>[];
-    if (!_cwVisible) return out;
-    for (final rail in _canvasRails) {
-      final cw = rail.cw;
-      if (cw == null) continue;
-      final n = min(cw.items.length, cw.nodes.length);
-      for (var col = 0; col < n; col++) {
-        out.add(HomeTonightQueueEntry(rail: rail, col: col));
-      }
-    }
-    return out;
-  }
+  List<HomeTonightQueueEntry> get _tonightQueue =>
+      _cwVisible ? HomeRailComposition.tonightQueue(_canvasRails) : [];
 
-  /// The rails the ACTIVE layout puts on its rail zone. Identical to
-  /// [_canvasRails] everywhere except Tonight, which lifts the Continue
-  /// Watching rows out into its own vertical queue — leaving them in both
-  /// places would mount the same FocusNodes twice.
-  List<HomeRail> get _stageRails => _homeStyleEffective == 'tonight'
-      ? [
-          for (final r in _canvasRails)
-            if (r.cw == null) r,
-        ]
-      : _canvasRails;
+  List<HomeRail> get _stageRails => HomeRailComposition.stage(
+    _canvasRails,
+    tonight: _homeStyleEffective == 'tonight',
+  );
 
   int _canvasFavItemCount(HomeFavoriteRowRef ref) {
     if (ref.isIptvList) return _iptvListRows[ref.list].channels.length;

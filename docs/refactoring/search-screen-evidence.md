@@ -6,6 +6,27 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Home rail composition — 2026-09-28
+
+Base: `97272d47`. `HomeRailComposition` (75 lines) owns non-empty rail projection,
+Classic loading-placeholder insertion and Tonight queue/stage separation. Saved
+ordering remains applied after placeholder insertion. The pure `HomeRowOrder`
+policy moved unchanged into Home application, with a compatibility export for
+existing settings callers; this resolves the architecture check's rejected legacy
+service import without an exception. Root: **11,639 → 11,590 lines**.
+
+Review preserves original continuation indices, borrowed rows/nodes, empty and
+unready-row filtering, disabled/merged Trakt placeholders, saved ordering and
+Tonight's item/node bounds. **66 distinct tests pass**: ten ordering tests,
+55 real-screen progressive/pagination checks and one projection boundary test.
+The 11 ordering/projection tests passed again after relocating the pure policy.
+Analysis retains **836 identical diagnostic identities**; architecture passes
+**539 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/rail-composition-
+{tests,focused,order-final,analyze-final}.txt`. No emulator used.
+Remaining C row/action and route/resource boundaries, D lifecycle/facade reduction
+and E final acceptance are pending.
+
 ## Batch C checkpoint: shared stage favorite cards — 2026-09-28
 
 Base: `897498f4`. `HomeStageFavoriteCards` (163 lines) owns the shared favorite
