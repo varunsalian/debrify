@@ -6,6 +6,50 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: MDBList detail read ownership — 2026-09-28
+
+The detail-status adapter forwards its route guard through identity preparation
+and title-state requests. Shared IMDb resolution and sync/dropped snapshots retain
+profile-session ownership independently of any one route. Closing the initiating
+page cannot cancel a sibling's shared read; each page separately rejects retired
+status. Foreign captured scopes cannot borrow those caches. Profile retirement
+prevents subsequent requests and cache publication, including during API-key reads.
+The default key reader now forwards the existing guarded SecretVault migration
+contract, so a held migration cannot commit after its owning session retires.
+
+Review found two linked invalidation gaps: the derived dropped-ID cache could
+refill from an old response, and a fresh read could still join the invalidated
+snapshot's in-flight request. Bucket invalidation now detaches that request (with
+identity-safe final cleanup), and the dropped projection checks epoch/bucket
+generation before publication. Actual dropped-title mutations detach the derived
+in-flight projection too, preserving optimistic updates to an existing cache.
+The existing concurrent state/dropped reads, successful same-session coalescing,
+cache lifetimes, pagination and unknown-status semantics are retained. Accepted
+shared reads, including same-profile credential work, remain service-owned.
+
+Validation: **167 related tests pass** across all MDBList services and Home
+continuation/removal/revision integration. The final **12-case ownership suite
+passes**, including one additional identity-preparation retirement test added
+after that wider run. Earlier detail-reader/real-route coverage also passed (148
+combined checks before the final invalidation refinement). New coverage exercises
+shared reads with independently retiring routes, session changes, cache hits,
+reset/bucket/mutation invalidation with late old responses, transport retirement
+while awaiting credentials, and an actual held credential-migration barrier.
+The delayed invalidation case reproduced the stale in-flight join before the fix.
+Nullable generic inference and newly introduced brace lint were corrected. Final
+analysis retains **848** diagnostic identities; **472** migrated files pass
+architecture checks and diff checks pass. Only changed legacy members were
+formatted. Receipts: `.git/refactor-evidence/phase5/mdblist-detail-final-related-tests.txt`,
+`mdblist-detail-ownership-final.txt`, and `mdblist-detail-final-analyze-3.txt`.
+
+Transport guards are optional for other callers; normal error classification and
+request contracts retain existing service-suite coverage. No API redesign,
+retry loop or native change was introduced. The previous full-suite integration
+receipt remains the reference; this checkpoint uses the full affected MDBList
+suite and Home integrations. Opening orchestration, addon inventory and the
+remaining mutation/reset contracts are still pending, as are batches B–E and
+native/device/performance acceptance.
+
 ## Batch A checkpoint: Trakt detail status ownership — 2026-09-28
 
 The injected detail reader now forwards its continuation guard into Trakt title

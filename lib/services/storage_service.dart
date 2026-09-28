@@ -2326,15 +2326,23 @@ class StorageService {
   // MDBList API key + cached username helpers
   static Future<String?> getMdblistApiKey({
     bool forRemoteTransfer = false,
+    bool Function()? canContinue,
   }) async {
+    if (canContinue?.call() == false) return null;
     if (forRemoteTransfer) {
       final credential = await ProfileCredentialFacade.readForRemoteTransfer(
         _mdblistApiKeyKey,
       );
+      if (canContinue?.call() == false) return null;
       if (credential.handled) return credential.value;
     }
     final prefs = await ProfilePreferences.instance();
-    return SecretVault.getString(prefs, _mdblistApiKeyKey);
+    if (canContinue?.call() == false) return null;
+    return SecretVault.getString(
+      prefs,
+      _mdblistApiKeyKey,
+      canContinue: canContinue,
+    );
   }
 
   static Future<bool> hasMdblistCredential({bool Function()? canContinue}) =>

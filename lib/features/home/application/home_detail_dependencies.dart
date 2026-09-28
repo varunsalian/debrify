@@ -36,8 +36,13 @@ final homeDetailReadersProvider = Provider.autoDispose
               canContinue: current,
             ),
           ),
-          mdblist: (id, type, current) =>
-              scoped(() => MdblistService.instance.fetchTitleStatus(id, type)),
+          mdblist: (id, type, current) => scoped(
+            () => MdblistService.instance.fetchTitleStatus(
+              id,
+              type,
+              canContinue: current,
+            ),
+          ),
           recommendations: (id, type, current) => scoped(
             () => StremioService.instance.getRecommendations(
               imdbId: id,
