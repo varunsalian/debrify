@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_see_all_navigation.dart';
 import '../features/home/application/home_refresh_queue.dart';
 import '../features/home/presentation/home_favorite_nodes.dart';
 import '../features/home/presentation/home_favorite_bindings.dart';
@@ -290,11 +291,6 @@ import '../services/metadata_title_service.dart';
 import 'collections/collection_folder_screen.dart';
 import 'iptv/xtream_series_detail.dart';
 import 'playlist_content_view_screen.dart';
-import 'see_all/catalog_see_all_screen.dart';
-import 'see_all/continue_watching_see_all_screen.dart';
-import 'see_all/trakt_see_all_screen.dart';
-import 'see_all/simkl_see_all_screen.dart';
-import 'see_all/mdblist_see_all_screen.dart';
 import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../models/mdblist_continue_watching.dart';
@@ -9909,111 +9905,46 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  /// Open the full-screen Stremio-styled catalog browser for a rail. Seeds the
-  /// grid with the rail's already-loaded items + paging cursor so it continues
-  /// where the rail left off; item taps route back through [_openItem] so the
-  /// existing detail flow (Trakt actions, recommendations) is reused unchanged.
-  void _openCatalogSeeAll(CatalogSection section) {
-    // Tracker list rows browse in their OWN See-All (list dropdowns, list
-    // semantics) — the catalog browser would try to page them through a
-    // placeholder addon that can't serve a catalog endpoint.
-    if (section is HomeListSection) {
-      _openListRowSeeAll(section);
-      return;
-    }
-    if (section is HomeCollectionSection) {
-      _openCollectionScreen(section.collection, 0);
-      return;
-    }
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => _withHomeExpandedCardSettings(
-              CatalogSeeAllScreen(
-                addon: section.addon,
-                initialCatalog: section.catalog,
-                seedItems: List<StremioMeta>.of(section.items),
-                seedNextSkip: section.nextSkip,
-                // Search sections carry their query → See All keeps searching
-                // this catalog (paged) instead of browsing it.
-                query: section.query,
-                isTelevision: widget.isTelevision,
-                onOpenItem: (item) => _openItem(item, section.addon),
-                onQuickPlay: _pikpakOnly
-                    ? null
-                    : (item) => _onCatalogPlay(item, section.addon),
-                // Bound-source badges are intentionally omitted here: _isBound only
-                // tracks rail/CW items (not See-All paged items) and wouldn't
-                // reactively update in a pushed screen, so a badge would be a false
-                // negative more often than not. Revisit with a per-item lookup.
-              ),
-            ),
-          ),
-        )
-        .then((_) => _afterSeeAllReturn());
-  }
+  late final _seeAllNavigation = HomeSeeAllNavigation(
+    isTelevision: () => widget.isTelevision,
+    pikpakOnly: () => _pikpakOnly,
+    wrap: _withHomeExpandedCardSettings,
+    isBound: _isBound,
+    afterReturn: _afterSeeAllReturn,
+    afterTrackerReturn: () => _refreshAfterPlayback(trackers: true),
+    traktItems: () => _traktAll,
+    traktProgress: () => _cwCardMaps(HomeContinuationKind.trakt).progress,
+    simklItems: () => _simklAll,
+    simklProgress: () => _simklProgress,
+    openTraktItem: _openTraktItem,
+    playTraktItem: _playTraktItem,
+    openSimklItem: _openSimklItem,
+    playSimklItem: _playSimklItem,
+    openSimklCwItem: _openSimklCwItem,
+    playSimklCwItem: _playSimklCwItem,
+    openMdblist: (item) => _openItem(
+      item,
+      _addonForContinue(item.sourceAddon?.id),
+      isMdblistSource: true,
+    ),
+    playMdblist: (item) => _onCatalogPlay(
+      item,
+      _addonForContinue(item.sourceAddon?.id),
+      isMdblistSource: true,
+    ),
+    openItem: _openItem,
+    playItem: _onCatalogPlay,
+  );
 
-  /// "See All" for a Trakt/Simkl list row: the tracker's own See-All screen,
-  /// opened directly on the row's list (`initialList`). CW items/progress are
-  /// passed exactly as the Discover wiring does, so switching the List
-  /// dropdown to Continue Watching inside the screen keeps resume semantics
-  /// (the Simkl screen needs its SEPARATE CW handlers for that — without
-  /// them, CW items would open/play plainly).
-  void _openListRowSeeAll(HomeListSection section) {
-    final Widget screen;
-    if (section.isTrakt) {
-      screen = TraktSeeAllScreen(
-        initialList: section.traktChoice,
-        cwItems: List<StremioMeta>.of(_traktAll),
-        cwProgress: _cwCardMaps(HomeContinuationKind.trakt).progress,
-        onOpen: _openTraktItem,
-        onQuickPlay: _pikpakOnly ? null : _playTraktItem,
-        isBound: _isBound,
-        isTelevision: widget.isTelevision,
-      );
-    } else if (section.isMdblist) {
-      screen = MdblistSeeAllScreen(
-        initialList: section.mdblistList,
-        initialListIsPublic: section.rowId.startsWith(
-          HomeExtraRowIds.mdblistTopPrefix,
-        ),
-        onOpen: (item) => _openItem(
-          item,
-          _addonForContinue(item.sourceAddon?.id),
-          isMdblistSource: true,
-        ),
-        onQuickPlay: _pikpakOnly
-            ? null
-            : (item) => _onCatalogPlay(
-                item,
-                _addonForContinue(item.sourceAddon?.id),
-                isMdblistSource: true,
-              ),
-        isBound: _isBound,
-        isTelevision: widget.isTelevision,
-      );
+  void _openCatalogSeeAll(CatalogSection section) {
+    // Synthetic list/collection rows must never enter catalog pagination.
+    if (section is HomeListSection) {
+      _seeAllNavigation.openList(context, section);
+    } else if (section is HomeCollectionSection) {
+      _openCollectionScreen(section.collection, 0);
     } else {
-      screen = SimklSeeAllScreen(
-        initialList: section.simklList,
-        cwItems: List<StremioMeta>.of(_simklAll),
-        cwProgress: _simklProgress,
-        onOpen: _openSimklItem,
-        onQuickPlay: _pikpakOnly ? null : _playSimklItem,
-        cwOnOpen: _openSimklCwItem,
-        cwOnQuickPlay: _pikpakOnly ? null : _playSimklCwItem,
-        isBound: _isBound,
-        isTelevision: widget.isTelevision,
-      );
+      _seeAllNavigation.openCatalog(context, section);
     }
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => _withHomeExpandedCardSettings(screen),
-          ),
-        )
-        // trackers:true — this grid renders the tracker's own lists, and a
-        // played title must reflect on return (same as _openTraktSeeAll).
-        .then((_) => _refreshAfterPlayback(trackers: true));
   }
 
   /// A real content player launched — see [_playedSinceRefresh].
@@ -10091,9 +10022,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// tracker rows when the user played something from the grid.
   Future<void> _afterSeeAllReturn() => _refreshAfterPlayback();
 
-  /// Shared push for the Continue Watching "See All" grid (local + Trakt). The
-  /// two sources differ only in title/items/callbacks/onReload and what to
-  /// refresh on return.
   void _pushCwSeeAll({
     required String title,
     required String initialCategory,
@@ -10103,28 +10031,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     required void Function(StremioMeta)? onQuickPlay,
     required Future<List<StremioMeta>> Function()? onReload,
     VoidCallback? onReturn,
-  }) {
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => _withHomeExpandedCardSettings(
-              ContinueWatchingSeeAllScreen(
-                title: title,
-                initialCategory: initialCategory,
-                items: List<StremioMeta>.of(items),
-                progressOf: progressOf,
-                onOpen: onOpen,
-                onQuickPlay: onQuickPlay,
-                onReload: onReload,
-                // CW items are all rail-loaded, so _boundCounts covers them.
-                isBound: _isBound,
-                isTelevision: widget.isTelevision,
-              ),
-            ),
-          ),
-        )
-        .then((_) => onReturn?.call());
-  }
+  }) => _seeAllNavigation.pushContinuation(
+    context,
+    title: title,
+    initialCategory: initialCategory,
+    items: items,
+    progressOf: progressOf,
+    onOpen: onOpen,
+    onQuickPlay: onQuickPlay,
+    onReload: onReload,
+    onReturn: onReturn,
+  );
 
   /// Local Continue Watching "See All", pre-filtered to [initialCategory]
   /// ('movie' / 'series') of the row the user came from. Re-fetches (via
@@ -10149,42 +10066,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  /// Trakt "See All". Opens on Continue Watching (the row the user came from,
-  /// handed in already-loaded) and lets them switch to any standard Trakt list
-  /// — Watchlist, History, Collection, Ratings, Recommendations, Trending,
-  /// Popular, Anticipated — from the in-screen "List" dropdown; those are
-  /// fetched on demand inside [TraktSeeAllScreen].
-  ///
-  /// The Continue Watching grid keeps its snapshot (no per-return reload).
-  /// The board's rows refresh once when the screen pops — `trackers: true`
-  /// because that's true whether or not anything was played here. One pass
-  /// reloads local CW + both trackers and then runs
-  /// the single bound-source refresh against the now-fresh lists (it swallows
-  /// its own errors, so the bound refresh still happens if a fetch fails).
-  void _openTraktSeeAll([String initialCategory = 'all']) {
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => _withHomeExpandedCardSettings(
-              TraktSeeAllScreen(
-                initialCategory: initialCategory,
-                cwItems: List<StremioMeta>.of(_traktAll),
-                // Pass the live progress map (read-only in the screen) so resume
-                // bars reflect any refresh while the screen is open, matching the
-                // old live-closure behaviour; items stay a snapshot so the grid
-                // doesn't shift under the user.
-                cwProgress: _cwCardMaps(HomeContinuationKind.trakt).progress,
-                onOpen: _openTraktItem,
-                onQuickPlay: _pikpakOnly ? null : _playTraktItem,
-                // CW items are all rail-loaded, so _boundCounts covers them.
-                isBound: _isBound,
-                isTelevision: widget.isTelevision,
-              ),
-            ),
-          ),
-        )
-        .then((_) => _refreshAfterPlayback(trackers: true));
-  }
+  void _openTraktSeeAll([String initialCategory = 'all']) =>
+      _seeAllNavigation.openTrakt(context, initialCategory);
 
   double _classicCatalogRowExtent(
     BuildContext context, {

@@ -84,6 +84,10 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # Legacy row DTO/ID grammar only; the route bridge performs no list reads.
+    "lib/features/home/presentation/home_see_all_navigation.dart": {
+        "lib/services/home_list_rows.dart": {"HomeListSection", "HomeExtraRowIds"},
+    },
     # App-shell callback/listener adapter; no persistence or business operations.
     "lib/features/discover/presentation/discover_shell_bridge.dart": {
         "lib/services/main_page_bridge.dart",

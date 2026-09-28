@@ -6,6 +6,26 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Home See-All navigation — 2026-09-28
+
+Base: `eea04c08`. `HomeSeeAllNavigation` (187 lines) owns catalog, tracker-list,
+Trakt and generic Continue Watching grid routes. Root dispatch still keeps synthetic
+collection/list rows out of catalog pagination. Existing action owners supply
+playback, detail and return-refresh callbacks. Root: **10,449 → 10,332 lines**.
+
+Review preserves route-builder-time catalog/CW/Trakt snapshots, opening-time
+tracker-list snapshots, live progress maps, catalog query/cursor and addon origin,
+PikPak quick-play gating, separate Simkl CW handlers, MDBList public-list origin,
+expanded-card wrapping and each route's existing return refresh. **27 tests pass**:
+23 local/Trakt/Simkl/MDBList continuation screen cases and four focused route tests.
+Final analysis retains **836 identical diagnostic identities**; architecture passes
+**557 files**; changed-code formatting/diff checks pass. The named route bridge may
+import only `HomeListSection` and `HomeExtraRowIds` from the legacy list service;
+the guard enforces the exact `show` list and permits no service operations.
+Receipts: `.git/refactor-evidence/phase5/see-all-navigation-{screens,focused,
+analyze-final}.txt`. No emulator used. Complete feature composition, remaining
+lifecycle/facade reduction, C/D integration and final acceptance remain pending.
+
 ## Batch C checkpoint: page shell composition — 2026-09-28
 
 Base: `d710827f`. `search_page_shell.dart` (175 lines) composes the route shell,
