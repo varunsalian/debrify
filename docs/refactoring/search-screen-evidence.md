@@ -6,6 +6,42 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: shared detail-layout composition — 2026-09-28
+
+The two production detail routes now use `home_detail_presentation.dart`, a
+154-line stateless feature builder. It owns the legacy/merged widget composition
+and layout-specific action arguments; it borrows explicit callbacks and owns no
+request, provider, mutable screen state or resources. The root retains origin
+preparation, menus and dependency wiring, and shrinks from 14,486 to 14,334 lines.
+Direct imports of the two detail screens are removed from the root.
+
+The layout flag is captured at route opening, preserving the original choice on
+later rebuilds. The merged page retains promised-episode forwarding, Trakt-first
+resume, episode-source dispatch, inline ratings, initial episode/hero settings and
+PikPak quick-play. Legacy composition retains its different PikPak rule, series
+source-hold behavior, source-addon preservation for Watchlist, and artwork callback.
+Existing route guards, loader timing, recommendation/enrichment callbacks and return
+refresh sequencing remain wired through their existing owners.
+
+Validation: **69 affected tests pass**, including six new movie/series/TV × layout
+composition scenarios. They verify no eager reads, exact playback flags/promises,
+source/selection/rating dispatch, metadata forwarding and lazy legacy bound-source
+reads. Existing real Home tests verify Play and source actions in both layouts,
+retirement, targeted dismissal, actual Sources destinations and tracker-menu
+ownership. Analyzer identities remain **848**. **469** measured files pass the
+architecture guard. The new builder's legacy status/menu imports are restricted
+to explicit `show` types; the guard now rejects service-class and unrestricted
+imports for these declarations, verified with negative controls. No service I/O
+is permitted by this type-only allowance. Diff checks pass and only the changed
+legacy member was formatted. Receipts:
+`.git/refactor-evidence/phase5/detail-composition-final-tests.txt` and
+`detail-composition-final-analyze.txt`.
+
+This completes the duplicated layout-construction boundary, not all of `_openItem`:
+menu assembly, status/recommendation-reader wiring and opening orchestration still
+need their final feature owners. Mutation/reset contracts and batches B–E remain
+open, including full integration and native/device/performance acceptance.
+
 ## Batch A checkpoint: Simkl shared resume reads — 2026-09-28
 
 The existing series-resume repository now forwards its view/profile guard through

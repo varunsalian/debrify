@@ -70,6 +70,18 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # Legacy DTO/menu declarations only; this composition performs no service IO.
+    "lib/features/home/presentation/home_detail_presentation.dart": {
+        "lib/services/trakt/trakt_service.dart": {"TraktTitleStatus"},
+        "lib/services/simkl/simkl_service.dart": {"SimklTitleStatus"},
+        "lib/services/mdblist/mdblist_models.dart": {"MdblistTitleStatus"},
+        "lib/services/simkl/simkl_menu_helpers.dart": {
+            "SimklMenuOption", "SimklItemMenuAction",
+        },
+        "lib/services/mdblist/mdblist_menu_helpers.dart": {
+            "MdblistMenuOption", "MdblistItemMenuAction",
+        },
+    },
     # Resolving-overlay UI only; playback data comes from injected feature owners.
     "lib/features/home/presentation/home_catalog_play_action.dart": {
         "lib/services/torrent_playback_service.dart",
@@ -142,6 +154,12 @@ def violations(path: Path) -> list[str]:
             if layer in ("data", "models") and (
                     "riverpod" in target or target.startswith("package:provider/")):
                 problems.append(f"{layer} depends on state/DI framework: {uri}")
+            bridge = PRESENTATION_BRIDGE_IMPORTS.get(relative, set())
+            if isinstance(bridge, dict) and target in bridge:
+                shown = re.search(r"\bshow\s+([\w,\s]+)$", declaration)
+                names = set(re.findall(r"\w+", shown.group(1))) if shown else set()
+                if not names or not names <= bridge[target]:
+                    problems.append(f"legacy DTO import must show only allowed types: {uri}")
             if layer == "presentation" and target.startswith((
                     "lib/services/", "package:http/", "package:shared_preferences/",
                     "package:sqflite")) and target not in (
