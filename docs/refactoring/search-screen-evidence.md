@@ -6,6 +6,22 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Classic row dispatch — 2026-09-28
+
+Base: `e164d4c6`. The existing `HomeClassicRows` (115 lines) now selects the
+skeleton, continuation, favorite or catalog builder from Home's ordered rail list.
+Catalog search retains index ordering. The factory returns the existing widget,
+so no element or resource lifetime changes. Root: **11,362 → 11,350 lines**.
+
+Review preserves build-time stable key snapshots, lazy row-id resolution,
+placeholder precedence, captured rails, footer timing and entrance animation.
+**58 tests pass**: Classic row identity/animation checks plus all 55 progressive/
+pagination screen tests. Analysis retains **836 identical diagnostic identities**;
+architecture passes **540 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/classic-dispatch-{tests,analyze}.txt`.
+No emulator used. Remaining navigation and route/resource boundaries, D lifecycle/
+facade reduction and E final acceptance remain pending.
+
 ## Batch C checkpoint: catalog item rendering — 2026-09-28
 
 Base: `22c6dbfe`. The existing `home_catalog_row.dart` (144 lines) now owns the

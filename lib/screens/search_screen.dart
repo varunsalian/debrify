@@ -10740,34 +10740,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // that Home order.
     final orderedHome = _homeRowOrderActive;
     final homeRails = orderedHome ? _classicHomeRails : const <HomeRail>[];
-    return HomeClassicRows(
+    return HomeClassicRows.fromRails(
       scrollController: _boardScroll,
       generation: _boardGen,
       catalogRowCount: _sections.length,
-      orderedRowIds: orderedHome
-          ? homeRails.map(_canvasRailRowId).toList()
-          : null,
+      rails: orderedHome ? homeRails : null,
+      rowIdOf: _canvasRailRowId,
+      catalog: _buildRow,
+      skeleton: _buildTraktSkeletonRow,
+      continuation: _buildContinueWatchingRow,
+      favorite: _buildFavRow,
       showFooter: _boardLoadingMore,
       tailPadding: _classicAnchorTailPadding,
       footerBuilder: (_) => _buildBoardFooter(),
       isFresh: () =>
           DateTime.now().difference(_boardAppliedAt) <
           const Duration(milliseconds: 1800),
-      rowBuilder: (context, i) {
-        if (!orderedHome) return _buildRow(i);
-        final rail = homeRails[i];
-        final rowId = _canvasRailRowId(rail);
-        if (rail.traktSkeletonIndex >= 0) {
-          return _buildTraktSkeletonRow(rail.traktSkeletonIndex);
-        }
-        if (rail.cw != null) {
-          return _buildContinueWatchingRow(rail.cw!, rail.cwIndex, rowId);
-        }
-        if (rail.favKind != null) {
-          return _buildFavRow(rail.favKind!, rowId);
-        }
-        return _buildRow(rail.sectionIndex!, homeRowId: rowId);
-      },
     );
   }
 

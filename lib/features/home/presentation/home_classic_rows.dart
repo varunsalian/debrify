@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'home_row_entrance.dart';
+import 'home_stage_rows.dart';
+import '../models/home_favorite_row_ref.dart';
 
 /// Lazy Classic rows. Home uses stable row IDs; catalog search keeps index keys.
 class HomeClassicRows extends StatelessWidget {
@@ -18,6 +20,48 @@ class HomeClassicRows extends StatelessWidget {
   }) : orderedRowIds = orderedRowIds == null
            ? null
            : List.unmodifiable(orderedRowIds);
+
+  /// Null rails select catalog-search index ordering. Home supplies a captured
+  /// ordered rail list; row identities are resolved again at materialization.
+  factory HomeClassicRows.fromRails({
+    Key? key,
+    required ScrollController scrollController,
+    required int generation,
+    required int catalogRowCount,
+    required List<HomeRail>? rails,
+    required String Function(HomeRail) rowIdOf,
+    required Widget Function(int, {String? homeRowId}) catalog,
+    required Widget Function(int) skeleton,
+    required Widget Function(HomeContinuationRow, int, String) continuation,
+    required Widget Function(HomeFavoriteRowRef, String) favorite,
+    required WidgetBuilder footerBuilder,
+    required bool showFooter,
+    required double tailPadding,
+    required bool Function() isFresh,
+  }) => HomeClassicRows(
+    key: key,
+    scrollController: scrollController,
+    generation: generation,
+    catalogRowCount: catalogRowCount,
+    orderedRowIds: rails?.map(rowIdOf).toList(),
+    footerBuilder: footerBuilder,
+    showFooter: showFooter,
+    tailPadding: tailPadding,
+    isFresh: isFresh,
+    rowBuilder: (context, index) {
+      if (rails == null) return catalog(index);
+      final rail = rails[index];
+      final rowId = rowIdOf(rail);
+      if (rail.traktSkeletonIndex >= 0) {
+        return skeleton(rail.traktSkeletonIndex);
+      }
+      if (rail.cw != null) {
+        return continuation(rail.cw!, rail.cwIndex, rowId);
+      }
+      if (rail.favKind != null) return favorite(rail.favKind!, rowId);
+      return catalog(rail.sectionIndex!, homeRowId: rowId);
+    },
+  );
 
   final ScrollController scrollController;
   final int generation;
