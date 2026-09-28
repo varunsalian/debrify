@@ -6,6 +6,39 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: catalog Resume-label policy — 2026-09-28
+
+The production Resume label now delegates to `HomeCatalogPlaybackResolver.label`,
+using the same injected series resolver, tracker memo and scoped readers as Play.
+The screen's six obsolete reconciliation/position helpers and direct movie-state
+read are removed. Movie-state existence is read through the existing captured-
+profile reader, including its retirement checks. The remaining screen wrapper
+loads policy and supplies live view/auth/card inputs; no new provider or cache was
+introduced. The entry file shrinks **14,747 → 14,620 lines**.
+
+Review preserves MDBList-owned fast-path coordinates, reconciled series targets,
+cached Trakt movie positions, local-first ordinary movies, sequential Trakt →
+Simkl → MDBList checks, short-circuit behavior and live authentication reads.
+Retired work retains the existing not-started label fallback. The shared resolver
+is now **513 lines**: reviewed as one stateless catalog playback/label policy with
+explicit data dependencies, no UI/resource ownership and no competing resume
+state. Keeping the two policies together preserves their shared cache/identity
+contract; this is within the reviewed 501–800-line band, not an oversized exception.
+
+Validation: **122 affected tests pass**, including twelve new label-policy cases;
+existing playback, rewatch routing, resume repositories, real Home detail layouts
+and movie-source independence checks pass. The existing two-profile reader test
+now verifies actual movie preference reads against a foreign ambient scope,
+missing-state handling and owner retirement. Analyzer identities remain **848**;
+**461** migrated files pass architecture checks; diff/format checks pass. The first
+analyzer identified the newly obsolete result-model import; it was removed before
+final verification. No full-suite rerun was needed for this covered policy move.
+
+Receipts: `.git/refactor-evidence/phase5/resume-label-final-tests.txt` and
+`resume-label-final-analyze.txt`; the pre-move method is preserved in
+`resume-label-original.dart`. Catalog loader/launch composition, reachable mutation
+writes, remaining detail/source dispatch and later batches remain open.
+
 ## Batch A checkpoint: tracker menu continuation ownership — 2026-09-28
 
 Trakt, Simkl and MDBList menu handlers capture the originating session before any

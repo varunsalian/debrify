@@ -256,7 +256,6 @@ import '../utils/continue_watching_presentation.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../features/home/data/home_series_resume_resolver.dart';
 import '../features/home/application/home_series_resume_resolver_dependencies.dart';
-import '../features/home/models/home_series_resume_result.dart';
 import '../features/home/models/home_series_resume_signals.dart';
 import '../features/home/data/home_series_resume_repository.dart';
 import '../features/home/application/home_series_resume_dependencies.dart';
@@ -10826,7 +10825,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // their local-vs-Trakt-CW split untouched).
     bool preferTraktResume = false,
     // The episode the pressed button was promising, when the caller had already
-    // resolved one (merged detail). It wins over [_reconcileSeriesResume]: that
+    // resolved one (merged detail). It wins over the series resume resolver: that
     // reconciler only reads resume/CW positions, while the merged page's episode
     // engine also advances off watched state. A show whose progress lives in a
     // tracker's WATCHED list but not its continue-watching list reconciles to the
@@ -10978,49 +10977,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (mounted) _seriesResumeResolverSubscription.read().clear();
   }
 
-  Future<HomeSeriesResumeResult?> _reconcileSeriesResume(
-    StremioMeta item, {
-    bool isTraktSource = false,
-    bool preferBuiltIn = false,
-    StremioMeta? catalogItem,
-  }) async {
-    if (!mounted) return null;
-    return _seriesResumeResolverSubscription.read().resolve(
-      item,
-      isTraktSource: isTraktSource,
-      preferBuiltIn: preferBuiltIn,
-      catalogItem: catalogItem,
-      availability: () => (
-        trakt: _isTraktAuthenticated,
-        simkl: _isSimklAuthenticated,
-        mdblist: _isMdblistAuthenticated,
-      ),
-      cachedTrakt: () => _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
-      isCurrent: () => mounted,
-    );
-  }
-
   HomeSeriesResumeRepository get _seriesResumeRepository =>
       ref.read(homeSeriesResumeRepositoryProvider(_profileSessionOwner));
-
-  Future<HomeResumePosition?> _traktResumeFor(StremioMeta item) async {
-    if (!mounted) return null;
-    return _seriesResumeRepository.traktPosition(
-      item,
-      cached: _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
-      isCurrent: () => mounted,
-    );
-  }
-
-  Future<MdblistContinueWatchingItem?> _mdblistResumeItemFor(
-    StremioMeta item,
-  ) async {
-    if (!mounted) return null;
-    return _trackerResumeSubscription.read().mdblistItem(
-      item.progressId ?? item.id,
-      isCurrent: () => mounted,
-    );
-  }
 
   Future<TrackingSourcePolicy?> _loadTrackingPolicy(StremioMeta item) async {
     bool current() =>
@@ -11031,94 +10989,33 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         .loadForContent(item.progressId, isCurrent: current);
   }
 
-  Future<({bool started, int? season, int? episode})> _resolveResumeInfo(
+  Future<HomeResumePosition> _resolveResumeInfo(
     StremioMeta item,
     StremioAddon addon, {
     bool isTraktSource = false,
     bool isMdblistSource = false,
   }) async {
     final trackingPolicy = await _loadTrackingPolicy(item);
-    if (trackingPolicy == null) {
+    if (!_catalogNavigationCurrent() || trackingPolicy == null) {
       return (started: false, season: null, episode: null);
     }
-    debugPrint(
-      '[SeriesResume] label-resolve-start title="${item.name}" '
-      'id=${item.progressId ?? item.id} type=${item.type} '
-      'traktSource=$isTraktSource mdblistSource=$isMdblistSource',
-    );
-    if (isMdblistSource &&
-        trackingPolicy.progressFrom(TrackingSource.mdblist)) {
-      final owned = await _mdblistResumeItemFor(item);
-      if (!mounted) return (started: false, season: null, episode: null);
-      if (owned != null) {
-        return (
-          started: true,
-          season: owned.selection.season,
-          episode: owned.selection.episode,
+    return ref
+        .read(homeCatalogPlaybackResolverProvider(_homeCatalogSession))
+        .label(
+          item,
+          addon,
+          trackingPolicy: trackingPolicy,
+          availability: () => (
+            trakt: _isTraktAuthenticated,
+            simkl: _isSimklAuthenticated,
+            mdblist: _isMdblistAuthenticated,
+          ),
+          cachedTrakt: () =>
+              _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
+          isCurrent: _catalogNavigationCurrent,
+          isTraktSource: isTraktSource,
+          isMdblistSource: isMdblistSource,
         );
-      }
-    }
-    // Series: the ONE reconciled answer — recency across trackers + local,
-    // watched-advance, briefly cached — shared verbatim with _onCatalogPlay
-    // so the label and playback can never disagree (see
-    // _reconcileSeriesResume for the full rules).
-    if (item.type == 'series') {
-      final r = await _reconcileSeriesResume(
-        item,
-        isTraktSource: isTraktSource,
-        preferBuiltIn: addon.id == NativeSeriesMetadataService.addon.id,
-          catalogItem: item.withSourceAddon(addon),
-      );
-      if (!mounted || r == null) {
-        return (started: false, season: null, episode: null);
-      }
-      debugPrint(
-        '[SeriesResume] label-resolve-result title="${item.name}" '
-        'started=${r.started} target=S${r.season}E${r.episode} '
-        'source=${HomeSeriesResumeResolver.sourceName(r.sourcePrio)}',
-      );
-      return (started: r.started, season: r.season, episode: r.episode);
-    }
-
-    // Trakt-sourced MOVIE: the cached CW selection carries Trakt's position —
-    // same fast path the old Trakt-first arm gave movies (a non-Trakt-sourced
-    // movie deliberately stays local-first; Play resumes it from the local
-    // byte offset, so a tracker-first label would over-promise).
-    if (isTraktSource && trackingPolicy.progressFrom(TrackingSource.trakt)) {
-      final resume = await _traktResumeFor(item);
-      if (!mounted) return (started: false, season: null, episode: null);
-      if (resume != null) return resume;
-    }
-
-    // Movie (series returned above): "started" if a local position OR a
-    // cross-device tracker position exists — so the button reads "Resume" for
-    // a movie paused on another device, matching what Play now seeks to (kept
-    // in lock-step with the movie branch of _onCatalogPlay).
-    final playId = item.imdbId ?? item.progressId ?? item.id;
-    final st = trackingPolicy.progressFrom(TrackingSource.local)
-        ? await StorageService.getVideoPlaybackStateByImdbId(playId)
-        : null;
-    if (!mounted) return (started: false, season: null, episode: null);
-    var started = st != null;
-    if (!started &&
-        trackingPolicy.progressFrom(TrackingSource.trakt) &&
-        (_isTraktAuthenticated || isTraktSource)) {
-      started = (await _traktMoviePercent(item)) != null;
-      if (!mounted) return (started: false, season: null, episode: null);
-    }
-    if (!started &&
-        trackingPolicy.progressFrom(TrackingSource.simkl) &&
-        _isSimklAuthenticated) {
-      started = (await _simklMoviePercent(item)) != null;
-      if (!mounted) return (started: false, season: null, episode: null);
-    }
-    if (!started &&
-        trackingPolicy.progressFrom(TrackingSource.mdblist) &&
-        _isMdblistAuthenticated) {
-      started = (await _mdblistMoviePercent(item)) != null;
-      if (!mounted) return (started: false, season: null, episode: null);
-    }
-    return (started: started, season: null, episode: null);
   }
 
   void _onCatalogBrowse(
@@ -11144,30 +11041,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon),
       );
     }
-  }
-
-  Future<double?> _traktMoviePercent(StremioMeta item) async {
-    if (!mounted) return null;
-    return _trackerResumeSubscription.read().traktMovie(
-      item.progressId ?? item.id,
-      isCurrent: () => mounted,
-    );
-  }
-
-  Future<double?> _simklMoviePercent(StremioMeta item) async {
-    if (!mounted) return null;
-    return _trackerResumeSubscription.read().simklMovie(
-      item.progressId ?? item.id,
-      isCurrent: () => mounted,
-    );
-  }
-
-  Future<double?> _mdblistMoviePercent(StremioMeta item) async {
-    if (!mounted) return null;
-    return _trackerResumeSubscription.read().mdblistMovie(
-      item.progressId ?? item.id,
-      isCurrent: () => mounted,
-    );
   }
 
   void _openEpisodes(

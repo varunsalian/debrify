@@ -48,6 +48,18 @@ class Readers extends Fake implements HomeCatalogPlaybackReaders {
   Completer<void>? gate;
   final entered = Completer<void>();
   ({int season, int episode})? next;
+  bool movie = false;
+  @override
+  Future<bool?> movieStarted(
+    String id, {
+    required bool Function() isCurrent,
+  }) async {
+    calls.add('movie:$id');
+    if (!entered.isCompleted) entered.complete();
+    await gate?.future;
+    return movie;
+  }
+
   @override
   Future<Map<String, dynamic>?> localById(
     String id, {

@@ -28,6 +28,13 @@ class HomeCatalogPlaybackReaders {
         : null;
   }
 
+  Future<bool?> movieStarted(String id, {required bool Function() isCurrent}) =>
+      _read(
+        () async =>
+            await StorageService.getVideoPlaybackStateByImdbId(id) != null,
+        isCurrent,
+      );
+
   Future<Map<String, dynamic>?> localById(
     String id, {
     required bool Function() isCurrent,

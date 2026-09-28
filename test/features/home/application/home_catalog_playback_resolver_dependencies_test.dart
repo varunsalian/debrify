@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:debrify/features/home/application/home_catalog_playback_resolver_dependencies.dart';
 import 'package:debrify/features/home/application/home_series_resume_resolver_dependencies.dart';
 import 'package:debrify/features/home/application/home_tracker_resume_dependencies.dart';
@@ -66,10 +68,14 @@ void main() {
       );
       ProfileRuntime.initializeCommitted(origin);
       SharedPreferences.setMockInitialValues({
-        origin.preferenceKey('playback_state_v1'): history(
-          season: 2,
-          episode: 3,
-        ),
+        origin.preferenceKey('playback_state_v1'): jsonEncode({
+          ...jsonDecode(history(season: 2, episode: 3)) as Map<String, dynamic>,
+          'video_fixture': {
+            'type': 'video',
+            'imdbId': 'ttMovie',
+            'updatedAt': 1,
+          },
+        }),
         other.preferenceKey('playback_state_v1'): history(
           season: 8,
           episode: 9,
@@ -84,7 +90,22 @@ void main() {
       );
       expect(result?['season'], 2);
       expect(result?['episode'], 3);
+      expect(
+        await ProfileRuntime.withCapturedScope(
+          other,
+          () => readers.movieStarted('ttMovie', isCurrent: () => true),
+        ),
+        isTrue,
+      );
+      expect(
+        await readers.movieStarted('missing', isCurrent: () => true),
+        isFalse,
+      );
       ProfileSessionMemory.clearAll();
+      expect(
+        await readers.movieStarted('ttMovie', isCurrent: () => true),
+        isNull,
+      );
       expect(await readers.localById('tt123', isCurrent: () => true), isNull);
       expect(
         await readers.localByTitle('Exact Title', isCurrent: () => true),

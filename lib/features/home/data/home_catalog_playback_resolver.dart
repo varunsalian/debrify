@@ -36,6 +36,124 @@ class HomeCatalogPlaybackResolver {
   final HomeCatalogPlaybackReaders readers;
   final void Function(String) log;
 
+  /// Resume-label policy shares Play's series resolver and tracker memo.
+  /// Movie reads remain sequential, stopping at the first usable position.
+  Future<HomeResumePosition> label(
+    StremioMeta item,
+    StremioAddon addon, {
+    required TrackingSourcePolicy trackingPolicy,
+    required HomeResumeAvailability Function() availability,
+    required TraktContinueWatchingItem? Function() cachedTrakt,
+    required bool Function() isCurrent,
+    bool isTraktSource = false,
+    bool isMdblistSource = false,
+  }) async {
+    if (!isCurrent()) return (started: false, season: null, episode: null);
+    log(
+      '[SeriesResume] label-resolve-start title="${item.name}" '
+      'id=${item.progressId ?? item.id} type=${item.type} '
+      'traktSource=$isTraktSource mdblistSource=$isMdblistSource',
+    );
+    if (isMdblistSource &&
+        trackingPolicy.progressFrom(TrackingSource.mdblist)) {
+      final owned = await trackers.mdblistItem(
+        item.progressId ?? item.id,
+        isCurrent: isCurrent,
+      );
+      if (!isCurrent()) return (started: false, season: null, episode: null);
+      if (owned != null) {
+        return (
+          started: true,
+          season: owned.selection.season,
+          episode: owned.selection.episode,
+        );
+      }
+    }
+    // Series: the ONE reconciled answer — recency across trackers + local,
+    // watched-advance, briefly cached — shared verbatim with _onCatalogPlay
+    // so the label and playback can never disagree (see
+    // the shared series resolver for the full rules).
+    if (item.type == 'series') {
+      final r = await seriesResume.resolve(
+        item,
+        isTraktSource: isTraktSource,
+        availability: availability,
+        cachedTrakt: cachedTrakt,
+        isCurrent: isCurrent,
+        preferBuiltIn: addon.id == NativeSeriesMetadataService.addon.id,
+        catalogItem: item.withSourceAddon(addon),
+      );
+      if (!isCurrent() || r == null) {
+        return (started: false, season: null, episode: null);
+      }
+      log(
+        '[SeriesResume] label-resolve-result title="${item.name}" '
+        'started=${r.started} target=S${r.season}E${r.episode} '
+        'source=${HomeSeriesResumeResolver.sourceName(r.sourcePrio)}',
+      );
+      return (started: r.started, season: r.season, episode: r.episode);
+    }
+
+    // Trakt-sourced MOVIE: the cached CW selection carries Trakt's position —
+    // same fast path the old Trakt-first arm gave movies (a non-Trakt-sourced
+    // movie deliberately stays local-first; Play resumes it from the local
+    // byte offset, so a tracker-first label would over-promise).
+    if (isTraktSource && trackingPolicy.progressFrom(TrackingSource.trakt)) {
+      final resume = await signals.traktPosition(
+        item,
+        cached: cachedTrakt(),
+        isCurrent: isCurrent,
+      );
+      if (!isCurrent()) return (started: false, season: null, episode: null);
+      if (resume != null) return resume;
+    }
+
+    // Movie (series returned above): "started" if a local position OR a
+    // cross-device tracker position exists — so the button reads "Resume" for
+    // a movie paused on another device, matching what Play now seeks to (kept
+    // in lock-step with the movie branch of _onCatalogPlay).
+    final playId = item.imdbId ?? item.progressId ?? item.id;
+    final st = trackingPolicy.progressFrom(TrackingSource.local)
+        ? await readers.movieStarted(playId, isCurrent: isCurrent)
+        : null;
+    if (!isCurrent()) return (started: false, season: null, episode: null);
+    var started = st == true;
+    if (!started &&
+        trackingPolicy.progressFrom(TrackingSource.trakt) &&
+        (availability().trakt || isTraktSource)) {
+      started =
+          (await trackers.traktMovie(
+            item.progressId ?? item.id,
+            isCurrent: isCurrent,
+          )) !=
+          null;
+      if (!isCurrent()) return (started: false, season: null, episode: null);
+    }
+    if (!started &&
+        trackingPolicy.progressFrom(TrackingSource.simkl) &&
+        availability().simkl) {
+      started =
+          (await trackers.simklMovie(
+            item.progressId ?? item.id,
+            isCurrent: isCurrent,
+          )) !=
+          null;
+      if (!isCurrent()) return (started: false, season: null, episode: null);
+    }
+    if (!started &&
+        trackingPolicy.progressFrom(TrackingSource.mdblist) &&
+        availability().mdblist) {
+      started =
+          (await trackers.mdblistMovie(
+            item.progressId ?? item.id,
+            isCurrent: isCurrent,
+          )) !=
+          null;
+      if (!isCurrent()) return (started: false, season: null, episode: null);
+    }
+    return (started: started, season: null, episode: null);
+  }
+
   Future<HomeCatalogPlaybackTarget?> resolve(
     StremioMeta item,
     StremioAddon addon, {
