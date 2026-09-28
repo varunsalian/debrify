@@ -5,6 +5,99 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('focused cold-start sheet consumes Back before style arrives', (
+    tester,
+  ) async {
+    final field = FocusNode();
+    final query = TextEditingController();
+    late StateSetter rebuild;
+    late SpotlightSearchSheet sheet;
+    final resetOrder = <String>[];
+    sheet = SpotlightSearchSheet(
+      field: field,
+      isForced: () => query.text.isNotEmpty,
+      hasText: () => query.text.isNotEmpty,
+      isSpotlightSelected: () => false,
+      resetSearch: () {
+        expect(sheet.isOpen, isTrue);
+        expect(field.hasFocus, isTrue);
+        resetOrder.add('reset');
+        query.clear();
+      },
+      rebuild: (change) {
+        rebuild(change);
+        if (!sheet.isOpen) resetOrder.add('closed');
+      },
+      isCurrent: () => true,
+    );
+    field.addListener(sheet.onFocusChanged);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, update) {
+            rebuild = update;
+            return Material(
+              child: TextField(focusNode: field, controller: query),
+            );
+          },
+        ),
+      ),
+    );
+    field.requestFocus();
+    await tester.pump();
+    expect(sheet.isOpen, isTrue);
+    expect(sheet.close(), isTrue);
+    expect(resetOrder, ['reset', 'closed']);
+    expect(sheet.close(), isFalse);
+    await tester.pumpWidget(const SizedBox());
+    field.dispose();
+    query.dispose();
+  });
+
+  testWidgets(
+    'sheet restoration latches silently and retired opening skips focus',
+    (tester) async {
+      final field = FocusNode();
+      var forced = true;
+      var current = true;
+      var rebuilds = 0;
+      final sheet = SpotlightSearchSheet(
+        field: field,
+        isForced: () => forced,
+        hasText: () => false,
+        isSpotlightSelected: () => false,
+        resetSearch: () => forced = false,
+        rebuild: (change) {
+          rebuilds++;
+          change();
+        },
+        isCurrent: () => current,
+      );
+      sheet.observeForcedState();
+      forced = false;
+      sheet.observeForcedState();
+      expect(sheet.isOpen, isTrue);
+      expect(rebuilds, 0);
+      // A stale Classic latch alone does not consume the host's Back action.
+      expect(sheet.close(), isFalse);
+      sheet.restore();
+      expect(sheet.isOpen, isTrue);
+      expect(rebuilds, 1);
+      sheet.close();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Focus(focusNode: field, child: const SizedBox()),
+        ),
+      );
+      sheet.open();
+      current = false;
+      await tester.pump();
+      expect(field.hasFocus, isFalse);
+      await tester.pumpWidget(const SizedBox());
+      field.dispose();
+    },
+  );
+
   testWidgets('route priority builds only the active surface', (tester) async {
     for (final (discover, tv, search, spotlight, expected) in [
       (true, true, false, true, ['discover']),

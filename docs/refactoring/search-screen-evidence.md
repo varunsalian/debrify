@@ -6,6 +6,25 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: Spotlight search sheet state — 2026-09-28
+
+Base: `a0ad2eaa`. `SpotlightSearchSheet` lives beside the existing shell
+presentation (file now 228 lines). It owns the open latch, focus-triggered opening,
+restoration, forced-state observation, deferred field focus and close/Back reset
+sequence. The root supplies its existing query reset and rebuild boundary, and
+registers/removes the owner's stable callbacks at the original lifecycle points.
+Root: **10,332 → 10,298 lines**. No new provider or feature file is introduced.
+
+Review preserves Catalog-before-clear ordering, query cancellation, pre-reset
+content capture, cold-start focused-field Back consumption, stale Classic-latch
+fallthrough and mounted checks on deferred focus. **68 tests pass**, including
+Search presentation/focus integration, Home keyword restoration and two new sheet
+lifecycle cases. Final analysis retains **836 identical diagnostic identities**;
+architecture passes **557 files**; changed-code formatting/diff checks pass.
+Receipts: `.git/refactor-evidence/phase5/search-sheet-{tests,analyze-final}.txt`.
+No emulator used. Remaining feature ownership, lifecycle/facade reduction and
+final acceptance remain pending.
+
 ## Batch C checkpoint: Home See-All navigation — 2026-09-28
 
 Base: `eea04c08`. `HomeSeeAllNavigation` (187 lines) owns catalog, tracker-list,

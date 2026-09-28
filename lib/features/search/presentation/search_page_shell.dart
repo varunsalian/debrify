@@ -173,3 +173,56 @@ Widget buildSearchModeContent({
   }
   return board();
 }
+
+/// Local Spotlight sheet state. The host retains query/controller ownership and
+/// supplies the existing atomic Catalog reset and synchronous rebuild boundary.
+class SpotlightSearchSheet {
+  SpotlightSearchSheet({
+    required this.field,
+    required this.isForced,
+    required this.hasText,
+    required this.isSpotlightSelected,
+    required this.resetSearch,
+    required this.rebuild,
+    required this.isCurrent,
+  });
+
+  final FocusNode field;
+  final bool Function() isForced, hasText, isSpotlightSelected, isCurrent;
+  final VoidCallback resetSearch;
+  final void Function(VoidCallback) rebuild;
+  bool _isOpen = false;
+  bool get isOpen => _isOpen;
+
+  /// Restoration and build-time forcing must not schedule another rebuild.
+  void restore() => _isOpen = true;
+  void observeForcedState() {
+    if (isForced()) _isOpen = true;
+  }
+
+  void onFocusChanged() {
+    if (!field.hasFocus || _isOpen) return;
+    rebuild(() => _isOpen = true);
+  }
+
+  void open() => rebuild(() {
+    _isOpen = true;
+    // The field can receive focus only after its sheet is mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (isCurrent()) field.requestFocus();
+    });
+  });
+
+  /// Back and the close button share the same ordered reset. Capture content
+  /// before clearing it: a focused field must consume Back even before the
+  /// asynchronous Spotlight preference arrives. A stale Classic latch may fall
+  /// through to the host's normal Back behavior.
+  bool close() {
+    if (!_isOpen) return false;
+    final hadContent = isForced() || hasText() || field.hasFocus;
+    resetSearch();
+    field.unfocus();
+    rebuild(() => _isOpen = false);
+    return isSpotlightSelected() || hadContent;
+  }
+}

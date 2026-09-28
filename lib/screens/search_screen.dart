@@ -1920,10 +1920,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // mechanism — a nested PopScope would race the root scope in
         // main.dart (its didPop==false path continues into double-back-exit
         // arming even when an inner scope consumed the press).
-        MainPageBridge.registerTabBackHandler('home', _handleHomeBack);
+        MainPageBridge.registerTabBackHandler('home', _searchSheet.close);
         // Restored keyword results must come back with the sheet open — the
         // full-bleed shell would otherwise hide them behind a hero.
-        if (restoredKeyword) _searchSheetOpen = true;
+        if (restoredKeyword) _searchSheet.restore();
         // Hero trailer prefs for the OFF-TV Spotlight reel. Only the pieces
         // that mean "resolve and paint a video" — none of the TV shell
         // machinery the _heroTrailerActive block registers.
@@ -1942,7 +1942,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // while the Spotlight shell is not yet eligible — an async style/hero
     // arrival can then never unmount a focused (still blank) field.
     if (!widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
-      _searchFocusNode.addListener(_onSearchFocusLatchSheet);
+      _searchFocusNode.addListener(_searchSheet.onFocusChanged);
     }
     _boardScroll.addListener(_onBoardScroll);
     _keywordViewport.observeScroll();
@@ -2076,48 +2076,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       }
     },
   );
-
-  /// Off-TV Home's Back (via the bridge, tab key 'home'): close the Spotlight
-  /// search sheet if it is up. Consuming the press here is what keeps the
-  /// root handler from arming double-back-exit while the user is merely
-  /// backing out of search.
-  bool _handleHomeBack() => _closeSearchSheet();
-
-  /// Focus on the search field latches the sheet open — see [_searchSheetOpen].
-  void _onSearchFocusLatchSheet() {
-    if (!_searchFocusNode.hasFocus || _searchSheetOpen) return;
-    setState(() => _searchSheetOpen = true);
-  }
-
-  /// The one reset the sheet's close button and system Back share.
-  ///
-  /// Atomic by design (plan rev 4): mode returns to catalog BEFORE the close
-  /// (`_clearQuery` alone never restores the mode — that lived only in the
-  /// Search tab's handler), and the in-flight keyword search is invalidated
-  /// (`_kwSearchToken`) so a late batch can't repopulate state Back just
-  /// cleared. Returns whether there was a sheet to close, which is also the
-  /// "did Back consume the press" answer.
-  bool _closeSearchSheet() {
-    if (!_searchSheetOpen) return false;
-    // Whether this press visibly did something — deliberately captured
-    // BEFORE the reset. The guard used to be `_spotlightSelected`, which
-    // reopened the race the focus latch exists to close: the style pref
-    // loads async, so on a cold start a user could focus the field (latch
-    // set) and press Back before the read landed — the handler refused to
-    // consume, and the root handler armed double-back-exit under an open
-    // sheet. Content/focus is the honest test: it is true throughout that
-    // window, and false only for a stale latch on a classic Home, where
-    // falling through to the root handler is exactly right.
-    final hadContent =
-        _sheetForced ||
-        _searchController.text.isNotEmpty ||
-        _searchFocusNode.hasFocus;
-    _mode = SearchMode.catalog;
-    _clearQuery(); // clears the field, kw/lists state, and the catalog query
-    _searchFocusNode.unfocus();
-    setState(() => _searchSheetOpen = false);
-    return _spotlightSelected || hadContent;
-  }
 
   /// An integration (Trakt / a debrid provider) was connected or disconnected
   /// elsewhere while this tab stayed alive — refresh the state that gates the
@@ -2339,8 +2297,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     if (!widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
       // Same closure that registered — the bridge's mid-transition contract.
-      MainPageBridge.unregisterTabBackHandler('home', _handleHomeBack);
-      _searchFocusNode.removeListener(_onSearchFocusLatchSheet);
+      MainPageBridge.unregisterTabBackHandler('home', _searchSheet.close);
+      _searchFocusNode.removeListener(_searchSheet.onFocusChanged);
       MainPageBridge.removePlayerLaunchListener(_onContentPlayerLaunch);
     }
     // Safe no-op in the variants that never registered it.
@@ -5366,7 +5324,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _searchController.text.isNotEmpty;
 
   /// The sheet latch. See the block comment above.
-  bool _searchSheetOpen = false;
+  late final _searchSheet = SpotlightSearchSheet(
+    field: _searchFocusNode,
+    isForced: () => _sheetForced,
+    hasText: () => _searchController.text.isNotEmpty,
+    isSpotlightSelected: () => _spotlightSelected,
+    resetSearch: () {
+      // Mode changes before clearing requests, results and the field.
+      _mode = SearchMode.catalog;
+      _clearQuery();
+    },
+    rebuild: setState,
+    isCurrent: () => mounted,
+  );
+  bool get _searchSheetOpen => _searchSheet.isOpen;
 
   int get _tvHeroArtworkCacheWidth =>
       TvHeroArtworkQualityController.decodeSize.landscapeWidth;
@@ -9047,24 +9018,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   Widget _buildSpotlightShell() {
     // Preserve the build-time latch for async default-mode/query restoration.
-    if (_sheetForced) _searchSheetOpen = true;
+    _searchSheet.observeForcedState();
     return buildSpotlightSearchShell(
       context: context,
       sheetOpen: _searchSheetOpen,
       canClose: !_sheetForced && _searchController.text.isEmpty,
-      onClose: _closeSearchSheet,
-      onOpen: () => setState(() {
-        _searchSheetOpen = true;
-        // Focus after the sheet mounts, in the same gesture.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _searchFocusNode.requestFocus();
-        });
-      }),
+      onClose: _searchSheet.close,
+      onOpen: _searchSheet.open,
       header: _buildHeader,
       sourcesBar: _buildUnifiedCatalogSourcesBar,
       body: _buildBody,
     );
   }
+
   /// Show/hide the unified catalog Sources bar as the search field gains/loses
   /// focus. The hide is DELAYED: clicking the Sources button blurs the field,
   /// and hiding synchronously would unmount the button before its onTap fires
