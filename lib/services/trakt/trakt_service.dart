@@ -91,6 +91,7 @@ class TraktService {
   final Map<String, ({DateTime at, Object data})> _libCache = {};
   static const Duration _libTtl = Duration(seconds: 45);
   int _libCacheGeneration = 0;
+  ProfileSessionOwner? _libCacheOwner;
   final Map<String, _TraktDeviceAuthorization> _deviceAuthorizations = {};
 
   void _invalidateLibraryCache() {
@@ -106,7 +107,12 @@ class TraktService {
     TraktCalendarService.instance.invalidate();
   }
 
-  Future<T?> _cachedLib<T>(String key, Future<T?> Function() load) async {
+  Future<T?> _cachedLib<T>(
+    String key,
+    Future<T?> Function() load, {
+    required bool Function() canContinue,
+  }) async {
+    if (!canContinue()) return null;
     final hit = _libCache[key];
     if (hit != null && DateTime.now().difference(hit.at) < _libTtl) {
       return hit.data as T;
@@ -116,6 +122,7 @@ class TraktService {
     // Only cache authoritative results — never poison the cache with the empty
     // set a transient failure produces, which would otherwise flip every
     // affected title's badge/menu to "not in library" for the whole TTL.
+    if (!canContinue()) return null;
     if (data != null && generation == _libCacheGeneration) {
       _libCache[key] = (at: DateTime.now(), data: data as Object);
     }
@@ -160,8 +167,23 @@ class TraktService {
   /// callers keep whatever they last showed instead of wrongly rendering the
   /// title as "not in library". A genuine "in none of them" is a non-null
   /// all-false status, distinct from this null.
-  Future<TraktTitleStatus?> fetchTitleStatus(String imdbId, String type) async {
-    if (!await isAuthenticated()) return null;
+  Future<TraktTitleStatus?> fetchTitleStatus(
+    String imdbId,
+    String type, {
+    bool Function()? canContinue,
+  }) async {
+    final owner = ProfileSessionMemory.captureOwner();
+    final scope = owner.scope;
+    if (scope != null && ProfileRuntime.capture() != scope) return null;
+    bool current() =>
+        owner == ProfileSessionMemory.captureOwner() &&
+        canContinue?.call() != false;
+    if (!current()) return null;
+    if (_libCacheOwner != owner) {
+      _invalidateLibraryCache();
+      _libCacheOwner = owner;
+    }
+    if (!await isAuthenticated(canContinue: current) || !current()) return null;
     final contentType = type == 'series' ? 'shows' : 'movies';
     try {
       // Kick all list fetches off together, then await — they run concurrently.
@@ -169,23 +191,38 @@ class TraktService {
       final watchlistF = _cachedLib<Set<String>>(
         'watchlist:$contentType',
         () async {
-          final l = await fetchListOrNull('watchlist', contentType);
+          final l = await fetchListOrNull(
+            'watchlist',
+            contentType,
+            canContinue: current,
+          );
           return l == null ? null : _extractListImdbIds(l);
         },
+        canContinue: current,
       );
       final collectionF = _cachedLib<Set<String>>(
         'collection:$contentType',
         () async {
-          final l = await fetchListOrNull('collection', contentType);
+          final l = await fetchListOrNull(
+            'collection',
+            contentType,
+            canContinue: current,
+          );
           return l == null ? null : _extractListImdbIds(l);
         },
+        canContinue: current,
       );
       final ratingsF = _cachedLib<Map<String, int>>(
         'ratings:$contentType',
         () async {
-          final l = await fetchListOrNull('ratings', contentType);
+          final l = await fetchListOrNull(
+            'ratings',
+            contentType,
+            canContinue: current,
+          );
           return l == null ? null : _extractRatings(l);
         },
+        canContinue: current,
       );
       // Watched via failure-aware endpoints, so a transient failure returns
       // null (not cached, treated as "unknown watched") instead of poisoning
@@ -196,13 +233,22 @@ class TraktService {
         final normalizedId = imdbId.trim().toLowerCase();
         watchedF = _cachedLib<bool>(
           'watched:show:$normalizedId',
-          () => fetchShowFullyWatchedOrNull(normalizedId),
+          () => fetchShowFullyWatchedOrNull(normalizedId, canContinue: current),
+          canContinue: current,
         );
       } else {
-        watchedF = _cachedLib<Set<String>>('watched:movies', () async {
-          final l = await fetchListOrNull('watched', 'movies');
-          return l == null ? null : _extractListImdbIds(l);
-        }).then((ids) => ids?.contains(imdbId.toLowerCase()));
+        watchedF = _cachedLib<Set<String>>(
+          'watched:movies',
+          () async {
+            final l = await fetchListOrNull(
+              'watched',
+              'movies',
+              canContinue: current,
+            );
+            return l == null ? null : _extractListImdbIds(l);
+          },
+          canContinue: current,
+        ).then((ids) => ids?.contains(imdbId.toLowerCase()));
       }
 
       final watchlist = await watchlistF;
@@ -215,6 +261,7 @@ class TraktService {
       }
       // Null (watched fetch failed) → watched unknown, not "unwatched".
       final titleWatched = await watchedF;
+      if (!current()) return null;
 
       return TraktTitleStatus(
         inWatchlist: watchlist.contains(imdbId),
@@ -1199,8 +1246,10 @@ class TraktService {
   /// that is genuinely empty — the two are visually different states.
   Future<List<dynamic>?> fetchListOrNull(
     String listType,
-    String contentType,
-  ) async {
+    String contentType, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
     final String path;
     // trending/popular/anticipated are public Trakt endpoints — no OAuth token
     // required — so serve them without auth to survive a missing/expired token.
@@ -1222,7 +1271,8 @@ class TraktService {
 
     final response = isPublic
         ? await _publicGet(path)
-        : await _authenticatedGet(path);
+        : await _authenticatedGet(path, canContinue: canContinue);
+    if (canContinue?.call() == false) return null;
     if (response == null || response.statusCode != 200) {
       debugPrint('Trakt: fetchList failed (${response?.statusCode})');
       return null;
@@ -1775,11 +1825,16 @@ class TraktService {
   /// Failure-aware completion check for one series detail page. This avoids
   /// downloading the user's entire watched-show history merely to label one
   /// title's Trakt pill.
-  Future<bool?> fetchShowFullyWatchedOrNull(String showId) async {
-    final resolvedShowId = await _showId(showId);
-    if (resolvedShowId == null) return null;
+  Future<bool?> fetchShowFullyWatchedOrNull(
+    String showId, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
+    final resolvedShowId = await _showId(showId, canContinue: canContinue);
+    if (canContinue?.call() == false || resolvedShowId == null) return null;
     final response = await _authenticatedGet(
       '/shows/$resolvedShowId/progress/watched?hidden=false&specials=false&count_specials=false',
+      canContinue: canContinue,
     );
     if (response == null || response.statusCode != 200) return null;
     try {

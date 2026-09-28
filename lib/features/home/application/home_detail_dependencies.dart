@@ -22,8 +22,13 @@ final homeDetailReadersProvider = Provider.autoDispose
 
         return HomeDetailReaders(
           isOwnerCurrent: () => owner == ProfileSessionMemory.captureOwner(),
-          trakt: (id, type, current) =>
-              scoped(() => TraktService.instance.fetchTitleStatus(id, type)),
+          trakt: (id, type, current) => scoped(
+            () => TraktService.instance.fetchTitleStatus(
+              id,
+              type,
+              canContinue: current,
+            ),
+          ),
           simkl: (id, type, current) => scoped(
             () => SimklService.instance.fetchTitleStatus(
               id,

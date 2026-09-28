@@ -6,6 +6,41 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: Trakt detail status ownership — 2026-09-28
+
+The injected detail reader now forwards its continuation guard into Trakt title
+status. The service captures the opening profile-session owner before authentication,
+rejects foreign captured scopes, and associates library-cache entries with that
+owner. Retired requests cannot borrow or populate the cache, continue through
+credential migration, initiate a token refresh after a late 401, or publish title
+status. The existing authenticated GET/native-ID guards are reused through the
+list and series-watched readers. Existing callers without a route guard retain
+normal behavior while receiving profile protection at the title-status boundary.
+
+Review preserved the concurrent four-read structure, 45-second TTL, unknown core
+list versus unknown watched semantics, mutation-generation fence and successful
+same-profile refresh policy. There is no new cache, provider, retry loop or service
+rewrite. The existing Trakt service remains an external legacy dependency; only
+changed members were formatted.
+
+Validation: **153 affected tests pass** (104 detail/history/menu checks plus 49
+refresh/watched/Continue Watching checks). Eleven new scenarios reuse the real
+two-account fixture: movies/series with active, route-retired and profile-retired
+responses, late 401s, original/new token selection, cache reuse and incoming
+results winning over outgoing responses. Profile tests deliberately omit singleton
+reset to exercise explicit owner validation; foreign captured scopes are rejected.
+A held preference-mutation snapshot also verifies no retired credential migration
+or HTTP request occurs. One introduced test brace lint was fixed; final analyzer
+identities remain **848**. **472** migrated files pass architecture checks and diff
+checks pass. Receipts: `.git/refactor-evidence/phase5/trakt-detail-final-tests.txt`,
+`trakt-detail-related-tests.txt`, and `trakt-detail-final-analyze.txt`.
+
+The immediately preceding full-suite receipt remains the integration reference;
+this narrowly forwarded guard uses focused verification rather than repeating the
+full suite. MDBList status continuations, addon inventory, detail opening and
+mutation/reset boundaries remain A work. Later feature/facade and CI/native/device/
+performance gates are still pending.
+
 ## Batch A checkpoint: Stremio detail cache retirement — 2026-09-28
 
 Review found that `invalidateCache()`, used by profile lifecycle cleanup, left

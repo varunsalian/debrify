@@ -1,3 +1,4 @@
+import 'package:debrify/features/home/application/home_detail_dependencies.dart';
 import 'package:debrify/features/home/application/home_series_resume_dependencies.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
@@ -755,4 +756,173 @@ void main() {
       );
     },
   );
+  for (final series in [false, true]) {
+    for (final retirement in ['active', 'route', 'profile']) {
+      for (final statusCode in retirement == 'active' ? [200] : [200, 401]) {
+        test(
+          'detail status cache ownership: series=$series retirement=$retirement status=$statusCode',
+          () async {
+            final reader = ProviderContainer.test().read(
+              homeDetailReadersProvider(ProfileSessionMemory.captureOwner()),
+            );
+            final entered = Completer<void>(), release = Completer<void>();
+            var active = true;
+            var oldRequests = 0, newRequests = 0;
+            var late = false;
+            final type = series ? 'series' : 'movie';
+            await http.runWithClient(
+              () async {
+                final pending = reader.trakt(
+                  'tt1234567',
+                  type,
+                  isCurrent: () => active,
+                );
+                await entered.future.timeout(const Duration(seconds: 5));
+                if (retirement == 'route') active = false;
+                if (retirement == 'profile') {
+                  await ProfileBootstrap.registry.setActiveProfile(
+                    other.profileId,
+                  );
+                  ProfileRuntime.publish(other);
+                  // Deliberately omit resetProfileScope: the reader must reject even
+                  // a warm foreign-owner cache independently of lifecycle cleanup.
+                }
+                late = true;
+                if (retirement != 'active') {
+                  final incoming = ProviderContainer.test().read(
+                    homeDetailReadersProvider(
+                      ProfileSessionMemory.captureOwner(),
+                    ),
+                  );
+                  final fresh = await incoming.trakt(
+                    'tt1234567',
+                    type,
+                    isCurrent: () => true,
+                  );
+                  expect(fresh?.rating, 9);
+                }
+                release.complete();
+                final result = await pending;
+                if (retirement == 'active') {
+                  expect(result?.rating, 3);
+                  expect(result?.inWatchlist, isTrue);
+                  expect(
+                    series ? result?.seriesFullyWatched : result?.watched,
+                    isTrue,
+                  );
+                } else {
+                  expect(result, isNull);
+                }
+                final currentReader = ProviderContainer.test().read(
+                  homeDetailReadersProvider(
+                    ProfileSessionMemory.captureOwner(),
+                  ),
+                );
+                final cached = await currentReader.trakt(
+                  'tt1234567',
+                  type,
+                  isCurrent: () => true,
+                );
+                expect(cached?.rating, retirement == 'active' ? 3 : 9);
+                expect(oldRequests, 4);
+                expect(newRequests, retirement == 'active' ? 0 : 4);
+                if (retirement == 'profile') {
+                  final foreign = await ProfileRuntime.withCapturedScope(
+                    origin,
+                    () => TraktService.instance.fetchTitleStatus(
+                      'tt1234567',
+                      type,
+                    ),
+                  );
+                  expect(foreign, isNull);
+                  expect(newRequests, 4);
+                }
+              },
+              () => MockClient((request) async {
+                final outgoing = !late;
+                if (outgoing) {
+                  expect(
+                    request.headers['authorization'],
+                    'Bearer origin-token',
+                  );
+                  oldRequests++;
+                  if (oldRequests == 4) entered.complete();
+                  await release.future;
+                } else {
+                  expect(
+                    request.headers['authorization'],
+                    retirement == 'profile'
+                        ? 'Bearer other-token'
+                        : 'Bearer origin-token',
+                  );
+                  newRequests++;
+                }
+                if (outgoing && statusCode == 401) {
+                  return http.Response('', 401);
+                }
+                if (request.url.path.contains('/progress/watched')) {
+                  return http.Response(
+                    jsonEncode({'aired': 4, 'completed': 4}),
+                    200,
+                  );
+                }
+                return http.Response(
+                  jsonEncode([
+                    {
+                      series ? 'show' : 'movie': {
+                        'ids': {'imdb': 'tt1234567'},
+                      },
+                      'rating': outgoing ? 3 : 9,
+                    },
+                  ]),
+                  200,
+                );
+              }),
+            );
+          },
+        );
+      }
+    }
+  }
+
+  test('detail authentication retires before credential migration', () async {
+    ProfileRuntime.debugReset();
+    ProfileRuntime.initializeLegacy();
+    SharedPreferences.setMockInitialValues({
+      'trakt_access_token': 'legacy-token',
+    });
+    final reader = ProviderContainer.test().read(
+      homeDetailReadersProvider(ProfileSessionMemory.captureOwner()),
+    );
+    final entered = Completer<void>(), release = Completer<void>();
+    final snapshot = ProfilePreferences.captureMutationSnapshot((_) async {
+      entered.complete();
+      await release.future;
+    });
+    await entered.future;
+    var active = true, requests = 0;
+    await http.runWithClient(
+      () async {
+        final pending = reader.trakt(
+          'tt1234567',
+          'movie',
+          isCurrent: () => active,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        active = false;
+        release.complete();
+        await snapshot;
+        expect(await pending, isNull);
+      },
+      () => MockClient((_) async {
+        requests++;
+        return http.Response('[]', 200);
+      }),
+    );
+    expect(requests, 0);
+    expect(
+      (await SharedPreferences.getInstance()).getString('trakt_access_token'),
+      'legacy-token',
+    );
+  });
 }
