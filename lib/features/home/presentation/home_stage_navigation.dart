@@ -65,6 +65,38 @@ class HomeStageNavigation {
     return nearestMountedNode(nodesFor(active), columns[keyOf(active)] ?? 0);
   }
 
+  /// Move between shelves, or admit a continuation/page at the loaded edge.
+  /// Readers stay lazy because continuation focus can synchronously update UI.
+  void switchRail({
+    required List<HomeRail> rails,
+    required int delta,
+    required bool Function() rowsPending,
+    required bool Function() canAdvance,
+    required bool Function() focusContinuation,
+    required void Function(String) deferAdvance,
+    required VoidCallback loadMore,
+    required void Function(String) activate,
+    required VoidCallback scheduleFocus,
+  }) {
+    if (rails.isEmpty) return;
+    final current = resolveIndex(rails);
+    final next = (current + delta).clamp(0, rails.length - 1);
+    if (next == current) {
+      if (delta > 0 && !rowsPending() && focusContinuation()) return;
+      if (delta > 0 && canAdvance()) {
+        // Remember the move before requesting the batch, including sync results.
+        deferAdvance(keyOf(rails[current]));
+        loadMore();
+      } else if (delta > 0) {
+        focusContinuation();
+      }
+      return;
+    }
+    // Each rail retains its own column; a first visit starts at zero.
+    activate(keyOf(rails[next]));
+    scheduleFocus();
+  }
+
   void seedFocus({
     required void Function(FocusNode? Function()) schedule,
     required FocusNode? Function() resolveTarget,

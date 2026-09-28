@@ -6,6 +6,23 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: stage rail transitions — 2026-09-28
+
+Base: `4e7c1ab6`. The existing `HomeStageNavigation` now owns rail switching,
+continuation priority and deferred paging admission. The screen supplies current
+readers, ordered UI activation and frame scheduling. No additional state owner or
+provider was introduced. Root: **11,831 → 11,816 lines**.
+
+Review preserves lazy reads after continuation focus, defer-before-load ordering,
+per-rail columns, repeated continuation fallback, clamped edge moves and Atrium
+marker updates before scheduled focus. **57 tests pass**, including all 55
+real-screen progressive/pagination cases and focused navigation coverage.
+Analysis retains **836 identical diagnostic identities**; architecture checks pass
+for **535 files**; changed declarations are formatted and diff checks pass.
+Receipts: `.git/refactor-evidence/phase5/stage-switch-{tests,analyze}.txt`.
+No emulator used. Remaining C composition/navigation, D lifecycle/facade work and
+E final acceptance remain pending.
+
 ## Batch C checkpoint: shared stage rail navigation — 2026-09-28
 
 Base: `6c55161c`. `HomeStageNavigation` (98 lines) owns active rail identity,

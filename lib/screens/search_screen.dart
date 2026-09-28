@@ -6809,40 +6809,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// scrolls. DOWN past the last loaded rail pulls the next catalog batch;
   /// the new rail becomes reachable when it lands.
   void _stageSwitchRail(int delta) {
-    final rails = _stageRails;
-    if (rails.isEmpty) return;
-    final current = _resolveCanvasRailIndex(rails);
-    final next = (current + delta).clamp(0, rails.length - 1);
-    if (next == current) {
-      if (delta > 0 && !_boardRowsPending && _focusCatalogContinuation()) {
-        return;
-      }
-      if (delta > 0 && _boardCanAdvance) {
-        // Remember the move so it COMPLETES when the batch lands — otherwise
-        // the keypress is silently eaten and the user has to press again.
-        _stageDeferredAdvance.defer(_canvasRailKeyOf(rails[current]));
-        _loadMoreBoard();
-      } else if (delta > 0) {
-        _focusCatalogContinuation();
-      }
-      return;
-    }
-    final nextKey = _canvasRailKeyOf(rails[next]);
-    // A first visit starts the rail at its BEGINNING — inheriting the column
-    // you came from (classic's carry-over) opened rails mid-list here, which
-    // read as broken with a fresh shelf. Revisits still restore the rail's
-    // own remembered column (written by onFocused).
-    setState(() {
-      _canvasRailKey = nextKey;
-      // Atrium's window is [active, active+1] and its focused-row marker is
-      // what _stageFocusTarget honours. Moving the window must re-anchor it,
-      // or UP from the top row resolves to the row you just left (it is the
-      // new window's BOTTOM row) and focus appears not to move.
-      if (_homeStyleEffective == 'atrium') {
-        _atriumFocusedRailKey.value = nextKey;
-      }
-    });
-    _stageFocusRequests.schedule(_stageFocusTarget);
+    _stageNavigation.switchRail(
+      rails: _stageRails,
+      delta: delta,
+      rowsPending: () => _boardRowsPending,
+      canAdvance: () => _boardCanAdvance,
+      focusContinuation: _focusCatalogContinuation,
+      deferAdvance: _stageDeferredAdvance.defer,
+      loadMore: _loadMoreBoard,
+      activate: (nextKey) {
+        setState(() {
+          _canvasRailKey = nextKey;
+          // Re-anchor Atrium's visible window before resolving deferred focus.
+          if (_homeStyleEffective == 'atrium') {
+            _atriumFocusedRailKey.value = nextKey;
+          }
+        });
+      },
+      scheduleFocus: () => _stageFocusRequests.schedule(_stageFocusTarget),
+    );
   }
 
   /// The CANVAS home: full-bleed stage (idle art → ambient trailer via the

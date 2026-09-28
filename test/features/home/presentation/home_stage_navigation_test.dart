@@ -4,6 +4,71 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'rail switches preserve continuation priority and deferred paging order',
+    () {
+      const rails = [HomeRail(sectionIndex: 0), HomeRail(sectionIndex: 1)];
+      final navigation = HomeStageNavigation(
+        keyOf: (rail) => '${rail.sectionIndex}',
+        nodesFor: (_) => [],
+        itemsFor: (_) => [],
+      );
+      final events = <String>[];
+      var pending = false;
+      var advance = true;
+      var continuation = false;
+      void move(int delta, {List<HomeRail> rows = rails}) {
+        events.clear();
+        navigation.switchRail(
+          rails: rows,
+          delta: delta,
+          rowsPending: () => pending,
+          canAdvance: () => advance,
+          focusContinuation: () {
+            events.add('continuation');
+            return continuation;
+          },
+          deferAdvance: (key) => events.add('defer:$key'),
+          loadMore: () => events.add('load'),
+          activate: (key) {
+            navigation.activeKey = key;
+            events.add('activate:$key');
+          },
+          scheduleFocus: () => events.add('focus:${navigation.activeKey}'),
+        );
+      }
+
+      navigation.columns['0'] = 7;
+      move(1);
+      expect(events, ['activate:1', 'focus:1']);
+      expect(navigation.columns, {'0': 7});
+      move(1);
+      expect(events, ['continuation', 'defer:1', 'load']);
+      continuation = true;
+      move(1);
+      expect(events, ['continuation']);
+      pending = true;
+      move(1);
+      expect(events, ['defer:1', 'load']);
+      advance = false;
+      move(1);
+      expect(events, ['continuation']);
+      pending = false;
+      continuation = false;
+      move(1);
+      expect(events, ['continuation', 'continuation']);
+      move(-1);
+      expect(events, ['activate:0', 'focus:0']);
+      expect(navigation.columns['0'], 7);
+      move(-1);
+      expect(events, isEmpty);
+      move(0);
+      expect(events, isEmpty);
+      move(1, rows: []);
+      expect(events, isEmpty);
+    },
+  );
+
   testWidgets(
     'rail identity and mounted-column restoration survive insertions and short Atrium',
     (tester) async {
