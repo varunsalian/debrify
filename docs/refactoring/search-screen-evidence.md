@@ -6,6 +6,34 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Home board states and framing — 2026-09-28
+
+Base revision: `656f6751`. Home now owns board state rendering/layout dispatch
+(`home_board_content.dart`, 77 lines) and its continuation frame
+(`home_board_frame.dart`, 60 lines). The shared Home/Search retry message moved
+unchanged to `lib/ui/core/retry_message.dart` (48 lines), registered with the
+architecture guard. The route supplies data, actions, focus nodes and lazy layout
+builders; Spotlight's existing one-time reveal/focus transition stays at its
+original call site pending D. SearchScreen shrinks **13,043 → 12,962 lines**.
+
+Review preserves loading/error/empty precedence, Trakt skeleton reservation,
+dedicated TV Search dispatch, Spotlight's content-dependent Classic fallback,
+continuation footer visibility/actions and retry autofocus. Hidden layouts remain
+unbuilt; Spotlight content projection remains lazy. Classic's existing layers and
+row composition are unchanged, now in a separately named root method.
+
+**471 affected existing tests pass** across Home presentation, catalog continuation,
+layout preference and catalog repository screens, plus Search presentation.
+**One new focused test passes** for dispatch precedence, lazy builders, reserved
+rows and Spotlight fallback. Receipts:
+`.git/refactor-evidence/phase5/home-board-view-tests.txt` and
+`home-board-content-focused.txt`. Final analyzer receipt:
+`home-board-view-analyze-final.txt`; the unnecessary assertion introduced by
+parameter promotion was removed; **838 diagnostic identities remain unchanged**.
+Architecture checks pass **519 files** and
+`git diff --check` passes. No emulator used. This checkpoint does not close C/D:
+layout-specific composition, resource ownership and the <=300-line facade remain.
+
 ## Batch C checkpoint: Discover panel composition — 2026-09-28
 
 Base revision: `646b274e`. `buildDiscoverPanels` (180 lines) composes the actual

@@ -1,3 +1,5 @@
+import '../ui/core/retry_message.dart';
+import '../features/home/presentation/home_board_content.dart';
 import '../features/search/presentation/search_focus_controller.dart';
 import '../features/search/presentation/keyword_focus_controller.dart';
 import '../features/search/presentation/keyword_source_tabs.dart';
@@ -205,7 +207,7 @@ import '../services/home_load_deadline.dart';
 import '../services/home_load_progress.dart';
 import '../widgets/home/home_row_focus.dart';
 import '../widgets/home/home_continuation_focus.dart';
-import '../features/home/presentation/home_catalog_continuation_footer.dart';
+import '../features/home/presentation/home_board_frame.dart';
 import '../services/home_row_refresh.dart';
 import '../services/profiles/connection_resource_service.dart';
 import 'dart:async';
@@ -11919,56 +11921,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         if (_sections[i].pagingPaused && !_sections[i].exhausted) i,
     ];
     final hasMoreCatalogs = _boardHasMore;
-    final showContinuation =
-        pending.isNotEmpty ||
-        (hasMoreCatalogs && _sections.every((s) => s.items.isEmpty));
     final busy =
         _catalogContinuing ||
         _boardLoadingMore ||
         pending.any((i) => _sections[i].loadingMore);
-    return Column(
-      children: [
-        Expanded(
-          child:
-              !_loading &&
-                  _error == null &&
-                  _sections.isNotEmpty &&
-                  _sections.every((s) => s.items.isEmpty) &&
-                  !_cwVisible &&
-                  !_anyFavVisible
-              ? _message(
-                  Icons.movie_filter_rounded,
-                  !showContinuation
-                      ? 'No unwatched titles found'
-                      : 'No new titles loaded yet',
-                  !showContinuation
-                      ? 'Try another catalog or turn off Hide watched titles in Tracking settings.'
-                      : 'Continue browsing to check more titles in these catalogs.',
-                )
-              : _buildBoardContent(),
-        ),
-        if (!_loading && showContinuation)
-          buildHomeCatalogContinuationFooter(
-            hasPausedRows: pending.isNotEmpty,
-            hasMoreCatalogs: hasMoreCatalogs,
-            catalogsEmpty: _sections.every((s) => s.items.isEmpty),
-            busy: busy,
-            continueNode: _catalogContinueNode,
-            moreNode: _catalogMoreNode,
-            onRestoreFocus: _restoreCatalogContinuationFocus,
-            onContinueRows: () => _continueHomeCatalogs(moreCatalogs: false),
-            onMoreCatalogs: () => _continueHomeCatalogs(moreCatalogs: true),
-          ),
-      ],
+    return buildHomeBoardFrame(
+      loading: _loading,
+      hasError: _error != null,
+      hasCatalogs: _sections.isNotEmpty,
+      catalogsEmpty: _sections.every((s) => s.items.isEmpty),
+      continuationVisible: _cwVisible,
+      favoritesVisible: _anyFavVisible,
+      hasPausedRows: pending.isNotEmpty,
+      hasMoreCatalogs: hasMoreCatalogs,
+      busy: busy,
+      continueNode: _catalogContinueNode,
+      moreNode: _catalogMoreNode,
+      onRestoreFocus: _restoreCatalogContinuationFocus,
+      onContinueRows: () => _continueHomeCatalogs(moreCatalogs: false),
+      onMoreCatalogs: () => _continueHomeCatalogs(moreCatalogs: true),
+      content: _buildBoardContent,
+      message: _message,
     );
   }
 
   Widget _buildBoardContent() {
-    if (!_loading && !_spotlightEntryRevealed && widget.isTelevision &&
-        !widget.searchMode && !widget.discoverMode &&
-        _catalogQuery.isEmpty && !_catalogSearching &&
+    if (!_loading &&
+        !_spotlightEntryRevealed &&
+        widget.isTelevision &&
+        !widget.searchMode &&
+        !widget.discoverMode &&
+        _catalogQuery.isEmpty &&
+        !_catalogSearching &&
         _homeStyleEffective == 'spotlight') {
-      if (_spotlightHero.isEmpty && (_boardRefreshing || _heroSourceResolving)) {
+      if (_spotlightHero.isEmpty &&
+          (_boardRefreshing || _heroSourceResolving)) {
         return BrandLoadingStage(isTelevision: true);
       }
       // Reveal once: background refreshes must not hide an already usable
@@ -11977,77 +11964,37 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _autoFocusSettled = false;
       _maybeAutoFocusBoard();
     }
-    if (_loading) {
-      // The brand moment: DEBRIFY centred on the ink while catalogs load —
-      // replaces the old skeleton-rail wall, which read as a broken app.
-      return BrandLoadingStage(isTelevision: widget.isTelevision);
-    }
-    if (_error != null) {
-      return _message(
-        Icons.error_outline_rounded,
-        "Couldn't load catalogs",
-        _error!,
-        onRetry: () => unawaited(_load()),
-      );
-    }
-    final showCw = _cwVisible;
-    // Don't fall through to the empty-state message while Trakt rows are being
-    // reserved — the skeletons below are the board's content until the fetch
-    // settles, and showing "No catalogs yet" first would flip to rows with the
-    // exact reflow the reservation exists to prevent.
-    if (_sections.isEmpty && !showCw && !_anyFavVisible && !_traktReserving) {
-      if (_catalogQuery.isNotEmpty) {
-        return _message(
-          Icons.search_off_rounded,
-          'No catalog matches',
-          _catalogSearchFailures > 0
-              ? 'Nothing in your catalogs for "$_catalogQuery" — and '
-                    '$_catalogSearchFailures source'
-                    '${_catalogSearchFailures == 1 ? '' : 's'} didn\'t '
-                    'respond, so there may be more. Try again, or switch to '
-                    'Keyword to search torrents directly.'
-              : 'Nothing in your catalogs for "$_catalogQuery". Try different '
-                    'keywords, or switch to Keyword to search torrents '
-                    'directly.',
-        );
-      }
-      return _message(
-        Icons.travel_explore_rounded,
-        'No catalogs yet',
-        'Install a catalog add-on (e.g. Cinemeta) from Addons to browse '
-            'movies and shows here.',
-      );
-    }
+    return buildHomeBoardContent(
+      loading: _loading,
+      isTelevision: widget.isTelevision,
+      error: _error,
+      continuationVisible: _cwVisible,
+      catalogsEmpty: _sections.isEmpty,
+      favoritesVisible: _anyFavVisible,
+      traktReserving: _traktReserving,
+      query: _catalogQuery,
+      searchFailures: _catalogSearchFailures,
+      searchMode: widget.searchMode,
+      style: _homeStyleEffective,
+      spotlightHasContent: () =>
+          _spotlightShelves.any((s) => s.items.isNotEmpty),
+      layouts: {
+        'canvas': _buildCanvasBoard,
+        'atrium': _buildAtriumBoard,
+        'mosaic': _buildMosaicBoard,
+        'promenade': _buildPromenadeBoard,
+        'deck': _buildDeckBoard,
+        'tonight': _buildTonightBoard,
+        'spotlight': _buildSpotlightBoard,
+      },
+      searchSpotlight: _buildSearchSpotlightBoard,
+      classic: _buildClassicBoard,
+      onRetry: () => unawaited(_load()),
+      message: _message,
+    );
+  }
 
-    if (widget.isTelevision && widget.searchMode) {
-      return _buildSearchSpotlightBoard();
-    }
-
-    // STAGE layouts: each owns the whole screen and has its own build path
-    // (the loading / error / empty guards above are shared with classic).
-    switch (_homeStyleEffective) {
-      case 'canvas':
-        return _buildCanvasBoard();
-      case 'atrium':
-        return _buildAtriumBoard();
-      case 'mosaic':
-        return _buildMosaicBoard();
-      case 'promenade':
-        return _buildPromenadeBoard();
-      case 'deck':
-        return _buildDeckBoard();
-      case 'tonight':
-        return _buildTonightBoard();
-      case 'spotlight':
-        // The shared guard above lets dispatch through whenever ANY rail has
-        // content — including favourites, which Spotlight still does not draw
-        // (they are not `StremioMeta`). So test what this board will actually
-        // render, not what the screen has: a stylish empty board is worse than
-        // classic.
-        if (_spotlightShelves.every((s) => s.items.isEmpty)) break;
-        return _buildSpotlightBoard();
-    }
-
+  Widget _buildClassicBoard() {
     final tv = widget.isTelevision;
     return buildHomeClassicLayout(
       isTelevision: tv,
@@ -12997,44 +12944,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     String title,
     String body, {
     VoidCallback? onRetry,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: scheme.onSurfaceVariant),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: scheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              body,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13.5, color: scheme.onSurfaceVariant),
-            ),
-            if (onRetry != null) ...[
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                autofocus: widget.isTelevision,
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Try again'),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
+  }) => buildRetryMessage(
+    context,
+    icon,
+    title,
+    body,
+    isTelevision: widget.isTelevision,
+    onRetry: onRetry,
+  );
+
+
 
 }
 
