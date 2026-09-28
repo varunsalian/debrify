@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:debrify/models/stremio_addon.dart';
 
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
@@ -31,6 +32,47 @@ void main() {
     SecretVault.debugReset();
     ProfileRuntime.debugReset();
   });
+
+  test(
+    'quick-play payload preserves raw paused/up-next and native identity fields',
+    () {
+      for (final isMovie in [true, false]) {
+        for (final progress in <double?>[null, 0, 100]) {
+          final item = SimklContinueWatchingItem(
+            meta: StremioMeta(
+              id: 'simkl:123',
+              type: isMovie ? 'movie' : 'series',
+              name: 'Exact title',
+              year: '2026',
+              poster: 'poster',
+            ),
+            progress: progress,
+            season: isMovie ? null : 2,
+            episode: isMovie ? null : 3,
+            pausedAtMs: 1000,
+            isMovie: isMovie,
+            isUpNext: progress == null,
+          );
+          for (final selection in [
+            item.selection,
+            SimklContinueWatchingService.instance.selectionForItem(item),
+          ]) {
+            expect(selection.imdbId, item.id);
+            expect(selection.title, 'Exact title');
+            expect(selection.year, '2026');
+            expect(selection.posterUrl, 'poster');
+            expect(selection.contentType, item.meta.type);
+            expect(selection.isSeries, !isMovie);
+            expect(selection.season, isMovie ? null : 2);
+            expect(selection.episode, isMovie ? null : 3);
+            expect(selection.simklProgressPercent, progress);
+            expect(selection.simklSource, isTrue);
+            expect(selection.traktSource, isFalse);
+          }
+        }
+      }
+    },
+  );
 
   for (final status in ['watching', 'completed']) {
     test(

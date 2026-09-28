@@ -1,3 +1,5 @@
+import '../models/simkl_continue_watching_item.dart';
+import '../features/home/presentation/home_detail_action_bridge.dart';
 import '../features/home/presentation/home_source_editor.dart';
 import '../features/home/application/home_source_editing_dependencies.dart';
 import '../features/sources/presentation/local_source_picker_composition.dart';
@@ -241,7 +243,6 @@ import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/tvos_top_shelf_service.dart';
 import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
-import '../services/simkl/simkl_continue_watching_service.dart';
 import '../services/trakt/trakt_continue_watching_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/simkl/simkl_service.dart';
@@ -4755,6 +4756,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Resume a Trakt Continue Watching title — resolves the paused/next episode
   /// (an extra Trakt call for series) and plays.
   Future<void> _playTraktItem(StremioMeta item) async {
+    if (!_catalogNavigationCurrent()) return;
     final cwItem = _traktByImdb[_imdbOf(item)];
     if (cwItem == null) {
       // Not in Continue Watching — a fetched Trakt list title (Trending,
@@ -4768,10 +4770,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
       return;
     }
-    final sel = await TraktContinueWatchingService.instance.selectionForItem(
-      cwItem,
+    final resume = await _seriesResumeRepository.traktSelection(
+      item,
+      cached: cwItem,
+      isCurrent: _catalogNavigationCurrent,
     );
-    if (!mounted) return;
+    if (!_catalogNavigationCurrent()) return;
+    final sel = resume?.sel;
     if (sel == null) {
       _snack("Couldn't resolve where to resume \"${item.name}\".");
       return;
@@ -4991,6 +4996,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// selection carrying the paused season/episode + Simkl progress percent and
   /// plays it, mirroring the Trakt quick-play.
   Future<void> _playSimklCwItem(StremioMeta item) async {
+    if (!_catalogNavigationCurrent()) return;
     _activeAddonId = NativeSeriesMetadataService.addonForItem(item).id;
     _playbackArtwork.capture(item);
     final cw = _simklByImdb[_simklCardKey(item)];
@@ -5000,7 +5006,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       await _onCatalogPlay(item, NativeSeriesMetadataService.addonForItem(item));
       return;
     }
-    _playSelection(SimklContinueWatchingService.instance.selectionForItem(cw));
+    _playSelection(cw.selection);
   }
 
   /// Desktop "See All" for the Simkl Continue Watching rows — reuses the generic
@@ -5081,6 +5087,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   Future<void> _playMdblistCwItem(StremioMeta item) async {
+    if (!_catalogNavigationCurrent()) return;
     final cw = _mdblistByImdb[_imdbOf(item)];
     if (cw == null) {
       await _onCatalogPlay(
@@ -10593,123 +10600,79 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         });
   }
 
-  /// Dispatch a detail-screen quick action. Reuses the shared
-  /// [handleTraktMenuAction] for the standard actions and handles the
-  /// Continue-Watching removal locally. The detail page stays underneath (like
-  /// Play/Sources), so Back returns to it.
+  HomeDetailActionBridge get _detailActionBridge => HomeDetailActionBridge(
+    isCurrent: _catalogNavigationCurrent,
+    isSearch: () => widget.searchMode,
+    clearResume: _clearSeriesResume,
+    refreshLocal: _loadContinueWatching,
+    refreshTrakt: () => _loadTraktContinueWatching(refreshBound: false),
+    refreshSimkl: () => _loadSimklContinueWatching(refreshBound: false),
+    refreshMdblist: () => _loadMdblistContinueWatching(refreshBound: false),
+  );
+
   Future<void> _handleDetailQuickAction(
     StremioMeta item,
     StremioAddon addon,
     TraktItemMenuAction action, {
     required bool inCw,
     String? imdb,
-    // Set by the merged detail sheet's inline rating strip, which already knows
-    // the score — skips the rating dialog rather than asking twice.
     int? presetRating,
-  }) async {
-    if (action == TraktItemMenuAction.clearWatchProgress) {
-      await handleTraktMenuAction(context, item, action);
-      if (!mounted) return;
-      _clearSeriesResume();
-      await Future.wait([
-        _loadContinueWatching(),
-        _loadTraktContinueWatching(refreshBound: false),
-        _loadSimklContinueWatching(refreshBound: false),
-        _loadMdblistContinueWatching(refreshBound: false),
-      ]);
-      return;
-    }
-    if (action == TraktItemMenuAction.removeFromPlayback) {
+  }) => _detailActionBridge.trakt(
+    action,
+    removeLocal: () async {
       if (imdb != null) await _handleContinueDetailAction(action, imdb);
-      return;
-    }
-    if (action == TraktItemMenuAction.removeFromTraktPlayback) {
+    },
+    removeTrakt: () async {
       if (imdb != null) await _removeFromTraktContinueWatching(imdb);
-      return;
-    }
-    _activeAddonId = addon.id;
-    await handleTraktMenuAction(
-      context,
-      item.withSourceAddon(addon),
-      action,
-      // "Select Source" when nothing is bound → straight to the picker; when a
-      // source is already bound → the rich edit dialog (list / reorder / remove
-      // / add). Matches the catalog/aggregated detail flow.
-      onSelectSource: _openBindSources,
-      onEditSource: _handleEditOrSelectSource,
-      onPlayRandomEpisode: (m) => _playRandomEpisodeFromDetail(m, addon),
-      onSearchPacks: _searchPacksFromDetail,
-      onAddToStremioTv: _addToStremioTvFromDetail,
-      presetRating: presetRating,
-    );
-    // A Trakt watched-state change moves a title in/out of Continue Watching,
-    // so reload the board's Trakt rows — otherwise the board is stale when the
-    // user backs out of the detail (old home reloads its list after these).
-    // Skipped on the dedicated Search tab, which never renders those rows.
-    if (mounted &&
-        !widget.searchMode &&
-        (action == TraktItemMenuAction.clearTraktProgress ||
-            action == TraktItemMenuAction.markWatched ||
-            action == TraktItemMenuAction.markUnwatched)) {
-      await _loadTraktContinueWatching(refreshBound: false);
-    }
-  }
+    },
+    invoke: (clearOnly) async {
+      if (clearOnly) {
+        await handleTraktMenuAction(context, item, action);
+        return;
+      }
+      _activeAddonId = addon.id;
+      await handleTraktMenuAction(
+        context,
+        item.withSourceAddon(addon),
+        action,
+        onSelectSource: _openBindSources,
+        onEditSource: _handleEditOrSelectSource,
+        onPlayRandomEpisode: (m) => _playRandomEpisodeFromDetail(m, addon),
+        onSearchPacks: _searchPacksFromDetail,
+        onAddToStremioTv: _addToStremioTvFromDetail,
+        presetRating: presetRating,
+      );
+    },
+  );
 
-  /// Dispatch a detail-screen Simkl quick action — mirrors
-  /// [_handleDetailQuickAction], simpler since Simkl's menu has no app
-  /// actions (Select Source etc.) or Continue-Watching removal to special-case.
   Future<void> _handleDetailSimklQuickAction(
     StremioMeta item,
     SimklItemMenuAction action, {
     int? presetRating,
-  }) async {
-    await handleSimklMenuAction(
+  }) => _detailActionBridge.simkl(
+    action,
+    invoke: () => handleSimklMenuAction(
       context,
       item,
       action,
       presetRating: presetRating,
-    );
-    // Any status change can add/remove a title from the Simkl CW rows: On Hold
-    // and remove/completed/dropped take it OFF, while Watching makes a series
-    // newly eligible as an "up next" card. So reload the rows on every one that
-    // shifts CW membership. Skipped on the dedicated Search tab (no rows there).
-    if (mounted &&
-        !widget.searchMode &&
-        (action == SimklItemMenuAction.clearWatchProgress ||
-            action == SimklItemMenuAction.removeFromContinueWatching ||
-            action == SimklItemMenuAction.removeFromList ||
-            action == SimklItemMenuAction.moveToCompleted ||
-            action == SimklItemMenuAction.moveToDropped ||
-            action == SimklItemMenuAction.moveToOnHold ||
-            action == SimklItemMenuAction.moveToWatching)) {
-      await _loadSimklContinueWatching(refreshBound: false);
-    }
-  }
+    ),
+  );
 
   Future<void> _handleDetailMdblistQuickAction(
     StremioMeta item,
     MdblistItemMenuAction action, {
     int? presetRating,
-  }) async {
-    if (action == MdblistItemMenuAction.removeFromContinueWatching) {
-      await _removeMdblistCwItem(item);
-      return;
-    }
-    await handleMdblistMenuAction(
+  }) => _detailActionBridge.mdblist(
+    action,
+    remove: () => _removeMdblistCwItem(item),
+    invoke: () => handleMdblistMenuAction(
       context,
       item,
       action,
       presetRating: presetRating,
-    );
-    if (!mounted || widget.searchMode) return;
-    if (action == MdblistItemMenuAction.clearWatchProgress ||
-        action == MdblistItemMenuAction.markWatched ||
-        action == MdblistItemMenuAction.markUnwatched ||
-        action == MdblistItemMenuAction.drop ||
-        action == MdblistItemMenuAction.restore) {
-      await _loadMdblistContinueWatching(refreshBound: false);
-    }
-  }
+    ),
+  );
 
   Future<void> _handleEditOrSelectSource(StremioMeta item) async {
     if (!_catalogNavigationCurrent()) return;

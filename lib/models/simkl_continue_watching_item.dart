@@ -1,3 +1,4 @@
+import 'advanced_search_selection.dart';
 import 'stremio_addon.dart';
 
 /// One Simkl "continue watching" entry: a paused movie, the paused episode of a
@@ -39,6 +40,20 @@ class SimklContinueWatchingItem {
     required this.isMovie,
     this.isUpNext = false,
   });
+
+  /// The exact paused/up-next payload used by quick play and compatibility callers.
+  AdvancedSearchSelection get selection => AdvancedSearchSelection(
+    imdbId: id,
+    isSeries: isSeries,
+    title: meta.name,
+    year: meta.year,
+    season: season,
+    episode: episode,
+    contentType: meta.type,
+    posterUrl: meta.poster,
+    simklProgressPercent: progress,
+    simklSource: true,
+  );
 
   String get id => meta.progressId ?? meta.id;
   bool get isSeries => !isMovie;

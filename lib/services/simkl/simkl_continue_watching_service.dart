@@ -87,20 +87,8 @@ class SimklContinueWatchingService {
 
   /// A ready-to-play selection for a CW item — carries the Simkl resume percent
   /// and the paused season/episode so [_playSelection] resumes exactly there.
-  AdvancedSearchSelection selectionForItem(SimklContinueWatchingItem item) {
-    return AdvancedSearchSelection(
-      imdbId: item.id,
-      isSeries: item.isSeries,
-      title: item.meta.name,
-      year: item.meta.year,
-      season: item.season,
-      episode: item.episode,
-      contentType: item.meta.type,
-      posterUrl: item.meta.poster,
-      simklProgressPercent: item.progress,
-      simklSource: true,
-    );
-  }
+  AdvancedSearchSelection selectionForItem(SimklContinueWatchingItem item) =>
+      item.selection;
 
   // ── Parsing ────────────────────────────────────────────────────────────────
 

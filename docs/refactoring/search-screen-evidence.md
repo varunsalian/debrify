@@ -6,6 +6,37 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: detail tracker actions and quick-play — 2026-09-28
+
+The three detail action handlers now share a 102-line presentation bridge for
+ordered dispatch, special removal delegation, cache invalidation and the exact
+provider-specific row refresh rules. It borrows existing handlers/controllers;
+it adds no provider, cache or competing state owner. Every dispatch and post-action
+refresh checks the originating view/profile. Handler arguments, addon activation,
+inline ratings, removal paths and Search-mode exceptions remain unchanged.
+
+Trakt Continue Watching quick-play now reuses the existing captured-profile
+series-resume reader with the exact cached card and selection. Simkl's pure
+selection mapping lives on its existing data model; its legacy service method
+delegates for compatibility. All three tracker quick-play entries reject retired
+owners before doing work. Their missing-card catalog fallbacks are retained.
+
+Validation: 84 affected tests pass, including 14 new action/payload checks.
+Every provider menu action is exercised in Home and Search modes; clear-progress
+waits for its handler then starts all four refreshes together. Tests cover
+retirement before/during dispatch, original failure propagation without retries,
+live Search mode and native/paused/up-next Simkl payload fields. Existing menu
+helper, real Home unavailable-origin, rewatch, resume-repository and Simkl transport
+reproduction tests pass. Analyzer diagnostic identities remain 848; architecture
+checks pass for 453 files; diff whitespace checks pass. Reviewed callback arguments,
+refresh ordering, production caller wiring and deletion of replaced branches.
+
+Receipts: `.git/refactor-evidence/phase5/detail-actions-targeted.txt` and
+`detail-actions-analyze.txt`; final commands are terminal. Full-suite verification
+remains at the planned integration gate. This checkpoint guards the outer detail
+workflow; it does not certify transitive tracker writes, rating-dialog retirement,
+Trakt remote removal, or native playback. Those remain in A/B/lifecycle scope.
+
 ## Batch A checkpoint: Home source editing — 2026-09-28
 
 The complete detail source-edit/add workflow now lives in `HomeSourceEditor`
