@@ -6,6 +6,36 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: exact detail-route ownership — 2026-09-28
+
+Both Home detail layouts now use the same 43-line `HomeDetailRoute` presentation
+owner. It owns one named Material route and the existing return-effect sequence;
+the duplicated parent completion callbacks are removed. Local and Trakt detail
+removal receive that exact owner, while row-menu removal has no detail route.
+A delayed result closes only its still-current original route. A covered original
+stays on the stack, and a popped original cannot dismiss a newer same-name page.
+Retired route callbacks cannot start these removals; accepted local writes still
+finish, with retired feedback suppressed. Closing a retired profile's detail
+cannot refresh incoming rows/auth or invoke its old return-tab callback.
+
+Validation: 47 affected tests pass, including nine new cases. Five Navigator tests
+cover ordinary return, covered/replaced routes, retirement and rejection before
+push. Four real Home cases exercise both merged and legacy detail constructors:
+hold an accepted removal, cover or replace the page, then complete the removal and
+verify the newer page remains. The legacy callback is intentionally void; tests
+wait on accepted-write drainage and settled navigation. Existing local/Trakt
+removal, detail-dispatch and rewatch contracts pass. Analyzer identities retain all
+848 prior diagnostics; 460 files pass architecture checks. Reviewed both detail
+constructor payloads and preserved refresh/auth/tab-return ordering. Only edited
+screen members were formatted, not the whole legacy file.
+
+Receipts: `.git/refactor-evidence/phase5/detail-route-targeted.txt` and
+`detail-route-analyze.txt`; focused owner cases are in `detail-route-tests.txt`.
+The Home fixture now accepts optional initial preferences so both existing layouts
+can be exercised deterministically. Other detail mutations and their dialog/data
+boundaries, catalog composition, native/player lifecycle and final acceptance
+remain open. This host checkpoint does not replace device acceptance.
+
 ## Batch A checkpoint: Simkl/MDBList removal and cache retirement — 2026-09-28
 
 Home and legacy Simkl menus now share `SimklContinueWatchingRemoval` (51 lines),

@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_detail_route.dart';
 import '../features/home/application/home_simkl_continuation_dependencies.dart';
 import '../features/home/application/home_iptv_continuation_dependencies.dart';
 import '../features/home/application/home_catalog_playback_resolver_dependencies.dart';
@@ -4797,14 +4798,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// Detail-screen action for a Continue Watching title. Only handles removal;
-  /// pops the detail and lets the push's `.then` refresh the row.
+  /// closes its own detail and lets the route return callback refresh the row.
   Future<void> _handleContinueDetailAction(
     TraktItemMenuAction action,
     String imdbId,
+    HomeDetailRoute detailRoute,
   ) async {
-    if (action != TraktItemMenuAction.removeFromPlayback) return;
-    if (!await _removeLocalHistory(imdbId) || !mounted) return;
-    Navigator.of(context).pop(); // close the detail; `.then` reloads the row
+    if (!detailRoute.isActive ||
+        action != TraktItemMenuAction.removeFromPlayback) {
+      return;
+    }
+    if (!await _removeLocalHistory(imdbId) || !mounted || !detailRoute.isActive) {
+      return;
+    }
+    detailRoute.closeIfCurrent();
     _snack('Removed from Continue Watching');
   }
 
@@ -4813,31 +4820,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// "Up Next") on Trakt, then pop the detail and reload the Trakt rows —
   /// mirroring the old home screen's remove flow.
   ///
-  /// [popDetail] is false when the card's own long-press menu asks for the
-  /// removal: there's no detail route open to pop, and popping would take the
-  /// board itself off the stack.
+  /// Row-menu removals have no detail route. Detail actions carry their exact
+  /// route so a delayed response cannot pop a newer page.
   Future<void> _removeFromTraktContinueWatching(
     String imdbId, {
-    bool popDetail = true,
+    HomeDetailRoute? detailRoute,
   }) async {
-    if (!_catalogNavigationCurrent()) return;
+    bool current() =>
+        _catalogNavigationCurrent() && (detailRoute?.isActive ?? true);
+    if (!current()) return;
     final cwItem = _traktByImdb[imdbId];
     if (cwItem == null) return;
     final removed = await ref
         .read(homeTraktHistoryRemovalProvider(_profileSessionOwner))
-        .remove(cwItem, isCurrent: _catalogNavigationCurrent);
-    if (!mounted || removed == null || !_catalogNavigationCurrent()) return;
+        .remove(cwItem, isCurrent: current);
+    if (!mounted || removed == null || !current()) return;
     if (!removed) {
       _snack('Failed to remove from Trakt Continue Watching');
       return;
     }
-    if (popDetail) {
-      // The Trakt calls take a moment — the user may have already backed out of
-      // the detail during the wait, so only pop while it's still the top route.
-      Navigator.of(
-        context,
-      ).popUntil((route) => route.settings.name != kCatalogDetailRouteName);
-    }
+    detailRoute?.closeIfCurrent();
     _snack('Removed from Trakt Continue Watching');
     await _loadTraktContinueWatching(refreshBound: false);
   }
@@ -4902,7 +4904,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _removeTraktCwItem(StremioMeta item) async {
     final imdbId = _imdbOf(item);
     if (imdbId == null) return;
-    await _removeFromTraktContinueWatching(imdbId, popDetail: false);
+    await _removeFromTraktContinueWatching(imdbId);
   }
 
   /// Remove a Simkl Continue Watching title from the row itself. Routes through
@@ -10294,7 +10296,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         hasBoundSource: _isBound(item),
         // The Trakt-syncing actions key off the IMDb id, so only offer them
         // for titles that have one (else the sync call fails with an error).
-          isTraktAuthenticated: _isTraktAuthenticated && imdb != null && MediaIdentity.isImdb(imdb) && !CustomSeriesIdentity.isCustom(imdb),
+        isTraktAuthenticated:
+            _isTraktAuthenticated &&
+            imdb != null &&
+            MediaIdentity.isImdb(imdb) &&
+            !CustomSeriesIdentity.isCustom(imdb),
         status: status,
       ),
       if (inCw)
@@ -10326,285 +10332,297 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     List<SimklMenuOption> buildSimklOptions(SimklTitleStatus? status) =>
         buildSimklMenuOptions(
           isSeries: item.type == 'series',
-          isSimklAuthenticated: _isSimklAuthenticated && imdb != null && !CustomSeriesIdentity.isCustom(imdb),
+          isSimklAuthenticated:
+              _isSimklAuthenticated &&
+              imdb != null &&
+              !CustomSeriesIdentity.isCustom(imdb),
           // Offer "Remove from Continue Watching" for a paused entry (movie or
           // series) — it has a session to delete. Not for "up next" entries
           // (progress null, no session; they leave via a status change). For a
           // series the remove also moves it to On Hold so it doesn't re-surface
           // as an up-next card (see handleSimklMenuAction).
           inContinueWatching:
-              imdb != null && (_simklByImdb[_simklCardKey(item)]?.progress != null),
+              imdb != null &&
+              (_simklByImdb[_simklCardKey(item)]?.progress != null),
           status: status,
         );
     final simklOptions = buildSimklOptions(null);
 
     List<MdblistMenuOption> buildMdblistOptions(MdblistTitleStatus? status) =>
         buildMdblistMenuOptions(
-          authenticated: _isMdblistAuthenticated && imdb != null && MediaIdentity.isImdb(imdb) && !CustomSeriesIdentity.isCustom(imdb),
+          authenticated:
+              _isMdblistAuthenticated &&
+              imdb != null &&
+              MediaIdentity.isImdb(imdb) &&
+              !CustomSeriesIdentity.isCustom(imdb),
           isSeries: item.type == 'series',
           inContinueWatching: inMdblistCw,
           status: status,
         );
     final mdblistOptions = buildMdblistOptions(null);
 
+    final detailRoute = HomeDetailRoute(
+      name: kCatalogDetailRouteName,
+      isOwnerCurrent: current,
+      onClosed: () {
+        unawaited(_refreshAfterPlayback());
+        _refreshTraktAuthState();
+        _refreshSimklAuthState();
+        _refreshMdblistAuthState();
+        if (returnToTabOnClose != null) {
+          MainPageBridge.switchTab?.call(returnToTabOnClose);
+        }
+      },
+    );
+
     // Experimental: series route to the merged detail+episodes page. Movies and
     // the flag-off path fall through to the existing CatalogItemDetailScreen.
     if ((item.type == 'series' || item.type == 'movie') && _mergedSeriesPage) {
-      Navigator.of(context)
-          .push(
-            MaterialPageRoute(
-              settings: const RouteSettings(name: kCatalogDetailRouteName),
-              builder: (_) => MergedDetailScreen(
-                item: item,
-                addon: addon,
-                isTelevision: widget.isTelevision,
-                // PikPak quick-plays fine here: onResume → _onCatalogPlay →
-                // _playSelection → TorrentPlaybackService.playFromSelection
-                // already handles PikPak (same path the episode tiles use, which
-                // stay quick-play-enabled for PikPak-only). It queues an offline
-                // download and surfaces "still processing" if not ready — same
-                // behaviour as the tiles, so the hero button matches them.
-                showQuickPlay: true,
-                isTraktSource: isTraktSource,
-                isMdblistSource: isMdblistSource,
-                heroTag: heroTag,
-                initialSeason: initialSeason,
-                initialEpisode: initialEpisode,
-                resumeInfoLoader: () => _resolveResumeInfo(
-                  item,
-                  addon,
-                  isTraktSource: isTraktSource,
-                  isMdblistSource: isMdblistSource,
-                ),
-                onResume: (promised) => _onCatalogPlay(
-                  item,
-                  addon,
-                  isTraktSource: isTraktSource,
-                  isMdblistSource: isMdblistSource,
-                  skipEpisodeFallback: true,
-                  // The merged page resolves its own episode target (it can see
-                  // watched state the reconciler can't) — Play must land on the
-                  // episode its label is showing.
-                  promisedTarget: promised,
-                  // Play the Trakt paused episode when the Trakt-first label
-                  // shows one, so the button and the action agree.
-                  preferTraktResume: true,
-                ),
-                onRewatch: () => _onCatalogPlay(item, addon,
-                  isTraktSource: isTraktSource, isMdblistSource: isMdblistSource,
-                  startFromBeginning: true),
-                // Movie only: the Sources (manual list) button.
-                onBrowse: item.type == 'movie'
-                    ? () => _onCatalogBrowse(
-                        item,
-                        addon,
-                        isTraktSource: isTraktSource,
-                        isMdblistSource: isMdblistSource,
-                      )
-                    : null,
-                onItemSelected: (selection) => _browseSelection(
-                  selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon),
-                ),
-                onQuickPlay: (selection) => _playSelection(
-                  selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon),
-                ),
-                onBrowsePrimaryEpisodeSources: (promised) => _onCatalogPlay(
-                  item,
-                  addon,
-                  isTraktSource: isTraktSource,
-                  isMdblistSource: isMdblistSource,
-                  skipEpisodeFallback: true,
-                  preferTraktResume: true,
-                  promisedTarget: promised,
-                  browseSourcesOnly: true,
-                ),
-                boundSourceCount: _boundCountFor,
-                onSelectSource: (show) {
-                  _activeAddonId = addon.id;
-                  return _handleEditOrSelectSource(show.withSourceAddon(addon));
-                },
-                traktMenuOptions: options,
-                traktMenuBuilder: buildMenuOptions,
-                // Live Trakt status (in watchlist / collection / watched /
-                // rating) — only when connected and the title has an IMDb id.
-                traktStatusLoader: (_isTraktAuthenticated && imdb != null && MediaIdentity.isImdb(imdb))
-                    ? () => TraktService.instance.fetchTitleStatus(
-                        imdb,
-                        item.type,
-                      )
-                    : null,
-                onTraktAction: (a) => _handleDetailQuickAction(
-                  item,
-                  addon,
-                  a,
-                  inCw: inCw,
-                  imdb: imdb,
-                ),
-                // Inline 1–10 strips in the tracker sheets: same handler, with
-                // the score already chosen so no dialog opens.
-                onTraktRate: (r) => _handleDetailQuickAction(
-                  item,
-                  addon,
-                  TraktItemMenuAction.rate,
-                  inCw: inCw,
-                  imdb: imdb,
-                  presetRating: r,
-                ),
-                onSimklRate: (r) => _handleDetailSimklQuickAction(
-                  item,
-                  SimklItemMenuAction.rate,
-                  presetRating: r,
-                ),
-                simklMenuOptions: simklOptions,
-                simklMenuBuilder: buildSimklOptions,
-                // Live Simkl status (current watchlist status + rating) —
-                // only when connected and the title has an IMDb id.
-                simklStatusLoader: (_isSimklAuthenticated && imdb != null)
-                    ? () => SimklService.instance.fetchTitleStatus(imdb, contentType: item.type)
-                    : null,
-                onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
-                mdblistMenuOptions: mdblistOptions,
-                mdblistMenuBuilder: buildMdblistOptions,
-                mdblistStatusLoader: (_isMdblistAuthenticated && imdb != null && MediaIdentity.isImdb(imdb))
-                    ? () => MdblistService.instance.fetchTitleStatus(
-                        imdb,
-                        item.type,
-                      )
-                    : null,
-                onMdblistAction: (a) =>
-                    _handleDetailMdblistQuickAction(item, a),
-                onMdblistRate: (rating) => _handleDetailMdblistQuickAction(
-                  item,
-                  MdblistItemMenuAction.rate,
-                  presetRating: rating,
-                ),
-                recommendationsLoader: imdb != null && MediaIdentity.isImdb(imdb)
-                    ? () => _stremio.getRecommendations(
-                        imdbId: imdb,
-                        type: item.type,
-                      )
-                    : null,
-                // Native TMDB titles can navigate even without IMDb recommendations.
-                onRecommendationTap: (rec) =>
-                    _openItem(rec, rec.sourceAddon ?? addon),
-                metaEnricher: (id, type) =>
-                    _stremio.fetchMetaDetails(imdbId: id, type: type),
-              ),
+      unawaited(
+        detailRoute.push(
+          Navigator.of(context),
+          (_) => MergedDetailScreen(
+            item: item,
+            addon: addon,
+            isTelevision: widget.isTelevision,
+            // PikPak quick-plays fine here: onResume → _onCatalogPlay →
+            // _playSelection → TorrentPlaybackService.playFromSelection
+            // already handles PikPak (same path the episode tiles use, which
+            // stay quick-play-enabled for PikPak-only). It queues an offline
+            // download and surfaces "still processing" if not ready — same
+            // behaviour as the tiles, so the hero button matches them.
+            showQuickPlay: true,
+            isTraktSource: isTraktSource,
+            isMdblistSource: isMdblistSource,
+            heroTag: heroTag,
+            initialSeason: initialSeason,
+            initialEpisode: initialEpisode,
+            resumeInfoLoader: () => _resolveResumeInfo(
+              item,
+              addon,
+              isTraktSource: isTraktSource,
+              isMdblistSource: isMdblistSource,
             ),
-          )
-          // Playback (or a bind/unbind) may have happened inside the detail
-          // flow — _refreshAfterPlayback covers the tracker rows too, and
-          // sequences the bound-source pass after the CW reloads.
-          .then((_) {
-            unawaited(_refreshAfterPlayback());
-            _refreshTraktAuthState();
-            _refreshSimklAuthState();
-            _refreshMdblistAuthState();
-            if (returnToTabOnClose != null) {
-              MainPageBridge.switchTab?.call(returnToTabOnClose);
-            }
-          });
+            onResume: (promised) => _onCatalogPlay(
+              item,
+              addon,
+              isTraktSource: isTraktSource,
+              isMdblistSource: isMdblistSource,
+              skipEpisodeFallback: true,
+              // The merged page resolves its own episode target (it can see
+              // watched state the reconciler can't) — Play must land on the
+              // episode its label is showing.
+              promisedTarget: promised,
+              // Play the Trakt paused episode when the Trakt-first label
+              // shows one, so the button and the action agree.
+              preferTraktResume: true,
+            ),
+            onRewatch: () => _onCatalogPlay(
+              item,
+              addon,
+              isTraktSource: isTraktSource,
+              isMdblistSource: isMdblistSource,
+              startFromBeginning: true,
+            ),
+            // Movie only: the Sources (manual list) button.
+            onBrowse: item.type == 'movie'
+                ? () => _onCatalogBrowse(
+                    item,
+                    addon,
+                    isTraktSource: isTraktSource,
+                    isMdblistSource: isMdblistSource,
+                  )
+                : null,
+            onItemSelected: (selection) => _browseSelection(
+              selection,
+              metadataAddonId: addon.id,
+              catalogItem: item.withSourceAddon(addon),
+            ),
+            onQuickPlay: (selection) => _playSelection(
+              selection,
+              metadataAddonId: addon.id,
+              catalogItem: item.withSourceAddon(addon),
+            ),
+            onBrowsePrimaryEpisodeSources: (promised) => _onCatalogPlay(
+              item,
+              addon,
+              isTraktSource: isTraktSource,
+              isMdblistSource: isMdblistSource,
+              skipEpisodeFallback: true,
+              preferTraktResume: true,
+              promisedTarget: promised,
+              browseSourcesOnly: true,
+            ),
+            boundSourceCount: _boundCountFor,
+            onSelectSource: (show) {
+              _activeAddonId = addon.id;
+              return _handleEditOrSelectSource(show.withSourceAddon(addon));
+            },
+            traktMenuOptions: options,
+            traktMenuBuilder: buildMenuOptions,
+            // Live Trakt status (in watchlist / collection / watched /
+            // rating) — only when connected and the title has an IMDb id.
+            traktStatusLoader:
+                (_isTraktAuthenticated &&
+                    imdb != null &&
+                    MediaIdentity.isImdb(imdb))
+                ? () => TraktService.instance.fetchTitleStatus(imdb, item.type)
+                : null,
+            onTraktAction: (a) => _handleDetailQuickAction(
+              item,
+              addon,
+              a,
+              inCw: inCw,
+              detailRoute: detailRoute,
+              imdb: imdb,
+            ),
+            // Inline 1–10 strips in the tracker sheets: same handler, with
+            // the score already chosen so no dialog opens.
+            onTraktRate: (r) => _handleDetailQuickAction(
+              item,
+              addon,
+              TraktItemMenuAction.rate,
+              inCw: inCw,
+              detailRoute: detailRoute,
+              imdb: imdb,
+              presetRating: r,
+            ),
+            onSimklRate: (r) => _handleDetailSimklQuickAction(
+              item,
+              SimklItemMenuAction.rate,
+              presetRating: r,
+            ),
+            simklMenuOptions: simklOptions,
+            simklMenuBuilder: buildSimklOptions,
+            // Live Simkl status (current watchlist status + rating) —
+            // only when connected and the title has an IMDb id.
+            simklStatusLoader: (_isSimklAuthenticated && imdb != null)
+                ? () => SimklService.instance.fetchTitleStatus(
+                    imdb,
+                    contentType: item.type,
+                  )
+                : null,
+            onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
+            mdblistMenuOptions: mdblistOptions,
+            mdblistMenuBuilder: buildMdblistOptions,
+            mdblistStatusLoader:
+                (_isMdblistAuthenticated &&
+                    imdb != null &&
+                    MediaIdentity.isImdb(imdb))
+                ? () =>
+                      MdblistService.instance.fetchTitleStatus(imdb, item.type)
+                : null,
+            onMdblistAction: (a) => _handleDetailMdblistQuickAction(item, a),
+            onMdblistRate: (rating) => _handleDetailMdblistQuickAction(
+              item,
+              MdblistItemMenuAction.rate,
+              presetRating: rating,
+            ),
+            recommendationsLoader: imdb != null && MediaIdentity.isImdb(imdb)
+                ? () =>
+                      _stremio.getRecommendations(imdbId: imdb, type: item.type)
+                : null,
+            // Native TMDB titles can navigate even without IMDb recommendations.
+            onRecommendationTap: (rec) =>
+                _openItem(rec, rec.sourceAddon ?? addon),
+            metaEnricher: (id, type) =>
+                _stremio.fetchMetaDetails(imdbId: id, type: type),
+          ),
+        ),
+      );
       return;
     }
 
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            settings: const RouteSettings(name: kCatalogDetailRouteName),
-            builder: (_) => CatalogItemDetailScreen(
-              // Keep the originating addon with the locally-saved My
-              // Watchlist row so reopening it can route to the same source.
-              item: StorageService.withMyWatchlistSource(item, addon),
-              isTelevision: widget.isTelevision,
-              // Hide "Play" when PikPak is the only provider — no quick-play.
-              showQuickPlay: !_pikpakOnly,
-              // Gold-tint the Sources button when a source is already pinned.
-              hasBoundSource: _isBound(item),
-              resumeInfoLoader: () => _resolveResumeInfo(
-                item,
-                addon,
-                isTraktSource: isTraktSource,
-                isMdblistSource: isMdblistSource,
-              ),
-              // preferTraktResume: this screen's resumeInfoLoader is the same
-              // Trakt-authoritative _resolveResumeInfo the merged page uses, so
-              // Play must honour the Trakt position too or the button label and
-              // playback diverge (button "Resume · S3E4" vs local S01E01).
-              onPlay: () => _onCatalogPlay(
-                item,
-                addon,
-                isTraktSource: isTraktSource,
-                isMdblistSource: isMdblistSource,
-                preferTraktResume: true,
-              ),
-              onRewatch: () => _onCatalogPlay(item, addon,
-                isTraktSource: isTraktSource, isMdblistSource: isMdblistSource,
-                startFromBeginning: true),
-              // Enriched backdrop/logo/meta for the Marquee play loader —
-              // the catalog row that opened this page rarely has any of it.
-              onLoaderArt: (art) => _playbackArtwork.adopt(item, art),
-              onBrowse: () => _onCatalogBrowse(
-                item,
-                addon,
-                isTraktSource: isTraktSource,
-                isMdblistSource: isMdblistSource,
-              ),
-              onBrowsePrimaryEpisodeSources: item.type == 'series'
-                  ? () => _onCatalogPlay(
-                      item,
-                      addon,
-                      isTraktSource: isTraktSource,
-                      isMdblistSource: isMdblistSource,
-                      skipEpisodeFallback: true,
-                      preferTraktResume: true,
-                      browseSourcesOnly: true,
-                    )
-                  : null,
-              traktMenuOptions: options,
-              onTraktAction: (a) => _handleDetailQuickAction(
-                item,
-                addon,
-                a,
-                inCw: inCw,
-                imdb: imdb,
-              ),
-              simklMenuOptions: simklOptions,
-              onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
-              mdblistMenuOptions: mdblistOptions,
-              onMdblistAction: (a) => _handleDetailMdblistQuickAction(item, a),
-              // Live Simkl status — relabels Play → "Rewatch" for a completed
-              // movie (matches the merged detail page's simklStatusLoader).
-              simklStatusLoader: (_isSimklAuthenticated && imdb != null)
-                  ? () => SimklService.instance.fetchTitleStatus(imdb, contentType: item.type)
-                  : null,
-              // "More Like This" rail + sparse-item meta backfill, matching the
-              // catalog detail flow.
-              recommendationsLoader: imdb != null && MediaIdentity.isImdb(imdb)
-                  ? () => _stremio.getRecommendations(
-                      imdbId: imdb,
-                      type: item.type,
-                    )
-                  : null,
-              // Native TMDB titles can navigate even without IMDb recommendations.
-              onRecommendationTap: (rec) =>
-                  _openItem(rec, rec.sourceAddon ?? addon),
-              metaEnricher: (id, type) =>
-                  _stremio.fetchMetaDetails(imdbId: id, type: type),
-            ),
+    unawaited(
+      detailRoute.push(
+        Navigator.of(context),
+        (_) => CatalogItemDetailScreen(
+          // Keep the originating addon with the locally-saved My
+          // Watchlist row so reopening it can route to the same source.
+          item: StorageService.withMyWatchlistSource(item, addon),
+          isTelevision: widget.isTelevision,
+          // Hide "Play" when PikPak is the only provider — no quick-play.
+          showQuickPlay: !_pikpakOnly,
+          // Gold-tint the Sources button when a source is already pinned.
+          hasBoundSource: _isBound(item),
+          resumeInfoLoader: () => _resolveResumeInfo(
+            item,
+            addon,
+            isTraktSource: isTraktSource,
+            isMdblistSource: isMdblistSource,
           ),
-        )
-        // A bind/unbind may have happened inside the detail flow; playback may
-        // also have changed Continue Watching progress (local AND tracker rows
-        // — see _refreshAfterPlayback).
-        .then((_) {
-          unawaited(_refreshAfterPlayback());
-          _refreshTraktAuthState();
-          _refreshSimklAuthState();
-          _refreshMdblistAuthState();
-          if (returnToTabOnClose != null) {
-            MainPageBridge.switchTab?.call(returnToTabOnClose);
-          }
-        });
+          // preferTraktResume: this screen's resumeInfoLoader is the same
+          // Trakt-authoritative _resolveResumeInfo the merged page uses, so
+          // Play must honour the Trakt position too or the button label and
+          // playback diverge (button "Resume · S3E4" vs local S01E01).
+          onPlay: () => _onCatalogPlay(
+            item,
+            addon,
+            isTraktSource: isTraktSource,
+            isMdblistSource: isMdblistSource,
+            preferTraktResume: true,
+          ),
+          onRewatch: () => _onCatalogPlay(
+            item,
+            addon,
+            isTraktSource: isTraktSource,
+            isMdblistSource: isMdblistSource,
+            startFromBeginning: true,
+          ),
+          // Enriched backdrop/logo/meta for the Marquee play loader —
+          // the catalog row that opened this page rarely has any of it.
+          onLoaderArt: (art) => _playbackArtwork.adopt(item, art),
+          onBrowse: () => _onCatalogBrowse(
+            item,
+            addon,
+            isTraktSource: isTraktSource,
+            isMdblistSource: isMdblistSource,
+          ),
+          onBrowsePrimaryEpisodeSources: item.type == 'series'
+              ? () => _onCatalogPlay(
+                  item,
+                  addon,
+                  isTraktSource: isTraktSource,
+                  isMdblistSource: isMdblistSource,
+                  skipEpisodeFallback: true,
+                  preferTraktResume: true,
+                  browseSourcesOnly: true,
+                )
+              : null,
+          traktMenuOptions: options,
+          onTraktAction: (a) => _handleDetailQuickAction(
+            item,
+            addon,
+            a,
+            inCw: inCw,
+            detailRoute: detailRoute,
+            imdb: imdb,
+          ),
+          simklMenuOptions: simklOptions,
+          onSimklAction: (a) => _handleDetailSimklQuickAction(item, a),
+          mdblistMenuOptions: mdblistOptions,
+          onMdblistAction: (a) => _handleDetailMdblistQuickAction(item, a),
+          // Live Simkl status — relabels Play → "Rewatch" for a completed
+          // movie (matches the merged detail page's simklStatusLoader).
+          simklStatusLoader: (_isSimklAuthenticated && imdb != null)
+              ? () => SimklService.instance.fetchTitleStatus(
+                  imdb,
+                  contentType: item.type,
+                )
+              : null,
+          // "More Like This" rail + sparse-item meta backfill, matching the
+          // catalog detail flow.
+          recommendationsLoader: imdb != null && MediaIdentity.isImdb(imdb)
+              ? () => _stremio.getRecommendations(imdbId: imdb, type: item.type)
+              : null,
+          // Native TMDB titles can navigate even without IMDb recommendations.
+          onRecommendationTap: (rec) =>
+              _openItem(rec, rec.sourceAddon ?? addon),
+          metaEnricher: (id, type) =>
+              _stremio.fetchMetaDetails(imdbId: id, type: type),
+        ),
+      ),
+    );
   }
 
   HomeDetailActionBridge get _detailActionBridge => HomeDetailActionBridge(
@@ -10622,15 +10640,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     StremioAddon addon,
     TraktItemMenuAction action, {
     required bool inCw,
+    required HomeDetailRoute detailRoute,
     String? imdb,
     int? presetRating,
   }) => _detailActionBridge.trakt(
     action,
     removeLocal: () async {
-      if (imdb != null) await _handleContinueDetailAction(action, imdb);
+      if (imdb != null) {
+        await _handleContinueDetailAction(action, imdb, detailRoute);
+      }
     },
     removeTrakt: () async {
-      if (imdb != null) await _removeFromTraktContinueWatching(imdb);
+      if (imdb != null) {
+        await _removeFromTraktContinueWatching(imdb, detailRoute: detailRoute);
+      }
     },
     invoke: (clearOnly) async {
       if (clearOnly) {

@@ -108,6 +108,7 @@ class HomeFixture {
   Future<void> mount({
     Widget Function(Widget)? wrap,
     List<NavigatorObserver> observers = const [],
+    Map<String, Object> initialPreferences = const {},
   }) async {
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox());
@@ -158,6 +159,7 @@ class HomeFixture {
         'mode': 'custom',
         'ids': [pendingHero ? 'paging:movie:hero' : 'paging:movie:fast'],
       }),
+      ...initialPreferences,
     });
     StorageService.tvHomeStyleCached = style;
     StremioService.instance.invalidateCache();
