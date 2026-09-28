@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_tonight_focus.dart';
 import '../features/home/presentation/home_mosaic_cell_navigation.dart';
 import '../features/home/presentation/home_stage_cards.dart';
 import '../features/home/presentation/home_spotlight_favorites.dart';
@@ -2608,7 +2609,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _stageTheater.dispose();
     _canvasFavFocus.dispose();
     _atriumFocusedRailKey.dispose();
-    _tonightCard.dispose();
+    _tonightFocus.dispose();
     _stageCol.dispose();
     _heroShellBinding?.dispose();
     _catalogDebounce?.cancel();
@@ -5800,9 +5801,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _canvasFavFocus.value = null;
     _canvasRailKey = null;
     _canvasCols.clear();
-    _tonightZoneIsQueue = true;
-    _tonightQueueCol = 0;
-    _tonightQueueKey = null;
+    _tonightFocus.resetPosition();
     _atriumFocusedRailKey.value = null;
     _tonightCard.value = null;
     _stageCol.value = 0;
@@ -6754,29 +6753,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // ── TONIGHT zone state ───────────────────────────────────────────────────
 
-  /// Tonight splits focus into two zones stacked vertically: the Continue
-  /// Watching QUEUE (a vertical list) above, and the usual horizontal rail
-  /// below. UP/DOWN walks the two as one column, so this is simply "which
-  /// zone currently owns focus".
-  bool _tonightZoneIsQueue = true;
+  late final _tonightFocus = HomeTonightFocus(
+    railKeyOf: _canvasRailKeyOf,
+    nearestNode: _nearestMountedNode,
+  );
+  bool get _tonightZoneIsQueue => _tonightFocus.isQueue;
+  set _tonightZoneIsQueue(bool value) => _tonightFocus.isQueue = value;
+  ValueNotifier<HomeTonightCardInfo?> get _tonightCard => _tonightFocus.card;
 
   final HomeStageHoldLatch _stageHold = HomeStageHoldLatch();
-
-  /// Remembered row within the queue — the INDEX is only a fallback. CW rows
-  /// stream in and prepend (Trakt/Simkl land seconds after a cold start), so
-  /// the identity below is what actually restores the user's place.
-  int _tonightQueueCol = 0;
-
-  /// What the big card should say about whatever currently has focus — the
-  /// OK hint in particular, which is 'Resume' only for a part-watched title
-  /// and 'Play'/'Open' otherwise. A notifier, so a focus move repaints the
-  /// caption alone rather than the board.
-  final ValueNotifier<HomeTonightCardInfo?> _tonightCard =
-      ValueNotifier<HomeTonightCardInfo?>(null);
-
-  /// Identity of the remembered queue row: '<rail key>#<column>'. Resolved
-  /// against the rebuilt queue every time, exactly like [_canvasRailKey].
-  String? _tonightQueueKey;
 
   /// The queue: every Continue Watching row flattened to (row, column) pairs
   /// in board order. Nodes come from the CW rows themselves — which is why
@@ -7539,43 +7524,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // ── TONIGHT view ─────────────────────────────────────────────────────────
 
-  String _tonightQueueKeyOf(HomeTonightQueueEntry e) =>
-      '${_canvasRailKeyOf(e.rail)}#${e.col}';
+  int _resolveTonightQueueIndex(List<HomeTonightQueueEntry> queue) =>
+      _tonightFocus.resolveIndex(queue);
 
-  /// Where the remembered queue row sits NOW. Identity first (CW rows stream
-  /// in and prepend, so a raw index would silently point at another title),
-  /// the remembered index only as a fallback.
-  int _resolveTonightQueueIndex(List<HomeTonightQueueEntry> queue) {
-    if (queue.isEmpty) return 0;
-    final key = _tonightQueueKey;
-    if (key != null) {
-      final i = queue.indexWhere((e) => _tonightQueueKeyOf(e) == key);
-      if (i >= 0) return i;
-    }
-    return _tonightQueueCol.clamp(0, queue.length - 1);
-  }
-
-  bool _tonightFocusQueue() {
-    final queue = _tonightQueue;
-    if (queue.isEmpty) return false;
-    final e = queue[_resolveTonightQueueIndex(queue)];
-    var node = _nearestMountedNode(e.rail.cw!.nodes, e.col);
-    // The remembered row may have scrolled out of the lazy list's mounted
-    // range (CW rows stream in and prepend). Fall back to the FIRST queue
-    // entry, which is always built, rather than failing the jump.
-    if (node == null && queue.isNotEmpty) {
-      final first = queue.first;
-      node = _nearestMountedNode(first.rail.cw!.nodes, first.col);
-      if (node != null) {
-        _tonightQueueCol = 0;
-        _tonightQueueKey = _tonightQueueKeyOf(first);
-      }
-    }
-    if (node == null) return false;
-    _tonightZoneIsQueue = true;
-    node.requestFocus();
-    return true;
-  }
+  bool _tonightFocusQueue() => _tonightFocus.focusQueue(_tonightQueue);
 
   bool _tonightFocusRail() {
     final node = () {
@@ -7587,10 +7539,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _canvasCols[_canvasRailKeyOf(rail)] ?? 0,
       );
     }();
-    if (node == null) return false;
-    _tonightZoneIsQueue = false;
-    node.requestFocus();
-    return true;
+    return _tonightFocus.focusRail(node);
   }
 
   /// TONIGHT: resume-first. A large card carries whatever has focus, a
@@ -7652,19 +7601,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           progress: cw.progressOf(item),
           hasBoundSource: _isBound(item),
           onFocused: () {
-            _tonightZoneIsQueue = true;
-            _tonightQueueCol = i;
-            _tonightQueueKey = _tonightQueueKeyOf(e);
-            _tonightCard.value = HomeTonightCardInfo(
-              // OK opens the detail page for a Continue Watching card
-              // everywhere in the app; the HOLD menu is what resumes.
-              action: 'Open',
-              // HOLD opens the card menu (Play / Remove) — not a
-              // direct resume, so it is named for what it is.
-              holdAction: 'Options',
-              episode: cw.episodeOf(item),
-              progress: cw.progressOf(item),
-            );
+            _tonightFocus.selectQueue(e, i, item);
             _setHero(item);
           },
           onOpen: () => cw.onOpen(item),
@@ -7775,16 +7712,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                       onDown: down,
                       onUpHold: upHold,
                       onFocusedExtra: () {
-                        _tonightZoneIsQueue = false;
-                        _tonightCard.value = HomeTonightCardInfo(
-                          action: 'Open',
-                          // Only Continue Watching cards arm hold-OK on
-                          // TV (they are the ones with a menu); catalog
-                          // cards have no hold action, so no hint.
-                          holdAction: rail.cw != null ? 'Options' : null,
-                          episode: rail.cw?.episodeOf(items[col]),
-                          progress: rail.cw?.progressOf(items[col]),
-                        );
+                        _tonightFocus.selectRail(rail, items[col]);
                       },
                     ),
                   ),

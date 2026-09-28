@@ -6,6 +6,27 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C/D checkpoint: Tonight focus ownership — 2026-09-28
+
+Base: `bfb2900c`. `HomeTonightFocus` (100 lines) owns remembered queue identity,
+index fallback, queue/rail zone, caption updates and caption-signal disposal.
+The root delegates queue/rail focus and selection while supplying existing target
+resolution. Nodes remain borrowed. Root: **11,970 → 11,898 lines**.
+
+Review preserves identity-first restoration, fallback when lazy rows unmount,
+failed-focus zone retention, continuation versus catalog caption hints and callback
+ordering. Position reset stays separate from caption clearing to preserve the
+route's ordered notifier updates; disposal stays at the original caption cleanup
+point. The existing layout-time zone adjustment is still pending D cleanup.
+
+**20 tests pass**: 16 focus/queue/rail/layout checks and four Tonight real-screen
+progressive-loading/focus checks. The new focused test covers prepended rows,
+unmounted fallback, caption policy, reset ordering and disposal without owning
+borrowed nodes. Receipts:
+`.git/refactor-evidence/phase5/tonight-focus-{tests,integration,analyze-final}.txt`.
+Architecture passes **534 files**; formatting/diff checks pass. No emulator used.
+Remaining shared navigation, lifecycle, composition and final acceptance stay open.
+
 ## Batch C checkpoint: Mosaic grid navigation — 2026-09-28
 
 Base: `d75ca061`. `HomeMosaicCellNavigation` (88 lines) now owns each Mosaic
