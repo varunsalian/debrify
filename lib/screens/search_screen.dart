@@ -52,8 +52,7 @@ import '../features/home/presentation/home_promenade_board.dart';
 import '../features/home/presentation/home_atrium_layout.dart';
 import '../features/home/presentation/home_atrium_row.dart';
 import '../features/home/presentation/home_mosaic_layout.dart';
-import '../features/home/presentation/home_deck_layout.dart';
-import '../features/home/presentation/home_deck_peeks.dart';
+import '../features/home/presentation/home_deck_board.dart';
 import '../features/home/presentation/home_stage_row_label.dart';
 import '../features/home/presentation/home_tonight_layout.dart';
 import '../features/home/presentation/home_tonight_header.dart';
@@ -8059,103 +8058,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return BrandLoadingStage(isTelevision: widget.isTelevision);
     }
     _seedStageFocusOnce();
-    final rail = view.rail;
-    final railKey = view.key;
-    final favRail = rail.favKind != null;
-    final items = view.items;
-    final nodes = view.nodes;
-    final count = favRail ? _canvasFavItemCount(rail.favKind!) : items.length;
-
-    return LayoutBuilder(
-      builder: (context, cons) {
-        final boardW = cons.maxWidth;
-        final boardH = cons.maxHeight;
-        // RESERVE THE RAIL FIRST, then let the card have what is left — the
-        // other way round, a tall card on a short board silently pushes the
-        // rail off the bottom edge.
-        final railBoxH = _stageRailBoxH(
-          context,
-          boardH * 0.24,
-          maxH: boardH * 0.34,
-        );
-        final geometry = HomeDeckGeometry(
-          boardW: boardW,
-          boardH: boardH,
-          railBoxH: railBoxH,
-          labelHeight: _atriumLabelHeight(context),
-          labelGap: _kAtriumLabelGap,
-        );
-        return buildHomeDeckLayout(
-          geometry: geometry,
-          theater: _canvasTheater,
-          railKey: railKey,
-          itemCount: count,
-          borderColor: app.fade(app.core.tx, 0.10),
-          peeks: ValueListenableBuilder<int>(
-            valueListenable: _stageCol,
-            builder: (context, focusedCol, _) => Stack(
-              children: buildHomeDeckPeeks(
-                items: items,
-                favRail: favRail,
-                focused: focusedCol,
-                left: geometry.cardLeft,
-                top: geometry.cardTop,
-                width: geometry.cardW,
-                height: geometry.cardH,
-              ),
-            ),
-          ),
-          artwork: _boardMedia.artwork(),
-          trailer: _heroTrailerActive
-              ? _boardMedia.trailerLayer(geometry.cardH, fullBleed: true)
-              : null,
-          live: _heroTrailerActive
-              ? _boardMedia.liveLayer(geometry.cardH, fullBleed: true)
-              : null,
-          identity: ValueListenableBuilder<HomeFavoriteFocus?>(
-            valueListenable: _canvasFavFocus,
-            builder: (context, fav, _) => fav != null
-                ? HomeStageFavoriteIdentity(fav: fav)
-                : HomeStageIdentity(
-                    item: _heroItem,
-                    enriched: _heroEnriched,
-                    trailerShowing: _heroTrailerShowing,
-                    variant:
-                        boardH - geometry.railZoneH >=
-                            homeStageNarrowIdentityHeight(context)
-                        ? HomeStageIdentityVariant.narrow
-                        : HomeStageIdentityVariant.headline,
-                    maxWidth: geometry.identityWidth,
-                  ),
-          ),
-          railLabel: buildHomeStageRowLabel(
-            context: this.context,
-            title: _canvasTabTitle(view.rails, view.index),
-          ),
-          itemBuilder: (context, col) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 7),
-            child: Center(
-              child: SizedBox(
-                width: favRail
-                    ? _stageFavW(context, railBoxH)
-                    : railBoxH * _stageCardAspect(rail),
-                child: favRail
-                    ? _canvasFavCell(rail.favKind!, railKey, col)
-                    : SizedBox(
-                        height: railBoxH,
-                        child: _stageShelfCell(
-                          rail,
-                          railKey,
-                          items,
-                          nodes,
-                          col,
-                        ),
-                      ),
-              ),
-            ),
-          ),
-        );
-      },
+    return buildHomeDeckBoard(
+      hostContext: context,
+      view: view,
+      itemCount: view.rail.favKind != null
+          ? _canvasFavItemCount(view.rail.favKind!)
+          : view.items.length,
+      media: () => _boardMedia,
+      theater: () => _canvasTheater,
+      trailerActive: () => _heroTrailerActive,
+      focusedColumn: _stageCol,
+      trailerShowing: _heroTrailerShowing,
+      borderColor: app.fade(app.core.tx, 0.10),
+      railBoxHeight: _stageRailBoxH,
+      labelHeight: _atriumLabelHeight,
+      labelGap: _kAtriumLabelGap,
+      favoriteWidth: _stageFavW,
+      cardAspect: () => _stageCardAspect(view.rail),
+      railTitle: () => _canvasTabTitle(view.rails, view.index),
+      favoriteBuilder: (_, col) =>
+          _canvasFavCell(view.rail.favKind!, view.key, col),
+      itemBuilder: (_, col) =>
+          _stageShelfCell(view.rail, view.key, view.items, view.nodes, col),
     );
   }
 

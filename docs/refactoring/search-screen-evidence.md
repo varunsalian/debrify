@@ -6,6 +6,27 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Deck board composition — 2026-09-28
+
+Base: `c8752712`. `home_deck_board.dart` (124 lines) owns Deck's rail-first
+geometry, floating media card, next-title peeks, responsive identity and lazy
+poster/favorite strip. Production route wiring retains focus seeding and actions;
+media/settings reads and card sizing remain lazy, with the selected rail captured
+as before. Review preserves item count timing, host-context labels, layer order,
+full-bleed card dimensions, favorite width and focused-column preview updates.
+Root: **12,769 → 12,693 lines**.
+
+**17 Deck layout/peeks/identity tests and 4 real-screen Deck tests pass**. Commands:
+`flutter test test/features/home/presentation/home_deck_layout_test.dart
+ test/features/home/presentation/home_deck_peeks_test.dart
+ test/features/home/presentation/home_stage_identity_test.dart`; then the two
+`test/home_progressive_{screen,pagination}_test.dart` files with `--plain-name deck`.
+The integration covers late catalogs, covered routes, pagination and deferred Down
+focus. Receipts: `.git/refactor-evidence/phase5/deck-board-{tests,integration,analyze}.txt`.
+Analysis retains **838 identical diagnostic identities**; architecture passes
+**522 files**; formatting/diff checks pass. No emulator used. Remaining layout,
+lifecycle and final-acceptance work is unchanged.
+
 ## Batch C checkpoint: Promenade board composition — 2026-09-28
 
 Base: `90ece4df`. `home_promenade_board.dart` (89 lines) now composes Promenade's
