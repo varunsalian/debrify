@@ -307,6 +307,7 @@ class TraktService {
     required String basePath,
     required String logLabel,
     int limit = 250,
+    bool Function()? canContinue,
   }) async {
     final items = <dynamic>[];
     final seenPagePayloads = <String>{};
@@ -314,9 +315,10 @@ class TraktService {
     const maxPages = 100;
 
     while (page <= maxPages) {
+      if (canContinue?.call() == false) return null;
       final separator = _withQuerySeparator(basePath);
       final path = '$basePath${separator}page=$page&limit=$limit';
-      final response = await _authenticatedGet(path);
+      final response = await _authenticatedGet(path, canContinue: canContinue);
       if (response == null || response.statusCode != 200) {
         debugPrint(
           'Trakt: $logLabel failed page=$page (${response?.statusCode})',
@@ -407,16 +409,22 @@ class TraktService {
   }
 
   /// Check if the user is authenticated (has a non-expired access token).
-  Future<bool> isAuthenticated() async {
-    final token = await StorageService.getTraktAccessToken();
-    if (token == null || token.isEmpty) return false;
+  Future<bool> isAuthenticated({bool Function()? canContinue}) async {
+    if (canContinue?.call() == false) return false;
+    final token = await StorageService.getTraktAccessToken(
+      canContinue: canContinue,
+    );
+    if (canContinue?.call() == false || token == null || token.isEmpty) {
+      return false;
+    }
 
     // Check if token is expired
     final expiryMs = await StorageService.getTraktTokenExpiry();
+    if (canContinue?.call() == false) return false;
     if (expiryMs != null && DateTime.now().millisecondsSinceEpoch >= expiryMs) {
       // Try to refresh
       final refreshed = await refreshAccessToken();
-      return refreshed;
+      return refreshed && canContinue?.call() != false;
     }
 
     return true;
@@ -1534,10 +1542,14 @@ class TraktService {
       await fetchPlaybackItemsOrNull(contentType) ?? <dynamic>[];
 
   /// Failure-aware, pagination-complete playback read.
-  Future<List<dynamic>?> fetchPlaybackItemsOrNull(String contentType) {
+  Future<List<dynamic>?> fetchPlaybackItemsOrNull(
+    String contentType, {
+    bool Function()? canContinue,
+  }) {
     return _fetchAllPagesOrNull(
       basePath: '/sync/playback/$contentType?extended=full',
       logLabel: 'fetchPlaybackItems $contentType',
+      canContinue: canContinue,
     );
   }
 
@@ -1548,12 +1560,15 @@ class TraktService {
   /// dropped progress rules and returns the exact next episode, avoiding the
   /// old approximation based on only 30 recent history entries plus one
   /// progress request per candidate show.
-  Future<List<Map<String, dynamic>>?> fetchContinueWatchingShowsOrNull() async {
+  Future<List<Map<String, dynamic>>?> fetchContinueWatchingShowsOrNull({
+    bool Function()? canContinue,
+  }) async {
     final raw = await _fetchAllPagesOrNull(
       basePath:
           '/sync/progress/up_next_nitro?intent=continue'
           '&sort_by=last_watched_at&sort_how=desc',
       logLabel: 'fetchContinueWatchingShows',
+      canContinue: canContinue,
     );
     if (raw == null) return null;
     return debugNormalizeContinueWatchingShows(raw);
@@ -1561,21 +1576,28 @@ class TraktService {
 
   /// Resume checkpoints and Up Next are independent: a new show can have
   /// paused playback before any episode reaches watched history.
-  Future<List<dynamic>?> fetchContinueWatchingEpisodeItemsOrNull() async {
+  Future<List<dynamic>?> fetchContinueWatchingEpisodeItemsOrNull({
+    bool Function()? canContinue,
+  }) async {
     return loadTraktContinueWatching(
-      upNext: fetchContinueWatchingShowsOrNull,
-      playback: () => fetchPlaybackItemsOrNull('episodes'),
+      upNext: () => fetchContinueWatchingShowsOrNull(canContinue: canContinue),
+      playback: () =>
+          fetchPlaybackItemsOrNull('episodes', canContinue: canContinue),
       hidden: () => _fetchAllPagesOrNull(
         basePath: '/users/hidden/progress_watched',
         logLabel: 'continue watching hidden',
+        canContinue: canContinue,
       ),
       dropped: () => _fetchAllPagesOrNull(
         basePath: '/users/hidden/dropped',
         logLabel: 'continue watching dropped',
+        canContinue: canContinue,
       ),
       // Show-level activity is sufficient to reject a checkpoint superseded
       // by a subsequent watch. Do not request the entire season breakdown.
-      watched: () => readTraktWatchedShowHistory(_authenticatedGet),
+      watched: () => readTraktWatchedShowHistory(
+        (path) => _authenticatedGet(path, canContinue: canContinue),
+      ),
     );
   }
 

@@ -36,25 +36,36 @@ class TraktContinueWatchingService {
   }
 
   Future<List<TraktContinueWatchingItem>> fetchItems(
-    String traktContentType,
-  ) async =>
-      await fetchItemsOrNull(traktContentType) ??
+    String traktContentType, {
+    bool Function()? canContinue,
+  }) async =>
+      await fetchItemsOrNull(traktContentType, canContinue: canContinue) ??
       const <TraktContinueWatchingItem>[];
 
   /// Failure-aware fetch used by UI snapshots. A successful empty response is
   /// `[]`; null means the network/authenticated endpoint could not be read.
   Future<List<TraktContinueWatchingItem>?> fetchItemsOrNull(
-    String traktContentType,
-  ) async {
+    String traktContentType, {
+    bool Function()? canContinue,
+  }) async {
     try {
-      final isAuth = await _traktService.isAuthenticated();
+      if (canContinue?.call() == false) return null;
+      final isAuth = await _traktService.isAuthenticated(
+        canContinue: canContinue,
+      );
+      if (canContinue?.call() == false) return null;
       if (!isAuth) return [];
 
       final rawItems = traktContentType == showsContentType
-          ? await _traktService.fetchContinueWatchingEpisodeItemsOrNull()
-          : await _traktService.fetchPlaybackItemsOrNull(traktContentType);
+          ? await _traktService.fetchContinueWatchingEpisodeItemsOrNull(
+              canContinue: canContinue,
+            )
+          : await _traktService.fetchPlaybackItemsOrNull(
+              traktContentType,
+              canContinue: canContinue,
+            );
 
-      if (rawItems == null) return null;
+      if (canContinue?.call() == false || rawItems == null) return null;
 
       if (rawItems.isEmpty) return [];
 
@@ -70,9 +81,11 @@ class TraktContinueWatchingService {
   Future<AdvancedSearchSelection?> resolveSelection({
     required String traktContentType,
     required String? itemId,
+    bool Function()? canContinue,
   }) async {
-    final items = await fetchItems(traktContentType);
-    if (items.isEmpty) return null;
+    if (canContinue?.call() == false) return null;
+    final items = await fetchItems(traktContentType, canContinue: canContinue);
+    if (canContinue?.call() == false || items.isEmpty) return null;
 
     final selected = itemId == null || itemId.isEmpty
         ? items.first
@@ -82,7 +95,7 @@ class TraktContinueWatchingService {
           );
     if (selected == null) return null;
 
-    return selectionForItem(selected);
+    return selectionForItem(selected, canContinue: canContinue);
   }
 
   Future<AdvancedSearchSelection?> selectionForItem(

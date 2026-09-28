@@ -591,4 +591,168 @@ void main() {
       },
     );
   }
+  for (final stage in ['catalog', 'filters', 'pagination']) {
+    for (final retirement in ['active', 'view', 'profile']) {
+      test(
+        'uncached resume $stage keeps complete feed only for $retirement action',
+        () async {
+          final reader = ProviderContainer.test().read(
+            homeSeriesResumeRepositoryProvider(
+              ProfileSessionMemory.captureOwner(),
+            ),
+          );
+          const meta = StremioMeta(
+            id: 'tt123',
+            name: 'Fixture',
+            type: 'series',
+          );
+          final entered = Completer<void>(), release = Completer<void>();
+          var current = true;
+          var selectionReads = 0, secondPages = 0;
+          final show = {
+            'title': 'Fixture',
+            'year': 2024,
+            'ids': {'imdb': 'tt123', 'trakt': 123},
+          };
+          final next = {
+            'show': show,
+            'progress': {
+              'next_episode': {'season': 2, 'number': 3},
+              'last_watched_at': '2025-01-01T00:00:00Z',
+            },
+          };
+          final paused = {
+            'show': show,
+            'episode': {'season': 2, 'number': 3},
+            'progress': 67,
+            'paused_at': '2026-01-01T00:00:00Z',
+            'id': 12,
+          };
+          await http.runWithClient(
+            () async {
+              final pending = ProfileRuntime.withCapturedScope(other, () async {
+                if (stage == 'filters') {
+                  final value = await reader.traktPosition(
+                    meta,
+                    isCurrent: () => current,
+                  );
+                  return value == null ? null : (value.season, value.episode);
+                }
+                final value = await reader.traktSelection(
+                  meta,
+                  isCurrent: () => current,
+                );
+                if (value != null) expect(value.sel.traktProgressPercent, 67);
+                return value == null
+                    ? null
+                    : (value.sel.season, value.sel.episode);
+              });
+              await entered.future;
+              if (retirement == 'view') current = false;
+              if (retirement == 'profile') ProfileRuntime.publish(other);
+              release.complete();
+              expect(await pending, retirement == 'active' ? (2, 3) : isNull);
+              expect(selectionReads, retirement == 'active' ? 1 : 0);
+              expect(
+                secondPages,
+                retirement == 'active' && stage == 'pagination' ? 1 : 0,
+              );
+            },
+            () => MockClient((request) async {
+              expect(request.headers['authorization'], 'Bearer origin-token');
+              final path = request.url.path;
+              final page = request.url.queryParameters['page'];
+              if ((stage == 'filters' && path == '/sync/watched/shows') ||
+                  (stage != 'filters' &&
+                      path == '/sync/progress/up_next_nitro' &&
+                      page == '1')) {
+                entered.complete();
+                await release.future;
+              }
+              if (path == '/sync/progress/up_next_nitro') {
+                if (page == '2') secondPages++;
+                return http.Response(
+                  jsonEncode(page == '2' ? [] : [next]),
+                  200,
+                  headers: {
+                    'x-pagination-page-count': stage == 'pagination'
+                        ? '2'
+                        : '1',
+                  },
+                );
+              }
+              if (path == '/sync/playback/episodes') {
+                if (!request.url.queryParameters.containsKey('extended')) {
+                  selectionReads++;
+                  return http.Response(
+                    jsonEncode([paused]),
+                    200,
+                    headers: {'x-pagination-page-count': '1'},
+                  );
+                }
+                return http.Response(
+                  jsonEncode(stage == 'filters' ? [paused] : []),
+                  200,
+                  headers: {'x-pagination-page-count': '1'},
+                );
+              }
+              expect(
+                path,
+                anyOf(
+                  '/users/hidden/progress_watched',
+                  '/users/hidden/dropped',
+                  '/sync/watched/shows',
+                ),
+              );
+              return http.Response('[]', 200);
+            }),
+          );
+        },
+      );
+    }
+  }
+
+  test(
+    'uncached authentication retires before credential migration or feed access',
+    () async {
+      ProfileRuntime.debugReset();
+      ProfileRuntime.initializeLegacy();
+      SharedPreferences.setMockInitialValues({
+        'trakt_access_token': 'legacy-token',
+      });
+      final reader = ProviderContainer.test().read(
+        homeSeriesResumeRepositoryProvider(ProfileSessionMemory.captureOwner()),
+      );
+      final entered = Completer<void>(), release = Completer<void>();
+      final snapshot = ProfilePreferences.captureMutationSnapshot((_) async {
+        entered.complete();
+        await release.future;
+      });
+      await entered.future;
+      var current = true;
+      var requests = 0;
+      await http.runWithClient(
+        () async {
+          final pending = reader.traktSelection(
+            const StremioMeta(id: 'tt123', name: 'Fixture', type: 'series'),
+            isCurrent: () => current,
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          current = false;
+          release.complete();
+          await snapshot;
+          expect(await pending, isNull);
+        },
+        () => MockClient((_) async {
+          requests++;
+          return http.Response('[]', 200);
+        }),
+      );
+      expect(requests, 0);
+      expect(
+        (await SharedPreferences.getInstance()).getString('trakt_access_token'),
+        'legacy-token',
+      );
+    },
+  );
 }

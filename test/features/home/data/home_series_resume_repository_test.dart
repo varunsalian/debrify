@@ -72,11 +72,11 @@ class Fixture {
       await step('select');
       return resolved;
     },
-    readTraktShows: () async {
+    readTraktShows: (current) async {
       await step('feed');
       return items;
     },
-    resolveTraktShow: (id) async {
+    resolveTraktShow: (id, current) async {
       await step('resolve:$id');
       return resolved;
     },

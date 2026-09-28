@@ -25,8 +25,10 @@ class HomeSeriesResumeRepository {
     bool Function(),
   )
   selectTraktItem;
-  final Future<List<TraktContinueWatchingItem>> Function() readTraktShows;
-  final Future<AdvancedSearchSelection?> Function(String) resolveTraktShow;
+  final Future<List<TraktContinueWatchingItem>> Function(bool Function())
+  readTraktShows;
+  final Future<AdvancedSearchSelection?> Function(String, bool Function())
+  resolveTraktShow;
   final Future<HomeSimklResumeSignal?> Function(String) readSimklPaused;
   final Future<({int season, int episode})?> Function(String) readSimklNext;
   final Future<Map<String, dynamic>?> Function(String) readLocalById;
@@ -66,7 +68,7 @@ class HomeSeriesResumeRepository {
     if (id.isEmpty) return null;
     // Fetch the item rather than resolving only coordinates: its timestamp
     // participates in recency ranking. Preserve exact first-match identity.
-    final items = await readTraktShows();
+    final items = await readTraktShows(() => _current(isCurrent));
     if (!_current(isCurrent)) return null;
     log(
       '[SeriesResume] trakt-live-lookup title="${item.name}" id=$id '
@@ -108,7 +110,7 @@ class HomeSeriesResumeRepository {
     if (item.type != 'series') return null;
     final id = item.progressId ?? item.id;
     if (id.isEmpty) return null;
-    final sel = await resolveTraktShow(id);
+    final sel = await resolveTraktShow(id, () => _current(isCurrent));
     if (!_current(isCurrent) || sel == null) return null;
     return (started: true, season: sel.season, episode: sel.episode);
   }

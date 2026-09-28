@@ -28,15 +28,17 @@ final homeSeriesResumeRepositoryProvider = Provider.autoDispose
               canContinue: current,
             ),
           ),
-          readTraktShows: () => scoped(
+          readTraktShows: (current) => scoped(
             () => TraktContinueWatchingService.instance.fetchItems(
               TraktContinueWatchingService.showsContentType,
+              canContinue: current,
             ),
           ),
-          resolveTraktShow: (id) => scoped(
+          resolveTraktShow: (id, current) => scoped(
             () => TraktContinueWatchingService.instance.resolveSelection(
               traktContentType: TraktContinueWatchingService.showsContentType,
               itemId: id,
+              canContinue: current,
             ),
           ),
           readSimklPaused: (id) => scoped(

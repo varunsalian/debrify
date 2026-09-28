@@ -6,6 +6,36 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: Trakt uncached-resume preparation — 2026-09-28
+
+Both uncached series selection and resume-label resolution now forward their
+existing repository view/profile guard through the injected live-feed adapters.
+The guard reaches authentication/credential migration, Up Next and paused-playback
+pagination, hidden/dropped filters, watched-history pagination, and final item
+selection. Retired actions cannot start the next request or turn a partially read
+feed into an accepted resume target. The original concurrent read groups, conditional
+visibility/history reads, pagination limits, exact identity matching, merge policy,
+fallbacks and legacy no-guard call behavior are preserved.
+
+Validation: **273 affected tests pass**, including ten new cases in the existing
+real two-account fixture. Cases cover active/view/profile outcomes while initial
+catalog, visibility/history and paginated reads are pending, both selection and
+label callers, origin credentials despite a foreign ambient scope, and actual
+credential migration held behind a preference snapshot barrier. Existing Home,
+Search and Discover Trakt continuation screens, cached resume, catalog playback,
+Trakt parsing/merge/calendar/history, native identity, profile refresh and reset
+checks pass. A single newly introduced missing-braces lint was corrected;
+final analyzer identities are the same **848**. **468** migrated files pass
+architecture checks and the diff check passes. Legacy formatting was restricted
+to changed members. Receipts: `.git/refactor-evidence/phase5/trakt-feed-final-tests.txt`
+and `trakt-feed-final-analyze.txt`.
+
+This closes Trakt's uncached resume preparation boundary; it does not close the
+shared Simkl resume-cache/read contract, remaining detail composition, mutation/
+reset writes, or later integration/native/device acceptance gates. Existing token
+refresh authorization remains the owner of an already-started refresh; retirement
+prevents the caller's follow-up requests and result publication.
+
 ## Batch A checkpoint: Trakt cached-resume retirement — 2026-09-28
 
 The existing series-resume repository now passes its combined view/profile guard
