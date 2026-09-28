@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../theme/app_theme_scope.dart';
 import 'package:flutter/services.dart';
 import '../../../models/mdblist_list_choice.dart';
 import '../../../utils/tv_keys.dart';
@@ -120,5 +121,72 @@ Widget _buildListRailCard(
         );
       },
     ),
+  );
+}
+
+/// Lists loading, failure, prompt and empty states keep the rail lazy.
+Widget buildListsSearchContent(
+  BuildContext context, {
+  required bool searching,
+  required String? error,
+  required String query,
+  required bool hasResults,
+  required Widget Function(IconData, String, String) message,
+  required Widget Function() rail,
+}) {
+  if (searching) {
+    return const Center(child: CircularProgressIndicator());
+  }
+  if (error != null) {
+    return message(Icons.error_outline_rounded, 'MDBList search failed', error);
+  }
+  if (query.isEmpty) {
+    final app = AppThemeScope.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.playlist_play_rounded,
+              size: 54,
+              color: app.fade(app.core.tx, 0.22),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Search MDBList lists',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: app.fade(app.core.tx, 0.8),
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Find public lists by name, then open or save them in MDBList.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: app.fade(app.core.tx, 0.5),
+                fontSize: 13.5,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  if (!hasResults) {
+    return message(
+      Icons.playlist_remove_rounded,
+      'No MDBList lists found',
+      'No public lists matched "$query".',
+    );
+  }
+  return ListView(
+    padding: const EdgeInsets.only(top: 6, bottom: 32),
+    children: [rail()],
   );
 }

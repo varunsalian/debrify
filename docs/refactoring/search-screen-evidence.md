@@ -6,6 +6,21 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Lists content states — 2026-09-28
+
+Base: `7900c24d`. The existing Lists presentation file (192 lines) now renders
+loading, error, prompt, empty and result states as well as the rail. Review
+preserves branch priority, theme/text/spacing and lazy result construction.
+Root: **11,192 → 11,140 lines**.
+
+**Nine affected tests pass** (production Lists screens and keyboard behavior).
+Analysis retains **836 identical diagnostic identities**; architecture passes
+**545 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/lists-content-{tests,analyze}.txt`.
+The plan's C status is condensed; detailed history remains in this evidence log.
+No emulator used. Navigation/action wiring, lifecycle/facade reduction and final
+acceptance remain pending.
+
 ## Batch C checkpoint: Lists result rail — 2026-09-28
 
 Base: `d60ffe68`. `lists_search_rail.dart` (124 lines) owns the lazy Lists strip,
