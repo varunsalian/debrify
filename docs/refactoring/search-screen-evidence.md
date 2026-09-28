@@ -6,6 +6,25 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Promenade board composition — 2026-09-28
+
+Base: `90ece4df`. `home_promenade_board.dart` (89 lines) now composes Promenade's
+geometry, media, centered identity, label and lazy cells. Production uses it;
+selected-rail snapshots, focus seeding and card actions retain their existing
+owners. Visual settings remain lazy reads during layout; label styling still
+uses the host context. Review preserves favorite/title sizing, strip constraints,
+media gates and captured rail identity. Root: **12,817 → 12,769 lines**.
+
+**14 layout/identity/preference tests** and **4 real-screen Promenade integration
+tests pass**, including late catalogs, covered routes, pagination and deferred
+Down focus. Commands: `flutter test` on `home_promenade_layout_test.dart`,
+`home_stage_identity_test.dart`, `home_layout_preference_screen_test.dart`; then
+`test/home_progressive_screen_test.dart test/home_progressive_pagination_test.dart
+--plain-name promenade`. Receipts: `.git/refactor-evidence/phase5/promenade-board-
+{tests,integration,analyze-final}.txt`. Analysis retains **838 identical diagnostic
+identities**, architecture passes **521 files**, formatting/diff checks pass.
+No emulator used. Other layouts, lifecycle and final acceptance remain pending.
+
 ## Batch C checkpoint: shared Home media composition — 2026-09-28
 
 Base revision: `fde5b480`. `HomeBoardMedia` (80 lines) consolidates 20 repeated

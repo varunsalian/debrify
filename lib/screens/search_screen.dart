@@ -48,7 +48,7 @@ export '../features/home/presentation/spotlight_iptv_card_preview.dart' show Spo
 import '../features/home/presentation/home_hero_trailer_indicators.dart';
 import '../features/home/presentation/home_spotlight_search_button.dart';
 import '../features/home/presentation/home_stage_rail_label.dart';
-import '../features/home/presentation/home_promenade_layout.dart';
+import '../features/home/presentation/home_promenade_board.dart';
 import '../features/home/presentation/home_atrium_layout.dart';
 import '../features/home/presentation/home_atrium_row.dart';
 import '../features/home/presentation/home_mosaic_layout.dart';
@@ -7421,71 +7421,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (view == null) {
       return BrandLoadingStage(isTelevision: widget.isTelevision);
     }
-    final rail = view.rail;
-    final railKey = view.key;
-    final favRail = rail.favKind != null;
-    final items = view.items;
-    final nodes = view.nodes;
     _seedStageFocusOnce();
-
-    return LayoutBuilder(
-      builder: (context, cons) {
-        final boardH = cons.maxHeight;
-        final boardW = cons.maxWidth;
-        // ONE box height for every rail kind; the kinds fill it differently
-        // (see [_stageFavW]) so neither wastes the other's space.
-        final double stripBoxH = _stageRailBoxH(
-          context,
-          boardH * 0.27,
-          maxH: boardH * 0.42,
-        );
-        final double cellW = favRail
-            ? _stageFavW(context, stripBoxH)
-            : stripBoxH * _stageCardAspect(rail, fallback: 16 / 9);
-        final itemCount = favRail
-            ? _canvasFavItemCount(rail.favKind!)
-            : items.length;
-        return buildHomePromenadeLayout(
-          boardWidth: boardW,
-          stripHeight: stripBoxH,
-          cellWidth: cellW,
-          labelHeight: homeStageRailLabelHeight(context),
-          theater: _canvasTheater,
-          railKey: railKey,
-          itemCount: itemCount,
-          artwork: _boardMedia.artwork(),
-          trailer: _heroTrailerActive
-              ? _boardMedia.trailerLayer(boardH, fullBleed: true)
-              : null,
-          live: _heroTrailerActive
-              ? _boardMedia.liveLayer(boardH, fullBleed: true)
-              : null,
-          identity: ValueListenableBuilder<HomeFavoriteFocus?>(
-            valueListenable: _canvasFavFocus,
-            builder: (context, fav, _) => fav != null
-                ? HomeStageFavoriteIdentity(fav: fav, centered: true)
-                : HomeStageIdentity(
-                    item: _heroItem,
-                    enriched: _heroEnriched,
-                    trailerShowing: _heroTrailerShowing,
-                    variant: HomeStageIdentityVariant.centered,
-                    maxWidth: boardW - 96,
-                  ),
-          ),
-          label: buildHomeStageRailLabel(
-            context: this.context,
-            title: _canvasTabTitle(view.rails, view.index),
-            railIndex: view.index,
-            railCount: view.rails.length,
-          ),
-          itemBuilder: (context, col) => favRail
-              ? _canvasFavCell(rail.favKind!, railKey, col)
-              : SizedBox(
-                  height: stripBoxH,
-                  child: _promenadeCell(rail, railKey, items, nodes, col),
-                ),
-        );
-      },
+    return buildHomePromenadeBoard(
+      hostContext: context,
+      view: view,
+      media: () => _boardMedia,
+      theater: () => _canvasTheater,
+      trailerActive: () => _heroTrailerActive,
+      trailerShowing: _heroTrailerShowing,
+      railBoxHeight: _stageRailBoxH,
+      favoriteWidth: _stageFavW,
+      cardAspect: () => _stageCardAspect(view.rail, fallback: 16 / 9),
+      favoriteCount: () => _canvasFavItemCount(view.rail.favKind!),
+      railTitle: () => _canvasTabTitle(view.rails, view.index),
+      favoriteBuilder: (_, col) =>
+          _canvasFavCell(view.rail.favKind!, view.key, col),
+      itemBuilder: (_, col) =>
+          _promenadeCell(view.rail, view.key, view.items, view.nodes, col),
     );
   }
 
