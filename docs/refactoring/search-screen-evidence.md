@@ -6,6 +6,52 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: progress-reset dialog ownership — 2026-09-28
+
+Provider-only and all-provider resets now share `runProgressResetDialog`, a
+UI-only component with injected confirmation, reset and message callbacks. It
+owns the exact loading route and removes that route in `finally`, leaving a newer
+page intact. Confirmation copy, safe-area/focus behavior, loader contents, result
+messages and provider-specific error handling are retained. All-provider errors
+still reach the caller, but no longer strand the loading dialog.
+
+The wrappers capture their originating profile before confirmation, reject a
+retired confirmation, retain that scope for an accepted operation and suppress
+retired feedback. The provider wrapper also accepts an explicit live guard and
+reset callback. This changes presentation ownership, not the reset service's
+provider ordering, local-write policy or failure aggregation. Transitive reset
+writes and profile-deletion sequencing remain in the action audit.
+
+Validation: 52 focused tests pass, including ten new cases for cancellation,
+retirement before confirmation, origin retention across accepted work, disposal,
+partial/exception failures and cleanup below a newer page. Existing provider-only,
+all-provider, custom-series and Home dispatch tests pass. Analyzer identities
+remain 848; 461 migrated files pass architecture checks; whitespace checks pass.
+Receipts: `.git/refactor-evidence/phase5/reset-dialog-targeted.txt` and
+`reset-dialog-analyze.txt`. A full-suite checkpoint is brought forward because the
+shared reset dialogs serve several screens and the preceding checkpoints changed
+shared tracker request/cache boundaries.
+
+That full run completed with **9,808 successes / 23 failures / 29 errors / 20
+skips**. Compared by identity with `full-local-removal.jsonl`, all prior outcomes
+are unchanged except `theme/shape_manifest_test.dart::the sweep is still
+substantial`; 108 added tests pass. Investigation found five unchanged themed
+radius calls moved into the source editor and bound-source tile, neither yet in
+the manifest. Both destinations are now registered with zero bare-radius allowance;
+the original 490-call floor is unchanged. The guard passes after this correction.
+
+Final review also preserves `showDialog`'s themed barrier color in the owned
+loader route; the existing dialog tests now assert a custom theme's color.
+The final affected run passes **54 tests**, with only the previously observed
+`no swept file grows a new bare radius` failure. Analyzer identities remain
+**848**, and **461** migrated files pass architecture checks. The full run
+predates these narrow inventory/theme corrections; it is not represented as a
+clean final-revision full-suite gate. No failure allowances were changed.
+Receipts: `full-reset-dialog.jsonl`, `reset-dialog-review-tests.txt`, and
+`reset-dialog-review-analyze.txt` under `.git/refactor-evidence/phase5/`.
+The reset service's transitive write/deletion audit and the other batch-A action
+boundaries remain open.
+
 ## Batch A checkpoint: exact detail-route ownership — 2026-09-28
 
 Both Home detail layouts now use the same 43-line `HomeDetailRoute` presentation

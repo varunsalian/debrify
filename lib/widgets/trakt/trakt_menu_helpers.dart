@@ -1,3 +1,6 @@
+import '../../ui/core/progress_reset_dialog.dart';
+import '../../services/profiles/profile_runtime.dart';
+import '../../services/profiles/profile_session_memory.dart';
 import 'package:flutter/material.dart';
 import '../../models/custom_series_identity.dart';
 import '../../models/stremio_addon.dart';
@@ -281,16 +284,17 @@ Future<void> handleTraktMenuAction(
     case TraktItemMenuAction.removeFromPlayback:
       return; // Only handled in TraktResultsView which has playback IDs
     case TraktItemMenuAction.clearWatchProgress:
-      final confirmed = await showDialog<bool>(
+      final owner = ProfileSessionMemory.captureOwner();
+      await runProgressResetDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
+        isCurrent: () => owner == ProfileSessionMemory.captureOwner(),
+        confirmation: (ctx) => AlertDialog(
           title: const Text('Clear watch progress?'),
           content: Text(
             CustomSeriesIdentity.isCustom(imdbId)
-            ? 'Clear watched history and resume progress for ${item.name} on this device?\n\nSaved sources are kept. This cannot be undone.'
-            :
-            'Clear ${item.type == 'movie' ? 'watched history and resume progress' : 'every episode’s watched history and resume progress'} for ${item.name} on this device and all connected Trakt, Simkl and MDBList accounts?\n\nSaved sources are kept. This cannot be undone.'
-            '${item.type == 'movie' ? '\n\nIf Simkl is connected, its movie reset also removes the movie from its library and permanently deletes its saved rating.' : '\n\nRatings and library entries are kept.'}',
+                ? 'Clear watched history and resume progress for ${item.name} on this device?\n\nSaved sources are kept. This cannot be undone.'
+                : 'Clear ${item.type == 'movie' ? 'watched history and resume progress' : 'every episode’s watched history and resume progress'} for ${item.name} on this device and all connected Trakt, Simkl and MDBList accounts?\n\nSaved sources are kept. This cannot be undone.'
+                      '${item.type == 'movie' ? '\n\nIf Simkl is connected, its movie reset also removes the movie from its library and permanently deletes its saved rating.' : '\n\nRatings and library entries are kept.'}',
           ),
           actions: [
             TextButton(
@@ -303,40 +307,20 @@ Future<void> handleTraktMenuAction(
             ),
           ],
         ),
-      );
-      if (confirmed != true || !context.mounted) return;
-      final navigator = Navigator.of(context, rootNavigator: true);
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const PopScope(
-          canPop: false,
-          child: AlertDialog(
-            content: Row(
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(width: 20),
-                Expanded(child: Text('Clearing watch progress…')),
-              ],
-            ),
-          ),
-        ),
-      );
-      final failures = await SeriesProgressResetService.clear(
-        imdbId,
-        item.name,
-        isMovie: item.type == 'movie',
-      );
-      if (navigator.mounted) navigator.pop();
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            failures.isEmpty
-                ? 'Watch progress cleared.'
-                : 'Could not fully clear: ${failures.join(', ')}. Please retry.',
-          ),
-        ),
+        reset: () {
+          Future<List<String>> run() => SeriesProgressResetService.clear(
+            imdbId,
+            item.name,
+            isMovie: item.type == 'movie',
+          );
+          final scope = owner.scope;
+          return scope == null
+              ? run()
+              : ProfileRuntime.withCapturedScope(scope, run);
+        },
+        message: (failures) => failures.isEmpty
+            ? 'Watch progress cleared.'
+            : 'Could not fully clear: ${failures.join(', ')}. Please retry.',
       );
       return;
     case TraktItemMenuAction.removeFromTraktPlayback:

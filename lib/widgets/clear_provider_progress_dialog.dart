@@ -2,12 +2,21 @@ import 'package:flutter/material.dart';
 import '../models/stremio_addon.dart';
 import '../models/tracking_source.dart';
 import '../services/series_progress_reset_service.dart';
+import '../services/profiles/profile_runtime.dart';
+import '../services/profiles/profile_session_memory.dart';
+import '../ui/core/progress_reset_dialog.dart';
 
 Future<void> showClearProviderProgressDialog(
   BuildContext context,
   StremioMeta item,
-  TrackingSource provider,
-) async {
+  TrackingSource provider, {
+  bool Function()? isCurrent,
+  Future<List<String>> Function()? reset,
+}) async {
+  final owner = ProfileSessionMemory.captureOwner();
+  bool current() =>
+      owner == ProfileSessionMemory.captureOwner() &&
+      (isCurrent?.call() ?? true);
   final label = switch (provider) {
     TrackingSource.trakt => 'Trakt',
     TrackingSource.simkl => 'Simkl',
@@ -15,9 +24,10 @@ Future<void> showClearProviderProgressDialog(
     _ => throw ArgumentError.value(provider),
   };
   final isMovie = item.type == 'movie';
-  final confirmed = await showDialog<bool>(
+  await runProgressResetDialog(
     context: context,
-    builder: (ctx) => AlertDialog(
+    isCurrent: current,
+    confirmation: (ctx) => AlertDialog(
       title: Text('Clear watch progress on $label?'),
       content: Text(
         'Clear ${isMovie ? 'watched history and resume progress' : 'watched history and resume progress for all episodes'} of ${item.name} on $label only?\n\nLocal progress and other trackers will not be changed. This cannot be undone.'
@@ -34,46 +44,26 @@ Future<void> showClearProviderProgressDialog(
         ),
       ],
     ),
-  );
-  if (confirmed != true || !context.mounted) return;
-  final navigator = Navigator.of(context, rootNavigator: true);
-  showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => const PopScope(
-      canPop: false,
-      child: AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Expanded(child: Text('Clearing watch progress…')),
-          ],
-        ),
-      ),
-    ),
-  );
-  var success = false;
-  try {
-    success = (await SeriesProgressResetService.clearProvider(
-      item.progressId ?? item.id,
-      item.name,
-      provider: provider,
-      isMovie: isMovie,
-    )).isEmpty;
-  } catch (_) {
-    success = false;
-  } finally {
-    if (navigator.mounted) navigator.pop();
-  }
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(
-        success
-            ? 'Watch progress cleared on $label.'
-            : 'Could not fully clear $label progress. Please retry.',
-      ),
-    ),
+    reset: () async {
+      try {
+        Future<List<String>> run() =>
+            reset?.call() ??
+            SeriesProgressResetService.clearProvider(
+              item.progressId ?? item.id,
+              item.name,
+              provider: provider,
+              isMovie: isMovie,
+            );
+        final scope = owner.scope;
+        return scope == null
+            ? await run()
+            : await ProfileRuntime.withCapturedScope(scope, run);
+      } catch (_) {
+        return [label];
+      }
+    },
+    message: (failures) => failures.isEmpty
+        ? 'Watch progress cleared on $label.'
+        : 'Could not fully clear $label progress. Please retry.',
   );
 }

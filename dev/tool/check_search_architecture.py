@@ -60,6 +60,7 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/services/source_selection_diagnostics.dart",
     "lib/core/platform/system_clipboard.dart",
     "lib/ui/core/see_all_link.dart",
+    "lib/ui/core/progress_reset_dialog.dart",
     "lib/ui/core/filter_sheet_header.dart",
     "lib/widgets/torrent_filters_sheet.dart",
     "lib/ui/core/source_metadata_labels.dart",
