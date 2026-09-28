@@ -6,6 +6,24 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: Search result provider bindings — 2026-09-28
+
+Base: `41bf6c67`. `SearchResultBindings` (106 lines) retains Lists, Catalog,
+Keyword cache/results/search subscriptions and forwards their publications into
+existing presentation actions. Controllers and session keys remain unchanged;
+there is no copied application state. Root: **10,970 → 10,920 lines**.
+
+Review preserves registration order, non-TV catalog append/replace logic, lazy
+subscription reads, mounted guards, Keyword stream/completion/failure ordering,
+cache-only badge repaints, covered-route retention and snapshot-before-cleanup.
+Cleanup stays in two phases around the appearance subscription to retain the
+original close sequence. **All 185 Search application/presentation tests pass**.
+Analysis retains **836 identical diagnostic identities**; architecture passes
+**549 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/search-bindings-{tests,analyze}.txt`.
+No emulator used. Remaining feature composition, broader lifecycle/facade reduction
+and final acceptance are pending.
+
 ## Batch C checkpoint: Lists route navigation — 2026-09-28
 
 Base: `d1c4b3dc`. `ListsNavigation` (66 lines) owns list-grid and list-items route

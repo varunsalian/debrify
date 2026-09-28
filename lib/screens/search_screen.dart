@@ -1,3 +1,4 @@
+import '../features/search/presentation/search_result_bindings.dart';
 import '../features/search/presentation/lists_navigation.dart';
 import '../features/search/presentation/catalog_search_prompt.dart';
 import '../features/search/presentation/lists_search_rail.dart';
@@ -424,8 +425,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // never runs as part of Catalog search. Each result card hands off via
   // MainPageBridge.pendingMdblistListOpen. One focus node per card.
   late final SearchSession _searchSession;
-  late final ProviderSubscription<ListsSearchState> _listsSubscription;
-  ListsSearchState get _listsState => _listsSubscription.read();
+  late final SearchResultBindings _searchResultBindings;
+  ListsSearchState get _listsState => _searchResultBindings.lists;
   ListsSearchController get _listsController =>
       ref.read(listsSearchProvider(_searchSession).notifier);
   String get _listsQuery => _listsState.query;
@@ -441,8 +442,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   SearchMode _mode = SearchMode.catalog;
 
   /// Committed catalog query (drives per-addon catalog search). Empty = board.
-  late final ProviderSubscription<CatalogSearchState> _catalogSubscription;
-  CatalogSearchState get _catalogState => _catalogSubscription.read();
+  CatalogSearchState get _catalogState => _searchResultBindings.catalog;
   CatalogSearchController get _catalogController =>
       ref.read(catalogSearchProvider(_searchSession).notifier);
   String get _catalogQuery => _catalogState.query;
@@ -454,17 +454,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   String? _activeAddonId;
 
   // Keyword torrent-search state (submit-based).
-  late final ProviderSubscription<KeywordSearchState> _keywordSearchSubscription;
   KeywordSearchController get _keywordSearchController =>
       ref.read(keywordSearchProvider(_searchSession).notifier);
-  KeywordSearchState get _keywordSearchState => _keywordSearchSubscription.read();
+  KeywordSearchState get _keywordSearchState => _searchResultBindings.search;
   bool get _kwLoading => _keywordSearchState.loading;
   String? get _kwError => _keywordSearchState.error;
   String get _kwQuery => _keywordSearchState.query;
-  late final ProviderSubscription<KeywordResultsState> _keywordResultsSubscription;
   KeywordResultsController get _keywordResultsController =>
       ref.read(keywordResultsProvider(_searchSession).notifier);
-  KeywordResultsState get _keywordResults => _keywordResultsSubscription.read();
+  KeywordResultsState get _keywordResults => _searchResultBindings.results;
   List<Torrent> get _kwAll => _keywordResults.all;
   List<Torrent> get _kwResults => _keywordResults.results;
   late final _keywordFocus = KeywordFocusController(
@@ -485,10 +483,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Sort direction for _kwSort (ignored for 'relevance', which is engine order).
   // Defaults follow each field's natural direction; the sort dialog can flip it.
   bool get _kwSortAsc => _keywordResults.sortAscending;
-  late final ProviderSubscription<KeywordCacheState> _keywordCacheSubscription;
   KeywordCacheController get _keywordCacheController =>
       ref.read(keywordCacheProvider(_searchSession).notifier);
-  Map<String, List<String>> get _kwCache => _keywordCacheSubscription.read().badges;
+  Map<String, List<String>> get _kwCache => _searchResultBindings.cache.badges;
 
   // Provider (stream-type) multi-select filter, ported from the old search
   // screen: results are grouped into "Direct" (direct/external URL streams) and
@@ -503,7 +500,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// True when the results list is being narrowed to TorBox-cached torrents
   /// only (TorBox is the sole usable debrid provider and its cache-check is on)
   /// — mirrors the old screen's `_showingTorboxCachedOnly`. Drives the banner.
-  bool get _kwCachedOnly => _keywordCacheSubscription.read().cachedOnly;
+  bool get _kwCachedOnly => _searchResultBindings.cache.cachedOnly;
 
   // Bulk-selection state for keyword results (mirrors Home's multi-select).
   bool get _kwSelectionMode => _keywordResults.selectionMode;
@@ -1647,61 +1644,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_loadSourceTextFormatting());
     // Retain state for this screen's mounted lifetime, including covered routes.
     // Returning from a pushed list must not discard results or replay a request.
-    _listsSubscription = ref.listenManual(
-      listsSearchProvider(_searchSession),
-      (previous, next) {
-        if (mounted) setState(() {});
-      },
-    );
-    _catalogSubscription = ref.listenManual(
-      catalogSearchProvider(_searchSession),
-      (previous, next) {
-        if (!mounted) return;
-        if (!widget.isTelevision && next.rows.isNotEmpty &&
-            !identical(previous?.rows, next.rows)) {
-          // Keep existing row nodes while new non-TV results stream in.
-          final previousCount = previous?.rows.length ?? 0;
-          final additions = next.rows.skip(previousCount)
-              .map(catalogSearchSection).toList();
-          if (previousCount == 0) {
-            _applySections(additions);
-          } else {
-            _appendSections(additions);
-          }
-        } else {
-          setState(() {});
-        }
-      },
-    );
-    _keywordCacheSubscription = ref.listenManual(
-      keywordCacheProvider(_searchSession),
-      (previous, next) {
-        // Badges repaint without rebuilding focus nodes. Only the accepted
-        // completion wrapper below asks for a cached-only row recomputation.
-        if (mounted) setState(() {});
-      },
-    );
-    _keywordResultsSubscription = ref.listenManual(
-      keywordResultsProvider(_searchSession),
-      (previous, next) {
-        if (mounted) setState(() {});
-      },
-    );
-    _keywordSearchSubscription = ref.listenManual(
-      keywordSearchProvider(_searchSession),
-      (previous, next) {
-        if (!mounted) return;
-        final results = next.results;
-        if (results != null) {
-          _presentKwStreaming(results, next.request);
-        }
-        if (next.status == KeywordSearchStatus.complete) {
-          _finishKeyword(next.request);
-        } else if (next.status == KeywordSearchStatus.failed) {
-          _searchSubmitFocus.cancel();
-        }
-        setState(() {});
-      },
+    _searchResultBindings = SearchResultBindings(
+      ref,
+      _searchSession,
+      isCurrent: () => mounted,
+      isTelevision: () => widget.isTelevision,
+      onChanged: () => setState(() {}),
+      replaceRows: _applySections,
+      appendRows: _appendSections,
+      presentKeyword: _presentKwStreaming,
+      finishKeyword: _finishKeyword,
+      cancelSubmitFocus: _searchSubmitFocus.cancel,
     );
     if (!widget.searchMode && !widget.discoverMode) {
       _homeReturnRepository.observeInvalidation();
@@ -2524,14 +2477,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _kwResults.isNotEmpty &&
         !_kwSearching) {
       final projection = keywordResultsSnapshot(
-        _keywordResultsSubscription.read(),
+        _searchResultBindings.results,
       );
       _keywordSnapshots.store(
         KeywordSnapshot(
           variant: _variantKey,
           query: _kwQuery,
           projection: projection,
-          cache: _keywordCacheSubscription.read(),
+          cache: _searchResultBindings.cache,
           scrollOffset: _kwLastScroll,
         ),
       );
@@ -2643,12 +2596,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _watchlistSubscription.close();
     _playlistSubscription.close();
     _continuationLayoutSubscription.close();
-    _listsSubscription.close();
-    _catalogSubscription.close();
+    _searchResultBindings.closeCatalogAndLists();
     _keywordAppearanceSubscription.close();
-    _keywordResultsSubscription.close();
-    _keywordSearchSubscription.close();
-    _keywordCacheSubscription.close();
+    _searchResultBindings.closeKeyword();
     _titleSearch.removeListener(_publishTitleSuggestions);
     _titleSearch.dispose();
     _titleSuggestions.dispose();
