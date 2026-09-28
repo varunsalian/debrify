@@ -6,6 +6,35 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Keyword focus ownership — 2026-09-28
+
+Base revision: `3a4c717c`. `KeywordFocusController` (167 lines) owns Keyword row,
+tab, toolbar, Sources-button and arrival-pill nodes, their cleanup, tab reveal and
+keyboard traversal. The root delegates node synchronization, restore/reset and
+final disposal; it no longer creates/disposes those nodes in several separate
+places. Route-dependent search/sidebar and above-toolbar targets remain callbacks.
+The controller owns only presentation resources, with no copied query/selection
+state, storage calls or Riverpod registration. SearchScreen shrinks
+**13,393 → 13,245 lines**; shared query/mode and Home/Discover ownership remain open.
+
+Review preserves node labels, fixed toolbar capacity, grow/shrink behavior, focus
+reanchoring before removal, post-frame disposal, tab-scroll timing, ignored key
+repeats, edge/sidebar routing and the empty-results arrival target. Final cleanup
+is idempotent and retired controllers reject navigation; already queued removed-node
+cleanup still completes. Ordinary query resets retain their immediate-clear path.
+Keyword cleanup is grouped at the route's existing focus-disposal stage; native
+teardown and other feature controllers are unchanged.
+
+**229 existing Search/focus tests pass**, plus **two new focused tests** for shrink
+and deferred disposal, keyboard boundaries, pending arrivals and retired dispatch.
+The initial new-test compile failure used an unsupported physical-key constant;
+correcting that fixture passed without production changes. Analyzer: **838 unchanged
+identities**; **513 migrated files pass** architecture checks; formatting/diff checks
+pass. Receipts: `.git/refactor-evidence/phase5/keyword-focus-tests.txt`,
+`keyword-focus-focused.txt`, `keyword-focus-analyze-final-2.txt`. No emulator or
+full-suite rerun. Continue with shared Search navigation and Home/Discover composition;
+D resource coordination/facade and E final acceptance remain pending.
+
 ## Batch C checkpoint: Keyword page composition — 2026-09-28
 
 Base revision: `0185bcac`. The live route now composes `KeywordSearchPage` and its

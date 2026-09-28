@@ -1,3 +1,4 @@
+import '../features/search/presentation/keyword_focus_controller.dart';
 import '../features/search/presentation/keyword_source_tabs.dart';
 import '../features/search/presentation/keyword_search_page.dart';
 import '../features/search/presentation/keyword_results_list.dart';
@@ -467,16 +468,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   KeywordResultsState get _keywordResults => _keywordResultsSubscription.read();
   List<Torrent> get _kwAll => _keywordResults.all;
   List<Torrent> get _kwResults => _keywordResults.results;
-  final List<FocusNode> _kwNodes = [];
+  late final _keywordFocus = KeywordFocusController(
+    focusSearch: _focusSearchFieldAtEnd,
+    focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+    focusAboveToolbar: _focusAboveKeywordToolbar,
+    hasAccessibleArrivals: () => _kwPendingNewCount > 0 && !_kwSelectionMode,
+  );
+  List<FocusNode> get _kwNodes => _keywordFocus.rows;
   final _kwCinemaKey = GlobalKey<CinemaSourcesLayoutState>();
   int _lastKeywordCinemaSource = 0;
   // Keyboard/DPAD focus targets for the keyword toolbar pills (Sort / Filters /
   // Providers / Sources / Select). A fixed pool of 5 covers the most pills ever
   // shown.
-  final List<FocusNode> _kwToolbarNodes = List.generate(
-    5,
-    (i) => FocusNode(debugLabel: 'kw_tb_$i'),
-  );
+  List<FocusNode> get _kwToolbarNodes => _keywordFocus.toolbar;
   TorrentFilterState get _kwFilters => _keywordResults.filters;
   String get _kwSort => _keywordResults.sort;
   // Sort direction for _kwSort (ignored for 'relevance', which is engine order).
@@ -519,12 +523,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   List<Torrent>? get _kwPending => _keywordResults.pending;
 
   /// DPAD focus for the "+N new results" pill.
-  final FocusNode _kwPillFocus = FocusNode(debugLabel: 'kw_pill');
+  FocusNode get _kwPillFocus => _keywordFocus.arrivals;
 
   /// DPAD focus for the pre-search "Sources" button (shown in the empty
   /// keyword state before a query). Without its own node it's a bare InkWell
   /// unreachable by the remote — you couldn't pick sources before searching.
-  final FocusNode _kwSourcesBtnFocus = FocusNode(debugLabel: 'kw_sources_btn');
+  FocusNode get _kwSourcesBtnFocus => _keywordFocus.sources;
 
   /// DPAD focus for the catalog-mode "Sources" button (empty-prompt state) —
   /// its keyword-mode twin, for picking which searchable addons are queried.
@@ -541,7 +545,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Source tab strip (All / per-source), single-select on top of the
   /// Providers multi-select. Null = All.
   String? get _kwSourceTab => _keywordResults.sourceTab;
-  final List<FocusNode> _kwTabNodes = [];
+  List<FocusNode> get _kwTabNodes => _keywordFocus.tabs;
 
   /// Scroll controller for the keyword results list, so we can preserve/restore
   /// the scroll position across a tab switch (see [KeywordSnapshot]).
@@ -2456,9 +2460,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _mode = SearchMode.keyword;
     _searchController.text = snap.query;
     _disposeKwNodes();
-    for (var i = 0; i < snap.projection.results.length; i++) {
-      _kwNodes.add(FocusNode(debugLabel: 'kw_$i'));
-    }
+    _keywordFocus.syncRows(snap.projection.results.length);
     _syncKwTabNodes();
     _pendingKwScroll = snap.scrollOffset;
     return true;
@@ -2722,15 +2724,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _discPreview.dispose();
     _boardScroll.dispose();
     _kwScroll.dispose();
-    _kwPillFocus.dispose();
-    _kwSourcesBtnFocus.dispose();
+    _keywordFocus.dispose();
     _catalogSourcesBtnFocus.dispose();
-    for (final n in _kwTabNodes) {
-      n.dispose();
-    }
-    _kwTabNodes.clear();
+
     _disposeNodes();
-    _disposeKwNodes();
     for (final n in [
       ..._cwMovieNodes,
       ..._cwSeriesNodes,
@@ -2748,7 +2745,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       ..._watchlistMovieNodes,
       ..._watchlistSeriesNodes,
       ..._playlistFavNodes,
-      ..._kwToolbarNodes, // fixed pool — only disposed here, not in _disposeKwNodes
     ]) {
       n.dispose();
     }
@@ -9743,7 +9739,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final idx = source.isEmpty ? 0 : _kwSourceList.indexOf(source) + 1;
-      _focusKwTab(idx > 0 && idx < _kwTabNodes.length ? idx : 0);
+      _keywordFocus.focusTab(idx > 0 && idx < _kwTabNodes.length ? idx : 0);
     });
   }
 
@@ -9889,52 +9885,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     setState(() {});
   }
 
-  /// Grows/shrinks [_kwNodes] to the target length without ever disposing the
-  /// focused node unanchored. Removed nodes are disposed POST-FRAME — their
-  /// row widgets are still mounted this frame, and unmounting a Focus widget
-  /// whose node is already disposed asserts (same rule as the Sources list).
-  void _syncKwNodes(int length) {
-    while (_kwNodes.length < length) {
-      _kwNodes.add(FocusNode(debugLabel: 'kw_${_kwNodes.length}'));
-    }
-    if (_kwNodes.length > length) {
-      final removed = <FocusNode>[];
-      while (_kwNodes.length > length) {
-        final node = _kwNodes.removeLast();
-        if (node.hasFocus && _kwNodes.isNotEmpty) _kwNodes.last.requestFocus();
-        removed.add(node);
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        for (final node in removed) {
-          node.dispose();
-        }
-      });
-    }
-  }
-
-  /// Same grow/shrink discipline for the source-tab pills ("All" + one per
-  /// source in [_kwSourceList]).
-  void _syncKwTabNodes() {
-    final want = _kwSourceList.length + 1;
-    while (_kwTabNodes.length < want) {
-      _kwTabNodes.add(FocusNode(debugLabel: 'kw_tab_${_kwTabNodes.length}'));
-    }
-    if (_kwTabNodes.length > want) {
-      final removed = <FocusNode>[];
-      while (_kwTabNodes.length > want) {
-        final node = _kwTabNodes.removeLast();
-        if (node.hasFocus && _kwTabNodes.isNotEmpty) {
-          _kwTabNodes.last.requestFocus();
-        }
-        removed.add(node);
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        for (final node in removed) {
-          node.dispose();
-        }
-      });
-    }
-  }
+  void _syncKwNodes(int length) => _keywordFocus.syncRows(length);
+  void _syncKwTabNodes() => _keywordFocus.syncTabs(_kwSourceList.length);
 
   /// Badge updates never reconcile row nodes. Cached-only mode changes do,
   /// and only the completion accepted by this still-mounted search may do so.
@@ -10139,12 +10091,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     await _runKeyword(_kwQuery, refocusToolbar: fromToolbar);
   }
 
-  void _disposeKwNodes() {
-    for (final n in _kwNodes) {
-      n.dispose();
-    }
-    _kwNodes.clear();
-  }
+  void _disposeKwNodes() => _keywordFocus.clearRows();
 
   void _switchMode(SearchMode mode) {
     // Belt for every entry point at once: the keyword surface is gated per
@@ -11750,28 +11697,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     full: _kwFullSet,
     selectedSource: _kwSourceTab,
     focusNodes: _kwTabNodes,
-    onKey: _handleKwTabKey,
+    onKey: _keywordFocus.handleTabKey,
     onChanged: _setKwSourceTab,
   );
-
-  /// Focus a source tab AND scroll the strip to reveal it — a bare
-  /// requestFocus doesn't scroll, so an off-screen tab would take focus
-  /// invisibly.
-  void _focusKwTab(int index) {
-    if (index < 0 || index >= _kwTabNodes.length) return;
-    final node = _kwTabNodes[index];
-    node.requestFocus();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = node.context;
-      if (mounted && ctx != null && ctx.mounted) {
-        Scrollable.ensureVisible(
-          ctx,
-          alignment: 0.5,
-          duration: const Duration(milliseconds: 120),
-        );
-      }
-    });
-  }
 
   void _setKwSourceTab(String? source) {
     final tabHadFocus = _kwTabNodes.any((n) => n.hasFocus);
@@ -11787,7 +11715,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final idx = s == null ? 0 : _kwSourceList.indexOf(s) + 1;
-        _focusKwTab(idx > 0 && idx < _kwTabNodes.length ? idx : 0);
+        _keywordFocus.focusTab(idx > 0 && idx < _kwTabNodes.length ? idx : 0);
       });
     }
   }
@@ -11795,43 +11723,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// DPAD/keyboard handling for a focused source tab: select activates,
   /// left/right move between tabs (left edge escapes to the sidebar), up
   /// returns to the search field, down drops into the toolbar pills.
-  KeyEventResult _handleKwTabKey(
-    int index,
-    int total,
-    VoidCallback onTap,
-    KeyEvent event,
-  ) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final key = event.logicalKey;
-    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
-      onTap();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      _focusSearchFieldAtEnd();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowDown) {
-      _kwToolbarNodes.first.requestFocus();
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      if (index > 0) {
-        _focusKwTab(index - 1);
-      } else {
-        MainPageBridge.focusTvSidebar?.call();
-      }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowRight) {
-      if (index < total - 1) _focusKwTab(index + 1);
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
-  /// Slim "still searching" strip under the toolbar while engines are in
-  /// flight — rows are already usable, this just says more may arrive.
   /// The "+N new results" pill: tap (or OK on TV) folds the parked arrivals
   /// into the list; DOWN returns to the rows, UP reaches the toolbar.
   Widget _kwNewResultsPill() => KeywordNewResultsPill(
@@ -11863,7 +11754,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     providerFilterCount: _kwProviderFilterActive,
     sortLabel: _sortLabel(_kwSort),
     focusNodes: _kwToolbarNodes,
-    onKey: _handleKwToolbarKey,
+    onKey: _keywordFocus.handleToolbarKey,
     onCancel: _exitKwSelection,
     onDeselectAll: _deselectAllKw,
     onSelectAll: _selectAllKw,
@@ -11875,63 +11766,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     onSelect: _enterKwSelection,
   );
 
-  /// DPAD/keyboard handling for a focused keyword-toolbar pill: select fires the
-  /// pill, left/right move between pills, up returns to the search field, down
-  /// drops into the first result row.
-  KeyEventResult _handleKwToolbarKey(
-    int index,
-    int total,
-    VoidCallback onTap,
-    KeyEvent event,
-  ) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final key = event.logicalKey;
-    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
-      onTap();
-      return KeyEventResult.handled;
+  /// Resolve the route's current target above the Keyword toolbar.
+  void _focusAboveKeywordToolbar() {
+    // Source tabs sit between the toolbar and the search field — land on
+    // the active tab so the strip context is obvious. Hidden during
+    // multi-select (the strip is suppressed then — see _buildKeyword).
+    if (!_kwSelectionMode && _kwCinemaKey.currentState != null) {
+      _kwCinemaKey.currentState!.focusSelectedProvider();
+      return;
     }
-    if (key == LogicalKeyboardKey.arrowUp) {
-      // Source tabs sit between the toolbar and the search field — land on
-      // the active tab so the strip context is obvious. Hidden during
-      // multi-select (the strip is suppressed then — see _buildKeyword).
-      if (!_kwSelectionMode && _kwCinemaKey.currentState != null) {
-        _kwCinemaKey.currentState!.focusSelectedProvider();
-        return KeyEventResult.handled;
-      }
-      if (!_kwSelectionMode && _kwTabsVisible && _kwTabNodes.isNotEmpty) {
-        final tabs = _kwSourceList;
-        final active = _kwSourceTab == null
-            ? 0
-            : tabs.indexOf(_kwSourceTab!) + 1;
-        _focusKwTab(active >= 0 && active < _kwTabNodes.length ? active : 0);
-        return KeyEventResult.handled;
-      }
-      _focusSearchFieldAtEnd();
-      return KeyEventResult.handled;
+    if (!_kwSelectionMode && _kwTabsVisible && _kwTabNodes.isNotEmpty) {
+      final tabs = _kwSourceList;
+      final active = _kwSourceTab == null ? 0 : tabs.indexOf(_kwSourceTab!) + 1;
+      _keywordFocus.focusTab(
+        active >= 0 && active < _kwTabNodes.length ? active : 0,
+      );
+      return;
     }
-    if (key == LogicalKeyboardKey.arrowDown) {
-      if (_kwNodes.isNotEmpty) {
-        _kwNodes.first.requestFocus();
-      } else if (_kwPendingNewCount > 0 && !_kwSelectionMode) {
-        // Zero rows (e.g. a no-match filter) but arrivals parked behind the
-        // pill: the pill must stay reachable or it's visible-but-dead on TV.
-        _kwPillFocus.requestFocus();
-      }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      if (index > 0) {
-        _kwToolbarNodes[index - 1].requestFocus();
-      } else {
-        MainPageBridge.focusTvSidebar?.call();
-      }
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowRight) {
-      if (index < total - 1) _kwToolbarNodes[index + 1].requestFocus();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
+    _focusSearchFieldAtEnd();
   }
 
   String _sortLabel(String s) =>
