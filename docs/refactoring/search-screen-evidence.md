@@ -6,6 +6,36 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Keyword rows and shared results pane — 2026-09-28
+
+Base revision: `7a6187ff`. `KeywordResultsList` (134 lines) renders the existing
+immutable Keyword results state and source appearance, with explicit row-action
+callbacks and borrowed focus/scroll resources. Row keys, copy availability,
+stream/selection behavior, labels, badges and neighbor focus rules are preserved.
+Selection/playback/menu dispatch and above-list focus remain with their route owner.
+The parent no longer renders individual rows or duplicates their metadata formatting.
+SearchScreen shrinks **13,754 → 13,641 lines**; page/cinema/navigation composition
+still remains, so this does not declare the Search feature complete.
+
+Both Keyword and Sources now use the existing `SourceResultsPane`, relocated to
+`lib/ui/core/` with a compatibility export at its old path. Its implementation is
+unchanged apart from the import path. This removes the duplicate Keyword lazy-list,
+user-drag freeze and parked-arrival overlay layout. Padding, 1,200-pixel cache,
+notification propagation and empty-result arrivals match the existing implementation;
+the SDK maps the old numeric cache extent to the same pixel extent. No new controller,
+state model, provider, service framework or shared mutable state was introduced.
+
+**227 Search/shared-pane tests pass**, plus **seven Sources integration tests** for
+cache/focus, binding and copy. One mistakenly named, nonexistent test path made the
+first command exit unsuccessfully; all actual suites passed, and the intended
+Sources files were then run successfully. Analyzer **838 identities**, no additions
+and one removed legacy cache-extent deprecation. **510 migrated files pass** the
+architecture check; changed formatting/diff checks pass. Receipts under
+`.git/refactor-evidence/phase5/`: `keyword-results-view-tests.txt`,
+`keyword-results-shared-pane-tests.txt`, `keyword-results-view-analyze-final.txt`.
+No emulator or full-suite rerun. Remaining page/navigation/lifecycle and final
+acceptance requirements stay open.
+
 ## Batch C checkpoint: Keyword result controls — 2026-09-28
 
 Base revision: `3a947c41`. The production Keyword view composes `KeywordToolbar`

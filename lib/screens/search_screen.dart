@@ -1,3 +1,4 @@
+import '../features/search/presentation/keyword_results_list.dart';
 import '../features/search/presentation/keyword_toolbar.dart';
 import '../features/search/presentation/keyword_selection_overlay.dart';
 import '../features/search/presentation/search_header.dart';
@@ -157,7 +158,6 @@ import '../features/home/models/home_catalog_state.dart';
 import '../features/home/models/home_catalog_plan.dart';
 import '../features/home/application/home_catalog_preferences_dependencies.dart';
 import '../features/home/presentation/home_sources_navigation.dart';
-import '../ui/core/source_metadata_labels.dart';
 import '../features/search/application/keyword_snapshot_dependencies.dart';
 import '../features/search/data/keyword_snapshot_repository.dart';
 import '../features/search/models/keyword_snapshot.dart';
@@ -265,7 +265,6 @@ import '../features/home/application/home_series_resume_resolver_dependencies.da
 import '../features/home/models/home_series_resume_signals.dart';
 import '../features/home/data/home_series_resume_repository.dart';
 import '../features/home/application/home_series_resume_dependencies.dart';
-import '../utils/format_tag_detector.dart';
 import '../utils/tv_keys.dart';
 import '../utils/tv_search_focus_handoff.dart';
 import '../services/youtube_service.dart';
@@ -277,9 +276,7 @@ import '../widgets/home/home_theme.dart';
 import '../widgets/home/spotlight_board.dart';
 import '../widgets/home/spotlight_catalog_card_cache.dart';
 import '../widgets/search_loading_animation.dart';
-import '../widgets/source_row.dart';
 import '../widgets/cinema_sources_layout.dart';
-import '../widgets/source_list_scroll_anchor.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/text_field_suggestions.dart';
 import '../widgets/metadata_title_navigation.dart';
@@ -5771,8 +5768,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   late final KeywordAppearanceController _keywordAppearanceController;
   late final ProviderSubscription<SourceAppearance>
   _keywordAppearanceSubscription;
-  bool get _useAddonSourceText => _keywordAppearanceSubscription.read().text;
-  bool get _showAddonSourceLogos => _keywordAppearanceSubscription.read().logos;
 
   Future<void> _loadSourceTextFormatting({bool Function()? isCurrent}) =>
       _keywordAppearanceController.load(
@@ -11503,6 +11498,51 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     ),
   );
 
+  void _activateKeywordResult(
+    BuildContext context,
+    Torrent torrent,
+    int index,
+  ) {
+    if (_kwSelectionMode &&
+        !torrent.isDirectStream &&
+        !torrent.isExternalStream) {
+      _toggleKwSelection(torrent);
+      return;
+    }
+    // Ignore Select leaking from a closing toolbar dialog; freeze before playback.
+    if (DialogTapGuard.shouldIgnoreTap()) return;
+    _kwFreeze();
+    unawaited(
+      TorrentPlaybackService.activateTorrent(
+        context,
+        torrent,
+        sources: _kwResults,
+        sourceIndex: index,
+        searchKeyword: _kwQuery,
+      ),
+    );
+  }
+
+  void _longPressKeywordResult(Torrent torrent, int index) {
+    if (!torrent.isDirectStream && !torrent.isExternalStream) {
+      _enterKwSelection();
+      _toggleKwSelection(torrent);
+    } else {
+      _kwFreeze();
+      _showKwStreamMenu(torrent, index);
+    }
+  }
+
+  void _focusAboveKeywordResults() {
+    if (_kwPendingNewCount > 0 && !_kwSelectionMode) {
+      _kwPillFocus.requestFocus();
+    } else if (_kwToolbarVisible) {
+      _kwToolbarNodes.first.requestFocus();
+    } else {
+      _searchFocusNode.requestFocus();
+    }
+  }
+
   Widget _buildKeywordContent({required bool cinema}) {
     if (_kwLoading) {
       // Branded phased loader (parity with the old screen) instead of a bare
@@ -11562,162 +11602,31 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         if (_kwSearching && !cinema) _kwSearchingStrip(),
         if (_kwCachedOnly && _kwAll.isNotEmpty) _kwCachedOnlyNotice(),
         Expanded(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: _kwResults.isEmpty
-                    ? _message(
-                        Icons.search_off_rounded,
-                        _kwAll.isEmpty ? 'No results' : 'No matches',
-                        _kwAll.isEmpty
-                            ? 'Nothing found for "$_kwQuery". Try different '
-                                  'keywords or enable more sources.'
-                            : 'No results match your filters. Adjust or clear them.',
-                      )
-                    : NotificationListener<ScrollNotification>(
-                        // A user drag (not programmatic scrolls) freezes live
-                        // reshuffling — arrivals park behind the pill instead.
-                        onNotification: (n) {
-                          if (n is ScrollStartNotification &&
-                              n.dragDetails != null) {
-                            _kwFreeze();
-                          }
-                          return false;
-                        },
-                        child: SourceListScrollAnchor(child: ListView.builder(
-                          controller: _kwScroll,
-                          // A focused SourceRow can scale and rise in
-                          // Spotlight. The first item starts at scroll offset
-                          // zero, so it needs real viewport clearance rather
-                          // than relying on ensureVisible to make room.
-                          padding: EdgeInsets.symmetric(
-                            vertical: widget.isTelevision ? 24 : 8,
-                            horizontal: 10,
-                          ),
-                          cacheExtent: 1200,
-                          itemCount: _kwResults.length,
-                          itemBuilder: (context, i) {
-                            final t = _kwResults[i];
-                            final selectable =
-                                !t.isDirectStream && !t.isExternalStream;
-                            final isStream = !selectable;
-                            final labels =
-                                _kwCache[t.infohash.toLowerCase()] ?? const [];
-                            final tags = isStream
-                                ? const <FormatTag>[]
-                                : FormatTagDetector.detect(t.name);
-                            return SourceRow(
-                              listIndex: i,
-                              key: ValueKey(
-                                '${t.infohash}_${_kwSelectionMode}_${_kwSelected.contains(t.infohash)}',
-                              ),
-                              title: t.displayTitle,
-                              addonText: _useAddonSourceText ? t.addonPresentation : null,
-                              addonName: _showAddonSourceLogos ? t.addonDisplayName : null,
-                              addonLogo: t.addonLogo,
-                              titleMaxLines: 6,
-                              subtitle: _kwRowSubtitle(t),
-                              focusNode: _kwNodes[i],
-                              isTelevision: widget.isTelevision,
-                              cinemaLayout: cinema,
-                              showPlayPill: widget.isTelevision,
-                              formatTags: tags,
-                              badgeName: t.name,
-                              badgeDescription: t.badgeDescription,
-                              qualityTag: tags.isEmpty
-                                  ? sourceQualityLabel(t)
-                                  : null,
-                              cacheLabel: labels.isEmpty
-                                  ? null
-                                  : labels.join(' | '),
-                              streamBadge: t.isExternalStream
-                                  ? 'External'
-                                  : t.isDirectStream
-                                  ? 'Direct'
-                                  : null,
-                              isSelectionMode: _kwSelectionMode && selectable,
-                              isSelected: _kwSelected.contains(t.infohash),
-                              onCopy: _kwSelectionMode || t.copyLink == null
-                                  ? null
-                                  : () => unawaited(_copyKwLink(t)),
-                              onTap: () {
-                                if (_kwSelectionMode && selectable) {
-                                  _toggleKwSelection(t);
-                                  return;
-                                }
-                                // Swallow a SELECT that leaks through as a toolbar
-                                // dialog (sort/filter/sources) closes on TV.
-                                if (DialogTapGuard.shouldIgnoreTap()) return;
-                                // Playing pushes the player — freeze so the list
-                                // is exactly as left when the user comes back.
-                                _kwFreeze();
-                                unawaited(
-                                  TorrentPlaybackService.activateTorrent(
-                                    context,
-                                    t,
-                                    // Pass the whole result set so the in-player Sources
-                                    // switcher can hop to any other keyword hit (parity
-                                    // with the old screen, which always passed _torrents).
-                                    sources: _kwResults,
-                                    sourceIndex: i,
-                                    searchKeyword: _kwQuery,
-                                  ),
-                                );
-                              },
-                              onLongPress: _kwSelectionMode
-                                  ? null
-                                  : selectable
-                                  ? () {
-                                      _enterKwSelection();
-                                      _toggleKwSelection(t);
-                                    }
-                                  // Direct/external streams aren't selectable — long
-                                  // press opens their Play/Copy/Download menu instead
-                                  // (parity with the old direct-stream action dialog).
-                                  : () {
-                                      _kwFreeze();
-                                      _showKwStreamMenu(t, i);
-                                    },
-                              onNavigateUp: () {
-                                _kwFreeze();
-                                if (i > 0) {
-                                  _kwNodes[i - 1].requestFocus();
-                                } else if (_kwPendingNewCount > 0 &&
-                                    !_kwSelectionMode) {
-                                  // Parked arrivals: the pill is the row above
-                                  // (unmounted during multi-select, where UP
-                                  // must reach the selection toolbar instead).
-                                  _kwPillFocus.requestFocus();
-                                } else if (_kwToolbarVisible) {
-                                  // From the top row, Up lands on the toolbar (Sort…),
-                                  // not straight back to the search field.
-                                  _kwToolbarNodes.first.requestFocus();
-                                } else {
-                                  _searchFocusNode.requestFocus();
-                                }
-                              },
-                              onNavigateDown: () {
-                                _kwFreeze();
-                                if (i < _kwNodes.length - 1) {
-                                  _kwNodes[i + 1].requestFocus();
-                                }
-                              },
-                            );
-                          },
-                        )),
-                      ),
-              ),
-              // Frozen-mode arrivals wait behind this pill so the list never
-              // reshuffles under the user. Hidden during multi-select —
-              // adopting would renumber rows under the checkmarks.
-              if (_kwPendingNewCount > 0 && !_kwSelectionMode)
-                Positioned(
-                  top: 10,
-                  left: 0,
-                  right: 0,
-                  child: Center(child: _kwNewResultsPill()),
-                ),
-            ],
+          child: KeywordResultsList(
+            state: _keywordResults,
+            cache: _kwCache,
+            appearance: _keywordAppearanceSubscription.read(),
+            isTelevision: widget.isTelevision,
+            cinema: cinema,
+            scrollController: _kwScroll,
+            focusNodes: _kwNodes,
+            onFreeze: _kwFreeze,
+            onFocusAbove: _focusAboveKeywordResults,
+            onCopy: (torrent) => unawaited(_copyKwLink(torrent)),
+            onActivate: _activateKeywordResult,
+            onLongPress: _longPressKeywordResult,
+            emptyBuilder: (_) => _message(
+              Icons.search_off_rounded,
+              _kwAll.isEmpty ? 'No results' : 'No matches',
+              _kwAll.isEmpty
+                  ? 'Nothing found for "$_kwQuery". Try different '
+                        'keywords or enable more sources.'
+                  : 'No results match your filters. Adjust or clear them.',
+            ),
+            // Never renumber selected rows by adopting arrivals mid-selection.
+            pendingResults: _kwPendingNewCount > 0 && !_kwSelectionMode
+                ? _kwNewResultsPill()
+                : null,
           ),
         ),
       ],
@@ -11794,7 +11703,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             selectionMode: _kwSelectionMode,
             selectableCount: _kwSelectableResults.length,
             selectedCount: _kwSelected.length,
-            floatingNavigation: MainPageBridge.phoneNavStyleCached == 'floating',
+            floatingNavigation:
+                MainPageBridge.phoneNavStyleCached == 'floating',
             onSelect: _enterKwSelection,
             onCancel: _exitKwSelection,
             onDeselectAll: _deselectAllKw,
@@ -11883,29 +11793,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         },
       ),
     );
-  }
-
-  /// `size · ↑seeders · ↓leechers · SOURCE · date` meta line for a keyword
-  /// row — same grammar as the Sources screen's rows (shared SourceRow look).
-  static String _kwRowSubtitle(Torrent t) {
-    final parts = <String>[];
-    final sourceLabel = t.addonDisplayName?.trim().isNotEmpty == true
-        ? t.addonDisplayName!.trim()
-        : t.source;
-    if (t.isDirectStream || t.isExternalStream) {
-      if (t.sizeBytes > 0) {
-        parts.add(sourceSizeLabel(t.sizeBytes));
-      }
-      if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
-      return parts.join(' · ');
-    }
-    if (t.sizeBytes > 0) parts.add(sourceSizeLabel(t.sizeBytes));
-    if (t.seeders > 0) parts.add('↑ ${t.seeders}');
-    if (t.leechers > 0) parts.add('↓ ${t.leechers}');
-    if (sourceLabel.isNotEmpty) parts.add(sourceLabel.toUpperCase());
-    final date = sourceDateLabel(t.createdUnix);
-    if (date != null) parts.add(date);
-    return parts.join(' · ');
   }
 
   /// Display name for a source tab ('stremio:foo' → 'Foo').
