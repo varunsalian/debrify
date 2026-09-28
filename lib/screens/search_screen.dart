@@ -1,3 +1,4 @@
+import '../features/search/presentation/title_suggestion_presentation.dart';
 import '../features/search/presentation/search_result_bindings.dart';
 import '../features/search/presentation/lists_navigation.dart';
 import '../features/search/presentation/catalog_search_prompt.dart';
@@ -281,7 +282,6 @@ import '../widgets/home/spotlight_board.dart';
 import '../widgets/home/spotlight_catalog_card_cache.dart';
 import '../widgets/cinema_sources_layout.dart';
 import '../widgets/torrent_filters_sheet.dart';
-import '../widgets/text_field_suggestions.dart';
 import '../widgets/metadata_title_navigation.dart';
 import '../services/tmdb_title_search.dart';
 import '../services/metadata_title_service.dart';
@@ -400,13 +400,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   final TextEditingController _searchController = TextEditingController();
   late final _titleSearch = widget.titleSearch ?? TmdbTitleSearch();
-  final _titleSuggestions = ValueNotifier<List<TextFieldSuggestion>>(const []);
+  final _titlePresentation = TitleSuggestionPresentation();
   final _titleSearchScope = ProfileRuntime.scope.value;
-  bool _openingSuggestedTitle = false;
-  int _suggestedTitleOpenGeneration = 0;
+  bool get _openingSuggestedTitle => _titlePresentation.opening;
   bool get _titleSearchPolicyReady => _metadataFeatureController.current.ready;
-  String _titleSearchText = '';
-  bool _titleSearchComposing = false;
   late final _searchFocus = SearchFocusController(
     onSourcesVisibilityChanged: () {
       if (mounted) setState(() {});
@@ -2599,7 +2596,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchResultBindings.closeKeyword();
     _titleSearch.removeListener(_publishTitleSuggestions);
     _titleSearch.dispose();
-    _titleSuggestions.dispose();
+    _titlePresentation.dispose();
     _searchFocusNode.removeListener(_onSearchFocusForSources);
     _searchFocus.dispose();
     _disposeListsNodes();
@@ -7805,12 +7802,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   void _onTitleSearchEditingChanged() {
     final editing = _searchController.value;
-    final composing = editing.composing.isValid && !editing.composing.isCollapsed;
-    if (editing.text == _titleSearchText && composing == _titleSearchComposing) {
-      return;
-    }
-    _titleSearchText = editing.text;
-    _titleSearchComposing = composing;
+    if (!_titlePresentation.acceptEdit(editing)) return;
     _cancelSuggestedTitleOpen();
     _scheduleTitleSuggestions();
   }
@@ -7833,10 +7825,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  void _cancelSuggestedTitleOpen() {
-    _suggestedTitleOpenGeneration++;
-    _openingSuggestedTitle = false;
-  }
+  void _cancelSuggestedTitleOpen() => _titlePresentation.cancelOpen();
 
   void _cancelTitleSuggestions() {
     _cancelSuggestedTitleOpen();
@@ -7844,7 +7833,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   void _publishTitleSuggestions() {
-    _titleSuggestions.value = buildSearchTitleSuggestions(
+    _titlePresentation.publish(
       _titleSearch.value,
       query: _searchController.text.trim(),
       onOpen: _openSuggestedTitle,
@@ -7853,7 +7842,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   Future<void> _openSuggestedTitle(StremioMeta item) async {
-    if (_openingSuggestedTitle || !mounted || _mode != SearchMode.catalog ||
+    if (_openingSuggestedTitle ||
+        !mounted ||
+        _mode != SearchMode.catalog ||
         MainPageBridge.activeTab.value != 'search' ||
         _titleSearchScope != ProfileRuntime.scope.value) {
       return;
@@ -7866,26 +7857,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _cancelTitleSuggestions();
     // Filling the field above goes through the same edit/cancel listener as
     // typing. Capture ownership only after that update has finished.
-    final generation = _suggestedTitleOpenGeneration;
-    _openingSuggestedTitle = true;
+    final generation = _titlePresentation.beginOpen();
     try {
-      await openMetadataTitle(context, item, (selected) {
-        if (!mounted || generation != _suggestedTitleOpenGeneration ||
-            MainPageBridge.activeTab.value != 'search') {
-          return;
-        }
-        _openItem(selected, selected.sourceAddon ?? StremioAddon(
-          id: 'metadata_title', name: 'Title metadata', manifestUrl: '', baseUrl: '',
-        ));
-      }, resolve: widget.suggestedTitleResolver ?? MetadataTitleService.instance.resolve,
+      await openMetadataTitle(
+        context,
+        item,
+        (selected) {
+          if (!mounted ||
+              !_titlePresentation.accepts(generation) ||
+              MainPageBridge.activeTab.value != 'search') {
+            return;
+          }
+          _openItem(
+            selected,
+            selected.sourceAddon ??
+                StremioAddon(
+                  id: 'metadata_title',
+                  name: 'Title metadata',
+                  manifestUrl: '',
+                  baseUrl: '',
+                ),
+          );
+        },
+        resolve:
+            widget.suggestedTitleResolver ??
+            MetadataTitleService.instance.resolve,
         onUnresolved: (unresolved) => _onQuerySubmitted(unresolved.name),
-        isCurrent: () => mounted && generation == _suggestedTitleOpenGeneration &&
-            _mode == SearchMode.catalog && MainPageBridge.activeTab.value == 'search');
+        isCurrent: () =>
+            mounted &&
+            _titlePresentation.accepts(generation) &&
+            _mode == SearchMode.catalog &&
+            MainPageBridge.activeTab.value == 'search',
+      );
     } finally {
       // A cancelled lookup can finish while a newer selection is loading.
-      if (generation == _suggestedTitleOpenGeneration) {
-        _openingSuggestedTitle = false;
-      }
+      _titlePresentation.finishOpen(generation);
     }
   }
 
@@ -9493,7 +9499,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     controller: _searchController,
     focusNode: _searchFocusNode,
     suggestions: widget.searchMode && _mode == SearchMode.catalog
-        ? _titleSuggestions
+        ? _titlePresentation.suggestions
         : null,
     onChanged: _onQueryChanged,
     onSubmitted: _onQuerySubmitted,

@@ -6,6 +6,26 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: title suggestion presentation ownership — 2026-09-28
+
+Base: `9a16a635`. `TitleSuggestionPresentation` (55 lines) owns the published
+suggestion notifier, edit/IME deduplication and selection generation state. The
+screen delegates publication/cancellation/begin/finish and disposes the notifier
+at its original point after the lookup source. Profile/tab/request eligibility and
+metadata navigation remain at their existing call sites.
+
+Review preserves text versus selection-only edits, composing-state changes,
+cancel-before-capture ordering and stale completions not unlocking newer opens.
+**200 tests pass**: 187 Search application/presentation tests, including a new
+ownership/IME test, plus 13 title-suggestion screen cases. Two previously observed
+unresolved-title failures were excluded from that focused screen command using
+`--name '^(?!unresolved suggestion)'`; they remain known failures, not passes.
+Analysis retains **836 identical diagnostic identities**; architecture passes
+**550 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/title-owner-{tests,screen,analyze-final}.txt`.
+No emulator used. Remaining source/navigation composition, broader lifecycle/
+facade reduction and final acceptance remain pending.
+
 ## Batch C/D checkpoint: query presentation cleanup — 2026-09-28
 
 Base: `4a32f4af`. Title-suggestion formatting/actions now live beside the query
