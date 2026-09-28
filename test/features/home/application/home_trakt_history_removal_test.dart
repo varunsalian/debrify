@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
@@ -310,6 +311,32 @@ void main() {
         (await SharedPreferences.getInstance()).getString('trakt_access_token'),
         'legacy-token',
       );
+    },
+  );
+
+  test(
+    'view retirement after accepted history write still invalidates same-profile state',
+    () async {
+      final container = ProviderContainer.test();
+      final writer = container.read(
+        homeTraktHistoryRemovalProvider(ProfileSessionMemory.captureOwner()),
+      );
+      var current = true;
+      final revision = StorageService.movieFinishedRevision.value;
+      await http.runWithClient(
+        () async {
+          expect(
+            await writer.remove(item(ids: []), isCurrent: () => current),
+            isNull,
+          );
+        },
+        () => MockClient((request) async {
+          expect(request.url.path, '/sync/history/remove');
+          current = false;
+          return http.Response('{}', 200);
+        }),
+      );
+      expect(StorageService.movieFinishedRevision.value, revision + 1);
     },
   );
 

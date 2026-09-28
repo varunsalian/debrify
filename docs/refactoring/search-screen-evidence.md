@@ -6,6 +6,46 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: Simkl/MDBList removal and cache retirement — 2026-09-28
+
+Home and legacy Simkl menus now share `SimklContinueWatchingRemoval` (51 lines),
+a UI-independent operation with originating-profile ownership. Home injects it
+through the existing continuation dependency module. Series move to On Hold and
+retain success when paused-session cleanup fails; movies retain the cleanup
+result. Null means retirement. Sequential writes check ownership after awaits;
+optional service/credential guards preserve existing callers' defaults. The menu
+keeps its original labels, colors and duration; Home supplies live ownership, and
+rating/confirmation returns reject retired actions. Other detail mutations and
+clear-progress dialogs still need their separate data-boundary audit.
+
+MDBList reuses its existing controller/repository and capability-aware transport.
+The controller now carries the session's captured scope through clear; its paused
+eligibility, independent accepted removals, success-only invalidation and retired
+feedback rules remain intact. No extra controller or cache was introduced.
+
+Review also distinguished view retirement from profile retirement after accepted
+remote writes. Simkl and Trakt invalidate the surviving original profile's caches
+when a view closes, without publishing into a different profile. Simkl cleanup
+invalidates after a partially completed deletion too. Normal cache invalidation
+still precedes revision notifications; cancellation cleanup runs in `finally`.
+
+Validation: 154 affected tests pass, including 21 new cases across transport,
+menu and ownership tests. Distinct bound profile credentials, foreign ambient
+zones, hold/read/delete retirement, partial cleanup failure, exact payloads,
+untouched movie/show matches, success/failure/cancellation snackbars, retired rating
+dialogs, MDBList scope continuation and same-profile cache freshness are covered.
+The final ordering review is followed by 27 passing focused Simkl cases. Existing
+Simkl/MDBList Home screens, native-ID regressions, Trakt scrobble/refresh and vault
+checks pass. Analyzer identities remain the same 848; architecture checks now
+cover 459 files, including the shared removal operation. Diff checks pass.
+
+Receipts: `.git/refactor-evidence/phase5/tracker-removal-final.txt`,
+`simkl-removal-cache-final.txt`, `simkl-removal-analyze.txt`; earlier focused runs
+are `simkl-removal-targeted.txt`, `simkl-removal-dialogs.txt` and
+`mdblist-removal-audit.txt`. Full-suite verification remains at the planned
+integration gate. Exact detail-route ownership, other detail mutations, native
+handoff and whole-batch acceptance remain open.
+
 ## Batch A checkpoint: Trakt Continue Watching removal — 2026-09-28
 
 Home row/detail removal now uses the owner-keyed `HomeTraktHistoryRemoval`

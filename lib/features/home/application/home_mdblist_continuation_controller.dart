@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/profiles/profile_session_memory.dart';
+import '../../../services/profiles/profile_runtime.dart';
 import '../data/home_mdblist_continuation_repository.dart';
 import '../models/home_continuation_session.dart';
 import '../models/home_mdblist_continuation.dart';
@@ -106,7 +107,13 @@ class HomeMdblistContinuationController
     if (!current()) return false;
     final item = state.byImdb[imdbId];
     if (item == null || !item.paused) return false;
-    final removed = await _repository.clear(item);
+    final scope = session.owner.scope;
+    final removed = scope == null
+        ? await _repository.clear(item)
+        : await ProfileRuntime.withCapturedScope(
+            scope,
+            () => _repository.clear(item),
+          );
     return current() && removed;
   }
 

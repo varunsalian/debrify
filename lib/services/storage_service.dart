@@ -7154,7 +7154,9 @@ class StorageService {
 
   static Future<String?> getSimklAccessToken({
     bool forRemoteTransfer = false,
+    bool Function()? canContinue,
   }) async {
+    if (canContinue?.call() == false) return null;
     if (forRemoteTransfer) {
       final credential = await ProfileCredentialFacade.readForRemoteTransfer(
         _simklAccessTokenKey,
@@ -7162,7 +7164,11 @@ class StorageService {
       if (credential.handled) return credential.value;
     }
     final prefs = await ProfilePreferences.instance();
-    return SecretVault.getString(prefs, _simklAccessTokenKey);
+    return SecretVault.getString(
+      prefs,
+      _simklAccessTokenKey,
+      canContinue: canContinue,
+    );
   }
 
   static Future<bool> hasSimklCredential({bool Function()? canContinue}) =>

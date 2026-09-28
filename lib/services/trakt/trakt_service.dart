@@ -11,6 +11,7 @@ import 'trakt_continue_watching_merge.dart';
 import 'trakt_watched_history_reader.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
+import '../profiles/profile_session_memory.dart';
 import '../profiles/profile_credential_facade.dart';
 import '../storage_service.dart';
 import 'trakt_calendar_service.dart';
@@ -905,6 +906,9 @@ class TraktService {
     bool Function()? canContinue,
   }) async {
     if (canContinue?.call() == false) return false;
+    final owner = canContinue == null
+        ? null
+        : ProfileSessionMemory.captureOwner();
     type = type == 'show' ? 'series' : type;
     final ids = await _idsForContent(imdbId, type);
     if (ids == null || canContinue?.call() == false) return false;
@@ -921,7 +925,10 @@ class TraktService {
       body,
       canContinue: canContinue,
     );
-    if (response == null || canContinue?.call() == false) return false;
+    if (response == null ||
+        (owner != null && owner != ProfileSessionMemory.captureOwner())) {
+      return false;
+    }
     final ok = response.statusCode >= 200 && response.statusCode < 300;
     if (!ok) {
       debugPrint('Trakt: Sync action failed (${response.statusCode})');

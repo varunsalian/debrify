@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/tracking_source.dart';
 import 'simkl_service.dart';
+import 'simkl_continue_watching_removal.dart';
+import '../profiles/profile_session_memory.dart';
 import '../watched_action_coordinator.dart';
 import '../../widgets/clear_provider_progress_dialog.dart';
 
@@ -147,7 +149,11 @@ Future<void> handleSimklMenuAction(
   /// value directly — mirrors `handleTraktMenuAction`'s [presetRating], for
   /// the merged detail sheet's inline 1–10 strip.
   int? presetRating,
+  bool Function()? isCurrent,
+  Future<bool?> Function()? removeContinueWatching,
 }) async {
+  bool current() => context.mounted && (isCurrent?.call() ?? true);
+  if (!current()) return;
   final simklService = SimklService.instance;
   final imdbId = item.progressId ?? item.id;
   final type = item.type;
@@ -156,7 +162,11 @@ Future<void> handleSimklMenuAction(
 
   switch (action) {
     case SimklItemMenuAction.clearWatchProgress:
-      await showClearProviderProgressDialog(context, item, TrackingSource.simkl);
+      await showClearProviderProgressDialog(
+        context,
+        item,
+        TrackingSource.simkl,
+      );
       return;
     case SimklItemMenuAction.moveToPlanToWatch:
       actionLabel = 'Moved to Plan to Watch on Simkl';
@@ -184,36 +194,35 @@ Future<void> handleSimklMenuAction(
       actionLabel = 'Marked Dropped on Simkl';
       success = await simklService.addToList(imdbId, type, 'dropped');
       // As above — the session-clear is what removes it, so fold the result in.
-      if (success) success = await simklService.deletePlaybackForImdb(imdbId, contentType: type);
+      if (success) {
+        success = await simklService.deletePlaybackForImdb(
+          imdbId,
+          contentType: type,
+        );
+      }
     case SimklItemMenuAction.removeFromList:
       if (!context.mounted ||
           !await confirmSimklTitleRemoval(context, item.name)) {
         return;
       }
+      if (!current()) return;
       actionLabel = 'Removed from Simkl';
       success = await simklService.removeFromListAndPlayback(imdbId, type);
     case SimklItemMenuAction.removeFromContinueWatching:
-      if (type == 'series') {
-        // A still-"watching" series shows in the paused row (its session) and
-        // would also re-surface as an "up next" card. Move it to On Hold: that
-        // takes it out of BOTH (the paused row is status-filtered, up-next
-        // fetches only 'watching'). Best-effort clear the paused session too
-        // (definitive — drops the resume position; a failure here doesn't leave
-        // it in the row, so it must not flip the action to "failed").
-        actionLabel = 'Removed — moved to On Hold on Simkl';
-        success = await simklService.addToList(imdbId, type, 'hold');
-        if (success) await simklService.deletePlaybackForImdb(imdbId, contentType: type);
-      } else {
-        // Movie: no watching/up-next status to change (a paused movie is
-        // plantowatch/none, which the row still shows), so clearing the paused
-        // session is what removes it — its result IS the success.
-        actionLabel = 'Removed from Continue Watching';
-        success = await simklService.deletePlaybackForImdb(imdbId, contentType: type);
-      }
+      actionLabel = type == 'series'
+          ? 'Removed — moved to On Hold on Simkl'
+          : 'Removed from Continue Watching';
+      final removed =
+          await (removeContinueWatching?.call() ??
+              SimklContinueWatchingRemoval(
+                ProfileSessionMemory.captureOwner(),
+              ).remove(imdbId, type, isCurrent: current));
+      if (removed == null) return;
+      success = removed;
     case SimklItemMenuAction.rate:
       if (!context.mounted) return;
       final rating = presetRating ?? await showSimklRatingDialog(context);
-      if (rating == null) return;
+      if (rating == null || !current()) return;
       actionLabel = 'Rated $rating/10 on Simkl';
       success = await simklService.rateItem(imdbId, type, rating);
     case SimklItemMenuAction.removeRating:
@@ -221,7 +230,7 @@ Future<void> handleSimklMenuAction(
       success = await simklService.removeRating(imdbId, type);
   }
 
-  if (!context.mounted) return;
+  if (!context.mounted || !current()) return;
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(success ? actionLabel : 'Failed: $actionLabel'),

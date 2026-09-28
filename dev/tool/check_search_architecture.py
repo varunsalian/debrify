@@ -24,6 +24,7 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/services/source_appearance_preferences.dart",
     "lib/services/home_return_cache.dart",
     "lib/services/local_history_removal.dart",
+    "lib/services/simkl/simkl_continue_watching_removal.dart",
     "lib/services/profiles/profile_session_memory.dart",
     "lib/models/home_preferences.dart",
     "lib/models/iptv_playlist.dart",

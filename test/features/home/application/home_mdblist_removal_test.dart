@@ -1,3 +1,5 @@
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_scope.dart';
 import 'dart:async';
 import 'package:debrify/features/home/application/home_mdblist_continuation_controller.dart';
 import 'package:debrify/features/home/application/home_mdblist_continuation_dependencies.dart';
@@ -75,6 +77,42 @@ class Fixture {
 }
 
 void main() {
+  test(
+    'clear retains originating scope across foreign zone and retirement',
+    () async {
+      final origin = ProfileScope(
+        profileId: 'origin',
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      final other = ProfileScope(
+        profileId: 'other',
+        dataGeneration: 1,
+        sessionEpoch: 2,
+      );
+      ProfileRuntime.debugReset();
+      ProfileRuntime.initializeCommitted(origin);
+      addTearDown(ProfileRuntime.debugReset);
+      final entered = Completer<void>(), release = Completer<void>();
+      final scopes = <ProfileScope?>[];
+      final f = Fixture((_) async {
+        scopes.add(ProfileRuntime.capture());
+        entered.complete();
+        await release.future;
+        scopes.add(ProfileRuntime.capture());
+        return true;
+      });
+      await f.load();
+      final pending = ProfileRuntime.withCapturedScope(other, f.remove);
+      await entered.future;
+      ProfileSessionMemory.clearAll();
+      ProfileRuntime.publish(other);
+      release.complete();
+      expect(await pending, isFalse);
+      expect(scopes, [origin, origin]);
+    },
+  );
+
   test(
     'only a paused accepted descriptor reaches clear, with its identity intact',
     () async {

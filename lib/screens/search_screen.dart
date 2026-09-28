@@ -1,3 +1,4 @@
+import '../features/home/application/home_simkl_continuation_dependencies.dart';
 import '../features/home/application/home_iptv_continuation_dependencies.dart';
 import '../features/home/application/home_catalog_playback_resolver_dependencies.dart';
 import '../models/simkl_continue_watching_item.dart';
@@ -4909,12 +4910,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// own result snackbar), so a series is moved to On Hold and its paused
   /// session cleared, and a movie just loses the session.
   Future<void> _removeSimklCwItem(StremioMeta item) async {
+    if (!_catalogNavigationCurrent()) return;
     await handleSimklMenuAction(
       context,
       item,
       SimklItemMenuAction.removeFromContinueWatching,
+      isCurrent: _catalogNavigationCurrent,
+      removeContinueWatching: () => ref
+          .read(homeSimklHistoryRemovalProvider(_profileSessionOwner))
+          .remove(
+            item.progressId ?? item.id,
+            item.type,
+            isCurrent: _catalogNavigationCurrent,
+          ),
     );
-    if (!mounted) return;
+    if (!_catalogNavigationCurrent()) return;
     await _loadSimklContinueWatching(refreshBound: false);
   }
 
@@ -5103,7 +5113,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _removeMdblistCwItem(StremioMeta item) async {
     final removed = await _mdblistContinuationController.remove(
       _imdbOf(item),
-      isCurrent: () => mounted,
+      isCurrent: _catalogNavigationCurrent,
     );
     if (!mounted ||
         !removed ||
@@ -10653,6 +10663,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       item,
       action,
       presetRating: presetRating,
+      isCurrent: _catalogNavigationCurrent,
+      removeContinueWatching: () => ref
+          .read(homeSimklHistoryRemovalProvider(_profileSessionOwner))
+          .remove(
+            item.progressId ?? item.id,
+            item.type,
+            isCurrent: _catalogNavigationCurrent,
+          ),
     ),
   );
 

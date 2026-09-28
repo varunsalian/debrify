@@ -10,6 +10,7 @@ import '../../models/tracking_source.dart';
 import '../episode_tracker_snapshot_revision.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
+import '../profiles/profile_session_memory.dart';
 import '../storage_service.dart';
 import 'simkl_calendar_service.dart';
 import 'simkl_constants.dart';
@@ -636,24 +637,37 @@ class SimklService {
   /// `completed`/`dropped`) via `POST /sync/add-to-list`. Removing the title
   /// altogether uses the whole-title form of `POST /sync/history/remove`; see
   /// [removeFromList].
-  Future<bool> addToList(String imdbId, String type, String status) async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return false;
+  Future<bool> addToList(
+    String imdbId,
+    String type,
+    String status, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return false;
+    final owner = canContinue == null
+        ? null
+        : ProfileSessionMemory.captureOwner();
+    final token = await StorageService.getSimklAccessToken(
+      canContinue: canContinue,
+    );
+    if (token == null || token.isEmpty || canContinue?.call() == false) {
+      return false;
+    }
     final typeKey = _typeKey(type);
     final result = await _postOrNull(
       '/sync/add-to-list',
       {
         typeKey: [
-          {
-            'to': status,
-            'ids': MediaIdentity.apiIds(imdbId),
-          },
+          {'to': status, 'ids': MediaIdentity.apiIds(imdbId)},
         ],
       },
       token: token,
       label: 'addToList $typeKey→$status',
     );
-    if (!_wasMatched(result, typeKey)) return false;
+    if ((owner != null && owner != ProfileSessionMemory.captureOwner()) ||
+        !_wasMatched(result, typeKey)) {
+      return false;
+    }
     _invalidateLibraryCache();
     // Moving to or away from Completed changes the effective watched set.
     // We do not know the previous status here, so every successful move must
@@ -1388,21 +1402,37 @@ class SimklService {
   /// this too. Invalidates the playback cache so the row refetches without the
   /// removed sessions. Returns true when every matching session was deleted (or
   /// there was nothing to delete). Never throws.
-  Future<bool> deletePlaybackForImdb(String imdbId, {String? contentType}) async {
-    if (MediaIdentity.isNative(imdbId) && await _cachedLibAllAll() == null) return false;
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return false;
+  Future<bool> deletePlaybackForImdb(
+    String imdbId, {
+    String? contentType,
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return false;
+    if (MediaIdentity.isNative(imdbId) && await _cachedLibAllAll() == null) {
+      return false;
+    }
+    if (canContinue?.call() == false) return false;
+    final token = await StorageService.getSimklAccessToken(
+      canContinue: canContinue,
+    );
+    if (token == null || token.isEmpty || canContinue?.call() == false) {
+      return false;
+    }
     // Independent GETs — fetch concurrently. A null list means the fetch failed.
     final lists = await Future.wait([
       _fetchEpisodePlaybackSessions(),
       _fetchMoviePlaybackSessions(),
     ]);
+    if (canContinue?.call() == false) return false;
     final episodes = lists[0];
     final movies = lists[1];
     final ids = <int>{};
     for (final raw in [...?episodes, ...?movies]) {
       if (raw is! Map) continue;
-      if (contentType != null && (raw['movie'] != null) != (contentType == 'movie')) continue;
+      if (contentType != null &&
+          (raw['movie'] != null) != (contentType == 'movie')) {
+        continue;
+      }
       final content = raw['show'] ?? raw['movie'];
       final cids = content is Map ? content['ids'] : null;
       if (!_matches(cids, imdbId, movie: raw['movie'] != null)) continue;
@@ -1414,19 +1444,36 @@ class SimklService {
     // session, so don't report success (the caller would show a false toast).
     if (ids.isEmpty) return episodes != null && movies != null;
     var allOk = true;
-    for (final id in ids) {
-      final ok = await _deleteOk(
-        '/sync/playback/$id',
-        token: token,
-        label: 'deletePlayback $id',
-      );
-      if (!ok) allOk = false;
+    final owner = canContinue == null
+        ? null
+        : ProfileSessionMemory.captureOwner();
+    var attempted = false;
+    try {
+      for (final id in ids) {
+        if (canContinue?.call() == false) return false;
+        attempted = true;
+        final ok = await _deleteOk(
+          '/sync/playback/$id',
+          token: token,
+          label: 'deletePlayback $id',
+        );
+        if (!ok) allOk = false;
+      }
+      if (canContinue?.call() == false) return false;
+      _invalidatePlaybackCache();
+      attempted = false;
+      if (allOk) {
+        EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
+      }
+      return allOk;
+    } finally {
+      // A closed view must not leave a surviving same-profile view with stale
+      // paused sessions. A switched profile owns a different cache generation.
+      if (attempted &&
+          (owner == null || owner == ProfileSessionMemory.captureOwner())) {
+        _invalidatePlaybackCache();
+      }
     }
-    _invalidatePlaybackCache();
-    if (allOk) {
-      EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
-    }
-    return allOk;
   }
 
   /// Clear the paused session for ONE specific episode of a show (matched by
