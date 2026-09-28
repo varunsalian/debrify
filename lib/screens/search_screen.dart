@@ -1,3 +1,4 @@
+import '../features/discover/presentation/discover_focus.dart';
 import '../features/home/presentation/home_classic_favorite_rows.dart';
 import '../features/home/presentation/home_rail_composition.dart';
 import '../features/home/presentation/home_stage_favorite_cards.dart';
@@ -1534,7 +1535,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   String get _discSource => _discoverSourceController.current.source;
   List<StremioAddon> get _discAddons =>
       _discoverSourceController.current.addons;
-  final FocusNode _discSourceNode = FocusNode(debugLabel: 'disc_source');
+  final _discoverFocus = DiscoverFocus();
+  FocusNode get _discSourceNode => _discoverFocus.source;
 
   /// An MDBList list handed off from the Search tab's Lists mode (consumed
   /// from MainPageBridge.pendingMdblistListOpen on mount). Passed into the
@@ -1544,8 +1546,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // The grid tile the DPAD is currently on, mirrored into the two-pane detail
   // rail (TV Discover). A ValueNotifier — not setState — so a focus move only
   // rebuilds the rail, never the grid subtree.
-  final ValueNotifier<StremioMeta?> _discFocused = ValueNotifier(null);
-  void _onDiscFocused(StremioMeta item) => _discFocused.value = item;
+  ValueNotifier<StremioMeta?> get _discFocused => _discoverFocus.focused;
+  void _onDiscFocused(StremioMeta item) => _discoverFocus.selectTitle(item);
 
   // Local preview signals are borrowed by the resolving rail and player stage.
   late final DiscoverPreview _discPreview = DiscoverPreview(
@@ -2683,8 +2685,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchFocusNode.removeListener(_onSearchFocusForSources);
     _searchFocus.dispose();
     _disposeListsNodes();
-    _discSourceNode.dispose();
-    _discFocused.dispose();
+    _discoverFocus.dispose();
     if (MainPageBridge.discoverCardSettingsChanged ==
         _onDiscoverCardSettingsChanged) {
       MainPageBridge.discoverCardSettingsChanged = null;
@@ -10509,9 +10510,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     // The embedded panel reattaches this shared node when the source changes.
     if (selected && widget.isTelevision) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _discSourceNode.requestFocus();
-      });
+      _discoverFocus.restoreSource(isCurrent: () => mounted);
     }
   }
 

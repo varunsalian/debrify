@@ -6,6 +6,22 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C/D checkpoint: Discover focus resources — 2026-09-28
+
+Base: `81766f62`. `DiscoverFocus` owns the route's source focus node and selected-
+title notifier, plus deferred source restoration. Embedded panels borrow the same
+resources. Creation remains eager; disposal remains at the original contiguous
+node/notifier cleanup point, separate from later preview teardown.
+
+Review preserves focused-title notification scope, source-panel reattachment timing
+and mounted-route guarding for scheduled focus. **Seven tests pass**, covering the
+new focus-owner test, Discover grid/layout screens and source startup behavior.
+Analysis retains **836 identical diagnostic identities**; architecture passes
+**541 files**; diff checks pass and new Dart files are formatted. Receipts:
+`.git/refactor-evidence/phase5/discover-focus-{tests,analyze}.txt`.
+No emulator used. Provider subscription ownership, preview/shell teardown, remaining
+navigation wiring, facade reduction and final acceptance are still pending.
+
 ## Batch C checkpoint: Classic row dispatch — 2026-09-28
 
 Base: `e164d4c6`. The existing `HomeClassicRows` (115 lines) now selects the
