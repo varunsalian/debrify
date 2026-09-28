@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_media_bindings.dart';
 import '../features/home/presentation/home_board_bindings.dart';
 import '../features/home/presentation/home_continuation_nodes.dart';
 import '../features/home/presentation/home_see_all_navigation.dart';
@@ -68,8 +69,6 @@ import '../features/discover/application/discover_layout_controller.dart';
 import '../features/discover/presentation/discover_preview.dart';
 import '../features/home/presentation/home_stage_theater.dart';
 import '../features/home/presentation/home_hero_shell_bridge.dart';
-import '../features/home/application/home_hero_tint_loader.dart';
-import '../features/home/application/home_hero_tint_dependencies.dart';
 import '../features/home/presentation/home_hero_swap.dart';
 import '../features/home/presentation/home_hero_spotlight.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart' show SpotlightIptvCardPreview;
@@ -96,12 +95,6 @@ import '../features/home/presentation/home_favorite_focus.dart';
 import '../features/home/models/home_tonight_card_info.dart';
 import '../features/home/application/home_stage_metadata.dart';
 import '../features/home/application/home_hero_metadata_policy.dart';
-import '../features/home/application/home_hero_metadata_loader.dart';
-import '../features/home/application/home_hero_metadata_dependencies.dart';
-import '../features/home/application/home_hero_trailer_dependencies.dart';
-import '../features/home/application/home_hero_trailer_loader.dart';
-import '../features/home/application/home_hero_live_preview.dart';
-import '../features/home/application/home_hero_live_dependencies.dart';
 import '../features/home/presentation/home_classic_rows.dart';
 import '../features/home/presentation/home_board_cell.dart';
 import '../features/home/models/home_favorite_row_ref.dart';
@@ -202,8 +195,6 @@ import '../features/home/application/home_random_episode_dependencies.dart';
 import '../features/home/application/home_catalog_episode_identity_dependencies.dart';
 import '../features/home/application/home_catalog_origin_dependencies.dart';
 import '../features/home/application/home_tracking_policy_dependencies.dart';
-import '../features/home/application/home_tracker_resume_dependencies.dart';
-import '../features/home/data/home_tracker_resume_repository.dart';
 import '../features/home/data/home_catalog_playback_payload.dart';
 import '../features/home/presentation/home_catalog_playback_bridge.dart';
 import '../services/profiles/profile_runtime.dart';
@@ -268,8 +259,6 @@ import '../features/home/application/home_trakt_continuation_dependencies.dart';
 import '../services/video_player_launcher.dart';
 import '../services/tracking_source_policy.dart';
 import '../utils/dialog_tap_guard.dart';
-import '../features/home/data/home_series_resume_resolver.dart';
-import '../features/home/application/home_series_resume_resolver_dependencies.dart';
 import '../features/home/models/home_series_resume_signals.dart';
 import '../features/home/data/home_series_resume_repository.dart';
 import '../features/home/application/home_series_resume_dependencies.dart';
@@ -1321,16 +1310,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final ValueNotifier<StremioMeta?> _heroEnriched = ValueNotifier<StremioMeta?>(
     null,
   );
-  late final ProviderSubscription<HomeHeroMetadataLoader>
-  _heroMetadataSubscription;
-  late final ProviderSubscription<HomeTrackerResumeRepository>
-  _trackerResumeSubscription;
-  late final ProviderSubscription<HomeSeriesResumeResolver>
-  _seriesResumeResolverSubscription;
 
   /// Settle debounce for the hero SWAP itself (260ms): while DPAD focus flies
   /// across cards only the card visuals update; the spotlight (backdrop
   /// decode, logo, meta, tint cascade) follows once focus rests.
+  late final HomeMediaBindings _homeMediaBindings;
   final HomeHeroSwap _heroSwap = HomeHeroSwap();
 
   // Hero ambient trailer (Home board, TV only): once DPAD focus RESTS on a
@@ -1340,8 +1324,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // arriving rebuilds only the hero's video layer, never the board.
   final ValueNotifier<YoutubeResolvedStreams?> _heroTrailer =
       ValueNotifier<YoutubeResolvedStreams?>(null);
-  late final ProviderSubscription<HomeHeroTrailerLoader>
-  _heroTrailerLoaderSubscription;
 
   /// True from the moment the rest-debounce commits to loading a trailer until
   /// either frames are on screen or the attempt dies (no trailer / resolve
@@ -1381,7 +1363,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// the spotlight fades its (now-stale) colour field and identity text on
   /// this, and has no other reason to know the IPTV-specific channel type.
   final ValueNotifier<bool> _heroLiveTakeover = ValueNotifier<bool>(false);
-  late final ProviderSubscription<HomeHeroLivePreview> _heroLiveSubscription;
 
   HomeHeroShellBridge? _heroShellBinding;
   final HomeHeroPreviewPolicy _heroPreviewPolicy = HomeHeroPreviewPolicy();
@@ -1582,30 +1563,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       isCurrent: () => mounted,
       onContinuationChanged: () => setState(() {}),
     );
-    _heroTintSubscription = ref.listenManual(
-      homeHeroTintLoaderProvider(homeSession),
-      (previous, next) {},
-    );
-    _heroLiveSubscription = ref.listenManual(
-      homeHeroLivePreviewProvider(homeSession),
-      (previous, next) {},
-    );
-    _heroTrailerLoaderSubscription = ref.listenManual(
-      homeHeroTrailerLoaderProvider(homeSession),
-      (previous, next) {},
-    );
-    _trackerResumeSubscription = ref.listenManual(
-      homeTrackerResumeRepositoryProvider(homeSession),
-      (previous, next) {},
-    );
-    _seriesResumeResolverSubscription = ref.listenManual(
-      homeSeriesResumeResolverProvider(homeSession),
-      (previous, next) {},
-    );
-    _heroMetadataSubscription = ref.listenManual(
-      homeHeroMetadataLoaderProvider(homeSession),
-      (previous, next) {},
-    );
+    _homeMediaBindings = HomeMediaBindings(ref, homeSession);
     _homeLayoutPreferenceSubscription = ref.listenManual(
       homeLayoutPreferenceProvider(homeSession),
       (previous, next) {},
@@ -2223,19 +2181,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _tonightFocus.dispose();
     _stageCol.dispose();
     _heroShellBinding?.dispose();
-    _seriesResumeResolverSubscription.read().dispose();
-    _trackerResumeSubscription.read().dispose();
-    _heroMetadataSubscription.read().dispose();
+    _homeMediaBindings.disposeResumeAndMetadata();
     _heroSwap.dispose();
-    _heroTrailerLoaderSubscription.read().dispose();
-    _heroTintSubscription.read().dispose();
+    _homeMediaBindings.disposeTrailerAndTint();
     _heroItem.dispose();
     _heroEnriched.dispose();
     _heroTrailer.dispose();
     _heroTrailerLoading.dispose();
     _heroTrailerShowing.dispose();
     _heroTrailerTakeover.dispose();
-    _heroLiveSubscription.read().dispose();
+    _homeMediaBindings.disposeLivePreview();
     _heroLiveUrl.dispose();
     _heroLiveChannel.dispose();
     _heroLiveTakeover.dispose();
@@ -2245,12 +2200,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _discoverBindings.close();
     _metadataFeatureSubscription.close();
     _homeBoardBindings.close();
-    _heroTintSubscription.close();
-    _heroLiveSubscription.close();
-    _heroTrailerLoaderSubscription.close();
-    _seriesResumeResolverSubscription.close();
-    _trackerResumeSubscription.close();
-    _heroMetadataSubscription.close();
+    _homeMediaBindings.close();
     _homeLayoutPreferenceSubscription.close();
     _heroTrailerPreferencesSubscription.close();
     _homeDefaultViewSubscription.close();
@@ -6766,7 +6716,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (!_heroActive) return;
     // Folders own the stage art too, but never request title metadata or video.
     if (item.type == 'folder') {
-      _heroMetadataSubscription.read().cancel();
+      _homeMediaBindings.metadata.cancel();
       _heroSwap.cancel();
       _clearHeroTrailer();
       _clearHeroLiveIptv();
@@ -6951,7 +6901,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     if (!fromSpotlight && _heroPreviewPolicy.hasAttempted(item.id)) return;
     // Spotlight already owns the stage; other layouts wait for focus to rest.
-    _heroTrailerLoaderSubscription.read().schedule(
+    _homeMediaBindings.trailer.schedule(
       item,
       delay: fromSpotlight ? Duration.zero : const Duration(seconds: 2),
       isCurrent: () => mounted,
@@ -6993,7 +6943,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Kill any pending/playing hero trailer (hero cleared, board reloading).
   void _clearHeroTrailer() {
-    _heroTrailerLoaderSubscription.read().cancel();
+    _homeMediaBindings.trailer.cancel();
     if (_heroTrailer.value != null) _heroTrailer.value = null;
     if (_heroTrailerLoading.value) _heroTrailerLoading.value = false;
     if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
@@ -7010,7 +6960,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (_heroLiveChannel.value?.url == channel.url) return;
     _heroLiveChannel.value = channel;
     if (!_heroLiveTakeover.value) _heroLiveTakeover.value = true;
-    _heroLiveSubscription.read().load(
+    _homeMediaBindings.live.load(
       channel.url,
       isCurrent: () => mounted,
       prepare: () {
@@ -7034,11 +6984,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// catalog/CW card) — drop the live feed so the boxed region falls back to
   /// whatever catalog trailer [_heroItem] owns.
   void _clearHeroLiveIptv() {
-    _heroLiveSubscription.read().invalidateRequest();
+    _homeMediaBindings.live.invalidateRequest();
     final wasLive = _heroLiveChannel.value != null;
     if (wasLive) _heroLiveChannel.value = null;
     if (_heroLiveTakeover.value) _heroLiveTakeover.value = false;
-    _heroLiveSubscription.read().clearCandidates();
+    _homeMediaBindings.live.clearCandidates();
     if (_heroLiveUrl.value != null) _heroLiveUrl.value = null;
     // The unmounting live backdrop can never report playing:false (its
     // dispose doesn't notify), and when the trailer path declines to re-arm
@@ -7071,7 +7021,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// (IptvResultsView._onPreviewPlaybackFailed). No-op for a plain M3U/Xtream
   /// favourite (single URL, no ladder) or once every candidate is exhausted.
   void _onHeroLivePlaybackFailed() {
-    _heroLiveSubscription.read().playbackFailed(
+    _homeMediaBindings.live.playbackFailed(
       currentUrl: _heroLiveUrl.value,
       channelKey: () => _heroLiveChannel.value?.url,
       publish: (url) => _heroLiveUrl.value = url,
@@ -7174,9 +7124,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // focus SETTLES — never per card while flying across a row), cached per
   // title, and decodes a 32px thumbnail — negligible on the TV chip.
   final ValueNotifier<Color?> _heroTint = ValueNotifier<Color?>(null);
-  late final ProviderSubscription<HomeHeroTintLoader> _heroTintSubscription;
 
-  void _updateHeroTint(StremioMeta item) => _heroTintSubscription.read().load(
+  void _updateHeroTint(StremioMeta item) => _homeMediaBindings.tint.load(
     item,
     isCurrent: () => mounted,
     publish: (color) {
@@ -7206,7 +7155,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// fetch them lazily — cached in [StremioService], and guarded against the
   /// focus moving on (req id) so a slow fetch never clobbers a newer hero.
   Future<void> _enrichHero(StremioMeta item) =>
-      _heroMetadataSubscription.read().load(
+      _homeMediaBindings.metadata.load(
         item,
         isCurrent: () => mounted,
         onResolved: (details) {
@@ -8486,7 +8435,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   void _clearSeriesResume() {
-    if (mounted) _seriesResumeResolverSubscription.read().clear();
+    if (mounted) _homeMediaBindings.seriesResume.clear();
   }
 
   HomeSeriesResumeRepository get _seriesResumeRepository =>

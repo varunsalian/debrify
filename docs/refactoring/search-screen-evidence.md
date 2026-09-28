@@ -6,6 +6,24 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: retained Home media resources — 2026-09-28
+
+Base: `bd803986`. `HomeMediaBindings` (81 lines) retains hero tint/live/trailer/
+metadata loaders and tracker/series resume resolvers. Getters read each current
+provider value, preserving dependency invalidation. Explicit resource-disposal
+phases remain interleaved with hero swap/notifier cleanup; subscription closure
+remains later in its original order. Root: **10,015 → 9,964 lines**.
+
+Review preserves all six provider/session keys, registration order, current-value
+lookup and cancellation/disposal order. It does not move native-player teardown or
+change preview eligibility. **80 tests pass** across hero trailer/metadata/tint
+screen integration, loader/live-preview lifecycle and resume repositories. Final
+analysis retains **836 identical diagnostic identities** after removing obsolete
+imports; architecture passes **562 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/home-media-bindings-{tests,analyze-final}.txt`.
+No emulator used. Remaining feature composition, UI/native lifecycle wiring,
+facade reduction, C/D integration and final acceptance remain pending.
+
 ## Batch D checkpoint: Home board application bindings — 2026-09-28
 
 Base: `607fabfb`. `HomeBoardBindings` (112 lines) retains catalog/continuation,
