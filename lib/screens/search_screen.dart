@@ -1,3 +1,4 @@
+import '../features/search/presentation/lists_search_rail.dart';
 import '../features/search/presentation/lists_focus.dart';
 import '../features/discover/presentation/discover_shell_bridge.dart';
 import '../features/discover/presentation/discover_bindings.dart';
@@ -290,7 +291,6 @@ import 'see_all/trakt_see_all_screen.dart';
 import 'see_all/simkl_see_all_screen.dart';
 import 'see_all/mdblist_see_all_screen.dart';
 import 'see_all/mdblist_lists_see_all_screen.dart';
-import '../widgets/see_all/mdblist_list_card.dart';
 import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../models/mdblist_continue_watching.dart';
@@ -9728,106 +9728,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// items — pushed over the board on TV (Back returns here), or in the
   /// Discover tab on mobile/laptop. DPAD: up → search field, left off card 0 →
   /// sidebar (TV); the single result rail deliberately holds Down in place.
-  Widget _buildListsRailRow() {
-    final posterW = _railPosterW(context);
-    final posterH = posterW * 3 / 2;
-    final rowH = posterH + 14;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _railHeader(
-          title: 'MDBList Lists',
-          tag: 'LISTS',
-          // Mobile/laptop get a "See All" link (auto-hidden on TV, where the
-          // rail is DPAD-scrollable) → full grid of every matched list.
-          onSeeAll: _openListsSeeAll,
-        ),
-        SizedBox(
-          height: rowH,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.hardEdge,
-            cacheExtent: 400,
-            padding: const EdgeInsets.symmetric(horizontal: 13),
-            itemCount: _listsResults.length,
-            itemBuilder: (context, index) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 11),
-              child: SizedBox(
-                width: posterW,
-                height: posterH,
-                child: _buildListRailCard(_listsResults[index], index),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// One gradient list-card in the lists rail (see [_buildListsRailRow]).
-  Widget _buildListRailCard(MdblistListChoice list, int index) {
-    final tv = widget.isTelevision;
-    final node = index < _listsNodes.length ? _listsNodes[index] : null;
-    return Focus(
-      focusNode: node,
-      onKeyEvent: (n, event) {
-        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-          return KeyEventResult.ignored;
-        }
-        final key = event.logicalKey;
-        if (isActivateKey(key)) {
-          _openListsResult(list);
-          return KeyEventResult.handled;
-        }
-        if (key == LogicalKeyboardKey.arrowLeft) {
-          if (index > 0) {
-            _listsNodes[index - 1].requestFocus();
-          } else if (tv) {
-            MainPageBridge.focusTvSidebar?.call();
-          }
-          return KeyEventResult.handled;
-        }
-        if (key == LogicalKeyboardKey.arrowRight) {
-          if (index < _listsNodes.length - 1) {
-            _listsNodes[index + 1].requestFocus();
-          }
-          return KeyEventResult.handled;
-        }
-        if (key == LogicalKeyboardKey.arrowUp) {
-          _leaveBoardTop();
-          return KeyEventResult.handled;
-        }
-        if (key == LogicalKeyboardKey.arrowDown) {
-          // Lists is a dedicated single-rail search mode; there is no unrelated
-          // catalog row below it to receive focus.
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Builder(
-        builder: (context) {
-          final focused = Focus.of(context).hasFocus;
-          if (focused) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (node != null && node.hasFocus && context.mounted) {
-                Scrollable.ensureVisible(
-                  context,
-                  alignment: 0.5,
-                  alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-                  duration: const Duration(milliseconds: 150),
-                );
-              }
-            });
-          }
-          return MdblistListCard(
-            list: list,
-            focused: focused,
-            onTap: () => _openListsResult(list),
-          );
-        },
-      ),
-    );
-  }
+  Widget _buildListsRailRow() => buildListsSearchRail(
+    posterW: _railPosterW(context),
+    header: _railHeader(
+      title: 'MDBList Lists',
+      tag: 'LISTS',
+      onSeeAll: _openListsSeeAll,
+    ),
+    results: () => _listsResults,
+    nodes: _listsNodes,
+    isTelevision: widget.isTelevision,
+    onOpen: _openListsResult,
+    onSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+    onUp: _leaveBoardTop,
+  );
 
   /// Empty state for the dedicated Search tab before the user types.
   Widget _buildSearchPrompt() {

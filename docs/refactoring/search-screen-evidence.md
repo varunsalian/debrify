@@ -6,6 +6,23 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Lists result rail — 2026-09-28
+
+Base: `d60ffe68`. `lists_search_rail.dart` (124 lines) owns the lazy Lists strip,
+card focus/scroll behavior and DPAD handling. The screen supplies current results,
+borrowed nodes, header and actions. Root is now **11,192 lines**.
+
+Review preserves captured card actions, current result reads, key-down/repeat
+activation, TV sidebar exit, horizontal bounds, Up behavior, swallowed Down and
+post-frame 150ms centered scrolling. **Ten tests pass**: production Lists screens,
+focus ownership and a new keyboard boundary test. Analysis remains at **836
+diagnostics**: one unchanged cacheExtent deprecation moved from the root into
+the extracted rail; all other diagnostic identities match. Architecture passes
+**545 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/lists-rail-{tests,focused,analyze-final}.txt`.
+No emulator used. Remaining presentation/navigation, lifecycle/facade reduction
+and final acceptance are pending.
+
 ## Batch D checkpoint: Lists result focus ownership — 2026-09-28
 
 Base: `a79ae587`. `ListsFocus` owns result-node resizing/cleanup and deferred
