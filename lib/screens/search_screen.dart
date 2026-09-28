@@ -208,7 +208,7 @@ import '../widgets/see_all/discover_browsing_input.dart';
 import '../services/home_load_deadline.dart';
 import '../services/home_load_progress.dart';
 import '../widgets/home/home_row_focus.dart';
-import '../widgets/home/home_continuation_focus.dart';
+import '../features/home/presentation/home_continuation_focus.dart';
 import '../features/home/presentation/home_board_frame.dart';
 import '../services/home_row_refresh.dart';
 import '../services/profiles/connection_resource_service.dart';
@@ -595,9 +595,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Board state. [_homeSections] is the homepage cache; [_sections] is whatever
   // is currently shown (homepage OR per-addon catalog search results). Both the
   // board and catalog search render through the same horizontal-row layout.
-  final _catalogContinueNode = FocusNode(debugLabel: 'catalog_continue');
-  final _catalogMoreNode = FocusNode(debugLabel: 'catalog_more');
-  FocusNode? _catalogReturnFocus;
+  final _catalogFocus = HomeContinuationFocus();
+  FocusNode get _catalogContinueNode => _catalogFocus.continueNode;
+  FocusNode get _catalogMoreNode => _catalogFocus.moreNode;
   late final HomeCatalogContinuationController _catalogContinuationController;
   late final ProviderSubscription<bool> _catalogContinuationSubscription;
   bool get _catalogContinuing => _catalogContinuationController.busy;
@@ -2509,8 +2509,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _preserveHomeSnapshot();
     _homePublication.dispose();
     MetadataPreferencesService.revision.removeListener(_metadataSettingsChanged);
-    _catalogContinueNode.dispose();
-    _catalogMoreNode.dispose();
+    _catalogFocus.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _mdblistContinuationController.cancelRevisionRefresh();
     _spotlightHeroNode.dispose();
@@ -10231,22 +10230,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     },
   );
 
-  bool _focusCatalogContinuation() {
-    final target = [_catalogContinueNode, _catalogMoreNode]
-        .where(
-          (node) => node.parent != null && (node.context?.mounted ?? false),
-        )
-        .firstOrNull;
-    if (target == null) return false;
-    final origin = FocusManager.instance.primaryFocus;
-    if (!identical(origin, target)) _catalogReturnFocus = origin;
-    target.requestFocus();
-    return true;
-  }
+  bool _focusCatalogContinuation() => _catalogFocus.focusAction();
 
   void _restoreCatalogContinuationFocus() {
-    if (focusMountedHomeNode([
-      _catalogReturnFocus,
+    if (_catalogFocus.restore([
       _stageFocusTarget(),
       for (final rail in _canvasRails) ..._canvasRailNodes(rail),
     ])) {
@@ -10281,20 +10268,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     try {
       await operation;
     } finally {
-      if (current() && ownedFocus) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!current()) return;
-          // Busy buttons retain focus. Restore only when the completed action
-          // disappeared, and do not override a user's move to another card.
-          if (actionNode.parent != null &&
-              (actionNode.context?.mounted ?? false)) {
-            return;
-          }
-          final focused = FocusManager.instance.primaryFocus;
-          if (focused != null && focused is! FocusScopeNode) return;
-          _restoreCatalogContinuationFocus();
-        });
-      }
+      _catalogFocus.restoreAfterCompletion(
+        actionNode,
+        ownedFocus: ownedFocus,
+        isCurrent: current,
+        onRestore: _restoreCatalogContinuationFocus,
+      );
     }
   }
 

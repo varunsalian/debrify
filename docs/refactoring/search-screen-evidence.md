@@ -6,6 +6,23 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: catalog continuation focus — 2026-09-28
+
+Base: `e4bd4c60`. `HomeContinuationFocus` owns both continuation action nodes,
+the borrowed return target and post-completion restoration policy. The existing
+mounted-node helper moved into the same feature file with a compatibility export.
+The root delegates selection/restoration and disposes nodes at the original point.
+Root: **11,028 → 11,007 lines**.
+
+Review preserves Continue-before-More priority, original-focus capture, mounted
+fallbacks, current-request checks and no-steal behavior after deferred completion.
+**58 affected tests pass**: mounted-focus and continuation-screen checks plus all
+55 progressive/pagination screen cases. Analysis retains **836 identical diagnostic
+identities**; architecture passes **547 files**; formatting/diff checks pass.
+Receipts: `.git/refactor-evidence/phase5/continuation-focus-{tests,analyze}.txt`.
+No emulator used. Remaining feature/navigation composition, broader lifecycle/
+facade reduction and final acceptance remain pending.
+
 ## Batch C checkpoint: catalog prompt and Sources control — 2026-09-28
 
 Base: `6590d4bf`. `catalog_search_prompt.dart` (136 lines) owns the catalog empty
