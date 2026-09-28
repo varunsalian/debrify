@@ -6,6 +6,32 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Keyword page composition — 2026-09-28
+
+Base revision: `0185bcac`. The live route now composes `KeywordSearchPage` and its
+cinema/mobile frame, searching strip and arrival pill (277 cohesive lines), plus
+`KeywordSourceTabs` (126 lines). Existing immutable search/results state is passed
+through; inactive page states use lazy builders. No duplicate application state,
+new DI framework or new resource owner was added. Original implementations and the
+unused source-label wrapper are removed. SearchScreen shrinks **13,641 → 13,393**.
+
+Review preserves loading/error/empty precedence, provider counts and order,
+selection lockout, cinema key/callbacks, mobile overlay eligibility, always-mounted
+tabs, focus-node mismatch fallback and the difference between touch adoption and
+remote adoption-plus-row-focus. Scroll restoration, source-switch focus anchoring
+and resource ownership remain explicit C/D work in the route. This is presentation
+composition, not a claim that its lifecycle has migrated.
+
+**226 Search feature tests pass** after page/tab extraction; **22 affected tests
+pass** after final cinema/mobile composition, covering stream publication, cache
+completion, profile retirement, controls and source dialogs. Analyzer retains
+**838 identical diagnostic identities**. **512 migrated files pass** architecture
+checks; changed declarations/files are formatted and diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/keyword-page-tests.txt`, `keyword-page-final-tests.txt`,
+`keyword-page-analyze-final-2.txt`. No new tests duplicating the moved implementation,
+full-suite rerun or emulator use. Continue with Search focus/navigation ownership
+and Home/Discover feature composition; final acceptance remains pending.
+
 ## Batch C checkpoint: Keyword rows and shared results pane — 2026-09-28
 
 Base revision: `7a6187ff`. `KeywordResultsList` (134 lines) renders the existing

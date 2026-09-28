@@ -1,3 +1,5 @@
+import '../features/search/presentation/keyword_source_tabs.dart';
+import '../features/search/presentation/keyword_search_page.dart';
 import '../features/search/presentation/keyword_results_list.dart';
 import '../features/search/presentation/keyword_toolbar.dart';
 import '../features/search/presentation/keyword_selection_overlay.dart';
@@ -162,7 +164,6 @@ import '../features/search/application/keyword_snapshot_dependencies.dart';
 import '../features/search/data/keyword_snapshot_repository.dart';
 import '../features/search/models/keyword_snapshot.dart';
 import '../features/search/presentation/keyword_providers_dialog.dart';
-import '../features/search/presentation/keyword_source_label.dart';
 import '../features/search/application/keyword_result_snapshot.dart';
 import '../features/search/application/keyword_results_controller.dart';
 import '../features/search/models/keyword_results_state.dart';
@@ -275,7 +276,6 @@ import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/home/spotlight_board.dart';
 import '../widgets/home/spotlight_catalog_card_cache.dart';
-import '../widgets/search_loading_animation.dart';
 import '../widgets/cinema_sources_layout.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/text_field_suggestions.dart';
@@ -11543,42 +11543,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  Widget _buildKeywordContent({required bool cinema}) {
-    if (_kwLoading) {
-      // Branded phased loader (parity with the old screen) instead of a bare
-      // spinner. Keyword search is never series-aware, so isSeries stays false.
-      return SearchLoadingAnimation(
-        phase: SearchPhase.searching,
-        isTelevision: widget.isTelevision,
-      );
-    }
-    if (_kwError != null) {
-      return _message(Icons.error_outline_rounded, 'Search failed', _kwError!);
-    }
-    if (_kwQuery.isEmpty) {
-      // Surface Sources before searching so users can enable/disable the
-      // trackers that get queried up front.
-      return Column(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: _kwSourcesButton(),
-            ),
-          ),
-          Expanded(
-            child: _message(
-              Icons.bolt_rounded,
-              'Keyword torrent search',
-              'Type a title and press search to find torrents across your '
-                  'enabled sources, then tap one to play. Use Sources to choose '
-                  'which trackers are queried.',
-            ),
-          ),
-        ],
-      );
-    }
+  Widget _buildKeywordContent({required bool cinema}) => KeywordSearchPage(
+    search: _keywordSearchState,
+    isTelevision: widget.isTelevision,
+    messageBuilder: _message,
+    sourcesBuilder: (_) => _kwSourcesButton(),
+    resultsBuilder: (_) => _buildKeywordResults(cinema: cinema),
+  );
+
+  Widget _buildKeywordResults({required bool cinema}) {
     final narrow =
         !widget.isTelevision && MediaQuery.of(context).size.width < 600;
     // Apply a restored scroll offset once the list is laid out, then clear it so
@@ -11599,7 +11572,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // them (matching the toolbar's own selection lock-out).
         if (!cinema && _kwTabsVisible && !_kwSelectionMode) _kwSourceTabs(),
         _buildKeywordToolbar(floatingSelect: narrow),
-        if (_kwSearching && !cinema) _kwSearchingStrip(),
+        if (_kwSearching && !cinema) const KeywordSearchingStrip(),
         if (_kwCachedOnly && _kwAll.isNotEmpty) _kwCachedOnlyNotice(),
         Expanded(
           child: KeywordResultsList(
@@ -11632,86 +11605,55 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       ],
     );
 
-    if (cinema) {
-      final counts = <String, int>{};
-      for (final torrent in _kwFullSet) {
-        final source = keywordSourceOf(torrent);
-        counts[source] = (counts[source] ?? 0) + 1;
-      }
-      return CinemaSourcesLayout(
-        key: _kwCinemaKey,
-        contextTitle: _kwQuery,
-        title: _kwSelectionMode ? 'Select sources' : 'Search results',
-        subtitle: _kwSelectionMode
-            ? '${_kwSelected.length} selected'
-            : 'Torrents matching your keyword',
-        providers: [
-          CinemaSourceProvider(
-            id: null,
-            label: 'All sources',
-            count: _kwFullSet.length,
-          ),
-          for (final source in _kwSourceList)
-            CinemaSourceProvider(
-              id: source,
-              label: _kwSourceLabel(source),
-              count: counts[source] ?? 0,
+    return KeywordResultsFrame(
+      cinema: cinema,
+      narrow: narrow,
+      isTelevision: widget.isTelevision,
+      search: _keywordSearchState,
+      results: _keywordResults,
+      full: _kwFullSet,
+      sources: _kwSourceList,
+      cinemaKey: _kwCinemaKey,
+      onProviderSelected: (source) {
+        _lastKeywordCinemaSource = 0;
+        // Keep the rail's row-zero target mounted after a source switch.
+        _pendingKwScroll = null;
+        _kwLastScroll = 0;
+        if (_kwScroll.hasClients) _kwScroll.jumpTo(0);
+        _setKwSourceTab(source);
+      },
+      onFocusAbove: () => _searchFocusNode.requestFocus(),
+      onFocusResults: () {
+        if (_kwNodes.isNotEmpty) {
+          _kwNodes[_lastKeywordCinemaSource.clamp(0, _kwNodes.length - 1)]
+              .requestFocus();
+        } else {
+          _kwToolbarNodes.first.requestFocus();
+        }
+      },
+      isSourceFocused: () {
+        final index = _kwNodes.indexWhere((node) => node.hasFocus);
+        if (index >= 0) {
+          _lastKeywordCinemaSource = index;
+          _kwFreeze();
+        }
+        return index >= 0;
+      },
+      selectionOverlay: cinema || !narrow || _kwSelectableResults.isEmpty
+          ? null
+          : KeywordSelectionOverlay(
+              selectionMode: _kwSelectionMode,
+              selectableCount: _kwSelectableResults.length,
+              selectedCount: _kwSelected.length,
+              floatingNavigation:
+                  MainPageBridge.phoneNavStyleCached == 'floating',
+              onSelect: _enterKwSelection,
+              onCancel: _exitKwSelection,
+              onDeselectAll: _deselectAllKw,
+              onSelectAll: _selectAllKw,
+              onAdd: _openBulkAdd,
             ),
-        ],
-        selectedProvider: _kwSourceTab,
-        providersEnabled: !_kwSelectionMode,
-        onProviderSelected: (source) {
-          _lastKeywordCinemaSource = 0;
-          // Keep the rail's row-zero target mounted after a source switch.
-          _pendingKwScroll = null;
-          _kwLastScroll = 0;
-          if (_kwScroll.hasClients) _kwScroll.jumpTo(0);
-          _setKwSourceTab(source);
-        },
-        onFocusAbove: () => _searchFocusNode.requestFocus(),
-        onFocusResults: () {
-          if (_kwNodes.isNotEmpty) {
-            _kwNodes[_lastKeywordCinemaSource.clamp(0, _kwNodes.length - 1)]
-                .requestFocus();
-          } else {
-            _kwToolbarNodes.first.requestFocus();
-          }
-        },
-        isSourceFocused: () {
-          final index = _kwNodes.indexWhere((node) => node.hasFocus);
-          if (index >= 0) {
-            _lastKeywordCinemaSource = index;
-            _kwFreeze();
-          }
-          return index >= 0;
-        },
-        resultCount: _kwResults.length,
-        searching: _kwSearching,
-        isTelevision: widget.isTelevision,
-        child: content,
-      );
-    }
-    if (!narrow) return content;
-    // Small screens: Home-style floating select FAB / selection bar overlaid
-    // on the results, instead of the toolbar "Select" pill.
-    final canSelect = _kwSelectableResults.isNotEmpty;
-    return Stack(
-      children: [
-        Positioned.fill(child: content),
-        if (canSelect)
-          KeywordSelectionOverlay(
-            selectionMode: _kwSelectionMode,
-            selectableCount: _kwSelectableResults.length,
-            selectedCount: _kwSelected.length,
-            floatingNavigation:
-                MainPageBridge.phoneNavStyleCached == 'floating',
-            onSelect: _enterKwSelection,
-            onCancel: _exitKwSelection,
-            onDeselectAll: _deselectAllKw,
-            onSelectAll: _selectAllKw,
-            onAdd: _openBulkAdd,
-          ),
-      ],
+      child: content,
     );
   }
 
@@ -11795,9 +11737,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  /// Display name for a source tab ('stremio:foo' → 'Foo').
-  String _kwSourceLabel(String source) => keywordSourceLabel(_kwFullSet, source);
-
   /// Horizontal source tabs (All / per-source with counts) above the toolbar —
   /// the fast single-select layer on top of the Providers multi-select. Only
   /// built when [_kwTabsVisible] (2+ sources). Derives from [_kwFullSet]:
@@ -11806,107 +11745,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// first, so what a tab press shows is always the complete picture). DPAD:
   /// left/right across tabs, up to the search field, down into the toolbar,
   /// select to activate.
-  Widget _kwSourceTabs() {
-    final app = AppThemeScope.of(context);
-    final accent = app.home.chromeAccent;
-    final dim = app.fade(app.core.tx, 0.55);
-    final sources = _kwSourceList;
-    final full = _kwFullSet;
-    final counts = <String, int>{};
-    for (final t in full) {
-      counts[keywordSourceOf(t)] = (counts[keywordSourceOf(t)] ?? 0) + 1;
-    }
-    final total = sources.length + 1;
-
-    Widget tab(int navIndex, String label, bool on, VoidCallback onTap) {
-      // Nodes are synced in _recomputeKeyword; a mid-build mismatch (e.g. the
-      // strip rebuilt by a non-recompute setState) must not range-crash.
-      final node = navIndex < _kwTabNodes.length ? _kwTabNodes[navIndex] : null;
-      Widget body(bool focused) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-        decoration: BoxDecoration(
-          color: on ? accent : app.fade(app.core.tx, 0.05),
-          borderRadius: app.shape.brPill,
-          // Always 2px so focus never shifts layout.
-          border: Border.all(
-            color: focused ? app.fade(app.core.tx, 0.9) : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            // Scored against the fill the selected tab actually paints.
-            // `accent` IS the theme accent, and white fails on 17 of the 18
-            // selectable themes (Noir's and Frost's are #FFFFFF), so a
-            // hardcoded white label vanished into its own pill. Legacy's
-            // #7B5CFF scores 4.36 against white, so inkOn still returns white
-            // there — no visual change to today's app.
-            color: on ? app.inkOn(accent) : dim,
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
-      final Widget tappable = node == null
-          ? Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: app.shape.brPill,
-                child: body(false),
-              ),
-            )
-          : Focus(
-              focusNode: node,
-              onKeyEvent: (n, e) => _handleKwTabKey(navIndex, total, onTap, e),
-              child: Builder(
-                builder: (context) {
-                  final focused = Focus.of(context).hasFocus;
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: onTap,
-                      borderRadius: app.shape.brPill,
-                      canRequestFocus: false,
-                      child: body(focused),
-                    ),
-                  );
-                },
-              ),
-            );
-      return Padding(padding: const EdgeInsets.only(right: 6), child: tappable);
-    }
-
-    // SingleChildScrollView + Row (not a lazy ListView) so EVERY tab's
-    // FocusNode stays mounted — requestFocus on an unmounted node is a silent
-    // no-op that would strand DPAD at the viewport edge (same reason the
-    // keyword toolbar uses this shape).
-    return SizedBox(
-      height: 42,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        child: Row(
-          children: [
-            tab(
-              0,
-              'All · ${full.length}',
-              _kwSourceTab == null,
-              () => _setKwSourceTab(null),
-            ),
-            for (var i = 0; i < sources.length; i++)
-              tab(
-                i + 1,
-                '${_kwSourceLabel(sources[i])} · ${counts[sources[i]] ?? 0}',
-                _kwSourceTab == sources[i],
-                () => _setKwSourceTab(sources[i]),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _kwSourceTabs() => KeywordSourceTabs(
+    sources: _kwSourceList,
+    full: _kwFullSet,
+    selectedSource: _kwSourceTab,
+    focusNodes: _kwTabNodes,
+    onKey: _handleKwTabKey,
+    onChanged: _setKwSourceTab,
+  );
 
   /// Focus a source tab AND scroll the strip to reveal it — a bare
   /// requestFocus doesn't scroll, so an off-screen tab would take focus
@@ -11986,111 +11832,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Slim "still searching" strip under the toolbar while engines are in
   /// flight — rows are already usable, this just says more may arrive.
-  Widget _kwSearchingStrip() {
-    final app = AppThemeScope.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 11,
-            height: 11,
-            child: CircularProgressIndicator(strokeWidth: 1.6),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'Still searching sources…',
-            style: TextStyle(
-              fontSize: 11.5,
-              color: app.fade(app.core.tx, 0.55),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// The "+N new results" pill: tap (or OK on TV) folds the parked arrivals
   /// into the list; DOWN returns to the rows, UP reaches the toolbar.
-  Widget _kwNewResultsPill() {
-    final app = AppThemeScope.of(context);
-    final accent = app.home.chromeAccent;
-    final n = _kwPendingNewCount;
-    return Focus(
-      focusNode: _kwPillFocus,
-      onKeyEvent: (node, e) {
-        if (e is! KeyDownEvent) return KeyEventResult.ignored;
-        if (isActivateKey(e.logicalKey)) {
-          _kwAdoptPending();
-          if (_kwNodes.isNotEmpty) _kwNodes.first.requestFocus();
-          return KeyEventResult.handled;
-        }
-        if (e.logicalKey == LogicalKeyboardKey.arrowDown) {
-          if (_kwNodes.isNotEmpty) _kwNodes.first.requestFocus();
-          return KeyEventResult.handled;
-        }
-        if (e.logicalKey == LogicalKeyboardKey.arrowUp) {
-          _kwToolbarNodes.first.requestFocus();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: ListenableBuilder(
-        listenable: _kwPillFocus,
-        builder: (context, _) {
-          final focused = _kwPillFocus.hasFocus;
-          return GestureDetector(
-            onTap: _kwAdoptPending,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: focused ? app.core.tx : accent,
-                borderRadius: app.shape.brPill,
-                border: Border.all(
-                  color: focused ? app.core.tx : Colors.transparent,
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.arrow_upward_rounded,
-                    size: 14,
-                    // Unfocused the pill is FILLED with the accent, so its ink
-                    // has to be scored against it — white is invisible on the
-                    // near-white accents (Noir, Frost, Vault). The focused
-                    // branch keeps its dark ink on the white focus fill.
-                    color: focused
-                        ? const Color(0xFF17131F)
-                        : app.inkOn(accent),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$n new result${n == 1 ? '' : 's'}',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: focused
-                          ? const Color(0xFF17131F)
-                          : app.inkOn(accent),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Widget _kwNewResultsPill() => KeywordNewResultsPill(
+    count: _kwPendingNewCount,
+    focusNode: _kwPillFocus,
+    onAdopt: _kwAdoptPending,
+    onFocusResults: () {
+      if (_kwNodes.isNotEmpty) _kwNodes.first.requestFocus();
+    },
+    onFocusToolbar: () => _kwToolbarNodes.first.requestFocus(),
+  );
 
   /// [floatingSelect] true on small screens where the multi-select entry is a
   /// floating FAB + bar (Home-style) rather than a toolbar pill — so the
