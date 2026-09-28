@@ -1,3 +1,4 @@
+import '../features/home/application/home_refresh_queue.dart';
 import '../features/home/presentation/home_favorite_nodes.dart';
 import '../features/home/presentation/home_favorite_bindings.dart';
 import '../features/search/presentation/keyword_viewport.dart';
@@ -2355,7 +2356,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     MainPageBridge.removeHomeSettingsListener(_reloadSearchCardPrefs);
     HomeRowRefreshSignal.removeListener(_queueHomeRows);
     _stremio.removeAddonsChangedListener(_onHomeAddonsChanged);
-    _homeRefreshTimer?.cancel();
+    _homeRefreshQueue.dispose();
     IptvMediaStore.listsRevision.removeListener(_onIptvListsRevision);
     _iptvListFocus.dispose();
     if (MainPageBridge.tvHomeStyleChanged == _onTvHomeStyleChanged) {
@@ -3379,54 +3380,38 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   VoidCallback _favRowOnDown(String rowId, int column) =>
       () => _focusRelativeHomeRail(rowId, 1, column);
 
-  final _pendingHomeRows = <HomeRowRefresh>{};
-  Timer? _homeRefreshTimer;
-  bool _homeAddonsPending = false;
-
-  void _onHomeAddonsChanged() {
-    _homeAddonsPending = true;
-    _queueHomeRows({HomeRowRefresh.stremioTvFavorites});
-  }
-
-  void _queueHomeRows(Set<HomeRowRefresh> rows) {
-    if (!mounted) return;
-    _pendingHomeRows.addAll(rows.where((row) =>
-        row != HomeRowRefresh.playback ||
-        !(ModalRoute.of(context)?.isCurrent ?? false)));
-    // Visible Home already receives the existing playback-data bridge.
-
-    _homeRefreshTimer ??= Timer(const Duration(milliseconds: 100), () {
-      _homeRefreshTimer = null;
-      if (!mounted) return;
-      final pending = Set<HomeRowRefresh>.of(_pendingHomeRows);
-      _pendingHomeRows.clear();
-      for (final row in pending) {
-        switch (row) {
-          case HomeRowRefresh.tvFavorites:
-            unawaited(_loadTvFavorites());
-          case HomeRowRefresh.stremioTvFavorites:
-            unawaited(_loadStremioTvFavorites());
-          case HomeRowRefresh.playlist:
-            unawaited(_loadPlaylistFavorites());
-          case HomeRowRefresh.watchlist:
-            unawaited(_loadMyWatchlist());
-          case HomeRowRefresh.playback:
-            // Do not consume the local playback/tracker refresh latch here.
-            unawaited(_loadContinueWatching());
-            unawaited(_loadIptvContinueWatching());
-        }
+  late final _homeRefreshQueue = HomeRefreshQueue(
+    isCurrent: () => mounted,
+    isVisible: () => ModalRoute.of(context)?.isCurrent ?? false,
+    refreshRow: (row) {
+      switch (row) {
+        case HomeRowRefresh.tvFavorites:
+          unawaited(_loadTvFavorites());
+        case HomeRowRefresh.stremioTvFavorites:
+          unawaited(_loadStremioTvFavorites());
+        case HomeRowRefresh.playlist:
+          unawaited(_loadPlaylistFavorites());
+        case HomeRowRefresh.watchlist:
+          unawaited(_loadMyWatchlist());
+        case HomeRowRefresh.playback:
+          // Do not consume the local playback/tracker refresh latch here.
+          unawaited(_loadContinueWatching());
+          unawaited(_loadIptvContinueWatching());
       }
-      if (_homeAddonsPending) {
-        _homeAddonsPending = false;
-        if (_catalogQuery.isNotEmpty || _catalogSearching) {
-          _pendingBoardReload = true;
-        } else {
-          unawaited(_load(preserveVisibleRows: true));
-        }
+    },
+    refreshAddons: () {
+      if (_catalogQuery.isNotEmpty || _catalogSearching) {
+        _pendingBoardReload = true;
+      } else {
+        unawaited(_load(preserveVisibleRows: true));
       }
-    });
-  }
+    },
+  );
 
+  void _onHomeAddonsChanged() => _homeRefreshQueue.addonsChanged();
+
+  void _queueHomeRows(Set<HomeRowRefresh> rows) =>
+      _homeRefreshQueue.enqueue(rows);
   /// Reload starred channels without replacing newer row data.
   Future<void> _loadTvFavorites() => _tvFavoritesController.load(
     isCurrent: () => mounted,

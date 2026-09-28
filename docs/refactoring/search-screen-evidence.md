@@ -6,6 +6,23 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: Home refresh queue — 2026-09-28
+
+Base: `fe25a05c`. `HomeRefreshQueue` owns pending row/addon invalidations and
+its timer. The refresh enum lives in Home's model layer, re-exported by the
+existing signal service for compatibility. Production callbacks delegate to the
+queue; disposal remains at the original teardown point. Root: **10,573 → 10,558
+lines**.
+
+Review preserves the 100 ms first-event deadline, insertion-order deduplication,
+visible playback suppression, current-view checks, row-before-addon dispatch and
+cancellation. **37 tests pass** across queue timing/disposal and six saved-content
+screen families. Analysis retains **836 identical diagnostic identities**;
+architecture passes **555 files**; changed-code formatting and diff checks pass.
+Receipts: `.git/refactor-evidence/phase5/home-refresh-queue-tests.txt` and
+`home-refresh-queue-analyze-final.txt`. No emulator used. Feature composition,
+remaining lifecycle/facade reduction and final acceptance remain pending.
+
 ## Batch D checkpoint: saved-content focus pools — 2026-09-28
 
 Base: `3c469c3d`. `HomeFavoriteNodes` (76 lines) owns the six saved-content node

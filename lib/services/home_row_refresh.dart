@@ -1,12 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-enum HomeRowRefresh {
-  tvFavorites,
-  stremioTvFavorites,
-  watchlist,
-  playback,
-  playlist,
-}
+import '../features/home/models/home_row_refresh.dart';
+export '../features/home/models/home_row_refresh.dart';
 
 /// Data changes for mounted Home rows, independent of route visibility.
 abstract final class HomeRowRefreshSignal {
