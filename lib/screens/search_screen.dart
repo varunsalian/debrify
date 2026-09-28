@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_spotlight_favorites.dart';
 import '../features/search/presentation/search_spotlight_board.dart';
 import '../features/home/presentation/home_spotlight_shelf.dart';
 import '../features/search/presentation/catalog_search_status.dart';
@@ -48,7 +49,6 @@ import '../features/home/application/home_hero_tint_loader.dart';
 import '../features/home/application/home_hero_tint_dependencies.dart';
 import '../features/home/presentation/home_hero_swap.dart';
 import '../features/home/presentation/home_hero_spotlight.dart';
-import '../features/home/presentation/spotlight_iptv_card_preview.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart' show SpotlightIptvCardPreview;
 import '../features/home/presentation/home_hero_trailer_indicators.dart';
 import '../features/home/presentation/home_spotlight_search_button.dart';
@@ -6425,144 +6425,63 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final nodes = _favNodesFor(ref);
     if (ref.isIptvList) {
       final row = _iptvListRows[ref.list];
-      return SpotlightShelf(
+      return buildSpotlightIptvFavorites(
         id: id,
         title: row.title,
         nodes: nodes,
-        items: [
-          for (final ch in row.channels)
-            SpotlightCard(
-              image: ch.logoUrl,
-              title: ch.name,
-              subtitle: 'LIVE',
-              shape: _homeLandscapeCards
-                  ? SpotlightCardShape.wideChannel
-                  : SpotlightCardShape.channel,
-              onOpen: () => _playIptvListChannel(ch),
-              previewBuilder: ch.isLive
-                  ? (_) => SpotlightIptvCardPreview(
-                      channel: ch,
-                      ambientVolume: _heroTrailerVolume,
-                    )
-                  : null,
-            ),
-        ],
+        channels: row.channels,
+        landscape: _homeLandscapeCards,
+        previewVolume: () => _heroTrailerVolume,
+        onOpen: _playIptvListChannel,
       );
     }
     switch (ref.kind) {
       case HomeFavoriteKind.watchlistMovies:
       case HomeFavoriteKind.watchlistSeries:
-        final isMovies = ref.kind == HomeFavoriteKind.watchlistMovies;
-        final items = isMovies ? _watchlistMovieItems : _watchlistSeriesItems;
-        return SpotlightShelf(
+        final movies = ref.kind == HomeFavoriteKind.watchlistMovies;
+        return buildSpotlightWatchlist(
           id: id,
-          title: isMovies ? 'Watchlist Movies' : 'Watchlist Series',
           nodes: nodes,
-          // Same rule as the catalog rows off TV: pure poster cards in
-          // portrait, captions back for landscape backdrops. The subtitle
-          // stays on the card because TV still renders overlay captions
-          // (this flag is non-TV only) — dropping it here would have
-          // changed TV cards too.
-          captions: _homeLandscapeCards,
-          items: [
-            for (final item in items)
-              SpotlightCard(
-                image: _homeLandscapeCards ? homeStageWideArtwork(item) : item.poster,
-                fallbackImage: _homeLandscapeCards ? item.poster : null,
-                title: item.name,
-                rating: item.imdbRating,
-                subtitle: isMovies ? 'MOVIE' : 'SERIES',
-                shape: _homeLandscapeCards
-                    ? SpotlightCardShape.wide
-                    : SpotlightCardShape.poster,
-                watchedImdbId: item.progressId ?? item.id,
-                watchedContentType: item.type,
-                onOpen: () => _openMyWatchlistItem(item),
-              ),
-          ],
+          items: movies ? _watchlistMovieItems : _watchlistSeriesItems,
+          movies: movies,
+          landscape: _homeLandscapeCards,
+          onOpen: _openMyWatchlistItem,
         );
       case HomeFavoriteKind.playlist:
-        return SpotlightShelf(
+        return buildSpotlightPlaylists(
           id: id,
-          title: 'Playlists',
           nodes: nodes,
-          items: [
-            for (final item in _playlistItems)
-              SpotlightCard(
-                image: item.posterUrl,
-                title: item.title,
-                progress: _playlistController.current.progressFor(item),
-                onOpen: () => _onPlaylistItemTap(item),
-              ),
-          ],
+          items: _playlistItems,
+          progress: _playlistController.current.progressFor,
+          onOpen: _onPlaylistItemTap,
         );
       case HomeFavoriteKind.iptv:
-        return SpotlightShelf(
+        return buildSpotlightIptvFavorites(
           id: id,
           title: 'IPTV Favourites',
           nodes: nodes,
-          items: [
-            for (final ch in _iptvFavChannels)
-              SpotlightCard(
-                image: ch.logoUrl,
-                title: ch.name,
-                subtitle: 'LIVE',
-                shape: _homeLandscapeCards
-                    ? SpotlightCardShape.wideChannel
-                    : SpotlightCardShape.channel,
-                onOpen: () => _playIptvChannel(ch),
-                previewBuilder: ch.isLive
-                    ? (_) => SpotlightIptvCardPreview(
-                        channel: ch,
-                        ambientVolume: _heroTrailerVolume,
-                      )
-                    : null,
-              ),
-          ],
+          channels: _iptvFavChannels,
+          landscape: _homeLandscapeCards,
+          previewVolume: () => _heroTrailerVolume,
+          onOpen: _playIptvChannel,
         );
       case HomeFavoriteKind.debrify:
-        return SpotlightShelf(
+        return buildSpotlightDebrifyFavorites(
           id: id,
-          title: 'Debrify TV',
           nodes: nodes,
-          items: [
-            for (final ch in _tvFavChannels)
-              SpotlightCard(
-                title: ch.name,
-                subtitle: 'CHANNEL ${ch.channelNumber}',
-                shape: _homeLandscapeCards
-                    ? SpotlightCardShape.wideChannel
-                    : SpotlightCardShape.channel,
-                onOpen: () => _playChannel(ch),
-              ),
-          ],
+          channels: _tvFavChannels,
+          landscape: _homeLandscapeCards,
+          onOpen: _playChannel,
         );
       case HomeFavoriteKind.stremio:
-        return SpotlightShelf(
+        return buildSpotlightStremioFavorites(
           id: id,
-          title: 'Stremio TV',
           nodes: nodes,
-          items: [
-            for (final ch in _stvFavChannels)
-              SpotlightCard(
-                image: _stvFavArt(ch, landscape: _homeLandscapeCards),
-                fallbackImage: _homeLandscapeCards
-                    ? _stvNowPlaying(ch)?.item.poster
-                    : null,
-                title: ch.displayName,
-                subtitle: 'STREMIO TV',
-                // The now-playing TITLE's rating — the card wears title art,
-                // so the rating follows the title, not the channel.
-                rating: _stvNowPlaying(ch)?.item.imdbRating,
-                // Title art, not a channel logo: follow the user's Spotlight
-                // title-card orientation instead of containing it as a square
-                // station mark.
-                shape: _homeLandscapeCards
-                    ? SpotlightCardShape.wide
-                    : SpotlightCardShape.poster,
-                onOpen: () => _playStremioTvChannel(ch),
-              ),
-          ],
+          channels: _stvFavChannels,
+          landscape: _homeLandscapeCards,
+          artwork: _stvFavArt,
+          nowPlaying: (channel) => _stvNowPlaying(channel)?.item,
+          onOpen: _playStremioTvChannel,
         );
     }
   }

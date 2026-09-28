@@ -6,6 +6,26 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Spotlight favorite shelves — 2026-09-28
+
+Base: `d2bc9e0e`. `home_spotlight_favorites.dart` (145 lines) owns typed builders
+for IPTV, watchlist, playlists, Debrify TV and Stremio TV shelves. IPTV favorites
+and custom lists share rendering while retaining their distinct open callbacks.
+Production dispatch remains in the root; source data/actions are borrowed.
+Root: **12,260 → 12,179 lines**.
+
+Review preserves titles, channel versus title shapes, artwork fallbacks, watched
+identity, caption flags, playlist progress, live-only preview eligibility and
+volume lookup at preview creation. The preview compatibility export remains in
+the root. Existing profile-owned controllers and playback actions are unchanged.
+
+**82 tests pass**: the five favorite/playlist/watchlist Home screen suites,
+Spotlight IPTV preview and Spotlight board tests. Receipts:
+`.git/refactor-evidence/phase5/spotlight-favorites-{tests,analyze-final}.txt`.
+Analysis retains **838 identical diagnostic identities**; architecture passes
+**531 files**; formatting/diff checks pass. No emulator used. Remaining stage
+cell/actions, navigation, lifecycle and final acceptance remain pending.
+
 ## Batch C checkpoint: Spotlight shelf and Search composition — 2026-09-28
 
 Base: `8057f8eb`. Home's Spotlight shelf/card projection now lives in
