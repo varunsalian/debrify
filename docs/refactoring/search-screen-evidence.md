@@ -6,6 +6,40 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: detail opening orchestration — 2026-09-28
+
+The 69-line `HomeDetailNavigation` now owns origin preparation outcomes,
+unavailable-origin confirmation/removal and the exact detail-route lifecycle.
+It borrows the existing injected origin repository and explicit presentation
+callbacks; no new provider or state bundle is introduced. The production root
+prepares its menu/layout snapshots before route push, retaining authentication
+loader timing, action arguments and all existing return effects. Its remaining
+detail code wires screen state and callbacks for phase C's feature composition.
+The root shrinks from 14,261 to 14,248 lines; this is ownership separation rather
+than a claim of substantial facade reduction.
+
+Review also tightened the post-deletion continuation from mounted-only to the
+originating profile/view guard. Accepted deletion still belongs to its existing
+operation; a retired page cannot then refresh a different profile's UI. The
+unverified retry message and missing-source dialog copy remain unchanged.
+
+Validation: **67 affected tests pass** (29 existing real-route/unavailable-origin/
+layout checks and 38 opening/origin/menu/routing checks). Five new navigation cases
+cover pre-push preparation and one return effect, retirement during preparation,
+unverified-origin feedback, and accepted deletion with active/retired refresh.
+A callback assertion in the new test fixture was changed to `expectSync` after
+Flutter's async test guard identified its overlap with pumping. Explicit mounted
+checks satisfy context-lifetime analysis without suppressions. Final analyzer
+identities match **848** baseline diagnostics; **473** migrated files pass the
+architecture guard; diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/detail-opening-tests.txt`,
+`detail-opening-focused-final-tests.txt`, and `detail-opening-final-analyze.txt`.
+
+Opening orchestration is reviewed. Addon-inventory persistence and remaining
+mutation/reset contracts are still pending in A. Screen-state composition,
+resource teardown, facade/CI and native/device/performance gates remain B–E work;
+this checkpoint does not complete the phase or the migration.
+
 ## Batch A checkpoint: MDBList detail read ownership — 2026-09-28
 
 The detail-status adapter forwards its route guard through identity preparation

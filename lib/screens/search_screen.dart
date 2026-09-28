@@ -181,7 +181,7 @@ import '../features/search/application/keyword_providers.dart';
 import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
 import '../features/home/presentation/home_random_playback_action.dart';
-import '../features/home/presentation/home_unavailable_origin_dialog.dart';
+import '../features/home/presentation/home_detail_navigation.dart';
 import '../features/home/application/home_random_episode_dependencies.dart';
 import '../features/home/application/home_catalog_episode_identity_dependencies.dart';
 import '../features/home/application/home_catalog_origin_dependencies.dart';
@@ -190,7 +190,6 @@ import '../features/home/application/home_tracker_resume_dependencies.dart';
 import '../features/home/data/home_tracker_resume_repository.dart';
 import '../features/home/data/home_catalog_playback_payload.dart';
 import '../features/home/presentation/home_catalog_playback_bridge.dart';
-import '../features/home/models/home_catalog_origin.dart';
 import '../services/profiles/profile_runtime.dart';
 import 'metadata_explore_page.dart';
 import '../models/metadata_preferences.dart';
@@ -10231,196 +10230,184 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // When set, switch back to this tab once the detail route closes — lets a
     // cross-tab opener (the Calendar) return the user to where they came from.
     int? returnToTabOnClose,
-  }) async {
+  }) {
     bool current() =>
         mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
     if (!current()) return;
-    final prepared = await ref
-        .read(homeCatalogOriginRepositoryProvider(_profileSessionOwner))
-        .prepare(item, addon, isCurrent: current);
-    if (!mounted ||
-        !current() ||
-        prepared.status == HomeCatalogOriginStatus.retired) {
-      return;
-    }
-    if (prepared.status == HomeCatalogOriginStatus.unverified) {
-      _snack('Could not verify series episodes. Please retry.');
-      return;
-    }
-    item = prepared.item;
-    final origin = prepared.addon;
-    if (origin == null) {
-      final remove = await confirmHomeUnavailableOriginRemoval(
-        context: context,
-        title: item.name,
-        canRemove: () => _cwIds.contains(item.imdbId),
-        isCurrent: current,
-      );
-      if (!current()) return;
-      if (remove == true) {
-        if (!await _removeLocalHistory(item.imdbId!) || !mounted) return;
-        _clearSeriesResume();
-        await _loadContinueWatching();
-      }
-      return;
-    }
-    addon = origin;
-    _activeAddonId = addon.id;
-    final imdb = _imdbOf(item);
-    // Show a "Remove from Continue Watching" action when this title is on the
-    // Continue Watching row (regardless of which row opened it).
-    final inCw = imdb != null && _cwIds.contains(imdb);
-    // Same for the Trakt Continue Watching rows — removal goes through the
-    // Trakt playback/history APIs rather than local storage.
-    final inTraktCw = imdb != null && _traktByImdb.containsKey(imdb);
-    final inMdblistCw = imdb != null && _mdblistByImdb[imdb]?.paused == true;
-
-    final menus = HomeDetailMenus(
-      type: item.type,
-      identity: imdb,
-      removalColor: AppThemeScope.of(context).home.danger,
-      inLocalContinueWatching: inCw,
-      inTraktContinueWatching: inTraktCw,
-      inMdblistContinueWatching: inMdblistCw,
-      hasBoundSource: () => _isBound(item),
-      traktAuthenticated: () => _isTraktAuthenticated,
-      simklAuthenticated: () => _isSimklAuthenticated,
-      mdblistAuthenticated: () => _isMdblistAuthenticated,
-      hasSimklPause: () => _simklByImdb[_simklCardKey(item)]?.progress != null,
+    final navigation = HomeDetailNavigation(
+      ref.read(homeCatalogOriginRepositoryProvider(_profileSessionOwner)),
     );
-
-    final detailRoute = HomeDetailRoute(
-      name: kCatalogDetailRouteName,
-      isOwnerCurrent: current,
-      onClosed: () {
-        unawaited(_refreshAfterPlayback());
-        _refreshTraktAuthState();
-        _refreshSimklAuthState();
-        _refreshMdblistAuthState();
-        if (returnToTabOnClose != null) {
-          MainPageBridge.switchTab?.call(returnToTabOnClose);
-        }
-      },
-    );
-
-    // Choose the layout at opening time, as before, rather than on a route rebuild.
-    final mergedDetail = _mergedSeriesPage;
-    final readers = ref.read(homeDetailReadersProvider(_profileSessionOwner));
-    bool detailCurrent() => detailRoute.isActive;
     unawaited(
-      detailRoute.push(
-        Navigator.of(context),
-        (_) => buildHomeDetail(
-          item: item,
-          addon: addon,
-          merged: mergedDetail,
-          isTelevision: widget.isTelevision,
-          pikpakOnly: _pikpakOnly,
-          hasBoundSource: () => _isBound(item),
-          isTraktSource: isTraktSource,
-          isMdblistSource: isMdblistSource,
-          heroTag: heroTag,
-          initialSeason: initialSeason,
-          initialEpisode: initialEpisode,
-          resumeInfo: () => _resolveResumeInfo(
-            item,
-            addon,
+      navigation.open(
+        context: context,
+        item: item,
+        addon: addon,
+        routeName: kCatalogDetailRouteName,
+        isCurrent: current,
+        hasLocalHistory: (item) => _cwIds.contains(item.imdbId),
+        removeLocalHistory: _removeLocalHistory,
+        onHistoryRemoved: () async {
+          _clearSeriesResume();
+          await _loadContinueWatching();
+        },
+        showMessage: _snack,
+        onClosed: () {
+          unawaited(_refreshAfterPlayback());
+          _refreshTraktAuthState();
+          _refreshSimklAuthState();
+          _refreshMdblistAuthState();
+          if (returnToTabOnClose != null) {
+            MainPageBridge.switchTab?.call(returnToTabOnClose);
+          }
+        },
+        prepareBuilder: (item, addon, detailRoute) {
+          _activeAddonId = addon.id;
+          final imdb = _imdbOf(item);
+          // Show a "Remove from Continue Watching" action when this title is on the
+          // Continue Watching row (regardless of which row opened it).
+          final inCw = imdb != null && _cwIds.contains(imdb);
+          // Same for the Trakt Continue Watching rows — removal goes through the
+          // Trakt playback/history APIs rather than local storage.
+          final inTraktCw = imdb != null && _traktByImdb.containsKey(imdb);
+          final inMdblistCw =
+              imdb != null && _mdblistByImdb[imdb]?.paused == true;
+
+          final menus = HomeDetailMenus(
+            type: item.type,
+            identity: imdb,
+            removalColor: AppThemeScope.of(context).home.danger,
+            inLocalContinueWatching: inCw,
+            inTraktContinueWatching: inTraktCw,
+            inMdblistContinueWatching: inMdblistCw,
+            hasBoundSource: () => _isBound(item),
+            traktAuthenticated: () => _isTraktAuthenticated,
+            simklAuthenticated: () => _isSimklAuthenticated,
+            mdblistAuthenticated: () => _isMdblistAuthenticated,
+            hasSimklPause: () =>
+                _simklByImdb[_simklCardKey(item)]?.progress != null,
+          );
+
+          // Choose the layout at opening time, as before, rather than on a route rebuild.
+          final mergedDetail = _mergedSeriesPage;
+          final readers = ref.read(
+            homeDetailReadersProvider(_profileSessionOwner),
+          );
+          bool detailCurrent() => detailRoute.isActive;
+          return (_) => buildHomeDetail(
+            item: item,
+            addon: addon,
+            merged: mergedDetail,
+            isTelevision: widget.isTelevision,
+            pikpakOnly: _pikpakOnly,
+            hasBoundSource: () => _isBound(item),
             isTraktSource: isTraktSource,
             isMdblistSource: isMdblistSource,
-          ),
-          play:
-              ({
-                bool startFromBeginning = false,
-                bool preferTraktResume = false,
-                bool skipEpisodeFallback = false,
-                bool browseSourcesOnly = false,
-                HomeDetailPromise? promisedTarget,
-              }) => _onCatalogPlay(
-                item,
-                addon,
+            heroTag: heroTag,
+            initialSeason: initialSeason,
+            initialEpisode: initialEpisode,
+            resumeInfo: () => _resolveResumeInfo(
+              item,
+              addon,
+              isTraktSource: isTraktSource,
+              isMdblistSource: isMdblistSource,
+            ),
+            play:
+                ({
+                  bool startFromBeginning = false,
+                  bool preferTraktResume = false,
+                  bool skipEpisodeFallback = false,
+                  bool browseSourcesOnly = false,
+                  HomeDetailPromise? promisedTarget,
+                }) => _onCatalogPlay(
+                  item,
+                  addon,
+                  isCurrent: () => detailRoute.isActive,
+                  isTraktSource: isTraktSource,
+                  isMdblistSource: isMdblistSource,
+                  startFromBeginning: startFromBeginning,
+                  preferTraktResume: preferTraktResume,
+                  skipEpisodeFallback: skipEpisodeFallback,
+                  browseSourcesOnly: browseSourcesOnly,
+                  promisedTarget: promisedTarget,
+                ),
+            browse: () => _onCatalogBrowse(
+              item,
+              addon,
+              isTraktSource: isTraktSource,
+              isMdblistSource: isMdblistSource,
+            ),
+            browseSelection: (selection) => _browseSelection(
+              selection,
+              metadataAddonId: addon.id,
+              catalogItem: item.withSourceAddon(addon),
+            ),
+            playSelection: (selection) => _playSelection(
+              selection,
+              metadataAddonId: addon.id,
+              catalogItem: item.withSourceAddon(addon),
+            ),
+            boundSourceCount: _boundCountFor,
+            selectSource: (show) {
+              if (!detailRoute.isActive) return Future.value();
+              _activeAddonId = addon.id;
+              return _handleEditOrSelectSource(
+                show.withSourceAddon(addon),
                 isCurrent: () => detailRoute.isActive,
-                isTraktSource: isTraktSource,
-                isMdblistSource: isMdblistSource,
-                startFromBeginning: startFromBeginning,
-                preferTraktResume: preferTraktResume,
-                skipEpisodeFallback: skipEpisodeFallback,
-                browseSourcesOnly: browseSourcesOnly,
-                promisedTarget: promisedTarget,
-              ),
-          browse: () => _onCatalogBrowse(
-            item,
-            addon,
-            isTraktSource: isTraktSource,
-            isMdblistSource: isMdblistSource,
-          ),
-          browseSelection: (selection) => _browseSelection(
-            selection,
-            metadataAddonId: addon.id,
-            catalogItem: item.withSourceAddon(addon),
-          ),
-          playSelection: (selection) => _playSelection(
-            selection,
-            metadataAddonId: addon.id,
-            catalogItem: item.withSourceAddon(addon),
-          ),
-          boundSourceCount: _boundCountFor,
-          selectSource: (show) {
-            if (!detailRoute.isActive) return Future.value();
-            _activeAddonId = addon.id;
-            return _handleEditOrSelectSource(
-              show.withSourceAddon(addon),
-              isCurrent: () => detailRoute.isActive,
-            );
-          },
-          adoptArtwork: (art) => _playbackArtwork.adopt(item, art),
-          menus: menus,
-          traktAction: (action, {rating}) => _handleDetailQuickAction(
-            item,
-            addon,
-            action,
-            inCw: inCw,
-            detailRoute: detailRoute,
-            imdb: imdb,
-            presetRating: rating,
-          ),
-          traktStatus:
-              (_isTraktAuthenticated &&
-                  imdb != null &&
-                  MediaIdentity.isImdb(imdb))
-              ? () => readers.trakt(imdb, item.type, isCurrent: detailCurrent)
-              : null,
-          simklAction: (action, {rating}) => _handleDetailSimklQuickAction(
-            item,
-            action,
-            detailRoute: detailRoute,
-            presetRating: rating,
-          ),
-          simklStatus: (_isSimklAuthenticated && imdb != null)
-              ? () => readers.simkl(imdb, item.type, isCurrent: detailCurrent)
-              : null,
-          mdblistAction: (action, {rating}) => _handleDetailMdblistQuickAction(
-            item,
-            action,
-            detailRoute: detailRoute,
-            presetRating: rating,
-          ),
-          mdblistStatus:
-              (_isMdblistAuthenticated &&
-                  imdb != null &&
-                  MediaIdentity.isImdb(imdb))
-              ? () => readers.mdblist(imdb, item.type, isCurrent: detailCurrent)
-              : null,
-          recommendations: imdb != null && MediaIdentity.isImdb(imdb)
-              ? () => readers.recommendations(
-                  imdb,
-                  item.type,
-                  isCurrent: detailCurrent,
-                )
-              : null,
-          openRecommendation: (rec) => _openItem(rec, rec.sourceAddon ?? addon),
-          enrich: (id, type) =>
-              readers.metadata(id, type, isCurrent: detailCurrent),
-        ),
+              );
+            },
+            adoptArtwork: (art) => _playbackArtwork.adopt(item, art),
+            menus: menus,
+            traktAction: (action, {rating}) => _handleDetailQuickAction(
+              item,
+              addon,
+              action,
+              inCw: inCw,
+              detailRoute: detailRoute,
+              imdb: imdb,
+              presetRating: rating,
+            ),
+            traktStatus:
+                (_isTraktAuthenticated &&
+                    imdb != null &&
+                    MediaIdentity.isImdb(imdb))
+                ? () => readers.trakt(imdb, item.type, isCurrent: detailCurrent)
+                : null,
+            simklAction: (action, {rating}) => _handleDetailSimklQuickAction(
+              item,
+              action,
+              detailRoute: detailRoute,
+              presetRating: rating,
+            ),
+            simklStatus: (_isSimklAuthenticated && imdb != null)
+                ? () => readers.simkl(imdb, item.type, isCurrent: detailCurrent)
+                : null,
+            mdblistAction: (action, {rating}) =>
+                _handleDetailMdblistQuickAction(
+                  item,
+                  action,
+                  detailRoute: detailRoute,
+                  presetRating: rating,
+                ),
+            mdblistStatus:
+                (_isMdblistAuthenticated &&
+                    imdb != null &&
+                    MediaIdentity.isImdb(imdb))
+                ? () =>
+                      readers.mdblist(imdb, item.type, isCurrent: detailCurrent)
+                : null,
+            recommendations: imdb != null && MediaIdentity.isImdb(imdb)
+                ? () => readers.recommendations(
+                    imdb,
+                    item.type,
+                    isCurrent: detailCurrent,
+                  )
+                : null,
+            openRecommendation: (rec) =>
+                _openItem(rec, rec.sourceAddon ?? addon),
+            enrich: (id, type) =>
+                readers.metadata(id, type, isCurrent: detailCurrent),
+          );
+        },
       ),
     );
   }
