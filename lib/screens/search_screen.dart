@@ -11160,7 +11160,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               _deferDownMove(rowIndex: rowIndex, column: col);
             }
           };
-    return buildHomeCatalogRow(
+    return buildHomeCatalogItems(
+      section: section,
+      nodes: nodes,
+      tv: tv,
       header: collection == null || !_hideHomeCollectionNames
           ? _railHeader(
               title: section.title,
@@ -11168,71 +11171,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               onSeeAll: () => _openCatalogSeeAll(section),
             )
           : const SizedBox(height: 8),
-      cellHeight: cellH,
-      readChildCount: () =>
-          section.items.length + (section.loadingMore ? 1 : 0),
-      onLoadMore: () => _loadMoreRow(rowIndex),
-      itemBuilder: (context, index) {
-        final col = index;
-        if (col >= section.items.length) {
-          return SizedBox(
-            width: 52,
-            height: cellH,
-            child: const Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          );
-        }
-        final item = section.items[col];
-        final itemAspect = collection?.tileAspectOf(item) ?? cellAspect;
-        // Unique per cell AND per SearchScreen instance (Home,
-        // Discover and Search coexist in the tab stack — a shared
-        // tag across them would trip Hero's duplicate-tag assert).
-        final heroTag = 'poster-${identityHashCode(this)}-$rowIndex-$col';
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 11),
-          child: Center(
-            child: SizedBox(
-              width: collection == null ? posterW : cellH * itemAspect,
-              height: cellH,
-              child: HomeBoardCell(
-                onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-                item: item,
-                isTelevision: tv,
-                focusNode: nodes[col],
-                column: col,
-                rowNodes: nodes,
-                hasBoundSource: _isBound(item),
-                aspectRatio: itemAspect,
-                artUrl: collection != null ? item.poster : _titleArtUrl(item),
-                focusArtUrl: collection?.focusArtOf(item),
-                focusVideoUrl: collection?.focusVideoOf(item),
-                focusGlowEnabled:
-                    collection?.collection.focusGlowEnabled ?? false,
-                showTitleOverlay: collection != null
-                    ? !(collection.folderOf(item)?.hideTitle ?? false)
-                    : !_hideHomeCardTitlesAndRatings,
-                onQuickPlay: _pikpakOnly || collection != null
-                    ? null
-                    : () => _sectionQuickPlay(section, item),
-                onFocused: () {
-                  _setHero(item);
-                  _rowCol[rowIndex] = col;
-                },
-                onUp: up(col),
-                onDown: down(col),
-                onOpen: () => _sectionOpenItem(section, item, heroTag: heroTag),
-                onNearEnd: () => _loadMoreRow(rowIndex),
-                heroTag: heroTag,
-              ),
-            ),
-          ),
-        );
+      cellH: cellH,
+      cellAspect: cellAspect,
+      posterW: posterW,
+      heroTagFor: (col) => 'poster-${identityHashCode(this)}-$rowIndex-$col',
+      isBound: _isBound,
+      artOf: _titleArtUrl,
+      showTitle: () => !_hideHomeCardTitlesAndRatings,
+      pikpakOnly: () => _pikpakOnly,
+      onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
+      up: up,
+      down: down,
+      onFocused: (item, col) {
+        _setHero(item);
+        _rowCol[rowIndex] = col;
       },
+      onOpen: (item, heroTag) =>
+          _sectionOpenItem(section, item, heroTag: heroTag),
+      onQuickPlay: (item) => _sectionQuickPlay(section, item),
+      onLoadMore: () => _loadMoreRow(rowIndex),
     );
   }
 

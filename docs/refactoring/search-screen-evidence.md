@@ -6,6 +6,24 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: catalog item rendering — 2026-09-28
+
+Base: `22c6dbfe`. The existing `home_catalog_row.dart` (144 lines) now owns the
+catalog/collection cell rendering and loading tile, alongside its lazy strip.
+The host retains geometry inputs, row navigation and action orchestration. Root:
+**11,405 → 11,362 lines**.
+
+Review preserves lazy section reads, spinner count, per-route/cell Hero identity,
+collection tile sizing/art/focus media/glow, title settings, quick-play restrictions,
+focus callback order and paging triggers. The original widget stack is unchanged.
+**69 affected tests pass**, covering row paging, Home catalog repository/preferences/
+continuation screens, Search catalog behavior and all progressive layout cases.
+Analysis retains **836 identical diagnostic identities**; architecture passes
+**540 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/catalog-items-{tests,analyze}.txt`.
+No emulator used. Remaining composition/navigation and route/resource boundaries,
+D lifecycle/facade reduction and E final acceptance remain pending.
+
 ## Batch C checkpoint: Classic favorite rows — 2026-09-28
 
 Base: `b5d11287`. `HomeClassicFavoriteRows` (221 lines) owns all six Classic
