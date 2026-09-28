@@ -6,6 +6,21 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: catalog prompt and Sources control — 2026-09-28
+
+Base: `6590d4bf`. `catalog_search_prompt.dart` (136 lines) owns the catalog empty
+prompt and Sources control rendering/key handling. The host still opens settings
+and reruns the current query. Root: **11,140 → 11,028 lines**.
+
+Review preserves theme/text/spacing, original widget stack, borrowed focus node,
+key-down-only activation, Up to query, Left to sidebar and pointer activation.
+**20 affected tests pass**: catalog screen, Sources dialog, shared focus controller
+and TV search handoff. Analysis retains **836 identical diagnostic identities**;
+architecture passes **546 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/catalog-prompt-{tests,analyze}.txt`.
+No emulator used. Remaining navigation/action composition, lifecycle/facade
+reduction and final acceptance remain pending.
+
 ## Batch C checkpoint: Lists content states — 2026-09-28
 
 Base: `7900c24d`. The existing Lists presentation file (192 lines) now renders

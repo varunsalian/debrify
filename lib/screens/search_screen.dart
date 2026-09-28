@@ -1,3 +1,4 @@
+import '../features/search/presentation/catalog_search_prompt.dart';
 import '../features/search/presentation/lists_search_rail.dart';
 import '../features/search/presentation/lists_focus.dart';
 import '../features/discover/presentation/discover_shell_bridge.dart';
@@ -9691,131 +9692,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     onUp: _leaveBoardTop,
   );
 
-  /// Empty state for the dedicated Search tab before the user types.
-  Widget _buildSearchPrompt() {
-    final app = AppThemeScope.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.search_rounded,
-              size: 54,
-              color: app.fade(app.core.tx, 0.22),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Search movies & shows',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: app.fade(app.core.tx, 0.8),
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Only reached in Catalog mode — _buildBody routes Keyword mode to
-            // _buildKeyword (which has its own empty state) before it gets here.
-            Text(
-              'Type a title to search your catalogs, or switch to Keyword to '
-              'search torrents directly.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: app.fade(app.core.tx, 0.5),
-                fontSize: 13.5,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 20),
-            // Pick which searchable addons the catalog search queries. Mirrors
-            // the keyword tab's Sources button; DPAD reaches it via the search
-            // field's Down (see _catalogSourcesButtonVisible).
-            _catalogSourcesButton(),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _buildSearchPrompt() => buildCatalogSearchPrompt(
+    context,
+    sourcesButton: _catalogSourcesButton,
+  );
 
-  /// "Sources" button for catalog search — opens a dialog to enable/disable
-  /// the search-capable addons, persisted across launches. Catalog-mode twin
-  /// of [_kwSourcesButton].
-  Widget _catalogSourcesButton() {
-    final app = AppThemeScope.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    return Focus(
-      focusNode: _catalogSourcesBtnFocus,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        final key = event.logicalKey;
-        if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
-          _openCatalogSources();
-          return KeyEventResult.handled;
-        }
-        // Up returns to the search field, Left hands off to the sidebar.
-        if (key == LogicalKeyboardKey.arrowUp) {
-          _focusSearchFieldAtEnd();
-          return KeyEventResult.handled;
-        }
-        if (key == LogicalKeyboardKey.arrowLeft) {
-          MainPageBridge.focusTvSidebar?.call();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: ListenableBuilder(
-        listenable: _catalogSourcesBtnFocus,
-        builder: (context, _) {
-          final focused = _catalogSourcesBtnFocus.hasFocus;
-          return Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _openCatalogSources,
-              borderRadius: app.shape.brPill,
-              canRequestFocus: false,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 9,
-                ),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHigh,
-                  borderRadius: app.shape.brPill,
-                  border: Border.all(
-                    color: focused
-                        ? app.fade(app.core.tx, 0.9)
-                        : app.fade(app.core.tx, 0.10),
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.dns_rounded,
-                      size: 16,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Sources',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Widget _catalogSourcesButton() => buildCatalogSourcesButton(
+    context,
+    focusNode: _catalogSourcesBtnFocus,
+    onOpen: _openCatalogSources,
+    onUp: _focusSearchFieldAtEnd,
+    onSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+  );
 
   /// Open the catalog Sources dialog, then re-run the search if one is active
   /// (so toggling an addon reflects immediately, like the keyword twin).
