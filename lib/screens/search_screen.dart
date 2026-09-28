@@ -1,3 +1,4 @@
+import '../features/discover/presentation/discover_bindings.dart';
 import '../features/discover/presentation/discover_focus.dart';
 import '../features/home/presentation/home_classic_favorite_rows.dart';
 import '../features/home/presentation/home_rail_composition.dart';
@@ -1529,9 +1530,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // DPAD focus node (the "Source" dropdown is the leading filter of whichever
   // embedded See-All panel is shown). [_discAddons] is the browsable addon list
   // appended to the Source dropdown.
-  late final ProviderSubscription<DiscoverSourceState>
-  _discoverSourceSubscription;
-  late final DiscoverSourceController _discoverSourceController;
+  late final DiscoverBindings _discoverBindings;
+  DiscoverSourceController get _discoverSourceController =>
+      _discoverBindings.source;
   String get _discSource => _discoverSourceController.current.source;
   List<StremioAddon> get _discAddons =>
       _discoverSourceController.current.addons;
@@ -1561,13 +1562,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // ── Discover layout (grid / stage) ───────────────────────────────────────
 
-  late final ProviderSubscription<String> _discoverLayoutSubscription;
-  late final DiscoverLayoutController _discoverLayoutController;
+  DiscoverLayoutController get _discoverLayoutController =>
+      _discoverBindings.layout;
   String get _discLayout => _discoverLayoutController.current;
 
-  late final ProviderSubscription<DiscoverCardSettings>
-  _discoverCardSettingsSubscription;
-  late final DiscoverCardSettingsController _discoverCardSettingsController;
+  DiscoverCardSettingsController get _discoverCardSettingsController =>
+      _discoverBindings.cards;
   DiscoverCardSettings get _discCardSettings =>
       _discoverCardSettingsController.current;
 
@@ -2043,31 +2043,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       initialSource: _discMdblistList == null ? _discCw : _discMdblist,
       hasHandoff: _discMdblistList != null,
     );
-    final discoverLayoutSession = (
-      owner: _profileSessionOwner,
-      viewIdentity: discoverSession.viewIdentity,
-    );
-    _discoverCardSettingsSubscription = ref.listenManual(
-      discoverCardSettingsProvider(discoverLayoutSession),
-      (previous, next) {},
-    );
-    _discoverCardSettingsController = ref.read(
-      discoverCardSettingsProvider(discoverLayoutSession).notifier,
-    );
-    _discoverLayoutSubscription = ref.listenManual(
-      discoverLayoutProvider(discoverLayoutSession),
-      (previous, next) {},
-    );
-    _discoverLayoutController = ref.read(
-      discoverLayoutProvider(discoverLayoutSession).notifier,
-    );
-    _discoverSourceSubscription = ref.listenManual(
-      discoverSourceProvider(discoverSession),
-      (previous, next) {},
-    );
-    _discoverSourceController = ref.read(
-      discoverSourceProvider(discoverSession).notifier,
-    );
+    _discoverBindings = DiscoverBindings(ref, discoverSession);
     if (_discMdblistList != null) {
       unawaited(
         _discoverSourceController.rememberCurrent(isCurrent: () => mounted),
@@ -2637,9 +2613,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _heroTint.dispose();
     _searchController.dispose();
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
-    _discoverCardSettingsSubscription.close();
-    _discoverLayoutSubscription.close();
-    _discoverSourceSubscription.close();
+    _discoverBindings.close();
     _metadataFeatureSubscription.close();
     _catalogContinuationSubscription.close();
     _homeCatalogSubscription.close();

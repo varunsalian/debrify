@@ -6,6 +6,23 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: Discover provider bindings — 2026-09-28
+
+Base: `a8881ad1`. `DiscoverBindings` (42 lines) owns the three manual Riverpod
+subscriptions retaining Discover card settings, layout and source controllers.
+The route supplies its existing profile/view/source session. Controllers continue
+to own application state; the binding only groups registration and cleanup.
+
+Review preserves listen-before-read order, shared view identity, initial source
+and handoff, explicit remember timing, empty listeners and card/layout/source close
+order at the original teardown point. **65 affected tests pass**, including
+Discover application tests and real-screen grid/layout/source-startup coverage.
+Analysis retains **836 identical diagnostic identities**; architecture passes
+**542 files**; diff checks pass and the new file is formatted. Receipts:
+`.git/refactor-evidence/phase5/discover-bindings-{tests,analyze}.txt`.
+No emulator used. Remaining preview/shell lifecycle, navigation wiring, facade
+reduction and final acceptance are pending. Root remains **11,323 lines**.
+
 ## Batch C/D checkpoint: Discover focus resources — 2026-09-28
 
 Base: `81766f62`. `DiscoverFocus` owns the route's source focus node and selected-
