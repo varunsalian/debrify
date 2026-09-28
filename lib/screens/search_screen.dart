@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_favorite_bindings.dart';
 import '../features/search/presentation/keyword_viewport.dart';
 import '../features/search/presentation/title_suggestion_presentation.dart';
 import '../features/search/presentation/search_result_bindings.dart';
@@ -132,7 +133,6 @@ import '../features/home/presentation/home_progress_publication.dart';
 import '../features/home/application/home_playlist_controller.dart';
 import '../features/home/models/home_playlist.dart';
 import '../features/home/application/home_watchlist_controller.dart';
-import '../features/home/models/home_watchlist.dart';
 import '../features/home/application/home_iptv_lists_controller.dart';
 import '../features/home/models/home_iptv_list.dart';
 import '../features/home/presentation/home_iptv_list_focus.dart';
@@ -909,9 +909,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // keyword channels, shown between Continue Watching and the catalog rows.
   // Channels have no artwork, so they render as Stremio-shaped cards with a
   // gradient + glyph placeholder (see [HomeArtPoster]).
-  late final HomeTvFavoritesController _tvFavoritesController;
-  late final ProviderSubscription<List<DebrifyTvChannel>>
-  _tvFavoritesSubscription;
+  late final HomeFavoriteBindings _favoriteBindings;
+  HomeTvFavoritesController get _tvFavoritesController => _favoriteBindings.tv;
   List<DebrifyTvChannel> get _tvFavChannels => _tvFavoritesController.current;
   final List<FocusNode> _tvFavNodes = [];
 
@@ -919,9 +918,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // "channels" (catalogs treated as TV channels). Each card shows the channel's
   // current now-playing item poster (same time-based rotation as the Home /
   // Stremio TV screens); tapping opens the channel. Loaded once on init.
-  late final HomeStremioFavoritesController _stremioFavoritesController;
-  late final ProviderSubscription<HomeStremioFavorites>
-  _stremioFavoritesSubscription;
+  HomeStremioFavoritesController get _stremioFavoritesController =>
+      _favoriteBindings.stremio;
   List<HomeStremioFavorite> get _stvFavChannels =>
       _stremioFavoritesController.current.channels;
   final List<FocusNode> _stvFavNodes = [];
@@ -930,16 +928,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Cards show the channel logo (glyph fallback); tapping plays the stream
   // directly via VideoPlayerLauncher (no tab switch). Reloaded whenever list
   // membership or manual order changes.
-  late final HomeIptvFavoritesController _iptvFavoritesController;
-  late final ProviderSubscription<List<IptvChannel>> _iptvFavoritesSubscription;
+  HomeIptvFavoritesController get _iptvFavoritesController =>
+      _favoriteBindings.iptv;
   List<IptvChannel> get _iptvFavChannels => _iptvFavoritesController.current;
   final List<FocusNode> _iptvFavNodes = [];
 
   // Debrify's account-independent movie/series watchlist. Full metadata is
   // stored locally and presented as separate movie and series rows, so neither
   // row needs a tracker or catalog network request.
-  late final HomeWatchlistController _watchlistController;
-  late final ProviderSubscription<HomeWatchlist> _watchlistSubscription;
+  HomeWatchlistController get _watchlistController =>
+      _favoriteBindings.watchlist;
   List<StremioMeta> get _watchlistMovieItems =>
       _watchlistController.current.movies;
   List<StremioMeta> get _watchlistSeriesItems =>
@@ -952,8 +950,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // by [_loadIptvListRows] on init, on Home Rows saves, and whenever
   // [IptvMediaStore.listsRevision] bumps (any list mutation anywhere in the
   // app). The view owns FocusNodes, reconciled by list id across reloads.
-  late final HomeIptvListsController _iptvListsController;
-  late final ProviderSubscription<List<HomeIptvList>> _iptvListsSubscription;
+  HomeIptvListsController get _iptvListsController =>
+      _favoriteBindings.iptvLists;
   List<HomeIptvList> get _iptvListRows => _iptvListsController.current;
   final _iptvListFocus = HomeIptvListFocus();
 
@@ -963,8 +961,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // random / view files / favorite / clear progress / launch-on-startup /
   // delete), so this row is a complete playlist manager on its own now that the
   // Home playlist section is being phased out. Loaded once on init.
-  late final HomePlaylistController _playlistController;
-  late final ProviderSubscription<HomePlaylist> _playlistSubscription;
+  HomePlaylistController get _playlistController => _favoriteBindings.playlist;
   List<HomePlaylistItem> get _playlistItems =>
       _playlistController.current.items;
   final List<FocusNode> _playlistFavNodes = [];
@@ -1697,70 +1694,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _homeDisplayController = ref.read(
       homeDisplayPreferencesProvider(displaySession).notifier,
     );
-    final tvFavoritesSession = (
-      owner: _profileSessionOwner,
-      viewIdentity: Object(),
+    _favoriteBindings = HomeFavoriteBindings(
+      ref,
+      newSession: () => (owner: _profileSessionOwner, viewIdentity: Object()),
     );
-    _tvFavoritesSubscription = ref.listenManual(
-      homeTvFavoritesProvider(tvFavoritesSession),
-      (previous, next) {},
-    );
-    _tvFavoritesController = ref.read(
-      homeTvFavoritesProvider(tvFavoritesSession).notifier,
-    );
-    final stremioFavoritesSession = (
-      owner: _profileSessionOwner,
-      viewIdentity: Object(),
-    );
-    _stremioFavoritesSubscription = ref.listenManual(
-      homeStremioFavoritesProvider(stremioFavoritesSession),
-      (previous, next) {},
-    );
-    _stremioFavoritesController = ref.read(
-      homeStremioFavoritesProvider(stremioFavoritesSession).notifier,
-    );
-    final iptvFavoritesSession = (
-      owner: _profileSessionOwner,
-      viewIdentity: Object(),
-    );
-    _iptvFavoritesSubscription = ref.listenManual(
-      homeIptvFavoritesProvider(iptvFavoritesSession),
-      (previous, next) {},
-    );
-    _iptvFavoritesController = ref.read(
-      homeIptvFavoritesProvider(iptvFavoritesSession).notifier,
-    );
-    final iptvListsSession = (
-      owner: _profileSessionOwner,
-      viewIdentity: Object(),
-    );
-    _iptvListsSubscription = ref.listenManual(
-      homeIptvListsProvider(iptvListsSession),
-      (previous, next) {},
-    );
-    _iptvListsController = ref.read(
-      homeIptvListsProvider(iptvListsSession).notifier,
-    );
-    final watchlistSession = (
-      owner: _profileSessionOwner,
-      viewIdentity: Object(),
-    );
-    _watchlistSubscription = ref.listenManual(
-      homeWatchlistProvider(watchlistSession),
-      (previous, next) {},
-    );
-    _watchlistController = ref.read(
-      homeWatchlistProvider(watchlistSession).notifier,
-    );
-    final playlistSession = (
-      owner: _profileSessionOwner,
-      viewIdentity: Object(),
-    );
-    _playlistSubscription = ref.listenManual(
-      homePlaylistProvider(playlistSession),
-      (previous, next) {},
-    );
-    _playlistController = ref.read(homePlaylistProvider(playlistSession).notifier);
     final localContinuationSession = HomeContinuationSession(
       owner: _profileSessionOwner,
       viewIdentity: Object(),
@@ -2477,12 +2414,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _traktContinuationSubscription.close();
     _simklContinuationSubscription.close();
     _mdblistContinuationSubscription.close();
-    _tvFavoritesSubscription.close();
-    _stremioFavoritesSubscription.close();
-    _iptvFavoritesSubscription.close();
-    _iptvListsSubscription.close();
-    _watchlistSubscription.close();
-    _playlistSubscription.close();
+    _favoriteBindings.close();
     _continuationLayoutSubscription.close();
     _searchResultBindings.closeCatalogAndLists();
     _keywordAppearanceSubscription.close();

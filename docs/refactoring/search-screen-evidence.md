@@ -6,6 +6,23 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: Home saved-content bindings — 2026-09-28
+
+Base: `6ed9b04a`. `HomeFavoriteBindings` (76 lines) retains TV/Stremio/IPTV
+favorites, IPTV lists, Watchlist and Playlist providers and exposes their existing
+controllers. Each provider keeps its own fresh view identity. Registration remains
+listen-before-read in the original sequence; contiguous cleanup remains in the
+same order and at the same route teardown point. Root: **10,710 → 10,639 lines**.
+
+Review confirms no provider keys, loading actions, snapshots or focus resources
+were merged. **35 real-screen tests pass** across the six saved-content families.
+Final analysis retains **836 identical diagnostic identities** after removing an
+unused root model import; architecture passes **552 files**; formatting/diff checks
+pass. Receipts: `.git/refactor-evidence/phase5/favorite-bindings-
+{tests,saved-tests,analyze-final}.txt`. No emulator used.
+Remaining feature composition, broader lifecycle/facade reduction and final
+acceptance remain pending.
+
 ## Batch D checkpoint: Keyword viewport ownership — 2026-09-28
 
 Base: `8b6e1627`. `KeywordViewport` (57 lines) owns the scroll controller, last
