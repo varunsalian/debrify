@@ -1,3 +1,4 @@
+import '../features/search/presentation/keyword_viewport.dart';
 import '../features/search/presentation/title_suggestion_presentation.dart';
 import '../features/search/presentation/search_result_bindings.dart';
 import '../features/search/presentation/lists_navigation.dart';
@@ -468,7 +469,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   );
   List<FocusNode> get _kwNodes => _keywordFocus.rows;
   final _kwCinemaKey = GlobalKey<CinemaSourcesLayoutState>();
-  int _lastKeywordCinemaSource = 0;
   // Keyboard/DPAD focus targets for the keyword toolbar pills (Sort / Filters /
   // Providers / Sources / Select). A fixed pool of 5 covers the most pills ever
   // shown.
@@ -537,16 +537,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   String? get _kwSourceTab => _keywordResults.sourceTab;
   List<FocusNode> get _kwTabNodes => _keywordFocus.tabs;
 
-  /// Scroll controller for the keyword results list, so we can preserve/restore
-  /// the scroll position across a tab switch (see [KeywordSnapshot]).
-  final ScrollController _kwScroll = ScrollController();
-
-  /// Last observed keyword-list scroll offset, captured live (the controller is
-  /// detached by the time [dispose] runs, so we can't read it there).
-  double _kwLastScroll = 0;
-
-  /// Set on restore; the keyword list jumps here once laid out, then clears.
-  double? _pendingKwScroll;
+  final _keywordViewport = KeywordViewport();
+  ScrollController get _kwScroll => _keywordViewport.scroll;
 
   // Retain the plain snapshot adapter: disposal must not resolve WidgetRef.
   late final KeywordSnapshotRepository _keywordSnapshots;
@@ -2011,9 +2003,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _searchFocusNode.addListener(_onSearchFocusLatchSheet);
     }
     _boardScroll.addListener(_onBoardScroll);
-    _kwScroll.addListener(() {
-      if (_kwScroll.hasClients) _kwLastScroll = _kwScroll.offset;
-    });
+    _keywordViewport.observeScroll();
     _refreshTraktAuthState();
     _refreshSimklAuthState();
     _refreshMdblistAuthState();
@@ -2281,7 +2271,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _disposeKwNodes();
     _keywordFocus.syncRows(snap.projection.results.length);
     _syncKwTabNodes();
-    _pendingKwScroll = snap.scrollOffset;
+    _keywordViewport.pendingOffset = snap.scrollOffset;
     return true;
   }
 
@@ -2384,7 +2374,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           query: _kwQuery,
           projection: projection,
           cache: _searchResultBindings.cache,
-          scrollOffset: _kwLastScroll,
+          scrollOffset: _keywordViewport.lastOffset,
         ),
       );
     }
@@ -2507,7 +2497,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _discoverShellBridge?.dispose();
     _discPreview.dispose();
     _boardScroll.dispose();
-    _kwScroll.dispose();
+    _keywordViewport.dispose();
     _keywordFocus.dispose();
     _catalogSourcesBtnFocus.dispose();
 
@@ -9584,17 +9574,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Widget _buildKeywordResults({required bool cinema}) {
     final narrow =
         !widget.isTelevision && MediaQuery.of(context).size.width < 600;
-    // Apply a restored scroll offset once the list is laid out, then clear it so
-    // it only fires on the first build after a restore.
-    if (_pendingKwScroll != null && _kwResults.isNotEmpty) {
-      final off = _pendingKwScroll!;
-      _pendingKwScroll = null;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _kwScroll.hasClients) {
-          _kwScroll.jumpTo(off.clamp(0.0, _kwScroll.position.maxScrollExtent));
-        }
-      });
-    }
+    _keywordViewport.restoreAfterLayout(
+      hasResults: _kwResults.isNotEmpty,
+      isCurrent: () => mounted,
+    );
     final content = Column(
       children: [
         // Tabs are suppressed during multi-select: switching source mid-select
@@ -9645,30 +9628,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       sources: _kwSourceList,
       cinemaKey: _kwCinemaKey,
       onProviderSelected: (source) {
-        _lastKeywordCinemaSource = 0;
-        // Keep the rail's row-zero target mounted after a source switch.
-        _pendingKwScroll = null;
-        _kwLastScroll = 0;
-        if (_kwScroll.hasClients) _kwScroll.jumpTo(0);
+        _keywordViewport.resetSource();
         _setKwSourceTab(source);
       },
       onFocusAbove: () => _searchFocusNode.requestFocus(),
-      onFocusResults: () {
-        if (_kwNodes.isNotEmpty) {
-          _kwNodes[_lastKeywordCinemaSource.clamp(0, _kwNodes.length - 1)]
-              .requestFocus();
-        } else {
-          _kwToolbarNodes.first.requestFocus();
-        }
-      },
-      isSourceFocused: () {
-        final index = _kwNodes.indexWhere((node) => node.hasFocus);
-        if (index >= 0) {
-          _lastKeywordCinemaSource = index;
-          _kwFreeze();
-        }
-        return index >= 0;
-      },
+      onFocusResults: () => _keywordViewport.focusResults(
+        _kwNodes,
+        fallback: () => _kwToolbarNodes.first.requestFocus(),
+      ),
+      isSourceFocused: () => _keywordViewport.isSourceFocused(
+        _kwNodes,
+        freeze: _kwFreeze,
+      ),
       selectionOverlay: cinema || !narrow || _kwSelectableResults.isEmpty
           ? null
           : KeywordSelectionOverlay(

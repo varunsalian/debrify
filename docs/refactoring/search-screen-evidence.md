@@ -6,6 +6,23 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: Keyword viewport ownership — 2026-09-28
+
+Base: `8b6e1627`. `KeywordViewport` (57 lines) owns the scroll controller, last
+observed/pending offsets and cinema return index. Root delegates restoration,
+source reset and focus selection while retaining the original listener-registration
+and disposal points. Snapshot capture still reads the last observed offset after
+list detachment. Root: **10,739 → 10,710 lines**.
+
+Review preserves result-gated consume-once restoration, clamping, mounted checks,
+source-reset order, index clamping, toolbar fallback and interaction freeze.
+**191 tests pass**: 190 Search/TV-focus checks and a new viewport restoration/reset
+test. Analysis retains **836 identical diagnostic identities**; architecture
+passes **551 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/keyword-viewport-{tests,focused,analyze-final}.txt`.
+No emulator used. Remaining feature composition, broader lifecycle/facade reduction
+and final acceptance remain pending.
+
 ## Batch C checkpoint: shared Search Sources control — 2026-09-28
 
 Base: `58dfc9a2`. Catalog and Keyword now use the same Sources control factory,
