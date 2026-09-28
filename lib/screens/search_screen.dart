@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_stage_navigation.dart';
 import '../features/home/presentation/home_tonight_focus.dart';
 import '../features/home/presentation/home_mosaic_cell_navigation.dart';
 import '../features/home/presentation/home_stage_cards.dart';
@@ -5796,7 +5797,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// cold start) — never partially, or a layout inherits a rail/zone/column
   /// that means something else in its own geometry.
   void _resetStageNavigation() {
-    _canvasFocusSeeded = false;
+    _stageNavigation.resetSeed();
     _stageTheater.reset();
     _canvasFavFocus.value = null;
     _canvasRailKey = null;
@@ -5873,7 +5874,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// reorder — CW rails prepend when Trakt/Simkl land seconds after a cold
   /// start — and a raw index would silently swap the shelf's content and
   /// teleport focus/hero when that happens. Null = first rail.
-  String? _canvasRailKey;
+  late final _stageNavigation = HomeStageNavigation(
+    keyOf: _canvasRailKeyOf,
+    nodesFor: _canvasRailNodes,
+    itemsFor: _canvasRailItems,
+  );
+  String? get _canvasRailKey => _stageNavigation.activeKey;
+  set _canvasRailKey(String? key) => _stageNavigation.activeKey = key;
 
   /// The focused column of the active rail, as a notifier — Deck's peek stack
   /// has to re-derive "the next two titles" on every horizontal move, and the
@@ -5881,10 +5888,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final ValueNotifier<int> _stageCol = ValueNotifier<int>(0);
 
   /// Remembered column per rail key (the Canvas mirror of classic's _rowCol).
-  final Map<String, int> _canvasCols = {};
-
-  /// One-shot: hand entry focus to the shelf the first time Canvas builds.
-  bool _canvasFocusSeeded = false;
+  Map<String, int> get _canvasCols => _stageNavigation.columns;
 
   /// Stage override while a favourites cell has focus (see
   /// [HomeFavoriteFocus]). A ValueNotifier — NOT setState — so scrubbing along
@@ -6192,32 +6196,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Where the active rail currently sits in [rails] — re-resolved every
   /// build so insertions above it never change WHICH rail is shown.
-  int _resolveCanvasRailIndex(List<HomeRail> rails) {
-    final key = _canvasRailKey;
-    if (key != null) {
-      final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
-      if (i >= 0) return i;
-    }
-    return 0;
-  }
+  int _resolveCanvasRailIndex(List<HomeRail> rails) =>
+      _stageNavigation.resolveIndex(rails);
 
-  /// Nearest MOUNTED node to [col] in [nodes], or null. Canvas only builds
-  /// the visible strip of the one displayed rail, so a bare first/last node
-  /// may be detached — and requestFocus on a detached node only latches a
-  /// stray focus grab for whenever it happens to mount.
-  FocusNode? _nearestMountedNode(List<FocusNode> nodes, int col) {
-    if (nodes.isEmpty) return null;
-    bool isMounted(FocusNode n) => n.context?.mounted ?? false;
-    final c = col.clamp(0, nodes.length - 1);
-    if (isMounted(nodes[c])) return nodes[c];
-    for (var d = 1; d < nodes.length; d++) {
-      final lo = c - d;
-      final hi = c + d;
-      if (lo >= 0 && isMounted(nodes[lo])) return nodes[lo];
-      if (hi < nodes.length && isMounted(nodes[hi])) return nodes[hi];
-    }
-    return null;
-  }
+  FocusNode? _nearestMountedNode(List<FocusNode> nodes, int col) =>
+      HomeStageNavigation.nearestMountedNode(nodes, col);
 
   // ── Spotlight ───────────────────────────────────────────────────────────
 
@@ -6622,35 +6605,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         return _nearestMountedNode(e.rail.cw!.nodes, e.col);
       }
     }
-    final rails = _stageRails;
-    if (rails.isEmpty) return null;
-    var index = _resolveCanvasRailIndex(rails);
-    // ATRIUM shows TWO rails at once, and focus may be in the lower one —
-    // which is NOT _canvasRailKey (that identifies the window's top rail).
-    // Sidebar re-entry, auto-focus and dead-focus reclaim all come through
-    // here, so without this they would teleport the user up a row.
-    if (_homeStyleEffective == 'atrium') {
-      final focusedKey = _atriumFocusedRailKey.value;
-      if (focusedKey != null) {
-        final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == focusedKey);
-        // Only honour it while it is still inside the visible window.
-        if (i == index || i == index + 1) index = i;
-      }
-    }
-    final rail = rails[index];
-    final node = _nearestMountedNode(
-      _canvasRailNodes(rail),
-      _canvasCols[_canvasRailKeyOf(rail)] ?? 0,
-    );
-    if (node != null) return node;
-    // The remembered row may no longer be RENDERED (Atrium drops to a single
-    // row on a short board), so fall back to the active rail rather than
-    // handing back null and leaving the board unfocusable.
-    final active = rails[_resolveCanvasRailIndex(rails)];
-    if (identical(active, rail)) return null;
-    return _nearestMountedNode(
-      _canvasRailNodes(active),
-      _canvasCols[_canvasRailKeyOf(active)] ?? 0,
+    return _stageNavigation.railTarget(
+      _stageRails,
+      focusedAtriumKey: _homeStyleEffective == 'atrium'
+          ? _atriumFocusedRailKey.value
+          : null,
     );
   }
 
@@ -7069,44 +7028,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// One-shot: hand entry focus to the active rail the first time a stage
   /// board builds. Shared by every stage layout — the target resolution
   /// ([_stageFocusTarget]) already knows which zone owns focus.
-  void _seedStageFocusOnce() {
-    if (_canvasFocusSeeded) return;
-    _canvasFocusSeeded = true;
-    _stageFocusRequests.schedule(() {
-      // Don't yank if focus already landed somewhere real (sidebar, etc).
-      final primary = FocusManager.instance.primaryFocus;
-      if (primary != null && primary is! FocusScopeNode) return null;
-      return _stageFocusTarget();
-    });
-  }
+  void _seedStageFocusOnce() => _stageNavigation.seedFocus(
+    schedule: _stageFocusRequests.schedule,
+    resolveTarget: _stageFocusTarget,
+  );
 
   /// Every stage board resolves the same four things before painting: the
   /// rails, which one is active, its identity key (persisted so a rail
   /// streaming in above it can't swap the content under the user) and its
   /// nodes. Null means "nothing to show yet" — the caller holds the brand
   /// stage.
-  HomeStageRailView? _resolveStageRail() {
-    final rails = _stageRails;
-    if (rails.isEmpty) return null;
-    final index = _resolveCanvasRailIndex(rails);
-    final rail = rails[index];
-    final key = _canvasRailKeyOf(rail);
-    // LOCK ONTO what we actually rendered (plain bookkeeping, no setState):
-    // the first build leaves the key null and a vanished key falls back to
-    // index 0 — in both cases an unpersisted identity would let a CW rail
-    // prepending seconds later silently swap the shelf under the user.
-    _canvasRailKey = key;
-    return HomeStageRailView(
-      rails: rails,
-      index: index,
-      rail: rail,
-      key: key,
-      items: rail.favKind != null
-          ? const <StremioMeta>[]
-          : _canvasRailItems(rail),
-      nodes: _canvasRailNodes(rail),
-    );
-  }
+  HomeStageRailView? _resolveStageRail() =>
+      _stageNavigation.resolveView(_stageRails);
 
   // ── PROMENADE view ───────────────────────────────────────────────────────
 

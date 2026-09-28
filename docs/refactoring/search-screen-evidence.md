@@ -6,6 +6,29 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: shared stage rail navigation — 2026-09-28
+
+Base: `6c55161c`. `HomeStageNavigation` (98 lines) owns active rail identity,
+remembered columns, mounted-node lookup, resolved rail views and one-time focus
+seeding. The root delegates production resolution; Spotlight and Tonight keep
+their specialized entry targets. Nodes, row data and frame scheduling are borrowed.
+Root: **11,898 → 11,831 lines**.
+
+Review preserves identity locking after first render, first-rail fallback,
+lower-index tie-breaking for mounted nodes, remembered columns, Atrium's visible
+window and fallback when its second row is hidden. Seeding still refuses to steal
+established focus, and layout reset preserves its original ordering. Existing
+render-time identity bookkeeping remains pending the D lifecycle cleanup.
+
+**63 tests pass**: eight focused navigation/Tonight/frame-scheduler checks and all
+55 real-screen progressive-loading/pagination checks across layouts. The new test
+covers inserted/removed rails, hidden Atrium rows, column restoration and seeding.
+Receipts: `.git/refactor-evidence/phase5/stage-navigation-
+{focused,integration,analyze-final}.txt`. Analysis retains **836 identical diagnostic
+identities**; architecture passes **535 files**; formatting/diff checks pass.
+No emulator used. Rail transition actions, remaining composition, lifecycle and
+final acceptance remain pending.
+
 ## Batch C/D checkpoint: Tonight focus ownership — 2026-09-28
 
 Base: `bfb2900c`. `HomeTonightFocus` (100 lines) owns remembered queue identity,
