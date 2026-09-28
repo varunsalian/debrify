@@ -6,6 +6,52 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: Stremio detail cache retirement — 2026-09-28
+
+Review found that `invalidateCache()`, used by profile lifecycle cleanup, left
+recommendation, enriched-metadata and non-recommendation-addon caches intact.
+Late network responses could also refill cleared caches. The shared invalidation
+now clears those caches and advances a generation. Both detail readers capture
+profile-session ownership before awaiting, reject foreign captured scopes, and
+fence network publication by generation after accepting addon inventory. That
+placement preserves legitimate inventory hydration, which may itself invalidate
+caches. The existing provider factory passes each detail route's continuation
+check into both reads. Provider priority, metadata selection, bounded concurrency,
+cache-hit reuse and ordinary failures are unchanged. This is an explicit
+profile/invalidation bug fix, not a purely structural relocation.
+
+Validation: **15 new cache tests pass**, using real service methods and controlled
+HTTP responses. They cover cache hits, invalidation/session/route retirement while
+requests are pending, incoming results winning over outgoing responses, lifecycle
+clearing, foreign captured scope rejection and stale skip-list publication.
+Final analyzer identities match all **848** baseline diagnostics; **472** measured
+files pass architecture checks. Only changed legacy members were formatted.
+The initial test fixture required legacy runtime initialization and valid seven-
+digit IMDb recommendation IDs; those fixture failures are corrected.
+
+The shared-service change justified a full-suite gate with concurrency 4. Its
+completed outcomes are **9,985 successes / 23 failures / 29 errors / 20 skips**.
+Compared with `full-sttv-picker-c4.jsonl`, all original test identities remain,
+there are no new skips, and 97 tests were added across intervening checkpoints.
+The sole new failure was `rewatch exits before cached tracker reconciliation,
+even for S1E1`: its assertion still counted callbacks in the root after the prior
+detail-composition extraction. The assertion now checks the actual feature builder
+and still requires both rewatch callbacks; all resolver precedence assertions
+remain. The corrected test and six detail-composition cases pass (**9 checks**).
+The full run predates that test-only correction; it is not represented as an
+all-green or final-revision full suite. All other failures/errors match the observed
+baseline, and no allowlist changed. Receipts:
+`.git/refactor-evidence/phase5/stremio-detail-cache-tests.txt`,
+`stremio-detail-final-analyze.txt`, `full-stremio-detail-c4.jsonl`, and
+`stremio-detail-rewatch-guard.txt`.
+
+The retained external Stremio service is 3,801 lines; this bounded edit changes
+only detail-reader continuation/cache semantics and their existing invalidation
+sites. It does not relocate original screen code into that service or declare
+addon inventory persistence audited. Trakt/MDBList status cache/credential paths,
+opening orchestration and mutation/reset contracts remain A work; feature/facade,
+CI and native/device/performance gates remain open.
+
 ## Batch A checkpoint: detail reader injection — 2026-09-28
 
 All five `_openItem` loaders now use the 73-line `HomeDetailReaders` and a

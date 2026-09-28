@@ -62,7 +62,9 @@ void main() {
     }
   });
   test('rewatch exits before cached tracker reconciliation, even for S1E1', () {
-    final screen = File('lib/screens/search_screen.dart').readAsStringSync();
+    final detail = File(
+      'lib/features/home/presentation/home_detail_presentation.dart',
+    ).readAsStringSync();
     final source = File(
       'lib/features/home/data/home_catalog_playback_resolver.dart',
     ).readAsStringSync();
@@ -81,6 +83,6 @@ void main() {
       branch,
       lessThan(source.indexOf('await seriesResume.resolve(', start)),
     );
-    expect(RegExp('startFromBeginning: true').allMatches(screen).length, 2);
+    expect(RegExp('startFromBeginning: true').allMatches(detail).length, 2);
   });
 }

@@ -18,6 +18,7 @@ import '../utils/json_isolate.dart';
 import '../utils/stremio_url.dart';
 import 'profiles/profile_preferences.dart';
 import 'profiles/profile_runtime.dart';
+import 'profiles/profile_session_memory.dart';
 import 'profiles/profile_collection_resource_facade.dart';
 import 'profiles/connection_resource_service.dart';
 import 'profiles/profile_async_authorization.dart';
@@ -110,6 +111,36 @@ class StremioService {
   // preferred-provider meta so their detail screen matches a normal catalog
   // open without leaking a result across provider changes.
   final Map<String, StremioMeta> _metaDetailsCache = {};
+  ProfileSessionOwner? _detailCacheOwner;
+  int _detailCacheGeneration = 0;
+
+  void _clearDetailCaches() {
+    _detailCacheGeneration++;
+    _recommendationsCache.clear();
+    _metaDetailsCache.clear();
+    _nonRecommendationAddonIds.clear();
+  }
+
+  /// Capture before any await: a retired request may neither borrow nor refill
+  /// another session's caches. Cache work is separate from route acceptance.
+  bool Function() _detailReadGuard(
+    bool Function()? canContinue, {
+    bool watchInvalidation = true,
+  }) {
+    final owner = ProfileSessionMemory.captureOwner();
+    final scope = owner.scope;
+    final scopeMatches = scope == null || ProfileRuntime.capture() == scope;
+    if (!scopeMatches || canContinue?.call() == false) return () => false;
+    if (_detailCacheOwner != owner) {
+      _clearDetailCaches();
+      _detailCacheOwner = owner;
+    }
+    final generation = _detailCacheGeneration;
+    return () =>
+        owner == ProfileSessionMemory.captureOwner() &&
+        (!watchInvalidation || generation == _detailCacheGeneration) &&
+        canContinue?.call() != false;
+  }
 
   // Series meta videos (episode lists), keyed by '<addonId>:<contentId>'.
   // Short TTL so newly-aired episodes still show up within a session; small
@@ -499,6 +530,7 @@ class StremioService {
     final prefs = await ProfilePreferences.instance();
     if (prefs.getString(_metadataProviderKey) == value) return;
     await prefs.setString(_metadataProviderKey, value);
+    _detailCacheGeneration++;
     _metaDetailsCache.clear();
     MetadataPreferencesService.revision.value++;
   }
@@ -607,9 +639,7 @@ class StremioService {
     // Addon set changed — drop recommendation caches so a title viewed
     // before installing a "Watch Next"-style addon picks it up without an
     // app restart (and a removed addon stops contributing).
-    _recommendationsCache.clear();
-    _metaDetailsCache.clear();
-    _nonRecommendationAddonIds.clear();
+    _clearDetailCaches();
     // Catalog pages too: a reconfigured addon can serve different content from
     // the same catalog URL, so nothing cached before the change may survive it.
     _catalogCache.clear();
@@ -907,9 +937,7 @@ class StremioService {
         throw StateError('Profile session changed before addon publication');
       }
       _addonsCache = null;
-      _recommendationsCache.clear();
-      _metaDetailsCache.clear();
-      _nonRecommendationAddonIds.clear();
+      _clearDetailCaches();
       _catalogCache.clear();
       _notifyAddonsChanged();
       return;
@@ -2071,7 +2099,14 @@ class StremioService {
   Future<List<StremioMeta>> getRecommendations({
     required String imdbId,
     required String type,
+    bool Function()? canContinue,
   }) async {
+    final originCurrent = _detailReadGuard(
+      canContinue,
+      watchInvalidation: false,
+    );
+    var current = originCurrent;
+    if (!current()) return const [];
     if (!imdbId.startsWith('tt') || (type != 'movie' && type != 'series')) {
       return const [];
     }
@@ -2081,6 +2116,10 @@ class StremioService {
 
     try {
       final addons = await getStreamingAddons();
+      if (!current()) return const [];
+      // Inventory hydration may legitimately invalidate caches. Fence network
+      // publication against changes after that inventory has been accepted.
+      current = _detailReadGuard(originCurrent);
       final candidates = addons
           .where(
             (a) =>
@@ -2095,6 +2134,7 @@ class StremioService {
       // failures. Order is preserved, which the perAddon[i]/candidates[i]
       // alignment below relies on.
       final perAddon = await mapWithConcurrency(candidates, (a) async {
+        if (!current()) return <StremioStream>[];
         try {
           return await _fetchStreamsFromAddon(
             a,
@@ -2106,6 +2146,8 @@ class StremioService {
           return <StremioStream>[];
         }
       });
+
+      if (!current()) return const [];
 
       // Learn which candidates are not recommendation providers so later
       // detail opens skip them. Rule: returned ≥1 stream but none were rec
@@ -2181,7 +2223,14 @@ class StremioService {
     required String imdbId,
     required String type,
     String? providerOverride,
+    bool Function()? canContinue,
   }) async {
+    final originCurrent = _detailReadGuard(
+      canContinue,
+      watchInvalidation: false,
+    );
+    var current = originCurrent;
+    if (!current()) return null;
     if ((providerOverride == null && !imdbId.startsWith('tt')) ||
         imdbId.isEmpty ||
         (type != 'movie' && type != 'series')) {
@@ -2189,6 +2238,8 @@ class StremioService {
     }
     try {
       final addons = await getEnabledAddons();
+      if (!current()) return null;
+      current = _detailReadGuard(originCurrent);
       final metadataAddons = addons
           .where((a) => a.resources.contains('meta') && a.baseUrl.isNotEmpty)
           .toList();
@@ -2200,6 +2251,7 @@ class StremioService {
       }
       final preference =
           providerOverride ?? await getMetadataProviderPreference();
+      if (!current()) return null;
       final preferred = metadataCandidatesForPreference(
         metadataAddons,
         preference,
@@ -2225,6 +2277,7 @@ class StremioService {
       // up enrichment. mapWithConcurrency preserves order, so results stay in
       // addon priority.
       final results = await mapWithConcurrency(candidates, (addon) async {
+        if (!current()) return null;
         final url = buildStremioResourceUri(addon.baseUrl, <String>[
           'meta',
           type,
@@ -2253,6 +2306,8 @@ class StremioService {
           client.close();
         }
       });
+
+      if (!current()) return null;
 
       // Prefer the first result (by addon priority) that carries real
       // structured metadata. Only fall back to a description-only result
@@ -3720,9 +3775,6 @@ class StremioService {
   /// Replay local addon notifications after an external registry commit.
   void refreshAfterExternalChange() {
     invalidateCache();
-    _recommendationsCache.clear();
-    _metaDetailsCache.clear();
-    _nonRecommendationAddonIds.clear();
     for (final listener in List<VoidCallback>.of(_addonsChangedListeners)) {
       try {
         listener();
@@ -3734,6 +3786,7 @@ class StremioService {
 
   /// Invalidate cache (call after external changes)
   void invalidateCache() {
+    _clearDetailCaches();
     HomeReturnCache.invalidate();
     _addonsCache = null;
     _catalogCache.clear();

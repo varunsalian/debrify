@@ -37,12 +37,14 @@ final homeDetailReadersProvider = Provider.autoDispose
             () => StremioService.instance.getRecommendations(
               imdbId: id,
               type: type,
+              canContinue: current,
             ),
           ),
           metadata: (id, type, current) => scoped(
             () => StremioService.instance.fetchMetaDetails(
               imdbId: id,
               type: type,
+              canContinue: current,
             ),
           ),
         );
