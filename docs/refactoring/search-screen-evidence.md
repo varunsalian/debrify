@@ -6,6 +6,24 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: continuation provider bindings — 2026-09-28
+
+Base: `2e9288bd`. `HomeContinuationBindings` (95 lines) retains local, IPTV,
+Trakt, Simkl and MDBList providers plus shared continuation layout preferences.
+Stable live progress adapters are created alongside their existing controllers;
+the screen delegates through aliases without copying published data. Root:
+**10,225 → 10,162 lines**.
+
+Review preserves the shared owner/view session, Trakt's Search-specific loading
+seed, listen-before-read initialization order, progress-view identity and phased
+cleanup (content families, favorites, then layout). **40 tests pass** across five
+continuation screen families, layout-controller cases and See-All routing checks.
+Analysis retains **836 identical diagnostic identities**; architecture passes
+**559 files**; changed-code formatting and diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/continuation-bindings-{tests,analyze}.txt`.
+No emulator used. Feature composition, remaining lifecycle/facade reduction and
+final acceptance remain pending.
+
 ## Batch D checkpoint: Home board viewport — 2026-09-28
 
 Base: `4304a202`. `HomeBoardViewport` (160 lines) owns the board scroll controller,

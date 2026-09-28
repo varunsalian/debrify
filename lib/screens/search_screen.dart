@@ -147,12 +147,10 @@ import '../features/home/application/home_mdblist_continuation_controller.dart';
 import '../features/home/models/home_mdblist_continuation.dart';
 import '../features/home/application/home_simkl_continuation_controller.dart';
 import '../features/home/models/home_simkl_continuation.dart';
-import '../features/home/presentation/home_progress_view.dart';
+import '../features/home/presentation/home_continuation_bindings.dart';
 import '../features/home/application/home_trakt_continuation_controller.dart';
-import '../features/home/models/home_trakt_continuation_state.dart';
 import '../features/home/models/home_trakt_continuation.dart';
 import '../features/home/application/home_continuation_layout_controller.dart';
-import '../features/home/models/home_continuation_layout.dart';
 import '../features/home/application/home_iptv_continuation_controller.dart';
 import '../features/home/models/home_iptv_continuation_state.dart';
 import '../features/home/application/home_local_continuation_controller.dart';
@@ -770,16 +768,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // affected. Split into two recency-ordered rows (Movies, then Series), each
   // shown as a leading board row when non-empty. Removal happens only from the
   // detail screen's action.
-  late final HomeLocalContinuationController _localContinuationController;
-  late final ProviderSubscription<HomeLocalContinuationState>
-  _localContinuationSubscription;
+  late final HomeContinuationBindings _continuationBindings;
+  HomeLocalContinuationController get _localContinuationController =>
+      _continuationBindings.local;
   HomeLocalContinuationState get _localContinuation =>
       _localContinuationController.current;
   bool get _cwEnabled => _localContinuation.enabled;
   List<StremioMeta> get _cwMovies => _localContinuation.movies;
   List<StremioMeta> get _cwSeries => _localContinuation.series;
   List<StremioMeta> get _cwAll => _localContinuation.data.items;
-  late final Map<String, double> _cwProgress;
+  Map<String, double> get _cwProgress => _continuationBindings.localProgress;
   Map<String, String> get _cwEpisode => _localContinuation.data.episode;
   Map<String, int> get _cwRemainingMinutes =>
       _localContinuation.data.remainingMinutes;
@@ -800,9 +798,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Loaded once before the first node sync (each CW loader awaits
   // [_ensureCwMergeFlags]); [_reloadForHomeSettings] re-reads and re-syncs
   // node counts when a toggle changes.
-  late final HomeContinuationLayoutController _continuationLayoutController;
-  late final ProviderSubscription<HomeContinuationLayout>
-  _continuationLayoutSubscription;
+  HomeContinuationLayoutController get _continuationLayoutController =>
+      _continuationBindings.layout;
   bool get _cwMergeLocal => _continuationLayoutController.current.local;
   bool get _cwMergeTrakt => _continuationLayoutController.current.trakt;
   bool get _cwMergeSimkl => _continuationLayoutController.current.simkl;
@@ -816,9 +813,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // metadata-addon rows above because IPTV items aren't IMDb-keyed, so their
   // progress/episode lookups and routing key off the router's routeKey (stored
   // as the synthetic meta id) instead of an imdbId.
-  late final HomeIptvContinuationController _iptvContinuationController;
-  late final ProviderSubscription<HomeIptvContinuationState>
-  _iptvContinuationSubscription;
+  HomeIptvContinuationController get _iptvContinuationController =>
+      _continuationBindings.iptv;
   HomeIptvContinuationState get _iptvContinuation =>
       _iptvContinuationController.current;
   List<StremioMeta> get _iptvCwMovies => _iptvContinuation.movies;
@@ -849,15 +845,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // from the Trakt account (no local store). Shown after the local rows when
   // connected + non-empty. Network-loaded on init / integration change,
   // post-playback, and throttled app resume, then cached in memory.
-  late final HomeTraktContinuationController _traktContinuationController;
-  late final ProviderSubscription<HomeTraktContinuationState>
-  _traktContinuationSubscription;
+  HomeTraktContinuationController get _traktContinuationController =>
+      _continuationBindings.trakt;
   HomeTraktContinuation get _traktContinuation =>
       _traktContinuationController.current.data;
   List<StremioMeta> get _traktMovies => _traktContinuation.movies;
   List<StremioMeta> get _traktSeries => _traktContinuation.series;
   List<StremioMeta> get _traktAll => _traktContinuation.all;
-  late final Map<String, double> _traktProgress;
+  Map<String, double> get _traktProgress => _continuationBindings.traktProgress;
   Map<String, String> get _traktEpisode => _traktContinuation.episode;
   Map<String, int> get _traktRemainingMinutes =>
       _traktContinuation.remainingMinutes;
@@ -873,15 +868,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // strip below the Trakt rows, built from the account's paused playback
   // sessions (same `/sync/playback` lists the scrobble resume already fetches).
   // Independent of the Trakt block above so neither can regress the other.
-  late final HomeSimklContinuationController _simklContinuationController;
-  late final ProviderSubscription<HomeSimklContinuation>
-  _simklContinuationSubscription;
+  HomeSimklContinuationController get _simklContinuationController =>
+      _continuationBindings.simkl;
   HomeSimklContinuation get _simklContinuation =>
       _simklContinuationController.current;
   List<StremioMeta> get _simklMovies => _simklContinuation.movies;
   List<StremioMeta> get _simklSeries => _simklContinuation.series;
   List<StremioMeta> get _simklAll => _simklContinuation.all;
-  late final Map<String, double> _simklProgress;
+  Map<String, double> get _simklProgress => _continuationBindings.simklProgress;
   Map<String, String> get _simklEpisode => _simklContinuation.episode;
   Map<String, SimklContinueWatchingItem> get _simklByImdb =>
       _simklContinuation.byImdb;
@@ -891,15 +885,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   final List<FocusNode> _simklMovieNodes = [];
   final List<FocusNode> _simklSeriesNodes = [];
-  late final HomeMdblistContinuationController _mdblistContinuationController;
-  late final ProviderSubscription<HomeMdblistContinuation>
-  _mdblistContinuationSubscription;
+  HomeMdblistContinuationController get _mdblistContinuationController =>
+      _continuationBindings.mdblist;
   HomeMdblistContinuation get _mdblistContinuation =>
       _mdblistContinuationController.current;
   List<StremioMeta> get _mdblistMovies => _mdblistContinuation.movies;
   List<StremioMeta> get _mdblistSeries => _mdblistContinuation.series;
   List<StremioMeta> get _mdblistAll => _mdblistContinuation.all;
-  late final Map<String, double> _mdblistProgress;
+  Map<String, double> get _mdblistProgress =>
+      _continuationBindings.mdblistProgress;
   Map<String, String> get _mdblistEpisode => _mdblistContinuation.episode;
   Map<String, MdblistContinueWatchingItem> get _mdblistByImdb =>
       _mdblistContinuation.byImdb;
@@ -1709,63 +1703,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       owner: _profileSessionOwner,
       viewIdentity: Object(),
     );
-    _continuationLayoutSubscription = ref.listenManual(
-      homeContinuationLayoutProvider(localContinuationSession),
-      (previous, next) {},
-    );
-    _continuationLayoutController = ref.read(
-      homeContinuationLayoutProvider(localContinuationSession).notifier,
-    );
-    _localContinuationSubscription = ref.listenManual(
-      homeLocalContinuationProvider(localContinuationSession),
-      (previous, next) {},
-    );
-    _localContinuationController = ref.read(
-      homeLocalContinuationProvider(localContinuationSession).notifier,
-    );
-    _cwProgress = HomeProgressView(
-      () => _localContinuationController.current.data.progress,
-    );
-    final traktContinuationScope = (
-      session: localContinuationSession,
-      initiallyLoading: !widget.searchMode,
-    );
-    _traktContinuationSubscription = ref.listenManual(
-      homeTraktContinuationProvider(traktContinuationScope),
-      (previous, next) {},
-    );
-    _traktContinuationController = ref.read(
-      homeTraktContinuationProvider(traktContinuationScope).notifier,
-    );
-    _traktProgress = HomeProgressView(
-      () => _traktContinuationController.current.data.progress,
-    );
-    _simklContinuationSubscription = ref.listenManual(
-      homeSimklContinuationProvider(localContinuationSession),
-      (previous, next) {},
-    );
-    _simklContinuationController = ref.read(
-      homeSimklContinuationProvider(localContinuationSession).notifier,
-    );
-    _simklProgress = HomeProgressView(
-      () => _simklContinuationController.current.progress,
-    );
-    _mdblistContinuationSubscription = ref.listenManual(
-      homeMdblistContinuationProvider(localContinuationSession),
-      (previous, next) {},
-    );
-    _mdblistContinuationController = ref.read(
-      homeMdblistContinuationProvider(localContinuationSession).notifier,
-    );
-    _mdblistProgress = HomeProgressView(
-      () => _mdblistContinuationController.current.progress,
-    );
-    _iptvContinuationSubscription = ref.listenManual(
-      homeIptvContinuationProvider(localContinuationSession),
-      (previous, next) {},
-    );
-    _iptvContinuationController = ref.read(
-      homeIptvContinuationProvider(localContinuationSession).notifier,
+    _continuationBindings = HomeContinuationBindings(
+      ref,
+      localContinuationSession,
+      initiallyLoadingTrakt: !widget.searchMode,
     );
     _homeLastScroll = restoredHome && !widget.isTelevision
         ? homeSnapshot.scrollOffset : 0;
@@ -2374,13 +2315,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _heroTrailerPreferencesSubscription.close();
     _homeDefaultViewSubscription.close();
     _homeDisplaySubscription.close();
-    _localContinuationSubscription.close();
-    _iptvContinuationSubscription.close();
-    _traktContinuationSubscription.close();
-    _simklContinuationSubscription.close();
-    _mdblistContinuationSubscription.close();
+    _continuationBindings.closeContent();
     _favoriteBindings.close();
-    _continuationLayoutSubscription.close();
+    _continuationBindings.closeLayout();
     _searchResultBindings.closeCatalogAndLists();
     _keywordAppearanceSubscription.close();
     _searchResultBindings.closeKeyword();
