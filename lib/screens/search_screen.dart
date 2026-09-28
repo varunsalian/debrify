@@ -1,3 +1,5 @@
+import '../features/home/presentation/home_canvas_board.dart';
+import '../features/home/presentation/home_tonight_board.dart';
 import '../features/home/presentation/home_board_media.dart';
 import '../ui/core/retry_message.dart';
 import '../features/home/presentation/home_board_content.dart';
@@ -53,8 +55,6 @@ import '../features/home/presentation/home_atrium_row.dart';
 import '../features/home/presentation/home_mosaic_board.dart';
 import '../features/home/presentation/home_deck_board.dart';
 import '../features/home/presentation/home_stage_row_label.dart';
-import '../features/home/presentation/home_tonight_layout.dart';
-import '../features/home/presentation/home_tonight_header.dart';
 import '../features/home/presentation/home_tonight_queue_list.dart';
 import '../features/home/presentation/home_tonight_rail.dart';
 import '../features/home/presentation/home_stage_hold_latch.dart';
@@ -62,16 +62,10 @@ import '../features/home/presentation/home_stage_focus_requests.dart';
 import '../features/home/presentation/home_stage_deferred_right.dart';
 import '../features/home/presentation/home_stage_deferred_advance.dart';
 import '../features/home/presentation/home_hero_preview_policy.dart';
-import '../features/home/presentation/home_canvas_tabs.dart';
-import '../features/home/presentation/home_canvas_shelf.dart';
-import '../features/home/presentation/home_canvas_layout.dart';
-import '../features/home/presentation/home_stage_favorite_identity.dart';
 import '../widgets/skeleton_poster.dart' show BrandLoadingStage;
 import '../features/home/presentation/home_trakt_skeleton_row.dart';
 import '../features/home/presentation/home_stage_rows.dart';
-import '../features/home/presentation/home_stage_identity.dart';
 import '../features/home/presentation/home_tonight_queue_row.dart';
-import '../features/home/presentation/home_tonight_card_caption.dart';
 import '../features/home/presentation/home_favorite_focus.dart';
 import '../features/home/models/home_tonight_card_info.dart';
 import '../features/home/application/home_stage_metadata.dart';
@@ -7133,113 +7127,76 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // the brand stage rather than an empty black canvas.
       return BrandLoadingStage(isTelevision: widget.isTelevision);
     }
-    final rails = view.rails;
-    final railIndex = view.index;
-    final rail = view.rail;
-    final railKey = view.key;
-    final bool favRail = rail.favKind != null;
-    final items = view.items;
-    final nodes = view.nodes;
-
     _seedStageFocusOnce();
-
-    return LayoutBuilder(
-      builder: (context, cons) {
-        final boardH = cons.maxHeight;
-        return buildHomeCanvasLayout(
-          boardHeight: boardH,
-          cardAspect: _stageCardAspect(rail),
-          captionBand: _homeArtPosterCaptionBand,
-          tabsHeight: homeCanvasTabsHeight(context),
-          theater: _canvasTheater,
-          artwork: _boardMedia.artwork(),
-          trailer: _heroTrailerActive
-              ? _boardMedia.trailerLayer(boardH, fullBleed: true)
-              : null,
-          live: _heroTrailerActive
-              ? _boardMedia.liveLayer(boardH, fullBleed: true)
-              : null,
-          identity: ValueListenableBuilder<HomeFavoriteFocus?>(
-            valueListenable: _canvasFavFocus,
-            builder: (context, fav, _) => fav != null
-                ? HomeStageFavoriteIdentity(fav: fav)
-                : HomeStageIdentity(
-                    item: _heroItem,
-                    enriched: _heroEnriched,
-                    trailerShowing: _heroTrailerShowing,
-                  ),
-          ),
-          tabs: buildHomeCanvasTabs(
-            context: this.context,
-            railCount: rails.length,
-            active: railIndex,
-            titleAt: (i) => _canvasTabTitle(rails, i),
-          ),
-          shelfBuilder: (cardH, cardW, favCardW) => buildHomeCanvasShelf(
-            railKey: railKey,
-            itemCount: favRail
-                ? _canvasFavItemCount(rail.favKind!)
-                : items.length,
-            cardWidth: favRail ? favCardW : cardW,
-            cardHeight: favRail ? null : cardH,
-            itemBuilder: (context, col) {
-              if (favRail) return _canvasFavCell(rail.favKind!, railKey, col);
-              final item = items[col];
-              return HomeBoardCell(
-                onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-                item: item,
-                isTelevision: true,
-                focusNode: nodes[col],
-                column: col,
-                rowNodes: nodes,
-                hasBoundSource: _isBound(item),
-                // Canvas focus grammar: white ring (the
-                // violet stays with classic chrome).
-                ringColor: Colors.white,
-                aspectRatio: _stageCardAspect(rail),
-                artUrl: _stageCardArt(rail, item),
-                focusArtUrl: _stageCollection(rail)?.focusArtOf(item),
-                focusVideoUrl: _stageCollection(rail)?.focusVideoOf(item),
-                focusGlowEnabled:
-                    _stageCollection(rail)?.collection.focusGlowEnabled ??
-                    false,
-                showTitleOverlay:
-                    !(_stageCollection(rail)?.folderOf(item)?.hideTitle ??
-                        false),
-                progress: rail.cw?.progressOf(item),
-                episodeLabel: rail.cw?.episodeOf(item),
-                onQuickPlay: rail.cw != null || _pikpakOnly
-                    ? null
-                    : () => _sectionQuickPlay(
-                        _sections[rail.sectionIndex!],
-                        item,
-                      ),
-                onLongPress: rail.cw == null
-                    ? null
-                    : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
-                onFocused: () {
-                  _setHero(item);
-                  _canvasCols[railKey] = col;
-                },
-                onUp: () => _stageSwitchRail(-1),
-                onDown: () => _stageSwitchRail(1),
-                onOpen: () {
-                  if (rail.cw != null) {
-                    rail.cw!.onOpen(item);
-                  } else {
-                    _sectionOpenItem(_sections[rail.sectionIndex!], item);
-                  }
-                },
-                onNearEnd: rail.sectionIndex == null
-                    ? null
-                    : () => _loadMoreRow(rail.sectionIndex!),
-              );
-            },
-          ),
-        );
-      },
+    return buildHomeCanvasBoard(
+      hostContext: context,
+      view: view,
+      media: () => _boardMedia,
+      theater: () => _canvasTheater,
+      trailerActive: () => _heroTrailerActive,
+      trailerShowing: _heroTrailerShowing,
+      cardAspect: () => _stageCardAspect(view.rail),
+      captionBandHeight: () => _homeArtPosterCaptionBand,
+      favoriteCount: () => _canvasFavItemCount(view.rail.favKind!),
+      railTitle: (index) => _canvasTabTitle(view.rails, index),
+      favoriteBuilder: (_, col) =>
+          _canvasFavCell(view.rail.favKind!, view.key, col),
+      itemBuilder: (_, col) => _canvasCell(view, col),
     );
   }
+
+  Widget _canvasCell(HomeStageRailView view, int col) {
+    final rail = view.rail;
+    final railKey = view.key;
+    final items = view.items;
+    final nodes = view.nodes;
+    final item = items[col];
+    return HomeBoardCell(
+      onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
+      item: item,
+      isTelevision: true,
+      focusNode: nodes[col],
+      column: col,
+      rowNodes: nodes,
+      hasBoundSource: _isBound(item),
+      // Canvas focus grammar: white ring (the
+      // violet stays with classic chrome).
+      ringColor: Colors.white,
+      aspectRatio: _stageCardAspect(rail),
+      artUrl: _stageCardArt(rail, item),
+      focusArtUrl: _stageCollection(rail)?.focusArtOf(item),
+      focusVideoUrl: _stageCollection(rail)?.focusVideoOf(item),
+      focusGlowEnabled:
+          _stageCollection(rail)?.collection.focusGlowEnabled ?? false,
+      showTitleOverlay:
+          !(_stageCollection(rail)?.folderOf(item)?.hideTitle ?? false),
+      progress: rail.cw?.progressOf(item),
+      episodeLabel: rail.cw?.episodeOf(item),
+      onQuickPlay: rail.cw != null || _pikpakOnly
+          ? null
+          : () => _sectionQuickPlay(_sections[rail.sectionIndex!], item),
+      onLongPress: rail.cw == null
+          ? null
+          : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
+      onFocused: () {
+        _setHero(item);
+        _canvasCols[railKey] = col;
+      },
+      onUp: () => _stageSwitchRail(-1),
+      onDown: () => _stageSwitchRail(1),
+      onOpen: () {
+        if (rail.cw != null) {
+          rail.cw!.onOpen(item);
+        } else {
+          _sectionOpenItem(_sections[rail.sectionIndex!], item);
+        }
+      },
+      onNearEnd: rail.sectionIndex == null
+          ? null
+          : () => _loadMoreRow(rail.sectionIndex!),
+    );
+  }
+
   /// A DOWN that ran off the end of the rail list asked for another batch.
   /// Called when one lands: completes the move only if the user is STILL on
   /// the rail they pressed DOWN from, and the request hasn't gone stale — a
@@ -8078,78 +8035,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final view = rails.isEmpty ? null : _resolveStageRail();
     _seedStageFocusOnce();
 
-    return LayoutBuilder(
-      builder: (context, cons) {
-        final boardW = cons.maxWidth;
-        final boardH = cons.maxHeight;
-
-        // ── Geometry, derived bottom-up. The rail zone is reserved FIRST,
-        // then the main zone takes what is left, then the card and the queue
-        // rows are sized from that — so nothing can overlap on a short board.
-        final labelH = _atriumLabelHeight(context);
-        final double railBoxH = rails.isEmpty
-            ? 0
-            : _stageRailBoxH(context, boardH * 0.21, maxH: boardH * 0.30);
-        final geometry = HomeTonightGeometry(
-          boardW: boardW,
-          boardH: boardH,
-          hasRail: rails.isNotEmpty,
-          hasQueue: queue.isNotEmpty,
-          railBoxH: railBoxH,
-          labelHeight: labelH,
-          labelGap: _kAtriumLabelGap,
-          headerH: homeTonightHeaderHeight(context),
-          rowMinH: _tonightRowMinHeight(context),
-        );
-        // A zone that isn't on screen must not be the one holding focus.
-        if (!geometry.showQueue && rails.isNotEmpty) {
-          _tonightZoneIsQueue = false;
-        }
-        return buildHomeTonightLayout(
-          geometry: geometry,
-          header: buildHomeTonightHeader(
-            context: this.context,
-            inProgress: queue.length,
-            now: DateTime.now(),
-          ),
-          cardBuilder: () => buildHomeTonightCardFrame(
-            artwork: _boardMedia.artwork(),
-            trailer: _heroTrailerActive
-                ? _boardMedia.trailerLayer(geometry.cardH, fullBleed: true)
-                : null,
-            live: _heroTrailerActive
-                ? _boardMedia.liveLayer(geometry.cardH, fullBleed: true)
-                : null,
-            caption: HomeTonightCardCaption(
-              item: _heroItem,
-              enriched: _heroEnriched,
-              fav: _canvasFavFocus,
-              info: _tonightCard,
-            ),
-          ),
-          queueBuilder: () => _tonightQueueList(
-            queue,
-            geometry.rowH,
-            geometry.effQueueW,
-            rails.isNotEmpty,
-          ),
-          railBuilder: view == null
-              ? null
-              : () => _tonightRail(
-                  view,
-                  railBoxH,
-                  queueAbove: queue.isNotEmpty && geometry.showQueue,
-                ),
-        );
-      },
+    return buildHomeTonightBoard(
+      hostContext: context,
+      queueCount: queue.length,
+      hasRail: rails.isNotEmpty,
+      media: () => _boardMedia,
+      trailerActive: () => _heroTrailerActive,
+      cardInfo: _tonightCard,
+      labelHeight: _atriumLabelHeight,
+      labelGap: _kAtriumLabelGap,
+      railBoxHeight: _stageRailBoxH,
+      onQueueHidden: () => _tonightZoneIsQueue = false,
+      queueBuilder: (height, width) =>
+          _tonightQueueList(queue, height, width, rails.isNotEmpty),
+      railBuilder: view == null
+          ? null
+          : (height, queueAbove) =>
+                _tonightRail(view, height, queueAbove: queueAbove),
     );
-  }
-
-  /// A queue row's true minimum at the current text scale: title + episode +
-  /// their gaps + the progress bar + the row's vertical padding.
-  double _tonightRowMinHeight(BuildContext context) {
-    final t = MediaQuery.textScalerOf(context);
-    return t.scale(13.5) * 1.25 + 5 + t.scale(11.5) * 1.25 + 9 + 4 + 20 + 4;
   }
 
   Widget _tonightQueueList(

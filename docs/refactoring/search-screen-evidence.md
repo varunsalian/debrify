@@ -6,6 +6,31 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Tonight and Canvas composition — 2026-09-28
+
+Base: `231b8fd8`. Tonight (90 lines) and Canvas (78 lines) now compose their
+boards in Home presentation. Tonight owns queue/card/rail geometry and caption
+composition; Canvas owns stage/tabs/shelf composition. Root:
+**12,555 → 12,458 lines**. Production uses both; old composition bodies are removed.
+
+Review preserves rail snapshots, lazy visual settings and cell creation, media
+visibility/geometry, host-context labels and focus-seeding order. Canvas card
+actions remain unchanged in a named root method. Tonight's existing adjustment
+when geometry hides its queue still calls back to the same focus-zone state at
+the same point; removing that build-time mutation remains D, not claimed complete.
+No new owned resources, providers or data calls were introduced.
+
+**28 tests pass**: 15 Tonight layout/queue/rail/integration checks and 13 Canvas
+layout/shelf/tabs/integration checks. Both use the existing
+`test/home_progressive_screen_test.dart` and
+`test/home_progressive_pagination_test.dart` filtered to the layout, including
+late catalogs, covered routes, paging and deferred focus. Receipts:
+`.git/refactor-evidence/phase5/{tonight,canvas}-board-tests.txt` and
+`tonight-canvas-analyze-final.txt`. Analysis retains **838 identical diagnostic
+identities**. Architecture passes **526 files**;
+formatting/diff checks pass. No emulator used. Remaining composition, navigation,
+lifecycle and final acceptance stay open.
+
 ## Batch C checkpoint: Atrium and Mosaic board composition — 2026-09-28
 
 Base: `974a5e22`. Atrium (156 lines) and Mosaic (81 lines) now compose their
