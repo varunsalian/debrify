@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_favorite_nodes.dart';
 import '../features/home/presentation/home_favorite_bindings.dart';
 import '../features/search/presentation/keyword_viewport.dart';
 import '../features/search/presentation/title_suggestion_presentation.dart';
@@ -909,10 +910,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // keyword channels, shown between Continue Watching and the catalog rows.
   // Channels have no artwork, so they render as Stremio-shaped cards with a
   // gradient + glyph placeholder (see [HomeArtPoster]).
+  final _favoriteNodes = HomeFavoriteNodes();
   late final HomeFavoriteBindings _favoriteBindings;
   HomeTvFavoritesController get _tvFavoritesController => _favoriteBindings.tv;
   List<DebrifyTvChannel> get _tvFavChannels => _tvFavoritesController.current;
-  final List<FocusNode> _tvFavNodes = [];
+  List<FocusNode> get _tvFavNodes =>
+      _favoriteNodes.nodes(HomeFavoriteKind.debrify);
 
   // Stremio TV favourites — a leading row of the user's starred Stremio
   // "channels" (catalogs treated as TV channels). Each card shows the channel's
@@ -922,7 +925,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _favoriteBindings.stremio;
   List<HomeStremioFavorite> get _stvFavChannels =>
       _stremioFavoritesController.current.channels;
-  final List<FocusNode> _stvFavNodes = [];
+  List<FocusNode> get _stvFavNodes =>
+      _favoriteNodes.nodes(HomeFavoriteKind.stremio);
 
   // IPTV favourites — a leading row of the user's starred live IPTV channels.
   // Cards show the channel logo (glyph fallback); tapping plays the stream
@@ -931,7 +935,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   HomeIptvFavoritesController get _iptvFavoritesController =>
       _favoriteBindings.iptv;
   List<IptvChannel> get _iptvFavChannels => _iptvFavoritesController.current;
-  final List<FocusNode> _iptvFavNodes = [];
+  List<FocusNode> get _iptvFavNodes =>
+      _favoriteNodes.nodes(HomeFavoriteKind.iptv);
 
   // Debrify's account-independent movie/series watchlist. Full metadata is
   // stored locally and presented as separate movie and series rows, so neither
@@ -942,8 +947,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _watchlistController.current.movies;
   List<StremioMeta> get _watchlistSeriesItems =>
       _watchlistController.current.series;
-  final List<FocusNode> _watchlistMovieNodes = [];
-  final List<FocusNode> _watchlistSeriesNodes = [];
+  List<FocusNode> get _watchlistMovieNodes =>
+      _favoriteNodes.nodes(HomeFavoriteKind.watchlistMovies);
+  List<FocusNode> get _watchlistSeriesNodes =>
+      _favoriteNodes.nodes(HomeFavoriteKind.watchlistSeries);
 
   // Opted-in IPTV custom lists as Home rows (`iptvlist:` extras), rendered
   // through the favourites-row family after the IPTV favourites row. Rebuilt
@@ -964,7 +971,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   HomePlaylistController get _playlistController => _favoriteBindings.playlist;
   List<HomePlaylistItem> get _playlistItems =>
       _playlistController.current.items;
-  final List<FocusNode> _playlistFavNodes = [];
+  List<FocusNode> get _playlistFavNodes =>
+      _favoriteNodes.nodes(HomeFavoriteKind.playlist);
   // Guards against launching a second concurrent playback while the first is
   // still resolving links (the menu closes immediately, giving no other cue).
   bool _playlistLaunching = false;
@@ -2445,15 +2453,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       ..._simklSeriesNodes,
       ..._mdblistMovieNodes,
       ..._mdblistSeriesNodes,
-      ..._tvFavNodes,
-      ..._stvFavNodes,
-      ..._iptvFavNodes,
-      ..._watchlistMovieNodes,
-      ..._watchlistSeriesNodes,
-      ..._playlistFavNodes,
     ]) {
       n.dispose();
     }
+    _favoriteNodes.disposeNodes();
     _cwMovieNodes.clear();
     _cwSeriesNodes.clear();
     _iptvCwMovieNodes.clear();
@@ -2464,12 +2467,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _simklSeriesNodes.clear();
     _mdblistMovieNodes.clear();
     _mdblistSeriesNodes.clear();
-    _tvFavNodes.clear();
-    _stvFavNodes.clear();
-    _iptvFavNodes.clear();
-    _watchlistMovieNodes.clear();
-    _watchlistSeriesNodes.clear();
-    _playlistFavNodes.clear();
+    _favoriteNodes.clearNodes();
     super.dispose();
   }
 
@@ -3440,16 +3438,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   );
 
   /// Grow/shrink the favourites row's focus nodes to match the channel count.
-  void _syncTvFavNodes() {
-    while (_tvFavNodes.length < _tvFavChannels.length) {
-      _tvFavNodes.add(
-        FocusNode(debugLabel: 'search_tvfav_${_tvFavNodes.length}'),
-      );
-    }
-    while (_tvFavNodes.length > _tvFavChannels.length) {
-      _tvFavNodes.removeLast().dispose();
-    }
-  }
+  void _syncTvFavNodes() =>
+      _syncFavoriteNodes(HomeFavoriteKind.debrify, _tvFavChannels.length);
 
   /// Launch a Debrify TV channel (same path the Home screen uses): hand off to
   /// the live player if it's mounted, else queue an auto-play and switch tabs.
@@ -3472,16 +3462,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     },
   );
 
-  void _syncStvFavNodes() {
-    while (_stvFavNodes.length < _stvFavChannels.length) {
-      _stvFavNodes.add(
-        FocusNode(debugLabel: 'search_stvfav_${_stvFavNodes.length}'),
-      );
-    }
-    while (_stvFavNodes.length > _stvFavChannels.length) {
-      _stvFavNodes.removeLast().dispose();
-    }
-  }
+  void _syncStvFavNodes() =>
+      _syncFavoriteNodes(HomeFavoriteKind.stremio, _stvFavChannels.length);
 
   /// First of [a], [b] that is a non-empty string, else null.
   String? _firstNonEmpty(String? a, String? b) {
@@ -3519,16 +3501,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     },
   );
 
-  void _syncIptvFavNodes() {
-    while (_iptvFavNodes.length < _iptvFavChannels.length) {
-      _iptvFavNodes.add(
-        FocusNode(debugLabel: 'search_iptvfav_${_iptvFavNodes.length}'),
-      );
-    }
-    while (_iptvFavNodes.length > _iptvFavChannels.length) {
-      _iptvFavNodes.removeLast().dispose();
-    }
-  }
+  void _syncIptvFavNodes() =>
+      _syncFavoriteNodes(HomeFavoriteKind.iptv, _iptvFavChannels.length);
 
   /// Apply a complete custom-list snapshot while retaining surviving row nodes.
   Future<void> _loadIptvListRows() => _iptvListsController.load(
@@ -3706,43 +3680,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     },
   );
 
-  void _syncMyWatchlistNodes() {
-    _syncWatchlistNodes(
-      nodes: _watchlistMovieNodes,
-      itemCount: _watchlistMovieItems.length,
-      debugLabel: 'search_watchlist_movie',
-    );
-    _syncWatchlistNodes(
-      nodes: _watchlistSeriesNodes,
-      itemCount: _watchlistSeriesItems.length,
-      debugLabel: 'search_watchlist_series',
-    );
-  }
+  void _syncFavoriteNodes(HomeFavoriteKind kind, int count) => _favoriteNodes
+      .sync(kind, count, isCurrent: () => mounted, onEmpty: _focusContent);
 
-  void _syncWatchlistNodes({
-    required List<FocusNode> nodes,
-    required int itemCount,
-    required String debugLabel,
-  }) {
-    while (nodes.length < itemCount) {
-      nodes.add(FocusNode(debugLabel: '${debugLabel}_${nodes.length}'));
-    }
-    var removedFocusedNode = false;
-    while (nodes.length > itemCount) {
-      final removed = nodes.removeLast();
-      removedFocusedNode = removedFocusedNode || removed.hasFocus;
-      removed.dispose();
-    }
-    if (removedFocusedNode) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (nodes.isNotEmpty) {
-          nodes.last.requestFocus();
-        } else {
-          _focusContent();
-        }
-      });
-    }
+  void _syncMyWatchlistNodes() {
+    _syncFavoriteNodes(
+      HomeFavoriteKind.watchlistMovies,
+      _watchlistMovieItems.length,
+    );
+    _syncFavoriteNodes(
+      HomeFavoriteKind.watchlistSeries,
+      _watchlistSeriesItems.length,
+    );
   }
 
   Future<void> _offerRemoveUnavailableWatchlistItem(
@@ -3856,26 +3805,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     },
   );
 
-  void _syncPlaylistFavNodes() {
-    while (_playlistFavNodes.length < _playlistItems.length) {
-      _playlistFavNodes.add(
-        FocusNode(debugLabel: 'search_playlistfav_${_playlistFavNodes.length}'),
-      );
-    }
-    while (_playlistFavNodes.length > _playlistItems.length) {
-      final removed = _playlistFavNodes.removeLast();
-      // Unlike the other fav rows, this one deletes items in-row — so the card
-      // being trimmed can be the one that currently holds DPAD focus (delete the
-      // focused last card). Disposing a focused node strands focus on a disposed
-      // object; hand it to the new last card first (or let it fall out cleanly
-      // when the row is now empty).
-      final hadFocus = removed.hasFocus;
-      removed.dispose();
-      if (hadFocus && _playlistFavNodes.isNotEmpty) {
-        _playlistFavNodes.last.requestFocus();
-      }
-    }
-  }
+  void _syncPlaylistFavNodes() =>
+      _syncFavoriteNodes(HomeFavoriteKind.playlist, _playlistItems.length);
 
   /// The full action menu for a playlist item — the same set of actions as the
   /// Home playlist section (Home is being phased out, so this row is a complete

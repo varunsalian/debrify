@@ -6,6 +6,23 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: saved-content focus pools — 2026-09-28
+
+Base: `3c469c3d`. `HomeFavoriteNodes` (76 lines) owns the six saved-content node
+pools and resize/removal policies. Custom IPTV lists retain their existing stable-
+list-id owner. The root delegates synchronization and preserves disposal/clear
+phases around continuation pools. Root: **10,639 → 10,573 lines**.
+
+Review preserves labels, positional node identity, ordinary favorite trimming,
+Watchlist's deferred remaining-card/content fallback, Playlist's immediate last-
+card handoff and the original disposal order. **31 tests pass**: 29 saved-content
+screen cases and two focused last-card removal/identity/fallback widget tests.
+Analysis retains **836 identical diagnostic identities**; architecture passes
+**553 files**; formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/favorite-nodes-{tests,focused,analyze-final}.txt`.
+No emulator used. Remaining feature composition, broader lifecycle/facade reduction
+and final acceptance remain pending.
+
 ## Batch D checkpoint: Home saved-content bindings — 2026-09-28
 
 Base: `6ed9b04a`. `HomeFavoriteBindings` (76 lines) retains TV/Stremio/IPTV
