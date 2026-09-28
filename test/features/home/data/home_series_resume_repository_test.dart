@@ -67,7 +67,7 @@ class Fixture {
   }
 
   late final repository = HomeSeriesResumeRepository(
-    selectTraktItem: (item) async {
+    selectTraktItem: (item, current) async {
       selectedItems.add(item);
       await step('select');
       return resolved;

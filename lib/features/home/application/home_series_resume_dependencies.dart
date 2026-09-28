@@ -22,8 +22,11 @@ final homeSeriesResumeRepositoryProvider = Provider.autoDispose
         }
 
         return HomeSeriesResumeRepository(
-          selectTraktItem: (item) => scoped(
-            () => TraktContinueWatchingService.instance.selectionForItem(item),
+          selectTraktItem: (item, current) => scoped(
+            () => TraktContinueWatchingService.instance.selectionForItem(
+              item,
+              canContinue: current,
+            ),
           ),
           readTraktShows: () => scoped(
             () => TraktContinueWatchingService.instance.fetchItems(

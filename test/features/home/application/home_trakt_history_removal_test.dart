@@ -1,3 +1,4 @@
+import 'package:debrify/features/home/application/home_series_resume_dependencies.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
@@ -359,4 +360,235 @@ void main() {
     );
     expect(requests, 0);
   });
+  // Resume reads exercise the same real two-account credential fixture as writes.
+  for (final stage in ['next', 'page', 'native', 'unauthorized']) {
+    for (final retirement in ['active', 'view', 'profile']) {
+      if (stage == 'unauthorized' && retirement == 'active') continue;
+      test(
+        'cached resume $stage retains origin and stops after $retirement retirement',
+        () async {
+          final container = ProviderContainer.test();
+          final reader = container.read(
+            homeSeriesResumeRepositoryProvider(
+              ProfileSessionMemory.captureOwner(),
+            ),
+          );
+          final meta = StremioMeta(
+            id: stage == 'native' ? 'tmdb:123' : 'tt123',
+            name: 'Fixture',
+            type: 'series',
+          );
+          final cached = TraktContinueWatchingItem(
+            meta: meta,
+            traktContentType: 'episodes',
+            season: stage == 'page' || stage == 'unauthorized' ? 2 : null,
+            episode: stage == 'page' || stage == 'unauthorized' ? 3 : null,
+            progress: 42,
+            pausedAtMs: 9876,
+          );
+          final entered = Completer<void>(), release = Completer<void>();
+          var current = true;
+          final paths = <String>[];
+          await http.runWithClient(
+            () async {
+              final pending = ProfileRuntime.withCapturedScope(
+                other,
+                () => reader.traktSelection(
+                  meta,
+                  cached: cached,
+                  isCurrent: () => current,
+                ),
+              );
+              await entered.future;
+              if (retirement == 'view') current = false;
+              if (retirement == 'profile') ProfileRuntime.publish(other);
+              release.complete();
+              final result = await pending;
+              if (retirement == 'active') {
+                expect(result!.sel.imdbId, meta.id);
+                expect((result.sel.season, result.sel.episode), (2, 3));
+                expect(result.sel.traktProgressPercent, 67);
+                expect(result.sel.traktSource, isTrue);
+                expect(result.tsMs, 9876);
+                expect(paths.length, stage == 'native' ? 3 : 2);
+              } else {
+                expect(result, isNull);
+                expect(paths, hasLength(1));
+              }
+            },
+            () => MockClient((request) async {
+              expect(request.method, 'GET');
+              expect(request.headers['authorization'], 'Bearer origin-token');
+              paths.add(request.url.path);
+              if (paths.length == 1) {
+                entered.complete();
+                await release.future;
+                if (stage == 'unauthorized') return http.Response('{}', 401);
+              }
+              if (request.url.path.startsWith('/search/')) {
+                return http.Response(
+                  jsonEncode([
+                    {
+                      'type': 'show',
+                      'show': {
+                        'ids': {'tmdb': 123, 'trakt': 42},
+                      },
+                    },
+                  ]),
+                  200,
+                );
+              }
+              if (request.url.path.contains('/progress/watched')) {
+                return http.Response(
+                  jsonEncode({
+                    'next_episode': {'season': 2, 'number': 3},
+                  }),
+                  200,
+                );
+              }
+              expect(request.url.path, '/sync/playback/episodes');
+              expect(request.url.queryParameters['limit'], '250');
+              return http.Response(
+                jsonEncode([
+                  {
+                    'progress': 67,
+                    'show': {
+                      'ids': stage == 'native'
+                          ? {'tmdb': 123}
+                          : {'imdb': 'tt123'},
+                    },
+                    'episode': {'season': 2, 'number': 3},
+                  },
+                ]),
+                200,
+                headers: {
+                  'x-pagination-page-count': stage == 'page' ? '2' : '1',
+                },
+              );
+            }),
+          );
+        },
+      );
+    }
+  }
+
+  test(
+    'retired cached resume cannot seal credentials or send GET after a snapshot barrier',
+    () async {
+      ProfileRuntime.debugReset();
+      ProfileRuntime.initializeLegacy();
+      SharedPreferences.setMockInitialValues({
+        'trakt_access_token': 'legacy-token',
+      });
+      final container = ProviderContainer.test();
+      final reader = container.read(
+        homeSeriesResumeRepositoryProvider(ProfileSessionMemory.captureOwner()),
+      );
+      final entered = Completer<void>(), release = Completer<void>();
+      final snapshot = ProfilePreferences.captureMutationSnapshot((_) async {
+        entered.complete();
+        await release.future;
+      });
+      await entered.future;
+      var current = true;
+      var requests = 0;
+      const meta = StremioMeta(id: 'tt123', name: 'Fixture', type: 'series');
+      await http.runWithClient(
+        () async {
+          final pending = reader.traktSelection(
+            meta,
+            cached: const TraktContinueWatchingItem(
+              meta: meta,
+              traktContentType: 'episodes',
+              season: 2,
+              episode: 3,
+            ),
+            isCurrent: () => current,
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+          current = false;
+          release.complete();
+          await snapshot;
+          expect(await pending, isNull);
+        },
+        () => MockClient((_) async {
+          requests++;
+          return http.Response('[]', 200);
+        }),
+      );
+      expect(requests, 0);
+      expect(
+        (await SharedPreferences.getInstance()).getString('trakt_access_token'),
+        'legacy-token',
+      );
+    },
+  );
+  for (final retirement in ['active', 'view', 'profile']) {
+    test(
+      'cached resume refresh retries only while $retirement action is current',
+      () async {
+        final container = ProviderContainer.test();
+        final reader = container.read(
+          homeSeriesResumeRepositoryProvider(
+            ProfileSessionMemory.captureOwner(),
+          ),
+        );
+        const meta = StremioMeta(id: 'tt123', name: 'Fixture', type: 'series');
+        var current = true;
+        var gets = 0;
+        var refreshes = 0;
+        await http.runWithClient(
+          () async {
+            final result = await ProfileRuntime.withCapturedScope(
+              other,
+              () => reader.traktSelection(
+                meta,
+                cached: const TraktContinueWatchingItem(
+                  meta: meta,
+                  traktContentType: 'episodes',
+                  season: 2,
+                  episode: 3,
+                  progress: 42,
+                ),
+                isCurrent: () => current,
+              ),
+            );
+            if (retirement == 'active') {
+              expect(result!.sel.traktProgressPercent, 42);
+              expect(gets, 2);
+            } else {
+              expect(result, isNull);
+              expect(gets, 1);
+            }
+            expect(refreshes, 1);
+          },
+          () => MockClient((request) async {
+            if (request.method == 'POST') {
+              expect(request.url.path, '/oauth/token');
+              expect(jsonDecode(request.body)['refresh_token'], 'refresh');
+              refreshes++;
+              if (retirement == 'view') current = false;
+              if (retirement == 'profile') ProfileRuntime.publish(other);
+              return http.Response(
+                jsonEncode({
+                  'access_token': 'updated-token',
+                  'refresh_token': 'updated-refresh',
+                  'expires_in': 3600,
+                }),
+                200,
+              );
+            }
+            gets++;
+            expect(
+              request.headers['authorization'],
+              gets == 1 ? 'Bearer origin-token' : 'Bearer updated-token',
+            );
+            return gets == 1
+                ? http.Response('{}', 401)
+                : http.Response('[]', 200);
+          }),
+        );
+      },
+    );
+  }
 }

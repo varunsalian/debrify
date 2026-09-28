@@ -86,8 +86,10 @@ class TraktContinueWatchingService {
   }
 
   Future<AdvancedSearchSelection?> selectionForItem(
-    TraktContinueWatchingItem item,
-  ) async {
+    TraktContinueWatchingItem item, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
     int? season = item.season;
     int? episode = item.episode;
     double? traktProgress = _visibleProgress(item.progress);
@@ -95,15 +97,20 @@ class TraktContinueWatchingService {
     if (item.isSeries) {
       final showId = item.id;
       if (season == null || episode == null || season <= 0 || episode <= 0) {
-        final next = await _traktService.fetchNextEpisode(showId);
-        if (next == null) return null;
+        final next = await _traktService.fetchNextEpisode(
+          showId,
+          canContinue: canContinue,
+        );
+        if (canContinue?.call() == false || next == null) return null;
         season = next.season;
         episode = next.episode;
       }
 
       final episodeProgress = await _traktService.fetchEpisodePlaybackProgress(
         showId,
+        canContinue: canContinue,
       );
+      if (canContinue?.call() == false) return null;
       final progress = episodeProgress['$season-$episode'];
       traktProgress = _visibleProgress(progress) ?? traktProgress;
     }

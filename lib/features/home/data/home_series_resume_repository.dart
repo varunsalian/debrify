@@ -20,7 +20,10 @@ class HomeSeriesResumeRepository {
     required this.log,
   });
 
-  final Future<AdvancedSearchSelection?> Function(TraktContinueWatchingItem)
+  final Future<AdvancedSearchSelection?> Function(
+    TraktContinueWatchingItem,
+    bool Function(),
+  )
   selectTraktItem;
   final Future<List<TraktContinueWatchingItem>> Function() readTraktShows;
   final Future<AdvancedSearchSelection?> Function(String) resolveTraktShow;
@@ -49,7 +52,7 @@ class HomeSeriesResumeRepository {
         'cardPct=${cached.progress} '
         'cardPausedAt=${_timestamp(cached.pausedAtMs)}',
       );
-      final sel = await selectTraktItem(cached);
+      final sel = await selectTraktItem(cached, () => _current(isCurrent));
       if (!_current(isCurrent) || sel == null) return null;
       log(
         '[SeriesResume] trakt-home-card-selection title="${item.name}" '
@@ -83,7 +86,7 @@ class HomeSeriesResumeRepository {
       'cardPct=${selected.progress} '
       'cardPausedAt=${_timestamp(selected.pausedAtMs)}',
     );
-    final sel = await selectTraktItem(selected);
+    final sel = await selectTraktItem(selected, () => _current(isCurrent));
     if (!_current(isCurrent) || sel == null) return null;
     return (sel: sel, tsMs: selected.pausedAtMs);
   }
@@ -98,7 +101,7 @@ class HomeSeriesResumeRepository {
   }) async {
     if (!_current(isCurrent)) return null;
     if (cached != null) {
-      final sel = await selectTraktItem(cached);
+      final sel = await selectTraktItem(cached, () => _current(isCurrent));
       if (!_current(isCurrent) || sel == null) return null;
       return (started: true, season: sel.season, episode: sel.episode);
     }

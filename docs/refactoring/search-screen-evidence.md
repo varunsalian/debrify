@@ -6,6 +6,42 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: Trakt cached-resume retirement — 2026-09-28
+
+The existing series-resume repository now passes its combined view/profile guard
+through the injected Trakt item selector. The optional guard reaches native-show
+lookup, next-episode resolution, every episode-progress page and authenticated
+GET credential access. Retirement prevents a subsequent page, late credential
+migration, a new refresh after a retired 401, retry after an already-started refresh,
+and publication of a stale native-show lookup. The repository still suppresses
+late selections; the guard now protects the underlying operations too.
+
+Unsubmitted work stops. An already-submitted token refresh retains the credential
+service's existing authorization/commit contract; this change prevents its retired
+caller from retrying GET afterward. Existing callers that omit the optional guard
+retain their request, pagination, retry and fallback behavior. Resume precedence,
+paused percentages, exact next-episode coordinates and native identity remain
+unchanged. No new state owner, provider, interface or transport was introduced.
+Only the changed legacy service members were formatted.
+
+Validation: **247 affected tests pass**, including fifteen new cases using the
+existing real two-profile/account fixture: active/view/profile retirement during
+next-episode lookup, pagination and native identity resolution; retired 401s;
+active/retired refresh completion; and actual credential migration held behind a
+preference snapshot barrier. Originating-account headers are verified even under
+a foreign ambient scope. Existing series-resume, catalog-play, native identity,
+Trakt parsing/merge/calendar/history, profile refresh and progress-reset coverage
+passes. Analyzer identities remain **848**, with no added or removed diagnostics;
+**468** migrated files pass architecture checks and the diff check passes.
+Receipts: `.git/refactor-evidence/phase5/trakt-resume-final-tests.txt` and
+`trakt-resume-final-analyze.txt`.
+
+This closes the cached Trakt quick-play lookup's reachable credential/read chain.
+Live feed/uncached resume preparation, remaining detail composition and mutation/
+reset write contracts remain in A; Sources/lifecycle/device gates remain in their
+recorded batches. This focused checkpoint does not replace the later full-suite
+integration or final acceptance gates.
+
 ## Batch A checkpoint: detail source binding handoff — 2026-09-28
 
 The existing `HomeSourcesNavigation` now owns the shared whole-title binding

@@ -1073,9 +1073,15 @@ class TraktService {
     }
   }
 
-  Future<http.Response?> _authenticatedGet(String path) async {
-    var accessToken = await StorageService.getTraktAccessToken();
-    if (accessToken == null) return null;
+  Future<http.Response?> _authenticatedGet(
+    String path, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
+    var accessToken = await StorageService.getTraktAccessToken(
+      canContinue: canContinue,
+    );
+    if (accessToken == null || canContinue?.call() == false) return null;
 
     try {
       var response = await http
@@ -1087,11 +1093,14 @@ class TraktService {
 
       // If unauthorized, try refreshing the token once
       if (response.statusCode == 401) {
+        if (canContinue?.call() == false) return null;
         final refreshed = await refreshAccessToken();
-        if (!refreshed) return null;
+        if (!refreshed || canContinue?.call() == false) return null;
 
-        accessToken = await StorageService.getTraktAccessToken();
-        if (accessToken == null) return null;
+        accessToken = await StorageService.getTraktAccessToken(
+          canContinue: canContinue,
+        );
+        if (accessToken == null || canContinue?.call() == false) return null;
 
         response = await http
             .get(
@@ -1101,7 +1110,7 @@ class TraktService {
             .timeout(const Duration(seconds: 15));
       }
 
-      return response;
+      return canContinue?.call() == false ? null : response;
     } catch (error) {
       debugPrint('Trakt: Authenticated GET error (${error.runtimeType})');
       return null;
@@ -1847,7 +1856,8 @@ class TraktService {
 
   final _nativeShowIds = <String, ({DateTime at, String id})>{};
 
-  Future<String?> _showId(String id) async {
+  Future<String?> _showId(String id, {bool Function()? canContinue}) async {
+    if (canContinue?.call() == false) return null;
     if (!MediaIdentity.isNative(id)) return id;
     final scope = ProfileRuntime.scope.value;
     final hit = _nativeShowIds[id];
@@ -1856,13 +1866,16 @@ class TraktService {
       return hit.id;
     }
     final ids = await _idsForContent(id, 'series');
-    if (ids == null) return null;
+    if (ids == null || canContinue?.call() == false) return null;
     if (ids['imdb'] case final String imdb) return imdb;
     final provider = ids.keys.single;
     final response = await _authenticatedGet(
       '/search/$provider/${ids[provider]}?type=show',
+      canContinue: canContinue,
     );
-    if (response?.statusCode != 200 || scope != ProfileRuntime.scope.value) {
+    if (canContinue?.call() == false ||
+        response?.statusCode != 200 ||
+        scope != ProfileRuntime.scope.value) {
       return null;
     }
     try {
@@ -1969,11 +1982,16 @@ class TraktService {
 
   /// Fetch the next episode to watch for a show.
   /// Returns (season, episode) or null if show is complete / not started / error.
-  Future<({int season, int episode})?> fetchNextEpisode(String showId) async {
-    final resolvedShowId = await _showId(showId);
-    if (resolvedShowId == null) return null;
+  Future<({int season, int episode})?> fetchNextEpisode(
+    String showId, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
+    final resolvedShowId = await _showId(showId, canContinue: canContinue);
+    if (resolvedShowId == null || canContinue?.call() == false) return null;
     final response = await _authenticatedGet(
       '/shows/$resolvedShowId/progress/watched',
+      canContinue: canContinue,
     );
     return _parseNextEpisode(response);
   }
@@ -2000,9 +2018,13 @@ class TraktService {
   /// Fetch playback progress for episodes of a specific show.
   /// Returns a map of `"season-episode"` → progress percentage (0-100).
   Future<Map<String, double>> fetchEpisodePlaybackProgress(
-    String showImdbId,
-  ) async {
-    return await fetchEpisodePlaybackProgressOrNull(showImdbId) ??
+    String showImdbId, {
+    bool Function()? canContinue,
+  }) async {
+    return await fetchEpisodePlaybackProgressOrNull(
+          showImdbId,
+          canContinue: canContinue,
+        ) ??
         <String, double>{};
   }
 
@@ -2013,10 +2035,12 @@ class TraktService {
   /// can silently erase checkpoints for shows on later pages. Every page must
   /// load and validate before this returns an authoritative map.
   Future<Map<String, double>?> fetchEpisodePlaybackProgressOrNull(
-    String showImdbId,
-  ) async {
+    String showImdbId, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
     final ids = await _idsForContent(showImdbId, 'series');
-    if (ids == null) return null;
+    if (ids == null || canContinue?.call() == false) return null;
     // Trakt caps explicitly paginated endpoints at 250. Request the applied
     // maximum rather than 1000 so a missing pagination header plus 250 items
     // is correctly recognized as potentially truncated, not a short page.
@@ -2025,8 +2049,10 @@ class TraktService {
     var page = 1;
 
     while (true) {
+      if (canContinue?.call() == false) return null;
       final response = await _authenticatedGet(
         '/sync/playback/episodes?page=$page&limit=$limit',
+        canContinue: canContinue,
       );
       if (response == null || response.statusCode != 200) {
         debugPrint(
