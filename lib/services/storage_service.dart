@@ -4871,10 +4871,14 @@ class StorageService {
   static Future<void> savePlaylistItemsRaw(
     List<Map<String, dynamic>> items, {
     bool recordSyncDeletions = true,
+    bool Function()? canContinue,
   }) async {
+    if (canContinue?.call() == false) return;
     final prefs = await ProfilePreferences.instance();
+    if (canContinue?.call() == false) return;
     if (recordSyncDeletions) {
       final previous = await getPlaylistItemsRaw();
+      if (canContinue?.call() == false) return;
       final retained = items.map(computePlaylistDedupeKey).toSet();
       await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
         previous
@@ -4883,7 +4887,11 @@ class StorageService {
             .map(WebDavSyncRecordKey.playlistItem),
       );
     }
-    await prefs.setString(_playlistKey, jsonEncode(items));
+    await prefs.setString(
+      _playlistKey,
+      jsonEncode(items),
+      canCommit: canContinue,
+    );
   }
 
   static String computePlaylistDedupeKey(Map<String, dynamic> item) =>
@@ -4892,8 +4900,13 @@ class StorageService {
   /// Add a new playlist item if it does not already exist.
   /// Expected item shape (MVP): { url, title, restrictedLink, rdTorrentId }
   /// Returns true if inserted, false if duplicate.
-  static Future<bool> addPlaylistItemRaw(Map<String, dynamic> item) async {
+  static Future<bool> addPlaylistItemRaw(
+    Map<String, dynamic> item, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return false;
     final items = await getPlaylistItemsRaw();
+    if (canContinue?.call() == false) return false;
     final initialKey = computePlaylistDedupeKey(item);
     debugPrint('Playlist dedupe: initialKey=$initialKey');
     for (final existing in items) {
@@ -4922,7 +4935,8 @@ class StorageService {
 
     // Fetch and add torrent hash if we have a torrent ID
     final String? rdTorrentId = item['rdTorrentId'] as String?;
-    final String? apiKey = await getApiKey();
+    final String? apiKey = await getApiKey(canContinue: canContinue);
+    if (canContinue?.call() == false) return false;
 
     if (!isTorbox &&
         rdTorrentId != null &&
@@ -4938,6 +4952,7 @@ class StorageService {
           headers: {'Authorization': 'Bearer $apiKey'},
         );
 
+        if (canContinue?.call() == false) return false;
         if (response.statusCode == 200) {
           final torrentInfo = json.decode(response.body);
           final String? hash = torrentInfo['hash'] as String?;
@@ -4991,10 +5006,20 @@ class StorageService {
       }
     }
 
-    items.insert(0, enriched);
-    await savePlaylistItemsRaw(items);
+    Future<bool> save() async {
+      if (canContinue?.call() == false) return false;
+      items.insert(0, enriched);
+      await savePlaylistItemsRaw(items, canContinue: canContinue);
+      return true;
+    }
 
-    return true;
+    if (canContinue == null) return save();
+    // Recheck after waiting for sync/profile mutations, before any persisted
+    // playlist or tombstone work. Existing unguarded callers retain their path.
+    return ProfilePreferences.synchronizeExternalMutation(
+      save,
+      marksMutation: false,
+    );
   }
 
   static Future<void> removePlaylistItemByKey(String dedupeKey) async {

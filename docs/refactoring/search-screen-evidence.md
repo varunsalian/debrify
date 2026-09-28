@@ -6,6 +6,35 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch B checkpoint: provider-native playlist persistence — 2026-09-28
+
+Base revision: `4ee21725`. The 115-line plain `SourcePlaylist` owns native playlist
+payload policy and originating-profile execution. Both production playlist actions
+use it. The UI wrapper retains feedback; `_Resolved` now extends the existing
+`AcquiredSource` data model and adds only provider-tab navigation, removing duplicate
+fields without changing construction defaults. Playback service: 7,059 lines.
+Provider-tab callbacks also reject retired owners before navigation.
+
+Borrowed storage methods accept optional guards around reads/enrichment and inside
+the final preference mutation barrier. Existing unguarded callers, enrichment,
+dedupe, tombstones and schemas remain. Singles retain playable file IDs, packs retain
+folder/per-file IDs, and expiring direct links remain excluded. Thirteen added cases
+cover five-provider payloads, original-scope persistence from a foreign zone,
+deduplication, actual write-barrier retirement and delayed RD enrichment retirement.
+The credential test initially lacked a committed active registry profile; fixing
+that fixture made it exercise the authorized HTTP path and retirement as intended.
+
+Verification: **886 affected passes / two pre-existing collection-browser failures**
+(the iOS/Android non-TV Spotlight folder cases, also errors in
+`full-automatic-acquisition-retry-c4.jsonl`). Sources, Home playlist consumers,
+collection-source/browser and vault-migration checks ran. Analyzer: **844 unchanged
+identities**; architecture: **498 files pass**. Formatting/diff checks pass.
+Receipts under `.git/refactor-evidence/phase5/`: `source-playlist-tests.txt`,
+`source-playlist-regression-tests.txt`, `source-playlist-analyze-final.txt`.
+The previous full gate remains 10,136 passes. No full/native/device pass is claimed
+here. Channel creation/cache writes (including picker-side creation), native
+handoff/recovery/generation and C–E remain pending.
+
 ## Batch B checkpoint: provider download and ZIP actions — 2026-09-28
 
 Base revision: `648ca15d`. Pack/lazy-link downloads, TorBox ZIPs, Premiumize

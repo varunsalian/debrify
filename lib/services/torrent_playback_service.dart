@@ -1,3 +1,5 @@
+import '../features/sources/data/source_playlist.dart';
+import '../features/sources/models/acquired_source.dart';
 import '../features/sources/data/provider_source_actions.dart';
 import '../features/sources/presentation/source_download_picker.dart';
 import '../features/sources/data/provider_cloud_source.dart';
@@ -431,7 +433,14 @@ class TorrentPlaybackService {
         );
         break;
       case 'playlist':
-        await _addToPlaylist(context, resolved, torrent, provider, meta: meta);
+        await _addToPlaylist(
+          context,
+          resolved,
+          torrent,
+          provider,
+          meta: meta,
+          sourceBindings: bindingOwner,
+        );
         break;
       case 'channel':
         // Saved "Add to channel" action (parity with the old screen): cache the
@@ -6325,82 +6334,15 @@ class TorrentPlaybackService {
     Torrent torrent,
     String provider, {
     PlaybackMeta? meta,
+    required AutomaticSourceBindings sourceBindings,
   }) async {
-    final isPack = r.hasPlaylist;
-    final rawTitle = (!isPack && r.fileName != null)
-        ? r.fileName!
-        : torrent.displayTitle;
-    // Base fields shared by every provider. NOTE: no 'url' is stored — the
-    // playlist player RE-RESOLVES a fresh link from the provider-native ids
-    // below, so saved items keep working after the debrid direct link expires
-    // (parity with the old per-provider playlist schema).
-    final item = <String, dynamic>{
-      'provider': provider == 'debrid' ? 'realdebrid' : provider,
-      'title': FileUtils.cleanPlaylistTitle(rawTitle),
-      'kind': isPack ? 'collection' : 'single',
-      'torrent_hash': torrent.infohash,
-      if (isPack) 'count': r.playlist!.length,
-      if (torrent.sizeBytes > 0) 'sizeBytes': torrent.sizeBytes,
-      // Catalog identity so the playlist shows poster art + links back (Home).
-      if (meta?.imdbId != null && meta!.imdbId!.isNotEmpty)
-        'imdbId': meta.imdbId,
-      if (meta?.contentType != null) 'contentType': meta!.contentType,
-      if (meta?.posterUrl != null && meta!.posterUrl!.isNotEmpty)
-        'posterUrl': meta.posterUrl,
-    };
-    // Provider-native identifiers for re-resolution. For packs, per-file ids are
-    // pulled from the resolved playlist entries; for single files they ride on
-    // [_Resolved].
-    switch (provider) {
-      case 'debrid': // Real-Debrid
-        if (r.rdTorrentId != null) item['rdTorrentId'] = r.rdTorrentId;
-        if (!isPack) {
-          item['url'] = ''; // force re-resolution from restrictedLink
-          if (r.restrictedLink != null) {
-            item['restrictedLink'] = r.restrictedLink;
-          }
-        }
-        break;
-      case 'torbox':
-        item['torboxTorrentId'] = r.torboxTorrentId;
-        if (isPack) {
-          item['torboxFileIds'] = [
-            for (final e in r.playlist!)
-              if (e.torboxFileId != null) e.torboxFileId,
-          ];
-        } else if (r.torboxFileId != null) {
-          item['torboxFileId'] = r.torboxFileId;
-        }
-        break;
-      case 'premiumize':
-        // Collections re-resolve from torrent_hash; singles from the file path.
-        if (!isPack && r.premiumizePath != null) {
-          item['premiumizePath'] = r.premiumizePath;
-        }
-        break;
-      case 'alldebrid':
-        // Collections re-resolve from torrent_hash; singles from the locked link.
-        if (!isPack && r.allDebridLink != null) {
-          item['allDebridLink'] = r.allDebridLink;
-        }
-        break;
-      case 'pikpak':
-        if (isPack) {
-          // Pack: folder id + per-file video ids (player collection path).
-          item['pikpakFileId'] = r.pikpakFileId;
-          item['pikpakFileIds'] = [
-            for (final e in r.playlist!)
-              if (e.pikpakFileId != null) e.pikpakFileId,
-          ];
-        } else {
-          // Single: the playable VIDEO-file id, NOT the folder id — else the
-          // player can't get a streaming URL and the item won't play.
-          item['pikpakFileId'] = r.pikpakVideoFileId ?? r.pikpakFileId;
-        }
-        break;
-    }
-    final ok = await StorageService.addPlaylistItemRaw(item);
-    if (context.mounted) {
+    final playlist = SourcePlaylist(
+      owner: sourceBindings.owner,
+      canContinue: () => context.mounted,
+    );
+    if (!playlist.isCurrent) return;
+    final ok = await playlist.add(r, torrent, provider, meta: meta);
+    if (context.mounted && playlist.isCurrent) {
       _snack(context, ok ? 'Added to playlist.' : 'Already in playlist.');
     }
   }
@@ -6480,7 +6422,14 @@ class TorrentPlaybackService {
           pillLabel: 'Playlist',
           enabled: hasVideo,
           onTap: () => unawaited(
-            _addToPlaylist(context, r, torrent, provider, meta: meta),
+            _addToPlaylist(
+              context,
+              r,
+              torrent,
+              provider,
+              meta: meta,
+              sourceBindings: sourceBindings,
+            ),
           ),
         ),
         DebridActionItem(
@@ -6582,7 +6531,11 @@ class TorrentPlaybackService {
                 ? 'Not available for RAR archives'
                 : 'View it in ${_label(provider)}.',
             enabled: !r.isRarArchive,
-            onTap: () => r.openInTab!.call(),
+            onTap: () {
+              if (context.mounted && sourceBindings.isCurrent) {
+                r.openInTab!.call();
+              }
+            },
           ),
       ],
     );
@@ -7075,74 +7028,28 @@ class TorrentPlaybackService {
 }
 
 /// Resolved add result carrying what each post-action branch needs.
-class _Resolved {
-  final String title;
-  final Map<String, String>? httpHeaders;
-  final String? playUrl;
-  final List<String> downloadUrls;
+/// Presentation adds provider-tab navigation to the acquired playback data.
+class _Resolved extends AcquiredSource {
   final VoidCallback? openInTab;
-
-  /// Multi-file playlist (season packs); the launcher lazily resolves each
-  /// entry's URL from its provider metadata (torboxFileId / allDebridLink /
-  /// restrictedLink / premiumizePath / pikpakFileId). [startIndex] is the
-  /// first-episode entry to begin playback at.
-  final List<PlaylistEntry>? playlist;
-  final int startIndex;
-
-  /// The single resolved file's name (with extension) for download naming.
-  final String? fileName;
-
-  /// RD only: an unextracted RAR archive (multiple files, one link). The
-  /// provider "open" view isn't useful for these, so it's disabled.
-  final bool isRarArchive;
-
-  /// TorBox only: the torrent id, for the "Copy Download Link (Zip)" action.
-  final int? torboxTorrentId;
-
-  /// RD only: the account entry this add created (RD's addMagnet always makes
-  /// a fresh entry), so a rejected bound-source attempt can delete it again.
-  final String? rdTorrentId;
-
-  /// PikPak only: the drive entry (file/folder) this add created (PikPak's
-  /// addOfflineDownload always makes a fresh entry), so a rejected
-  /// bound-source attempt can delete it again.
-  final String? pikpakFileId;
-
-  // Single-file provider-native identifiers, captured so an "Add to playlist"
-  // item can be RE-RESOLVED after the direct URL expires (the playlist player
-  // re-derives a fresh link from these) — parity with the old per-provider
-  // playlist schema. Only the field for the resolved provider is set.
-  final String? restrictedLink; // RD: raw restricted link to re-unrestrict
-  final int? torboxFileId; // TorBox: file id to re-request a download link
-  final String? premiumizePath; // Premiumize: file path (matched on re-resolve)
-  final String? allDebridLink; // AllDebrid: locked link to re-unlock
-  // PikPak: the playable VIDEO-file id for a single (distinct from
-  // [pikpakFileId], which is the offline-download FOLDER id used for
-  // bound-source deletes). A playlist item must store the video-file id or the
-  // player can't get a streaming URL from a folder.
-  final String? pikpakVideoFileId;
-
   const _Resolved({
-    required this.title,
-    this.httpHeaders,
-    this.playUrl,
-    this.downloadUrls = const [],
     this.openInTab,
-    this.playlist,
-    this.startIndex = 0,
-    this.fileName,
-    this.isRarArchive = false,
-    this.torboxTorrentId,
-    this.rdTorrentId,
-    this.pikpakFileId,
-    this.restrictedLink,
-    this.torboxFileId,
-    this.premiumizePath,
-    this.allDebridLink,
-    this.pikpakVideoFileId,
+    required super.title,
+    super.httpHeaders,
+    super.playUrl,
+    super.downloadUrls,
+    super.playlist,
+    super.startIndex,
+    super.fileName,
+    super.isRarArchive,
+    super.torboxTorrentId,
+    super.rdTorrentId,
+    super.pikpakFileId,
+    super.restrictedLink,
+    super.torboxFileId,
+    super.premiumizePath,
+    super.allDebridLink,
+    super.pikpakVideoFileId,
   });
-
-  bool get hasPlaylist => playlist != null && playlist!.length > 1;
 }
 
 /// Mutable flag the catalog-play flow polls to abort when the user taps Cancel

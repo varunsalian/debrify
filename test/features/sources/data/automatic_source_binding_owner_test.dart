@@ -1,4 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:debrify/features/sources/data/source_playlist.dart';
+import 'package:debrify/features/sources/models/acquired_source.dart';
+import 'package:debrify/services/storage_service.dart';
 
 import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
 import 'package:debrify/features/sources/data/source_binding_committer.dart';
@@ -11,6 +17,7 @@ import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/resolved_playback_link_cache.dart';
 import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/series_source_service.dart';
@@ -328,6 +335,142 @@ void main() {
         () => ResolvedPlaybackLinkCache.get(id: id, type: 'movie', pin: pin),
       );
       expect(retained?.directUrl, direct.directUrl);
+    },
+  );
+  test(
+    'playlist add retains origin under foreign scope and deduplicates',
+    () async {
+      final playlist = SourcePlaylist(
+        owner: ProfileSessionMemory.captureOwner(),
+        canContinue: () => true,
+      );
+      await ProfileRuntime.withCapturedScope(incoming, () async {
+        expect(
+          await playlist.add(
+            const AcquiredSource(
+              title: 'Title',
+              torboxTorrentId: 42,
+              torboxFileId: 1,
+            ),
+            source('hash'),
+            'torbox',
+          ),
+          isTrue,
+        );
+        expect(
+          await playlist.add(
+            const AcquiredSource(
+              title: 'Title',
+              torboxTorrentId: 42,
+              torboxFileId: 1,
+            ),
+            source('hash'),
+            'torbox',
+          ),
+          isFalse,
+        );
+      });
+      expect(
+        (await ProfileRuntime.withCapturedScope(
+          origin,
+          StorageService.getPlaylistItemsRaw,
+        )).single['torboxTorrentId'],
+        42,
+      );
+      expect(
+        await ProfileRuntime.withCapturedScope(
+          incoming,
+          StorageService.getPlaylistItemsRaw,
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'playlist add rejects retirement while waiting for actual write barrier',
+    () async {
+      final playlist = SourcePlaylist(
+        owner: ProfileSessionMemory.captureOwner(),
+        canContinue: () => true,
+      );
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final barrier = ProfilePreferences.captureMutationSnapshot((_) async {
+        entered.complete();
+        await release.future;
+      });
+      await entered.future;
+      final pending = playlist.add(
+        const AcquiredSource(title: 'Title', torboxTorrentId: 42),
+        source('hash'),
+        'torbox',
+      );
+      await Future<void>.delayed(Duration.zero);
+      ProfileRuntime.publish(incoming);
+      release.complete();
+      await barrier;
+      expect(await pending, isFalse);
+      expect(
+        await ProfileRuntime.withCapturedScope(
+          origin,
+          StorageService.getPlaylistItemsRaw,
+        ),
+        isEmpty,
+      );
+      expect(
+        await ProfileRuntime.withCapturedScope(
+          incoming,
+          StorageService.getPlaylistItemsRaw,
+        ),
+        isEmpty,
+      );
+    },
+  );
+  test(
+    'playlist retirement during RD enrichment cannot persist either profile',
+    () async {
+      await registry.commitBootstrap(
+        activeProfileId: origin.profileId,
+        migratedLegacyInstall: false,
+      );
+      await StorageService.saveApiKey('original-key');
+      final playlist = SourcePlaylist(
+        owner: ProfileSessionMemory.captureOwner(),
+        canContinue: () => true,
+      );
+      var requests = 0;
+      final client = MockClient((request) async {
+        requests++;
+        expect(request.headers['Authorization'], 'Bearer original-key');
+        ProfileRuntime.publish(incoming);
+        return http.Response(jsonEncode({'hash': 'enriched-hash'}), 200);
+      });
+      addTearDown(client.close);
+      final saved = await http.runWithClient(
+        () => playlist.add(
+          const AcquiredSource(title: 'Title', rdTorrentId: 'rd-id'),
+          source('hash'),
+          'debrid',
+        ),
+        () => client,
+      );
+      expect(requests, 1);
+      expect(saved, isFalse);
+      expect(
+        await ProfileRuntime.withCapturedScope(
+          origin,
+          StorageService.getPlaylistItemsRaw,
+        ),
+        isEmpty,
+      );
+      expect(
+        await ProfileRuntime.withCapturedScope(
+          incoming,
+          StorageService.getPlaylistItemsRaw,
+        ),
+        isEmpty,
+      );
     },
   );
 }

@@ -132,7 +132,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | Batch | Current status |
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
-| B | Manual/provider acquisition, automatic bindings, direct downloads, automatic torrent probes and player source-switch resolution reviewed. Full retry: 10,136 passes, unchanged historical failures/errors/skips, no missing tests, 26 added passing cases. Saved-cloud preparation is also reviewed (813 affected passes, unchanged analyzer). Pack/ZIP/not-ready actions are reviewed (755 Sources passes plus three additional action cases, unchanged analyzer). Remaining: playlist/channel writes, provider-tab navigation, native handoff/recovery ownership and device checks; see concrete paths below. |
+| B | Manual/provider acquisition, automatic bindings, direct downloads, automatic torrent probes and player source-switch resolution reviewed. Full retry: 10,136 passes, unchanged historical failures/errors/skips, no missing tests, 26 added passing cases. Saved-cloud preparation is also reviewed (813 affected passes, unchanged analyzer). Pack/ZIP/not-ready actions are reviewed (755 Sources passes plus three additional action cases, unchanged analyzer). Playlist payload/persistence and provider-tab dispatch are now reviewed (886 affected passes, two observed historical collection-browser failures, unchanged analyzer). Remaining: channel writes, native handoff/recovery ownership and device checks; see concrete paths below. |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
@@ -256,11 +256,22 @@ callers. This scoped B change moves no screen logic into the provider service;
 accepted transfers are not deleted on retirement. The guarded action and actual
 UI callers now close this specific boundary.
 
+Playlist persistence additionally permits optional guards in the borrowed
+`StorageService.addPlaylistItemRaw` and `savePlaylistItemsRaw`: preserve enrichment,
+dedupe, schemas and unguarded callers, but recheck retirement before metadata
+requests and inside the actual preference write barrier. Original provider payload
+policy moves to the plain Sources operation, not into this oversized service.
+Verify real-profile/foreign-scope writes and delayed-save retirement before closing
+this B boundary; unrelated storage redesign remains outside this migration.
+
 Concrete remaining B paths:
-- Playlist/channel actions (`_addToPlaylist`, `DebrifyTvChannelAddService`) and
-  provider-tab navigation: finish originating-owner checks at actual persistence
-  and dispatch boundaries. Pack/ZIP/not-ready actions now use the reviewed plain
-  `ProviderSourceActions`; saved-cloud preparation uses `ProviderCloudSource`.
+- Channel actions (`DebrifyTvChannelAddService`, including creation inside
+  `ChannelPickerDialog`): preserve original ownership through picker callbacks,
+  repository transactions and cache saves. The picker itself writes before it
+  returns; guarding only the result is insufficient. Playlist additions now use
+  the reviewed `SourcePlaylist` operation and actual preference-write guard;
+  provider-tab dispatch checks its original owner. Pack/ZIP/not-ready actions
+  use `ProviderSourceActions`; saved-cloud preparation uses `ProviderCloudSource`.
 - `VideoPlayerLauncher` preparation and native automatic recovery: pass the
   originating owner rather than recapturing after handoff; retain player/session
   and source-switch generation checks across queued native work. The recovery
