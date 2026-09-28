@@ -6,6 +6,27 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Mosaic grid navigation — 2026-09-28
+
+Base: `d75ca061`. `HomeMosaicCellNavigation` (88 lines) now owns each Mosaic
+cell's directional rules, prefetch and hold dispatch. Nodes, hold latch, paging
+and deferred-focus coordinator remain borrowed; the actual favorite/title card
+callbacks use this owner. Root: **12,020 → 11,970 lines**.
+
+Review preserves row-edge sidebar entry, Right wrapping and catalog-only deferred
+moves, two-row prefetch, Down leaving the last row, frame-captured geometry and
+live node-list bounds. Held Up/Down retain the shared latch and reset behavior.
+A focused widget test exercises these paths against mounted nodes.
+
+**20 tests pass**: 16 navigation/hold/deferred-right checks (including actual
+screen completion) and four Mosaic progressive-loading/focus checks. The first
+focused command used an incorrect deferred-right test path; it was corrected and
+the complete selected group passed. Receipts:
+`.git/refactor-evidence/phase5/mosaic-navigation-{focused-final,integration,analyze}.txt`.
+Analysis retains **838 identical diagnostic identities**; architecture passes
+**533 files**; formatting/diff checks pass. No emulator used. Remaining shared
+navigation, resource ownership, composition and final acceptance remain pending.
+
 ## Batch C checkpoint: shared stage title-card composition — 2026-09-28
 
 Base: `c154a7fc`. `HomeStageCards` (116 lines) replaces five repeated constructors

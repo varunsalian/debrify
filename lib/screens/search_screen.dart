@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_mosaic_cell_navigation.dart';
 import '../features/home/presentation/home_stage_cards.dart';
 import '../features/home/presentation/home_spotlight_favorites.dart';
 import '../features/search/presentation/search_spotlight_board.dart';
@@ -7420,82 +7421,31 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     int perRow,
     double cellW,
   ) {
-    final atRowStart = col % perRow == 0;
-    // Prefetch two rows out, the grid equivalent of the row's six-cards rule.
-    void prefetch() {
-      if (rail.sectionIndex != null && col >= count - perRow * 2) {
-        _loadMoreRow(rail.sectionIndex!);
-      }
-    }
-
-    void focusAt(int target) {
-      if (target < 0 || target >= nodes.length) return;
-      nodes[target].requestFocus();
-    }
-
-    final onLeft = atRowStart
-        ? () => MainPageBridge.focusTvSidebar?.call()
-        : () => focusAt(col - 1);
-    // RIGHT always advances while a cell exists — wrapping onto the next
-    // grid line, the way a wall of posters reads. Stopping at the visual row
-    // end would strand every cell past it behind DOWN alone.
-    void onRight() {
-      prefetch();
-      if (col + 1 < nodes.length) {
-        focusAt(col + 1);
-      } else if (rail.sectionIndex != null) {
-        // At the very end with a page in flight: remember the move so it
-        // completes when the cells land.
-        _stageDeferredRight.defer(railKey, col);
-      }
-    }
-
-    final onUp = col - perRow >= 0
-        ? () {
-            if (_stageHold.swallows(LogicalKeyboardKey.arrowUp)) return;
-            focusAt(col - perRow);
-          }
-        : () {
-            if (_stageHold.swallows(LogicalKeyboardKey.arrowUp)) return;
-            _stageSwitchRail(-1);
-          };
-    // DOWN steps a whole line, and at the LAST line always leaves for the
-    // next rail (prefetching on the way out, so coming back finds more).
-    // Consuming DOWN to paginate would trap the user inside a long catalog.
-    Null onDown() {
-      if (_stageHold.swallows(LogicalKeyboardKey.arrowDown)) return;
-      if (col + perRow < count) {
-        prefetch();
-        focusAt(col + perRow);
-        return;
-      }
-      prefetch();
-      _stageSwitchRail(1);
-    }
-
-    // A catalog keeps paging for as long as it has more, so the last grid
-    // line is a moving target and DOWN alone can never reliably reach the
-    // next rail. HOLDING the key changes rail from anywhere in the grid.
-    void onUpHold() => _stageHold.jump(LogicalKeyboardKey.arrowUp, () {
-      _stageSwitchRail(-1);
-      return true;
-    });
-    void onDownHold() => _stageHold.jump(LogicalKeyboardKey.arrowDown, () {
-      _stageSwitchRail(1);
-      return true;
-    });
+    final navigation = HomeMosaicCellNavigation(
+      column: col,
+      count: count,
+      perRow: perRow,
+      nodes: nodes,
+      hold: _stageHold,
+      focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+      switchRail: _stageSwitchRail,
+      loadMore: rail.sectionIndex == null
+          ? null
+          : () => _loadMoreRow(rail.sectionIndex!),
+      deferRight: () => _stageDeferredRight.defer(railKey, col),
+    );
 
     if (rail.favKind != null) {
       return _canvasFavCell(
         rail.favKind!,
         railKey,
         col,
-        onUp: onUp,
-        onDown: onDown,
-        onLeft: onLeft,
-        onRight: onRight,
-        onUpHold: onUpHold,
-        onDownHold: onDownHold,
+        onUp: navigation.up,
+        onDown: navigation.down,
+        onLeft: navigation.left,
+        onRight: navigation.right,
+        onUpHold: navigation.upHold,
+        onDownHold: navigation.downHold,
       );
     }
     return SizedBox(
@@ -7507,12 +7457,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         nodes: nodes,
         column: col,
         pageNearEnd: false,
-        onUp: onUp,
-        onDown: onDown,
-        onUpHold: onUpHold,
-        onDownHold: onDownHold,
-        onLeft: onLeft,
-        onRight: onRight,
+        onUp: navigation.up,
+        onDown: navigation.down,
+        onUpHold: navigation.upHold,
+        onDownHold: navigation.downHold,
+        onLeft: navigation.left,
+        onRight: navigation.right,
       ),
     );
   }
