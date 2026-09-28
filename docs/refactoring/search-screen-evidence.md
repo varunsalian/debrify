@@ -6,6 +6,34 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: shared stage title-card composition — 2026-09-28
+
+Base: `c154a7fc`. `HomeStageCards` (116 lines) replaces five repeated constructors
+used by Canvas, Promenade, Atrium, Mosaic and Deck/Tonight shelves. It owns shared
+card presentation and callback dispatch, borrowing current section lookup and
+accepted actions. Layouts retain directional navigation and extra focus effects;
+no new resources/providers/data access. Root: **12,179 → 12,020 lines**.
+
+Review preserves collection artwork/overlays, progress/episode display, restricted
+quick-play, continuation Options, white focus treatment and per-layout focus side
+effects. Promenade retains wide art/rest veil; Mosaic retains its own paging
+policy. Atrium intentionally resolves its borrowed item at action time, while the
+other layouts retain their captured item. Current section lookup remains at action
+time. Two focused tests exercise that distinction, focus-effect ordering, paging
+suppression and quick-play gating after input changes.
+
+**55 real-screen progressive-loading/focus tests pass**, plus **44 action/cell/
+collection tests and two new focused tests**. The broader action run also reports
+two existing collection-browser errors: `Retry in tab B must remain on tab B` and
+`TV tabs Down from folder chip must focus a title`. Both are recorded as errors in
+`full-native-owner-c4.jsonl`; no allowlist change. Receipts in
+`.git/refactor-evidence/phase5/`: `stage-cards-integration.txt`,
+`stage-cards-actions.txt`, `stage-cards-focused.txt`, `stage-cards-atrium-final.txt`
+and `stage-cards-analyze-final.txt`. Final Atrium integration recheck: **4 pass**.
+Analysis retains **838 identical diagnostic identities**. Architecture passes **532 files**;
+formatting/diff checks pass. No emulator used. Navigation/resource ownership,
+remaining composition and final acceptance stay pending.
+
 ## Batch C checkpoint: Spotlight favorite shelves — 2026-09-28
 
 Base: `d2bc9e0e`. `home_spotlight_favorites.dart` (145 lines) owns typed builders

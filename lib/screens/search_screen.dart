@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_stage_cards.dart';
 import '../features/home/presentation/home_spotlight_favorites.dart';
 import '../features/search/presentation/search_spotlight_board.dart';
 import '../features/home/presentation/home_spotlight_shelf.dart';
@@ -6928,55 +6929,36 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
+  late final _stageCards = HomeStageCards(
+    sectionAt: (index) => _sections[index],
+    collectionFor: _stageCollection,
+    aspectOf: _stageCardAspect,
+    artOf: _stageCardArt,
+    isBound: _isBound,
+    pikpakOnly: () => _pikpakOnly,
+    openSection: _sectionOpenItem,
+    playSection: _sectionQuickPlay,
+    openContinuationMenu: _openCwCardMenu,
+    onFocused: (railKey, item, column) {
+      _setHero(item);
+      _canvasCols[railKey] = column;
+    },
+    focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+    switchRail: _stageSwitchRail,
+    loadMore: _loadMoreRow,
+  );
+
   Widget _canvasCell(HomeStageRailView view, int col) {
     final rail = view.rail;
     final railKey = view.key;
     final items = view.items;
     final nodes = view.nodes;
-    final item = items[col];
-    return HomeBoardCell(
-      onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-      item: item,
-      isTelevision: true,
-      focusNode: nodes[col],
+    return _stageCards.build(
+      rail: rail,
+      railKey: railKey,
+      item: items[col],
+      nodes: nodes,
       column: col,
-      rowNodes: nodes,
-      hasBoundSource: _isBound(item),
-      // Canvas focus grammar: white ring (the
-      // violet stays with classic chrome).
-      ringColor: Colors.white,
-      aspectRatio: _stageCardAspect(rail),
-      artUrl: _stageCardArt(rail, item),
-      focusArtUrl: _stageCollection(rail)?.focusArtOf(item),
-      focusVideoUrl: _stageCollection(rail)?.focusVideoOf(item),
-      focusGlowEnabled:
-          _stageCollection(rail)?.collection.focusGlowEnabled ?? false,
-      showTitleOverlay:
-          !(_stageCollection(rail)?.folderOf(item)?.hideTitle ?? false),
-      progress: rail.cw?.progressOf(item),
-      episodeLabel: rail.cw?.episodeOf(item),
-      onQuickPlay: rail.cw != null || _pikpakOnly
-          ? null
-          : () => _sectionQuickPlay(_sections[rail.sectionIndex!], item),
-      onLongPress: rail.cw == null
-          ? null
-          : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
-      onFocused: () {
-        _setHero(item);
-        _canvasCols[railKey] = col;
-      },
-      onUp: () => _stageSwitchRail(-1),
-      onDown: () => _stageSwitchRail(1),
-      onOpen: () {
-        if (rail.cw != null) {
-          rail.cw!.onOpen(item);
-        } else {
-          _sectionOpenItem(_sections[rail.sectionIndex!], item);
-        }
-      },
-      onNearEnd: rail.sectionIndex == null
-          ? null
-          : () => _loadMoreRow(rail.sectionIndex!),
     );
   }
 
@@ -7183,47 +7165,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     List<FocusNode> nodes,
     int col,
   ) {
-    final item = items[col];
-    return HomeBoardCell(
-      onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-      item: item,
-      isTelevision: true,
-      focusNode: nodes[col],
+    return _stageCards.build(
+      rail: rail,
+      railKey: railKey,
+      item: items[col],
+      nodes: nodes,
       column: col,
-      rowNodes: nodes,
-      hasBoundSource: _isBound(item),
-      ringColor: Colors.white,
-      aspectRatio: _stageCardAspect(rail, fallback: 16 / 9),
-      artUrl: _stageCardArt(rail, item, wide: true),
-      focusArtUrl: _stageCollection(rail)?.focusArtOf(item),
-      focusVideoUrl: _stageCollection(rail)?.focusVideoOf(item),
-      focusGlowEnabled: _stageCollection(rail)?.collection.focusGlowEnabled ?? false,
-      showTitleOverlay: !(_stageCollection(rail)?.folderOf(item)?.hideTitle ?? false),
+      wide: true,
       restVeil: _kPromRestVeil,
-      progress: rail.cw?.progressOf(item),
-      episodeLabel: rail.cw?.episodeOf(item),
-      onQuickPlay: rail.cw != null || _pikpakOnly
-          ? null
-          : () => _sectionQuickPlay(_sections[rail.sectionIndex!], item),
-      onLongPress: rail.cw == null
-          ? null
-          : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
-      onFocused: () {
-        _setHero(item);
-        _canvasCols[railKey] = col;
-      },
-      onUp: () => _stageSwitchRail(-1),
-      onDown: () => _stageSwitchRail(1),
-      onOpen: () {
-        if (rail.cw != null) {
-          rail.cw!.onOpen(item);
-        } else {
-          _sectionOpenItem(_sections[rail.sectionIndex!], item);
-        }
-      },
-      onNearEnd: rail.sectionIndex == null
-          ? null
-          : () => _loadMoreRow(rail.sectionIndex!),
     );
   }
 
@@ -7396,67 +7345,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   )
                 : SizedBox(
                     height: rowBoxH,
-                    child: HomeBoardCell(
-                      onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
+                    child: _stageCards.build(
+                      rail: rail,
+                      railKey: railKey,
                       item: items[col],
-                      isTelevision: true,
-                      focusNode: nodes[col],
+                      readActionItem: () => items[col],
+                      nodes: nodes,
                       column: col,
-                      rowNodes: nodes,
-                      hasBoundSource: _isBound(items[col]),
-                      ringColor: Colors.white,
-                      aspectRatio: _stageCardAspect(rail),
-                      artUrl: _stageCardArt(rail, items[col]),
-                      focusArtUrl: _stageCollection(
-                        rail,
-                      )?.focusArtOf(items[col]),
-                      focusVideoUrl: _stageCollection(
-                        rail,
-                      )?.focusVideoOf(items[col]),
-                      focusGlowEnabled:
-                          _stageCollection(rail)?.collection.focusGlowEnabled ??
-                          false,
-                      showTitleOverlay:
-                          !(_stageCollection(
-                                rail,
-                              )?.folderOf(items[col])?.hideTitle ??
-                              false),
-                      progress: rail.cw?.progressOf(items[col]),
-                      episodeLabel: rail.cw?.episodeOf(items[col]),
-                      onQuickPlay: rail.cw != null || _pikpakOnly
-                          ? null
-                          : () => _sectionQuickPlay(
-                              _sections[rail.sectionIndex!],
-                              items[col],
-                            ),
-                      onLongPress: rail.cw == null
-                          ? null
-                          : () => _openCwCardMenu(
-                              rail.cw!,
-                              items[col],
-                              rail.cwIndex,
-                              col,
-                            ),
-                      onFocused: () {
-                        _setHero(items[col]);
-                        _canvasCols[railKey] = col;
-                        _atriumFocusedRailKey.value = railKey;
-                      },
                       onUp: onUp,
                       onDown: onDown,
-                      onOpen: () {
-                        if (rail.cw != null) {
-                          rail.cw!.onOpen(items[col]);
-                        } else {
-                          _sectionOpenItem(
-                            _sections[rail.sectionIndex!],
-                            items[col],
-                          );
-                        }
-                      },
-                      onNearEnd: rail.sectionIndex == null
-                          ? null
-                          : () => _loadMoreRow(rail.sectionIndex!),
+                      onFocusedExtra: () =>
+                          _atriumFocusedRailKey.value = railKey,
                     ),
                   ),
           ),
@@ -7599,49 +7498,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         onDownHold: onDownHold,
       );
     }
-    final item = items[col];
     return SizedBox(
       height: cellW / _stageCardAspect(rail),
-      child: HomeBoardCell(
-        onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-        item: item,
-        isTelevision: true,
-        focusNode: nodes[col],
+      child: _stageCards.build(
+        rail: rail,
+        railKey: railKey,
+        item: items[col],
+        nodes: nodes,
         column: col,
-        rowNodes: nodes,
-        aspectRatio: _stageCardAspect(rail),
-        artUrl: _stageCardArt(rail, item),
-        focusArtUrl: _stageCollection(rail)?.focusArtOf(item),
-        focusVideoUrl: _stageCollection(rail)?.focusVideoOf(item),
-        focusGlowEnabled: _stageCollection(rail)?.collection.focusGlowEnabled ?? false,
-        showTitleOverlay: !(_stageCollection(rail)?.folderOf(item)?.hideTitle ?? false),
-        hasBoundSource: _isBound(item),
-        ringColor: Colors.white,
-        progress: rail.cw?.progressOf(item),
-        episodeLabel: rail.cw?.episodeOf(item),
-        onQuickPlay: rail.cw != null || _pikpakOnly
-            ? null
-            : () => _sectionQuickPlay(_sections[rail.sectionIndex!], item),
-        onLongPress: rail.cw == null
-            ? null
-            : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
-        onFocused: () {
-          _setHero(item);
-          _canvasCols[railKey] = col;
-        },
+        pageNearEnd: false,
         onUp: onUp,
         onDown: onDown,
         onUpHold: onUpHold,
         onDownHold: onDownHold,
         onLeft: onLeft,
         onRight: onRight,
-        onOpen: () {
-          if (rail.cw != null) {
-            rail.cw!.onOpen(item);
-          } else {
-            _sectionOpenItem(_sections[rail.sectionIndex!], item);
-          }
-        },
       ),
     );
   }
@@ -7699,50 +7570,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     VoidCallback? onDownHold,
     VoidCallback? onFocusedExtra,
   }) {
-    final item = items[col];
-    return HomeBoardCell(
-      onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-      item: item,
-      isTelevision: true,
-      focusNode: nodes[col],
+    return _stageCards.build(
+      rail: rail,
+      railKey: railKey,
+      item: items[col],
+      nodes: nodes,
       column: col,
-      rowNodes: nodes,
-      hasBoundSource: _isBound(item),
-      ringColor: Colors.white,
-      aspectRatio: _stageCardAspect(rail),
-      artUrl: _stageCardArt(rail, item),
-      focusArtUrl: _stageCollection(rail)?.focusArtOf(item),
-      focusVideoUrl: _stageCollection(rail)?.focusVideoOf(item),
-      focusGlowEnabled: _stageCollection(rail)?.collection.focusGlowEnabled ?? false,
-      showTitleOverlay: !(_stageCollection(rail)?.folderOf(item)?.hideTitle ?? false),
-      progress: rail.cw?.progressOf(item),
-      episodeLabel: rail.cw?.episodeOf(item),
-      onQuickPlay: rail.cw != null || _pikpakOnly
-          ? null
-          : () => _sectionQuickPlay(_sections[rail.sectionIndex!], item),
-      onLongPress: rail.cw == null
-          ? null
-          : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
-      onFocused: () {
-        _setHero(item);
-        _canvasCols[railKey] = col;
+      onUp: onUp,
+      onDown: onDown,
+      onUpHold: onUpHold,
+      onDownHold: onDownHold,
+      onFocusedExtra: () {
         _stageCol.value = col;
         onFocusedExtra?.call();
       },
-      onUp: onUp ?? () => _stageSwitchRail(-1),
-      onDown: onDown ?? () => _stageSwitchRail(1),
-      onUpHold: onUpHold,
-      onDownHold: onDownHold,
-      onOpen: () {
-        if (rail.cw != null) {
-          rail.cw!.onOpen(item);
-        } else {
-          _sectionOpenItem(_sections[rail.sectionIndex!], item);
-        }
-      },
-      onNearEnd: rail.sectionIndex == null
-          ? null
-          : () => _loadMoreRow(rail.sectionIndex!),
     );
   }
 
