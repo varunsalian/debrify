@@ -92,6 +92,8 @@ class SimklService {
   List<dynamic>? _playbackCacheData;
   DateTime? _playbackCacheAt;
   Future<List<dynamic>?>? _playbackInFlight;
+  ProfileSessionOwner? _playbackCacheOwner;
+  ProfileSessionOwner? _playbackInFlightOwner;
   // The generation the in-flight fetch was started at — a reader that arrives
   // after a scrobble write invalidated the cache must NOT join a fetch started
   // before it (that fetch carries pre-write, stale sessions); it starts fresh.
@@ -110,6 +112,7 @@ class SimklService {
   void _invalidatePlaybackCache() {
     _playbackCacheData = null;
     _playbackCacheAt = null;
+    _playbackCacheOwner = null;
     _moviePlaybackCacheData = null;
     _moviePlaybackCacheAt = null;
     _playbackCacheGeneration++;
@@ -574,9 +577,16 @@ class SimklService {
   /// the show summary object are enough, and `full` would bloat the response
   /// with the whole watched-episode list. Returns the raw `shows` list (empty
   /// when the list is genuinely empty), or null on failure / when disconnected.
-  Future<List<dynamic>?> fetchUpNextShowsOrNull() async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return null;
+  Future<List<dynamic>?> fetchUpNextShowsOrNull({
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
+    final token = await StorageService.getSimklAccessToken(
+      canContinue: canContinue,
+    );
+    if (canContinue?.call() == false || token == null || token.isEmpty) {
+      return null;
+    }
     final uri = _apiUri('/sync/all-items/shows/watching', {
       'next_watch_info': 'yes',
     });
@@ -585,7 +595,9 @@ class SimklService {
       headers: _apiHeaders(accessToken: token),
       label: 'upNext shows',
     );
-    if (data is! Map<String, dynamic>) return null;
+    if (canContinue?.call() == false || data is! Map<String, dynamic>) {
+      return null;
+    }
     final shows = data['shows'];
     return shows is List ? shows : const [];
   }
@@ -1171,44 +1183,71 @@ class SimklService {
   /// Raw paused-playback sessions for episodes, or null on failure. Cached for
   /// [_playbackTtl] and coalesced across concurrent callers, so a detail open's
   /// several readers share a single fetch.
-  Future<List<dynamic>?> _fetchEpisodePlaybackSessions() async {
+  Future<List<dynamic>?> _fetchEpisodePlaybackSessions({
+    bool Function()? canContinue,
+  }) async {
+    final owner = ProfileSessionMemory.captureOwner();
+    final scope = owner.scope == null ? null : ProfileRuntime.capture();
+    bool ownerCurrent() =>
+        owner == ProfileSessionMemory.captureOwner() &&
+        (scope == null || scope == ProfileRuntime.scope.value);
+    bool current() => ownerCurrent() && canContinue?.call() != false;
+    if (!current()) return null;
     final at = _playbackCacheAt;
-    if (at != null && DateTime.now().difference(at) < _playbackTtl) {
+    if (_playbackCacheOwner == owner &&
+        at != null &&
+        DateTime.now().difference(at) < _playbackTtl) {
       return _playbackCacheData;
     }
-    // Only join an in-flight fetch started at the current generation — a fetch
-    // that predates a scrobble-write invalidation would hand back stale data.
     final inFlight = _playbackInFlight;
     if (inFlight != null &&
+        _playbackInFlightOwner == owner &&
         _playbackInFlightGeneration == _playbackCacheGeneration) {
-      return inFlight;
+      final result = await inFlight;
+      return current() ? result : null;
     }
-    final future = _loadEpisodePlaybackSessions();
+    // The service owns a shared request; one retiring view must not cancel
+    // another consumer. Capture the invalidation generation before credentials.
+    final generation = _playbackCacheGeneration;
+    final future = _loadEpisodePlaybackSessions(
+      owner,
+      generation,
+      ownerCurrent,
+    );
     _playbackInFlight = future;
-    _playbackInFlightGeneration = _playbackCacheGeneration;
+    _playbackInFlightOwner = owner;
+    _playbackInFlightGeneration = generation;
     try {
-      return await future;
+      final result = await future;
+      return current() ? result : null;
     } finally {
-      // Don't clear a newer fetch that may have replaced this one mid-flight.
-      if (identical(_playbackInFlight, future)) _playbackInFlight = null;
+      if (identical(_playbackInFlight, future)) {
+        _playbackInFlight = null;
+        _playbackInFlightOwner = null;
+      }
     }
   }
 
-  Future<List<dynamic>?> _loadEpisodePlaybackSessions() async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return null;
-    final generation = _playbackCacheGeneration;
+  Future<List<dynamic>?> _loadEpisodePlaybackSessions(
+    ProfileSessionOwner owner,
+    int generation,
+    bool Function() ownerCurrent,
+  ) async {
+    final token = await StorageService.getSimklAccessToken(
+      canContinue: ownerCurrent,
+    );
+    if (!ownerCurrent() || token == null || token.isEmpty) return null;
     final data = await _getOrNull(
       _apiUri('/sync/playback/episodes'),
       headers: _apiHeaders(accessToken: token),
       label: 'playback episodes',
     );
+    if (!ownerCurrent()) return null;
     final list = data is List ? data : null;
-    // Only cache an authoritative result that wasn't superseded by a scrobble
-    // write while this fetch was in flight.
     if (list != null && generation == _playbackCacheGeneration) {
       _playbackCacheData = list;
       _playbackCacheAt = DateTime.now();
+      _playbackCacheOwner = owner;
     }
     return list;
   }
@@ -1298,9 +1337,18 @@ class SimklService {
   /// e.g. Simkl's 409 duplicate refusal — leaves its pause checkpoints behind
   /// forever) can no longer outrank a fresher position from another source.
   Future<({int season, int episode, double? progress, DateTime? pausedAt})?>
-  fetchShowPlaybackSelection(String showImdbId) async {
-    if (MediaIdentity.isNative(showImdbId)) await _cachedLibAllAll();
-    final sessions = await _fetchEpisodePlaybackSessions();
+  fetchShowPlaybackSelection(
+    String showImdbId, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
+    if (MediaIdentity.isNative(showImdbId)) {
+      await _cachedLibAllAll(canContinue: canContinue);
+    }
+    if (canContinue?.call() == false) return null;
+    final sessions = await _fetchEpisodePlaybackSessions(
+      canContinue: canContinue,
+    );
     if (sessions == null) return null;
     ({int season, int episode, double? progress})? best;
     DateTime? bestAt;
@@ -1334,10 +1382,15 @@ class SimklService {
   /// FALLBACK used when a show has no paused playback session — so a series
   /// watched up to E3 on another device resumes at E4, not the default S01E01.
   Future<({int season, int episode})?> fetchNextToWatch(
-    String showImdbId,
-  ) async {
-    if (MediaIdentity.isNative(showImdbId)) await _cachedLibAllAll();
-    final shows = await fetchUpNextShowsOrNull();
+    String showImdbId, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return null;
+    if (MediaIdentity.isNative(showImdbId)) {
+      await _cachedLibAllAll(canContinue: canContinue);
+    }
+    if (canContinue?.call() == false) return null;
+    final shows = await fetchUpNextShowsOrNull(canContinue: canContinue);
     if (shows == null) return null;
     for (final raw in shows) {
       if (raw is! Map) continue;

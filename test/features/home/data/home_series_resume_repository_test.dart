@@ -80,11 +80,11 @@ class Fixture {
       await step('resolve:$id');
       return resolved;
     },
-    readSimklPaused: (id) async {
+    readSimklPaused: (id, current) async {
       await step('paused:$id');
       return paused;
     },
-    readSimklNext: (id) async {
+    readSimklNext: (id, current) async {
       await step('next:$id');
       return next;
     },

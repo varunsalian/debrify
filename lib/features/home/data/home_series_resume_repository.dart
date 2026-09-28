@@ -29,8 +29,10 @@ class HomeSeriesResumeRepository {
   readTraktShows;
   final Future<AdvancedSearchSelection?> Function(String, bool Function())
   resolveTraktShow;
-  final Future<HomeSimklResumeSignal?> Function(String) readSimklPaused;
-  final Future<({int season, int episode})?> Function(String) readSimklNext;
+  final Future<HomeSimklResumeSignal?> Function(String, bool Function())
+  readSimklPaused;
+  final Future<({int season, int episode})?> Function(String, bool Function())
+  readSimklNext;
   final Future<Map<String, dynamic>?> Function(String) readLocalById;
   final Future<Map<String, dynamic>?> Function(String) readLocalByTitle;
   final bool Function() isOwnerCurrent;
@@ -164,7 +166,7 @@ class HomeSeriesResumeRepository {
         (!MediaIdentity.isImdb(id) && !MediaIdentity.isNative(id))) {
       return null;
     }
-    final result = await readSimklPaused(id);
+    final result = await readSimklPaused(id, () => _current(isCurrent));
     return _current(isCurrent) ? result : null;
   }
 
@@ -179,7 +181,7 @@ class HomeSeriesResumeRepository {
         (!MediaIdentity.isImdb(id) && !MediaIdentity.isNative(id))) {
       return null;
     }
-    final result = await readSimklNext(id);
+    final result = await readSimklNext(id, () => _current(isCurrent));
     return _current(isCurrent) ? result : null;
   }
 

@@ -1,3 +1,4 @@
+import 'package:debrify/features/home/application/home_series_resume_dependencies.dart';
 import 'package:debrify/features/home/data/home_catalog_playback_readers.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
@@ -547,4 +548,258 @@ void main() {
       );
     },
   );
+  const resumeShow = StremioMeta(id: 'tt123', name: 'Fixture', type: 'series');
+  String pausedBody(int progress) => jsonEncode([
+    {
+      'show': {
+        'ids': {'imdb': 'tt123', 'tmdb': 123},
+      },
+      'episode': {'season': 2, 'number': 3},
+      'progress': progress,
+      'paused_at': '2026-01-01T00:00:00Z',
+    },
+  ]);
+
+  test(
+    'shared resume read survives one view closing and warms the same-profile cache',
+    () async {
+      final reader = ProviderContainer.test().read(
+        homeSeriesResumeRepositoryProvider(ProfileSessionMemory.captureOwner()),
+      );
+      final entered = Completer<void>(), release = Completer<void>();
+      var firstCurrent = true;
+      var requests = 0;
+      await http.runWithClient(
+        () async {
+          final first = ProfileRuntime.withCapturedScope(
+            other,
+            () => reader.simklPaused(resumeShow, isCurrent: () => firstCurrent),
+          );
+          await entered.future.timeout(const Duration(seconds: 3));
+          final second = reader.simklPaused(resumeShow, isCurrent: () => true);
+          await Future<void>.delayed(Duration.zero);
+          firstCurrent = false;
+          release.complete();
+          expect(await first, isNull);
+          expect((await second)!.progress, 42);
+          expect(
+            (await reader.simklPaused(
+              resumeShow,
+              isCurrent: () => true,
+            ))!.progress,
+            42,
+          );
+          expect(requests, 1);
+          // A captured foreign scope cannot borrow the active profile's cache.
+          expect(
+            await ProfileRuntime.withCapturedScope(
+              other,
+              () => SimklService.instance.fetchShowPlaybackSelection('tt123'),
+            ),
+            isNull,
+          );
+          expect(requests, 1);
+        },
+        () => MockClient((request) async {
+          expect(request.headers['authorization'], 'Bearer origin-token');
+          requests++;
+          entered.complete();
+          await release.future;
+          return http.Response(pausedBody(42), 200);
+        }),
+      );
+    },
+  );
+
+  test(
+    'late old-profile resume cannot join or replace the new-profile cache',
+    () async {
+      final container = ProviderContainer.test();
+      final oldReader = container.read(
+        homeSeriesResumeRepositoryProvider(ProfileSessionMemory.captureOwner()),
+      );
+      final entered = Completer<void>(), release = Completer<void>();
+      var requests = 0;
+      await http.runWithClient(
+        () async {
+          final oldRead = oldReader.simklPaused(
+            resumeShow,
+            isCurrent: () => true,
+          );
+          await entered.future.timeout(const Duration(seconds: 3));
+          ProfileRuntime.publish(other);
+          final newReader = container.read(
+            homeSeriesResumeRepositoryProvider(
+              ProfileSessionMemory.captureOwner(),
+            ),
+          );
+          expect(
+            (await newReader.simklPaused(
+              resumeShow,
+              isCurrent: () => true,
+            ))!.progress,
+            80,
+          );
+          release.complete();
+          expect(await oldRead, isNull);
+          expect(
+            (await newReader.simklPaused(
+              resumeShow,
+              isCurrent: () => true,
+            ))!.progress,
+            80,
+          );
+          expect(requests, 2);
+        },
+        () => MockClient((request) async {
+          requests++;
+          if (request.headers['authorization'] == 'Bearer origin-token') {
+            entered.complete();
+            await release.future;
+            return http.Response(pausedBody(42), 200);
+          }
+          expect(request.headers['authorization'], 'Bearer other-token');
+          return http.Response(pausedBody(80), 200);
+        }),
+      );
+    },
+  );
+
+  for (final retireProfile in [false, true]) {
+    test(
+      'resume owns generation before held credentials: profile retired=$retireProfile',
+      () async {
+        ProfileRuntime.debugReset();
+        ProfileRuntime.initializeLegacy();
+        SharedPreferences.setMockInitialValues({
+          'simkl_access_token': 'legacy-token',
+        });
+        final reader = ProviderContainer.test().read(
+          homeSeriesResumeRepositoryProvider(
+            ProfileSessionMemory.captureOwner(),
+          ),
+        );
+        final entered = Completer<void>(), release = Completer<void>();
+        final snapshot = ProfilePreferences.captureMutationSnapshot((_) async {
+          entered.complete();
+          await release.future;
+        });
+        await entered.future;
+        var requests = 0;
+        await http.runWithClient(
+          () async {
+            final pending = reader.simklPaused(
+              resumeShow,
+              isCurrent: () => true,
+            );
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+            SimklService.instance.resetProfileScope();
+            if (retireProfile) ProfileSessionMemory.clearAll();
+            release.complete();
+            await snapshot;
+            final result = await pending;
+            if (retireProfile) {
+              expect(result, isNull);
+              expect(requests, 0);
+              expect(
+                (await SharedPreferences.getInstance()).getString(
+                  'simkl_access_token',
+                ),
+                'legacy-token',
+              );
+            } else {
+              expect(result!.progress, 42);
+              expect(
+                (await reader.simklPaused(
+                  resumeShow,
+                  isCurrent: () => true,
+                ))!.progress,
+                80,
+              );
+              expect(requests, 2);
+            }
+          },
+          () => MockClient((_) async {
+            requests++;
+            return http.Response(pausedBody(requests == 1 ? 42 : 80), 200);
+          }),
+        );
+      },
+    );
+  }
+
+  for (final kind in ['paused-native', 'next-native', 'next']) {
+    for (final retire in [false, true]) {
+      test(
+        '$kind resume preserves lookup and stops retired follow-up: $retire',
+        () async {
+          final reader = ProviderContainer.test().read(
+            homeSeriesResumeRepositoryProvider(
+              ProfileSessionMemory.captureOwner(),
+            ),
+          );
+          final entered = Completer<void>(), release = Completer<void>();
+          var current = true;
+          var requests = 0;
+          final meta = StremioMeta(
+            id: kind.endsWith('native') ? 'tmdb:123' : 'tt123',
+            name: 'Fixture',
+            type: 'series',
+          );
+          await http.runWithClient(
+            () async {
+              final pending = ProfileRuntime.withCapturedScope(other, () async {
+                if (kind == 'paused-native') {
+                  final result = await reader.simklPaused(
+                    meta,
+                    isCurrent: () => current,
+                  );
+                  return result == null
+                      ? null
+                      : (result.season, result.episode);
+                }
+                final result = await reader.simklNext(
+                  meta,
+                  isCurrent: () => current,
+                );
+                return result == null ? null : (result.season, result.episode);
+              });
+              await entered.future.timeout(const Duration(seconds: 3));
+              current = !retire;
+              release.complete();
+              expect(await pending, retire ? isNull : (2, 3));
+              expect(requests, retire || kind == 'next' ? 1 : 2);
+            },
+            () => MockClient((request) async {
+              expect(request.headers['authorization'], 'Bearer origin-token');
+              requests++;
+              if (requests == 1) {
+                entered.complete();
+                await release.future;
+              }
+              if (request.url.path.endsWith('/episodes')) {
+                return http.Response(pausedBody(42), 200);
+              }
+              if (request.url.path.endsWith('/watching')) {
+                expect(request.url.queryParameters['next_watch_info'], 'yes');
+              }
+              return http.Response(
+                jsonEncode({
+                  'shows': [
+                    {
+                      'show': {
+                        'ids': {'tmdb': 123, 'imdb': 'tt123'},
+                      },
+                      'next_to_watch': 'S02E03',
+                    },
+                  ],
+                }),
+                200,
+              );
+            }),
+          );
+        },
+      );
+    }
+  }
 }

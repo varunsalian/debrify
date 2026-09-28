@@ -41,11 +41,18 @@ final homeSeriesResumeRepositoryProvider = Provider.autoDispose
               canContinue: current,
             ),
           ),
-          readSimklPaused: (id) => scoped(
-            () => SimklService.instance.fetchShowPlaybackSelection(id),
+          readSimklPaused: (id, current) => scoped(
+            () => SimklService.instance.fetchShowPlaybackSelection(
+              id,
+              canContinue: current,
+            ),
           ),
-          readSimklNext: (id) =>
-              scoped(() => SimklService.instance.fetchNextToWatch(id)),
+          readSimklNext: (id, current) => scoped(
+            () => SimklService.instance.fetchNextToWatch(
+              id,
+              canContinue: current,
+            ),
+          ),
           readLocalById: (id) =>
               scoped(() => StorageService.getLastPlayedEpisodeByImdbId(id)),
           readLocalByTitle: (title) => scoped(

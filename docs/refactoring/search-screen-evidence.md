@@ -6,6 +6,44 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: Simkl shared resume reads — 2026-09-28
+
+The existing series-resume repository now forwards its view/profile guard through
+Simkl paused and next-to-watch readers, including native-library preparation and
+next-to-watch credential access. The episode-session cache records the owning
+profile session for both cached and in-flight values. It captures the invalidation
+generation before awaiting credentials, closing a race where reset during that
+wait could make an old fetch appear current. Foreign captured scopes cannot borrow
+the active profile's episode cache, and a late old-profile request cannot overwrite
+or clear a newer profile's request/cache.
+
+The service retains ownership of an accepted shared episode read: one closing view
+must not cancel another consumer. Each caller checks its own continuation after
+awaiting the shared result. Same-profile coalescing, cache TTL, payload parsing,
+resume timestamps/precedence and existing invalidation behavior are retained. An
+accepted shared credential read may finish within its original live profile even
+if its initiating view closes; profile retirement stops credential migration and
+cache publication. No new provider or generalized cache framework was added.
+
+Validation: **223 affected tests pass**, including ten new cases reusing the real
+two-profile/account fixture. Tests cover a closing first consumer with a live
+second consumer, a single network request and cache hit, foreign-scope rejection,
+new-profile cache winning over an old response, generation invalidation during an
+actual credential-write barrier, profile retirement preventing that migration,
+and active/retired native paused and next-to-watch preparation. Existing Simkl
+service, resume/catalog, continuation-screen, episode menu/native flow, playlist
+identity, watched-badge/season and progress-reset checks pass. Five introduced
+formatting lints were corrected; final analyzer identities remain **848** and
+**468** migrated files pass architecture checks. Diff checks pass; only changed
+legacy members were formatted. Receipts:
+`.git/refactor-evidence/phase5/simkl-resume-final-tests.txt` and
+`simkl-resume-final-analyze.txt`.
+
+This closes the recorded Simkl resume-reader/shared episode-cache boundary.
+Detail composition and mutation/reset write contracts remain in A; Sources,
+lifecycle, full integration and native/device/performance gates remain pending.
+The movie playback cache and unrelated service internals were not reorganized.
+
 ## Batch A checkpoint: Trakt uncached-resume preparation — 2026-09-28
 
 Both uncached series selection and resume-label resolution now forward their
