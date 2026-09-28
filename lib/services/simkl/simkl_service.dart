@@ -840,9 +840,20 @@ class SimklService {
   /// Clear sessions while the library still supplies aliases for sparse
   /// Simkl-only playback records. On cleanup failure, retain the library entry
   /// so a retry can still resolve the title rather than reporting a false success.
-  Future<bool> removeFromListAndPlayback(String id, String type) async {
-    if (!await deletePlaybackForImdb(id, contentType: type)) return false;
-    return removeFromList(id, type);
+  Future<bool> removeFromListAndPlayback(
+    String id,
+    String type, {
+    bool Function()? canContinue,
+  }) async {
+    if (!await deletePlaybackForImdb(
+      id,
+      contentType: type,
+      canContinue: canContinue,
+    )) {
+      return false;
+    }
+    if (canContinue?.call() == false) return false;
+    return removeFromList(id, type, canContinue: canContinue);
   }
 
   /// Existing watched-action name retained for callers that mean "make this
@@ -903,17 +914,28 @@ class SimklService {
   }
 
   /// Reset watched episodes without removing the show from the library.
-  Future<bool> clearSeriesHistory(String imdbId) async {
-    final token = await StorageService.getSimklAccessToken();
-    if (token == null || token.isEmpty) return false;
+  Future<bool> clearSeriesHistory(
+    String imdbId, {
+    bool Function()? canContinue,
+  }) async {
+    if (canContinue?.call() == false) return false;
+    final owner = ProfileSessionMemory.captureOwner();
+    final token = await StorageService.getSimklAccessToken(
+      canContinue: canContinue,
+    );
+    if (token == null || token.isEmpty || canContinue?.call() == false) {
+      return false;
+    }
     final rows = await _postOrNull(
       '/sync/watched',
-      [{...MediaIdentity.apiIds(imdbId), 'type': 'show'}],
+      [
+        {...MediaIdentity.apiIds(imdbId), 'type': 'show'},
+      ],
       token: token,
       label: 'clearSeriesHistory read',
       query: {'extended': 'episodes'},
     );
-    if (rows is! List) return false;
+    if (rows is! List || canContinue?.call() == false) return false;
     final seasons = <Map<String, dynamic>>[];
     for (final row in rows) {
       if (row is! Map || row['seasons'] is! List) return false;
@@ -938,16 +960,16 @@ class SimklService {
       '/sync/history/remove',
       {
         'shows': [
-          {
-            'ids': MediaIdentity.apiIds(imdbId),
-            'seasons': seasons,
-          },
+          {'ids': MediaIdentity.apiIds(imdbId), 'seasons': seasons},
         ],
       },
       token: token,
       label: 'clearSeriesHistory',
     );
-    if (!_wasMatched(result, 'shows')) return false;
+    if (!_wasMatched(result, 'shows') ||
+        owner != ProfileSessionMemory.captureOwner()) {
+      return false;
+    }
     _invalidateLibraryCache();
     EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
     StorageService.movieFinishedRevision.value++;

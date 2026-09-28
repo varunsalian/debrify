@@ -6,6 +6,40 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: accepted reset deletion and tracker continuation — 2026-09-28
+
+The reset service now includes its complete local deletion sequence in the
+existing `LocalHistoryRemoval` lifecycle drain. It retains its captured profile
+through playback, finished/history, recovery and sync-journal writes. Retirement
+stops subsequent tracker work and global reset notifications, while the accepted
+local sequence finishes. Foreign ambient profile scopes cannot begin a reset.
+This is a reachable ownership fix; it introduces no new lifecycle registry.
+
+Trakt reset reads/deletions now receive the existing continuation guard through
+credentials, authentication and transport. Simkl reset propagates that guard
+through authentication, history reads and playback/library removal; an awaited
+history read cannot start its deletion after retirement. Accepted Simkl responses
+cannot invalidate the incoming profile's caches. Existing active-account ordering,
+provider-specific resets and independent failure handling remain covered.
+
+Validation: 101 affected tests and 16 related Simkl checks pass, including seven
+new cases covering actual
+origin/incoming preferences, finished markers, recovery records, sync journals,
+lifecycle-drain blocking, foreign scopes and active/retired Trakt/Simkl history
+reads. Analyzer comparison against the addon-inventory checkpoint has no added
+diagnostics; three brace diagnostics are removed (845 remain). The architecture
+guard still passes 473 measured files. Receipts:
+`.git/refactor-evidence/phase5/reset-local-final-tests.txt` and
+`reset-local-final-analyze-2.txt`; related checks are in
+`reset-local-related-tests.txt`. Only modified Simkl members were formatted.
+
+Review: local acceptance and retirement are intentionally different policies;
+a completed accepted deletion is not reported as a failed local write merely
+because its initiating view retired. Existing dialog ownership/feedback guards
+remain unchanged. Batch A is still open for mutation data boundaries,
+watched-action sequencing and remaining MDBList/transitive persistence checks.
+This checkpoint does not establish device acceptance or complete the refactor.
+
 ## Batch A checkpoint: addon inventory and hydration ownership — 2026-09-28
 
 Addon inventory reads now capture session ownership and invalidation generation
