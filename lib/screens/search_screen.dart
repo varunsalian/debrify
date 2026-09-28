@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_board_bindings.dart';
 import '../features/home/presentation/home_continuation_nodes.dart';
 import '../features/home/presentation/home_see_all_navigation.dart';
 import '../features/home/application/home_refresh_queue.dart';
@@ -121,8 +122,6 @@ import '../features/home/application/home_return_dependencies.dart';
 import '../features/home/application/home_pikpak_only_controller.dart';
 import '../features/home/application/home_bound_counts_controller.dart';
 import '../features/home/application/home_configuration_changes.dart';
-import '../features/home/application/home_settings_refresh.dart';
-import '../features/home/application/home_settings_refresh_dependencies.dart';
 import '../features/home/application/home_layout_preference.dart';
 import '../features/home/application/home_layout_preference_dependencies.dart';
 import '../models/source_appearance.dart';
@@ -560,8 +559,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// True when PikPak is the ONLY configured provider. PikPak can't quick-play
   /// (it queues a cloud download), so catalog "Play" is hidden — matching Home.
-  late final HomePikpakOnlyController _pikpakOnlyController;
-  late final ProviderSubscription<bool> _pikpakOnlySubscription;
+  HomePikpakOnlyController get _pikpakOnlyController =>
+      _homeBoardBindings.pikpak;
   bool get _pikpakOnly => _pikpakOnlyController.current;
 
   /// Experimental flag: route series taps to the merged detail+episodes page.
@@ -570,8 +569,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// imdbId → number of pinned (bound) sources — drives the board tile badge,
   /// detail Sources tint, and the Episodes "Source(s)" button count.
-  late final HomeBoundCountsController _boundCountsController;
-  late final ProviderSubscription<Map<String, int>> _boundCountsSubscription;
+  HomeBoundCountsController get _boundCountsController =>
+      _homeBoardBindings.boundCounts;
   Map<String, int> get _boundCounts => _boundCountsController.current;
 
   // Board state. [_homeSections] is the homepage cache; [_sections] is whatever
@@ -580,8 +579,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final _catalogFocus = HomeContinuationFocus();
   FocusNode get _catalogContinueNode => _catalogFocus.continueNode;
   FocusNode get _catalogMoreNode => _catalogFocus.moreNode;
-  late final HomeCatalogContinuationController _catalogContinuationController;
-  late final ProviderSubscription<bool> _catalogContinuationSubscription;
+  HomeCatalogContinuationController get _catalogContinuationController =>
+      _homeBoardBindings.continuation;
   bool get _catalogContinuing => _catalogContinuationController.busy;
   bool _loading = true;
   String? _error;
@@ -629,8 +628,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Imported collections — each enabled one is a row of folder tiles.
   List<HomeCollection> get _homeCollections => _homeConfiguration.collections;
-  late final ProviderSubscription<HomeSettingsRefresh>
-  _homeSettingsRefreshSubscription;
   late final _spotlightCatalogCards = SpotlightCatalogCardCache(
     wideArtwork: homeStageWideArtwork,
     onOpen: (item, addon) => _openItem(item, addon),
@@ -734,8 +731,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   late final ProviderSubscription<HomeDefaultView> _homeDefaultViewSubscription;
   HomeDefaultView get _homeDefaultView => _homeDefaultViewSubscription.read();
   late final HomeCatalogSession _homeCatalogSession;
-  late final HomeCatalogController _homeCatalogController;
-  late final ProviderSubscription<HomeCatalogState> _homeCatalogSubscription;
+  late final HomeBoardBindings _homeBoardBindings;
+  HomeCatalogController get _homeCatalogController =>
+      _homeBoardBindings.catalog;
   List<HomeCatalogReference> get _boardRefs =>
       _homeCatalogController.current.references;
   int get _boardCursor => _homeCatalogController.current.cursor;
@@ -842,8 +840,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// a session that actually played something can have moved a tracker's
   /// position. Tracker rows changed by menu actions (mark watched, remove from
   /// Continue Watching) are refreshed by those handlers directly.
-  late final ProviderSubscription<bool> _postPlaybackRefreshSubscription;
-  late final HomePostPlaybackRefreshController _postPlaybackRefreshController;
+  HomePostPlaybackRefreshController get _postPlaybackRefreshController =>
+      _homeBoardBindings.playbackRefresh;
   bool get _playedSinceRefresh =>
       _postPlaybackRefreshController.playedSinceRefresh;
 
@@ -1017,10 +1015,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
   /// (watchlist / collection / watched / rate / list). App actions (Select
   /// Source, Add to Stremio TV, Search Packs) show regardless.
-  late final Map<HomeTracker, ProviderSubscription<bool>>
-  _trackerAuthSubscriptions;
-  late final Map<HomeTracker, HomeTrackerAuthenticationController>
-  _trackerAuthControllers;
+  Map<HomeTracker, HomeTrackerAuthenticationController>
+  get _trackerAuthControllers => _homeBoardBindings.authentication;
   bool get _isTraktAuthenticated =>
       _trackerAuthControllers[HomeTracker.trakt]!.current;
 
@@ -1580,70 +1576,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           !(restoredHome && keywordSnapshot == null),
     );
     _homeCatalogSession = homeSession;
-    _homeCatalogSubscription = ref.listenManual(
-      homeCatalogProvider(homeSession),
-      (previous, next) {},
-    );
-    _homeCatalogController = ref.read(homeCatalogProvider(homeSession).notifier);
-    _catalogContinuationSubscription = ref.listenManual(
-      homeCatalogContinuationProvider(homeSession),
-      (previous, next) {
-        if (mounted) setState(() {});
-      },
-    );
-    _catalogContinuationController = ref.read(
-      homeCatalogContinuationProvider(homeSession).notifier,
-    );
-    _episodeArtworkSubscription = ref.listenManual(
-      homeEpisodeArtworkProvider(homeSession),
-      (previous, next) {},
-    );
-    _episodeArtworkController = ref.read(
-      homeEpisodeArtworkProvider(homeSession).notifier,
-    );
-    _trackerAuthSubscriptions = {
-      for (final tracker in HomeTracker.values)
-        tracker: ref.listenManual(
-          homeTrackerAuthenticationProvider((
-            view: homeSession,
-            tracker: tracker,
-          )),
-          (previous, next) {},
-        ),
-    };
-    _trackerAuthControllers = {
-      for (final tracker in HomeTracker.values)
-        tracker: ref.read(
-          homeTrackerAuthenticationProvider((
-            view: homeSession,
-            tracker: tracker,
-          )).notifier,
-        ),
-    };
-    _pikpakOnlySubscription = ref.listenManual(
-      homePikpakOnlyProvider(homeSession),
-      (previous, next) {},
-    );
-    _pikpakOnlyController = ref.read(
-      homePikpakOnlyProvider(homeSession).notifier,
-    );
-    _boundCountsSubscription = ref.listenManual(
-      homeBoundCountsProvider(homeSession),
-      (previous, next) {},
-    );
-    _boundCountsController = ref.read(
-      homeBoundCountsProvider(homeSession).notifier,
-    );
-    _postPlaybackRefreshSubscription = ref.listenManual(
-      homePostPlaybackRefreshProvider(homeSession),
-      (previous, next) {},
-    );
-    _postPlaybackRefreshController = ref.read(
-      homePostPlaybackRefreshProvider(homeSession).notifier,
-    );
-    _homeSettingsRefreshSubscription = ref.listenManual(
-      homeSettingsRefreshProvider(homeSession),
-      (previous, next) {},
+    _homeBoardBindings = HomeBoardBindings(
+      ref,
+      homeSession,
+      isCurrent: () => mounted,
+      onContinuationChanged: () => setState(() {}),
     );
     _heroTintSubscription = ref.listenManual(
       homeHeroTintLoaderProvider(homeSession),
@@ -2307,16 +2244,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     ProfileRuntime.scope.removeListener(_onSearchProfileChanged);
     _discoverBindings.close();
     _metadataFeatureSubscription.close();
-    _catalogContinuationSubscription.close();
-    _homeCatalogSubscription.close();
-    _episodeArtworkSubscription.close();
-    for (final subscription in _trackerAuthSubscriptions.values) {
-      subscription.close();
-    }
-    _pikpakOnlySubscription.close();
-    _boundCountsSubscription.close();
-    _postPlaybackRefreshSubscription.close();
-    _homeSettingsRefreshSubscription.close();
+    _homeBoardBindings.close();
     _heroTintSubscription.close();
     _heroLiveSubscription.close();
     _heroTrailerLoaderSubscription.close();
@@ -2362,7 +2290,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// broadcast is shared), so the equality guards skip reloads for unrelated
   /// settings.
   Future<void> _reloadForHomeSettings() =>
-      _homeSettingsRefreshSubscription.read().run(
+      _homeBoardBindings.settings.run(
         isCurrent: () => mounted,
         refreshAppearance: (current) =>
             _loadSourceTextFormatting(isCurrent: current),
@@ -2954,9 +2882,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   int? _iptvRemainingMinutes(String routeKey) =>
       _iptvContinuation.remainingMinutes[routeKey];
 
-  late final ProviderSubscription<HomeEpisodeArtwork>
-  _episodeArtworkSubscription;
-  late final HomeEpisodeArtworkController _episodeArtworkController;
+  HomeEpisodeArtworkController get _episodeArtworkController =>
+      _homeBoardBindings.artwork;
 
   Future<void> _enrichCwEpisodeArtwork({
     required Map<String, HomeEpisodeReference> refs,

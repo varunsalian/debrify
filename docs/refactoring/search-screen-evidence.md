@@ -6,6 +6,24 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: Home board application bindings — 2026-09-28
+
+Base: `607fabfb`. `HomeBoardBindings` (112 lines) retains catalog/continuation,
+episode artwork, tracker authentication, PikPak availability, bound-source counts,
+post-playback refresh and settings-refresh application owners. The root keeps
+snapshot/session construction and delegates through existing typed controllers.
+Root: **10,088 → 10,015 lines**.
+
+Review preserves provider keys, registration/read order, tracker iteration, the
+continuation-only repaint subscription and the original contiguous cleanup order.
+No request or state-publication owner changes. **69 tests pass** across progressive
+loading/pagination and configuration, PikPak, artwork, bound-count and Trakt screen
+integration. Analysis retains **836 identical diagnostic identities**; architecture
+passes **561 files**; changed-code formatting/diff checks pass. Receipts:
+`.git/refactor-evidence/phase5/home-board-bindings-{tests,analyze}.txt`.
+No emulator used. Complete feature composition, remaining lifecycle/facade
+reduction, C/D integration and final acceptance remain pending.
+
 ## Batch D checkpoint: continuation focus pools — 2026-09-28
 
 Base: `5cf9fa74`. `HomeContinuationNodes` (92 lines) owns the ten movie/series
