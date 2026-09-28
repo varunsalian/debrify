@@ -6,6 +6,28 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Spotlight shelf and Search composition — 2026-09-28
+
+Base: `8057f8eb`. Home's Spotlight shelf/card projection now lives in
+`home_spotlight_shelf.dart` (150 lines), and Search's shelves-only board composition
+in `search_spotlight_board.dart` (98 lines). Production uses both; root falls
+**12,394 → 12,260 lines**. Home's Spotlight route callbacks and favorite-card
+projection remain root responsibilities; this does not close all composition.
+
+Review preserves stable shelf ids and borrowed focus nodes, continuation progress
+conversion and episode-art fallback, preference-aware Options dispatch, collection
+art/shape/caption rules, and catalog card cache usage. Search captures the original
+section list; paging resolves that section against the current list before loading.
+Its status reservation, remote actions, watched identity and quick-play gating
+remain unchanged. No new resources or data access.
+
+**70 tests pass**: 59 Spotlight board/cache and Catalog Search screen tests plus
+11 real-screen Spotlight progressive-loading/paging/focus checks. Receipts:
+`.git/refactor-evidence/phase5/spotlight-composition-{tests,integration,analyze-final}.txt`.
+Analysis retains **838 identical diagnostic identities**; architecture passes
+**530 files**; formatting/diff checks pass. No emulator used. Remaining navigation,
+composition, lifecycle and final acceptance stay pending.
+
 ## Batch C checkpoint: Classic composition and catalog status — 2026-09-28
 
 Base: `54b76d11`. Classic's hero/status/rows/media composition now lives in

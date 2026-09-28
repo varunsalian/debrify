@@ -1,3 +1,5 @@
+import '../features/search/presentation/search_spotlight_board.dart';
+import '../features/home/presentation/home_spotlight_shelf.dart';
 import '../features/search/presentation/catalog_search_status.dart';
 import '../features/home/presentation/home_classic_board.dart';
 import '../features/home/presentation/home_canvas_board.dart';
@@ -247,7 +249,6 @@ import '../models/trakt_continue_watching_item.dart';
 import '../features/home/application/home_trakt_continuation_dependencies.dart';
 import '../services/video_player_launcher.dart';
 import '../services/tracking_source_policy.dart';
-import '../utils/continue_watching_presentation.dart';
 import '../utils/dialog_tap_guard.dart';
 import '../features/home/data/home_series_resume_resolver.dart';
 import '../features/home/application/home_series_resume_resolver_dependencies.dart';
@@ -6393,135 +6394,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     for (final rail in _canvasRails) _spotlightShelfForRail(rail),
   ];
 
-  SpotlightShelf _spotlightShelfForRail(HomeRail rail) {
-    // Rail identity — the same key Canvas/Atrium key their rails by — so the
-    // board reuses shelf subtrees when tracker rows front-insert.
-    final railKey = _canvasRailKeyOf(rail);
-    final row = rail.cw;
-    if (row != null) {
-      return SpotlightShelf(
-        id: railKey,
-        title: row.title,
-        // The tag used to be folded into the title text; now it IS the tag —
-        // the same pill grammar the catalog rows wear.
-        tag: row.tag,
-        nodes: row.nodes,
-        // Already nullable on the row itself — a tracker row with no grid
-        // behind it hands over null and simply draws no chevron.
-        onSeeAll: row.onSeeAll,
-        // Caption-free like catalog rows in PORTRAIT off TV. LANDSCAPE flips
-        // the premise: a textless still needs the title, and CW's second line
-        // adds its useful episode / remaining-time context.
-        captions: _homeLandscapeCards,
-        items: [
-          for (var col = 0; col < row.items.length; col++)
-            _spotlightContinueWatchingCard(
-              row,
-              row.items[col],
-              rail.cwIndex,
-              col,
-            ),
-        ],
+  SpotlightShelf _spotlightShelfForRail(HomeRail rail) =>
+      buildHomeSpotlightShelf(
+        rail,
+        railKey: _canvasRailKeyOf(rail),
+        landscape: _homeLandscapeCards,
+        hideCollectionNames: _hideHomeCollectionNames,
+        sections: _sections,
+        rowNodes: _rowNodes,
+        catalogTag: _catalogSourceTag,
+        onSeeAll: _openCatalogSeeAll,
+        onCollectionOpen: _openCollectionFolder,
+        onContinuationOptions: _openCwCardMenu,
+        favoriteShelf: _spotlightFavShelf,
+        catalogCard: (item, addon) => _spotlightCatalogCards.resolve(
+          item,
+          addon,
+          landscape: _homeLandscapeCards,
+        ),
       );
-    }
-    final fav = rail.favKind;
-    if (fav != null) return _spotlightFavShelf(fav, id: railKey);
-    final i = rail.sectionIndex!;
-    final section = _sections[i];
-    if (section is HomeCollectionSection) {
-      return SpotlightShelf(
-        id: railKey,
-        title: section.title,
-        tag: _hideHomeCollectionNames ? null : _catalogSourceTag(section),
-        showHeader: !_hideHomeCollectionNames,
-        nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
-        onSeeAll: () => _openCatalogSeeAll(section),
-        // A brand-logo tile needs no caption; captions stay on only while
-        // some folder still wants its title drawn.
-        captions: section.collection.folders.any((f) => !f.hideTitle),
-        items: [
-          for (final m in section.items)
-            SpotlightCard(
-              image: m.poster,
-              fallbackImage: m.background,
-              coverEmoji: section.folderOf(m)?.coverEmoji,
-              focusGlowEnabled: section.collection.focusGlowEnabled,
-              previewOnKeyboardFocus: true,
-              collectionGifUrl: section.focusArtOf(m),
-              collectionVideoUrl: section.focusVideoOf(m),
-              title: m.name,
-              shape: section.tileAspectOf(m) == 1
-                  ? SpotlightCardShape.square
-                  : section.tileAspectOf(m) > 1
-                  ? SpotlightCardShape.wide
-                  : SpotlightCardShape.poster,
-              showCaption: !(section.folderOf(m)?.hideTitle ?? false),
-              onOpen: () => _openCollectionFolder(section, m),
-            ),
-        ],
-      );
-    }
-    return SpotlightShelf(
-      id: railKey,
-      title: _sections[i].title,
-      tag: _catalogSourceTag(_sections[i]),
-      nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
-      // The same destination the classic rails' "See All" link opens —
-      // including the tracker-list rows, which _openCatalogSeeAll routes to
-      // their own browser rather than the catalog pager.
-      onSeeAll: () => _openCatalogSeeAll(section),
-      // Catalog cards go caption-free off TV in PORTRAIT — the art is the
-      // label; a caption repeating the poster's own title was the
-      // reference's one piece of noise we added ourselves. That rationale
-      // inverts for LANDSCAPE, where the backdrop is a textless still and
-      // the caption is the only identity the card has.
-      captions: _homeLandscapeCards,
-      items: [
-        for (final m in _sections[i].items)
-          _spotlightCatalogCards.resolve(m, section.addon,
-            landscape: _homeLandscapeCards),
-      ],
-    );
-  }
-
-  SpotlightCard _spotlightContinueWatchingCard(
-    HomeContinuationRow row,
-    StremioMeta item,
-    int cwIndex,
-    int col,
-  ) {
-    final wideArt = homeStageWideArtwork(item);
-    final episodeArt = item.type == 'series'
-        ? row.episodeArtworkOf(item)
-        : null;
-    return SpotlightCard(
-      metadata: item,
-      episodeArtwork: _homeLandscapeCards && episodeArt != null,
-      image: _homeLandscapeCards ? (episodeArt ?? wideArt) : item.poster,
-      // An episode still is best-effort. If it fails at image-decode time (not
-      // only during lookup), fall back to the same show art CW used before.
-      fallbackImage: _homeLandscapeCards
-          ? (episodeArt != null ? wideArt : item.poster)
-          : null,
-      title: item.name,
-      subtitle: continueWatchingCardSubtitle(
-        episodeLabel: row.episodeOf(item),
-        minutesLeft: row.remainingMinutesOf(item),
-      ),
-      rating: item.imdbRating,
-      shape: _homeLandscapeCards
-          ? SpotlightCardShape.wide
-          : SpotlightCardShape.poster,
-      // `HomeContinuationRow` publishes a 0..1 fraction; the card draws 0..100.
-      progress: (row.progressOf(item) ?? 0) * 100,
-      onOpen: () => row.onOpen(item),
-      // Spotlight used to bypass the shared CW hold handler and Quick Play
-      // unconditionally. Route through the same preference-aware menu path as
-      // every other Home layout so disabled means Play/Remove and enabled
-      // means immediate playback on both touch and DPAD.
-      onOptions: () => _openCwCardMenu(row, item, cwIndex, col),
-    );
-  }
 
   /// A favourites rail as Spotlight cards.
   ///
@@ -6705,57 +6596,32 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     onLivePlaybackFailed: _onHeroLivePlaybackFailed,
   );
 
-  Widget _buildSearchSpotlightBoard() {
-    final sections = List<CatalogSection>.of(_sections);
-    return Column(
-      children: [
-        // Reserve the status strip so completion never shifts focused cards.
-        if (_catalogSearching || _catalogSearchFailures > 0)
-          _buildSearchStatusStrip()
-        else
-          const SizedBox(height: 16),
-        Expanded(child: SpotlightBoard(
-          key: _spotlightKey,
-          hero: const [], heroNode: _spotlightHeroNode, heroAddon: null,
-          onHeroOpen: _openItem, shelvesOnly: true, dpad: true,
-          showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
-          forceCardParallax: true,
-          onExitTop: _leaveBoardTop,
-          expandFocusedCard: _spotlightFocusDetails,
-          trailersEnabled: _heroTrailerEnabled,
-          cardTrailerVolume: _heroTrailerVolume,
-          onTrailerStop: _clearHeroTrailer,
-          sections: [
-            for (var i = 0; i < sections.length; i++) SpotlightShelf(
-              id: 'search:$_catalogQuery:${sections[i].addon.id}:${sections[i].catalog.id}:$i',
-              title: sections[i].title,
-              tag: _catalogSourceTag(sections[i]),
-              onSeeAll: () => _openCatalogSeeAll(sections[i]),
-              nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
-              items: [
-                for (final item in sections[i].items)
-                  SpotlightCard(
-                    metadata: item, title: item.name, rating: item.imdbRating,
-                    image: _homeLandscapeCards ? homeStageWideArtwork(item) : item.poster,
-                    fallbackImage: _homeLandscapeCards ? item.poster : null,
-                    shape: _homeLandscapeCards ? SpotlightCardShape.wide : SpotlightCardShape.poster,
-                    watchedImdbId: item.progressId ?? item.id,
-                    watchedContentType: item.type,
-                    onOpen: () => _sectionOpenItem(sections[i], item),
-                    onOptions: _pikpakOnly ? null : () => _onCatalogPlay(item, sections[i].addon),
-                  ),
-              ],
-            ),
-          ],
-          onLoadMoreRow: (row) {
-            if (row < 0 || row >= sections.length) return;
-            final current = _sections.indexOf(sections[row]);
-            if (current >= 0) unawaited(_loadMoreRow(current));
-          },
-        )),
-      ],
-    );
-  }
+  Widget _buildSearchSpotlightBoard() => buildSearchSpotlightBoard(
+    context: context,
+    sections: List<CatalogSection>.of(_sections),
+    rowNodes: _rowNodes,
+    boardKey: _spotlightKey,
+    heroNode: _spotlightHeroNode,
+    query: _catalogQuery,
+    searching: _catalogSearching,
+    failures: _catalogSearchFailures,
+    landscape: _homeLandscapeCards,
+    showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
+    expandFocusedCard: _spotlightFocusDetails,
+    trailersEnabled: _heroTrailerEnabled,
+    trailerVolume: _heroTrailerVolume,
+    onExitTop: _leaveBoardTop,
+    onTrailerStop: _clearHeroTrailer,
+    onHeroOpen: _openItem,
+    onOpen: _sectionOpenItem,
+    onPlay: _pikpakOnly ? null : _onCatalogPlay,
+    sourceTag: _catalogSourceTag,
+    onSeeAll: _openCatalogSeeAll,
+    onLoadMore: (section) {
+      final current = _sections.indexOf(section);
+      if (current >= 0) unawaited(_loadMoreRow(current));
+    },
+  );
 
   Widget _buildSpotlightBoard() {
     // Snapshot row descriptors with the shelf list: async inserts must not
