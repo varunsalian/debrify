@@ -1,3 +1,5 @@
+import '../features/search/presentation/keyword_toolbar.dart';
+import '../features/search/presentation/keyword_selection_overlay.dart';
 import '../features/search/presentation/search_header.dart';
 import '../features/search/presentation/search_query_field.dart';
 import '../features/home/application/home_detail_action_dependencies.dart';
@@ -11788,7 +11790,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       children: [
         Positioned.fill(child: content),
         if (canSelect)
-          _kwSelectionMode ? _buildKwSelectionBar() : _buildKwSelectFab(),
+          KeywordSelectionOverlay(
+            selectionMode: _kwSelectionMode,
+            selectableCount: _kwSelectableResults.length,
+            selectedCount: _kwSelected.length,
+            floatingNavigation: MainPageBridge.phoneNavStyleCached == 'floating',
+            onSelect: _enterKwSelection,
+            onCancel: _exitKwSelection,
+            onDeselectAll: _deselectAllKw,
+            onSelectAll: _selectAllKw,
+            onAdd: _openBulkAdd,
+          ),
       ],
     );
   }
@@ -12196,203 +12208,33 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// [floatingSelect] true on small screens where the multi-select entry is a
   /// floating FAB + bar (Home-style) rather than a toolbar pill — so the
   /// toolbar stays Sort/Filters/Sources and never swaps to selection controls.
-  Widget _buildKeywordToolbar({bool floatingSelect = false}) {
-    final app = AppThemeScope.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    // Every facet counts. Sizes were already missing here, so a size-only
-    // filter quietly trimmed the results while the pill still read "Filters"
-    // and rendered inactive — the same trap a dynamic-range-only filter would
-    // fall into.
-    final filterCount =
+  Widget _buildKeywordToolbar({bool floatingSelect = false}) => KeywordToolbar(
+    selectionMode: _kwSelectionMode,
+    floatingSelect: floatingSelect,
+    selectableCount: _kwSelectableResults.length,
+    selectedCount: _kwSelected.length,
+    // Every facet counts, including size-only and dynamic-range-only filters.
+    filterCount:
         _kwFilters.qualities.length +
         _kwFilters.ripSources.length +
         _kwFilters.languages.length +
         _kwFilters.sizes.length +
-        _kwFilters.dynamicRanges.length;
-
-    // [navIndex]/[navTotal], when provided, make the pill keyboard/DPAD
-    // focusable at that position in the toolbar (left/right between pills, up to
-    // the search field, down into the results, select to activate).
-    Widget pill(
-      IconData icon,
-      String label,
-      VoidCallback onTap, {
-      bool active = false,
-      bool compact = false,
-      int? navIndex,
-      int navTotal = 0,
-    }) {
-      Widget body(bool focused) => Container(
-        padding: compact
-            ? const EdgeInsets.all(10)
-            : const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
-        decoration: BoxDecoration(
-          color: active
-              ? scheme.primary.withValues(alpha: 0.16)
-              : scheme.surfaceContainerHigh,
-          borderRadius: app.shape.brPill,
-          // Always 2px so focus never shifts layout: white ring when
-          // focused, else the active/idle border.
-          border: Border.all(
-            color: focused
-                ? app.fade(app.core.tx, 0.9)
-                : active
-                ? scheme.primary.withValues(alpha: 0.5)
-                : app.fade(app.core.tx, 0.10),
-            width: 2,
-          ),
-        ),
-        child: compact
-            ? Icon(
-                icon,
-                size: 18,
-                color: active ? scheme.primary : scheme.onSurfaceVariant,
-              )
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 15, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                ],
-              ),
-      );
-
-      final Widget tappable = navIndex == null
-          ? Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: app.shape.brPill,
-                child: body(false),
-              ),
-            )
-          : Focus(
-              focusNode: _kwToolbarNodes[navIndex],
-              onKeyEvent: (n, event) =>
-                  _handleKwToolbarKey(navIndex, navTotal, onTap, event),
-              child: Builder(
-                builder: (context) {
-                  final focused = Focus.of(context).hasFocus;
-                  return Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: onTap,
-                      borderRadius: app.shape.brPill,
-                      canRequestFocus: false,
-                      child: body(focused),
-                    ),
-                  );
-                },
-              ),
-            );
-
-      return Padding(padding: const EdgeInsets.only(right: 8), child: tappable);
-    }
-
-    if (_kwSelectionMode && !floatingSelect) {
-      final selectable = _kwSelectableResults.length;
-      final count = _kwSelected.length;
-      final allSelected = count > 0 && count == selectable;
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-        child: Row(
-          children: [
-            pill(
-              Icons.close_rounded,
-              'Cancel',
-              _exitKwSelection,
-              navIndex: 0,
-              navTotal: 3,
-            ),
-            pill(
-              allSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
-              allSelected ? 'None' : 'All',
-              allSelected ? _deselectAllKw : _selectAllKw,
-              navIndex: 1,
-              navTotal: 3,
-            ),
-            pill(
-              Icons.playlist_add_rounded,
-              count > 0 ? 'Add · $count' : 'Add',
-              count > 0 ? _openBulkAdd : () {},
-              active: count > 0,
-              navIndex: 2,
-              navTotal: 3,
-            ),
-          ],
-        ),
-      );
-    }
-
-    final canSelect = _kwSelectableResults.isNotEmpty;
-    final showSelect = canSelect && !floatingSelect;
-    final showProviders = _kwHasProviderFilter;
-    final providerActive = _kwProviderFilterActive;
-    // Build the pill set dynamically so navIndex stays contiguous when the
-    // optional Providers / Select pills come and go. Base pills always present:
-    // Sort, Filters, Sources (3); Providers and Select are optional.
-    final total = 3 + (showProviders ? 1 : 0) + (showSelect ? 1 : 0);
-    var idx = 0;
-    final pills = <Widget>[
-      pill(
-        Icons.sort_rounded,
-        'Sort · ${_sortLabel(_kwSort)}',
-        _openKeywordSort,
-        compact: floatingSelect,
-        navIndex: idx++,
-        navTotal: total,
-      ),
-      pill(
-        Icons.filter_list_rounded,
-        filterCount > 0 ? 'Filters · $filterCount' : 'Filters',
-        _openKeywordFilters,
-        active: filterCount > 0,
-        compact: floatingSelect,
-        navIndex: idx++,
-        navTotal: total,
-      ),
-      if (showProviders)
-        pill(
-          Icons.hub_rounded,
-          providerActive > 0 ? 'Providers · $providerActive' : 'Providers',
-          _openKeywordProviders,
-          active: providerActive > 0,
-          compact: floatingSelect,
-          navIndex: idx++,
-          navTotal: total,
-        ),
-      pill(
-        Icons.dns_rounded,
-        'Sources',
-        _openKeywordSources,
-        compact: floatingSelect,
-        navIndex: idx++,
-        navTotal: total,
-      ),
-      if (showSelect)
-        pill(
-          Icons.checklist_rounded,
-          'Select',
-          _enterKwSelection,
-          navIndex: idx++,
-          navTotal: total,
-        ),
-    ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-      child: Row(children: pills),
-    );
-  }
+        _kwFilters.dynamicRanges.length,
+    showProviderFilter: _kwHasProviderFilter,
+    providerFilterCount: _kwProviderFilterActive,
+    sortLabel: _sortLabel(_kwSort),
+    focusNodes: _kwToolbarNodes,
+    onKey: _handleKwToolbarKey,
+    onCancel: _exitKwSelection,
+    onDeselectAll: _deselectAllKw,
+    onSelectAll: _selectAllKw,
+    onAdd: _openBulkAdd,
+    onSort: _openKeywordSort,
+    onFilters: _openKeywordFilters,
+    onProviders: _openKeywordProviders,
+    onSources: _openKeywordSources,
+    onSelect: _enterKwSelection,
+  );
 
   /// DPAD/keyboard handling for a focused keyword-toolbar pill: select fires the
   /// pill, left/right move between pills, up returns to the search field, down
@@ -12451,152 +12293,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
-  }
-
-  /// Floating checklist FAB (bottom-left) that enters multi-select on small
-  /// screens — ported from Home's torrent-search layout.
-  Widget _buildKwSelectFab() {
-    final app = AppThemeScope.of(context);
-    return Positioned(
-      left: 16,
-      bottom: 16,
-      child: GestureDetector(
-        onTap: _enterKwSelection,
-        child: Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            color: app.home.controlBg,
-            shape: BoxShape.circle,
-            border: Border.all(color: app.fade(app.core.tx, 0.15)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Icon(Icons.checklist_rounded, color: app.core.tx, size: 20),
-        ),
-      ),
-    );
-  }
-
-  /// Floating multi-select bar (bottom) — Home-style. Right-inset so it clears
-  /// the mobile floating "Menu" nav.
-  Widget _buildKwSelectionBar() {
-    final app = AppThemeScope.of(context);
-    final selectable = _kwSelectableResults.length;
-    final count = _kwSelected.length;
-    final allSelected = count > 0 && count == selectable;
-    final bottomPad = MediaQuery.of(context).padding.bottom;
-
-    Widget chip(Widget child, VoidCallback? onTap, Color bg) => GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(color: bg, borderRadius: app.shape.br(8)),
-        child: child,
-      ),
-    );
-
-    return Positioned(
-      left: 12,
-      // Clear the bottom-right "Menu" FAB — which only the floating nav
-      // style has; the classic bar occupies its own strip below the page.
-      right: MainPageBridge.phoneNavStyleCached == 'floating' ? 108 : 12,
-      bottom: 12 + bottomPad,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
-          borderRadius: app.shape.br(16),
-          border: Border.all(color: app.fade(app.home.chromeAccent, 0.45)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            chip(
-              Icon(
-                Icons.close_rounded,
-                color: app.core.tx.withValues(alpha: 0xB3 / 0xFF),
-                size: 18,
-              ),
-              _exitKwSelection,
-              app.fade(app.core.tx, 0.1),
-            ),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                '$count selected',
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: count > 0
-                      ? app.home.chromeAccent
-                      : app.core.tx.withValues(alpha: 0x8A / 0xFF),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            chip(
-              Text(
-                allSelected ? 'None' : 'All',
-                style: TextStyle(
-                  color: app.core.tx.withValues(alpha: 0xB3 / 0xFF),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-              allSelected ? _deselectAllKw : _selectAllKw,
-              app.fade(app.core.tx, 0.08),
-            ),
-            const SizedBox(width: 8),
-            chip(
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.playlist_add_rounded,
-                    // Enabled, this chip is filled with the OPAQUE accent, so
-                    // its ink is scored against it (white disappears on Noir's
-                    // and Frost's #FFFFFF accent). Disabled, the fill is a 0.3
-                    // wash over the dark bar, where white38 still reads.
-                    color: count > 0
-                        ? app.inkOn(app.home.chromeAccent)
-                        : Colors.white38,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Add',
-                    style: TextStyle(
-                      color: count > 0
-                          ? app.inkOn(app.home.chromeAccent)
-                          : Colors.white38,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-              count > 0 ? _openBulkAdd : null,
-              count > 0
-                  ? app.home.chromeAccent
-                  : app.fade(app.home.chromeAccent, 0.3),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   String _sortLabel(String s) =>

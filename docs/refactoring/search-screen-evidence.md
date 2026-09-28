@@ -6,6 +6,32 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: Keyword result controls — 2026-09-28
+
+Base revision: `3a947c41`. The production Keyword view composes `KeywordToolbar`
+(225 lines) and `KeywordSelectionOverlay` (173 lines). Both receive current values,
+actions and borrowed focus nodes; no storage, native calls, Riverpod state copies
+or navigation-service imports live in these widgets. The root retains selection
+and focus ownership, including the active-source/first-result navigation decisions.
+Removed the replaced toolbar, floating entry and selection-bar implementations.
+SearchScreen shrinks **14,057 → 13,754 lines**; its final facade target is still open.
+
+Review preserves all facet counts, dynamic provider/select controls, compact mode,
+All/None rules, empty Add behavior, selected counts, focus rings, mobile navigation
+clearance and existing action callbacks. **223 existing Search feature tests pass**;
+**three new control tests pass** for selection, keyboard activation, compact mode
+and overlay dispatch. The initial new-test compile failure was a missing services
+import; the corrected focused run passes. No production behavior was changed to
+satisfy it. Analyzer stays at **839 identities**, no additions; **508 migrated files
+pass** architecture checks. Changed code formatting/diff checks pass.
+
+Receipts: `.git/refactor-evidence/phase5/keyword-controls-tests.txt`,
+`keyword-controls-focused.txt`, `keyword-controls-analyze-final-2.txt`. Existing
+passing tests were reused after the test-only import correction. No emulator or
+redundant full-suite run. Next: Keyword results-body composition, retaining current
+scroll/live-arrival and row focus behavior; overall C/D and final acceptance remain
+pending.
+
 ## Batch C checkpoint: query editing and header presentation — 2026-09-28
 
 Base revision: `d41d1775`. The real Search route now composes `SearchQueryField`
