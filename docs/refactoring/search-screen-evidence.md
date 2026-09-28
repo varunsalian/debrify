@@ -6,6 +6,26 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch D checkpoint: Home board viewport — 2026-09-28
+
+Base: `4304a202`. `HomeBoardViewport` (160 lines) owns the board scroll controller,
+catalog-row focus pools, remembered columns, append/reconciliation and mounted-row
+focus recovery. The root retains rendering/pagination decisions and aliases the
+same resources. Scroll construction and scroll/node disposal remain at their
+original separate lifecycle points. Root: **10,298 → 10,225 lines** after formatting
+complete changed methods, without whole-file formatting.
+
+Review preserves labels, row/content identity, incremental column remapping,
+non-incremental column clearing, left-first nearest mounted cell selection,
+140 ms/45%-viewport glides, the three-hop bound and post-frame mounted guard.
+**62 tests pass**: 58 progressive-loading/pagination/row-focus/navigation cases
+and four viewport identity/focus/retirement cases. Final analysis retains **836
+identical diagnostic identities** after fixing a braces lint and using the current
+cache-extent API in the new test. Architecture passes **558 files**; formatting
+and diff checks pass. Receipts: `.git/refactor-evidence/phase5/board-viewport-
+{tests,focused-final,analyze-final}.txt`. No emulator used. Broader feature ownership,
+remaining lifecycle/facade reduction and final acceptance remain pending.
+
 ## Batch D checkpoint: Spotlight search sheet state — 2026-09-28
 
 Base: `a0ad2eaa`. `SpotlightSearchSheet` lives beside the existing shell

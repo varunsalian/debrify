@@ -214,13 +214,14 @@ import '../services/metadata_preferences_service.dart';
 import '../widgets/see_all/discover_browsing_input.dart';
 import '../services/home_load_deadline.dart';
 import '../services/home_load_progress.dart';
-import '../widgets/home/home_row_focus.dart';
+import '../features/home/presentation/home_board_viewport.dart';
+import '../widgets/home/home_row_focus.dart'
+    show homeRowHeight, preserveHomeInsertionAnchor;
 import '../features/home/presentation/home_continuation_focus.dart';
 import '../features/home/presentation/home_board_frame.dart';
 import '../services/home_row_refresh.dart';
 import '../services/profiles/connection_resource_service.dart';
 import 'dart:async';
-import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:math';
 
@@ -587,11 +588,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   String? _error;
   List<CatalogSection> get _homeSections => _homeCatalogController.rows;
   List<CatalogSection> _sections = [];
-  final List<List<FocusNode>> _rowNodes = [];
+  final _boardViewport = HomeBoardViewport();
+  List<List<FocusNode>> get _rowNodes => _boardViewport.nodes;
   // Per-row remembered focus column (leanback-style). DPAD up/down into a row
   // returns to where you left THAT row — the cell it points at is guaranteed
   // mounted, so requestFocus never no-ops on a scrolled-away lazy cell.
-  final Map<int, int> _rowCol = {};
+  Map<int, int> get _rowCol => _boardViewport.columns;
   // Board entrance: bumped each time the displayed sections are swapped
   // (initial load, search results in/out), so the first rows replay their
   // one-shot fade/rise entrance. Appends don't bump it.
@@ -741,7 +743,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   HomeCatalogSnapshot? get _committedBoard =>
       _homeCatalogController.current.committed;
   bool get _boardLoadingMore => _homeCatalogController.current.loadingMore;
-  late final ScrollController _boardScroll;
+  ScrollController get _boardScroll => _boardViewport.scroll;
 
   /// Whether more board rows remain to lazily load (board mode only — never
   /// during a catalog search, which streams and appends its own rows).
@@ -1767,7 +1769,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     _homeLastScroll = restoredHome && !widget.isTelevision
         ? homeSnapshot.scrollOffset : 0;
-    _boardScroll = ScrollController(initialScrollOffset: _homeLastScroll);
+    _boardViewport.initializeScroll(_homeLastScroll);
     // This one widget backs three tabs (Home board / dedicated Search / Discover).
     AnalyticsService.screenView(
       widget.searchMode
@@ -2391,7 +2393,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _discoverFocus.dispose();
     _discoverShellBridge?.dispose();
     _discPreview.dispose();
-    _boardScroll.dispose();
+    _boardViewport.disposeScroll();
     _keywordViewport.dispose();
     _keywordFocus.dispose();
     _catalogSourcesBtnFocus.dispose();
@@ -2426,16 +2428,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     super.dispose();
   }
 
-  void _disposeNodes() {
-    for (final row in _rowNodes) {
-      for (final node in row) {
-        node.dispose();
-      }
-    }
-    _rowNodes.clear();
-    // Row indices now remap to different content — drop stale column memory.
-    _rowCol.clear();
-  }
+  void _disposeNodes() => _boardViewport.disposeNodes();
 
   /// Re-read the hidden-rows set + opted-in extras and reload the board if
   /// either actually changed. Fires on any home-settings change (the
@@ -2869,14 +2862,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Append newly-loaded board rows without disturbing the rows already shown:
   /// grow the per-row focus nodes in lockstep with [_sections].
   void _appendSections(List<CatalogSection> more) {
-    for (final section in more) {
-      _rowNodes.add(
-        List.generate(
-          section.items.length,
-          (i) => FocusNode(debugLabel: 'search_r${_rowNodes.length}_c$i'),
-        ),
-      );
-    }
+    _boardViewport.appendRows(more);
     setState(() => _sections = [..._sections, ...more]);
     unawaited(_refreshBoundSources());
   }
@@ -2893,9 +2879,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (rowIndex < 0 || rowIndex >= _sections.length) return;
     final section = _sections[rowIndex];
     final scope = ProfileRuntime.scope.value;
-    int currentIndex() => !mounted || scope != ProfileRuntime.scope.value ||
-        _catalogQuery.isNotEmpty || _catalogSearching
-        ? -1 : _sections.indexWhere((row) => identical(row, section));
+    int currentIndex() =>
+        !mounted ||
+            scope != ProfileRuntime.scope.value ||
+            _catalogQuery.isNotEmpty ||
+            _catalogSearching
+        ? -1
+        : _sections.indexWhere((row) => identical(row, section));
     if (!_homeCatalogController.beginRowPage(section, resume: resume)) return;
     // Android TV: flip the guard silently. The setState exists to show the
     // classic row's tail spinner, but it fires on the exact keypress that
@@ -2924,11 +2914,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       final fresh = page.items;
       if (fresh.isEmpty) return;
       // Grow this row's focus nodes in lockstep with the new items.
-      final nodes = _rowNodes[index];
-      final base = nodes.length;
-      for (var i = 0; i < fresh.length; i++) {
-        nodes.add(FocusNode(debugLabel: 'search_r${index}_c${base + i}'));
-      }
+      _boardViewport.appendItems(index, fresh.length);
       setState(() => _homeCatalogController.appendRowItems(section, fresh));
       // A DPAD-right that ran off the end of this row may be waiting on it.
       _maybeCompleteStageRight();
@@ -4686,7 +4672,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Swap the displayed sections (homepage or search results): rebuild the
   /// per-row focus nodes and reset the hero to the first item.
-  void _applySections(List<CatalogSection> sections, {
+  void _applySections(
+    List<CatalogSection> sections, {
     bool preserveFocus = false,
     bool incremental = false,
   }) {
@@ -4704,8 +4691,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // Newly published rows are catalog/list/collection rows even if the
         // focused anchor is Continue Watching or a favourite in a custom order.
         if (rail.sectionIndex != null) {
-          anchorHeight = homeRowHeight(focused.first.context,
-            ValueKey('board-reveal-$_boardGen-$anchor'));
+          anchorHeight = homeRowHeight(
+            focused.first.context,
+            ValueKey('board-reveal-$_boardGen-$anchor'),
+          );
         }
         anchorHeight ??= _classicCatalogRowExtent(
           focused.first.context ?? context,
@@ -4716,7 +4705,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         break;
       }
       previousOrder = rails.map(_canvasRailRowId).toList();
-      if (anchor != null && _boardScroll.hasClients &&
+      if (anchor != null &&
+          _boardScroll.hasClients &&
           _boardScroll.position.maxScrollExtent <= 0) {
         // A short first batch leaves unused viewport space below its rows.
         // Retain that space as tail padding when rows are inserted above the
@@ -4725,16 +4715,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         for (final rail in rails) {
           if (rail.traktSkeletonIndex >= 0) break;
           final nodes = _canvasRailNodes(rail);
-          final height = nodes.map((node) => homeRowHeight(node.context,
-            ValueKey('board-reveal-$_boardGen-${_canvasRailRowId(rail)}')))
-            .whereType<double>().firstOrNull;
+          final height = nodes
+              .map(
+                (node) => homeRowHeight(
+                  node.context,
+                  ValueKey('board-reveal-$_boardGen-${_canvasRailRowId(rail)}'),
+                ),
+              )
+              .whereType<double>()
+              .firstOrNull;
           if (height == null) break;
           heights.add(height);
         }
         if (heights.length == rails.length) {
-          anchorTailPadding = max(_classicAnchorTailPadding,
-            _boardScroll.position.viewportDimension - 38 -
-                heights.fold<double>(0, (sum, height) => sum + height));
+          anchorTailPadding = max(
+            _classicAnchorTailPadding,
+            _boardScroll.position.viewportDimension -
+                38 -
+                heights.fold<double>(0, (sum, height) => sum + height),
+          );
         }
       }
     }
@@ -4748,60 +4747,45 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _stageDeferredAdvance.invalidateForBoardReseed();
       _stageFocusRequests.invalidate();
     }
-    if (preserveFocus) {
-      List<List<String>> identities(List<CatalogSection> rows) => [
-        for (final row in rows) [
-          for (final item in row.items)
-            jsonEncode([_sectionRowId(row), item.type, item.id]),
-        ],
-      ];
-      final nextNodes = reconcileHomeRowFocus(
-        previousIds: identities(_sections),
-        previousNodes: _rowNodes,
-        nextIds: identities(sections),
-      );
-      final columns = {
-        if (incremental)
-          for (var i = 0; i < _sections.length; i++)
-            _sectionRowId(_sections[i]): _rowCol[i],
-      };
-      _rowNodes..clear()..addAll(nextNodes);
-      _rowCol
-        ..clear()
-        ..addAll({
-          for (var i = 0; i < sections.length; i++)
-            if (columns[_sectionRowId(sections[i])] case final column?) i: column,
-        });
-    } else {
-      _disposeNodes();
-      for (final section in sections) {
-        _rowNodes.add(
-          List.generate(
-            section.items.length,
-            (i) => FocusNode(debugLabel: 'search_r${_rowNodes.length}_c$i'),
-          ),
-        );
-      }
-    }
+    _boardViewport.replaceRows(
+      previous: _sections,
+      next: sections,
+      rowId: _sectionRowId,
+      preserveFocus: preserveFocus,
+      incremental: incremental,
+    );
     setState(() {
       _sections = sections;
       if (anchor != null && anchorHeight != null) {
         final nextOrder = _classicHomeRails.map(_canvasRailRowId).toList();
-        if (nextOrder.takeWhile((id) => id != anchor)
+        if (nextOrder
+            .takeWhile((id) => id != anchor)
             .any((id) => !previousOrder.contains(id))) {
-          _classicAnchorTailPadding = max(_classicAnchorTailPadding, anchorTailPadding);
+          _classicAnchorTailPadding = max(
+            _classicAnchorTailPadding,
+            anchorTailPadding,
+          );
         }
-        preserveHomeInsertionAnchor(scroll: _boardScroll,
+        preserveHomeInsertionAnchor(
+          scroll: _boardScroll,
           previous: previousOrder,
           next: nextOrder,
-          anchor: anchor, extentOf: (_) => anchorHeight!);
+          anchor: anchor,
+          extentOf: (_) => anchorHeight!,
+        );
       }
     });
     _publishTopShelfSpotlight();
     unawaited(_refreshBoundSources());
-    if (preserveFocus && _heroItem.value != null && sections.any((section) =>
-        section.items.any((item) => item.id == _heroItem.value!.id &&
-            item.type == _heroItem.value!.type))) {
+    if (preserveFocus &&
+        _heroItem.value != null &&
+        sections.any(
+          (section) => section.items.any(
+            (item) =>
+                item.id == _heroItem.value!.id &&
+                item.type == _heroItem.value!.type,
+          ),
+        )) {
       return;
     }
     // Seed the hero with the first item so it isn't blank before DPAD focus
@@ -5169,65 +5153,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return true;
   }
 
-  /// Focus [desired] in [nodes] if its cell is mounted; otherwise the nearest
-  /// mounted cell. A horizontal ListView.builder unmounts off-screen cells, and
-  /// requestFocus() on an unmounted FocusNode is a silent no-op — so a naive
-  /// nodes[desired].requestFocus() leaves focus stranded on the previous row.
-  void _requestRowFocus(List<FocusNode> nodes, int desired, {int hops = 0}) {
-    // NB: FocusNode.context stays non-null after the owning Focus unmounts
-    // (detach() doesn't clear it), so the element's own `mounted` flag — which
-    // flips false on unmount — is the reliable "can this node take focus" test.
-    bool isMounted(FocusNode n) => n.context?.mounted ?? false;
-    if (isMounted(nodes[desired])) {
-      nodes[desired].requestFocus();
-      return;
-    }
-    for (var d = 1; d < nodes.length; d++) {
-      final lo = desired - d;
-      final hi = desired + d;
-      if (lo >= 0 && isMounted(nodes[lo])) {
-        nodes[lo].requestFocus();
-        return;
-      }
-      if (hi < nodes.length && isMounted(nodes[hi])) {
-        nodes[hi].requestFocus();
-        return;
-      }
-    }
-    // The whole row is unmounted: it sits beyond the board's deliberately
-    // small vertical cacheExtent (300) — the live case is DPAD-down off the
-    // last Continue Watching row while TWO Trakt skeleton rows (~380px of
-    // focusless shimmer) separate it from the favourites/catalog row below.
-    // requestFocus on a detached node would only latch a focus grab for
-    // whenever that cell happens to build (a later yank, not a move — the old
-    // "blocked DOWN"), so instead nudge the board forward and retry until the
-    // row builds. Down-only on purpose: an unmounted target ABOVE can't
-    // happen from row-by-row DPAD moves (the row above was just on screen,
-    // still inside the cache). Bounded so the total travel stays within the
-    // cache above the origin cell — it can't unmount mid-journey — and a
-    // settled miss just leaves focus where it was.
-    //
-    // Glides (was jumpTo — a visible 45%-viewport teleport). The retry MUST
-    // wait for the glide to land, not the next frame: per-frame retries would
-    // spend all 3 hops inside one animation before the row could ever build.
-    if (hops >= 3 || !_boardScroll.hasClients) return;
-    final pos = _boardScroll.position;
-    if (pos.pixels >= pos.maxScrollExtent) return;
-    _boardScroll
-        .animateTo(
-          (pos.pixels + pos.viewportDimension * 0.45).clamp(
-            0.0,
-            pos.maxScrollExtent,
-          ),
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOutCubic,
-        )
-        .whenComplete(() {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _requestRowFocus(nodes, desired, hops: hops + 1);
-          });
-        });
-  }
+  void _requestRowFocus(List<FocusNode> nodes, int desired) =>
+      _boardViewport.requestFocus(nodes, desired, isCurrent: () => mounted);
 
   // ── TV Home layout (classic / canvas) ────────────────────────────────────
 
