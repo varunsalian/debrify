@@ -1,3 +1,5 @@
+import '../features/sources/data/source_download.dart';
+import '../features/sources/presentation/source_download_action.dart';
 import '../features/sources/data/automatic_source_bindings.dart';
 import '../features/sources/data/source_binding_committer.dart';
 import '../features/sources/data/source_single_episode.dart';
@@ -6433,7 +6435,7 @@ class TorrentPlaybackService {
   /// Native media-server streams need credential-aware background downloads,
   /// including redirect and resource-revocation handling, before enabling this.
   static bool supportsDirectStreamDownload(Torrent torrent) =>
-      !MediaServerService.owns(torrent);
+      SourceDownload.supports(torrent);
 
   /// Download a direct/external addon stream to device (parity with the old
   /// screen's direct-stream "Download to device" action). Follows redirects
@@ -6442,101 +6444,7 @@ class TorrentPlaybackService {
   static Future<void> downloadDirectStream(
     BuildContext context,
     Torrent torrent,
-  ) async {
-    if (!supportsDirectStreamDownload(torrent)) {
-      if (context.mounted) {
-        _snack(context, 'Jellyfin and Emby downloads are not supported yet.');
-      }
-      return;
-    }
-    if (IptvSourceSearch.isDeferredXtreamSeries(torrent)) {
-      if (context.mounted) {
-        _snack(context, 'Finding this IPTV episode…');
-      }
-      final resolution = await IptvSourceSearch.resolveXtreamSeriesEpisode(
-        torrent,
-      );
-      if (!context.mounted) return;
-      if (resolution.source == null) {
-        _snack(
-          context,
-          resolution.status == IptvEpisodeResolutionStatus.missing
-              ? '${torrent.episodeIdentifier ?? 'This episode'} is not available in this IPTV series.'
-              : 'Could not check this IPTV series. Try again.',
-        );
-        return;
-      }
-      torrent = resolution.source!;
-    }
-    try {
-      await DirectSourceAuthorization.authorize(torrent);
-    } catch (_) {
-      if (context.mounted) {
-        _snack(context, 'IPTV connection changed. Search sources again.');
-      }
-      return;
-    }
-    if (!context.mounted) return;
-    final raw = torrent.directUrl ?? '';
-    if (raw.isEmpty) {
-      _snack(context, 'No stream URL available.');
-      return;
-    }
-    _snack(context, 'Resolving download URL…');
-    final resolved = await _resolveDownloadUrl(raw);
-    try {
-      await DirectSourceAuthorization.authorize(torrent);
-      await DownloadService.instance.enqueueDownload(
-        url: resolved,
-        fileName: torrent.displayTitle,
-        torrentName: torrent.displayTitle,
-      );
-      if (context.mounted) _snack(context, 'Download queued.');
-    } catch (_) {
-      if (context.mounted) _snack(context, 'Failed to queue download.');
-    }
-  }
-
-  /// Follow up to 10 redirects (HEAD, no auto-follow) to resolve a stream URL to
-  /// its final downloadable location, handling relative Location headers. Ported
-  /// from the old screen's `_resolveDownloadUrl`.
-  static Future<String> _resolveDownloadUrl(String url) async {
-    var currentUrl = url;
-    var redirectCount = 0;
-    while (redirectCount < 10) {
-      try {
-        final uri = Uri.parse(currentUrl);
-        final client = http.Client();
-        try {
-          final request = http.Request('HEAD', uri);
-          request.followRedirects = false;
-          request.headers['User-Agent'] =
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
-          final response = await client
-              .send(request)
-              .timeout(const Duration(seconds: 10));
-          if (response.statusCode == 301 ||
-              response.statusCode == 302 ||
-              response.statusCode == 303 ||
-              response.statusCode == 307 ||
-              response.statusCode == 308) {
-            final location = response.headers['location'];
-            if (location != null && location.isNotEmpty) {
-              currentUrl = uri.resolve(location).toString();
-              redirectCount++;
-              continue;
-            }
-          }
-          return currentUrl; // no redirect → final URL
-        } finally {
-          client.close();
-        }
-      } catch (_) {
-        break;
-      }
-    }
-    return currentUrl; // best effort (possibly partially resolved)
-  }
+  ) => downloadSource(context, torrent, const SourceDownload());
 
   /// Resolve a playlist entry to a concrete download URL, unlocking a lazy
   /// debrid entry on demand: RD `restrictedLink` → unrestrict, TorBox

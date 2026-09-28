@@ -132,7 +132,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | Batch | Current status |
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
-| B | Shared acquisition/manual-pin DI, manual provider ownership and automatic binding writes reviewed. Latest full run adds seven passing ownership cases; one old-signature assertion was updated and passes its focused rerun. Historical failures/errors remain; no missing tests or new skips. Automatic provider preparation, download/native handoff and device acceptance remain pending. |
+| B | Shared acquisition/manual-pin DI, manual provider ownership and automatic binding writes reviewed. Latest full run adds seven passing ownership cases; one old-signature assertion was updated and passes its focused rerun. Historical failures/errors remain; no missing tests or new skips. Direct-stream download preparation/queue ownership also reviewed (77 focused passes, unchanged analyzer). Automatic provider preparation, remaining download/native handoff and device acceptance remain pending. |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
@@ -226,10 +226,20 @@ binding contracts and seven real-profile retirement cases pass. The shared
 only its optional actual-write guard changed. The workflow is reviewed: the full comparison and focused signature-assertion
 correction are recorded in the evidence log.
 
+The borrowed `lib/services/download_service.dart` (4,682 lines before formatting)
+retains its existing device queue, platform scheduling and recovery responsibilities.
+B permits an optional caller-retirement guard before initialization/authorization
+and immediately before queue publication; accepted jobs retain their existing
+lifecycle. No original screen logic moves into this service. Its broader size and
+scheduler redesign are outside this migration; B closes only the reachable enqueue
+ownership boundary with focused operation, dispatch and existing job-policy checks.
+
 Next, finish provider preparation and download/native handoff ownership, then the
 remaining device checks in the checklist. Concrete gaps: automatic `_add` and
-in-player resolvers still omit the available acquisition guard; direct downloads
-can reach queue authorization after an asynchronous URL resolution. Preserve
+in-player resolvers still omit the available acquisition guard; provider-backed
+pack download and native handoff paths still need their ownership review. Direct
+stream URL resolution and queue publication now retain the originating owner via
+the injected `SourceDownload` operation and guarded queue handoff. Preserve
 request order, source-switch behavior and accepted download ownership while
 closing those gaps. Do not re-extract completed binding/data operations or reopen
 unrelated provider internals. Ordered native teardown remains D.

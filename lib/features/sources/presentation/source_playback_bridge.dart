@@ -1,3 +1,5 @@
+import '../data/source_download.dart';
+import 'source_download_action.dart';
 import '../application/source_playback_dependencies.dart';
 import '../data/automatic_source_bindings.dart';
 import 'package:flutter/widgets.dart';
@@ -13,15 +15,23 @@ import '../../../services/torrent_playback_service.dart'
 final sourcePlaybackBridgeProvider = Provider<SourcePlaybackBridge>(
   (ref) => SourcePlaybackBridge(
     bindings: ref.watch(automaticSourceBindingsFactoryProvider),
+    downloads: ref.watch(sourceDownloadProvider),
   ),
-  dependencies: [automaticSourceBindingsFactoryProvider],
+  dependencies: [
+    automaticSourceBindingsFactoryProvider,
+    sourceDownloadProvider,
+  ],
 );
 
 class SourcePlaybackBridge {
   const SourcePlaybackBridge({
+    SourceDownload downloads = const SourceDownload(),
     AutomaticSourceBindings Function() bindings =
         AutomaticSourceBindings.capture,
-  }) : _bindings = bindings;
+  }) : _bindings = bindings,
+       _downloads = downloads;
+
+  final SourceDownload _downloads;
 
   final AutomaticSourceBindings Function() _bindings;
 
@@ -44,9 +54,8 @@ class SourcePlaybackBridge {
     sourceBindings: _bindings(),
   );
 
-  bool supportsDownload(Torrent torrent) =>
-      TorrentPlaybackService.supportsDirectStreamDownload(torrent);
+  bool supportsDownload(Torrent torrent) => SourceDownload.supports(torrent);
 
   Future<void> download(BuildContext context, Torrent torrent) =>
-      TorrentPlaybackService.downloadDirectStream(context, torrent);
+      downloadSource(context, torrent, _downloads);
 }

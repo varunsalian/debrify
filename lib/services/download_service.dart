@@ -2162,8 +2162,17 @@ class DownloadService {
     String? credentialKey,
     String? connectionResourceId,
     int? resourceAuthorizationRevision,
+    bool Function()? canContinue,
   }) async {
+    void ensureCurrent() {
+      if (canContinue?.call() == false) {
+        throw StateError('Download request has ended');
+      }
+    }
+
+    ensureCurrent();
     await initialize();
+    ensureCurrent();
     final authorization = await DeviceJobStore.authorize(
       ProfileFeature.downloads,
     );
@@ -2265,6 +2274,8 @@ class DownloadService {
       }
     }
 
+    // Publication accepts the job; later view closure must not cancel it.
+    ensureCurrent();
     final queuedTask = DownloadTask(
       taskId: queuedId,
       url: url,

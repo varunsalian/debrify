@@ -6,6 +6,46 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch B checkpoint: direct download preparation and queue handoff — 2026-09-28
+
+Base revision: `ab7b4fa2`. `SourceDownload` now owns direct-stream authorization,
+deferred IPTV preparation, redirect resolution and queue submission. The actual
+Sources playback bridge resolves this operation through `sourceDownloadProvider`;
+the remaining legacy entry point delegates to the same operation/presentation
+adapter. The operation captures the live originating profile before awaiting,
+runs in that scope even when invoked from a foreign captured zone, and stops
+redirects/submission after profile or view retirement. UI messages and their
+three-second snackbar lifetime remain in `downloadSource`.
+
+The existing ten-hop HEAD policy, relative redirects, fallback URL on network
+failure, request user agent, names, unsupported media-server behavior and queue
+payload are preserved. `DownloadService.enqueueDownload` adds an optional guard
+before initialization, after initialization and immediately before synchronous
+queue publication. Publication remains the acceptance boundary: later view
+retirement does not cancel the durable job. Existing unguarded callers and native
+queue payloads are unchanged. This does not redesign the borrowed queue service.
+
+Verification: seven operation tests pass, including all redirect status codes,
+cycle limits, client cleanup, foreign scope, retirement while HEAD is pending,
+queue rejection and the actual service's pre-initialization retirement gate. The
+production Riverpod bridge test passes with injected downloads and original UI
+feedback. All 69 existing playback-dispatch, media-server and device-job policy
+cases pass. Initial new-test compile errors (non-const profile scopes) and widget
+animation timing were corrected; focused reruns pass without changing application
+assertions. Analyzer: 844 unchanged diagnostic identities. Architecture: 492 files
+pass; formatting and diff checks pass. Receipts under
+`.git/refactor-evidence/phase5/`: `source-download-focused-tests.txt`,
+`source-download-operation-tests.txt`, `source-download-di-tests-final.txt`,
+`source-download-analyze-final.txt`. The full-suite gate remains scheduled after
+remaining Sources integration; the optional guard preserves unguarded behavior.
+
+Review confirms this closes the direct-stream download preparation/queue boundary.
+Automatic provider acquisition, in-player resolution and native handoff remain B;
+ordered teardown remains D. Native/device/performance acceptance is still pending.
+The previously corrected saved-direct-recovery signature test is an observed pass
+and must remain passing in the next full comparison, despite its original full-run
+failure receipt.
+
 ## Batch B checkpoint: automatic binding ownership — 2026-09-28
 
 Base revision: `9d1ec429`. Automatic movie/series pins, switch promotion, durable
