@@ -6,6 +6,31 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch C checkpoint: shared Home media composition — 2026-09-28
+
+Base revision: `fde5b480`. `HomeBoardMedia` (80 lines) consolidates 20 repeated
+artwork/trailer/live constructors across Canvas, Promenade, Atrium, Mosaic, Deck,
+Tonight, Spotlight and Classic. It is a presentation value of borrowed signals
+and callbacks, with no subscriptions, players or mutable workflow state. Its
+factories return the existing widgets directly, preserving element ancestry.
+The route supplies current settings; layouts retain their visibility gates,
+geometry and layer order. SearchScreen shrinks **12,962 → 12,817 lines**.
+
+Review matches all six artwork bindings, seven trailer bindings and seven live
+bindings to the originals, including full-bleed versus boxed rendering, Spotlight
+renderability versus stage activation, volume, artwork budgets and failure/playing
+callbacks. Mosaic still uses only its existing live surface; no new trailer path
+was added. Player teardown and profile ownership were not changed.
+
+**416 tests pass** (`test/features/home/presentation` and
+`test/features/home/home_layout_preference_screen_test.dart`). Existing layer,
+layout and screen coverage was reused for this mechanical composition change.
+Analysis retains **838 identical diagnostic identities**; architecture checks pass
+**520 files** and `git diff --check` passes. Receipts:
+`.git/refactor-evidence/phase5/home-media-{tests,analyze-final}.txt`.
+No emulator used. Layout-specific navigation/composition and lifecycle ownership
+remain pending; this does not claim performance or device acceptance.
+
 ## Batch C checkpoint: Home board states and framing — 2026-09-28
 
 Base revision: `656f6751`. Home now owns board state rendering/layout dispatch

@@ -1,3 +1,4 @@
+import '../features/home/presentation/home_board_media.dart';
 import '../ui/core/retry_message.dart';
 import '../features/home/presentation/home_board_content.dart';
 import '../features/search/presentation/search_focus_controller.dart';
@@ -44,10 +45,8 @@ import '../features/home/presentation/home_hero_spotlight.dart';
 import '../features/home/presentation/home_classic_hero.dart';
 import '../features/home/presentation/spotlight_iptv_card_preview.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart' show SpotlightIptvCardPreview;
-import '../features/home/presentation/home_hero_trailer_layer.dart';
 import '../features/home/presentation/home_hero_trailer_indicators.dart';
 import '../features/home/presentation/home_spotlight_search_button.dart';
-import '../features/home/presentation/home_hero_live_layer.dart';
 import '../features/home/presentation/home_stage_rail_label.dart';
 import '../features/home/presentation/home_promenade_layout.dart';
 import '../features/home/presentation/home_atrium_layout.dart';
@@ -73,7 +72,6 @@ import '../widgets/skeleton_poster.dart' show BrandLoadingStage;
 import '../features/home/presentation/home_trakt_skeleton_row.dart';
 import '../features/home/presentation/home_stage_rows.dart';
 import '../features/home/presentation/home_stage_identity.dart';
-import '../features/home/presentation/home_stage_art.dart';
 import '../features/home/presentation/home_tonight_queue_row.dart';
 import '../features/home/presentation/home_tonight_card_caption.dart';
 import '../features/home/presentation/home_favorite_focus.dart';
@@ -6705,6 +6703,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return _firstNonEmpty(item.poster, item.background);
   }
 
+  HomeBoardMedia get _boardMedia => HomeBoardMedia(
+    item: _heroItem,
+    enriched: _heroEnriched,
+    favorite: _canvasFavFocus,
+    cacheWidth: _tvHeroArtworkCacheWidth,
+    cacheHeight: _tvHeroArtworkCacheHeight,
+    trailer: _heroTrailer,
+    isTelevision: widget.isTelevision,
+    volume: _heroTrailerVolume,
+    loading: _heroTrailerLoading,
+    takeover: _heroTrailerTakeover,
+    liveChannel: _heroLiveChannel,
+    liveUrl: _heroLiveUrl,
+    isAddonChannel: StremioIptvService.isStremioChannelUrl,
+    onPlayingChanged: _onHeroTrailerPlaying,
+    onLivePlaybackFailed: _onHeroLivePlaybackFailed,
+  );
+
   Widget _buildSearchSpotlightBoard() {
     final sections = List<CatalogSection>.of(_sections);
     return Column(
@@ -6796,22 +6812,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       trailersEnabled: _heroTrailerEnabled,
       onDwell: (item) => _scheduleHeroTrailer(item, fromSpotlight: true),
       onTrailerStop: _clearHeroTrailer,
+      // Full bleed on every form factor — a letterboxed 16:9 band was tried
+      // on the phone and read as a TV set embedded in the artwork (user call).
+      // The portrait cover-crop is the design; sharpness comes from the 1080p
+      // resolve and medium-filter texture sampling.
       trailer: _heroTrailerRenderable
-          ? HomeHeroTrailerLayer(
-              trailer: _heroTrailer,
-              isTelevision: widget.isTelevision,
-              heroHeight: 540,
-              // Full bleed on every form factor — a letterboxed 16:9 band
-              // was tried on the phone and read as a TV set embedded in the
-              // artwork (user call). The portrait cover-crop is the design;
-              // it gets its sharpness from the 1080p resolve and the
-              // medium-filter texture sampling instead.
-              fullBleed: true,
-              volume: _heroTrailerVolume,
-              loading: _heroTrailerLoading,
-              onPlayingChanged: _onHeroTrailerPlaying,
-              takeover: _heroTrailerTakeover,
-            )
+          ? _boardMedia.trailerLayer(540, fullBleed: true)
           : null,
       // TV only: the glass stage the publish feeds exists behind the TV
       // sidebar rail. Off-TV there is no consumer, and writing the shared
@@ -7154,36 +7160,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           captionBand: _homeArtPosterCaptionBand,
           tabsHeight: homeCanvasTabsHeight(context),
           theater: _canvasTheater,
-          artwork: HomeStageArt(
-            item: _heroItem,
-            enriched: _heroEnriched,
-            fav: _canvasFavFocus,
-            cacheWidth: _tvHeroArtworkCacheWidth,
-            cacheHeight: _tvHeroArtworkCacheHeight,
-          ),
+          artwork: _boardMedia.artwork(),
           trailer: _heroTrailerActive
-              ? HomeHeroTrailerLayer(
-                  trailer: _heroTrailer,
-                  isTelevision: widget.isTelevision,
-                  heroHeight: boardH,
-                  fullBleed: true,
-                  volume: _heroTrailerVolume,
-                  loading: _heroTrailerLoading,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  takeover: _heroTrailerTakeover,
-                )
+              ? _boardMedia.trailerLayer(boardH, fullBleed: true)
               : null,
           live: _heroTrailerActive
-              ? HomeHeroLiveLayer(
-                  isAddonChannel: StremioIptvService.isStremioChannelUrl,
-                  channel: _heroLiveChannel,
-                  streamUrl: _heroLiveUrl,
-                  heroHeight: boardH,
-                  fullBleed: true,
-                  volume: _heroTrailerVolume,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  onPlaybackFailed: _onHeroLivePlaybackFailed,
-                )
+              ? _boardMedia.liveLayer(boardH, fullBleed: true)
               : null,
           identity: ValueListenableBuilder<HomeFavoriteFocus?>(
             valueListenable: _canvasFavFocus,
@@ -7471,36 +7453,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           theater: _canvasTheater,
           railKey: railKey,
           itemCount: itemCount,
-          artwork: HomeStageArt(
-            item: _heroItem,
-            enriched: _heroEnriched,
-            fav: _canvasFavFocus,
-            cacheWidth: _tvHeroArtworkCacheWidth,
-            cacheHeight: _tvHeroArtworkCacheHeight,
-          ),
+          artwork: _boardMedia.artwork(),
           trailer: _heroTrailerActive
-              ? HomeHeroTrailerLayer(
-                  trailer: _heroTrailer,
-                  isTelevision: widget.isTelevision,
-                  heroHeight: boardH,
-                  fullBleed: true,
-                  volume: _heroTrailerVolume,
-                  loading: _heroTrailerLoading,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  takeover: _heroTrailerTakeover,
-                )
+              ? _boardMedia.trailerLayer(boardH, fullBleed: true)
               : null,
           live: _heroTrailerActive
-              ? HomeHeroLiveLayer(
-                  isAddonChannel: StremioIptvService.isStremioChannelUrl,
-                  channel: _heroLiveChannel,
-                  streamUrl: _heroLiveUrl,
-                  heroHeight: boardH,
-                  fullBleed: true,
-                  volume: _heroTrailerVolume,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  onPlaybackFailed: _onHeroLivePlaybackFailed,
-                )
+              ? _boardMedia.liveLayer(boardH, fullBleed: true)
               : null,
           identity: ValueListenableBuilder<HomeFavoriteFocus?>(
             valueListenable: _canvasFavFocus,
@@ -7703,36 +7661,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           wallH: wallH,
           panelColor: app.home.bg,
           seamColor: app.fade(app.core.tx, 0.09),
-          artwork: HomeStageArt(
-            item: _heroItem,
-            enriched: _heroEnriched,
-            fav: _canvasFavFocus,
-            cacheWidth: _tvHeroArtworkCacheWidth,
-            cacheHeight: _tvHeroArtworkCacheHeight,
-          ),
+          artwork: _boardMedia.artwork(),
           trailer: _heroTrailerActive
-              ? HomeHeroTrailerLayer(
-                  trailer: _heroTrailer,
-                  isTelevision: widget.isTelevision,
-                  heroHeight: boardH,
-                  fullBleed: true,
-                  volume: _heroTrailerVolume,
-                  loading: _heroTrailerLoading,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  takeover: _heroTrailerTakeover,
-                )
+              ? _boardMedia.trailerLayer(boardH, fullBleed: true)
               : null,
           live: _heroTrailerActive
-              ? HomeHeroLiveLayer(
-                  isAddonChannel: StremioIptvService.isStremioChannelUrl,
-                  channel: _heroLiveChannel,
-                  streamUrl: _heroLiveUrl,
-                  heroHeight: boardH,
-                  fullBleed: true,
-                  volume: _heroTrailerVolume,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  onPlaybackFailed: _onHeroLivePlaybackFailed,
-                )
+              ? _boardMedia.liveLayer(boardH, fullBleed: true)
               : null,
           railLabel: ValueListenableBuilder<String?>(
             valueListenable: _atriumFocusedRailKey,
@@ -7978,24 +7912,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           liveChannel: _heroLiveChannel,
           showRailHint: view.rails.length > 1,
           hintColor: app.fade(app.core.tx, 0.34),
-          artwork: HomeStageArt(
-            item: _heroItem,
-            enriched: _heroEnriched,
-            fav: _canvasFavFocus,
-            cacheWidth: _tvHeroArtworkCacheWidth,
-            cacheHeight: _tvHeroArtworkCacheHeight,
-          ),
+          artwork: _boardMedia.artwork(),
           liveSurface: _heroTrailerActive
-              ? HomeHeroLiveLayer(
-                  isAddonChannel: StremioIptvService.isStremioChannelUrl,
-                  channel: _heroLiveChannel,
-                  streamUrl: _heroLiveUrl,
-                  heroHeight: boardH,
-                  fullBleed: true,
-                  volume: _heroTrailerVolume,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  onPlaybackFailed: _onHeroLivePlaybackFailed,
-                )
+              ? _boardMedia.liveLayer(boardH, fullBleed: true)
               : null,
           identity: ValueListenableBuilder<HomeFavoriteFocus?>(
             valueListenable: _canvasFavFocus,
@@ -8234,36 +8153,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               ),
             ),
           ),
-          artwork: HomeStageArt(
-            item: _heroItem,
-            enriched: _heroEnriched,
-            fav: _canvasFavFocus,
-            cacheWidth: _tvHeroArtworkCacheWidth,
-            cacheHeight: _tvHeroArtworkCacheHeight,
-          ),
+          artwork: _boardMedia.artwork(),
           trailer: _heroTrailerActive
-              ? HomeHeroTrailerLayer(
-                  trailer: _heroTrailer,
-                  isTelevision: widget.isTelevision,
-                  heroHeight: geometry.cardH,
-                  fullBleed: true,
-                  volume: _heroTrailerVolume,
-                  loading: _heroTrailerLoading,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  takeover: _heroTrailerTakeover,
-                )
+              ? _boardMedia.trailerLayer(geometry.cardH, fullBleed: true)
               : null,
           live: _heroTrailerActive
-              ? HomeHeroLiveLayer(
-                  isAddonChannel: StremioIptvService.isStremioChannelUrl,
-                  channel: _heroLiveChannel,
-                  streamUrl: _heroLiveUrl,
-                  heroHeight: geometry.cardH,
-                  fullBleed: true,
-                  volume: _heroTrailerVolume,
-                  onPlayingChanged: _onHeroTrailerPlaying,
-                  onPlaybackFailed: _onHeroLivePlaybackFailed,
-                )
+              ? _boardMedia.liveLayer(geometry.cardH, fullBleed: true)
               : null,
           identity: ValueListenableBuilder<HomeFavoriteFocus?>(
             valueListenable: _canvasFavFocus,
@@ -8480,36 +8375,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             now: DateTime.now(),
           ),
           cardBuilder: () => buildHomeTonightCardFrame(
-            artwork: HomeStageArt(
-              item: _heroItem,
-              enriched: _heroEnriched,
-              fav: _canvasFavFocus,
-              cacheWidth: _tvHeroArtworkCacheWidth,
-              cacheHeight: _tvHeroArtworkCacheHeight,
-            ),
+            artwork: _boardMedia.artwork(),
             trailer: _heroTrailerActive
-                ? HomeHeroTrailerLayer(
-                    trailer: _heroTrailer,
-                    isTelevision: widget.isTelevision,
-                    heroHeight: geometry.cardH,
-                    fullBleed: true,
-                    volume: _heroTrailerVolume,
-                    loading: _heroTrailerLoading,
-                    onPlayingChanged: _onHeroTrailerPlaying,
-                    takeover: _heroTrailerTakeover,
-                  )
+                ? _boardMedia.trailerLayer(geometry.cardH, fullBleed: true)
                 : null,
             live: _heroTrailerActive
-                ? HomeHeroLiveLayer(
-                    isAddonChannel: StremioIptvService.isStremioChannelUrl,
-                    channel: _heroLiveChannel,
-                    streamUrl: _heroLiveUrl,
-                    heroHeight: geometry.cardH,
-                    fullBleed: true,
-                    volume: _heroTrailerVolume,
-                    onPlayingChanged: _onHeroTrailerPlaying,
-                    onPlaybackFailed: _onHeroLivePlaybackFailed,
-                  )
+                ? _boardMedia.liveLayer(geometry.cardH, fullBleed: true)
                 : null,
             caption: HomeTonightCardCaption(
               item: _heroItem,
@@ -12094,24 +11965,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           ),
         ],
       ),
-      trailerBuilder: (heroH) => HomeHeroTrailerLayer(
-        trailer: _heroTrailer,
-        isTelevision: widget.isTelevision,
-        heroHeight: heroH,
-        volume: _heroTrailerVolume,
-        loading: _heroTrailerLoading,
-        onPlayingChanged: _onHeroTrailerPlaying,
-        takeover: _heroTrailerTakeover,
-      ),
-      liveBuilder: (heroH) => HomeHeroLiveLayer(
-        isAddonChannel: StremioIptvService.isStremioChannelUrl,
-        channel: _heroLiveChannel,
-        streamUrl: _heroLiveUrl,
-        heroHeight: heroH,
-        volume: _heroTrailerVolume,
-        onPlayingChanged: _onHeroTrailerPlaying,
-        onPlaybackFailed: _onHeroLivePlaybackFailed,
-      ),
+      trailerBuilder: (heroH) => _boardMedia.trailerLayer(heroH),
+      liveBuilder: (heroH) => _boardMedia.liveLayer(heroH),
       infoBuilder: () => buildHomeTakeoverInfo(
         context,
         heroItem: _heroItem,
