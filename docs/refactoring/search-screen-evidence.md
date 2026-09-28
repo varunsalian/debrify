@@ -6,6 +6,30 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch B checkpoint: provider download and ZIP actions — 2026-09-28
+
+Base revision: `648ca15d`. Pack/lazy-link downloads, TorBox ZIPs, Premiumize
+transfers/ZIPs and not-cached decisions now use the 257-line plain
+`ProviderSourceActions`. The separate picker retains selection order, All/None,
+sizes and cancellation; legacy presentation retains clipboard access and feedback.
+Every production action supplies its original profile owner. Accepted downloads
+remain durable; retirement stops subsequent requests/queue entries. Premiumize
+polling has an optional guard; the owned loading handle dismisses only its dialog
+before feedback. Provider payloads, retries, explicit-decline cleanup and legacy
+best-effort queue feedback are preserved. Playback service: 7,152 lines.
+
+Verification: **755 Sources tests pass**, followed by **13 action tests passing**
+after three additional no-key/uncached-decision cases. Fifteen new cases total
+cover partial pack failures, queue retirement, lazy-link retirement, ZIP payloads,
+Premiumize create/lookup/generate retirement, explicit RD keep/decline and picker
+selection/cancellation. Analyzer: **844 unchanged diagnostic identities**;
+architecture: **497 files pass**. Formatting/diff checks pass. Receipts:
+`provider-actions-regression-tests.txt`, `provider-actions-tests-final.txt`,
+`provider-actions-analyze-final.txt`, `provider-actions-analyzer-comparison.txt`
+under `.git/refactor-evidence/phase5/`. The previous full gate remains 10,136
+passes; no new full run is claimed. Native/device verification and playlist/channel
+write ownership remain pending, along with B's native handoff/recovery and C–E.
+
 ## Batch B checkpoint: saved provider-cloud preparation — 2026-09-28
 
 Base revision: `9ec8a796`. The 393-line plain `ProviderCloudSource` operation now

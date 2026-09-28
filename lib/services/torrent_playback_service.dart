@@ -1,3 +1,5 @@
+import '../features/sources/data/provider_source_actions.dart';
+import '../features/sources/presentation/source_download_picker.dart';
 import '../features/sources/data/provider_cloud_source.dart';
 import '../features/sources/data/source_acquisition_cleanup.dart';
 import '../features/sources/data/source_playlist_resolver.dart';
@@ -64,7 +66,6 @@ import '../widgets/provider_picker_dialog.dart';
 import 'alldebrid_service.dart';
 import 'debrid_service.dart';
 import 'debrify_tv_channel_add_service.dart';
-import 'download_service.dart';
 import 'local_bound_source_service.dart';
 import 'local_playback_resume_resolver.dart';
 import 'main_page_bridge.dart';
@@ -379,7 +380,13 @@ class TorrentPlaybackService {
     if (!context.mounted || !bindingOwner.isCurrent) return;
 
     if (notCached != null) {
-      await _handleNotCached(context, notCached, provider, magnet);
+      await _handleNotCached(
+        context,
+        notCached,
+        provider,
+        magnet,
+        sourceBindings: bindingOwner,
+      );
       return;
     }
     if (resolved == null) {
@@ -415,7 +422,13 @@ class TorrentPlaybackService {
         }
         break;
       case 'download':
-        await _download(context, resolved, torrent, provider);
+        await _download(
+          context,
+          resolved,
+          torrent,
+          provider,
+          sourceBindings: bindingOwner,
+        );
         break;
       case 'playlist':
         await _addToPlaylist(context, resolved, torrent, provider, meta: meta);
@@ -6243,171 +6256,27 @@ class TorrentPlaybackService {
     Torrent torrent,
   ) => downloadSource(context, torrent, const SourceDownload());
 
-  /// Resolve a playlist entry to a concrete download URL, unlocking a lazy
-  /// debrid entry on demand: RD `restrictedLink` → unrestrict, TorBox
-  /// torrent+file id → download link, AllDebrid locked link → unlock. Premiumize
-  /// entries already carry a URL. Returns null if it can't be resolved.
-  static Future<String?> _resolveEntryUrl(PlaylistEntry e) async {
-    if (e.url.isNotEmpty) return e.url;
-    try {
-      if (e.restrictedLink != null && e.restrictedLink!.isNotEmpty) {
-        final key = (await StorageService.getApiKey()) ?? '';
-        final r = await DebridService.unrestrictLink(key, e.restrictedLink!);
-        return r['download']?.toString();
-      }
-      if (e.torboxTorrentId != null && e.torboxFileId != null) {
-        final key = (await StorageService.getTorboxApiKey()) ?? '';
-        return await TorboxService.requestFileDownloadLink(
-          apiKey: key,
-          torrentId: e.torboxTorrentId!,
-          fileId: e.torboxFileId!,
-        );
-      }
-      if (e.allDebridLink != null && e.allDebridLink!.isNotEmpty) {
-        final key = (await StorageService.getAllDebridApiKey()) ?? '';
-        return await AllDebridService.unlockLink(key, e.allDebridLink!);
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  /// Multi-select download picker (parity with the old per-file download
-  /// dialog): lists the pack's files with sizes, defaults all selected, shows a
-  /// running total, and returns the chosen entries — or null if cancelled.
-  static Future<List<PlaylistEntry>?> _showDownloadPicker(
-    BuildContext context,
-    List<PlaylistEntry> entries,
-  ) {
-    return showDialog<List<PlaylistEntry>>(
-      context: context,
-      builder: (dialogCtx) {
-        final scheme = Theme.of(dialogCtx).colorScheme;
-        final selected = {...entries}; // default: all selected
-        return StatefulBuilder(
-          builder: (ctx, setLocal) {
-            final totalBytes = selected.fold<int>(
-              0,
-              (sum, e) => sum + (e.sizeBytes ?? 0),
-            );
-            final allOn = selected.length == entries.length;
-            return AlertDialog(
-              title: const Text('Download files'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () => setLocal(() {
-                          if (allOn) {
-                            selected.clear();
-                          } else {
-                            selected
-                              ..clear()
-                              ..addAll(entries);
-                          }
-                        }),
-                        child: Text(allOn ? 'None' : 'All'),
-                      ),
-                    ),
-                    Flexible(
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          for (final e in entries)
-                            CheckboxListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              controlAffinity: ListTileControlAffinity.leading,
-                              value: selected.contains(e),
-                              title: Text(
-                                e.title,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: scheme.onSurface,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              secondary: Text(
-                                (e.sizeBytes ?? 0) > 0
-                                    ? Formatters.formatFileSize(e.sizeBytes!)
-                                    : '',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                              onChanged: (_) => setLocal(() {
-                                if (selected.contains(e)) {
-                                  selected.remove(e);
-                                } else {
-                                  selected.add(e);
-                                }
-                              }),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogCtx).pop(),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: selected.isEmpty
-                      ? null
-                      : () => Navigator.of(
-                          dialogCtx,
-                        ).pop(entries.where(selected.contains).toList()),
-                  child: Text(
-                    totalBytes > 0
-                        ? 'Download · ${Formatters.formatFileSize(totalBytes)}'
-                        : 'Download',
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   static Future<void> _download(
     BuildContext context,
     _Resolved r,
     Torrent torrent,
-    String provider,
-  ) async {
-    final credentialKey = _credentialKeyForProvider(provider);
-    // Multi-file pack: let the user choose which files (parity with the old
-    // per-file download dialog), then queue each — unlocking lazy debrid entries
-    // on demand (RD/TorBox/AllDebrid resolve only the start file up front;
-    // Premiumize resolves all).
+    String provider, {
+    required AutomaticSourceBindings sourceBindings,
+  }) async {
+    final actions = ProviderSourceActions(
+      owner: sourceBindings.owner,
+      canContinue: () => context.mounted,
+    );
+    if (!context.mounted || !actions.isCurrent) return;
     if (r.playlist != null && r.playlist!.length > 1) {
-      final chosen = await _showDownloadPicker(context, r.playlist!);
-      if (chosen == null || chosen.isEmpty) return; // cancelled
-      var n = 0;
-      for (final e in chosen) {
-        final url = await _resolveEntryUrl(e);
-        if (url == null || url.isEmpty) continue;
-        try {
-          await DownloadService.instance.enqueueDownload(
-            credentialKey: credentialKey,
-            url: url,
-            fileName: e.title,
-            torrentName: torrent.displayTitle,
-          );
-          n++;
-        } catch (_) {}
-      }
-      if (context.mounted) {
+      final chosen = await showSourceDownloadPicker(context, r.playlist!);
+      if (chosen == null || chosen.isEmpty || !actions.isCurrent) return;
+      final n = await actions.queueEntries(
+        chosen,
+        provider: provider,
+        torrentName: torrent.displayTitle,
+      );
+      if (context.mounted && actions.isCurrent) {
         _snack(
           context,
           n > 0
@@ -6417,25 +6286,16 @@ class TorrentPlaybackService {
       }
       return;
     }
-    if (r.playlist != null && r.playlist!.isNotEmpty) {
-      // Single-entry playlist: queue it directly (no picker for one file).
-      final url = await _resolveEntryUrl(r.playlist!.first);
-      var queued = false;
-      if (url != null && url.isNotEmpty) {
-        try {
-          await DownloadService.instance.enqueueDownload(
-            credentialKey: credentialKey,
-            url: url,
-            fileName: r.playlist!.first.title,
-            torrentName: torrent.displayTitle,
-          );
-          queued = true;
-        } catch (_) {}
-      }
-      if (context.mounted) {
+    if (r.playlist?.isNotEmpty == true) {
+      final n = await actions.queueEntries(
+        r.playlist!,
+        provider: provider,
+        torrentName: torrent.displayTitle,
+      );
+      if (context.mounted && actions.isCurrent) {
         _snack(
           context,
-          queued ? 'Download queued.' : 'Could not queue download.',
+          n > 0 ? 'Download queued.' : 'Could not queue download.',
         );
       }
       return;
@@ -6446,14 +6306,17 @@ class TorrentPlaybackService {
       return;
     }
     try {
-      await DownloadService.instance.enqueueDownload(
-        credentialKey: credentialKey,
-        url: url,
+      await actions.queueUrl(
+        url,
+        provider: provider,
         fileName: r.fileName ?? torrent.displayTitle,
         torrentName: torrent.displayTitle,
       );
     } catch (_) {}
-    if (context.mounted) _snack(context, 'Download queued.');
+    // Preserve the legacy single-URL feedback, including its best-effort enqueue.
+    if (context.mounted && actions.isCurrent) {
+      _snack(context, 'Download queued.');
+    }
   }
 
   static Future<void> _addToPlaylist(
@@ -6599,7 +6462,15 @@ class TorrentPlaybackService {
             title: 'Download to device',
             subtitle: 'Grab the file(s) via ${_label(provider)}.',
             pillLabel: 'Download',
-            onTap: () => unawaited(_download(context, r, torrent, provider)),
+            onTap: () => unawaited(
+              _download(
+                context,
+                r,
+                torrent,
+                provider,
+                sourceBindings: sourceBindings,
+              ),
+            ),
           ),
         DebridActionItem(
           icon: Icons.playlist_add_rounded,
@@ -6634,7 +6505,12 @@ class TorrentPlaybackService {
             title: 'Download as ZIP',
             subtitle: 'Download all files as a ZIP to this device.',
             onTap: () => unawaited(
-              _downloadTorboxZip(context, r.torboxTorrentId!, name),
+              _downloadTorboxZip(
+                context,
+                r.torboxTorrentId!,
+                name,
+                sourceBindings: sourceBindings,
+              ),
             ),
           ),
           DebridActionItem(
@@ -6642,8 +6518,13 @@ class TorrentPlaybackService {
             color: const Color(0xFFEC4899),
             title: 'Copy Download Link (Zip)',
             subtitle: 'Copy ZIP download link to clipboard.',
-            onTap: () =>
-                unawaited(_copyTorboxZipLink(context, r.torboxTorrentId!)),
+            onTap: () => unawaited(
+              _copyTorboxZipLink(
+                context,
+                r.torboxTorrentId!,
+                sourceBindings: sourceBindings,
+              ),
+            ),
           ),
         ],
         // Premiumize power actions (need the magnet — cloud transfer + ZIP).
@@ -6653,7 +6534,13 @@ class TorrentPlaybackService {
             color: const Color(0xFFF59E0B),
             title: 'Transfer to Premiumize',
             subtitle: 'Add this torrent to your Premiumize cloud.',
-            onTap: () => unawaited(_premiumizeTransfer(context, magnet)),
+            onTap: () => unawaited(
+              _premiumizeTransfer(
+                context,
+                magnet,
+                sourceBindings: sourceBindings,
+              ),
+            ),
           ),
           DebridActionItem(
             icon: Icons.folder_zip_rounded,
@@ -6661,7 +6548,13 @@ class TorrentPlaybackService {
             title: 'Download as ZIP',
             subtitle: 'Transfer to cloud and download all files as a ZIP.',
             onTap: () => unawaited(
-              _premiumizeZip(context, magnet, name, copyOnly: false),
+              _premiumizeZip(
+                context,
+                magnet,
+                name,
+                copyOnly: false,
+                sourceBindings: sourceBindings,
+              ),
             ),
           ),
           DebridActionItem(
@@ -6670,7 +6563,13 @@ class TorrentPlaybackService {
             title: 'Copy ZIP Link',
             subtitle: 'Copy ZIP download link to clipboard.',
             onTap: () => unawaited(
-              _premiumizeZip(context, magnet, name, copyOnly: true),
+              _premiumizeZip(
+                context,
+                magnet,
+                name,
+                copyOnly: true,
+                sourceBindings: sourceBindings,
+              ),
             ),
           ),
         ],
@@ -6693,91 +6592,106 @@ class TorrentPlaybackService {
 
   static Future<void> _copyTorboxZipLink(
     BuildContext context,
-    int torrentId,
-  ) async {
-    final apiKey = (await StorageService.getTorboxApiKey()) ?? '';
-    if (apiKey.isEmpty) return;
-    final zipLink = TorboxService.createZipPermalink(apiKey, torrentId);
-    await Clipboard.setData(ClipboardData(text: zipLink));
-    if (context.mounted) {
+    int torrentId, {
+    required AutomaticSourceBindings sourceBindings,
+  }) async {
+    final actions = ProviderSourceActions(
+      owner: sourceBindings.owner,
+      canContinue: () => context.mounted,
+    );
+    if (!context.mounted || !actions.isCurrent) return;
+    final String? url;
+    try {
+      url = await actions.torboxZipUrl(torrentId);
+    } catch (_) {
+      return;
+    }
+    if (!context.mounted || url == null || !actions.isCurrent) return;
+    await Clipboard.setData(ClipboardData(text: url));
+    if (context.mounted && actions.isCurrent) {
       _snack(context, 'ZIP download link copied to clipboard!');
     }
   }
 
-  /// Queue the whole-torrent ZIP for download to this device (parity with the
-  /// old TorBox "Download as ZIP to device" option). The `torboxZip` meta lets
-  /// the download service key/retry it as a ZIP job.
   static Future<void> _downloadTorboxZip(
     BuildContext context,
     int torrentId,
-    String torrentName,
-  ) async {
-    final apiKey = (await StorageService.getTorboxApiKey()) ?? '';
-    if (apiKey.isEmpty) return;
-    final zipLink = TorboxService.createZipPermalink(apiKey, torrentId);
+    String name, {
+    required AutomaticSourceBindings sourceBindings,
+  }) async {
+    final actions = ProviderSourceActions(
+      owner: sourceBindings.owner,
+      canContinue: () => context.mounted,
+    );
+    if (!context.mounted || !actions.isCurrent) return;
     try {
-      await DownloadService.instance.enqueueDownload(
-        credentialKey: 'torbox_api_key',
-        url: zipLink,
-        fileName: '$torrentName.zip',
-        torrentName: torrentName,
-        meta: jsonEncode({
-          'torboxDownload': true,
-          'torboxZip': true,
-          'torboxTorrentId': torrentId,
-        }),
-      );
-      if (context.mounted) _snack(context, 'ZIP download queued.');
+      final queued = await actions.queueTorboxZip(torrentId, name);
+      if (context.mounted && queued && actions.isCurrent) {
+        _snack(context, 'ZIP download queued.');
+      }
     } catch (_) {
-      if (context.mounted) _snack(context, 'Failed to queue ZIP download.');
+      if (context.mounted && actions.isCurrent) {
+        _snack(context, 'Failed to queue ZIP download.');
+      }
     }
   }
 
   static Future<void> _premiumizeTransfer(
     BuildContext context,
-    String magnet,
-  ) async {
-    final apiKey = (await StorageService.getPremiumizeApiKey()) ?? '';
-    if (apiKey.isEmpty) return;
+    String magnet, {
+    required AutomaticSourceBindings sourceBindings,
+  }) async {
+    final actions = ProviderSourceActions(
+      owner: sourceBindings.owner,
+      canContinue: () => context.mounted,
+    );
+    if (!context.mounted || !actions.isCurrent) return;
     try {
-      await PremiumizeService.createTransfer(apiKey, magnet);
-      if (context.mounted) {
+      final accepted = await actions.transferPremiumize(magnet);
+      if (context.mounted && accepted && actions.isCurrent) {
         _snack(
           context,
           'Added to Premiumize. It will be available once the download finishes.',
         );
       }
     } catch (_) {
-      if (context.mounted) _snack(context, 'Failed to transfer to Premiumize.');
+      if (context.mounted && actions.isCurrent) {
+        _snack(context, 'Failed to transfer to Premiumize.');
+      }
     }
   }
 
-  /// Generate the Premiumize ZIP (cloud transfer + zip), then either queue the
-  /// download or copy the link — matching Home's "Download as ZIP" / "Copy ZIP
-  /// Link" tiles. Shows the Premiumize loading overlay during the (slow) build.
   static Future<void> _premiumizeZip(
     BuildContext context,
     String magnet,
-    String torrentName, {
+    String name, {
     required bool copyOnly,
+    required AutomaticSourceBindings sourceBindings,
   }) async {
-    final apiKey = (await StorageService.getPremiumizeApiKey()) ?? '';
-    if (apiKey.isEmpty) return;
-    if (!context.mounted) return;
-    final rootNav = Navigator.of(context, rootNavigator: true);
-    DebridLoadingOverlay.showPremiumize(context, torrentName);
-    // Only the (slow) ZIP generation is covered by the overlay. Popping happens
-    // exactly once — the post-success clipboard/download step runs in its own
-    // guard so a failure there can NEVER pop a second (underlying) route.
-    final String zipUrl;
+    final actions = ProviderSourceActions(
+      owner: sourceBindings.owner,
+      canContinue: () => context.mounted,
+    );
+    if (!context.mounted || !actions.isCurrent) return;
+    DebridLoadingHandle? loading;
+    String? url;
+    var failed = false;
     try {
-      zipUrl = await PremiumizeService.createTransferAndGenerateZip(
-        apiKey,
+      url = await actions.premiumizeZipUrl(
         magnet,
+        onStarted: () {
+          if (context.mounted) {
+            loading = DebridLoadingOverlay.showPremiumize(context, name);
+          }
+        },
       );
     } catch (_) {
-      if (rootNav.canPop()) rootNav.pop();
-      if (context.mounted) {
+      failed = true;
+    } finally {
+      loading?.dismiss();
+    }
+    if (failed) {
+      if (context.mounted && actions.isCurrent) {
         _snack(
           context,
           copyOnly ? 'Failed to generate ZIP link.' : 'Failed to generate ZIP.',
@@ -6785,43 +6699,32 @@ class TorrentPlaybackService {
       }
       return;
     }
-    if (rootNav.canPop()) rootNav.pop(); // dismiss the overlay exactly once
+    if (!context.mounted || url == null || !actions.isCurrent) return;
     try {
       if (copyOnly) {
-        await Clipboard.setData(ClipboardData(text: zipUrl));
-        if (context.mounted) {
+        await Clipboard.setData(ClipboardData(text: url));
+        if (context.mounted && actions.isCurrent) {
           _snack(context, 'ZIP download link copied to clipboard!');
         }
       } else {
-        await DownloadService.instance.enqueueDownload(
-          credentialKey: 'premiumize_api_key',
-          url: zipUrl,
-          fileName: '$torrentName.zip',
-          torrentName: torrentName,
+        await actions.queueUrl(
+          url,
+          provider: 'premiumize',
+          fileName: '$name.zip',
+          torrentName: name,
         );
-        if (context.mounted) {
+        if (context.mounted && actions.isCurrent) {
           _snack(context, 'ZIP download queued successfully.');
         }
       }
     } catch (_) {
-      if (context.mounted) {
+      if (context.mounted && actions.isCurrent) {
         _snack(
           context,
           copyOnly ? 'Failed to generate ZIP link.' : 'Failed to generate ZIP.',
         );
       }
     }
-  }
-
-  static String? _credentialKeyForProvider(String provider) {
-    return switch (provider) {
-      'debrid' || 'realdebrid' => 'real_debrid_api_key',
-      'torbox' => 'torbox_api_key',
-      'premiumize' => 'premiumize_api_key',
-      'alldebrid' => 'alldebrid_api_key',
-      'pikpak' => 'pikpak_email',
-      _ => null,
-    };
   }
 
   static List<Color> _providerGradient(String provider) {
@@ -6864,40 +6767,23 @@ class TorrentPlaybackService {
     BuildContext context,
     Object marker,
     String provider,
-    String magnet,
-  ) async {
+    String magnet, {
+    required AutomaticSourceBindings sourceBindings,
+  }) async {
+    final actions = ProviderSourceActions(
+      owner: sourceBindings.owner,
+      canContinue: () => context.mounted,
+    );
+    if (!context.mounted || !actions.isCurrent) return;
     final keep = await showNotCachedDialog(context, _label(provider));
-    if (!context.mounted) return;
-    if (!keep) {
-      if (marker is TorrentNotCachedException) {
-        try {
-          await DebridService.deleteTorrent(marker.apiKey, marker.torrentId);
-        } catch (_) {}
-      } else if (marker is AllDebridTorrentNotReadyException) {
-        try {
-          await AllDebridService.deleteMagnet(marker.apiKey, marker.magnetId);
-        } catch (_) {}
-      }
-      return;
+    if (!context.mounted || !actions.isCurrent) return;
+    try {
+      await actions.decideNotCached(marker, provider, magnet, keep: keep);
+    } catch (_) {
+      if (!context.mounted || !actions.isCurrent) return;
+      rethrow;
     }
-    // "Add anyway": queue the download on the provider.
-    if (provider == 'torbox') {
-      final apiKey = (await StorageService.getTorboxApiKey()) ?? '';
-      try {
-        await TorboxService.createTorrent(
-          apiKey: apiKey,
-          magnet: magnet,
-          addOnlyIfCached: false,
-        );
-      } catch (_) {}
-    } else if (provider == 'premiumize') {
-      final apiKey = (await StorageService.getPremiumizeApiKey()) ?? '';
-      try {
-        await PremiumizeService.createTransfer(apiKey, magnet);
-      } catch (_) {}
-    }
-    // RD/AllDebrid already added the torrent while resolving; nothing more.
-    if (context.mounted) {
+    if (context.mounted && keep && actions.isCurrent) {
       _snack(
         context,
         'Added — it will download on ${_label(provider)}. Play it once ready.',

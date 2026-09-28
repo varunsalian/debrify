@@ -132,7 +132,7 @@ until the batch ends. This replaces per-helper checkpoints, not incremental safe
 | Batch | Current status |
 | --- | --- |
 | A | Implemented and reviewed. Home actions, resume, detail mutation/reset boundaries and accepted local writes are wired and checked. Full gate: 10,058 passes, unchanged historical failures/errors, no missing or newly skipped tests. |
-| B | Manual/provider acquisition, automatic bindings, direct downloads, automatic torrent probes and player source-switch resolution reviewed. Full retry: 10,136 passes, unchanged historical failures/errors/skips, no missing tests, 26 added passing cases. Saved-cloud preparation is also reviewed (813 affected passes, unchanged analyzer). Remaining: pack/zip/not-ready actions, native handoff/recovery ownership and device checks; see concrete paths below. |
+| B | Manual/provider acquisition, automatic bindings, direct downloads, automatic torrent probes and player source-switch resolution reviewed. Full retry: 10,136 passes, unchanged historical failures/errors/skips, no missing tests, 26 added passing cases. Saved-cloud preparation is also reviewed (813 affected passes, unchanged analyzer). Pack/ZIP/not-ready actions are reviewed (755 Sources passes plus three additional action cases, unchanged analyzer). Remaining: playlist/channel writes, provider-tab navigation, native handoff/recovery ownership and device checks; see concrete paths below. |
 | C | Pending remaining boundaries; substantial layout/search extraction already complete |
 | D | Pending remaining boundaries and facade reduction |
 | E | Pending final acceptance |
@@ -249,11 +249,18 @@ callers retain their behavior; no screen logic moves into these provider service
 The B exit is a guarded plain cloud-preparation operation plus its actual playback
 caller and affected request/selection tests.
 
+The borrowed `PremiumizeService.createTransferAndGenerateZip` additionally accepts
+an optional retirement guard around create/lookup/poll stages. Its 120-second
+timeout, four-second polling and ZIP selection remain unchanged for existing
+callers. This scoped B change moves no screen logic into the provider service;
+accepted transfers are not deleted on retirement. The guarded action and actual
+UI callers now close this specific boundary.
+
 Concrete remaining B paths:
-- Provider-backed pack/zip download and `_handleNotCached` actions: preserve the
-  original credentials, accepted queue writes and existing retry/cleanup policies
-  through their awaits. `_resolveProviderNativeBound` now delegates to the reviewed
-  393-line `ProviderCloudSource` operation with originating owner/action guards.
+- Playlist/channel actions (`_addToPlaylist`, `DebrifyTvChannelAddService`) and
+  provider-tab navigation: finish originating-owner checks at actual persistence
+  and dispatch boundaries. Pack/ZIP/not-ready actions now use the reviewed plain
+  `ProviderSourceActions`; saved-cloud preparation uses `ProviderCloudSource`.
 - `VideoPlayerLauncher` preparation and native automatic recovery: pass the
   originating owner rather than recapturing after handoff; retain player/session
   and source-switch generation checks across queued native work. The recovery
