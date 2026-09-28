@@ -1,3 +1,4 @@
+import '../features/home/application/home_iptv_continuation_dependencies.dart';
 import '../features/home/application/home_catalog_playback_resolver_dependencies.dart';
 import '../models/simkl_continue_watching_item.dart';
 import '../features/home/presentation/home_detail_action_bridge.dart';
@@ -4919,21 +4920,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// resume entry, a series drops every episode's (the card collapses them, so
   /// leaving one behind would just rebuild it).
   Future<void> _removeIptvCwItem(StremioMeta item) async {
+    if (!_catalogNavigationCurrent()) return;
     final entry = _iptvCwByKey[item.id];
     if (entry == null) return;
-    if (entry.isSeries) {
-      final seriesId = (entry.raw['seriesId'] as String?) ?? '';
-      if (seriesId.isEmpty) return;
-      await StorageService.removeIptvContinueWatchingSeries(
-        playlistId: (entry.raw['playlistId'] as String?) ?? '',
-        seriesId: seriesId,
-      );
-    } else {
-      final url = (entry.raw['url'] as String?) ?? entry.routeKey;
-      if (url.isEmpty) return;
-      await StorageService.removeIptvContinueWatchingItem(url);
-    }
-    if (!mounted) return;
+    final removed = await ref
+        .read(homeIptvHistoryRemovalProvider(_profileSessionOwner))
+        .remove(entry, isCurrent: _catalogNavigationCurrent);
+    if (!removed) return;
     _snack('Removed from Continue Watching');
     await _loadIptvContinueWatching();
   }

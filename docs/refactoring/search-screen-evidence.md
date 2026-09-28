@@ -6,6 +6,34 @@ workflow checkpoints, reuse valid evidence, and run broader checks at integratio
 gates. Earlier entries retain their original slice history. No changes are pushed
 to the public repository.
 
+## Batch A checkpoint: IPTV history removal — 2026-09-28
+
+`_removeIptvCwItem` now dispatches through `HomeIptvHistoryRemoval`, injected by
+an owner-keyed Riverpod factory alongside the existing IPTV dependencies. The
+screen keeps only feedback and row refresh. The operation rejects retired actions,
+captures the originating profile, preserves explicit movie URL/route fallback and
+playlist-specific whole-series removal, and suppresses stale success feedback.
+Existing `IptvMediaStore` transactions still own history/resume deletion and sync
+tombstones. `DebrifyTvDatabase.runScoped` already drains admitted operations during
+scope closure, so no second deletion queue or storage implementation was added.
+
+Validation: 58 affected tests pass, including six new production-factory tests
+using real SQLite files for two profiles. They verify foreign ambient scopes do
+not redirect writes, other series/playlists/profiles retain their history and
+resume data, each removed item gets both sync tombstones, explicit URL takes
+precedence, and retired/invalid requests write nothing. Retirement at the mutation
+notification suppresses the result without undoing the accepted transaction.
+Existing store, hold-menu and database-isolation tests also pass. Review retained
+branch-specific metadata reads and failure propagation. Analyzer identities match
+all 848 prior diagnostics; architecture checks pass for 457 migrated files.
+
+Receipts: `.git/refactor-evidence/phase5/iptv-removal-tests.txt` and
+`iptv-removal-analyze.txt`. This changes no database schema or native API and does
+not require repeating the full suite before the planned integration gate. Tracker
+removal and detail mutation remain open: their sequential remote writes and rating
+dialog returns need originating-account/retirement review. No device acceptance
+or whole-batch completion is claimed by this checkpoint.
+
 ## Batch A checkpoint: catalog playback target resolution — 2026-09-28
 
 `HomeCatalogPlaybackResolver` (395 lines) now owns the complete catalog target
