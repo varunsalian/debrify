@@ -381,4 +381,9 @@ class KeywordSearchSection {
 
   SourceAppearance get appearance => _keywordAppearanceSubscription.read();
   void closeAppearance() => _keywordAppearanceSubscription.close();
+  void clearKeywordSearch() {
+    keywordSearchController.clear();
+    disposeKwNodes();
+    keywordResultsController.clear();
+  }
 }

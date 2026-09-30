@@ -1,3 +1,10 @@
+import '../features/search/presentation/lists_search_rows.dart';
+import '../features/search/presentation/search_input_section.dart';
+import '../features/search/presentation/search_mode_section.dart';
+import '../features/search/presentation/catalog_search_section.dart';
+import '../features/search/presentation/search_title_section.dart';
+import '../features/search/presentation/search_title_open.dart';
+import '../features/search/presentation/lists_search_section.dart';
 import '../features/search/presentation/keyword_return.dart';
 import '../features/search/presentation/keyword_search_frame.dart';
 import '../features/search/presentation/keyword_search_rows.dart';
@@ -15,12 +22,8 @@ import '../features/home/presentation/home_see_all_navigation.dart';
 import '../features/home/application/home_refresh_queue.dart';
 import '../features/home/presentation/home_favorite_nodes.dart';
 import '../features/home/presentation/home_favorite_bindings.dart';
-import '../features/search/presentation/title_suggestion_presentation.dart';
 import '../features/search/presentation/search_result_bindings.dart';
 import '../features/search/presentation/lists_navigation.dart';
-import '../features/search/presentation/catalog_search_prompt.dart';
-import '../features/search/presentation/lists_search_rail.dart';
-import '../features/search/presentation/lists_focus.dart';
 import '../features/discover/presentation/discover_bindings.dart';
 import '../features/home/presentation/home_classic_favorite_rows.dart';
 import '../features/home/presentation/home_rail_composition.dart';
@@ -40,9 +43,6 @@ import '../features/home/presentation/home_tonight_board.dart';
 import '../features/home/presentation/home_board_media.dart';
 import '../ui/core/retry_message.dart';
 import '../features/home/presentation/home_board_content.dart';
-import '../features/search/presentation/search_focus_controller.dart';
-import '../features/search/presentation/search_header.dart';
-import '../features/search/presentation/search_query_field.dart';
 import '../features/home/application/home_detail_action_dependencies.dart';
 import '../features/home/application/home_detail_dependencies.dart';
 import '../features/home/presentation/home_detail_menus.dart';
@@ -160,16 +160,9 @@ import '../features/home/presentation/home_sources_navigation.dart';
 import '../features/search/application/keyword_snapshot_dependencies.dart';
 import '../features/search/data/keyword_snapshot_repository.dart';
 import '../features/search/models/keyword_cache_state.dart';
-import '../features/search/presentation/catalog_sources_dialog.dart';
-import '../features/search/application/catalog_search_controller.dart';
-import '../features/search/models/catalog_search_state.dart';
-import '../features/search/presentation/catalog_search_projection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../features/search/application/lists_search_controller.dart';
 import '../features/search/models/search_session.dart';
-import '../features/search/models/lists_search_state.dart';
 import '../features/search/models/search_mode.dart';
-import '../features/search/presentation/search_mode_toggle.dart';
 import '../services/native_series_metadata_service.dart';
 import '../models/media_identity.dart';
 import '../features/home/presentation/home_random_playback_action.dart';
@@ -250,7 +243,6 @@ import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/home/spotlight_board.dart';
 import '../widgets/home/spotlight_catalog_card_cache.dart';
-import '../widgets/metadata_title_navigation.dart';
 import '../services/tmdb_title_search.dart';
 import '../services/metadata_title_service.dart';
 import 'collections/collection_folder_screen.dart';
@@ -361,65 +353,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   final TextEditingController _searchController = TextEditingController();
   late final _titleSearch = widget.titleSearch ?? TmdbTitleSearch();
-  final _titlePresentation = TitleSuggestionPresentation();
   final _titleSearchScope = ProfileRuntime.scope.value;
-  bool get _openingSuggestedTitle => _titlePresentation.opening;
-  bool get _titleSearchPolicyReady => _metadataFeatureController.current.ready;
-  late final _searchFocus = SearchFocusController(
-    onSourcesVisibilityChanged: () {
-      if (mounted) setState(() {});
-    },
-  );
-  FocusNode get _searchFocusNode => _searchFocus.field;
   final TvSearchFocusHandoff _searchSubmitFocus = TvSearchFocusHandoff();
-  // DPAD focus targets for the Catalog / Keyword / Lists selector, so the
-  // toggle is reachable with a remote (arrow-up from the search field).
-  FocusNode get _modeCatalogNode => _searchFocus.catalog;
-  FocusNode get _modeKeywordNode => _searchFocus.keyword;
-  FocusNode get _modeListsNode => _searchFocus.lists;
-  FocusNode get _modeDropdownNode => _searchFocus.dropdown;
-
   // Dedicated MDBList list-search state. Lists is its own Search mode; it
   // never runs as part of Catalog search. Each result card hands off via
   // MainPageBridge.pendingMdblistListOpen. One focus node per card.
   late final SearchSession _searchSession;
   late final SearchResultBindings _searchResultBindings;
-  ListsSearchState get _listsState => _searchResultBindings.lists;
-  ListsSearchController get _listsController =>
-      ref.read(listsSearchProvider(_searchSession).notifier);
-  String get _listsQuery => _listsState.query;
-  List<MdblistListChoice> get _listsResults => _listsState.results;
-  bool get _listsSearching => _listsState.searching;
-  String? get _listsError => _listsState.error;
-  final _listsFocus = ListsFocus();
-  List<FocusNode> get _listsNodes => _listsFocus.nodes;
-  // Debounce for opening a list from the rail — one fast double-press must not
-  // stack two pushed item screens (TV) / double-fire the handoff.
-  DateTime? _lastListOpenAt;
-
-  SearchMode _mode = SearchMode.catalog;
-
-  /// Committed catalog query (drives per-addon catalog search). Empty = board.
-  CatalogSearchState get _catalogState => _searchResultBindings.catalog;
-  CatalogSearchController get _catalogController =>
-      ref.read(catalogSearchProvider(_searchSession).notifier);
-  String get _catalogQuery => _catalogState.query;
 
   /// The addon that produced the item currently being played/browsed, threaded
   /// into playback so Continue Watching can route resume / next-episode back to
   /// it (matching Home's `addonId`). Set whenever we open a catalog item.
   String? _activeAddonId;
-
-  /// DPAD focus for the catalog-mode "Sources" button (empty-prompt state) —
-  /// its keyword-mode twin, for picking which searchable addons are queried.
-  final FocusNode _catalogSourcesBtnFocus = FocusNode(
-    debugLabel: 'catalog_sources_btn',
-  );
-
-  /// Whether the unified (non-TV) catalog Sources bar under the field is shown.
-  /// Driven by search-field focus with a delayed hide (see
-  /// [_onSearchFocusForSources]) so a click on the button isn't lost.
-  bool get _catalogSourcesBarShown => _searchFocus.sourcesVisible;
 
   // Retain the plain snapshot adapter: disposal must not resolve WidgetRef.
   late final KeywordSnapshotRepository _keywordSnapshots;
@@ -481,11 +426,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // one-shot fade/rise entrance. Appends don't bump it.
   int _boardGen = 0;
   DateTime _boardAppliedAt = DateTime.fromMillisecondsSinceEpoch(0);
-  bool get _catalogSearching => _catalogState.searching;
   // Catalogs that errored (timeout / HTTP / network) during the current
   // catalog search — distinct from "returned no results". Drives the quiet
   // "N sources didn't respond" note so failing addons don't just vanish.
-  int get _catalogSearchFailures => _catalogState.failures;
+  int get _catalogSearchFailures => _catalogSection.catalogState.failures;
 
   // Rows the user hid via Settings → Home Page → Home Rows (fixed-section
   // leaves like `cw:movies`/`trakt:shows`/`fav:iptv` and catalog leaves
@@ -556,7 +500,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return;
     }
     _homeCatalogController.replaceRows(rows);
-    if (_catalogQuery.isNotEmpty || _catalogSearching) return;
+    if (_catalogSection.catalogQuery.isNotEmpty ||
+        _catalogSection.catalogSearching) {
+      return;
+    }
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
       // Keep data, not new image widgets, while a detail page/player covers
       // Home. Returning first restores the old focused row, then inserts the
@@ -629,14 +576,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Whether more board rows remain to lazily load (board mode only — never
   /// during a catalog search, which streams and appends its own rows).
   bool get _boardHasMore =>
-      _catalogQuery.isEmpty &&
-      !_catalogSearching &&
+      _catalogSection.catalogQuery.isEmpty &&
+      !_catalogSection.catalogSearching &&
       _boardCursor < _boardRefs.length;
 
   /// Reserving a batch advances the cursor before all its rows arrive. This
   /// affects deferred navigation, not whether another batch should be fetched.
   bool get _boardRowsPending =>
-      _catalogQuery.isEmpty && !_catalogSearching &&
+      _catalogSection.catalogQuery.isEmpty &&
+      !_catalogSection.catalogSearching &&
       (_progressiveHomeLoadPending || _boardLoadingMore);
 
   bool get _boardCanAdvance => _boardHasMore || _boardRowsPending;
@@ -1146,16 +1094,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               !_homeDisabled.contains('iptv:movies')) ||
           (_iptvCwSeries.isNotEmpty &&
               !_homeDisabled.contains('iptv:series'))) &&
-      _catalogQuery.isEmpty &&
-      !_catalogSearching;
+      _catalogSection.catalogQuery.isEmpty &&
+      !_catalogSection.catalogSearching;
 
   /// Home ordering is presentation state for the Home board only. Search and
   /// Discover share some rail/focus helpers, but keep result-source order.
   bool get _homeRowOrderActive =>
       !widget.searchMode &&
       !widget.discoverMode &&
-      _catalogQuery.isEmpty &&
-      !_catalogSearching;
+      _catalogSection.catalogQuery.isEmpty &&
+      !_catalogSection.catalogSearching;
 
   /// Saved Home orders created before MDBList was exposed do not contain its
   /// CW ids. Seed those new ids after the Simkl CW family instead of allowing
@@ -1194,8 +1142,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _traktCwLoading &&
       _traktMovies.isEmpty &&
       _traktSeries.isEmpty &&
-      _catalogQuery.isEmpty &&
-      !_catalogSearching;
+      _catalogSection.catalogQuery.isEmpty &&
+      !_catalogSection.catalogSearching;
 
   // Hero state. Driven by ValueNotifiers so focus-driven hero swaps rebuild
   // only the spotlight, never the whole board (important on low-power TVs).
@@ -1302,6 +1250,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   DiscoverCardSettingsController get _discoverCardSettingsController =>
       _discoverBindings.cards;
+  late final SearchInputSection _inputSection;
+  late final SearchModeSection _modeSection;
+  late final CatalogSearchSection _catalogSection;
+  late final SearchTitleSection _titleSection;
+  late final SearchTitleOpen _titleOpen;
+  late final ListsSearchSection _listsSection;
+  late final ListsSearchRows _listsRows;
   late final KeywordSearchSection _keywordSection;
   late final KeywordReturn _keywordReturn;
   late final KeywordSearchRows _keywordRows;
@@ -1381,13 +1336,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _keywordSection = KeywordSearchSection(ref, (
       session: () => _searchSession,
       bindings: () => _searchResultBindings,
-      mode: () => _mode,
+      mode: () => _modeSection.mode,
       mounted: () => mounted,
       setState: setState,
-      focusSearch: _focusSearchFieldAtEnd,
-      focusSearchNode: () => _searchFocusNode.requestFocus(),
+      focusSearch: () => _inputSection.focusSearchFieldAtEnd(),
+      focusSearchNode: () => _inputSection.searchFocusNode.requestFocus(),
       focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
-      completeSubmitFocus: _completeSearchSubmitFocus,
+      completeSubmitFocus: (target) =>
+          _inputSection.completeSearchSubmitFocus(target),
       cancelSubmitFocus: _searchSubmitFocus.cancel,
     ));
     _keywordDialogs = KeywordSearchDialogs(ref, (
@@ -1428,7 +1384,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         focus: () => _keywordSection.keywordFocus,
         floatingNavigation: () =>
             MainPageBridge.phoneNavStyleCached == 'floating',
-        focusSearchNode: () => _searchFocusNode.requestFocus(),
+        focusSearchNode: () => _inputSection.searchFocusNode.requestFocus(),
         freeze: _keywordSection.kwFreeze,
         setSourceTab: _keywordSection.setKwSourceTab,
       ),
@@ -1445,7 +1401,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         focus: () => _keywordSection.keywordFocus,
         appearance: () => _keywordSection.appearance,
         message: _message,
-        focusSearch: _focusSearchFieldAtEnd,
+        focusSearch: () => _inputSection.focusSearchFieldAtEnd(),
         focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
         focusAboveResults: _keywordSection.focusAboveKeywordResults,
         freeze: _keywordSection.kwFreeze,
@@ -1466,8 +1422,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         keywordAllowed: () =>
             ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch),
         variant: () => _variantKey,
-        mode: () => _mode,
-        setMode: (mode) => _mode = mode,
+        mode: () => _modeSection.mode,
+        setMode: (mode) => _modeSection.mode = mode,
         repository: () => _keywordSnapshots,
         bindings: () => _searchResultBindings,
         focus: () => _keywordSection.keywordFocus,
@@ -1476,8 +1432,207 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _searchController,
       _keywordSection.keywordViewport,
     );
-    _titleSearch.addListener(_publishTitleSuggestions);
-    _searchController.addListener(_onTitleSearchEditingChanged);
+    _listsSection = ListsSearchSection(ref, (
+      session: () => _searchSession,
+      bindings: () => _searchResultBindings,
+      mounted: () => mounted,
+      setState: setState,
+      isTelevision: () => widget.isTelevision,
+      mdblistEnabled: kMdblistEnabled,
+      cancelSubmitFocus: _searchSubmitFocus.cancel,
+      completeSubmitFocus: (target) =>
+          _inputSection.completeSearchSubmitFocus(target),
+      trackOpen: (choice) => AnalyticsService.trackInBackground(
+        'mdblist_list_search_open',
+        {'liked': choice.liked},
+      ),
+      handoff: (choice) {
+        MainPageBridge.pendingMdblistListOpen = {
+          'id': choice.id,
+          'name': choice.name,
+          'ownerName': choice.ownerName,
+          'itemCount': choice.itemCount,
+          'liked': choice.liked,
+          'likes': choice.likes,
+        };
+        // Discover tab — main.dart `case 18`.
+        MainPageBridge.switchTab?.call(MainTab.discover);
+      },
+      context: () => context,
+      createNavigation: () => ListsNavigation(
+        isTelevision: () => widget.isTelevision,
+        pikpakOnly: () => _pikpakOnly,
+        isBound: _isBound,
+        onOpen: (item) => _openItem(
+          item,
+          _addonForContinue(item.sourceAddon?.id),
+          isMdblistSource: true,
+        ),
+        onQuickPlay: (item) => _onCatalogPlay(
+          item,
+          _addonForContinue(item.sourceAddon?.id),
+          isMdblistSource: true,
+        ),
+        afterReturn: _afterSeeAllReturn,
+      ),
+    ));
+    _titleSection = SearchTitleSection((
+      mode: () => _modeSection.mode,
+      searchMode: () => widget.searchMode,
+      metadata: () => _metadataFeatureController,
+      activeTab: () => MainPageBridge.activeTab.value,
+      originCurrent: () => _titleSearchScope == ProfileRuntime.scope.value,
+      update: (query, {required language, enabled = true, composing = false}) =>
+          _titleSearch.update(
+            query,
+            language: language,
+            enabled: enabled,
+            composing: composing,
+          ),
+      clear: () => _titleSearch.clear(),
+      titles: () => _titleSearch.value,
+      open: (item) => _titleOpen.openSuggestedTitle(item),
+      submit: (query) => _modeSection.onQuerySubmitted(query),
+    ), _searchController);
+    _titleOpen = SearchTitleOpen(
+      (
+        mode: () => _modeSection.mode,
+        mounted: () => mounted,
+        context: () => context,
+        activeTab: () => MainPageBridge.activeTab.value,
+        originCurrent: () => _titleSearchScope == ProfileRuntime.scope.value,
+        cancelSubmitFocus: _searchSubmitFocus.cancel,
+        cancelTitleSuggestions: _titleSection.cancelTitleSuggestions,
+        openItem: _openItem,
+        resolver: () =>
+            widget.suggestedTitleResolver ??
+            MetadataTitleService.instance.resolve,
+        submit: (query) => _modeSection.onQuerySubmitted(query),
+      ),
+      _searchController,
+      _titleSection.presentation,
+    );
+    _catalogSection = CatalogSearchSection(ref, (
+      session: () => _searchSession,
+      bindings: () => _searchResultBindings,
+      mounted: () => mounted,
+      isTelevision: () => widget.isTelevision,
+      searchField: () => _inputSection.searchFocusNode,
+      applySections: _applySections,
+      firstResult: () => _rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty
+          ? _rowNodes.first.first
+          : null,
+      completeSubmitFocus: (target) =>
+          _inputSection.completeSearchSubmitFocus(target),
+      cancelSubmitFocus: _searchSubmitFocus.cancel,
+      catalogModeActive: () =>
+          _modeSection.mode == SearchMode.catalog && widget.searchMode,
+      focusSearch: () => _inputSection.focusSearchFieldAtEnd(),
+      focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+      context: () => context,
+    ));
+    _modeSection = SearchModeSection(
+      (
+        mounted: () => mounted,
+        setState: setState,
+        isTelevision: () => widget.isTelevision,
+        keywordAllowed: () =>
+            ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch),
+        cancelTitleSuggestions: _titleSection.cancelTitleSuggestions,
+        restoreHome: _restoreHome,
+        runCatalog: _catalogSection.runCatalogSearch,
+        bindings: () => _searchResultBindings,
+        runKeyword: _keywordSection.runKeyword,
+        clearKeyword: _keywordSection.clearKeywordSearch,
+        searchField: () => _inputSection.searchFocusNode,
+        exitSelection: _keywordSelection.exitKwSelection,
+      ),
+      _searchController,
+      _searchSubmitFocus,
+      _listsSection,
+    );
+    _inputSection = SearchInputSection(
+      (
+        mounted: () => mounted,
+        setState: setState,
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        searchMode: () => widget.searchMode,
+        mdblistEnabled: kMdblistEnabled,
+        mdblistAuthenticated: () => _isMdblistAuthenticated,
+        keywordAllowed: () =>
+            ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch),
+        focusContent: () => _inputSection.searchFocus.focusContent(
+          discoverMode: widget.discoverMode,
+          searchMode: widget.searchMode,
+          isTelevision: widget.isTelevision,
+          mode: _modeSection.mode,
+          discoverSource: _discoverSection.discSourceNode,
+          keywordToolbar: _keywordSection.kwToolbarVisible
+              ? _keywordSection.kwToolbarNodes.first
+              : null,
+          listsResult:
+              _listsSection.listsResults.isNotEmpty &&
+                  _listsSection.listsNodes.isNotEmpty
+              ? _listsSection.listsNodes.first
+              : null,
+          catalogResult:
+              _catalogSection.catalogQuery.isNotEmpty &&
+                  _rowNodes.isNotEmpty &&
+                  _rowNodes.first.isNotEmpty
+              ? _rowNodes.first.first
+              : null,
+          focusCatalogShelf: _spotlightKey.currentState == null
+              ? null
+              : () => _spotlightKey.currentState!.focusShelf(0),
+          topBoardNode: _topBoardFocusNode,
+          loading: _loading,
+          focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+        ),
+        focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+        fieldFocusContent: () {
+          if (_keywordSection.kwSourcesButtonVisible) {
+            _keywordSection.kwSourcesBtnFocus.requestFocus();
+          } else if (_catalogSection.catalogSourcesButtonVisible) {
+            _catalogSection.catalogSourcesBtnFocus.requestFocus();
+          } else {
+            _inputSection.focusContent();
+          }
+        },
+        catalogSourcesButton: () =>
+            _catalogSection.catalogSourcesButton(context),
+        body: () => buildSearchModeContent(
+          mode: _modeSection.mode,
+          catalogSearching: _catalogSection.catalogSearching,
+          catalogEmpty: _sections.isEmpty,
+          dedicatedSearch: widget.searchMode,
+          queryEmpty: _catalogSection.catalogQuery.isEmpty,
+          keyword: () => _keywordRows.buildKeyword(context),
+          lists: () => _listsRows.build(context),
+          prompt: () => _catalogSection.buildSearchPrompt(context),
+          board: _buildBoard,
+        ),
+      ),
+      _modeSection,
+      _searchController,
+      _titleSection.presentation.suggestions,
+      _searchSubmitFocus,
+    );
+    _listsRows = ListsSearchRows((
+      state: () => _listsSection.listsState,
+      nodes: () => _listsSection.listsNodes,
+      isTelevision: () => widget.isTelevision,
+      posterWidth: _railPosterW,
+      header: (onSeeAll) =>
+          _railHeader(title: 'MDBList Lists', tag: 'LISTS', onSeeAll: onSeeAll),
+      message: (icon, title, body) => _message(icon, title, body),
+      open: _listsSection.openListsResult,
+      openSeeAll: _listsSection.openListsSeeAll,
+      focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+      onUp: _leaveBoardTop,
+    ));
+    _titleSearch.addListener(_titleSection.publishTitleSuggestions);
+    _searchController.addListener(_titleSection.onTitleSearchEditingChanged);
     ProfileRuntime.scope.addListener(_onSearchProfileChanged);
     MetadataPreferencesService.revision.addListener(_metadataSettingsChanged);
     final metadataSession = (
@@ -1618,7 +1773,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           ? 'discover'
           : 'home',
     );
-    MainPageBridge.registerTvContentFocusHandler(_tabIndex, _focusContent);
+    MainPageBridge.registerTvContentFocusHandler(
+      _tabIndex,
+      _inputSection.focusContent,
+    );
     if (!widget.searchMode && !widget.discoverMode) {
       StorageService.localCompletionRevision.addListener(
         _onLocalCompletionChanged,
@@ -1629,8 +1787,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       MainPageBridge.addPlaylistChangeListener(_loadPlaylistFavorites);
     }
     if (widget.searchMode) {
-      MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
-      MainPageBridge.activeTab.addListener(_onTitleSearchTabChanged);
+      MainPageBridge.registerTabBackHandler(
+        'search',
+        _modeSection.handleSearchBack,
+      );
+      MainPageBridge.activeTab.addListener(
+        _titleSection.onTitleSearchTabChanged,
+      );
     }
     // A detail-open handed off from another tab (e.g. the Trakt Calendar, a
     // separate tab that can't reach this screen's state). Only the Home board
@@ -1774,15 +1937,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // Unified (non-TV) layout: drive the catalog Sources bar off search-field
     // focus, with a delayed hide so clicking the button doesn't yank it away
     // before the tap lands (blurring the field would otherwise unmount it
-    // mid-click). See _buildUnifiedCatalogSourcesBar.
+    // mid-click). See _inputSection.buildUnifiedCatalogSourcesBar.
     if (!widget.isTelevision && !widget.searchMode) {
-      _searchFocusNode.addListener(_onSearchFocusForSources);
+      _inputSection.searchFocusNode.addListener(
+        _inputSection.onSearchFocusForSources,
+      );
     }
     // The focus latch: interacting with the field pins the sheet open, even
     // while the Spotlight shell is not yet eligible — an async style/hero
     // arrival can then never unmount a focused (still blank) field.
     if (!widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
-      _searchFocusNode.addListener(_searchSheet.onFocusChanged);
+      _inputSection.searchFocusNode.addListener(_searchSheet.onFocusChanged);
     }
     _boardScroll.addListener(_onBoardScroll);
     _keywordSection.keywordViewport.observeScroll();
@@ -1862,29 +2027,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _autoFocusSettled = true;
     });
-  }
-
-  /// Back on the dedicated Search tab: clear an in-progress search (returning to
-  /// the blank prompt) first; a second Back with nothing to clear falls through
-  /// to leave the tab. Registered only in [SearchScreen.searchMode].
-  bool _handleSearchBack() {
-    final hasQuery =
-        _searchController.text.isNotEmpty ||
-        _catalogQuery.isNotEmpty ||
-        _keywordSection.kwQuery.isNotEmpty ||
-        _listsQuery.isNotEmpty;
-    if (!hasQuery) return false;
-    // Back also drops out of Keyword/Lists mode, so the tab returns to its
-    // default Catalog prompt (matches the old overlay-close behaviour).
-    // _clearQuery rebuilds, so setting the field first is enough.
-    _mode = SearchMode.catalog;
-    _clearQuery();
-    if (widget.isTelevision) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _searchFocusNode.requestFocus();
-      });
-    }
-    return true;
   }
 
   /// Re-read hero trailer prefs when Home survives Settings or a WebDAV
@@ -1967,24 +2109,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return _trackerAuthControllers[HomeTracker.mdblist]!.load(
       isCurrent: () => mounted,
       beforeChange: (auth) {
-        leaveLists = !auth && _mode == SearchMode.lists;
-        if (leaveLists) _clearListsSearch();
+        leaveLists = !auth && _modeSection.mode == SearchMode.lists;
+        if (leaveLists) _listsSection.clearListsSearch();
       },
       onChanged: (_) {
         setState(() {
-          if (leaveLists) _mode = SearchMode.catalog;
+          if (leaveLists) _modeSection.mode = SearchMode.catalog;
         });
         // A disconnect can remove the currently selected mode. Keep the shared
         // query useful by resolving it through Catalog after the selector falls
         // back, unless those exact Catalog results are already present.
         if (leaveLists) {
           final query = _searchController.text.trim();
-          if (query.isNotEmpty && query != _catalogQuery) {
-            _runCatalogSearch(query);
+          if (query.isNotEmpty && query != _catalogSection.catalogQuery) {
+            _catalogSection.runCatalogSearch(query);
           }
           if (widget.isTelevision) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _searchFocusNode.requestFocus();
+              if (mounted) _inputSection.searchFocusNode.requestFocus();
             });
           }
         }
@@ -2073,7 +2215,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _mdblistContinuationController.cancelRevisionRefresh();
     _spotlightHeroNode.dispose();
     _keywordReturn.preserve();
-    MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
+    MainPageBridge.unregisterTvContentFocusHandler(
+      _tabIndex,
+      _inputSection.focusContent,
+    );
     StorageService.localCompletionRevision.removeListener(
       _onLocalCompletionChanged,
     );
@@ -2087,13 +2232,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
     }
     if (widget.searchMode) {
-      MainPageBridge.unregisterTabBackHandler('search', _handleSearchBack);
-      MainPageBridge.activeTab.removeListener(_onTitleSearchTabChanged);
+      MainPageBridge.unregisterTabBackHandler(
+        'search',
+        _modeSection.handleSearchBack,
+      );
+      MainPageBridge.activeTab.removeListener(
+        _titleSection.onTitleSearchTabChanged,
+      );
     }
     if (!widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
       // Same closure that registered — the bridge's mid-transition contract.
       MainPageBridge.unregisterTabBackHandler('home', _searchSheet.close);
-      _searchFocusNode.removeListener(_searchSheet.onFocusChanged);
+      _inputSection.searchFocusNode.removeListener(_searchSheet.onFocusChanged);
       MainPageBridge.removePlayerLaunchListener(_onContentPlayerLaunch);
     }
     // Safe no-op in the variants that never registered it.
@@ -2156,17 +2306,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchResultBindings.closeCatalogAndLists();
     _keywordSection.closeAppearance();
     _searchResultBindings.closeKeyword();
-    _titleSearch.removeListener(_publishTitleSuggestions);
+    _titleSearch.removeListener(_titleSection.publishTitleSuggestions);
     _titleSearch.dispose();
-    _titlePresentation.dispose();
-    _searchFocusNode.removeListener(_onSearchFocusForSources);
-    _searchFocus.dispose();
-    _disposeListsNodes();
+    _titleSection.presentation.dispose();
+    _inputSection.searchFocusNode.removeListener(
+      _inputSection.onSearchFocusForSources,
+    );
+    _inputSection.searchFocus.dispose();
+    _listsSection.disposeListsNodes();
     _discoverSection.dispose();
     _boardViewport.disposeScroll();
     _keywordSection.keywordViewport.dispose();
     _keywordSection.keywordFocus.dispose();
-    _catalogSourcesBtnFocus.dispose();
+    _catalogSection.catalogSourcesBtnFocus.dispose();
 
     _disposeNodes();
     _continuationNodes.disposeNodes();
@@ -2257,7 +2409,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// reload is latched instead and [_restoreHome] performs it when the board
   /// comes back. (The initState load never comes through here.)
   void _requestBoardReload() {
-    if (_catalogQuery.isNotEmpty || _catalogSearching) {
+    if (_catalogSection.catalogQuery.isNotEmpty ||
+        _catalogSection.catalogSearching) {
       _pendingBoardReload = true;
       return;
     }
@@ -2270,7 +2423,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         isHome: !widget.searchMode && !widget.discoverMode,
         isCurrent: () => mounted && (isCurrent?.call() ?? true),
         select: (mode) {
-          if (_mode != mode) _switchMode(mode);
+          if (_modeSection.mode != mode) _modeSection.switchMode(mode);
         },
       );
 
@@ -2421,7 +2574,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               MainPageBridge.homeBoardReady.value = true;
               // Keep accepted Home data during a catalog search without
               // replacing its visible results or stealing its focus.
-              if (_catalogQuery.isNotEmpty || _catalogSearching) return;
+              if (_catalogSection.catalogQuery.isNotEmpty ||
+                  _catalogSection.catalogSearching) {
+                return;
+              }
               _applySections(rows, preserveFocus: keepRows);
               _maybeAutoFocusBoard();
             },
@@ -2437,7 +2593,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // Mid-search, the error screen must not replace the search results
       // (_buildBoard renders _error before anything else) — latch a retry
       // for _restoreHome instead.
-      if (_catalogQuery.isNotEmpty || _catalogSearching) {
+      if (_catalogSection.catalogQuery.isNotEmpty ||
+          _catalogSection.catalogSearching) {
         _pendingBoardReload = true;
         setState(() => _loading = false);
         MainPageBridge.homeBoardReady.value = true;
@@ -2561,7 +2718,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // shown. If a catalog search started while this batch was in flight,
         // `_sections`/`_rowNodes` now hold search results — appending board rows
         // there would corrupt the search view. They'll reappear on _restoreHome.
-        if (_catalogQuery.isEmpty && !_catalogSearching) {
+        if (_catalogSection.catalogQuery.isEmpty &&
+            !_catalogSection.catalogSearching) {
           if (page.appendOnly &&
               !(PlatformUtil.isAndroidTvCached &&
                   !(ModalRoute.of(context)?.isCurrent ?? true))) {
@@ -2603,15 +2761,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _loadMoreRow(int rowIndex, {bool resume = false}) async {
     // While a catalog search is active, `_sections` holds search results, which
     // don't paginate — leave them alone.
-    if (_catalogQuery.isNotEmpty || _catalogSearching) return;
+    if (_catalogSection.catalogQuery.isNotEmpty ||
+        _catalogSection.catalogSearching) {
+      return;
+    }
     if (rowIndex < 0 || rowIndex >= _sections.length) return;
     final section = _sections[rowIndex];
     final scope = ProfileRuntime.scope.value;
     int currentIndex() =>
         !mounted ||
             scope != ProfileRuntime.scope.value ||
-            _catalogQuery.isNotEmpty ||
-            _catalogSearching
+            _catalogSection.catalogQuery.isNotEmpty ||
+            _catalogSection.catalogSearching
         ? -1
         : _sections.indexWhere((row) => identical(row, section));
     if (!_homeCatalogController.beginRowPage(section, resume: resume)) return;
@@ -2820,33 +2981,33 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool get _iptvFavVisible =>
       _iptvFavChannels.isNotEmpty &&
       !_homeDisabled.contains('fav:iptv') &&
-      _catalogQuery.isEmpty &&
-      !_catalogSearching;
+      _catalogSection.catalogQuery.isEmpty &&
+      !_catalogSection.catalogSearching;
   bool get _tvFavVisible =>
       _tvFavChannels.isNotEmpty &&
       !_homeDisabled.contains('fav:debrify') &&
-      _catalogQuery.isEmpty &&
-      !_catalogSearching;
+      _catalogSection.catalogQuery.isEmpty &&
+      !_catalogSection.catalogSearching;
   bool get _stvFavVisible =>
       _stvFavChannels.isNotEmpty &&
       !_homeDisabled.contains('fav:stremio') &&
-      _catalogQuery.isEmpty &&
-      !_catalogSearching;
+      _catalogSection.catalogQuery.isEmpty &&
+      !_catalogSection.catalogSearching;
   bool get _playlistFavVisible =>
       _playlistItems.isNotEmpty &&
       !_homeDisabled.contains('fav:playlist') &&
-      _catalogQuery.isEmpty &&
-      !_catalogSearching;
+      _catalogSection.catalogQuery.isEmpty &&
+      !_catalogSection.catalogSearching;
   bool get _watchlistMoviesVisible =>
       _watchlistMovieItems.isNotEmpty &&
       !_homeDisabled.contains('watchlist:movies') &&
-      _catalogQuery.isEmpty &&
-      !_catalogSearching;
+      _catalogSection.catalogQuery.isEmpty &&
+      !_catalogSection.catalogSearching;
   bool get _watchlistSeriesVisible =>
       _watchlistSeriesItems.isNotEmpty &&
       !_homeDisabled.contains('watchlist:series') &&
-      _catalogQuery.isEmpty &&
-      !_catalogSearching;
+      _catalogSection.catalogQuery.isEmpty &&
+      !_catalogSection.catalogSearching;
 
   /// The visible saved-content rows in render order: Watchlist Movies,
   /// Watchlist Series, Playlist, Debrify TV, Stremio TV, IPTV favourites, then
@@ -2870,8 +3031,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       const HomeFavoriteRowRef(HomeFavoriteKind.stremio),
     if (_iptvFavVisible && ProfilePolicyGuard.allowsSync(ProfileFeature.iptv))
       const HomeFavoriteRowRef(HomeFavoriteKind.iptv),
-    if (_catalogQuery.isEmpty &&
-        !_catalogSearching &&
+    if (_catalogSection.catalogQuery.isEmpty &&
+        !_catalogSection.catalogSearching &&
         ProfilePolicyGuard.allowsSync(ProfileFeature.iptv))
       for (var i = 0; i < _iptvListRows.length; i++)
         if (_iptvListRows[i].channels.isNotEmpty) HomeFavoriteRowRef(HomeFavoriteKind.iptv, i),
@@ -3031,7 +3192,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       }
     },
     refreshAddons: () {
-      if (_catalogQuery.isNotEmpty || _catalogSearching) {
+      if (_catalogSection.catalogQuery.isNotEmpty ||
+          _catalogSection.catalogSearching) {
         _pendingBoardReload = true;
       } else {
         unawaited(_load(preserveVisibleRows: true));
@@ -3296,8 +3458,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     },
   );
 
-  void _syncFavoriteNodes(HomeFavoriteKind kind, int count) => _favoriteNodes
-      .sync(kind, count, isCurrent: () => mounted, onEmpty: _focusContent);
+  void _syncFavoriteNodes(HomeFavoriteKind kind, int count) =>
+      _favoriteNodes.sync(
+        kind,
+        count,
+        isCurrent: () => mounted,
+        onEmpty: _inputSection.focusContent,
+      );
 
   void _syncMyWatchlistNodes() {
     _syncFavoriteNodes(
@@ -4509,39 +4676,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  /// Cross-addon catalog search, grouped as one horizontal row per addon so it
-  /// matches the board (not a merged grid).
-  Future<void> _runCatalogSearch(String query) async {
-    // Reclaim TV focus before disposing the previous result nodes.
-    if (widget.isTelevision && !_searchFocusNode.hasFocus) {
-      _searchFocusNode.requestFocus();
-    }
-    final completion = _catalogController.search(
-      query,
-      batchResults: widget.isTelevision,
-    );
-    _applySections(const []);
-    final result = await completion;
-    if (!mounted || result == CatalogSearchCompletion.stale) return;
-    if (result == CatalogSearchCompletion.failed) {
-      _searchSubmitFocus.cancel();
-      return;
-    }
-    if (widget.isTelevision) {
-      // One stable batch, including empty results. Phone/desktop rows arrive
-      // through the subscription without replacing already focused rows.
-      _applySections(_catalogState.rows.map(catalogSearchSection).toList());
-      if (_rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty) {
-        _completeSearchSubmitFocus(_rowNodes.first.first);
-      } else {
-        _searchSubmitFocus.cancel();
-      }
-    }
-  }
-
   /// Cancel any pending search and return to the homepage board.
   void _restoreHome() {
-    _catalogController.clear();
+    _catalogSection.catalogController.clear();
     // A settings/integration reload arrived mid-search and was deferred so it
     // couldn't stomp the results view — run it now instead of restoring the
     // stale cached board.
@@ -4625,7 +4762,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// avoid stealing focus from the user in [_maybeAutoFocusBoard].
   bool _boardHasFocus() {
     bool anyOf(List<FocusNode> ns) => ns.any((n) => n.hasFocus);
-    if (_searchFocus.hasFocus ||
+    if (_inputSection.searchFocus.hasFocus ||
         _discoverSection.discSourceNode.hasFocus ||
         // Spotlight's hero is a focus target the rail lists know nothing
         // about; without this the arrival machinery thinks the board is
@@ -4633,7 +4770,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _spotlightHeroNode.hasFocus) {
       return true;
     }
-    if (anyOf(_listsNodes)) return true;
+    if (anyOf(_listsSection.listsNodes)) return true;
     if (anyOf(_cwMovieNodes) ||
         anyOf(_cwSeriesNodes) ||
         anyOf(_traktMovieNodes) ||
@@ -4657,7 +4794,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// The focus node for the board's current top card — the same target
-  /// [_focusContent] would pick on the board path (Continue Watching →
+  /// [_inputSection.focusContent] would pick on the board path (Continue Watching →
   /// favourites → catalog rows), or null if nothing is focusable yet. Skeleton
   /// Trakt rows carry no nodes, so they're naturally skipped: while Trakt is
   /// reserving, the top is whatever real row sits below the skeletons, and once
@@ -4745,55 +4882,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _leaveBoardTop() {
     _heroPreviewPolicy.resetAttempt();
     if (widget.searchMode) {
-      _searchFocusNode.requestFocus();
+      _inputSection.searchFocusNode.requestFocus();
     }
   }
-
-  void _focusContent() => _searchFocus.focusContent(
-    discoverMode: widget.discoverMode,
-    searchMode: widget.searchMode,
-    isTelevision: widget.isTelevision,
-    mode: _mode,
-    discoverSource: _discoverSection.discSourceNode,
-    keywordToolbar: _keywordSection.kwToolbarVisible
-        ? _keywordSection.kwToolbarNodes.first
-        : null,
-    listsResult: _listsResults.isNotEmpty && _listsNodes.isNotEmpty
-        ? _listsNodes.first
-        : null,
-    catalogResult:
-        _catalogQuery.isNotEmpty &&
-            _rowNodes.isNotEmpty &&
-            _rowNodes.first.isNotEmpty
-        ? _rowNodes.first.first
-        : null,
-    focusCatalogShelf: _spotlightKey.currentState == null
-        ? null
-        : () => _spotlightKey.currentState!.focusShelf(0),
-    topBoardNode: _topBoardFocusNode,
-    loading: _loading,
-    focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
-  );
-
-  void _focusModeToggle() =>
-      _searchFocus.focusMode(_mode, compact: _useCompactModeMenu);
-
-  bool get _useCompactModeMenu => SearchFocusController.useCompactModeMenu(
-    listsEnabled: kMdblistEnabled,
-    isTelevision: widget.isTelevision,
-    width: MediaQuery.sizeOf(context).width,
-  );
-
-  void _focusSearchFieldAtEnd() =>
-      _searchFocus.focusFieldAtEnd(_searchController);
-
-  /// Catalog-mode twin of [_keywordSection.kwSourcesButtonVisible]: the Sources button shown
-  /// on the empty catalog prompt (Search tab, no query yet, not mid-search).
-  bool get _catalogSourcesButtonVisible =>
-      _mode == SearchMode.catalog &&
-      widget.searchMode &&
-      _catalogQuery.isEmpty &&
-      !_catalogSearching;
 
   /// Returns false when the target catalog row isn't loaded/focusable (after
   /// kicking the next batch load if one is available) — same contract as
@@ -4895,9 +4986,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// restore, preserved keyword results, a committed catalog search, or the
   /// dedicated Lists surface.
   bool get _sheetForced =>
-      _mode != SearchMode.catalog ||
-      _catalogQuery.isNotEmpty ||
-      _catalogSearching ||
+      _modeSection.mode != SearchMode.catalog ||
+      _catalogSection.catalogQuery.isNotEmpty ||
+      _catalogSection.catalogSearching ||
       // Belt to the focus latch's braces: interactive typing always comes
       // through a focused field, but autofill or a programmatic controller
       // write would not — and text on screen must force the header that
@@ -4906,14 +4997,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// The sheet latch. See the block comment above.
   late final _searchSheet = SpotlightSearchSheet(
-    field: _searchFocusNode,
+    field: _inputSection.searchFocusNode,
     isForced: () => _sheetForced,
     hasText: () => _searchController.text.isNotEmpty,
     isSpotlightSelected: () => _spotlightSelected,
     resetSearch: () {
       // Mode changes before clearing requests, results and the field.
-      _mode = SearchMode.catalog;
-      _clearQuery();
+      _modeSection.mode = SearchMode.catalog;
+      _modeSection.clearQuery();
     },
     rebuild: setState,
     isCurrent: () => mounted,
@@ -5362,7 +5453,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // them — the pinned source is Home-board furniture and must not paint
     // over a search.
     final override = _spotlightHeroOverride;
-    if (override != null && _catalogQuery.isEmpty && !_catalogSearching) {
+    if (override != null &&
+        _catalogSection.catalogQuery.isEmpty &&
+        !_catalogSection.catalogSearching) {
       return override;
     }
     for (final section in _sections) {
@@ -5519,8 +5612,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     rowNodes: _rowNodes,
     boardKey: _spotlightKey,
     heroNode: _spotlightHeroNode,
-    query: _catalogQuery,
-    searching: _catalogSearching,
+    query: _catalogSection.catalogQuery,
+    searching: _catalogSection.catalogSearching,
     failures: _catalogSearchFailures,
     landscape: _homeLandscapeCards,
     showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
@@ -6753,7 +6846,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         isCurrent: () => mounted,
         onAccepted: (prefs) {
           setState(() {});
-          _scheduleTitleSuggestions();
+          _titleSection.scheduleTitleSuggestions();
           if (widget.discoverMode &&
               _discoverSection.discSource == _discTmdb &&
               !prefs.features.contains(MetadataFeature.discovery)) {
@@ -6765,7 +6858,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _metadataSettingsChanged() {
     if (!mounted) return;
     _metadataFeatureController.invalidate();
-    _cancelTitleSuggestions();
+    _titleSection.cancelTitleSuggestions();
     unawaited(_refreshMetadataFeaturePolicy());
     _episodeArtworkController.refresh(
       isCurrent: () => mounted,
@@ -7081,291 +7174,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // ── Search field ─────────────────────────────────────────────────────────
 
-  void _onTitleSearchTabChanged() {
-    if (MainPageBridge.activeTab.value != 'search') {
-      // Invalidate even if Search is reselected before the transition ends.
-      _cancelTitleSuggestions();
-    }
-  }
-
-  void _onTitleSearchEditingChanged() {
-    final editing = _searchController.value;
-    if (!_titlePresentation.acceptEdit(editing)) return;
-    _cancelSuggestedTitleOpen();
-    _scheduleTitleSuggestions();
-  }
-
-  void _scheduleTitleSuggestions() {
-    final preferences = _metadataFeaturePolicy;
-    final editing = _searchController.value;
-    _titleSearch.update(
-      editing.text,
-      language: preferences?.language ?? 'en-US',
-      // Title lookup belongs only to Catalog. Keyword, Lists and pasted
-      // links retain their own search semantics.
-      enabled: widget.searchMode && _mode == SearchMode.catalog &&
-          MainPageBridge.activeTab.value == 'search' &&
-          _titleSearchPolicyReady &&
-          !_openingSuggestedTitle &&
-          _titleSearchScope == ProfileRuntime.scope.value &&
-          (preferences?.features.contains(MetadataFeature.discovery) ?? false),
-      composing: editing.composing.isValid && !editing.composing.isCollapsed,
-    );
-  }
-
-  void _cancelSuggestedTitleOpen() => _titlePresentation.cancelOpen();
-
-  void _cancelTitleSuggestions() {
-    _cancelSuggestedTitleOpen();
-    _titleSearch.clear();
-  }
-
-  void _publishTitleSuggestions() {
-    _titlePresentation.publish(
-      _titleSearch.value,
-      query: _searchController.text.trim(),
-      onOpen: _openSuggestedTitle,
-      onSubmit: _onQuerySubmitted,
-    );
-  }
-
-  Future<void> _openSuggestedTitle(StremioMeta item) async {
-    if (_openingSuggestedTitle ||
-        !mounted ||
-        _mode != SearchMode.catalog ||
-        MainPageBridge.activeTab.value != 'search' ||
-        _titleSearchScope != ProfileRuntime.scope.value) {
-      return;
-    }
-    _searchSubmitFocus.cancel();
-    _searchController.value = TextEditingValue(
-      text: item.name,
-      selection: TextSelection.collapsed(offset: item.name.length),
-    );
-    _cancelTitleSuggestions();
-    // Filling the field above goes through the same edit/cancel listener as
-    // typing. Capture ownership only after that update has finished.
-    final generation = _titlePresentation.beginOpen();
-    try {
-      await openMetadataTitle(
-        context,
-        item,
-        (selected) {
-          if (!mounted ||
-              !_titlePresentation.accepts(generation) ||
-              MainPageBridge.activeTab.value != 'search') {
-            return;
-          }
-          _openItem(
-            selected,
-            selected.sourceAddon ??
-                StremioAddon(
-                  id: 'metadata_title',
-                  name: 'Title metadata',
-                  manifestUrl: '',
-                  baseUrl: '',
-                ),
-          );
-        },
-        resolve:
-            widget.suggestedTitleResolver ??
-            MetadataTitleService.instance.resolve,
-        onUnresolved: (unresolved) => _onQuerySubmitted(unresolved.name),
-        isCurrent: () =>
-            mounted &&
-            _titlePresentation.accepts(generation) &&
-            _mode == SearchMode.catalog &&
-            MainPageBridge.activeTab.value == 'search',
-      );
-    } finally {
-      // A cancelled lookup can finish while a newer selection is loading.
-      _titlePresentation.finishOpen(generation);
-    }
-  }
-
-  void _onQueryChanged(String value) {
-    _searchSubmitFocus.cancel();
-    // Every mode searches on SUBMIT. Because the field is shared, emptying it
-    // must invalidate EVERY mode's cached query/result state; otherwise a mode
-    // switch can reveal results for text the field no longer contains.
-    if (value.trim().isEmpty) {
-      _clearQuery();
-    }
-  }
-
-  void _onQuerySubmitted(String value) {
-    _cancelTitleSuggestions();
-    final q = value.trim();
-    if (q.isEmpty) {
-      _searchSubmitFocus.cancel();
-    } else {
-      _searchSubmitFocus.arm(enabled: widget.isTelevision);
-    }
-    switch (_mode) {
-      case SearchMode.keyword:
-        _keywordSection.runKeyword(q);
-        return;
-      case SearchMode.catalog:
-        if (q.isEmpty) {
-          _restoreHome();
-        } else {
-          _runCatalogSearch(q);
-        }
-        return;
-      case SearchMode.lists:
-        if (q.isEmpty) {
-          _clearListsSearch();
-        } else {
-          _runListsSearch(q);
-        }
-        return;
-    }
-  }
-
-  void _clearQuery() {
-    _searchSubmitFocus.cancel();
-    _searchController.clear();
-    _cancelTitleSuggestions();
-    _clearKeywordSearch();
-    _disposeListsNodes();
-    _listsController.clear();
-    _restoreHome();
-  }
-
-  void _clearKeywordSearch() {
-    _keywordSection.keywordSearchController.clear();
-    _keywordSection.disposeKwNodes();
-    _keywordSection.keywordResultsController.clear();
-  }
-
-  void _completeSearchSubmitFocus(FocusNode target) {
-    _searchSubmitFocus.complete(
-      field: _searchFocusNode,
-      isMounted: () => mounted,
-      requestFocus: target.requestFocus,
-      targetHasFocus: () => target.hasFocus,
-    );
-  }
-
-  void _disposeListsNodes() => _listsFocus.clear();
-
   void _onSearchProfileChanged() {
-    _cancelTitleSuggestions();
+    _titleSection.cancelTitleSuggestions();
     if (_profileSessionOwner != ProfileSessionMemory.captureOwner()) {
       _searchController.clear();
-      _clearKeywordSearch();
-      _clearListsSearch();
-      final hadCatalogSearch = _catalogQuery.isNotEmpty || _catalogSearching;
-      _catalogController.clear();
+      _keywordSection.clearKeywordSearch();
+      _listsSection.clearListsSearch();
+      final hadCatalogSearch =
+          _catalogSection.catalogQuery.isNotEmpty ||
+          _catalogSection.catalogSearching;
+      _catalogSection.catalogController.clear();
       if (hadCatalogSearch) _applySections(const []);
-    }
-  }
-
-  void _clearListsSearch() {
-    if (!mounted) return;
-    _disposeListsNodes();
-    _listsController.clear();
-  }
-
-  /// One focus node per result row, rebuilt to match the current result set.
-  void _ensureListsNodes() => _listsFocus.resize(_listsResults.length);
-
-  /// Keep route/focus effects in presentation; the notifier owns requests,
-  /// results, errors and stale-completion checks.
-  Future<void> _runListsSearch(String query) async {
-    if (!kMdblistEnabled) {
-      _searchSubmitFocus.cancel();
-      return;
-    }
-    if (query.trim().isEmpty) {
-      _clearListsSearch();
-      return;
-    }
-    _disposeListsNodes();
-    final accepted = await _listsController.search(query);
-    if (!mounted || !accepted) return;
-    setState(_ensureListsNodes);
-    if (_listsNodes.isEmpty) {
-      _searchSubmitFocus.cancel();
-    } else {
-      _completeSearchSubmitFocus(_listsNodes.first);
-    }
-  }
-
-  /// Hand the picked list to the Discover tab, which opens it focused (with
-  /// the ♥ like toggle). Mirrors the pendingCatalogDetailOpen handoff.
-  void _openListsResult(MdblistListChoice choice) {
-    // Debounce: a fast double OK/tap must not stack two pushed screens (TV) or
-    // double-fire the tab handoff. A route push + Back takes far longer than
-    // this, so re-opening the same card after returning still works.
-    final now = DateTime.now();
-    if (_lastListOpenAt != null &&
-        now.difference(_lastListOpenAt!) < const Duration(milliseconds: 600)) {
-      return;
-    }
-    _lastListOpenAt = now;
-    AnalyticsService.trackInBackground('mdblist_list_search_open', {
-      'liked': choice.liked,
-    });
-    // TV: switching to the Discover tab rebuilds this Search screen fresh on
-    // return (main.dart keys tab content by index), losing the results, scroll,
-    // and focused card. Instead PUSH the list's items over the Search board —
-    // the screen stays mounted underneath, so Back returns to exactly this
-    // state, and we re-focus the tapped rail card so the DPAD cursor lands back
-    // on it (its focus handler scrolls it into view). Mobile/laptop keep the
-    // Discover-tab landing (with its Source switcher).
-    if (widget.isTelevision) {
-      _openMdblistListItems(
-        context,
-        choice,
-        onReturn: () => _listsFocus.restore(
-          isCurrent: () => mounted,
-          indexOfResult: () =>
-              _listsResults.indexWhere((l) => l.id == choice.id),
-        ),
-      );
-      return;
-    }
-    MainPageBridge.pendingMdblistListOpen = {
-      'id': choice.id,
-      'name': choice.name,
-      'ownerName': choice.ownerName,
-      'itemCount': choice.itemCount,
-      'liked': choice.liked,
-      'likes': choice.likes,
-    };
-    // Discover tab — main.dart `case 18`.
-    MainPageBridge.switchTab?.call(MainTab.discover);
-  }
-
-  void _switchMode(SearchMode mode) {
-    // Belt for every entry point at once: the keyword surface is gated per
-    // profile (catalog search never is).
-    if (mode == SearchMode.keyword &&
-        !ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)) {
-      return;
-    }
-    if (_mode == mode) return;
-    _cancelTitleSuggestions();
-    setState(() {
-      _mode = mode;
-      // Leaving the keyword list drops any in-progress multi-selection.
-      _keywordSection.keywordResultsController.setSelectionMode(false);
-    });
-    // Carry the typed query across: if there's text in the box, run the target
-    // mode's search immediately instead of showing the empty state.
-    final query = _searchController.text.trim();
-    if (query.isEmpty) return;
-    switch (mode) {
-      case SearchMode.keyword:
-        if (query != _keywordSection.kwQuery) _keywordSection.runKeyword(query);
-        return;
-      case SearchMode.catalog:
-        if (query != _catalogQuery) _runCatalogSearch(query);
-        return;
-      case SearchMode.lists:
-        if (query != _listsQuery) _runListsSearch(query);
-        return;
     }
   }
 
@@ -8066,9 +7885,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     discover: _discoverSection.buildDiscover,
     board: _buildBoard,
     spotlight: _buildSpotlightShell,
-    header: _buildHeader,
-    sourcesBar: _buildUnifiedCatalogSourcesBar,
-    body: _buildBody,
+    header: _inputSection.buildHeader,
+    sourcesBar: _inputSection.buildUnifiedCatalogSourcesBar,
+    body: _inputSection.buildBody,
   );
 
   Widget _buildSpotlightShell() {
@@ -8080,189 +7899,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       canClose: !_sheetForced && _searchController.text.isEmpty,
       onClose: _searchSheet.close,
       onOpen: _searchSheet.open,
-      header: _buildHeader,
-      sourcesBar: _buildUnifiedCatalogSourcesBar,
-      body: _buildBody,
+      header: _inputSection.buildHeader,
+      sourcesBar: _inputSection.buildUnifiedCatalogSourcesBar,
+      body: _inputSection.buildBody,
     );
-  }
-
-  /// Show/hide the unified catalog Sources bar as the search field gains/loses
-  /// focus. The hide is DELAYED: clicking the Sources button blurs the field,
-  /// and hiding synchronously would unmount the button before its onTap fires
-  /// (the bug where "clicking Sources does nothing"). The delay keeps it up
-  /// long enough for the tap; a re-focus within the window cancels the hide.
-  void _onSearchFocusForSources() => _searchFocus.onFieldFocusForSources();
-
-  Widget _buildUnifiedCatalogSourcesBar() => buildUnifiedCatalogSourcesBar(
-    isTelevision: widget.isTelevision,
-    dedicatedSearch: widget.searchMode,
-    show: _catalogSourcesBarShown && _mode == SearchMode.catalog,
-    sourcesButton: _catalogSourcesButton,
-  );
-  Widget _buildHeader() {
-    final tv = widget.isTelevision;
-    // On narrow phones the search box + mode selector crowd each other in one
-    // row, so stack the selector underneath. When even the stacked three labels
-    // cannot fit, [SearchModeToggle] becomes a single dropdown.
-    final hasLists = kMdblistEnabled && _isMdblistAuthenticated;
-    // Reserve the three-mode layout whenever the integration is compiled in,
-    // even before the async auth check lands. This avoids a one-frame inline →
-    // stacked jump for connected users on medium-width windows.
-    final narrowBreakpoint = kMdblistEnabled ? 900.0 : 620.0;
-    final narrow = !tv && MediaQuery.of(context).size.width < narrowBreakpoint;
-    final compactModeMenu = _useCompactModeMenu;
-
-    final field = _buildSearchField(tv);
-    final toggle = SearchModeToggle(
-      mode: _mode,
-      isTelevision: tv,
-      listsAvailable: hasLists,
-      keywordAvailable: ProfilePolicyGuard.allowsSync(
-        ProfileFeature.keywordSearch,
-      ),
-      fullWidth: narrow,
-      compact: compactModeMenu,
-      onChanged: _switchMode,
-      // Keyboard/DPAD wiring (both desktop + TV): the segments are focusable;
-      // up/left leave back to the search field, down drops into the content,
-      // select switches mode.
-      catalogNode: _modeCatalogNode,
-      keywordNode: _modeKeywordNode,
-      listsNode: _modeListsNode,
-      dropdownNode: _modeDropdownNode,
-      onLeaveToField: _focusSearchFieldAtEnd,
-      onLeaveToContent: _focusContent,
-    );
-
-    return SearchHeader(
-      tv: tv,
-      dedicatedSearch: widget.searchMode,
-      narrow: narrow,
-      compactModeMenu: compactModeMenu,
-      field: field,
-      toggle: toggle,
-    );
-  }
-
-  /// Centered translucent pill search — mirrors Stremio's search bar (rounded
-  /// pill, centered text, a search glyph on the right that becomes a clear ✕).
-  Widget _buildSearchField(bool tv) => SearchQueryField(
-    tv: tv,
-    dedicatedSearch: widget.searchMode,
-    mode: _mode,
-    controller: _searchController,
-    focusNode: _searchFocusNode,
-    suggestions: widget.searchMode && _mode == SearchMode.catalog
-        ? _titlePresentation.suggestions
-        : null,
-    onChanged: _onQueryChanged,
-    onSubmitted: _onQuerySubmitted,
-    onClear: _clearQuery,
-    onFocusMode: _focusModeToggle,
-    onFocusContent: () {
-      if (_keywordSection.kwSourcesButtonVisible) {
-        _keywordSection.kwSourcesBtnFocus.requestFocus();
-      } else if (_catalogSourcesButtonVisible) {
-        _catalogSourcesBtnFocus.requestFocus();
-      } else {
-        _focusContent();
-      }
-    },
-    onFocusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
-  );
-
-  Widget _buildBody() => buildSearchModeContent(
-    mode: _mode,
-    catalogSearching: _catalogSearching,
-    catalogEmpty: _sections.isEmpty,
-    dedicatedSearch: widget.searchMode,
-    queryEmpty: _catalogQuery.isEmpty,
-    keyword: () => _keywordRows.buildKeyword(context),
-    lists: _buildListsSearch,
-    prompt: _buildSearchPrompt,
-    board: _buildBoard,
-  );
-  late final _listsNavigation = ListsNavigation(
-    isTelevision: () => widget.isTelevision,
-    pikpakOnly: () => _pikpakOnly,
-    isBound: _isBound,
-    onOpen: (item) => _openItem(
-      item,
-      _addonForContinue(item.sourceAddon?.id),
-      isMdblistSource: true,
-    ),
-    onQuickPlay: (item) => _onCatalogPlay(
-      item,
-      _addonForContinue(item.sourceAddon?.id),
-      isMdblistSource: true,
-    ),
-    afterReturn: _afterSeeAllReturn,
-  );
-
-  void _openListsSeeAll() =>
-      _listsNavigation.openGrid(context, _listsQuery, _listsResults);
-
-  void _openMdblistListItems(
-    BuildContext pushCtx,
-    MdblistListChoice list, {
-    VoidCallback? onReturn,
-  }) => _listsNavigation.openItems(pushCtx, list, onReturn: onReturn);
-
-  Widget _buildListsSearch() => buildListsSearchContent(
-    context,
-    searching: _listsSearching,
-    error: _listsError,
-    query: _listsQuery,
-    hasResults: _listsResults.isNotEmpty,
-    message: (icon, title, body) => _message(icon, title, body),
-    rail: _buildListsRailRow,
-  );
-
-  /// The MDBList list-search result rail. Same 2:3 card
-  /// footprint as the poster rows; each card is a gradient tile (list glyph +
-  /// centred name + items/likes footer, no artwork). Select opens the list's
-  /// items — pushed over the board on TV (Back returns here), or in the
-  /// Discover tab on mobile/laptop. DPAD: up → search field, left off card 0 →
-  /// sidebar (TV); the single result rail deliberately holds Down in place.
-  Widget _buildListsRailRow() => buildListsSearchRail(
-    posterW: _railPosterW(context),
-    header: _railHeader(
-      title: 'MDBList Lists',
-      tag: 'LISTS',
-      onSeeAll: _openListsSeeAll,
-    ),
-    results: () => _listsResults,
-    nodes: _listsNodes,
-    isTelevision: widget.isTelevision,
-    onOpen: _openListsResult,
-    onSidebar: () => MainPageBridge.focusTvSidebar?.call(),
-    onUp: _leaveBoardTop,
-  );
-
-  Widget _buildSearchPrompt() => buildCatalogSearchPrompt(
-    context,
-    sourcesButton: _catalogSourcesButton,
-  );
-
-  Widget _catalogSourcesButton() => buildSearchSourcesButton(
-    context,
-    focusNode: _catalogSourcesBtnFocus,
-    onOpen: _openCatalogSources,
-    onUp: _focusSearchFieldAtEnd,
-    onSidebar: () => MainPageBridge.focusTvSidebar?.call(),
-  );
-
-  /// Open the catalog Sources dialog, then re-run the search if one is active
-  /// (so toggling an addon reflects immediately, like the keyword twin).
-  Future<void> _openCatalogSources() async {
-    await showDialog<void>(
-      context: context,
-      builder: (_) => CatalogSourcesDialog(session: _searchSession),
-    );
-    if (!mounted) return;
-    if (_catalogQuery.isNotEmpty) {
-      _runCatalogSearch(_catalogQuery);
-    }
   }
 
   /// Poster width for a board rail. On TV the logical canvas can be as short as
@@ -8376,8 +8016,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         widget.isTelevision &&
         !widget.searchMode &&
         !widget.discoverMode &&
-        _catalogQuery.isEmpty &&
-        !_catalogSearching &&
+        _catalogSection.catalogQuery.isEmpty &&
+        !_catalogSection.catalogSearching &&
         _homeStyleEffective == 'spotlight') {
       if (_spotlightHero.isEmpty &&
           (_boardRefreshing || _heroSourceResolving)) {
@@ -8397,7 +8037,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       catalogsEmpty: _sections.isEmpty,
       favoritesVisible: _anyFavVisible,
       traktReserving: _traktReserving,
-      query: _catalogQuery,
+      query: _catalogSection.catalogQuery,
       searchFailures: _catalogSearchFailures,
       searchMode: widget.searchMode,
       style: _homeStyleEffective,
@@ -8447,8 +8087,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       trailerShowing: _heroTrailerShowing,
       liveTakeover: _heroLiveTakeover,
       showSearchStatus: () =>
-          _catalogQuery.isNotEmpty &&
-          (_catalogSearching || _catalogSearchFailures > 0),
+          _catalogSection.catalogQuery.isNotEmpty &&
+          (_catalogSection.catalogSearching || _catalogSearchFailures > 0),
       searchStatus: _buildSearchStatusStrip,
       rowsBuilder: (_) => _buildClassicRows(),
     );
@@ -8484,7 +8124,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// failure note doesn't reflow the rows under DPAD focus.
   Widget _buildSearchStatusStrip() => buildCatalogSearchStatus(
     context,
-    searching: _catalogSearching,
+    searching: _catalogSection.catalogSearching,
     failures: _catalogSearchFailures,
   );
 
