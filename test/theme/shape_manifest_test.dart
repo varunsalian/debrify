@@ -139,6 +139,10 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/home/presentation/home_board_loading.dart': 0,
+  'lib/features/home/presentation/home_classic_section.dart': 0,
+  'lib/features/home/presentation/home_board_rendering.dart': 0,
+
   'lib/features/home/presentation/home_stage_cells.dart': 0,
   'lib/features/home/presentation/home_stage_boards.dart': 0,
   'lib/features/home/presentation/home_atrium_section.dart': 0,

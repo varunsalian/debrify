@@ -1,3 +1,5 @@
+import '../../../services/home_load_progress.dart';
+import '../../../services/home_load_deadline.dart';
 import '../../../models/home_collection.dart';
 import '../../../models/home_preferences.dart';
 import '../../../models/stremio_addon.dart';
@@ -31,4 +33,29 @@ class HomeBoardServices {
     required bool showsCollectionRows,
   })
   claimedCatalogs;
+
+  static List<HomeListSection> previousLists(List<CatalogSection> rows) =>
+      rows.whereType<HomeListSection>().toList();
+
+  static bool isList(CatalogSection row) => row is HomeListSection;
+
+  static List<CatalogSection> replaceLists(
+    List<CatalogSection> rows,
+    List<HomeListSection> lists,
+  ) => replaceHomeListRows(rows, lists);
+
+  static HomeLoadProgress createProgress({
+    required bool Function() isCurrent,
+    required String Function(CatalogSection) rowId,
+    required void Function(List<CatalogSection>, bool) onPublish,
+  }) => HomeLoadProgress(
+    isCurrent: isCurrent,
+    rowId: rowId,
+    onPublish: onPublish,
+  );
+
+  static Future<void> runWithDeadline({
+    required Future<void> Function() load,
+    required void Function() retire,
+  }) => runHomeLoadWithDeadline(load: load, retire: retire);
 }

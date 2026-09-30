@@ -19,9 +19,10 @@ typedef DiscoverLoadingDeps = ({
 
 /// Primes Discover's continuation data and source inventory in their original order.
 class DiscoverLoading {
-  DiscoverLoading(this._deps, this._addonsById);
+  DiscoverLoading(this._deps, this._readAddons);
   final DiscoverLoadingDeps _deps;
-  final Map<String, StremioAddon> _addonsById;
+  final Map<String, StremioAddon> Function() _readAddons;
+  Map<String, StremioAddon> get _addonsById => _readAddons();
 
   /// Load Continue Watching + Trakt rows, then refresh the pinned-source badge
   /// counts once. The board's `_load` does this via `_refreshBoundSources`; the

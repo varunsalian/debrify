@@ -1,3 +1,13 @@
+import '../features/home/presentation/home_board_rendering.dart';
+import '../features/home/presentation/home_classic_section.dart';
+import '../features/home/presentation/home_board_rows.dart';
+import '../features/home/presentation/home_board_configuration_section.dart';
+import '../features/home/presentation/home_board_focus.dart';
+import '../features/home/presentation/home_board_deferred.dart';
+import '../features/home/presentation/home_board_paging.dart';
+import '../features/home/presentation/home_board_loading.dart';
+import '../features/home/presentation/home_board_publication.dart';
+import '../features/home/presentation/home_board_section.dart';
 import '../features/home/presentation/home_spotlight_boards.dart';
 import '../features/search/presentation/search_spotlight_results.dart';
 import '../features/home/presentation/home_spotlight_rows.dart';
@@ -56,65 +66,42 @@ import '../features/discover/presentation/discover_section.dart';
 import '../features/home/presentation/home_media_bindings.dart';
 import '../features/home/presentation/home_board_bindings.dart';
 import '../features/home/presentation/home_see_all_navigation.dart';
-import '../features/home/application/home_refresh_queue.dart';
 import '../features/home/presentation/home_favorite_bindings.dart';
 import '../features/search/presentation/search_result_bindings.dart';
 import '../features/search/presentation/lists_navigation.dart';
 import '../features/discover/presentation/discover_bindings.dart';
 import '../features/home/presentation/home_classic_favorite_rows.dart';
-import '../features/home/presentation/home_classic_navigation.dart';
-import '../features/search/presentation/catalog_search_status.dart';
-import '../features/home/presentation/home_classic_board.dart';
 import '../features/home/presentation/home_board_media.dart';
-import '../ui/core/retry_message.dart';
-import '../features/home/presentation/home_board_content.dart';
 import '../features/home/application/home_detail_action_dependencies.dart';
 import '../features/home/presentation/home_detail_menus.dart';
 import '../features/home/application/home_simkl_continuation_dependencies.dart';
 import '../features/home/presentation/home_detail_action_bridge.dart';
-import '../features/home/presentation/home_catalog_row.dart';
-import '../features/home/presentation/home_catalog_row_header.dart';
 import '../features/discover/presentation/discover_panels.dart';
 import '../features/home/presentation/home_hero_shell.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart'
     show SpotlightIptvCardPreview;
 import '../features/search/presentation/search_page_shell.dart';
-import '../widgets/skeleton_poster.dart' show BrandLoadingStage;
 import '../features/home/presentation/home_stage_rows.dart';
-import '../features/home/presentation/home_classic_rows.dart';
 import '../features/discover/models/discover_source_state.dart';
 import '../features/discover/application/metadata_feature_controller.dart';
 import '../features/discover/models/metadata_feature_policy.dart';
 import '../features/home/models/home_tracker_authentication.dart';
 import '../features/home/application/home_tracker_authentication_controller.dart';
 import '../features/home/models/home_return_snapshot.dart';
-import '../features/home/data/home_return_repository.dart';
 import '../features/home/application/home_return_dependencies.dart';
 import '../features/home/application/home_pikpak_only_controller.dart';
 import '../features/home/application/home_bound_counts_controller.dart';
-import '../features/home/application/home_configuration_changes.dart';
 import '../features/home/application/home_layout_preference_dependencies.dart';
-import '../features/home/application/home_default_view.dart';
 import '../features/home/application/home_default_view_dependencies.dart';
 import '../features/home/application/home_display_preferences_controller.dart';
 import '../features/home/models/home_display_preferences.dart';
-import '../features/home/presentation/home_progress_publication.dart';
 import '../features/home/presentation/home_continuation_bindings.dart';
 import '../features/home/models/home_continuation_session.dart';
 import '../features/home/application/home_row_snapshot.dart';
-import '../features/home/application/home_board_load.dart';
-import '../features/home/application/home_board_dependencies.dart';
 import '../features/home/models/home_board_configuration.dart';
 import '../features/home/application/home_collections_dependencies.dart';
-import '../features/home/application/home_configuration_refresh.dart';
-import '../features/home/data/home_collections_repository.dart';
 import '../features/home/models/home_catalog_preferences.dart';
 import '../features/home/models/home_catalog_session.dart';
-import '../features/home/application/home_catalog_controller.dart';
-import '../features/home/application/home_catalog_continuation_controller.dart';
-import '../features/home/models/home_catalog_state.dart';
-import '../features/home/models/home_catalog_plan.dart';
-import '../features/home/application/home_catalog_preferences_dependencies.dart';
 import '../features/search/application/keyword_snapshot_dependencies.dart';
 import '../features/search/data/keyword_snapshot_repository.dart';
 import '../features/search/models/keyword_cache_state.dart';
@@ -125,23 +112,14 @@ import '../services/native_series_metadata_service.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../models/metadata_preferences.dart';
 import '../services/metadata_preferences_service.dart';
-import '../services/home_load_deadline.dart';
 import '../services/home_load_progress.dart';
-import '../features/home/presentation/home_board_viewport.dart';
-import '../widgets/home/home_row_focus.dart'
-    show homeRowHeight, preserveHomeInsertionAnchor;
-import '../features/home/presentation/home_continuation_focus.dart';
-import '../features/home/presentation/home_board_frame.dart';
 import '../services/home_row_refresh.dart';
 import 'dart:async';
-import 'dart:developer' as developer;
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme_scope.dart';
-import '../features/home/presentation/home_classic_row_metrics.dart';
 import '../utils/platform_util.dart';
 import '../models/home_collection.dart';
 import '../models/playlist_view_mode.dart';
@@ -150,7 +128,6 @@ import '../services/analytics_service.dart';
 import '../services/home_collection_rows.dart';
 import '../services/home_collections_store.dart';
 import '../services/home_list_rows.dart';
-import '../services/home_row_order.dart';
 import '../services/hide_watched_prefs.dart';
 import '../services/iptv_cw_router.dart';
 import '../services/iptv_media_store.dart';
@@ -169,7 +146,6 @@ import '../services/torrent_playback_service.dart';
 import '../services/video_player_launcher.dart';
 import '../utils/tv_search_focus_handoff.dart';
 import '../widgets/home/card_focus_rise.dart';
-import '../widgets/home/home_theme.dart';
 import '../services/tmdb_title_search.dart';
 import '../services/metadata_title_service.dart';
 import 'collections/collection_folder_screen.dart';
@@ -185,13 +161,6 @@ import '../services/simkl/simkl_menu_helpers.dart';
 /// scale. (The old kStremioAccent/kStremioBg palette constants now live in
 /// the app theme as `app.home.chromeAccent` / `app.home.bg`.)
 const Color kStremioFocusRing = kCardFocusRing;
-
-/// Board (homepage) infinite scroll: how many catalog rows to fetch per batch as
-/// the user scrolls, and how many items to keep per row. Enumerating catalogs is
-/// free (manifest metadata) — only fetching each row's items costs a call — so we
-/// list every catalog up front and lazily pull batches on scroll (Stremio-style)
-/// instead of a hard global row cap.
-const int _kBoardBatchSize = 8;
 
 /// Dedicated Search tab.
 ///
@@ -272,7 +241,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   late HomeItemActions _itemActions;
   late HomeDetailActions _detailActions;
   late HomeSourceActions _sourceActions;
-  late final HomeCollectionsRepository _homeCollectionsRepository;
 
   final TextEditingController _searchController = TextEditingController();
   late final _titleSearch = widget.titleSearch ?? TmdbTitleSearch();
@@ -286,11 +254,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // Retain the plain snapshot adapter: disposal must not resolve WidgetRef.
   late final KeywordSnapshotRepository _keywordSnapshots;
-
-  late final HomeReturnRepository _homeReturnRepository;
-  int _homeReturnRevision = -1;
-  DateTime? _homeLoadedAt;
-  double _homeLastScroll = 0;
 
   /// Captured at mount, not dispose: an outgoing screen may be torn down after
   /// the next profile is published and must still tag its snapshot as outgoing.
@@ -320,30 +283,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _homeBoardBindings.boundCounts;
   Map<String, int> get _boundCounts => _boundCountsController.current;
 
-  // Board state. [_homeSections] is the homepage cache; [_sections] is whatever
+  // Board state. [_boardSection.homeSections] is the homepage cache; [_boardSection.sections] is whatever
   // is currently shown (homepage OR per-addon catalog search results). Both the
   // board and catalog search render through the same horizontal-row layout.
-  final _catalogFocus = HomeContinuationFocus();
-  FocusNode get _catalogContinueNode => _catalogFocus.continueNode;
-  FocusNode get _catalogMoreNode => _catalogFocus.moreNode;
-  HomeCatalogContinuationController get _catalogContinuationController =>
-      _homeBoardBindings.continuation;
-  bool get _catalogContinuing => _catalogContinuationController.busy;
-  bool _loading = true;
-  String? _error;
-  List<CatalogSection> get _homeSections => _homeCatalogController.rows;
-  List<CatalogSection> _sections = [];
-  final _boardViewport = HomeBoardViewport();
-  List<List<FocusNode>> get _rowNodes => _boardViewport.nodes;
-  // Per-row remembered focus column (leanback-style). DPAD up/down into a row
-  // returns to where you left THAT row — the cell it points at is guaranteed
-  // mounted, so requestFocus never no-ops on a scrolled-away lazy cell.
-  Map<int, int> get _rowCol => _boardViewport.columns;
-  // Board entrance: bumped each time the displayed sections are swapped
-  // (initial load, search results in/out), so the first rows replay their
-  // one-shot fade/rise entrance. Appends don't bump it.
-  int _boardGen = 0;
-  DateTime _boardAppliedAt = DateTime.fromMillisecondsSinceEpoch(0);
   // Catalogs that errored (timeout / HTTP / network) during the current
   // catalog search — distinct from "returned no results". Drives the quiet
   // "N sources didn't respond" note so failing addons don't just vanish.
@@ -352,7 +294,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Rows the user hid via Settings → Home Page → Home Rows (fixed-section
   // leaves like `cw:movies`/`trakt:shows`/`fav:iptv` and catalog leaves
   // `addonId:type:catalogId`). Gates every Home board row below. Refreshed by
-  // [_reloadForHomeSettings] when the manager saves.
+  // [_boardConfiguration.reloadForHomeSettings] when the manager saves.
   // Bootstrap is captured at state construction, matching the previous field
   // initialization. All accepted changes live in the controller afterwards.
   final _initialHomeConfiguration = HomeBoardConfiguration(
@@ -361,168 +303,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     collectionsSignature: HomeCollectionsStore.signatureOf(const []),
     hideWatched: HideWatchedPrefs.enabled,
   );
-  HomeBoardConfiguration get _homeConfiguration =>
-      _homeCatalogController.current.configuration;
-  Set<String> get _homeDisabled => _homeConfiguration.preferences.disabled;
-
-  // The OPT-IN extra rows (Trakt/Simkl list rows, IPTV custom-list rows) from
-  // the same manager — default-off, so they live in their own store
-  // (`home_extra_rows_v1`). Tracker ids become [HomeListSection]s at the head
-  // of the board in [_load]; `iptvlist:` ids drive the IPTV list favourites
-  // rows. Refreshed by [_reloadForHomeSettings].
-  List<HomeExtraRow> get _homeExtras => _homeConfiguration.preferences.extras;
-
-  /// Imported collections — each enabled one is a row of folder tiles.
-  List<HomeCollection> get _homeCollections => _homeConfiguration.collections;
-
-  /// Stable ids in the user's global Home-row order. Rows not present append
-  /// canonically; ids whose backing row is temporarily unavailable stay saved.
-  List<String> get _homeRowOrder => _homeConfiguration.preferences.rowOrder;
-
-  /// The Spotlight hero-source pref (`home_hero_source_v1`): which catalog the
-  /// hero reel is built from. Read in [_load], refreshed by
-  /// [_reloadForHomeSettings]; resolved into [_spotlightSection.spotlightHeroOverride] by
-  /// [_spotlightSection.resolveSpotlightHeroSource].
-  HomeHeroSource get _heroSource => _homeConfiguration.preferences.heroSource;
-
-  /// Whether any Trakt/Simkl list row is opted in — gates the tracker-row
-  /// resolve in [_load] and the integrations-triggered reload.
-  bool get _trackerExtrasEnabled =>
-      _homeExtras.any((r) => HomeExtraRowIds.isTracker(r.id));
-
-  /// Board load generation. [_load] is re-entrant (Home Rows save,
-  /// integration connect/disconnect) and mutates shared state
-  /// ([_boardRefs]/[_boardCursor]/[_homeSections]); every await inside the
-  /// load pipeline re-checks this so a superseded load can neither apply its
-  /// stale sections nor advance the new load's cursor.
-  int get _boardLoadGen => _homeCatalogController.generation;
-  bool get _boardRefreshing => _homeCatalogController.current.refreshing;
-  bool _progressiveHomeLoadPending = false;
-  bool _homePaginationDeferred = false;
-  double _classicAnchorTailPadding = 0;
-  final _homePublication = HomeProgressPublication();
-
-  void _publishHomeProgress(
-    List<CatalogSection> rows,
-    bool first,
-    int generation,
-    Object? scope,
-  ) {
-    if (!mounted ||
-        generation != _boardLoadGen ||
-        scope != ProfileRuntime.scope.value) {
-      return;
-    }
-    _homeCatalogController.replaceRows(rows);
-    if (_catalogSection.catalogQuery.isNotEmpty ||
-        _catalogSection.catalogSearching) {
-      return;
-    }
-    if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
-      // Keep data, not new image widgets, while a detail page/player covers
-      // Home. Returning first restores the old focused row, then inserts the
-      // arrivals with the same scroll-anchor protection as foreground loads.
-      _homePublication.defer((
-        rows: rows,
-        first: first,
-        generation: generation,
-        scope: scope,
-      ));
-      return;
-    }
-    _homePublication.clear();
-    if (!first && _boardHasFocus()) _autoFocusSettled = true;
-    setState(() {
-      _loading = false;
-      if (rows.isNotEmpty) _error = null;
-    });
-    _applySections(rows, preserveFocus: !first, incremental: !first);
-    MainPageBridge.homeBoardReady.value = true;
-    _maybeAutoFocusBoard();
-    _maybeCompleteDeferredDown();
-    _stageSection.maybeCompleteStageAdvance();
-  }
-
-  void _resumeHomeProgress() => _homePublication.resume(
-    isVisible: () => mounted && (ModalRoute.of(context)?.isCurrent ?? true),
-    isCurrent: (pending) =>
-        pending.generation == _boardLoadGen &&
-        pending.scope == ProfileRuntime.scope.value,
-    publish: (pending) => _publishHomeProgress(
-      pending.rows,
-      pending.first,
-      pending.generation,
-      pending.scope,
-    ),
-    onResumed: () => _maybeAutoFillBoard(resumeDeferred: true),
-  );
-
-  void _resumeDeferredHomePagination() {
-    if (!_homePaginationDeferred || _boardRefreshing || !mounted ||
-        !(ModalRoute.of(context)?.isCurrent ?? true)) {
-      return;
-    }
-    _homePaginationDeferred = false;
-    if (_boardHasMore) unawaited(_loadMoreBoard());
-  }
-
-  /// A triggered board reload arrived while a catalog search was showing its
-  /// results — running [_load] then would stomp the search view, so it's
-  /// latched here and consumed by [_restoreHome].
-  bool _pendingBoardReload = false;
-
   // Riverpod owns inventory, reservation and the last accepted snapshot for
   // this view. Search detours retain the subscription and its cursor.
-  late final ProviderSubscription<HomeDefaultView> _homeDefaultViewSubscription;
-  HomeDefaultView get _homeDefaultView => _homeDefaultViewSubscription.read();
   late final HomeCatalogSession _homeCatalogSession;
   late final HomeBoardBindings _homeBoardBindings;
-  HomeCatalogController get _homeCatalogController =>
-      _homeBoardBindings.catalog;
-  List<HomeCatalogReference> get _boardRefs =>
-      _homeCatalogController.current.references;
-  int get _boardCursor => _homeCatalogController.current.cursor;
-  HomeCatalogSnapshot? get _committedBoard =>
-      _homeCatalogController.current.committed;
-  bool get _boardLoadingMore => _homeCatalogController.current.loadingMore;
-  ScrollController get _boardScroll => _boardViewport.scroll;
-
-  /// Whether more board rows remain to lazily load (board mode only — never
-  /// during a catalog search, which streams and appends its own rows).
-  bool get _boardHasMore =>
-      _catalogSection.catalogQuery.isEmpty &&
-      !_catalogSection.catalogSearching &&
-      _boardCursor < _boardRefs.length;
-
-  /// Reserving a batch advances the cursor before all its rows arrive. This
-  /// affects deferred navigation, not whether another batch should be fetched.
-  bool get _boardRowsPending =>
-      _catalogSection.catalogQuery.isEmpty &&
-      !_catalogSection.catalogSearching &&
-      (_progressiveHomeLoadPending || _boardLoadingMore);
-
-  bool get _boardCanAdvance => _boardHasMore || _boardRowsPending;
-
-  bool get _canPageHome => mounted &&
-      (!PlatformUtil.isAndroidTvCached ||
-        ((ModalRoute.of(context)?.isCurrent ?? true) &&
-          !_homePublication.hasPending && !_homePublication.isScheduled));
-
-  /// TV auto-focus "settle to the top" state. On arrival the board focuses the
-  /// best card available immediately (an addon row if the Trakt rows above it
-  /// are still loading), remembering that node in [_autoFocusedNode]. As higher
-  /// rows load (Trakt, local Continue Watching), focus slides up to the new top
-  /// card — but only while the user is idle (focus still sits on the node we
-  /// placed). The instant the user moves focus themselves, [_autoFocusSettled]
-  /// latches and we never touch focus again.
-  FocusNode? _autoFocusedNode;
-  bool _autoFocusSettled = false;
-
-  /// Coalesces auto-focus passes: multiple content loads finishing in one frame
-  /// schedule a single post-frame placement (which reads the final top after all
-  /// their setStates apply), instead of racing several callbacks whose
-  /// primaryFocus reads haven't caught up to each other's requestFocus.
-  bool _autoFocusScheduled = false;
 
   /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
   /// (watchlist / collection / watched / rate / list). App actions (Select
@@ -543,35 +327,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool get _isMdblistAuthenticated =>
       _trackerAuthControllers[HomeTracker.mdblist]!.current;
 
-  // Addons that produced homepage rows, indexed by id, so a Continue Watching
-  // tap can route back through the right addon (for Episodes / next-episode).
-  final Map<String, StremioAddon> _addonsById = {};
-
-  /// Home ordering is presentation state for the Home board only. Search and
-  /// Discover share some rail/focus helpers, but keep result-source order.
-  bool get _homeRowOrderActive =>
-      !widget.searchMode &&
-      !widget.discoverMode &&
-      _catalogSection.catalogQuery.isEmpty &&
-      !_catalogSection.catalogSearching;
-
-  /// Saved Home orders created before MDBList was exposed do not contain its
-  /// CW ids. Seed those new ids after the Simkl CW family instead of allowing
-  /// the generic ordering projection to append them at the bottom. Any MDBList
-  /// id already saved keeps its chosen position untouched.
-  List<String> get _effectiveHomeRowOrder => HomeRowOrder.seedCollections(
-    HomeRowOrder.insertMissingAfter(
-      _homeRowOrder,
-      additions: const ['mdblist:movies', 'mdblist:shows'],
-      anchors: const ['simkl:movies', 'simkl:shows'],
-    ),
-    [
-      for (final c in _homeCollections)
-        if (c.pinToTop) HomeCollectionRowIds.collection(c.id),
-      for (final c in _homeCollections)
-        if (!c.pinToTop) HomeCollectionRowIds.collection(c.id),
-    ],
-  );
+  late final HomeBoardConfigurationSection _boardConfiguration;
+  late final HomeBoardRendering _boardRendering;
+  late final HomeClassicSection _classicSection;
+  late final HomeBoardRows _boardRows;
+  late final HomeBoardFocus _boardFocus;
+  late final HomeBoardDeferred _boardDeferred;
+  late final HomeBoardPaging _boardPaging;
+  late final HomeBoardLoading _boardLoading;
+  late final HomeBoardPublication _boardPublication;
+  late final HomeBoardSection _boardSection;
   late final HomeMediaBindings _homeMediaBindings;
   late final HomeStageBoards _stageBoards;
   late final HomeAtriumSection _atriumLayout;
@@ -640,7 +405,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         pikpakOnly: _pikpakOnly,
         onItemFocused: _discoverSection.onDiscFocused,
         isBound: _isBound,
-        findAddon: (id) => _addonsById[id],
+        findAddon: (id) => _boardSection.addonsById[id],
         addonForContinue: _addonForContinue,
         onOpenCatalog: (item, addon, {isMdblistSource = false}) => _itemActions
             .openItem(item, addon, isMdblistSource: isMdblistSource),
@@ -687,7 +452,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             refreshBound: refreshBound,
           ),
       refreshBoundSources: _refreshBoundSources,
-    ), _addonsById);
+    ), () => _boardSection.addonsById);
     _keywordSection = KeywordSearchSection(ref, (
       session: () => _searchSession,
       bindings: () => _searchResultBindings,
@@ -755,7 +520,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         bindings: () => _searchResultBindings,
         focus: () => _keywordSection.keywordFocus,
         appearance: () => _keywordSection.appearance,
-        message: _message,
+        message: (icon, title, body, {VoidCallback? onRetry}) =>
+            _boardRendering.message(icon, title, body, onRetry: onRetry),
         focusSearch: () => _inputSection.focusSearchFieldAtEnd(),
         focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
         focusAboveResults: _keywordSection.focusAboveKeywordResults,
@@ -873,9 +639,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       mounted: () => mounted,
       isTelevision: () => widget.isTelevision,
       searchField: () => _inputSection.searchFocusNode,
-      applySections: _applySections,
-      firstResult: () => _rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty
-          ? _rowNodes.first.first
+      applySections:
+          (sections, {bool preserveFocus = false, bool incremental = false}) =>
+              _boardRows.applySections(
+                sections,
+                preserveFocus: preserveFocus,
+                incremental: incremental,
+              ),
+      firstResult: () =>
+          _boardSection.rowNodes.isNotEmpty &&
+              _boardSection.rowNodes.first.isNotEmpty
+          ? _boardSection.rowNodes.first.first
           : null,
       completeSubmitFocus: (target) =>
           _inputSection.completeSearchSubmitFocus(target),
@@ -894,7 +668,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         keywordAllowed: () =>
             ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch),
         cancelTitleSuggestions: _titleSection.cancelTitleSuggestions,
-        restoreHome: _restoreHome,
+        restoreHome: () => _boardRows.restoreHome(),
         runCatalog: _catalogSection.runCatalogSearch,
         bindings: () => _searchResultBindings,
         runKeyword: _keywordSection.runKeyword,
@@ -933,16 +707,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               : null,
           catalogResult:
               _catalogSection.catalogQuery.isNotEmpty &&
-                  _rowNodes.isNotEmpty &&
-                  _rowNodes.first.isNotEmpty
-              ? _rowNodes.first.first
+                  _boardSection.rowNodes.isNotEmpty &&
+                  _boardSection.rowNodes.first.isNotEmpty
+              ? _boardSection.rowNodes.first.first
               : null,
           focusCatalogShelf: _spotlightSection.spotlightKey.currentState == null
               ? null
               : () =>
                     _spotlightSection.spotlightKey.currentState!.focusShelf(0),
-          topBoardNode: _topBoardFocusNode,
-          loading: _loading,
+          topBoardNode: () => _boardFocus.topBoardFocusNode(),
+          loading: _boardSection.loading,
           focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
         ),
         focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
@@ -960,13 +734,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         body: () => buildSearchModeContent(
           mode: _modeSection.mode,
           catalogSearching: _catalogSection.catalogSearching,
-          catalogEmpty: _sections.isEmpty,
+          catalogEmpty: _boardSection.sections.isEmpty,
           dedicatedSearch: widget.searchMode,
           queryEmpty: _catalogSection.catalogQuery.isEmpty,
           keyword: () => _keywordRows.buildKeyword(context),
           lists: () => _listsRows.build(context),
           prompt: () => _catalogSection.buildSearchPrompt(context),
-          board: _buildBoard,
+          board: () => _boardRendering.buildBoard(),
         ),
       ),
       _modeSection,
@@ -978,14 +752,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       state: () => _listsSection.listsState,
       nodes: () => _listsSection.listsNodes,
       isTelevision: () => widget.isTelevision,
-      posterWidth: _railPosterW,
-      header: (onSeeAll) =>
-          _railHeader(title: 'MDBList Lists', tag: 'LISTS', onSeeAll: onSeeAll),
-      message: (icon, title, body) => _message(icon, title, body),
+      posterWidth: (context) => _classicSection.railPosterW(context),
+      header: (onSeeAll) => _classicSection.railHeader(
+        title: 'MDBList Lists',
+        tag: 'LISTS',
+        onSeeAll: onSeeAll,
+      ),
+      message: (icon, title, body) =>
+          _boardRendering.message(icon, title, body),
       open: _listsSection.openListsResult,
       openSeeAll: _listsSection.openListsSeeAll,
       focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
-      onUp: _leaveBoardTop,
+      onUp: () => _boardFocus.leaveBoardTop(),
     ));
     _playbackNavigation = HomePlaybackNavigation(ref, (
       mounted: () => mounted,
@@ -1159,10 +937,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       bindings: () => _favoriteBindings,
       mounted: () => mounted,
       setState: setState,
-      disabled: () => _homeDisabled,
-      autoFocus: _maybeAutoFocusBoard,
+      disabled: () => _boardSection.homeDisabled,
+      autoFocus: () => _boardFocus.maybeAutoFocusBoard(),
       focusContent: _inputSection.focusContent,
-      requestRowFocus: _requestRowFocus,
+      requestRowFocus: (nodes, desired) =>
+          _boardFocus.requestRowFocus(nodes, desired),
       debrifyTvAllowed: () =>
           ProfilePolicyGuard.allowsSync(ProfileFeature.debrifyTv),
       stremioTvAllowed: () =>
@@ -1230,7 +1009,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         classicRows: (rowId, nodes) => HomeClassicFavoriteRows(
           context: context,
           isTelevision: widget.isTelevision,
-          posterWidth: _railPosterW(context),
+          posterWidth: _classicSection.railPosterW(context),
           captionBand: _displaySection.homeArtPosterCaptionBand,
           showTitle: () => !_displaySection.hideHomeCardTitlesAndRatings,
           nodes: nodes,
@@ -1261,11 +1040,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         isTelevision: () => widget.isTelevision,
         searchMode: () => widget.searchMode,
         discoverMode: () => widget.discoverMode,
-        loading: () => _loading,
+        loading: () => _boardSection.loading,
         activeTab: () => MainPageBridge.activeTvTabIndex == _tabIndex,
         context: () => context,
-        disabled: () => _homeDisabled,
-        rowNodes: () => _rowNodes,
+        disabled: () => _boardSection.homeDisabled,
+        rowNodes: () => _boardSection.rowNodes,
       ),
       _continuationSection,
       _savedSection,
@@ -1277,8 +1056,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         searchMode: () => widget.searchMode,
         discoverMode: () => widget.discoverMode,
         context: () => context,
-        requestRowFocus: _requestRowFocus,
-        autoFocus: _maybeAutoFocusBoard,
+        requestRowFocus: (nodes, desired) =>
+            _boardFocus.requestRowFocus(nodes, desired),
+        autoFocus: () => _boardFocus.maybeAutoFocusBoard(),
         announceTrakt: _continuationAnnouncements.maybeAnnounceTraktRows,
         announceSimkl: _continuationAnnouncements.maybeAnnounceSimklRows,
         announceMdblist: _continuationAnnouncements.maybeAnnounceMdblistRows,
@@ -1331,7 +1111,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     _continuationProjection = HomeContinuationProjection(
       (
-        disabled: () => _homeDisabled,
+        disabled: () => _boardSection.homeDisabled,
         openLocal: (category) =>
             _continuationSeeAll.openContinueWatchingSeeAll(category),
         openTrakt: (category) => _continuationSeeAll.openTraktSeeAll(category),
@@ -1355,26 +1135,31 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         isTelevision: () => widget.isTelevision,
         pikpakOnly: () => _pikpakOnly,
         session: () => _homeCatalogSession,
-        requestRowFocus: _requestRowFocus,
-        leaveBoardTop: _leaveBoardTop,
+        requestRowFocus: (nodes, desired) =>
+            _boardFocus.requestRowFocus(nodes, desired),
+        leaveBoardTop: () => _boardFocus.leaveBoardTop(),
       ),
       _continuationProjection,
       _playbackNavigation,
     );
     _continuationRows = HomeContinuationRows(
       (
-        header: ({required title, tag, onSeeAll}) =>
-            _railHeader(title: title, tag: tag, onSeeAll: onSeeAll),
+        header: ({required title, tag, onSeeAll}) => _classicSection.railHeader(
+          title: title,
+          tag: tag,
+          onSeeAll: onSeeAll,
+        ),
         isTelevision: () => widget.isTelevision,
-        posterWidth: () => _railTitleCardW(context),
-        cellHeight: () => _railTitleCardH(context),
+        posterWidth: () => _classicSection.railTitleCardW(context),
+        cellHeight: () => _classicSection.railTitleCardH(context),
         aspectRatio: () => _stageGeometry.titleCardAspect,
         showTitleOverlay: () => !_displaySection.hideHomeCardTitlesAndRatings,
         artOf: (item) => _stageGeometry.titleArtUrl(item),
         isBound: _isBound,
         sidebar: () => MainPageBridge.focusTvSidebar?.call(),
         onFocused: (item) => _heroSection.setHero(item),
-        focusRelativeRail: _focusRelativeHomeRail,
+        focusRelativeRail: (rowId, delta, column) =>
+            _boardFocus.focusRelativeHomeRail(rowId, delta, column),
       ),
       _continuationSection,
       _continuationMenu,
@@ -1469,8 +1254,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       setState: setState,
       searchMode: () => widget.searchMode,
       discoverMode: () => widget.discoverMode,
-      heroSource: () => _heroSource,
-      sections: () => _sections,
+      heroSource: () => _boardSection.heroSource,
+      sections: () => _boardSection.sections,
       repository: () => ref.read(homeCatalogRepositoryProvider),
       publishTopShelf: (items, {sourceTitle}) => TvosTopShelfService.instance
           .publishSpotlight(items, sourceTitle: sourceTitle),
@@ -1484,7 +1269,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         searchMode: () => widget.searchMode,
         discoverMode: () => widget.discoverMode,
         rawStyle: () => _displaySection.tvHomeStyle,
-        loading: () => _loading,
+        loading: () => _boardSection.loading,
         hasHero: () => _spotlightSection.spotlightHero.isNotEmpty,
       ),
       _searchController,
@@ -1494,11 +1279,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     _stageRailsSection = HomeStageRails(
       (
-        sections: () => _sections,
-        rowNodes: () => _rowNodes,
-        orderActive: () => _homeRowOrderActive,
-        order: () => _effectiveHomeRowOrder,
-        disabled: () => _homeDisabled,
+        sections: () => _boardSection.sections,
+        rowNodes: () => _boardSection.rowNodes,
+        orderActive: () => _boardSection.homeRowOrderActive,
+        order: () => _boardSection.effectiveHomeRowOrder,
+        disabled: () => _boardSection.homeDisabled,
         sectionRowId: _sectionRowId,
         style: () => _displaySection.homeStyleEffective,
         hideCollectionNames: () => _displaySection.hideHomeCollectionNames,
@@ -1514,16 +1299,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         setState: setState,
         context: () => context,
         clearFavoriteFocus: () => _stageFavorites.canvasFavFocus.value = null,
-        rowsPending: () => _boardRowsPending,
-        canAdvance: () => _boardCanAdvance,
-        focusContinuation: _focusCatalogContinuation,
-        loadMore: _loadMoreBoard,
+        rowsPending: () => _boardSection.boardRowsPending,
+        canAdvance: () => _boardSection.boardCanAdvance,
+        focusContinuation: () => _boardFocus.focusCatalogContinuation(),
+        loadMore: () => _boardPaging.loadMoreBoard(),
       ),
       _stageRailsSection,
       _displaySection,
       _heroPreview,
       _spotlightSection,
-      _pendingDownMaxAge,
+      HomeBoardDeferred.pendingDownMaxAge,
     );
     _stageFavorites = HomeStageFavorites(
       _stageSection,
@@ -1537,16 +1322,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _playlistActions,
       () => MainPageBridge.focusTvSidebar?.call(),
     );
-    _stageGeometry = HomeStageGeometry(_displaySection, () => _sections);
+    _stageGeometry = HomeStageGeometry(
+      _displaySection,
+      () => _boardSection.sections,
+    );
     _stageCells = HomeStageCells(
       (
-        sectionAt: (index) => _sections[index],
+        sectionAt: (index) => _boardSection.sections[index],
         isBound: _isBound,
         pikpakOnly: () => _pikpakOnly,
         openSection: _sectionOpenItem,
         playSection: _sectionQuickPlay,
         sidebar: () => MainPageBridge.focusTvSidebar?.call(),
-        loadMore: _loadMoreRow,
+        loadMore: (row, {bool resume = false}) =>
+            _boardPaging.loadMoreRow(row, resume: resume),
       ),
       _stageGeometry,
       _stageSection,
@@ -1573,8 +1362,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         context: () => context,
         isTelevision: () => widget.isTelevision,
         media: () => _boardMedia,
-        canAdvance: () => _boardCanAdvance,
-        loadMore: _loadMoreBoard,
+        canAdvance: () => _boardSection.boardCanAdvance,
+        loadMore: () => _boardPaging.loadMoreBoard(),
       ),
       _stageSection,
       _stageRailsSection,
@@ -1603,8 +1392,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     _spotlightRows = HomeSpotlightRows(
       (
-        sections: () => _sections,
-        rowNodes: () => _rowNodes,
+        sections: () => _boardSection.sections,
+        rowNodes: () => _boardSection.rowNodes,
         catalogTag: _catalogSourceTag,
         seeAll: _openCatalogSeeAll,
         openCollection: _openCollectionFolder,
@@ -1619,15 +1408,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _spotlightResults = SearchSpotlightResults(
       (
         context: () => context,
-        sections: () => _sections,
-        rowNodes: () => _rowNodes,
+        sections: () => _boardSection.sections,
+        rowNodes: () => _boardSection.rowNodes,
         failures: () => _catalogSearchFailures,
-        leaveTop: _leaveBoardTop,
+        leaveTop: () => _boardFocus.leaveBoardTop(),
         openSection: _sectionOpenItem,
         pikpakOnly: () => _pikpakOnly,
         catalogTag: _catalogSourceTag,
         seeAll: _openCatalogSeeAll,
-        loadMoreRow: _loadMoreRow,
+        loadMoreRow: (row, {bool resume = false}) =>
+            _boardPaging.loadMoreRow(row, resume: resume),
       ),
       _catalogSection,
       _displaySection,
@@ -1640,9 +1430,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       (
         mounted: () => mounted,
         isTelevision: () => widget.isTelevision,
-        loadMoreRow: _loadMoreRow,
-        loadMore: _loadMoreBoard,
-        rowsPending: () => _boardRowsPending,
+        loadMoreRow: (row, {bool resume = false}) =>
+            _boardPaging.loadMoreRow(row, resume: resume),
+        loadMore: () => _boardPaging.loadMoreBoard(),
+        rowsPending: () => _boardSection.boardRowsPending,
         media: () => _boardMedia,
       ),
       _stageRailsSection,
@@ -1653,6 +1444,247 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _spotlightRows,
       MainPageBridge.tvAmbientArt,
       MainPageBridge.tvHeroTint,
+    );
+    _boardSection = HomeBoardSection((
+      bindings: () => _homeBoardBindings,
+      mounted: () => mounted,
+      context: () => context,
+      searchMode: () => widget.searchMode,
+      discoverMode: () => widget.discoverMode,
+      isTracker: HomeExtraRowIds.isTracker,
+    ), _catalogSection);
+    _boardPublication = HomeBoardPublication(
+      (
+        mounted: () => mounted,
+        setState: setState,
+        context: () => context,
+        scope: () => ProfileRuntime.scope.value,
+        boardHasFocus: () => _boardFocus.boardHasFocus(),
+        settleAutoFocus: () => _boardFocus.autoFocusSettled = true,
+        applySections:
+            (
+              sections, {
+              bool preserveFocus = false,
+              bool incremental = false,
+            }) => _boardRows.applySections(
+              sections,
+              preserveFocus: preserveFocus,
+              incremental: incremental,
+            ),
+        autoFocus: () => _boardFocus.maybeAutoFocusBoard(),
+        completeDeferredDown: () => _boardDeferred.maybeCompleteDeferredDown(),
+        autoFill: ({bool resumeDeferred = false}) =>
+            _boardPaging.maybeAutoFillBoard(resumeDeferred: resumeDeferred),
+      ),
+      _boardSection,
+      _catalogSection,
+      _stageSection,
+      MainPageBridge.homeBoardReady,
+    );
+    _boardLoading = HomeBoardLoading(
+      ref,
+      (
+        mounted: () => mounted,
+        setState: setState,
+        context: () => context,
+        scope: () => ProfileRuntime.scope.value,
+        isTelevision: () => widget.isTelevision,
+        searchMode: () => widget.searchMode,
+        discoverMode: () => widget.discoverMode,
+        rowId: _sectionRowId,
+        refreshPikpakOnly: _refreshPikpakOnly,
+        applySections:
+            (
+              sections, {
+              bool preserveFocus = false,
+              bool incremental = false,
+            }) => _boardRows.applySections(
+              sections,
+              preserveFocus: preserveFocus,
+              incremental: incremental,
+            ),
+        autoFocus: () => _boardFocus.maybeAutoFocusBoard(),
+        autoFill: ({bool resumeDeferred = false}) =>
+            _boardPaging.maybeAutoFillBoard(resumeDeferred: resumeDeferred),
+      ),
+      _boardSection,
+      _catalogSection,
+      _boardPublication,
+      _displaySection,
+      _spotlightSection,
+      MainPageBridge.homeBoardReady,
+    );
+    _boardPaging = HomeBoardPaging(
+      (
+        mounted: () => mounted,
+        setState: setState,
+        context: () => context,
+        scope: () => ProfileRuntime.scope.value,
+        rowId: _sectionRowId,
+        completeDeferredDown: () => _boardDeferred.maybeCompleteDeferredDown(),
+        refreshBoundSources: _refreshBoundSources,
+      ),
+      _boardSection,
+      _catalogSection,
+      _boardPublication,
+      _stageSection,
+    );
+    _boardFocus = HomeBoardFocus(
+      (
+        mounted: () => mounted,
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        searchMode: () => widget.searchMode,
+        discoverMode: () => widget.discoverMode,
+        activeTabIndex: () => MainPageBridge.activeTvTabIndex,
+        tabIndex: () => _tabIndex,
+        sidebarFocused: () =>
+            MainPageBridge.isTvSidebarFocused?.call() ?? false,
+        focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
+        loadMore: _boardPaging.loadMoreBoard,
+        maybeCompleteDeferredDown: () =>
+            _boardDeferred.maybeCompleteDeferredDown(),
+        deferDownMove:
+            ({int rowIndex = -1, String? homeRowId, required int column}) =>
+                _boardDeferred.deferDownMove(
+                  rowIndex: rowIndex,
+                  homeRowId: homeRowId,
+                  column: column,
+                ),
+      ),
+      _boardSection,
+      _inputSection,
+      _discoverSection,
+      _listsSection,
+      _continuationSection,
+      _savedSection,
+      _displaySection,
+      _stageSection,
+      _stageRailsSection,
+      _spotlightSection,
+      _heroPreview,
+    );
+    _boardDeferred = HomeBoardDeferred(
+      (
+        mounted: () => mounted,
+        focusCatalogContinuation: _boardFocus.focusCatalogContinuation,
+        focusHomeRailAt: _boardFocus.focusHomeRailAt,
+        focusRow: _boardFocus.focusRow,
+      ),
+      _boardSection,
+      _stageRailsSection,
+    );
+    _boardConfiguration = HomeBoardConfigurationSection(
+      ref,
+      (
+        mounted: () => mounted,
+        setState: setState,
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        searchMode: () => widget.searchMode,
+        discoverMode: () => widget.discoverMode,
+        bindings: () => _homeBoardBindings,
+      ),
+      _boardSection,
+      _boardLoading,
+      _boardFocus,
+      _keywordSection,
+      _displaySection,
+      _continuationSection,
+      _continuationLoading,
+      _heroPreview,
+      _modeSection,
+      _catalogSection,
+      _spotlightSection,
+      _savedSection,
+    );
+    _boardRows = HomeBoardRows(
+      (
+        setState: setState,
+        context: () => context,
+        rowId: _sectionRowId,
+        classicRowExtent: (context, {CatalogSection? section}) =>
+            _classicSection.classicCatalogRowExtent(context, section: section),
+        refreshBoundSources: _refreshBoundSources,
+      ),
+      _boardSection,
+      _boardLoading,
+      _boardPaging,
+      _catalogSection,
+      _displaySection,
+      _stageSection,
+      _stageRailsSection,
+      _stageFavorites,
+      _spotlightSection,
+      _heroSection,
+      _heroPreview,
+      _heroLive,
+    );
+    _classicSection = HomeClassicSection(
+      (
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        searchMode: () => widget.searchMode,
+        media: () => _boardMedia,
+        artworkWidth: () => _tvHeroArtworkCacheWidth,
+        artworkHeight: () => _tvHeroArtworkCacheHeight,
+        sourceTag: _catalogSourceTag,
+        openSeeAll: _openCatalogSeeAll,
+        heroIdentity: () => identityHashCode(this),
+        isBound: _isBound,
+        pikpakOnly: () => _pikpakOnly,
+        sidebar: () => MainPageBridge.focusTvSidebar?.call(),
+        openItem: _sectionOpenItem,
+        quickPlay: _sectionQuickPlay,
+      ),
+      _boardSection,
+      _boardFocus,
+      _boardDeferred,
+      _boardPaging,
+      _catalogSection,
+      _displaySection,
+      _stageRailsSection,
+      _stageGeometry,
+      _savedSection,
+      _savedRows,
+      _continuationProjection,
+      _continuationMenu,
+      _continuationRows,
+      _heroSection,
+      _heroPreview,
+      _heroLive,
+    );
+    _boardRendering = HomeBoardRendering(
+      (
+        mounted: () => mounted,
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        searchMode: () => widget.searchMode,
+        discoverMode: () => widget.discoverMode,
+        profileCurrent: () =>
+            _profileSessionOwner == ProfileSessionMemory.captureOwner(),
+        layouts: () => {
+          'canvas': _stageBoards.buildCanvasBoard,
+          'atrium': _atriumLayout.buildAtriumBoard,
+          'mosaic': _stageBoards.buildMosaicBoard,
+          'promenade': _stageBoards.buildPromenadeBoard,
+          'deck': _stageBoards.buildDeckBoard,
+          'tonight': _tonightLayout.buildTonightBoard,
+          'spotlight': _spotlightBoards.buildSpotlightBoard,
+        },
+        classic: _classicSection.buildClassicBoard,
+        searchSpotlight: _spotlightResults.buildSearchSpotlightBoard,
+      ),
+      _boardSection,
+      _boardLoading,
+      _boardPaging,
+      _boardFocus,
+      _catalogSection,
+      _displaySection,
+      _spotlightSection,
+      _spotlightRows,
+      _savedSection,
+      _continuationProjection,
     );
     _titleSearch.addListener(_titleSection.publishTitleSuggestions);
     _searchController.addListener(_titleSection.onTitleSearchEditingChanged);
@@ -1672,10 +1704,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     unawaited(_refreshMetadataFeaturePolicy());
     WidgetsBinding.instance.addObserver(this);
     _profileSessionOwner = ProfileSessionMemory.captureOwner();
-    _homeReturnRepository = ref.read(
+    _boardSection.homeReturnRepository = ref.read(
       homeReturnRepositoryProvider(_profileSessionOwner),
     );
-    _homeCollectionsRepository = ref.read(homeCollectionsRepositoryProvider);
+    _boardSection.homeCollectionsRepository = ref.read(
+      homeCollectionsRepositoryProvider,
+    );
     _keywordSnapshots = ref.read(
       keywordSnapshotRepositoryProvider(_profileSessionOwner),
     );
@@ -1698,17 +1732,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       isCurrent: () => mounted,
       isTelevision: () => widget.isTelevision,
       onChanged: () => setState(() {}),
-      replaceRows: _applySections,
-      appendRows: _appendSections,
+      replaceRows: _boardRows.applySections,
+      appendRows: _boardPaging.appendSections,
       presentKeyword: _keywordSection.presentKwStreaming,
       finishKeyword: _keywordSection.finishKeyword,
       cancelSubmitFocus: _searchSubmitFocus.cancel,
     );
     if (!widget.searchMode && !widget.discoverMode) {
-      _homeReturnRepository.observeInvalidation();
+      _boardSection.homeReturnRepository.observeInvalidation();
     }
     final homeSnapshot = !widget.searchMode && !widget.discoverMode
-        ? _homeReturnRepository.take()
+        ? _boardSection.homeReturnRepository.take()
         : null;
     final restoredHome = homeSnapshot != null &&
         homeSnapshot.configuration.hideWatched == HideWatchedPrefs.enabled;
@@ -1743,7 +1777,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         .read()
         .initialStyle;
     _heroPreview.startPreferences(ref, homeSession);
-    _homeDefaultViewSubscription = ref.listenManual(
+    _boardConfiguration.homeDefaultViewSubscription = ref.listenManual(
       homeDefaultViewProvider(homeSession),
       (previous, next) {},
     );
@@ -1782,9 +1816,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       localContinuationSession,
       initiallyLoadingTrakt: !widget.searchMode,
     );
-    _homeLastScroll = restoredHome && !widget.isTelevision
-        ? homeSnapshot.scrollOffset : 0;
-    _boardViewport.initializeScroll(_homeLastScroll);
+    _boardSection.homeLastScroll = restoredHome && !widget.isTelevision
+        ? homeSnapshot.scrollOffset
+        : 0;
+    _boardSection.boardViewport.initializeScroll(_boardSection.homeLastScroll);
     // This one widget backs three tabs (Home board / dedicated Search / Discover).
     AnalyticsService.screenView(
       widget.searchMode
@@ -1902,16 +1937,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // Home board only: live-refresh when the Home Rows manager changes which
     // rows are hidden. The bridge also invalidates a saved return snapshot.
     if (!widget.searchMode && !widget.discoverMode) {
-      MainPageBridge.addHomeSettingsListener(_reloadForHomeSettings);
-      HomeRowRefreshSignal.addListener(_queueHomeRows);
-      _stremio.addAddonsChangedListener(_onHomeAddonsChanged);
+      MainPageBridge.addHomeSettingsListener(
+        _boardConfiguration.reloadForHomeSettings,
+      );
+      HomeRowRefreshSignal.addListener(_boardConfiguration.queueHomeRows);
+      _stremio.addAddonsChangedListener(
+        _boardConfiguration.onHomeAddonsChanged,
+      );
       // IPTV list mutations (picker, IPTV settings, provider deletion,
       // reconcile, import) all bump the store revision — the only signal a
       // Home that stays alive across tab switches gets about them.
       IptvMediaStore.listsRevision.addListener(
         _savedSection.onIptvListsRevision,
       );
-      if (!restoredKeyword) unawaited(_loadHomeDefaultView());
+      if (!restoredKeyword) {
+        unawaited(_boardConfiguration.loadHomeDefaultView());
+      }
       // Home layout pref: loaded once here, then live-reloaded whenever the
       // Settings picker fires the bridge. HOME board instance only — the
       // Search tab keeps classic and must not steal the single bridge slot.
@@ -1974,13 +2015,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _spotlightShell.searchSheet.onFocusChanged,
       );
     }
-    _boardScroll.addListener(_onBoardScroll);
+    _boardSection.boardScroll.addListener(_boardPaging.onBoardScroll);
     _keywordSection.keywordViewport.observeScroll();
     _refreshTraktAuthState();
     _refreshSimklAuthState();
     _refreshMdblistAuthState();
     _loadMergedSeriesFlag();
-    // (The keyword restore itself ran earlier — before _loadHomeDefaultView —
+    // (The keyword restore itself ran earlier — before _boardConfiguration.loadHomeDefaultView —
     // see the ordering comment there.) A restored search carries its own
     // filters, so don't overwrite them with the saved defaults.
     if (!restoredKeyword) {
@@ -1989,29 +2030,29 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // The dedicated Search tab only shows a field + blank prompt until a query,
     // so it skips the whole board pipeline (home catalogs, Continue Watching,
     // Trakt, favourites) — catalog search fetches its addons on demand. It also
-    // never runs _load(), which is what clears _loading, so clear it here or the
-    // results grid (_buildBoard) would sit on its initial spinner forever.
+    // never runs _boardLoading.load(), which is what clears _boardSection.loading, so clear it here or the
+    // results grid (_boardRendering.buildBoard) would sit on its initial spinner forever.
     if (widget.searchMode) {
-      _loading = false;
+      _boardSection.loading = false;
     } else if (widget.discoverMode) {
       // Discover browses one source at a time via the Source dropdown, so it
       // skips the board's catalog pipeline and just primes the Continue Watching
       // + Trakt rows its first two sources draw from. _refreshPikpakOnly gates the
       // Quick-Play affordance the same way the board does.
-      _loading = false;
+      _boardSection.loading = false;
       _refreshPikpakOnly();
       _discoverLoading.loadAddons();
       _discoverLoading.primeRows();
     } else {
       // TV board: last-resort focus reclaim. Several load/reload paths dispose
-      // FocusNodes wholesale (_applySections rebuilds every catalog row's
+      // FocusNodes wholesale (_boardRows.applySections rebuilds every catalog row's
       // nodes; CW rows re-sync after playback) and any of them can kill the
       // node holding primary focus — leaving the remote dead with no DPAD
       // press able to recover (the shell's recovery only fires when the scope
       // has NO traversable descendants, and the board always has plenty).
       // Watch the FocusManager and re-anchor onto the board when focus dies.
       if (widget.isTelevision) {
-        FocusManager.instance.addListener(_onGlobalFocusChange);
+        FocusManager.instance.addListener(_boardFocus.onGlobalFocusChange);
       }
       // Kick off every leading-content load. Auto-focus settles to the top as
       // these complete; once they've ALL settled the arrival window is over and
@@ -2021,10 +2062,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         if (restoredHome && !restoredKeyword)
           _restoreHomeSnapshot(homeSnapshot)
         else
-          _load(),
+          _boardLoading.load(),
         _continuationLoading.loadContinueWatching(),
         _continuationLoading.loadTraktContinueWatching(),
-        // refreshBound:false — _load()'s bound-source scan (which now covers the
+        // refreshBound:false — _boardLoading.load()'s bound-source scan (which now covers the
         // Simkl rows) runs after this on cold start, so a 2nd concurrent scan
         // here would be pure duplicate startup work on weak TV hardware.
         _continuationLoading.loadSimklContinueWatching(refreshBound: false),
@@ -2041,16 +2082,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// Await the initial board content loads, then end the auto-focus "arrival
-  /// window": one final placement pass, then latch [_autoFocusSettled] so
+  /// window": one final placement pass, then latch [_boardFocus.autoFocusSettled] so
   /// re-anchoring never fires again (a background CW/Trakt refresh, or focus
   /// restoration after returning from playback, must not move the user's focus).
   Future<void> _settleAutoFocusAfter(List<Future<void>> loads) async {
     await Future.wait(loads.map((f) => f.catchError((_) {})));
     if (!mounted) return;
-    _maybeAutoFocusBoard();
+    _boardFocus.maybeAutoFocusBoard();
     // Latch on the following frame so the placement pass above runs first.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _autoFocusSettled = true;
+      if (mounted) _boardFocus.autoFocusSettled = true;
     });
   }
 
@@ -2077,7 +2118,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _refreshPikpakOnly();
     // Connect/disconnect can change what the local shelves should hold (the
     // single-owner rule keys off scrobbling), so re-read local CW before the
-    // tracker rows; _reloadForHomeSettings can legitimately return early when
+    // tracker rows; _boardConfiguration.reloadForHomeSettings can legitimately return early when
     // no row/layout preference changed.
     if (!widget.searchMode && !widget.discoverMode) {
       _continuationLoading.loadContinueWatching();
@@ -2093,10 +2134,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // connect/disconnect needs a board reload to add/drop them. Home board
     // only — this listener is registered by every SearchScreen variant, and
     // Search/Discover must never run the board pipeline. Deferred while a
-    // catalog search is showing (see _requestBoardReload); safe against
-    // overlap via _boardLoadGen.
-    if (!widget.searchMode && !widget.discoverMode && _trackerExtrasEnabled) {
-      _requestBoardReload();
+    // catalog search is showing (see _boardConfiguration.requestBoardReload); safe against
+    // overlap via _boardSection.boardLoadGen.
+    if (!widget.searchMode &&
+        !widget.discoverMode &&
+        _boardSection.trackerExtrasEnabled) {
+      _boardConfiguration.requestBoardReload();
     }
   }
 
@@ -2143,67 +2186,81 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   Future<void> _restoreHomeSnapshot(HomeReturnSnapshot snapshot) async {
-    _homeReturnRevision = _homeReturnRepository.revision;
-    _homeLoadedAt = snapshot.loadedAt;
+    _boardSection.homeReturnRevision =
+        _boardSection.homeReturnRepository.revision;
+    _boardSection.homeLoadedAt = snapshot.loadedAt;
     _spotlightSection.spotlightHeroOverride = snapshot.hero;
-    _addonsById
+    _boardSection.addonsById
       ..clear()
       ..addAll(snapshot.board.addons);
-    _loading = false;
+    _boardSection.loading = false;
     _spotlightSection.spotlightEntryRevealed = true;
     if (snapshot.heroResolutionPending) {
       unawaited(
         _spotlightSection.resolveSpotlightHeroSource(
-          _addonsById.values.toList(),
+          _boardSection.addonsById.values.toList(),
         ),
       );
     }
-    _applySections(_homeSections);
+    _boardRows.applySections(_boardSection.homeSections);
     MainPageBridge.homeBoardReady.value = true;
-    _maybeAutoFocusBoard();
-    _maybeAutoFillBoard();
+    _boardFocus.maybeAutoFocusBoard();
+    _boardPaging.maybeAutoFillBoard();
     unawaited(_refreshPikpakOnly());
-    if (_trackerExtrasEnabled) {
-      final generation = _boardLoadGen;
+    if (_boardSection.trackerExtrasEnabled) {
+      final generation = _boardSection.boardLoadGen;
       final owner = _profileSessionOwner;
-      unawaited(HomeListRowsService.instance.resolve(
-        _homeExtras,
-        previous: _homeSections.whereType<HomeListSection>().toList(),
-        isCurrent: () => mounted && generation == _boardLoadGen &&
-            owner == ProfileSessionMemory.captureOwner(),
-        onUpdate: (rows) {
-          if (!mounted || generation != _boardLoadGen ||
-              owner != ProfileSessionMemory.captureOwner()) {
-            return;
-          }
-          _publishHomeProgress(replaceHomeListRows(_homeSections, rows),
-            false, generation, ProfileRuntime.scope.value);
-        },
-      ).catchError((_) => <HomeListSection>[]));
+      unawaited(
+        HomeListRowsService.instance
+            .resolve(
+              _boardSection.homeExtras,
+              previous: _boardSection.homeSections
+                  .whereType<HomeListSection>()
+                  .toList(),
+              isCurrent: () =>
+                  mounted &&
+                  generation == _boardSection.boardLoadGen &&
+                  owner == ProfileSessionMemory.captureOwner(),
+              onUpdate: (rows) {
+                if (!mounted ||
+                    generation != _boardSection.boardLoadGen ||
+                    owner != ProfileSessionMemory.captureOwner()) {
+                  return;
+                }
+                _boardPublication.publishHomeProgress(
+                  replaceHomeListRows(_boardSection.homeSections, rows),
+                  false,
+                  generation,
+                  ProfileRuntime.scope.value,
+                );
+              },
+            )
+            .catchError((_) => <HomeListSection>[]),
+      );
     }
     // Re-read local configuration too, including imports that bypass the UI
     // bridge. Continue Watching and favourite loaders still run on each visit.
-    await _reloadForHomeSettings();
+    await _boardConfiguration.reloadForHomeSettings();
   }
 
   void _preserveHomeSnapshot() {
-    final board = _committedBoard;
-    final loadedAt = _homeLoadedAt;
+    final board = _boardSection.committedBoard;
+    final loadedAt = _boardSection.homeLoadedAt;
     if (widget.searchMode ||
         widget.discoverMode ||
         board == null ||
         loadedAt == null ||
-        _loading ||
-        _error != null ||
-        _boardRefreshing ||
-        _boardLoadingMore ||
-        _pendingBoardReload) {
+        _boardSection.loading ||
+        _boardSection.error != null ||
+        _boardSection.boardRefreshing ||
+        _boardSection.boardLoadingMore ||
+        _boardSection.pendingBoardReload) {
       return;
     }
-    _homeReturnRepository.store((
-      sections: _homeCatalogController.rowsForReturn(),
+    _boardSection.homeReturnRepository.store((
+      sections: _boardSection.homeCatalogController.rowsForReturn(),
       board: board,
-      configuration: _homeConfiguration,
+      configuration: _boardSection.homeConfiguration,
       hero: _spotlightSection.spotlightHeroOverride == null
           ? null
           : copyHomeRowForReturn(_spotlightSection.spotlightHeroOverride!),
@@ -2213,16 +2270,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       hideCatalogAddonNames: _displaySection.hideHomeCatalogAddonNames,
       hideCollectionNames: _displaySection.hideHomeCollectionNames,
       loadedAt: loadedAt,
-      scrollOffset: _homeLastScroll,
-    ), revision: _homeReturnRevision);
+      scrollOffset: _boardSection.homeLastScroll,
+    ), revision: _boardSection.homeReturnRevision);
   }
 
   @override
   void dispose() {
     _preserveHomeSnapshot();
-    _homePublication.dispose();
-    MetadataPreferencesService.revision.removeListener(_metadataSettingsChanged);
-    _catalogFocus.dispose();
+    _boardSection.homePublication.dispose();
+    MetadataPreferencesService.revision.removeListener(
+      _metadataSettingsChanged,
+    );
+    _boardFocus.catalogFocus.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _continuationSection.mdblistContinuationController.cancelRevisionRefresh();
     _spotlightSection.spotlightHeroNode.dispose();
@@ -2268,7 +2327,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
     }
     // Safe no-op in the variants that never registered it.
-    FocusManager.instance.removeListener(_onGlobalFocusChange);
+    FocusManager.instance.removeListener(_boardFocus.onGlobalFocusChange);
     MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
     MainPageBridge.removePlaybackReturnListener(
       _continuationReturn.onPlaybackReturned,
@@ -2276,11 +2335,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     MainPageBridge.removePlayerLaunchListener(
       _continuationReturn.markPlaybackStarted,
     );
-    MainPageBridge.removeHomeSettingsListener(_reloadForHomeSettings);
+    MainPageBridge.removeHomeSettingsListener(
+      _boardConfiguration.reloadForHomeSettings,
+    );
     MainPageBridge.removeHomeSettingsListener(_reloadSearchCardPrefs);
-    HomeRowRefreshSignal.removeListener(_queueHomeRows);
-    _stremio.removeAddonsChangedListener(_onHomeAddonsChanged);
-    _homeRefreshQueue.dispose();
+    HomeRowRefreshSignal.removeListener(_boardConfiguration.queueHomeRows);
+    _stremio.removeAddonsChangedListener(
+      _boardConfiguration.onHomeAddonsChanged,
+    );
+    _boardConfiguration.homeRefreshQueue.dispose();
     IptvMediaStore.listsRevision.removeListener(
       _savedSection.onIptvListsRevision,
     );
@@ -2330,7 +2393,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _homeMediaBindings.close();
     _displaySection.homeLayoutPreferenceSubscription.close();
     _heroPreview.heroTrailerPreferencesSubscription.close();
-    _homeDefaultViewSubscription.close();
+    _boardConfiguration.homeDefaultViewSubscription.close();
     _displaySection.homeDisplaySubscription.close();
     _continuationBindings.closeContent();
     _favoriteBindings.close();
@@ -2347,7 +2410,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _inputSection.searchFocus.dispose();
     _listsSection.disposeListsNodes();
     _discoverSection.dispose();
-    _boardViewport.disposeScroll();
+    _boardSection.boardViewport.disposeScroll();
     _keywordSection.keywordViewport.dispose();
     _keywordSection.keywordFocus.dispose();
     _catalogSection.catalogSourcesBtnFocus.dispose();
@@ -2360,519 +2423,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     super.dispose();
   }
 
-  void _disposeNodes() => _boardViewport.disposeNodes();
-
-  /// Re-read the hidden-rows set + opted-in extras and reload the board if
-  /// either actually changed. Fires on any home-settings change (the
-  /// broadcast is shared), so the equality guards skip reloads for unrelated
-  /// settings.
-  Future<void> _reloadForHomeSettings() => _homeBoardBindings.settings.run(
-    isCurrent: () => mounted,
-    refreshAppearance: (current) =>
-        _keywordSection.loadSourceTextFormatting(isCurrent: current),
-    refreshDisplay: (current) =>
-        _displaySection.loadHomeCardOrientation(isCurrent: current),
-    refreshContinuation: (current) => _continuationSection
-        .continuationLayoutController
-        .refresh(isCurrent: current),
-    reconcileContinuation: _reconcileContinuationLayout,
-    refreshTrailers: (current) =>
-        _heroPreview.reloadHeroTrailerPrefs(isCurrent: current),
-    selectDefaultView: (current) => _loadHomeDefaultView(isCurrent: current),
-    refreshConfiguration: (current) =>
-        HomeConfigurationRefresh(
-          catalog: _homeCatalogController,
-          preferences: ref.read(homeCatalogPreferencesRepositoryProvider),
-          collections: _homeCollectionsRepository,
-          readHideWatched: ref.read(homeBoardServicesProvider).hideWatched,
-        ).run(
-          isCurrent: current,
-          isHome: !widget.searchMode && !widget.discoverMode,
-        ),
-    applyConfiguration: _applyHomeConfigurationChanges,
-  );
-
-  // Reconcile nodes against accepted rows without refetching continuation data.
-  void _reconcileContinuationLayout() {
-    setState(() {
-      _continuationSection.continuationNodes.resize(
-        HomeContinuationKind.local,
-        movies: _continuationSection.cwMergeLocal
-            ? _continuationSection.cwAll.length
-            : _continuationSection.cwMovies.length,
-        series: _continuationSection.cwMergeLocal
-            ? 0
-            : _continuationSection.cwSeries.length,
-        requestFocus: _requestRowFocus,
-      );
-      _continuationSection.continuationNodes.resize(
-        HomeContinuationKind.trakt,
-        movies: _continuationSection.cwMergeTrakt
-            ? _continuationSection.traktAll.length
-            : _continuationSection.traktMovies.length,
-        series: _continuationSection.cwMergeTrakt
-            ? 0
-            : _continuationSection.traktSeries.length,
-        requestFocus: _requestRowFocus,
-      );
-      _continuationSection.continuationNodes.resize(
-        HomeContinuationKind.simkl,
-        movies: _continuationSection.cwMergeSimkl
-            ? _continuationSection.simklAll.length
-            : _continuationSection.simklMovies.length,
-        series: _continuationSection.cwMergeSimkl
-            ? 0
-            : _continuationSection.simklSeries.length,
-        requestFocus: _requestRowFocus,
-      );
-      _continuationSection.continuationNodes.resize(
-        HomeContinuationKind.mdblist,
-        movies: _continuationSection.cwMergeMdblist
-            ? _continuationSection.mdblistAll.length
-            : _continuationSection.mdblistMovies.length,
-        series: _continuationSection.cwMergeMdblist
-            ? 0
-            : _continuationSection.mdblistSeries.length,
-        requestFocus: _requestRowFocus,
-      );
-    });
-  }
-
-  void _applyHomeConfigurationChanges(HomeConfigurationChanges changes) {
-    setState(() {});
-    // Hide-watched changes row MEMBERSHIP, so it takes the full reload path.
-    if (changes.reloadBoard) {
-      _requestBoardReload();
-    } else if (changes.reloadHero) {
-      // Only the hero source moved — re-roll the reel without refetching the
-      // whole board. `_load` isn't rerun here, so resolve from the addons the
-      // last load cached.
-      unawaited(
-        _spotlightSection.resolveSpotlightHeroSource(
-          _addonsById.values.toList(),
-        ),
-      );
-    }
-    // IPTV list rows live outside the board's section pipeline. The loader
-    // reads its own extras from storage, so it can't race the reload above.
-    if (changes.reloadIptv) unawaited(_savedSection.loadIptvListRows());
-  }
-
-  /// Run [_load] for a TRIGGERED reload (Home Rows save, integration
-  /// connect/disconnect) — unless a catalog search is showing its results, in
-  /// which case `_load`'s visible reset would stomp the search view. The
-  /// reload is latched instead and [_restoreHome] performs it when the board
-  /// comes back. (The initState load never comes through here.)
-  void _requestBoardReload() {
-    if (_catalogSection.catalogQuery.isNotEmpty ||
-        _catalogSection.catalogSearching) {
-      _pendingBoardReload = true;
-      return;
-    }
-    _load();
-  }
-
-  Future<void> _loadHomeDefaultView({bool Function()? isCurrent}) =>
-      _homeDefaultView.load(
-        isTelevision: widget.isTelevision,
-        isHome: !widget.searchMode && !widget.discoverMode,
-        isCurrent: () => mounted && (isCurrent?.call() ?? true),
-        select: (mode) {
-          if (_modeSection.mode != mode) _modeSection.switchMode(mode);
-        },
-      );
-
-  void _commitBoardSnapshot() {
-    _homeCatalogController.commit(_addonsById);
-  }
-
-  Future<void> _load({bool preserveVisibleRows = false}) async {
-    _homeReturnRevision = _homeReturnRepository.revision;
-    _homeLoadedAt = null;
-    final previousLists = _homeSections.whereType<HomeListSection>().toList();
-    HomeBoardLoad? operation;
-    final keepRows =
-        preserveVisibleRows &&
-        _homeSections.isNotEmpty &&
-        _committedBoard != null;
-    final previousBoard = keepRows ? _committedBoard : null;
-    final previouslyLoaded = previousBoard?.cursor ?? 0;
-    final previousRows = <String, CatalogSection>{
-      if (keepRows)
-        for (final row in _homeSections)
-          if (row is! HomeListSection) _sectionRowId(row): row,
-    };
-    // A superseded pagination request may never return. Its finally block is
-    // generation-guarded, so it cannot clear a newer request's loading flag.
-    final gen = _homeCatalogController.beginLoad();
-    _homePublication.clear();
-    final scope = ProfileRuntime.scope.value;
-    bool current() =>
-        mounted && gen == _boardLoadGen && scope == ProfileRuntime.scope.value;
-    // Refreshes already preserve visible rows. Only the Android TV initial
-    // Home path changes publication behavior; Search, Discover and tvOS keep
-    // their existing loading contract.
-    final progressive =
-        PlatformUtil.isAndroidTvCached &&
-        !widget.searchMode &&
-        !widget.discoverMode &&
-        !keepRows;
-    final progress = progressive
-        ? HomeLoadProgress(
-            isCurrent: current,
-            rowId: _sectionRowId,
-            onPublish: (rows, first) {
-              if (first) {
-                developer.Timeline.instantSync('Home.contentPublished');
-              }
-              _publishHomeProgress(rows, first, gen, scope);
-            },
-          )
-        : null;
-    if (progressive) developer.Timeline.instantSync('Home.loadStarted');
-    var completionGen = gen;
-    var expired = false;
-    _homePaginationDeferred = false;
-    _progressiveHomeLoadPending = progressive;
-    setState(() {
-      if (!keepRows) {
-        _loading = true;
-        _classicAnchorTailPadding = 0;
-      }
-      _error = null;
-    });
-    unawaited(_refreshPikpakOnly());
-    try {
-      await runHomeLoadWithDeadline(
-        retire: () {
-          if (!current()) return;
-          expired = true;
-          _progressiveHomeLoadPending = false;
-          completionGen = _homeCatalogController.retireLoad(gen) ?? gen;
-          _homePublication.retireGeneration(gen, completionGen);
-          // Retiring the generation stops stale batches. A refresh timeout
-          // must restore the paging state belonging to the still-visible rows.
-          final recovery = progress?.hasPublished == true
-              ? _committedBoard
-              : previousBoard;
-          if (recovery != null) {
-            _homeCatalogController.restore(recovery);
-            _addonsById
-              ..clear()
-              ..addAll(recovery.addons);
-          } else {
-            _homeCatalogController.install(const []);
-          }
-        },
-        load: () {
-          final load = HomeBoardLoad(
-            catalog: _homeCatalogController,
-            preferences: ref.read(homeCatalogPreferencesRepositoryProvider),
-            collections: _homeCollectionsRepository,
-            services: ref.read(homeBoardServicesProvider),
-          );
-          operation = load;
-          return load.run(
-            generation: gen,
-            isHome: () => !widget.searchMode && !widget.discoverMode,
-            isCurrent: current,
-            useSavedOrder: () => _homeRowOrderActive,
-            canContinue: () => _canPageHome,
-            captureBatchAcceptance: () {
-              final batchScope = ProfileRuntime.scope.value;
-              return () =>
-                  mounted &&
-                  gen == _boardLoadGen &&
-                  batchScope == ProfileRuntime.scope.value;
-            },
-            batchSize: _kBoardBatchSize,
-            previouslyLoaded: previouslyLoaded,
-            previousRows: previousRows,
-            previousLists: previousLists,
-            progress: progress,
-            onResetCatalogs: () {
-              _addonsById.clear();
-              _commitBoardSnapshot();
-            },
-            onInventory: (plan, addons) {
-              // The metadata lookup is also used by Discover and detail opens.
-              _addonsById
-                ..clear()
-                ..addAll(plan.addonsById);
-              if (progress != null) {
-                progress.catalogOrder(
-                  _boardRefs.map(homeCatalogRowId).toList(),
-                );
-                _commitBoardSnapshot();
-              }
-              if (!widget.searchMode && !widget.discoverMode) {
-                unawaited(_spotlightSection.resolveSpotlightHeroSource(addons));
-              }
-            },
-            onCommitBatch: _commitBoardSnapshot,
-            onLateLists: (rows) => _publishHomeProgress(
-              replaceHomeListRows(_homeSections, rows),
-              false,
-              gen,
-              scope,
-            ),
-            onCompleted: (rows) {
-              if (rows == null) {
-                _commitBoardSnapshot();
-                _homeLoadedAt = DateTime.now();
-                return;
-              }
-              _homeCatalogController.replaceRows(rows);
-              _commitBoardSnapshot();
-              _homeLoadedAt = DateTime.now();
-              setState(() => _loading = false);
-              MainPageBridge.homeBoardReady.value = true;
-              // Keep accepted Home data during a catalog search without
-              // replacing its visible results or stealing its focus.
-              if (_catalogSection.catalogQuery.isNotEmpty ||
-                  _catalogSection.catalogSearching) {
-                return;
-              }
-              _applySections(rows, preserveFocus: keepRows);
-              _maybeAutoFocusBoard();
-            },
-          );
-        },
-      );
-    } catch (e) {
-      if (!mounted ||
-          completionGen != _boardLoadGen ||
-          scope != ProfileRuntime.scope.value) {
-        return;
-      }
-      // Mid-search, the error screen must not replace the search results
-      // (_buildBoard renders _error before anything else) — latch a retry
-      // for _restoreHome instead.
-      if (_catalogSection.catalogQuery.isNotEmpty ||
-          _catalogSection.catalogSearching) {
-        _pendingBoardReload = true;
-        setState(() => _loading = false);
-        MainPageBridge.homeBoardReady.value = true;
-        return;
-      }
-      setState(() {
-        if (!keepRows && progress?.hasPublished != true) {
-          _error = expired
-              ? 'Home took too long to load. Please try again.'
-              : e.toString();
-        }
-        _loading = false;
-      });
-      if (expired && keepRows) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: const Text(
-              "Couldn't refresh Home. Showing previous rows.",
-            ),
-            action: SnackBarAction(
-              label: 'Retry',
-              onPressed: () {
-                if (mounted) unawaited(_load(preserveVisibleRows: true));
-              },
-            ),
-          ),
-        );
-      }
-      // Terminal state too — the launch splash must not outlive the board's
-      // loading phase just because it ended in an error screen.
-      MainPageBridge.homeBoardReady.value = true;
-    } finally {
-      progress?.dispose();
-      operation?.finish();
-      if (completionGen == _boardLoadGen &&
-          scope == ProfileRuntime.scope.value) {
-        _homeCatalogController.finishLoad(completionGen);
-        _progressiveHomeLoadPending = false;
-        // Empty/failed catalogs can end without another content publication.
-        // Rebuild the initial Spotlight gate so its cards fallback is shown.
-        if (mounted &&
-            !_spotlightSection.spotlightEntryRevealed &&
-            widget.isTelevision &&
-            _displaySection.homeStyleEffective == 'spotlight') {
-          setState(() {});
-        }
-        if (mounted && !expired) {
-          _maybeAutoFillBoard(resumeDeferred: true);
-        }
-      }
-    }
-  }
-
-  /// After a batch lands, if the board still doesn't fill the viewport (so the
-  /// user can't scroll to trigger more) keep pulling batches until it does or
-  /// the board is exhausted. No-ops outside board mode (search sets no cursor).
-  void _maybeAutoFillBoard({bool resumeDeferred = false}) {
-    if (!_canPageHome || !_boardHasMore || _boardLoadingMore) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_canPageHome || !_boardHasMore || _boardLoadingMore) return;
-      if (resumeDeferred) _resumeDeferredHomePagination();
-      if (_boardLoadingMore) return;
-      if (!_boardScroll.hasClients) return;
-      final pos = _boardScroll.position;
-      if (pos.maxScrollExtent <= 0 || pos.pixels >= pos.maxScrollExtent - 600) {
-        _loadMoreBoard();
-      }
-    });
-  }
-
-  /// Fire off the next batch as the user nears the bottom of the board.
-  void _onBoardScroll() {
-    if (_boardScroll.hasClients) _homeLastScroll = _boardScroll.offset;
-    if (!_canPageHome || !_boardHasMore || _boardLoadingMore) return;
-    if (!_boardScroll.hasClients) return;
-    final pos = _boardScroll.position;
-    if (pos.pixels >= pos.maxScrollExtent - 600) {
-      _loadMoreBoard();
-    }
-  }
-
-  /// Load and append the next batch of board rows (deduped against re-entry).
-  Future<bool> _loadMoreBoard() async {
-    if (!_canPageHome) return false;
-    if (_boardRefreshing) {
-      if (PlatformUtil.isAndroidTvCached && _boardHasMore) {
-        _homePaginationDeferred = true;
-      }
-      return false;
-    }
-    if (_boardLoadingMore || _boardCursor >= _boardRefs.length) {
-      return false;
-    }
-    // Bind this append to the load generation that owns the current cursor —
-    // if a full reload lands mid-fetch, the stale batch must not append onto
-    // (or advance) the fresh board.
-    final gen = _boardLoadGen;
-    final scope = ProfileRuntime.scope.value;
-    var appended = false;
-    if (!_homeCatalogController.beginPage(gen)) return false;
-    setState(() {});
-    try {
-      final page = await _homeCatalogController.loadNextRows(
-        _kBoardBatchSize,
-        generation: gen,
-        isCurrent: () =>
-            mounted &&
-            gen == _boardLoadGen &&
-            scope == ProfileRuntime.scope.value,
-        canContinue: () => !PlatformUtil.isAndroidTvCached || _canPageHome,
-        currentAddons: () => _addonsById,
-        rowId: _sectionRowId,
-      );
-      if (!mounted ||
-          gen != _boardLoadGen ||
-          scope != ProfileRuntime.scope.value) {
-        return false;
-      }
-      if (page != null) {
-        // Only fold into the live view when the board is still what's
-        // shown. If a catalog search started while this batch was in flight,
-        // `_sections`/`_rowNodes` now hold search results — appending board rows
-        // there would corrupt the search view. They'll reappear on _restoreHome.
-        if (_catalogSection.catalogQuery.isEmpty &&
-            !_catalogSection.catalogSearching) {
-          if (page.appendOnly &&
-              !(PlatformUtil.isAndroidTvCached &&
-                  !(ModalRoute.of(context)?.isCurrent ?? true))) {
-            _appendSections(page.additions);
-          } else {
-            _publishHomeProgress(page.rows, false, gen, scope);
-          }
-          appended = true;
-          // A DPAD-down past the last row may be waiting on this batch —
-          // classic's deferred move, and the stage layouts' rail advance.
-          _maybeCompleteDeferredDown();
-          _stageSection.maybeCompleteStageAdvance();
-        }
-      }
-    } finally {
-      if (mounted &&
-          gen == _boardLoadGen &&
-          scope == ProfileRuntime.scope.value) {
-        setState(() => _homeCatalogController.finishPage(gen));
-        _maybeAutoFillBoard();
-      }
-    }
-    return appended;
-  }
-
-  /// Append newly-loaded board rows without disturbing the rows already shown:
-  /// grow the per-row focus nodes in lockstep with [_sections].
-  void _appendSections(List<CatalogSection> more) {
-    _boardViewport.appendRows(more);
-    setState(() => _sections = [..._sections, ...more]);
-    unawaited(_refreshBoundSources());
-  }
-
-  /// Fetch the next page for a single catalog row and append it in place, so
-  /// rows grow without bound as the user scrolls right (Stremio-style). Only
-  /// board rows paginate; search-result rows are single-shot. Safe to call
-  /// repeatedly — [CatalogSection.loadingMore]/[CatalogSection.exhausted] guard
-  /// re-entrancy and the end of the catalog.
-  Future<void> _loadMoreRow(int rowIndex, {bool resume = false}) async {
-    // While a catalog search is active, `_sections` holds search results, which
-    // don't paginate — leave them alone.
-    if (_catalogSection.catalogQuery.isNotEmpty ||
-        _catalogSection.catalogSearching) {
-      return;
-    }
-    if (rowIndex < 0 || rowIndex >= _sections.length) return;
-    final section = _sections[rowIndex];
-    final scope = ProfileRuntime.scope.value;
-    int currentIndex() =>
-        !mounted ||
-            scope != ProfileRuntime.scope.value ||
-            _catalogSection.catalogQuery.isNotEmpty ||
-            _catalogSection.catalogSearching
-        ? -1
-        : _sections.indexWhere((row) => identical(row, section));
-    if (!_homeCatalogController.beginRowPage(section, resume: resume)) return;
-    // Android TV: flip the guard silently. The setState exists to show the
-    // classic row's tail spinner, but it fires on the exact keypress that
-    // crossed the row-end threshold — a full-screen rebuild landing on the
-    // input frame, which an Amlogic box renders as the cursor hitching every
-    // time a row pages. The spinner is a nicety; the page landing repaints
-    // either way.
-    if (!PlatformUtil.isAndroidTvCached || resume) setState(() {});
-    try {
-      // Dedup against what we already have: some addons return valid ids but
-      // repeat entries, and some ignore `skip` entirely. The pager advances
-      // `skip` by the addon's RAW counts so paging never under-advances into a
-      // false "exhausted", and with hide-watched on it tops the window up so a
-      // page of watched titles doesn't end the row early.
-      final page = await _homeCatalogController.fetchRowPage(
-        (section.addon, section.catalog),
-        skip: section.nextSkip,
-        existingIds: section.items.map((item) => item.id),
-        isCurrent: () => currentIndex() >= 0,
-      );
-      // Progressive arrivals can move the SAME row. Only a removed/replaced
-      // row or a changed session invalidates its page, not a new numeric index.
-      final index = currentIndex();
-      if (index < 0) return;
-      _homeCatalogController.acceptRowPage(section, page);
-      final fresh = page.items;
-      if (fresh.isEmpty) return;
-      // Grow this row's focus nodes in lockstep with the new items.
-      _boardViewport.appendItems(index, fresh.length);
-      setState(() => _homeCatalogController.appendRowItems(section, fresh));
-      // A DPAD-right that ran off the end of this row may be waiting on it.
-      _stageSection.maybeCompleteStageRight();
-      unawaited(_refreshBoundSources());
-    } catch (_) {
-      // Transient fetch failure — leave the row as-is so a later scroll retries.
-    } finally {
-      if (currentIndex() >= 0) {
-        setState(() => _homeCatalogController.finishRowPage(section));
-      } else {
-        _homeCatalogController.finishRowPage(section);
-      }
-    }
-  }
+  void _disposeNodes() => _boardSection.boardViewport.disposeNodes();
 
   /// Stable progress key, including supported native provider identities.
   String? _imdbOf(StremioMeta item) {
@@ -2897,7 +2448,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // AND the Continue Watching rows (whose titles may not appear in any
     // section, so editing their sources must still refresh the CW card badge).
     final items = [
-      for (final section in _sections) ...section.items,
+      for (final section in _boardSection.sections) ...section.items,
       ..._continuationSection.cwMovies,
       ..._continuationSection.cwSeries,
       ..._continuationSection.traktMovies,
@@ -2925,117 +2476,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       ? section.rowId
       : '${section.addon.id}:${section.catalog.type}:${section.catalog.id}';
 
-  // A DPAD-down pressed while everything below was still loading (Trakt row a
-  // focusless skeleton, favourites absent, first catalog batch in flight) used
-  // to be swallowed with focus frozen in place — the cell handler had already
-  // reported the key handled. Instead the press is remembered briefly and
-  // completed the moment a row below lands. Origin node is compared by
-  // IDENTITY only (never dereferenced — it may be disposed by then): if focus
-  // moved elsewhere meanwhile, the deferred move is dropped, so a late load
-  // can never yank focus away from the user.
-  FocusNode? _pendingDownOrigin;
-  int _pendingDownRowIndex = -1; // set when pressed on a catalog row
-  String? _pendingDownHomeRowId; // stable id on the globally ordered Home
-  int _pendingDownCol = 0;
-  DateTime? _pendingDownAt;
-  static const Duration _pendingDownMaxAge = Duration(seconds: 3);
-
-  void _deferDownMove({
-    int rowIndex = -1,
-    String? homeRowId,
-    required int column,
-  }) {
-    if (!_boardCanAdvance && _focusCatalogContinuation()) return;
-    _pendingDownOrigin = FocusManager.instance.primaryFocus;
-    if (_pendingDownOrigin == null) return;
-    _pendingDownRowIndex = rowIndex;
-    _pendingDownHomeRowId = homeRowId;
-    _pendingDownCol = column;
-    _pendingDownAt = DateTime.now();
-  }
-
-  void _clearDeferredDown() {
-    _pendingDownOrigin = null;
-    _pendingDownAt = null;
-    _pendingDownHomeRowId = null;
-  }
-
-  /// Complete a recent deferred DPAD-down, called whenever a row load settles.
-  /// Post-frame: the freshly-loaded row's cells only mount on the next build,
-  /// and [_requestRowFocus] needs mounted cells.
-  void _maybeCompleteDeferredDown() {
-    if (_pendingDownAt == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final at = _pendingDownAt;
-      final origin = _pendingDownOrigin;
-      if (at == null || origin == null) return;
-      if (DateTime.now().difference(at) > _pendingDownMaxAge) {
-        _clearDeferredDown();
-        return;
-      }
-      if (!identical(FocusManager.instance.primaryFocus, origin)) {
-        _clearDeferredDown();
-        return;
-      }
-      final col = _pendingDownCol;
-      final bool moved;
-      final homeRowId = _pendingDownHomeRowId;
-      if (homeRowId != null) {
-        final rails = _stageRailsSection.canvasRails;
-        final current = rails.indexWhere(
-          (rail) => _stageRailsSection.canvasRailRowId(rail) == homeRowId,
-        );
-        moved = current >= 0 && _focusHomeRailAt(current + 1, col);
-      } else if (_pendingDownRowIndex >= 0) {
-        moved = _focusRow(_pendingDownRowIndex + 1, col);
-      } else {
-        // From the last favourites row.
-        moved = _focusRow(0, col);
-      }
-      if (moved) _clearDeferredDown();
-    });
-  }
-
   VoidCallback _favRowOnUp(String rowId, int column) =>
-      () => _focusRelativeHomeRail(rowId, -1, column);
+      () => _boardFocus.focusRelativeHomeRail(rowId, -1, column);
 
   VoidCallback _favRowOnDown(String rowId, int column) =>
-      () => _focusRelativeHomeRail(rowId, 1, column);
-
-  late final _homeRefreshQueue = HomeRefreshQueue(
-    isCurrent: () => mounted,
-    isVisible: () => ModalRoute.of(context)?.isCurrent ?? false,
-    refreshRow: (row) {
-      switch (row) {
-        case HomeRowRefresh.tvFavorites:
-          unawaited(_savedSection.loadTvFavorites());
-        case HomeRowRefresh.stremioTvFavorites:
-          unawaited(_savedSection.loadStremioTvFavorites());
-        case HomeRowRefresh.playlist:
-          unawaited(_savedSection.loadPlaylistFavorites());
-        case HomeRowRefresh.watchlist:
-          unawaited(_savedSection.loadMyWatchlist());
-        case HomeRowRefresh.playback:
-          // Do not consume the local playback/tracker refresh latch here.
-          unawaited(_continuationLoading.loadContinueWatching());
-          unawaited(_continuationLoading.loadIptvContinueWatching());
-      }
-    },
-    refreshAddons: () {
-      if (_catalogSection.catalogQuery.isNotEmpty ||
-          _catalogSection.catalogSearching) {
-        _pendingBoardReload = true;
-      } else {
-        unawaited(_load(preserveVisibleRows: true));
-      }
-    },
-  );
-
-  void _onHomeAddonsChanged() => _homeRefreshQueue.addonsChanged();
-
-  void _queueHomeRows(Set<HomeRowRefresh> rows) =>
-      _homeRefreshQueue.enqueue(rows);
+      () => _boardFocus.focusRelativeHomeRail(rowId, 1, column);
 
   /// Resolve the addon that a Continue Watching title should route through.
   /// Prefers the stored source addon; falls back to any homepage addon, then a
@@ -3044,16 +2489,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (addonId == NativeSeriesMetadataService.addon.id) {
       return NativeSeriesMetadataService.addon;
     }
-    for (final addon in _addonsById.values) {
-      if (addon.sourceBindingKey == addonId || addon.portableConfigurationKey == addonId) return addon;
+    for (final addon in _boardSection.addonsById.values) {
+      if (addon.sourceBindingKey == addonId ||
+          addon.portableConfigurationKey == addonId) {
+        return addon;
+      }
     }
-    if (addonId != null && _addonsById.containsKey(addonId)) {
-      return _addonsById[addonId]!;
+    if (addonId != null && _boardSection.addonsById.containsKey(addonId)) {
+      return _boardSection.addonsById[addonId]!;
     }
     // "Any homepage addon" means a REAL catalog addon — the Trakt/Simkl list
-    // rows that now lead _homeSections carry only a placeholder addon (empty
+    // rows that now lead _boardSection.homeSections carry only a placeholder addon (empty
     // baseUrl), which can't serve /meta or /stream.
-    for (final s in _homeSections) {
+    for (final s in _boardSection.homeSections) {
       if (s is! HomeListSection && s is! HomeCollectionSection) {
         return s.addon;
       }
@@ -3197,406 +2645,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // ── Simkl Continue Watching ───────────────────────────────────────────────
 
-  /// Swap the displayed sections (homepage or search results): rebuild the
-  /// per-row focus nodes and reset the hero to the first item.
-  void _applySections(
-    List<CatalogSection> sections, {
-    bool preserveFocus = false,
-    bool incremental = false,
-  }) {
-    String? anchor;
-    double? anchorHeight;
-    double anchorTailPadding = 0;
-    List<String> previousOrder = const [];
-    if (incremental && _displaySection.homeStyleEffective == 'classic') {
-      final rails = _stageRailsSection.classicHomeRails;
-      for (final rail in rails) {
-        if (rail.traktSkeletonIndex >= 0) continue;
-        final focused = _stageRailsSection
-            .canvasRailNodes(rail)
-            .where((node) => node.hasFocus);
-        if (focused.isEmpty) continue;
-        anchor = _stageRailsSection.canvasRailRowId(rail);
-        // Newly published rows are catalog/list/collection rows even if the
-        // focused anchor is Continue Watching or a favourite in a custom order.
-        if (rail.sectionIndex != null) {
-          anchorHeight = homeRowHeight(
-            focused.first.context,
-            ValueKey('board-reveal-$_boardGen-$anchor'),
-          );
-        }
-        anchorHeight ??= _classicCatalogRowExtent(
-          focused.first.context ?? context,
-          section: rail.sectionIndex == null
-              ? null
-              : _sections[rail.sectionIndex!],
-        );
-        break;
-      }
-      previousOrder = rails.map(_stageRailsSection.canvasRailRowId).toList();
-      if (anchor != null &&
-          _boardScroll.hasClients &&
-          _boardScroll.position.maxScrollExtent <= 0) {
-        // A short first batch leaves unused viewport space below its rows.
-        // Retain that space as tail padding when rows are inserted above the
-        // anchor, otherwise scroll physics clamps away the preserved offset.
-        final heights = <double>[];
-        for (final rail in rails) {
-          if (rail.traktSkeletonIndex >= 0) break;
-          final nodes = _stageRailsSection.canvasRailNodes(rail);
-          final height = nodes
-              .map(
-                (node) => homeRowHeight(
-                  node.context,
-                  ValueKey(
-                    'board-reveal-$_boardGen-${_stageRailsSection.canvasRailRowId(rail)}',
-                  ),
-                ),
-              )
-              .whereType<double>()
-              .firstOrNull;
-          if (height == null) break;
-          heights.add(height);
-        }
-        if (heights.length == rails.length) {
-          anchorTailPadding = max(
-            _classicAnchorTailPadding,
-            _boardScroll.position.viewportDimension -
-                38 -
-                heights.fold<double>(0, (sum, height) => sum + height),
-          );
-        }
-      }
-    }
-    // Streaming arrivals are not a fresh board: preserve keyed row elements,
-    // entrance state, and any pending user-directed move to the next rail.
-    if (!incremental) {
-      _boardGen++;
-      _boardAppliedAt = DateTime.now();
-      // Rail keys are content-addressed by stable Home-row id, so a reload can
-      // preserve the active rail even when its numeric section index changes.
-      _stageSection.stageDeferredAdvance.invalidateForBoardReseed();
-      _stageSection.stageFocusRequests.invalidate();
-    }
-    _boardViewport.replaceRows(
-      previous: _sections,
-      next: sections,
-      rowId: _sectionRowId,
-      preserveFocus: preserveFocus,
-      incremental: incremental,
-    );
-    setState(() {
-      _sections = sections;
-      if (anchor != null && anchorHeight != null) {
-        final nextOrder = _stageRailsSection.classicHomeRails
-            .map(_stageRailsSection.canvasRailRowId)
-            .toList();
-        if (nextOrder
-            .takeWhile((id) => id != anchor)
-            .any((id) => !previousOrder.contains(id))) {
-          _classicAnchorTailPadding = max(
-            _classicAnchorTailPadding,
-            anchorTailPadding,
-          );
-        }
-        preserveHomeInsertionAnchor(
-          scroll: _boardScroll,
-          previous: previousOrder,
-          next: nextOrder,
-          anchor: anchor,
-          extentOf: (_) => anchorHeight!,
-        );
-      }
-    });
-    _spotlightSection.publishTopShelfSpotlight();
-    unawaited(_refreshBoundSources());
-    if (preserveFocus &&
-        _heroSection.heroItem.value != null &&
-        sections.any(
-          (section) => section.items.any(
-            (item) =>
-                item.id == _heroSection.heroItem.value!.id &&
-                item.type == _heroSection.heroItem.value!.type,
-          ),
-        )) {
-      return;
-    }
-    // Seed the hero with the first item so it isn't blank before DPAD focus
-    // lands (see [_heroSection.heroActive] for when the hero is shown).
-    if (_heroSection.heroActive) {
-      // Seed from the first real title: a pinned collection row can lead the
-      // board, and folder tiles can't drive the hero.
-      StremioMeta? first;
-      for (final section in sections) {
-        if (section is HomeCollectionSection) continue;
-        if (section.items.isNotEmpty) {
-          first = section.items.first;
-          break;
-        }
-      }
-      _heroSection.heroItem.value = first;
-      _heroSection.heroEnriched.value = null;
-      // Outside the null-check: a board that reloads EMPTY must clear the
-      // shell stage too (null item → null art), not keep the last title's.
-      _heroSection.publishAmbientArt(first, null);
-      if (first != null) {
-        _heroSection.enrichHero(first);
-        _heroSection.updateHeroTint(first);
-        // Billboard effect: the seeded spotlight starts its trailer too, so
-        // opening Home settles into a living hero without any DPAD input.
-        // A board reload is a fresh visit — lift any after-the-feature
-        // suppression, and drop any Canvas favourites override + live feed
-        // (a reload landing while a favourite held focus would otherwise
-        // keep its stale art/title on the stage — or resume its stream —
-        // with no cell focused, and let the seeded trailer start beneath).
-        _heroPreview.heroPreviewPolicy.allowNewHero();
-        _stageFavorites.canvasFavFocus.value = null;
-        _heroLive.clearHeroLiveIptv();
-        _heroPreview.scheduleHeroTrailer(first);
-      } else {
-        _heroPreview.clearHeroTrailer();
-        // Clear the COLOUR too, not just the art — an empty reload otherwise
-        // left the departed title's tint on the shell stage + sidebar glass.
-        _heroSection.heroTint.value = null;
-        _heroSection.publishHeroTintToShell(null);
-      }
-    }
-  }
-
-  /// Cancel any pending search and return to the homepage board.
-  void _restoreHome() {
-    _catalogSection.catalogController.clear();
-    // A settings/integration reload arrived mid-search and was deferred so it
-    // couldn't stomp the results view — run it now instead of restoring the
-    // stale cached board.
-    if (_pendingBoardReload) {
-      _pendingBoardReload = false;
-      _load();
-      return;
-    }
-    _applySections(_homeSections);
-    _maybeAutoFillBoard();
-  }
-
   // ── Focus entry ──────────────────────────────────────────────────────────
-
-  /// Place — or re-anchor — the board's auto-focus after content loads, so
-  /// arriving on the Home tab lands on a card (no stray arrow press) and then
-  /// *settles to the top*: focus the best card available now, and as higher rows
-  /// arrive (Trakt filling its reserved slot, local Continue Watching) slide up
-  /// to the new top card while the user is idle. See [_autoFocusedNode] /
-  /// [_autoFocusSettled] for the state machine.
-  ///
-  /// TV-only, homepage board only. Deferred a frame so the target row is mounted.
-  void _maybeAutoFocusBoard() {
-    // Every row-load settle path funnels through here, which makes it the one
-    // hook needed to complete a DPAD-down deferred while that row was loading.
-    // Runs before the settle latch below — deferred moves are USER presses and
-    // must work long after auto-focus has handed over control.
-    _maybeCompleteDeferredDown();
-    if (_autoFocusSettled || _autoFocusScheduled) return;
-    if (!widget.isTelevision) return;
-    if (widget.searchMode || widget.discoverMode) return;
-    _autoFocusScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Coalesced pass: reads the final top after every same-frame load's
-      // setState has applied, so multiple loads don't race.
-      _autoFocusScheduled = false;
-      if (!mounted || _autoFocusSettled) return;
-      if (widget.searchMode || widget.discoverMode) return;
-      // Only when this is the tab the user is actually looking at. During the
-      // ~350ms tab cross-fade the outgoing board is still mounted and shares the
-      // ModalRoute, so isCurrent can't tell them apart — the active-tab index
-      // can. (main.dart keeps it in lock-step with the rendered tab.)
-      if (MainPageBridge.activeTvTabIndex != _tabIndex) return;
-      // Don't grab focus if the board isn't the top route — e.g. the user
-      // opened a detail page or player and a slow CW/Trakt load only just
-      // finished. Stealing focus here would yank it off the pushed screen onto
-      // the hidden board below.
-      final route = ModalRoute.of(context);
-      if (route != null && !route.isCurrent) return;
-      if (MainPageBridge.isTvSidebarFocused?.call() ?? false) return;
-
-      final primary = FocusManager.instance.primaryFocus;
-      final boardFocused = _boardHasFocus();
-      if (_autoFocusedNode == null) {
-        // Never placed focus yet. If the user already reached a board card on
-        // their own, leave it and latch — nothing to auto-place.
-        if (boardFocused) {
-          _autoFocusSettled = true;
-          return;
-        }
-      } else if (boardFocused && primary != _autoFocusedNode) {
-        // We placed focus earlier and it now sits on a *different* board card —
-        // the user has taken control. Stop re-anchoring so we never fight them.
-        // (Guarded by boardFocused so our own just-applied requestFocus, or a
-        // transient null primaryFocus between loads, can't false-trigger this.)
-        _autoFocusSettled = true;
-        return;
-      }
-
-      final top = _topBoardFocusNode();
-      if (top == null) return; // nothing focusable yet — retry on the next load
-      if (top == _autoFocusedNode) {
-        return; // already anchored to the current top
-      }
-      top.requestFocus();
-      _autoFocusedNode = top;
-    });
-  }
-
-  /// Whether any focusable element on this screen currently holds focus. Used to
-  /// avoid stealing focus from the user in [_maybeAutoFocusBoard].
-  bool _boardHasFocus() {
-    bool anyOf(List<FocusNode> ns) => ns.any((n) => n.hasFocus);
-    if (_inputSection.searchFocus.hasFocus ||
-        _discoverSection.discSourceNode.hasFocus ||
-        // Spotlight's hero is a focus target the rail lists know nothing
-        // about; without this the arrival machinery thinks the board is
-        // unfocused while the hero holds the cursor and steals it back.
-        _spotlightSection.spotlightHeroNode.hasFocus) {
-      return true;
-    }
-    if (anyOf(_listsSection.listsNodes)) return true;
-    if (anyOf(_continuationSection.cwMovieNodes) ||
-        anyOf(_continuationSection.cwSeriesNodes) ||
-        anyOf(_continuationSection.traktMovieNodes) ||
-        anyOf(_continuationSection.traktSeriesNodes) ||
-        anyOf(_continuationSection.simklMovieNodes) ||
-        anyOf(_continuationSection.simklSeriesNodes) ||
-        anyOf(_continuationSection.mdblistMovieNodes) ||
-        anyOf(_continuationSection.mdblistSeriesNodes) ||
-        anyOf(_savedSection.tvFavNodes) ||
-        anyOf(_savedSection.stvFavNodes) ||
-        anyOf(_savedSection.iptvFavNodes) ||
-        anyOf(_savedSection.watchlistMovieNodes) ||
-        anyOf(_savedSection.watchlistSeriesNodes) ||
-        anyOf(_savedSection.playlistFavNodes)) {
-      return true;
-    }
-    for (final row in _rowNodes) {
-      if (anyOf(row)) return true;
-    }
-    return false;
-  }
-
-  /// The focus node for the board's current top card — the same target
-  /// [_inputSection.focusContent] would pick on the board path (Continue Watching →
-  /// favourites → catalog rows), or null if nothing is focusable yet. Skeleton
-  /// Trakt rows carry no nodes, so they're naturally skipped: while Trakt is
-  /// reserving, the top is whatever real row sits below the skeletons, and once
-  /// the real Trakt rows land they become the top. Drives the "settle to the
-  /// top" re-anchor in [_maybeAutoFocusBoard].
-  FocusNode? _topBoardFocusNode() {
-    // Canvas shows exactly ONE rail — the classic top-row targets are
-    // usually unmounted there (and requestFocus on a detached node only
-    // latches a stray later grab), so sidebar hand-off / tab re-entry /
-    // auto-focus all aim at the displayed rail's nearest mounted cell.
-    // Canvas renders exactly ONE rail, so aim at its nearest mounted cell;
-    // null (rails still loading) falls through to the classic targets.
-    if (_displaySection.stageActive) return _stageSection.stageFocusTarget();
-    for (final rail in _stageRailsSection.canvasRails) {
-      final nodes = _stageRailsSection.canvasRailNodes(rail);
-      if (nodes.isNotEmpty) return nodes.first;
-    }
-    return null;
-  }
-
-  bool _focusReclaimScheduled = false;
-
-  /// FocusManager listener (TV board only): fires on every app-wide focus
-  /// change, so the common path must bail out in a comparison or two. Only a
-  /// DEAD state — primary focus fell back to a bare scope (the focused node
-  /// was disposed) — schedules the post-frame reclaim pass.
-  void _onGlobalFocusChange() {
-    final primary = FocusManager.instance.primaryFocus;
-    if (primary != null && primary is! FocusScopeNode) return;
-    if (_focusReclaimScheduled) return;
-    _focusReclaimScheduled = true;
-    // Post-frame: the disposal that killed focus is usually mid-rebuild; the
-    // board's surviving cells are attached again by the frame's end.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusReclaimScheduled = false;
-      _reclaimDeadFocus();
-    });
-  }
-
-  /// Re-anchor focus onto the board after it died. Deliberately picks the
-  /// first MOUNTED cell (Continue Watching → favourites → catalog order) — if
-  /// the user was deep in the board, the top rows' cells are unmounted and
-  /// requestFocus on them is a silent no-op, so walking to a mounted node also
-  /// lands focus near where they were looking.
-  void _reclaimDeadFocus() {
-    if (!mounted) return;
-    final primary = FocusManager.instance.primaryFocus;
-    if (primary != null && primary is! FocusScopeNode) return; // recovered
-    if (MainPageBridge.activeTvTabIndex != _tabIndex) return;
-    final route = ModalRoute.of(context);
-    if (route != null && !route.isCurrent) return;
-    if (MainPageBridge.isTvSidebarFocused?.call() ?? false) return;
-
-    // On a stage layout only ONE rail (and, on Tonight, one zone) is mounted,
-    // so the data-order walk below would land wherever the first mounted node
-    // happens to be — a different rail, or the wrong Tonight zone with the
-    // zone flag left lying. Ask the layout where focus belongs first.
-    if (_displaySection.stageActive) {
-      final target = _stageSection.stageFocusTarget();
-      if (target != null && (target.context?.mounted ?? false)) {
-        target.requestFocus();
-        return;
-      }
-    }
-
-    bool tryRow(List<FocusNode> nodes) {
-      for (final n in nodes) {
-        if (n.context?.mounted ?? false) {
-          n.requestFocus();
-          return true;
-        }
-      }
-      return false;
-    }
-
-    for (final rail in _stageRailsSection.canvasRails) {
-      if (tryRow(_stageRailsSection.canvasRailNodes(rail))) return;
-    }
-  }
-
-  /// DPAD-up from the top row. On the dedicated Search tab the field sits above
-  /// the results, so land there; on the Home-New board there's nothing above —
-  /// stay put. (This used to hand focus to the sidebar, but the sidebar policy
-  /// is now LEFT-only: no other direction may open it.)
-  void _leaveBoardTop() {
-    _heroPreview.heroPreviewPolicy.resetAttempt();
-    if (widget.searchMode) {
-      _inputSection.searchFocusNode.requestFocus();
-    }
-  }
-
-  /// Returns false when the target catalog row isn't loaded/focusable (after
-  /// kicking the next batch load if one is available) — same contract as
-  /// [_continuationMenu.focusCwRow], so DPAD wiring can defer the move instead of eating it.
-  bool _focusRow(int row, int column) {
-    if (row >= _rowNodes.length) {
-      // Reach visible actions before starting another batch. When no action
-      // is mounted, retain the existing deferred move into the next row.
-      if (!_boardLoadingMore && _focusCatalogContinuation()) return true;
-      if (_boardHasMore) _loadMoreBoard();
-      return false;
-    }
-    if (row < 0) return false;
-    final nodes = _rowNodes[row];
-    if (nodes.isEmpty) return false;
-    // Land on the row's own remembered column, not the source column, so
-    // returning to a row you'd scrolled right goes back where you left it (that
-    // cell is still mounted). First visit falls back to the incoming column.
-    final desired = (_rowCol[row] ?? column).clamp(0, nodes.length - 1);
-    _requestRowFocus(nodes, desired);
-    return true;
-  }
-
-  void _requestRowFocus(List<FocusNode> nodes, int desired) =>
-      _boardViewport.requestFocus(nodes, desired, isCurrent: () => mounted);
 
   // ── TV Home layout (classic / canvas) ────────────────────────────────────
 
@@ -3626,26 +2675,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     onPlayingChanged: _heroPreview.onHeroTrailerPlaying,
     onLivePlaybackFailed: _heroLive.onHeroLivePlaybackFailed,
   );
-
-  late final _classicNavigation = HomeClassicNavigation(
-    rails: () => _stageRailsSection.canvasRails,
-    rowIdOf: _stageRailsSection.canvasRailRowId,
-    nodesFor: _stageRailsSection.canvasRailNodes,
-    requestFocus: _requestRowFocus,
-    leaveTop: _leaveBoardTop,
-    loadingMore: () => _boardLoadingMore,
-    hasMore: () => _boardHasMore,
-    focusContinuation: _focusCatalogContinuation,
-    loadMore: _loadMoreBoard,
-    deferDown: (rowId, column) =>
-        _deferDownMove(homeRowId: rowId, column: column),
-  );
-
-  bool _focusHomeRailAt(int index, int column) =>
-      _classicNavigation.focusAt(index, column);
-
-  void _focusRelativeHomeRail(String rowId, int delta, int column) =>
-      _classicNavigation.move(rowId, delta, column);
 
   // ── PROMENADE view ───────────────────────────────────────────────────────
 
@@ -3720,9 +2749,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     super.didChangeDependencies();
     if (PlatformUtil.isAndroidTvCached) {
       if (ModalRoute.of(context)?.isCurrent ?? true) {
-        _resumeHomeProgress();
+        _boardPublication.resumeHomeProgress();
       } else {
-        _clearDeferredDown();
+        _boardDeferred.clearDeferredDown();
         _stageSection.stageDeferredAdvance.reset();
       }
     }
@@ -3738,7 +2767,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // the reclaim listener fires while covered and bails on route.isCurrent,
     // and no focus event re-fires it on the way back — re-run the dead check
     // now that the board is the top route again.
-    _onGlobalFocusChange();
+    _boardFocus.onGlobalFocusChange();
     if (!_heroPreview.heroTrailerActive || !_heroPreview.heroTrailerEnabled) {
       return;
     }
@@ -3758,7 +2787,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           _catalogSection.catalogQuery.isNotEmpty ||
           _catalogSection.catalogSearching;
       _catalogSection.catalogController.clear();
-      if (hadCatalogSearch) _applySections(const []);
+      if (hadCatalogSearch) _boardRows.applySections(const []);
     }
   }
 
@@ -3791,238 +2820,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     dedicatedSearch: widget.searchMode,
     spotlightActive: () => _spotlightShell.spotlightShellActive,
     discover: _discoverSection.buildDiscover,
-    board: _buildBoard,
+    board: _boardRendering.buildBoard,
     spotlight: _spotlightShell.buildSpotlightShell,
     header: _inputSection.buildHeader,
     sourcesBar: _inputSection.buildUnifiedCatalogSourcesBar,
     body: _inputSection.buildBody,
   );
 
-  /// Poster width for a board rail. On TV the logical canvas can be as short as
-  /// 540px (a 1080p panel at density 320 → devicePixelRatio 2.0), where a poster
-  /// tuned for a 720-logical canvas leaves no room for a row (plus its header and
-  /// the next row's header) under the hero. So scale the poster with the screen
-  /// height.
-  double _railPosterW(BuildContext context) =>
-      homeRailPosterWidth(context, isTelevision: widget.isTelevision,
-        searchResults: widget.searchMode);
-
-  Size _railTitleCardSize(BuildContext context) => homeClassicCardSize(
-    posterWidth: _railPosterW(context),
-    landscape: _displaySection.homeLandscapeCards,
-  );
-
-  double _railTitleCardW(BuildContext context) =>
-      _railTitleCardSize(context).width;
-  double _railTitleCardH(BuildContext context) =>
-      _railTitleCardSize(context).height;
-
-  double _tvHeroBudget(double boardH) => homeClassicHeroBudget(
-    boardHeight: boardH,
-    cardHeight: _railTitleCardH(context),
-    isTelevision: widget.isTelevision,
-    searchResults: widget.searchMode,
-  );
-
   // ── Discover tab ────────────────────────────────────────────────────────────
-
-  bool _focusCatalogContinuation() => _catalogFocus.focusAction();
-
-  void _restoreCatalogContinuationFocus() {
-    if (_catalogFocus.restore([
-      _stageSection.stageFocusTarget(),
-      for (final rail in _stageRailsSection.canvasRails)
-        ..._stageRailsSection.canvasRailNodes(rail),
-    ])) {
-      return;
-    }
-    MainPageBridge.focusTvSidebar?.call();
-  }
-
-  Future<void> _continueHomeCatalogs({required bool moreCatalogs}) async {
-    final gen = _boardLoadGen;
-    bool current() =>
-        mounted &&
-        gen == _boardLoadGen &&
-        _profileSessionOwner == ProfileSessionMemory.captureOwner();
-    final actionNode = moreCatalogs ? _catalogMoreNode : _catalogContinueNode;
-    final ownedFocus = actionNode.hasFocus;
-    final operation = _catalogContinuationController.start(
-      moreCatalogs: moreCatalogs,
-      boardLoading: _boardLoadingMore,
-      rows: _sections,
-      hasMoreCatalogs: () => _boardHasMore,
-      isCurrent: current,
-      loadMoreCatalogs: () async {
-        await _loadMoreBoard();
-      },
-      resumeRow: (section) async {
-        final i = _sections.indexOf(section);
-        if (i >= 0) await _loadMoreRow(i, resume: true);
-      },
-    );
-    if (operation == null) return;
-    try {
-      await operation;
-    } finally {
-      _catalogFocus.restoreAfterCompletion(
-        actionNode,
-        ownedFocus: ownedFocus,
-        isCurrent: current,
-        onRestore: _restoreCatalogContinuationFocus,
-      );
-    }
-  }
-
-  Widget _buildBoard() {
-    final pending = [
-      for (var i = 0; i < _sections.length; i++)
-        if (_sections[i].pagingPaused && !_sections[i].exhausted) i,
-    ];
-    final hasMoreCatalogs = _boardHasMore;
-    final busy =
-        _catalogContinuing ||
-        _boardLoadingMore ||
-        pending.any((i) => _sections[i].loadingMore);
-    return buildHomeBoardFrame(
-      loading: _loading,
-      hasError: _error != null,
-      hasCatalogs: _sections.isNotEmpty,
-      catalogsEmpty: _sections.every((s) => s.items.isEmpty),
-      continuationVisible: _continuationProjection.cwVisible,
-      favoritesVisible: _savedSection.anyFavVisible,
-      hasPausedRows: pending.isNotEmpty,
-      hasMoreCatalogs: hasMoreCatalogs,
-      busy: busy,
-      continueNode: _catalogContinueNode,
-      moreNode: _catalogMoreNode,
-      onRestoreFocus: _restoreCatalogContinuationFocus,
-      onContinueRows: () => _continueHomeCatalogs(moreCatalogs: false),
-      onMoreCatalogs: () => _continueHomeCatalogs(moreCatalogs: true),
-      content: _buildBoardContent,
-      message: _message,
-    );
-  }
-
-  Widget _buildBoardContent() {
-    if (!_loading &&
-        !_spotlightSection.spotlightEntryRevealed &&
-        widget.isTelevision &&
-        !widget.searchMode &&
-        !widget.discoverMode &&
-        _catalogSection.catalogQuery.isEmpty &&
-        !_catalogSection.catalogSearching &&
-        _displaySection.homeStyleEffective == 'spotlight') {
-      if (_spotlightSection.spotlightHero.isEmpty &&
-          (_boardRefreshing || _spotlightSection.heroSourceResolving)) {
-        return BrandLoadingStage(isTelevision: true);
-      }
-      // Reveal once: background refreshes must not hide an already usable
-      // board. Hero success enters on the hero; exhaustion enters on a card.
-      _spotlightSection.spotlightEntryRevealed = true;
-      _autoFocusSettled = false;
-      _maybeAutoFocusBoard();
-    }
-    return buildHomeBoardContent(
-      loading: _loading,
-      isTelevision: widget.isTelevision,
-      error: _error,
-      continuationVisible: _continuationProjection.cwVisible,
-      catalogsEmpty: _sections.isEmpty,
-      favoritesVisible: _savedSection.anyFavVisible,
-      traktReserving: _continuationProjection.traktReserving,
-      query: _catalogSection.catalogQuery,
-      searchFailures: _catalogSearchFailures,
-      searchMode: widget.searchMode,
-      style: _displaySection.homeStyleEffective,
-      spotlightHasContent: () =>
-          _spotlightRows.spotlightShelves.any((s) => s.items.isNotEmpty),
-      layouts: {
-        'canvas': _stageBoards.buildCanvasBoard,
-        'atrium': _atriumLayout.buildAtriumBoard,
-        'mosaic': _stageBoards.buildMosaicBoard,
-        'promenade': _stageBoards.buildPromenadeBoard,
-        'deck': _stageBoards.buildDeckBoard,
-        'tonight': _tonightLayout.buildTonightBoard,
-        'spotlight': _spotlightBoards.buildSpotlightBoard,
-      },
-      searchSpotlight: _spotlightResults.buildSearchSpotlightBoard,
-      classic: _buildClassicBoard,
-      onRetry: () => unawaited(_load()),
-      message: _message,
-    );
-  }
-
-  Widget _buildClassicBoard() {
-    final tv = widget.isTelevision;
-    return buildHomeClassicBoard(
-      context: context,
-      isTelevision: tv,
-      tvHeroBudget: _tvHeroBudget,
-      media: () => _boardMedia,
-      trailerActive: () => _heroPreview.heroTrailerActive,
-      heroActive: () => _heroSection.heroActive,
-      readHeroConfiguration: () => (
-        compact: widget.searchMode,
-        isTelevision: tv,
-        artworkCacheWidth: tv
-            ? (_displaySection.homeBoardMode
-                  ? _tvHeroArtworkCacheWidth
-                  : HomeTheme.heroBackdropCacheWidthTv)
-            : HomeTheme.heroBackdropCacheWidth,
-        artworkCacheHeight: tv
-            ? (_displaySection.homeBoardMode
-                  ? _tvHeroArtworkCacheHeight
-                  : HomeTheme.heroBackdropCacheHeightTv)
-            : null,
-        trailerActive: _heroPreview.heroTrailerActive,
-      ),
-      tint: _heroSection.heroTint,
-      trailerShowing: _heroPreview.heroTrailerShowing,
-      liveTakeover: _heroLive.heroLiveTakeover,
-      showSearchStatus: () =>
-          _catalogSection.catalogQuery.isNotEmpty &&
-          (_catalogSection.catalogSearching || _catalogSearchFailures > 0),
-      searchStatus: _buildSearchStatusStrip,
-      rowsBuilder: (_) => _buildClassicRows(),
-    );
-  }
-
-  Widget _buildClassicRows() {
-    // Home uses one globally ordered descriptor list across
-    // every row family. Catalog search results never read
-    // that Home order.
-    final orderedHome = _homeRowOrderActive;
-    final homeRails = orderedHome
-        ? _stageRailsSection.classicHomeRails
-        : const <HomeRail>[];
-    return HomeClassicRows.fromRails(
-      scrollController: _boardScroll,
-      generation: _boardGen,
-      catalogRowCount: _sections.length,
-      rails: orderedHome ? homeRails : null,
-      rowIdOf: _stageRailsSection.canvasRailRowId,
-      catalog: _buildRow,
-      skeleton: _continuationRows.buildTraktSkeletonRow,
-      continuation: _continuationRows.buildContinueWatchingRow,
-      favorite: _savedRows.buildFavRow,
-      showFooter: _boardLoadingMore,
-      tailPadding: _classicAnchorTailPadding,
-      footerBuilder: (_) => _buildBoardFooter(),
-      isFresh: () =>
-          DateTime.now().difference(_boardAppliedAt) <
-          const Duration(milliseconds: 1800),
-    );
-  }
-
-  /// Status strip for a streaming catalog search (see the call site in
-  /// [_buildBoard]). Fixed height so the swap from "searching" bar to the
-  /// failure note doesn't reflow the rows under DPAD focus.
-  Widget _buildSearchStatusStrip() => buildCatalogSearchStatus(
-    context,
-    searching: _catalogSection.catalogSearching,
-    failures: _catalogSearchFailures,
-  );
 
   /// "Movies" / "Series" (etc.) tag for a catalog row, so two "Popular" rows
   /// (one movies, one series) are distinguishable. Null for unknown types.
@@ -4109,140 +2914,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _seeAllNavigation.openCatalog(context, section);
     }
   }
-
-  double _classicCatalogRowExtent(
-    BuildContext context, {
-    CatalogSection? section,
-  }) => measureHomeClassicRowExtent(
-    context,
-    hideHeader:
-        _displaySection.hideHomeCollectionNames &&
-        section is HomeCollectionSection,
-    hideSourceTags: _displaySection.hideHomeCatalogAddonNames,
-    titleStyle: () => homeCatalogRowTitleStyle(this.context, fontSize: 15),
-    cardHeight: () => _railTitleCardH(context),
-  );
-
-  Widget _railHeader({
-    required String title,
-    String? tag,
-    VoidCallback? onSeeAll,
-  }) => buildHomeCatalogRowHeader(
-    context,
-    isTelevision: widget.isTelevision,
-    title: title,
-    tag: tag,
-    onSeeAll: onSeeAll,
-  );
-
-  Widget _buildRow(int rowIndex, {String? homeRowId}) {
-    final section = _sections[rowIndex];
-    final nodes = _rowNodes[rowIndex];
-    final tv = widget.isTelevision;
-    // Bigger, roomier posters on desktop (Stremio-scale); smaller on phones.
-    // Titleless cells (Stremio-style) — just the art box + a little headroom
-    // for the hover/focus lift. The box follows the Home Cards orientation.
-    // Collection rows draw their folders' own tile shape (a brand tile stays
-    // wide even when Home cards are portrait) at the same height as every
-    // other rail, so the row grammar stays intact.
-    final collection = section is HomeCollectionSection ? section : null;
-    final cellH = _railTitleCardH(context);
-    final cellAspect =
-        collection?.tileAspectRatio ?? _stageGeometry.titleCardAspect;
-    final posterW = collection == null
-        ? _railTitleCardW(context)
-        : cellH * cellAspect;
-    // Rows start straight on the first poster (Stremio-style, no
-    // leading See-All tile). DPAD-up from row 0 leaves the board;
-    // col-0 DPAD-left drops to the sidebar (handled in HomeBoardCell
-    // when onLeftEdge is null).
-    VoidCallback up(int col) => homeRowId != null
-        ? () => _focusRelativeHomeRail(homeRowId, -1, col)
-        : rowIndex == 0
-        ? (_savedSection.anyFavVisible
-              ? () => _savedSection.focusFavRowAt(
-                  _savedSection.favRowCount - 1,
-                  col,
-                )
-              : (_continuationProjection.cwVisible
-                    ? () => _continuationMenu.focusCwRow(
-                        _continuationProjection.cwRows.length - 1,
-                        col,
-                      )
-                    : () => _leaveBoardTop()))
-        : () => _focusRow(rowIndex - 1, col);
-    // Down past the last loaded row kicks the next batch load
-    // (inside _focusRow) and defers the move until it lands.
-    VoidCallback down(int col) => homeRowId != null
-        ? () => _focusRelativeHomeRail(homeRowId, 1, col)
-        : () {
-            if (!_focusRow(rowIndex + 1, col)) {
-              _deferDownMove(rowIndex: rowIndex, column: col);
-            }
-          };
-    return buildHomeCatalogItems(
-      section: section,
-      nodes: nodes,
-      tv: tv,
-      header: collection == null || !_displaySection.hideHomeCollectionNames
-          ? _railHeader(
-              title: section.title,
-              tag: _catalogSourceTag(section),
-              onSeeAll: () => _openCatalogSeeAll(section),
-            )
-          : const SizedBox(height: 8),
-      cellH: cellH,
-      cellAspect: cellAspect,
-      posterW: posterW,
-      heroTagFor: (col) => 'poster-${identityHashCode(this)}-$rowIndex-$col',
-      isBound: _isBound,
-      artOf: (item) => _stageGeometry.titleArtUrl(item),
-      showTitle: () => !_displaySection.hideHomeCardTitlesAndRatings,
-      pikpakOnly: () => _pikpakOnly,
-      onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-      up: up,
-      down: down,
-      onFocused: (item, col) {
-        _heroSection.setHero(item);
-        _rowCol[rowIndex] = col;
-      },
-      onOpen: (item, heroTag) =>
-          _sectionOpenItem(section, item, heroTag: heroTag),
-      onQuickPlay: (item) => _sectionQuickPlay(section, item),
-      onLoadMore: () => _loadMoreRow(rowIndex),
-    );
-  }
-
-  /// Bottom-of-board loading indicator shown while more catalog rows stream in.
-  Widget _buildBoardFooter() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 28),
-      child: Center(
-        child: SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      ),
-    );
-  }
-
-  Widget _message(
-    IconData icon,
-    String title,
-    String body, {
-    VoidCallback? onRetry,
-  }) => buildRetryMessage(
-    context,
-    icon,
-    title,
-    body,
-    isTelevision: widget.isTelevision,
-    onRetry: onRetry,
-  );
-
-
-
 }
 
 /// The Stremio-style spotlight. Reflects the currently focused board title —
