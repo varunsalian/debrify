@@ -73,10 +73,12 @@ void main() {
     expect(HomeRowOrder.seedCollections([], ['collection:new']), isEmpty);
   });
 
-  // The stage layouts are private parts of SearchScreen. These wiring guards
+  // The stage layout owners retain SearchScreen's wiring. These guards
   // supplement the rendered shared-card tests; they catch a layout reverting
   // to global title geometry while the shared presentation stays correct.
-  final source = File('lib/screens/search_screen.dart').readAsStringSync();
+  final source = File(
+    'lib/features/home/presentation/home_stage_cells.dart',
+  ).readAsStringSync();
   // Every stage layout builds its cells through the shared HomeStageCards
   // builder, which owns collection shape, artwork and focus preview.
   final stageCards = File(
@@ -93,34 +95,65 @@ void main() {
       expect(stageCards, contains('hideTitle'));
       // The screen wires the collection-aware geometry, not global title
       // geometry, into the shared builder.
-      expect(source, contains('aspectOf: _stageCardAspect,'));
-      expect(source, contains('artOf: _stageCardArt,'));
+      expect(source, contains('aspectOf: _stageGeometry.stageCardAspect,'));
+      expect(source, contains('artOf: _stageGeometry.stageCardArt,'));
     },
   );
-  for (final (start, end) in [
-    ('Widget _canvasCell', 'void _maybeCompleteStageAdvance'),
-    ('Widget _promenadeCell', 'Widget _buildAtriumBoard'),
-    ('Widget _atriumRow', 'Widget _buildMosaicBoard'),
-    ('Widget _mosaicCell', 'Widget _buildDeckBoard'),
-    ('Widget _stageShelfCell', 'Widget _buildTonightBoard'),
+  for (final (identity, file, start, end) in [
+    (
+      'Widget _canvasCell',
+      'home_stage_cells.dart',
+      'Widget canvasCell',
+      'Widget promenadeCell',
+    ),
+    (
+      'Widget _promenadeCell',
+      'home_stage_cells.dart',
+      'Widget promenadeCell',
+      'Widget mosaicCell',
+    ),
+    (
+      'Widget _atriumRow',
+      'home_atrium_section.dart',
+      'Widget atriumRow',
+      '\n}',
+    ),
+    (
+      'Widget _mosaicCell',
+      'home_stage_cells.dart',
+      'Widget mosaicCell',
+      'Widget stageShelfCell',
+    ),
+    (
+      'Widget _stageShelfCell',
+      'home_stage_cells.dart',
+      'Widget stageShelfCell',
+      '\n}',
+    ),
   ]) {
-    test('$start uses collection artwork, shape and focus preview', () {
+    test('$identity uses collection artwork, shape and focus preview', () {
+      final source = File(
+        'lib/features/home/presentation/$file',
+      ).readAsStringSync();
       final from = source.indexOf(start);
       final to = source.indexOf(end, from);
       expect(from, isNonNegative);
       expect(to, greaterThan(from));
       final body = source.substring(from, to);
-      expect(body, contains('_stageCards.build('));
+      expect(body, contains('stageCards.build('));
     });
   }
   test('Canvas board sizes its rail with collection geometry', () {
-    final from = source.indexOf('Widget _buildCanvasBoard');
-    final to = source.indexOf('double get _titleCardAspect', from);
+    final source = File(
+      'lib/features/home/presentation/home_stage_boards.dart',
+    ).readAsStringSync();
+    final from = source.indexOf('Widget buildCanvasBoard');
+    final to = source.indexOf('Widget buildPromenadeBoard', from);
     expect(from, isNonNegative);
     expect(to, greaterThan(from));
     final body = source.substring(from, to);
-    expect(body, contains('_stageCardAspect(view.rail)'));
-    expect(body, contains('_canvasCell(view, col)'));
+    expect(body, contains('_stageGeometry.stageCardAspect(view.rail)'));
+    expect(body, contains('_stageCells.canvasCell(view, col)'));
   });
   test('folder focus retires title work and owns the hero', () {
     final source = File(

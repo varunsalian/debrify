@@ -22,6 +22,17 @@ class HomeCatalogRepository {
   fetchPage;
   final bool Function(StremioMeta)? Function() readHides;
 
+  /// Reads the independent Spotlight reel with its existing eight-item floor.
+  Future<FilteredPage> fetchHeroPage(
+    StremioAddon addon,
+    StremioAddonCatalog catalog,
+  ) => fetchFilteredPage(
+    (skip, onRaw) => fetchPage(addon, catalog, skip, onRaw),
+    skip: 0,
+    hides: readHides(),
+    minItems: 8,
+  );
+
   /// Reads one horizontal page without mutating the displayed legacy row.
   /// A moved row remains eligible; the caller checks its identity and profile
   /// before every raw request and again before publishing the returned page.

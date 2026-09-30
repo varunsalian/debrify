@@ -471,7 +471,9 @@ of this is dropped silently:
 
 | 7 | `8a6330ae` | 5,811 | Hero selection/metadata/art/tint, trailer preferences/scheduling/suppression, live preview and shell relays moved into four Home presentation owners (57–244 lines). Borrowed shell notifiers are passed at composition; media bindings and disposal remain in their original order. Folder-focus source guard follows its new owner with every assertion retained. Scoped analyze: same 2 infos; focused tests: 215 pass, 5 step-0 failures/errors, no missing identities/new skips; guard passes. |
 
-| 7b | `:/test: capture Home layout D-pad behavior` | 5,811 | Parameterized TV smoke test reuses the progressive-screen harness pattern for all eight layouts. Baseline captures and asserts metadata card keys through Down/Right/Left/Up, then Select opens that title; existing cards do not expose Flutter widget keys. All 8 pass; test analyzer clean; architecture guard passes. Test remains unchanged through step 8. |
+| 7b | `283d753e` | 5,811 | Parameterized TV smoke test reuses the progressive-screen harness pattern for all eight layouts. Baseline captures and asserts metadata card keys through Down/Right/Left/Up, then Select opens that title; existing cards do not expose Flutter widget keys. All 8 pass; test analyzer clean; architecture guard passes. Test remains unchanged through step 8. |
+
+| 8 | `:/refactor: move Home stage and Spotlight coordinators` | 4,250 | Display transitions, rail projections, stage focus/deferred/hold/theater state, favorite previews, geometry/cells, six stage builders, Spotlight source/shelves/board and Search Spotlight results/shell moved (new owners 70–364 lines). Hero-source paging uses the existing catalog repository; Top Shelf and shell publication remain explicit composition dependencies. Source guards retain every assertion and identity; nine render owners registered in the shape manifest. Whole Search feature + screen/source/repository checks: 460 pass, 5 step-0 failures/errors, no missing identities/new skips; all eight step-7b tests pass unchanged. Scoped analyze: same 2 infos; architecture guard passes. |
 
 ## Found, not fixed
 

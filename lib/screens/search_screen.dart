@@ -1,3 +1,18 @@
+import '../features/home/presentation/home_spotlight_boards.dart';
+import '../features/search/presentation/search_spotlight_results.dart';
+import '../features/home/presentation/home_spotlight_rows.dart';
+import '../features/home/presentation/home_tonight_section.dart';
+import '../features/home/presentation/home_atrium_section.dart';
+import '../features/home/presentation/home_stage_boards.dart';
+import '../features/home/presentation/home_stage_cells.dart';
+import '../features/home/presentation/home_stage_geometry.dart';
+import '../features/home/presentation/home_stage_favorites.dart';
+import '../features/home/presentation/home_stage_section.dart';
+import '../features/home/application/home_catalog_dependencies.dart';
+import '../features/home/presentation/home_spotlight_section.dart';
+import '../features/search/presentation/search_spotlight_shell.dart';
+import '../features/home/presentation/home_display_section.dart';
+import '../features/home/presentation/home_stage_rails.dart';
 import '../features/home/presentation/home_hero_live.dart';
 import '../features/home/presentation/home_hero_preview.dart';
 import '../features/home/presentation/home_hero_section.dart';
@@ -47,20 +62,9 @@ import '../features/search/presentation/search_result_bindings.dart';
 import '../features/search/presentation/lists_navigation.dart';
 import '../features/discover/presentation/discover_bindings.dart';
 import '../features/home/presentation/home_classic_favorite_rows.dart';
-import '../features/home/presentation/home_rail_composition.dart';
-import '../features/home/presentation/home_stage_favorite_cards.dart';
 import '../features/home/presentation/home_classic_navigation.dart';
-import '../features/home/presentation/home_stage_navigation.dart';
-import '../features/home/presentation/home_tonight_focus.dart';
-import '../features/home/presentation/home_mosaic_cell_navigation.dart';
-import '../features/home/presentation/home_stage_cards.dart';
-import '../features/home/presentation/home_spotlight_favorites.dart';
-import '../features/search/presentation/search_spotlight_board.dart';
-import '../features/home/presentation/home_spotlight_shelf.dart';
 import '../features/search/presentation/catalog_search_status.dart';
 import '../features/home/presentation/home_classic_board.dart';
-import '../features/home/presentation/home_canvas_board.dart';
-import '../features/home/presentation/home_tonight_board.dart';
 import '../features/home/presentation/home_board_media.dart';
 import '../ui/core/retry_message.dart';
 import '../features/home/presentation/home_board_content.dart';
@@ -71,35 +75,13 @@ import '../features/home/presentation/home_detail_action_bridge.dart';
 import '../features/home/presentation/home_catalog_row.dart';
 import '../features/home/presentation/home_catalog_row_header.dart';
 import '../features/discover/presentation/discover_panels.dart';
-import '../features/home/presentation/home_stage_theater.dart';
 import '../features/home/presentation/home_hero_shell.dart';
 export '../features/home/presentation/spotlight_iptv_card_preview.dart'
     show SpotlightIptvCardPreview;
 import '../features/search/presentation/search_page_shell.dart';
-import '../features/home/presentation/home_promenade_board.dart';
-import '../features/home/presentation/home_atrium_board.dart';
-import '../features/home/presentation/home_atrium_row.dart';
-import '../features/home/presentation/home_mosaic_board.dart';
-import '../features/home/presentation/home_deck_board.dart';
-import '../features/home/presentation/home_stage_row_label.dart';
-import '../features/home/presentation/home_tonight_queue_list.dart';
-import '../features/home/presentation/home_tonight_rail.dart';
-import '../features/home/presentation/home_stage_hold_latch.dart';
-import '../features/home/presentation/home_stage_focus_requests.dart';
-import '../features/home/presentation/home_stage_deferred_right.dart';
-import '../features/home/presentation/home_stage_deferred_advance.dart';
 import '../widgets/skeleton_poster.dart' show BrandLoadingStage;
 import '../features/home/presentation/home_stage_rows.dart';
-import '../features/home/presentation/home_tonight_queue_row.dart';
-import '../features/home/presentation/home_favorite_focus.dart';
-import '../features/home/models/home_tonight_card_info.dart';
-import '../features/home/application/home_stage_metadata.dart';
 import '../features/home/presentation/home_classic_rows.dart';
-import '../features/home/presentation/home_board_cell.dart';
-import '../features/home/models/home_favorite_row_ref.dart';
-import '../features/home/presentation/home_favorite_cell.dart';
-import '../features/home/presentation/home_art_poster.dart';
-import '../features/home/presentation/home_card_style.dart';
 import '../features/discover/models/discover_source_state.dart';
 import '../features/discover/application/metadata_feature_controller.dart';
 import '../features/discover/models/metadata_feature_policy.dart';
@@ -111,14 +93,12 @@ import '../features/home/application/home_return_dependencies.dart';
 import '../features/home/application/home_pikpak_only_controller.dart';
 import '../features/home/application/home_bound_counts_controller.dart';
 import '../features/home/application/home_configuration_changes.dart';
-import '../features/home/application/home_layout_preference.dart';
 import '../features/home/application/home_layout_preference_dependencies.dart';
 import '../features/home/application/home_default_view.dart';
 import '../features/home/application/home_default_view_dependencies.dart';
 import '../features/home/application/home_display_preferences_controller.dart';
 import '../features/home/models/home_display_preferences.dart';
 import '../features/home/presentation/home_progress_publication.dart';
-import '../features/home/models/home_stremio_favorites.dart';
 import '../features/home/presentation/home_continuation_bindings.dart';
 import '../features/home/models/home_continuation_session.dart';
 import '../features/home/application/home_row_snapshot.dart';
@@ -164,7 +144,6 @@ import '../theme/app_theme_scope.dart';
 import '../features/home/presentation/home_classic_row_metrics.dart';
 import '../utils/platform_util.dart';
 import '../models/home_collection.dart';
-import '../models/iptv_playlist.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/stremio_addon.dart';
 import '../services/analytics_service.dart';
@@ -172,9 +151,7 @@ import '../services/home_collection_rows.dart';
 import '../services/home_collections_store.dart';
 import '../services/home_list_rows.dart';
 import '../services/home_row_order.dart';
-import '../services/filtered_catalog_pager.dart';
 import '../services/hide_watched_prefs.dart';
-import '../services/watched_filter.dart';
 import '../services/iptv_cw_router.dart';
 import '../services/iptv_media_store.dart';
 import '../services/main_page_bridge.dart';
@@ -193,8 +170,6 @@ import '../services/video_player_launcher.dart';
 import '../utils/tv_search_focus_handoff.dart';
 import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
-import '../widgets/home/spotlight_board.dart';
-import '../widgets/home/spotlight_catalog_card_cache.dart';
 import '../services/tmdb_title_search.dart';
 import '../services/metadata_title_service.dart';
 import 'collections/collection_folder_screen.dart';
@@ -203,7 +178,6 @@ import '../services/mdblist/mdblist_service.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/see_all/discover_card_settings_scope.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
-import '../features/home/application/home_layout_policy.dart';
 
 /// TV focus ring for board cards — violet-300, deliberately LIGHTER than the
 /// board's chrome accent: a light ring over dark art pops at 10ft, while the
@@ -270,22 +244,6 @@ class SearchScreen extends ConsumerStatefulWidget {
 const String _discCw = DiscoverSources.cw;
 const String _discTmdb = DiscoverSources.tmdb;
 const String _discMdblist = DiscoverSources.mdblist;
-
-/// Smallest poster art a stage rail will draw before it is simply too small
-/// to recognise — the floor every derived rail box respects.
-const double _kStageMinPosterH = 56;
-
-// ATRIUM metrics. The wall's height is DERIVED from these (never guessed),
-// so the dossier column beside it can't be crowded by a taller row.
-const double _kAtriumLabelGap = 10;
-
-double _atriumLabelHeight(BuildContext context) =>
-    MediaQuery.textScalerOf(context).scale(homeStageRowLabelFontSize) * 1.35;
-
-/// Dim painted over every strip cell that isn't focused, so the centre-locked
-/// cell reads as the lit one. A flat fill inside the card's own clip (see
-/// [CardFocusRise.restVeil]) — no Opacity, no saveLayer.
-const Color _kPromRestVeil = Color(0x8C0D0B1A);
 
 class _SearchScreenState extends ConsumerState<SearchScreen>
     with RouteAware, WidgetsBindingObserver {
@@ -416,10 +374,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Imported collections — each enabled one is a row of folder tiles.
   List<HomeCollection> get _homeCollections => _homeConfiguration.collections;
-  late final _spotlightCatalogCards = SpotlightCatalogCardCache(
-    wideArtwork: homeStageWideArtwork,
-    onOpen: (item, addon) => _itemActions.openItem(item, addon),
-  );
 
   /// Stable ids in the user's global Home-row order. Rows not present append
   /// canonically; ids whose backing row is temporarily unavailable stay saved.
@@ -427,8 +381,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// The Spotlight hero-source pref (`home_hero_source_v1`): which catalog the
   /// hero reel is built from. Read in [_load], refreshed by
-  /// [_reloadForHomeSettings]; resolved into [_spotlightHeroOverride] by
-  /// [_resolveSpotlightHeroSource].
+  /// [_reloadForHomeSettings]; resolved into [_spotlightSection.spotlightHeroOverride] by
+  /// [_spotlightSection.resolveSpotlightHeroSource].
   HomeHeroSource get _heroSource => _homeConfiguration.preferences.heroSource;
 
   /// Whether any Trakt/Simkl list row is opted in — gates the tracker-row
@@ -486,7 +440,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     MainPageBridge.homeBoardReady.value = true;
     _maybeAutoFocusBoard();
     _maybeCompleteDeferredDown();
-    _maybeCompleteStageAdvance();
+    _stageSection.maybeCompleteStageAdvance();
   }
 
   void _resumeHomeProgress() => _homePublication.resume(
@@ -619,6 +573,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     ],
   );
   late final HomeMediaBindings _homeMediaBindings;
+  late final HomeStageBoards _stageBoards;
+  late final HomeAtriumSection _atriumLayout;
+  late final HomeTonightSection _tonightLayout;
+  late final HomeSpotlightRows _spotlightRows;
+  late final SearchSpotlightResults _spotlightResults;
+  late final HomeSpotlightBoards _spotlightBoards;
+  late final HomeStageCells _stageCells;
+  late final HomeStageGeometry _stageGeometry;
+  late final HomeStageFavorites _stageFavorites;
+  late final HomeStageSection _stageSection;
+  late final HomeSpotlightSection _spotlightSection;
+  late final SearchSpotlightShell _spotlightShell;
+  late final HomeDisplaySection _displaySection;
+  late final HomeStageRails _stageRailsSection;
   late final HomeHeroShell _heroShell;
   late final HomeHeroSection _heroSection;
   late final HomeHeroPreview _heroPreview;
@@ -969,9 +937,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   _rowNodes.first.isNotEmpty
               ? _rowNodes.first.first
               : null,
-          focusCatalogShelf: _spotlightKey.currentState == null
+          focusCatalogShelf: _spotlightSection.spotlightKey.currentState == null
               ? null
-              : () => _spotlightKey.currentState!.focusShelf(0),
+              : () =>
+                    _spotlightSection.spotlightKey.currentState!.focusShelf(0),
           topBoardNode: _topBoardFocusNode,
           loading: _loading,
           focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
@@ -1262,8 +1231,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           context: context,
           isTelevision: widget.isTelevision,
           posterWidth: _railPosterW(context),
-          captionBand: _homeArtPosterCaptionBand,
-          showTitle: () => !_hideHomeCardTitlesAndRatings,
+          captionBand: _displaySection.homeArtPosterCaptionBand,
+          showTitle: () => !_displaySection.hideHomeCardTitlesAndRatings,
           nodes: nodes,
           up: (col) => _favRowOnUp(rowId, col),
           down: (col) => _favRowOnDown(rowId, col),
@@ -1399,9 +1368,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         isTelevision: () => widget.isTelevision,
         posterWidth: () => _railTitleCardW(context),
         cellHeight: () => _railTitleCardH(context),
-        aspectRatio: () => _titleCardAspect,
-        showTitleOverlay: () => !_hideHomeCardTitlesAndRatings,
-        artOf: _titleArtUrl,
+        aspectRatio: () => _stageGeometry.titleCardAspect,
+        showTitleOverlay: () => !_displaySection.hideHomeCardTitlesAndRatings,
+        artOf: (item) => _stageGeometry.titleArtUrl(item),
         isBound: _isBound,
         sidebar: () => MainPageBridge.focusTvSidebar?.call(),
         onFocused: (item) => _heroSection.setHero(item),
@@ -1441,9 +1410,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         mounted: () => mounted,
         isTelevision: () => widget.isTelevision,
         searchMode: () => widget.searchMode,
-        stageActive: () => _stageActive,
-        stagePublishesShellArt: () => _stagePublishesShellArt,
-        clearFavoriteFocus: () => _canvasFavFocus.value = null,
+        stageActive: () => _displaySection.stageActive,
+        stagePublishesShellArt: () => _displaySection.stagePublishesShellArt,
+        clearFavoriteFocus: () => _stageFavorites.canvasFavFocus.value = null,
         preview: () => _heroPreview,
         clearLive: () => _heroLive.clearHeroLiveIptv(),
       ),
@@ -1458,12 +1427,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       isTelevision: () => widget.isTelevision,
       searchMode: () => widget.searchMode,
       discoverMode: () => widget.discoverMode,
-      stageActive: () => _stageActive,
-      stageWantsAmbient: () => _stageWantsAmbient,
-      homeStyle: () => _homeStyleEffective,
-      hasFavoriteFocus: () => _canvasFavFocus.value != null,
+      stageActive: () => _displaySection.stageActive,
+      stageWantsAmbient: () => _displaySection.stageWantsAmbient,
+      homeStyle: () => _displaySection.homeStyleEffective,
+      hasFavoriteFocus: () => _stageFavorites.canvasFavFocus.value != null,
       hasLiveChannel: () => _heroLive.heroLiveChannel.value != null,
-      spotlightHeroId: () => _spotlightKey.currentState?.currentHeroId,
+      spotlightHeroId: () =>
+          _spotlightSection.spotlightKey.currentState?.currentHeroId,
     ), _heroSection.heroItem);
     _heroLive = HomeHeroLive(
       (media: () => _homeMediaBindings, mounted: () => mounted),
@@ -1476,6 +1446,213 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _heroPreview,
       MainPageBridge.tvChromeDim,
       MainPageBridge.tvStageLightsOff,
+    );
+    _displaySection = HomeDisplaySection(
+      (
+        mounted: () => mounted,
+        setState: setState,
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        searchMode: () => widget.searchMode,
+        discoverMode: () => widget.discoverMode,
+        spotlightShellActive: () => _spotlightShell.spotlightShellActive,
+        searchSheetOpen: () => _spotlightShell.searchSheetOpen,
+        resetStageNavigation: () => _stageSection.resetStageNavigation(),
+      ),
+      _heroSection,
+      _heroPreview,
+      _heroLive,
+      MainPageBridge.tvAmbientArt,
+    );
+    _spotlightSection = HomeSpotlightSection((
+      mounted: () => mounted,
+      setState: setState,
+      searchMode: () => widget.searchMode,
+      discoverMode: () => widget.discoverMode,
+      heroSource: () => _heroSource,
+      sections: () => _sections,
+      repository: () => ref.read(homeCatalogRepositoryProvider),
+      publishTopShelf: (items, {sourceTitle}) => TvosTopShelfService.instance
+          .publishSpotlight(items, sourceTitle: sourceTitle),
+    ), _catalogSection);
+    _spotlightShell = SearchSpotlightShell(
+      (
+        mounted: () => mounted,
+        setState: setState,
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        searchMode: () => widget.searchMode,
+        discoverMode: () => widget.discoverMode,
+        rawStyle: () => _displaySection.tvHomeStyle,
+        loading: () => _loading,
+        hasHero: () => _spotlightSection.spotlightHero.isNotEmpty,
+      ),
+      _searchController,
+      _inputSection,
+      _modeSection,
+      _catalogSection,
+    );
+    _stageRailsSection = HomeStageRails(
+      (
+        sections: () => _sections,
+        rowNodes: () => _rowNodes,
+        orderActive: () => _homeRowOrderActive,
+        order: () => _effectiveHomeRowOrder,
+        disabled: () => _homeDisabled,
+        sectionRowId: _sectionRowId,
+        style: () => _displaySection.homeStyleEffective,
+        hideCollectionNames: () => _displaySection.hideHomeCollectionNames,
+        sectionTag: _sectionTag,
+      ),
+      _continuationProjection,
+      _continuationSection,
+      _savedSection,
+    );
+    _stageSection = HomeStageSection(
+      (
+        mounted: () => mounted,
+        setState: setState,
+        context: () => context,
+        clearFavoriteFocus: () => _stageFavorites.canvasFavFocus.value = null,
+        rowsPending: () => _boardRowsPending,
+        canAdvance: () => _boardCanAdvance,
+        focusContinuation: _focusCatalogContinuation,
+        loadMore: _loadMoreBoard,
+      ),
+      _stageRailsSection,
+      _displaySection,
+      _heroPreview,
+      _spotlightSection,
+      _pendingDownMaxAge,
+    );
+    _stageFavorites = HomeStageFavorites(
+      _stageSection,
+      _displaySection,
+      _heroSection,
+      _heroPreview,
+      _heroLive,
+      _savedSection,
+      _savedIptv,
+      _watchlistActions,
+      _playlistActions,
+      () => MainPageBridge.focusTvSidebar?.call(),
+    );
+    _stageGeometry = HomeStageGeometry(_displaySection, () => _sections);
+    _stageCells = HomeStageCells(
+      (
+        sectionAt: (index) => _sections[index],
+        isBound: _isBound,
+        pikpakOnly: () => _pikpakOnly,
+        openSection: _sectionOpenItem,
+        playSection: _sectionQuickPlay,
+        sidebar: () => MainPageBridge.focusTvSidebar?.call(),
+        loadMore: _loadMoreRow,
+      ),
+      _stageGeometry,
+      _stageSection,
+      _stageFavorites,
+      _heroSection,
+      _continuationMenu,
+    );
+    _stageBoards = HomeStageBoards(
+      (
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        media: () => _boardMedia,
+      ),
+      _stageSection,
+      _stageRailsSection,
+      _stageGeometry,
+      _stageCells,
+      _stageFavorites,
+      _displaySection,
+      _heroPreview,
+    );
+    _atriumLayout = HomeAtriumSection(
+      (
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        media: () => _boardMedia,
+        canAdvance: () => _boardCanAdvance,
+        loadMore: _loadMoreBoard,
+      ),
+      _stageSection,
+      _stageRailsSection,
+      _stageGeometry,
+      _stageCells,
+      _stageFavorites,
+      _displaySection,
+      _heroPreview,
+    );
+    _tonightLayout = HomeTonightSection(
+      (
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        media: () => _boardMedia,
+        sidebar: () => MainPageBridge.focusTvSidebar?.call(),
+        isBound: _isBound,
+      ),
+      _stageSection,
+      _stageRailsSection,
+      _stageGeometry,
+      _stageCells,
+      _stageFavorites,
+      _heroPreview,
+      _heroSection,
+      _continuationMenu,
+    );
+    _spotlightRows = HomeSpotlightRows(
+      (
+        sections: () => _sections,
+        rowNodes: () => _rowNodes,
+        catalogTag: _catalogSourceTag,
+        seeAll: _openCatalogSeeAll,
+        openCollection: _openCollectionFolder,
+      ),
+      _stageRailsSection,
+      _stageSection,
+      _displaySection,
+      _continuationMenu,
+      _stageFavorites,
+      _itemActions,
+    );
+    _spotlightResults = SearchSpotlightResults(
+      (
+        context: () => context,
+        sections: () => _sections,
+        rowNodes: () => _rowNodes,
+        failures: () => _catalogSearchFailures,
+        leaveTop: _leaveBoardTop,
+        openSection: _sectionOpenItem,
+        pikpakOnly: () => _pikpakOnly,
+        catalogTag: _catalogSourceTag,
+        seeAll: _openCatalogSeeAll,
+        loadMoreRow: _loadMoreRow,
+      ),
+      _catalogSection,
+      _displaySection,
+      _heroPreview,
+      _spotlightSection,
+      _itemActions,
+      _catalogActions,
+    );
+    _spotlightBoards = HomeSpotlightBoards(
+      (
+        mounted: () => mounted,
+        isTelevision: () => widget.isTelevision,
+        loadMoreRow: _loadMoreRow,
+        loadMore: _loadMoreBoard,
+        rowsPending: () => _boardRowsPending,
+        media: () => _boardMedia,
+      ),
+      _stageRailsSection,
+      _displaySection,
+      _heroPreview,
+      _spotlightSection,
+      _itemActions,
+      _spotlightRows,
+      MainPageBridge.tvAmbientArt,
+      MainPageBridge.tvHeroTint,
     );
     _titleSearch.addListener(_titleSection.publishTitleSuggestions);
     _searchController.addListener(_titleSection.onTitleSearchEditingChanged);
@@ -1557,11 +1734,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       onContinuationChanged: () => setState(() {}),
     );
     _homeMediaBindings = HomeMediaBindings(ref, homeSession);
-    _homeLayoutPreferenceSubscription = ref.listenManual(
+    _displaySection.homeLayoutPreferenceSubscription = ref.listenManual(
       homeLayoutPreferenceProvider(homeSession),
       (previous, next) {},
     );
-    _tvHomeStyle = _homeLayoutPreferenceSubscription.read().initialStyle;
+    _displaySection.tvHomeStyle = _displaySection
+        .homeLayoutPreferenceSubscription
+        .read()
+        .initialStyle;
     _heroPreview.startPreferences(ref, homeSession);
     _homeDefaultViewSubscription = ref.listenManual(
       homeDefaultViewProvider(homeSession),
@@ -1582,11 +1762,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             )
           : initialHomeDisplayPreferences,
     );
-    _homeDisplaySubscription = ref.listenManual(
+    _displaySection.homeDisplaySubscription = ref.listenManual(
       homeDisplayPreferencesProvider(displaySession),
       (previous, next) {},
     );
-    _homeDisplayController = ref.read(
+    _displaySection.homeDisplayController = ref.read(
       homeDisplayPreferencesProvider(displaySession).notifier,
     );
     _favoriteBindings = HomeFavoriteBindings(
@@ -1738,31 +1918,36 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // EVERY platform now: off-TV the pref decides Classic vs Spotlight,
       // and without this load the off-TV field would sit on its 'canvas'
       // initial forever (resolved to classic) whatever was chosen.
-      unawaited(_loadTvHomeStyle());
-      unawaited(_loadHomeCardOrientation());
-      MainPageBridge.tvHomeStyleChanged = _onTvHomeStyleChanged;
+      unawaited(_displaySection.loadTvHomeStyle());
+      unawaited(_displaySection.loadHomeCardOrientation());
+      MainPageBridge.tvHomeStyleChanged = _displaySection.onTvHomeStyleChanged;
       if (widget.isTelevision) {
         MainPageBridge.tvHeroArtworkQualityChanged =
-            _onTvHeroArtworkQualityChanged;
+            _displaySection.onTvHeroArtworkQualityChanged;
         // Canvas theater mode: a dwell after trailer frames land recedes the
         // shelf so the video owns the screen; any key wakes it. Observe-only
         // handler (the key still performs its normal action) — same rule as
         // _heroPreview.onTakeoverKey.
         _heroPreview.heroTrailerShowing.addListener(
-          _onCanvasTrailerShowingChanged,
+          _stageSection.onCanvasTrailerShowingChanged,
         );
-        HardwareKeyboard.instance.addHandler(_onCanvasTheaterKey);
-        HardwareKeyboard.instance.addHandler(_stageHold.handleKeyEvent);
+        HardwareKeyboard.instance.addHandler(_stageSection.onCanvasTheaterKey);
+        HardwareKeyboard.instance.addHandler(
+          _stageSection.stageHold.handleKeyEvent,
+        );
       } else {
         // Off-TV Home: system Back closes the Spotlight search sheet before
         // anything else may handle it. Routed through the bridge's tab-back
         // mechanism — a nested PopScope would race the root scope in
         // main.dart (its didPop==false path continues into double-back-exit
         // arming even when an inner scope consumed the press).
-        MainPageBridge.registerTabBackHandler('home', _searchSheet.close);
+        MainPageBridge.registerTabBackHandler(
+          'home',
+          _spotlightShell.searchSheet.close,
+        );
         // Restored keyword results must come back with the sheet open — the
         // full-bleed shell would otherwise hide them behind a hero.
-        if (restoredKeyword) _searchSheet.restore();
+        if (restoredKeyword) _spotlightShell.searchSheet.restore();
         // Hero trailer prefs for the OFF-TV Spotlight reel. Only the pieces
         // that mean "resolve and paint a video" — none of the TV shell
         // machinery the _heroPreview.heroTrailerActive block registers.
@@ -1785,7 +1970,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // while the Spotlight shell is not yet eligible — an async style/hero
     // arrival can then never unmount a focused (still blank) field.
     if (!widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
-      _inputSection.searchFocusNode.addListener(_searchSheet.onFocusChanged);
+      _inputSection.searchFocusNode.addListener(
+        _spotlightShell.searchSheet.onFocusChanged,
+      );
     }
     _boardScroll.addListener(_onBoardScroll);
     _keywordSection.keywordViewport.observeScroll();
@@ -1876,7 +2063,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// off" keeps meaning what it meant. Writes go to both surfaces now, so
   /// the pairs converge on first change.
   void _reloadSearchCardPrefs() {
-    unawaited(_loadHomeCardOrientation());
+    unawaited(_displaySection.loadHomeCardOrientation());
     unawaited(_heroPreview.reloadHeroTrailerPrefs());
   }
 
@@ -1958,14 +2145,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _restoreHomeSnapshot(HomeReturnSnapshot snapshot) async {
     _homeReturnRevision = _homeReturnRepository.revision;
     _homeLoadedAt = snapshot.loadedAt;
-    _spotlightHeroOverride = snapshot.hero;
+    _spotlightSection.spotlightHeroOverride = snapshot.hero;
     _addonsById
       ..clear()
       ..addAll(snapshot.board.addons);
     _loading = false;
-    _spotlightEntryRevealed = true;
+    _spotlightSection.spotlightEntryRevealed = true;
     if (snapshot.heroResolutionPending) {
-      unawaited(_resolveSpotlightHeroSource(_addonsById.values.toList()));
+      unawaited(
+        _spotlightSection.resolveSpotlightHeroSource(
+          _addonsById.values.toList(),
+        ),
+      );
     }
     _applySections(_homeSections);
     MainPageBridge.homeBoardReady.value = true;
@@ -2013,14 +2204,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       sections: _homeCatalogController.rowsForReturn(),
       board: board,
       configuration: _homeConfiguration,
-      hero: _spotlightHeroOverride == null
+      hero: _spotlightSection.spotlightHeroOverride == null
           ? null
-          : copyHomeRowForReturn(_spotlightHeroOverride!),
-      heroResolutionPending: _heroSourceResolutionPending,
-      cardOrientation: _homeCardOrientation,
-      hideCardTitlesAndRatings: _hideHomeCardTitlesAndRatings,
-      hideCatalogAddonNames: _hideHomeCatalogAddonNames,
-      hideCollectionNames: _hideHomeCollectionNames,
+          : copyHomeRowForReturn(_spotlightSection.spotlightHeroOverride!),
+      heroResolutionPending: _spotlightSection.heroSourceResolutionPending,
+      cardOrientation: _displaySection.homeCardOrientation,
+      hideCardTitlesAndRatings: _displaySection.hideHomeCardTitlesAndRatings,
+      hideCatalogAddonNames: _displaySection.hideHomeCatalogAddonNames,
+      hideCollectionNames: _displaySection.hideHomeCollectionNames,
       loadedAt: loadedAt,
       scrollOffset: _homeLastScroll,
     ), revision: _homeReturnRevision);
@@ -2034,7 +2225,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _catalogFocus.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _continuationSection.mdblistContinuationController.cancelRevisionRefresh();
-    _spotlightHeroNode.dispose();
+    _spotlightSection.spotlightHeroNode.dispose();
     _keywordReturn.preserve();
     MainPageBridge.unregisterTvContentFocusHandler(
       _tabIndex,
@@ -2065,8 +2256,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     if (!widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
       // Same closure that registered — the bridge's mid-transition contract.
-      MainPageBridge.unregisterTabBackHandler('home', _searchSheet.close);
-      _inputSection.searchFocusNode.removeListener(_searchSheet.onFocusChanged);
+      MainPageBridge.unregisterTabBackHandler(
+        'home',
+        _spotlightShell.searchSheet.close,
+      );
+      _inputSection.searchFocusNode.removeListener(
+        _spotlightShell.searchSheet.onFocusChanged,
+      );
       MainPageBridge.removePlayerLaunchListener(
         _heroPreview.onContentPlayerLaunch,
       );
@@ -2089,25 +2285,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _savedSection.onIptvListsRevision,
     );
     _savedSection.iptvListFocus.dispose();
-    if (MainPageBridge.tvHomeStyleChanged == _onTvHomeStyleChanged) {
+    if (MainPageBridge.tvHomeStyleChanged ==
+        _displaySection.onTvHomeStyleChanged) {
       MainPageBridge.tvHomeStyleChanged = null;
     }
     if (MainPageBridge.tvHeroArtworkQualityChanged ==
-        _onTvHeroArtworkQualityChanged) {
+        _displaySection.onTvHeroArtworkQualityChanged) {
       MainPageBridge.tvHeroArtworkQualityChanged = null;
     }
     if (widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
       _heroPreview.heroTrailerShowing.removeListener(
-        _onCanvasTrailerShowingChanged,
+        _stageSection.onCanvasTrailerShowingChanged,
       );
-      HardwareKeyboard.instance.removeHandler(_onCanvasTheaterKey);
-      HardwareKeyboard.instance.removeHandler(_stageHold.handleKeyEvent);
+      HardwareKeyboard.instance.removeHandler(_stageSection.onCanvasTheaterKey);
+      HardwareKeyboard.instance.removeHandler(
+        _stageSection.stageHold.handleKeyEvent,
+      );
     }
-    _stageTheater.dispose();
-    _canvasFavFocus.dispose();
-    _atriumFocusedRailKey.dispose();
-    _tonightFocus.dispose();
-    _stageCol.dispose();
+    _stageSection.stageTheater.dispose();
+    _stageFavorites.canvasFavFocus.dispose();
+    _stageSection.atriumFocusedRailKey.dispose();
+    _stageSection.tonightFocus.dispose();
+    _stageSection.stageCol.dispose();
     _heroShell.dispose();
     _homeMediaBindings.disposeResumeAndMetadata();
     _heroSection.heroSwap.dispose();
@@ -2129,10 +2328,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _metadataFeatureSubscription.close();
     _homeBoardBindings.close();
     _homeMediaBindings.close();
-    _homeLayoutPreferenceSubscription.close();
+    _displaySection.homeLayoutPreferenceSubscription.close();
     _heroPreview.heroTrailerPreferencesSubscription.close();
     _homeDefaultViewSubscription.close();
-    _homeDisplaySubscription.close();
+    _displaySection.homeDisplaySubscription.close();
     _continuationBindings.closeContent();
     _favoriteBindings.close();
     _continuationBindings.closeLayout();
@@ -2171,7 +2370,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     isCurrent: () => mounted,
     refreshAppearance: (current) =>
         _keywordSection.loadSourceTextFormatting(isCurrent: current),
-    refreshDisplay: (current) => _loadHomeCardOrientation(isCurrent: current),
+    refreshDisplay: (current) =>
+        _displaySection.loadHomeCardOrientation(isCurrent: current),
     refreshContinuation: (current) => _continuationSection
         .continuationLayoutController
         .refresh(isCurrent: current),
@@ -2247,7 +2447,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // Only the hero source moved — re-roll the reel without refetching the
       // whole board. `_load` isn't rerun here, so resolve from the addons the
       // last load cached.
-      unawaited(_resolveSpotlightHeroSource(_addonsById.values.toList()));
+      unawaited(
+        _spotlightSection.resolveSpotlightHeroSource(
+          _addonsById.values.toList(),
+        ),
+      );
     }
     // IPTV list rows live outside the board's section pipeline. The loader
     // reads its own extras from storage, so it can't race the reload above.
@@ -2402,7 +2606,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 _commitBoardSnapshot();
               }
               if (!widget.searchMode && !widget.discoverMode) {
-                unawaited(_resolveSpotlightHeroSource(addons));
+                unawaited(_spotlightSection.resolveSpotlightHeroSource(addons));
               }
             },
             onCommitBatch: _commitBoardSnapshot,
@@ -2487,9 +2691,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // Empty/failed catalogs can end without another content publication.
         // Rebuild the initial Spotlight gate so its cards fallback is shown.
         if (mounted &&
-            !_spotlightEntryRevealed &&
+            !_spotlightSection.spotlightEntryRevealed &&
             widget.isTelevision &&
-            _homeStyleEffective == 'spotlight') {
+            _displaySection.homeStyleEffective == 'spotlight') {
           setState(() {});
         }
         if (mounted && !expired) {
@@ -2582,7 +2786,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           // A DPAD-down past the last row may be waiting on this batch —
           // classic's deferred move, and the stage layouts' rail advance.
           _maybeCompleteDeferredDown();
-          _maybeCompleteStageAdvance();
+          _stageSection.maybeCompleteStageAdvance();
         }
       }
     } finally {
@@ -2657,7 +2861,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _boardViewport.appendItems(index, fresh.length);
       setState(() => _homeCatalogController.appendRowItems(section, fresh));
       // A DPAD-right that ran off the end of this row may be waiting on it.
-      _maybeCompleteStageRight();
+      _stageSection.maybeCompleteStageRight();
       unawaited(_refreshBoundSources());
     } catch (_) {
       // Transient fetch failure — leave the row as-is so a later scroll retries.
@@ -2778,9 +2982,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       final bool moved;
       final homeRowId = _pendingDownHomeRowId;
       if (homeRowId != null) {
-        final rails = _canvasRails;
+        final rails = _stageRailsSection.canvasRails;
         final current = rails.indexWhere(
-          (rail) => _canvasRailRowId(rail) == homeRowId,
+          (rail) => _stageRailsSection.canvasRailRowId(rail) == homeRowId,
         );
         moved = current >= 0 && _focusHomeRailAt(current + 1, col);
       } else if (_pendingDownRowIndex >= 0) {
@@ -2832,13 +3036,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   void _queueHomeRows(Set<HomeRowRefresh> rows) =>
       _homeRefreshQueue.enqueue(rows);
-
-  /// First of [a], [b] that is a non-empty string, else null.
-  String? _firstNonEmpty(String? a, String? b) {
-    if (a != null && a.isNotEmpty) return a;
-    if (b != null && b.isNotEmpty) return b;
-    return null;
-  }
 
   /// Resolve the addon that a Continue Watching title should route through.
   /// Prefers the stored source addon; falls back to any homepage addon, then a
@@ -3011,13 +3208,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     double? anchorHeight;
     double anchorTailPadding = 0;
     List<String> previousOrder = const [];
-    if (incremental && _homeStyleEffective == 'classic') {
-      final rails = _classicHomeRails;
+    if (incremental && _displaySection.homeStyleEffective == 'classic') {
+      final rails = _stageRailsSection.classicHomeRails;
       for (final rail in rails) {
         if (rail.traktSkeletonIndex >= 0) continue;
-        final focused = _canvasRailNodes(rail).where((node) => node.hasFocus);
+        final focused = _stageRailsSection
+            .canvasRailNodes(rail)
+            .where((node) => node.hasFocus);
         if (focused.isEmpty) continue;
-        anchor = _canvasRailRowId(rail);
+        anchor = _stageRailsSection.canvasRailRowId(rail);
         // Newly published rows are catalog/list/collection rows even if the
         // focused anchor is Continue Watching or a favourite in a custom order.
         if (rail.sectionIndex != null) {
@@ -3034,7 +3233,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         );
         break;
       }
-      previousOrder = rails.map(_canvasRailRowId).toList();
+      previousOrder = rails.map(_stageRailsSection.canvasRailRowId).toList();
       if (anchor != null &&
           _boardScroll.hasClients &&
           _boardScroll.position.maxScrollExtent <= 0) {
@@ -3044,12 +3243,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         final heights = <double>[];
         for (final rail in rails) {
           if (rail.traktSkeletonIndex >= 0) break;
-          final nodes = _canvasRailNodes(rail);
+          final nodes = _stageRailsSection.canvasRailNodes(rail);
           final height = nodes
               .map(
                 (node) => homeRowHeight(
                   node.context,
-                  ValueKey('board-reveal-$_boardGen-${_canvasRailRowId(rail)}'),
+                  ValueKey(
+                    'board-reveal-$_boardGen-${_stageRailsSection.canvasRailRowId(rail)}',
+                  ),
                 ),
               )
               .whereType<double>()
@@ -3074,8 +3275,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _boardAppliedAt = DateTime.now();
       // Rail keys are content-addressed by stable Home-row id, so a reload can
       // preserve the active rail even when its numeric section index changes.
-      _stageDeferredAdvance.invalidateForBoardReseed();
-      _stageFocusRequests.invalidate();
+      _stageSection.stageDeferredAdvance.invalidateForBoardReseed();
+      _stageSection.stageFocusRequests.invalidate();
     }
     _boardViewport.replaceRows(
       previous: _sections,
@@ -3087,7 +3288,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     setState(() {
       _sections = sections;
       if (anchor != null && anchorHeight != null) {
-        final nextOrder = _classicHomeRails.map(_canvasRailRowId).toList();
+        final nextOrder = _stageRailsSection.classicHomeRails
+            .map(_stageRailsSection.canvasRailRowId)
+            .toList();
         if (nextOrder
             .takeWhile((id) => id != anchor)
             .any((id) => !previousOrder.contains(id))) {
@@ -3105,7 +3308,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         );
       }
     });
-    _publishTopShelfSpotlight();
+    _spotlightSection.publishTopShelfSpotlight();
     unawaited(_refreshBoundSources());
     if (preserveFocus &&
         _heroSection.heroItem.value != null &&
@@ -3147,7 +3350,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // keep its stale art/title on the stage — or resume its stream —
         // with no cell focused, and let the seeded trailer start beneath).
         _heroPreview.heroPreviewPolicy.allowNewHero();
-        _canvasFavFocus.value = null;
+        _stageFavorites.canvasFavFocus.value = null;
         _heroLive.clearHeroLiveIptv();
         _heroPreview.scheduleHeroTrailer(first);
       } else {
@@ -3251,7 +3454,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // Spotlight's hero is a focus target the rail lists know nothing
         // about; without this the arrival machinery thinks the board is
         // unfocused while the hero holds the cursor and steals it back.
-        _spotlightHeroNode.hasFocus) {
+        _spotlightSection.spotlightHeroNode.hasFocus) {
       return true;
     }
     if (anyOf(_listsSection.listsNodes)) return true;
@@ -3291,9 +3494,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // auto-focus all aim at the displayed rail's nearest mounted cell.
     // Canvas renders exactly ONE rail, so aim at its nearest mounted cell;
     // null (rails still loading) falls through to the classic targets.
-    if (_stageActive) return _stageFocusTarget();
-    for (final rail in _canvasRails) {
-      final nodes = _canvasRailNodes(rail);
+    if (_displaySection.stageActive) return _stageSection.stageFocusTarget();
+    for (final rail in _stageRailsSection.canvasRails) {
+      final nodes = _stageRailsSection.canvasRailNodes(rail);
       if (nodes.isNotEmpty) return nodes.first;
     }
     return null;
@@ -3336,8 +3539,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // so the data-order walk below would land wherever the first mounted node
     // happens to be — a different rail, or the wrong Tonight zone with the
     // zone flag left lying. Ask the layout where focus belongs first.
-    if (_stageActive) {
-      final target = _stageFocusTarget();
+    if (_displaySection.stageActive) {
+      final target = _stageSection.stageFocusTarget();
       if (target != null && (target.context?.mounted ?? false)) {
         target.requestFocus();
         return;
@@ -3354,8 +3557,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return false;
     }
 
-    for (final rail in _canvasRails) {
-      if (tryRow(_canvasRailNodes(rail))) return;
+    for (final rail in _stageRailsSection.canvasRails) {
+      if (tryRow(_stageRailsSection.canvasRailNodes(rail))) return;
     }
   }
 
@@ -3397,696 +3600,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // ── TV Home layout (classic / canvas) ────────────────────────────────────
 
-  /// Active home layout, from `tv_home_style`. The HOME board renders it on
-  /// TV; off-TV the pref is resolved through [effectiveOffTvHomeStyle] and
-  /// only Spotlight passes through — Search tab and Discover always render
-  /// classic (via [_homeStyleEffective], regardless of this field). Canvas is
-  /// the TV default; matching it here avoids a one-frame classic flash at
-  /// boot there, and resolves to classic off-TV.
-  late String _tvHomeStyle;
-  late final ProviderSubscription<HomeLayoutPreference>
-  _homeLayoutPreferenceSubscription;
-
-  // Landscape default matches the stored default, so a fresh boot doesn't
-  // flash portrait rows before the async pref read lands.
-  late final HomeDisplayPreferencesController _homeDisplayController;
-  late final ProviderSubscription<HomeDisplayPreferences>
-  _homeDisplaySubscription;
-  HomeDisplayPreferences get _homeDisplay => _homeDisplayController.current;
-  HomeCardOrientation get _homeCardOrientation => _homeDisplay.orientation;
-  bool get _hideHomeCardTitlesAndRatings => _homeDisplay.hideTitlesAndRatings;
-  bool get _hideHomeCatalogAddonNames => _homeDisplay.hideCatalogAddonNames;
-  bool get _hideHomeCollectionNames => _homeDisplay.hideCollectionNames;
-  bool get _spotlightFocusDetails => _homeDisplay.spotlightFocusDetails;
-  bool get _homeAnimationsEnabled => _homeDisplay.animationsEnabled;
-  String get _homeAnimationStyle => _homeDisplay.animationStyle;
-
-  bool get _homeLandscapeCards =>
-      _homeCardOrientation == HomeCardOrientation.landscape;
-
-  double get _homeArtPosterCaptionBand =>
-      _hideHomeCardTitlesAndRatings ? 0 : HomeArtCaption.band(context);
-
-  bool get _homeBoardMode =>
-      widget.isTelevision && !widget.searchMode && !widget.discoverMode;
-
-  // ── Off-TV Spotlight shell state ─────────────────────────────────────────
-  //
-  // Four separate questions, deliberately not one predicate (the sheet is a
-  // latched state machine — see SPOTLIGHT_RESPONSIVE_PLAN.md):
-  //  • [_spotlightSelected] — the resolved pref says Spotlight.
-  //  • [_spotlightShellActive] — this Home instance renders the shell branch
-  //    (either of its two states) instead of the plain classic Column.
-  //  • [_sheetForced] — search state that REQUIRES the header on screen.
-  //  • [_searchSheetOpen] — the latch. Set by the search button, by field
-  //    focus, and silently whenever [_sheetForced] is observed true; cleared
-  //    only by the explicit close/back reset. The latch is what stops the
-  //    header collapsing under a focused field when its force condition
-  //    momentarily clears (deleting the last character of a query).
-
-  /// The stored style, resolved for this platform, is Spotlight. Off-TV only.
-  bool get _spotlightSelected =>
-      !widget.isTelevision &&
-      effectiveOffTvHomeStyle(_tvHomeStyle) == 'spotlight';
-
-  /// Whether the off-TV Home renders the Spotlight shell branch. While the
-  /// selected layout is loading, retain this branch so a newly mounted Home
-  /// cannot flash Classic's persistent search bar before its hero arrives.
-  /// After loading, the hero guard still matters: CW/favourites-only content
-  /// would otherwise render a large empty hero.
-  bool get _spotlightShellActive =>
-      !widget.searchMode &&
-      !widget.discoverMode &&
-      shouldUseOffTvSpotlightShell(
-        rawStyle: _tvHomeStyle,
-        loading: _loading,
-        hasHero: _spotlightHero.isNotEmpty,
-      );
-
-  /// Search state that forces the header/sheet to be visible. Typing is
-  /// covered by the focus latch (one can only type while the field is
-  /// focused, and focus latches [_searchSheetOpen]); this covers the states
-  /// that arrive WITHOUT the field being touched: the async keyword-default
-  /// restore, preserved keyword results, a committed catalog search, or the
-  /// dedicated Lists surface.
-  bool get _sheetForced =>
-      _modeSection.mode != SearchMode.catalog ||
-      _catalogSection.catalogQuery.isNotEmpty ||
-      _catalogSection.catalogSearching ||
-      // Belt to the focus latch's braces: interactive typing always comes
-      // through a focused field, but autofill or a programmatic controller
-      // write would not — and text on screen must force the header that
-      // renders it.
-      _searchController.text.isNotEmpty;
-
-  /// The sheet latch. See the block comment above.
-  late final _searchSheet = SpotlightSearchSheet(
-    field: _inputSection.searchFocusNode,
-    isForced: () => _sheetForced,
-    hasText: () => _searchController.text.isNotEmpty,
-    isSpotlightSelected: () => _spotlightSelected,
-    resetSearch: () {
-      // Mode changes before clearing requests, results and the field.
-      _modeSection.mode = SearchMode.catalog;
-      _modeSection.clearQuery();
-    },
-    rebuild: setState,
-    isCurrent: () => mounted,
-  );
-  bool get _searchSheetOpen => _searchSheet.isOpen;
-
   int get _tvHeroArtworkCacheWidth =>
       TvHeroArtworkQualityController.decodeSize.landscapeWidth;
   int get _tvHeroArtworkCacheHeight =>
       TvHeroArtworkQualityController.decodeSize.posterHeight;
 
-  /// The layout the CURRENT surface should render (guards non-home surfaces).
-  /// The layout the CURRENT surface should render. TV: the stored style on
-  /// the Home board, classic everywhere else. Off-TV: Spotlight only while
-  /// the full-bleed shell is actually on screen — results, keyword mode and
-  /// the open search sheet all dispatch to the classic board, so the search
-  /// experience is byte-identical to today whenever search is in play.
-  String get _homeStyleEffective {
-    if (widget.isTelevision) return _homeBoardMode ? _tvHomeStyle : 'classic';
-    return _spotlightShellActive && !_searchSheetOpen ? 'spotlight' : 'classic';
-  }
-
-  bool get _stageActive => isHomeStageLayout(_homeStyleEffective);
-
-  bool get _stageWantsAmbient => homeStageWantsAmbient(_homeStyleEffective);
-
-  // Live channel previews remain available on every stage, including Mosaic.
-  bool get _stageWantsLivePreview => _stageActive;
-
-  bool get _stagePublishesShellArt =>
-      homeStagePublishesShellArt(_homeStyleEffective);
-
-  bool get _theaterEligible => homeStageTheaterEligible(_homeStyleEffective);
-
-  late final HomeStageFocusRequests _stageFocusRequests = HomeStageFocusRequests(
-    isMounted: () => mounted,
-    readStyle: () => _homeStyleEffective,
-  );
-
-  late final HomeStageDeferredAdvance _stageDeferredAdvance =
-      HomeStageDeferredAdvance(
-        stageActive: () => _stageActive,
-        maxAge: _pendingDownMaxAge,
-      );
-
-  late final HomeStageDeferredRight _stageDeferredRight = HomeStageDeferredRight(
-    currentRail: () => _canvasRailKey,
-    stageActive: () => _stageActive,
-    scheduleFocus: _stageFocusRequests.schedule,
-    maxAge: _pendingDownMaxAge,
-  );
-
-  void _maybeCompleteStageRight() {
-    _stageDeferredRight.complete((key, column) {
-      final rails = _stageRails;
-      final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
-      if (i < 0) return null;
-      final nodes = _canvasRailNodes(rails[i]);
-      if (column >= nodes.length) return null;
-      return (nodes[column].context?.mounted ?? false) ? nodes[column] : null;
-    });
-  }
-
-  /// Every piece of per-layout navigation state, cleared as one. Called on a
-  /// real layout transition (either the picker or the saved pref landing at
-  /// cold start) — never partially, or a layout inherits a rail/zone/column
-  /// that means something else in its own geometry.
-  void _resetStageNavigation() {
-    _stageNavigation.resetSeed();
-    _stageTheater.reset();
-    _canvasFavFocus.value = null;
-    _canvasRailKey = null;
-    _canvasCols.clear();
-    _tonightFocus.resetPosition();
-    _atriumFocusedRailKey.value = null;
-    _tonightCard.value = null;
-    _stageCol.value = 0;
-    _stageDeferredAdvance.reset();
-    _stageDeferredRight.reset();
-    _stageHold.reset();
-    _stageFocusRequests.invalidate();
-  }
-
-  /// THE single layout-transition path. Both entry points route here — the
-  /// Settings picker AND the cold-start load, which is also a transition
-  /// (the field starts at the product default, so a saved 'mosaic' relayouts
-  /// a board that may already have a trailer or a live preview running).
-  void _applyStageTransition(String style) {
-    // Tear the live players down BEFORE the relayout: the underlay engine
-    // widget must never be re-parented into a different geometry mid-play.
-    _heroPreview.clearHeroTrailer();
-    _heroLive.clearHeroLiveIptv();
-    _resetStageNavigation();
-    // The shell's ambient art is per-layout (ink-ground layouts publish
-    // none), so clear it rather than leaving the old layout's lighting in
-    // the strip behind the ghost rail.
-    _heroSection.ambientArtItemId = null;
-    if (MainPageBridge.tvAmbientArt.value != null) {
-      MainPageBridge.tvAmbientArt.value = null;
-    }
-    setState(() => _tvHomeStyle = style);
-    // …then republish for the layout we just switched TO: Canvas/Promenade
-    // want the shell lit again, and the ink layouts want it to stay dark.
-    // Without this the shell keeps whatever the previous layout left until
-    // some unrelated hero change happens to refresh it.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _heroSection.publishAmbientArt(
-        _heroSection.heroItem.value,
-        _heroSection.heroEnriched.value,
-      );
-      _heroSection.publishHeroTintToShell(_heroSection.heroTint.value);
-    });
-  }
-
-  Future<void> _loadTvHomeStyle() =>
-      _homeLayoutPreferenceSubscription.read().load(
-        isCurrent: () => mounted,
-        currentStyle: () => _tvHomeStyle,
-        transition: _applyStageTransition,
-      );
-
-  Future<void> _loadHomeCardOrientation({bool Function()? isCurrent}) async {
-    final changed = await _homeDisplayController.load(
-      isCurrent: () => mounted && (isCurrent?.call() ?? true),
-    );
-    if (mounted && changed) setState(() {});
-  }
-
-  /// Settings picker fired: tear down live players BEFORE the relayout, so
-  /// the underlay engine widget is never re-parented mid-play, then re-read
-  /// the pref and rebuild.
-  void _onTvHomeStyleChanged() {
-    if (!mounted) return;
-    unawaited(_loadTvHomeStyle());
-  }
-
-  void _onTvHeroArtworkQualityChanged() {
-    if (!mounted || !_homeBoardMode) return;
-    setState(() {});
-  }
-
   // ── CANVAS view ──────────────────────────────────────────────────────────
 
-  /// IDENTITY of the active Canvas rail (not an index): rails stream in and
-  /// reorder — CW rails prepend when Trakt/Simkl land seconds after a cold
-  /// start — and a raw index would silently swap the shelf's content and
-  /// teleport focus/hero when that happens. Null = first rail.
-  late final _stageNavigation = HomeStageNavigation(
-    keyOf: _canvasRailKeyOf,
-    nodesFor: _canvasRailNodes,
-    itemsFor: _canvasRailItems,
-  );
-  String? get _canvasRailKey => _stageNavigation.activeKey;
-  set _canvasRailKey(String? key) => _stageNavigation.activeKey = key;
-
-  /// The focused column of the active rail, as a notifier — Deck's peek stack
-  /// has to re-derive "the next two titles" on every horizontal move, and the
-  /// remembered-column MAP is a plain field write that rebuilds nothing.
-  final ValueNotifier<int> _stageCol = ValueNotifier<int>(0);
-
-  /// Remembered column per rail key (the Canvas mirror of classic's _rowCol).
-  Map<String, int> get _canvasCols => _stageNavigation.columns;
-
-  /// Stage override while a favourites cell has focus (see
-  /// [HomeFavoriteFocus]). A ValueNotifier — NOT setState — so scrubbing along
-  /// a favourites rail repaints only the stage layers that listen (art +
-  /// identity), never the whole board (the hero pipeline's own pattern).
-  final ValueNotifier<HomeFavoriteFocus?> _canvasFavFocus =
-      ValueNotifier<HomeFavoriteFocus?>(null);
-
-  /// A Canvas favourites cell took focus: remember the column, stop any
-  /// catalog trailer machinery (a PENDING hero swap firing later would start
-  /// a full-bleed trailer of an unrelated title under favourites browsing),
-  /// drive the live preview for IPTV, and hand the stage the favourite's own
-  /// art + name.
-  void _canvasFavFocused(
-    String railKey,
-    int col,
-    HomeFavoriteFocus focus, {
-    IptvChannel? liveChannel,
-  }) {
-    _canvasCols[railKey] = col;
-    _stageCol.value = col;
-    // Atrium's two-row window needs to know which row owns focus (favourites
-    // cells don't go through a HomeBoardCell onFocused), and favourites only
-    // ever live in Tonight's RAIL zone, never its Continue queue.
-    _atriumFocusedRailKey.value = railKey;
-    _tonightZoneIsQueue = false;
-    _heroSection.heroSwap.cancel();
-    _heroPreview.clearHeroTrailer();
-    if (liveChannel != null && _stageWantsLivePreview) {
-      _heroLive.setHeroLiveIptv(liveChannel);
-    } else {
-      _heroLive.clearHeroLiveIptv();
-    }
-    _canvasFavFocus.value = focus;
-  }
-
-  /// One favourites cell on the Canvas shelf — the SAME [HomeFavoriteCell] +
-  /// [HomeArtPoster] stack the classic rows use (identical art, badges, hold
-  /// behaviour and open actions), with UP/DOWN rewired to rail switching and
-  /// focus driving the Canvas stage override (and the full-bleed live
-  /// preview, for IPTV).
-  Widget _canvasFavCell(
-    HomeFavoriteRowRef ref,
-    String railKey,
-    int col, {
-    VoidCallback? onUp,
-    VoidCallback? onDown,
-    VoidCallback? onLeft,
-    VoidCallback? onRight,
-    VoidCallback? onUpHold,
-    VoidCallback? onDownHold,
-  }) {
-    final cells = HomeStageFavoriteCards(
-      nodes: _savedSection.favNodesFor(ref),
-      column: col,
-      showTitle: !_hideHomeCardTitlesAndRatings,
-      onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-      onUp: onUp ?? () => _stageSwitchRail(-1),
-      onDown: onDown ?? () => _stageSwitchRail(1),
-      onLeft: onLeft,
-      onRight: onRight,
-      onUpHold: onUpHold,
-      onDownHold: onDownHold,
-      onFocused: (focus, liveChannel) =>
-          _canvasFavFocused(railKey, col, focus, liveChannel: liveChannel),
-    );
-    if (ref.isIptvList) {
-      final row = _savedSection.iptvListRows[ref.list];
-      final channel = row.channels[col];
-      return cells.iptv(
-        channel,
-        subtitle: () => 'IPTV · ${row.title.toUpperCase()}',
-        previewLive: channel.isLive,
-        onOpen: () => _savedIptv.playIptvListChannel(channel),
-      );
-    }
-    switch (ref.kind) {
-      case HomeFavoriteKind.watchlistMovies:
-      case HomeFavoriteKind.watchlistSeries:
-        final items = ref.kind == HomeFavoriteKind.watchlistMovies
-            ? _savedSection.watchlistMovieItems
-            : _savedSection.watchlistSeriesItems;
-        final item = items[col];
-        return cells.watchlist(
-          item,
-          onOpen: () => _watchlistActions.openMyWatchlistItem(item),
-        );
-      case HomeFavoriteKind.iptv:
-        final channel = _savedSection.iptvFavChannels[col];
-        return cells.iptv(
-          channel,
-          subtitle: () => 'IPTV · FAVORITES',
-          previewLive: true,
-          onOpen: () => _savedIptv.playIptvChannel(channel),
-        );
-      case HomeFavoriteKind.debrify:
-        final channel = _savedSection.tvFavChannels[col];
-        return cells.debrify(
-          channel,
-          onOpen: () => _savedSection.playChannel(channel),
-        );
-      case HomeFavoriteKind.stremio:
-        final channel = _savedSection.stvFavChannels[col];
-        return cells.stremio(
-          channel,
-          item: _savedSection.stvNowPlaying(channel)?.item,
-          onOpen: () => _savedSection.playStremioTvChannel(channel),
-        );
-      case HomeFavoriteKind.playlist:
-        final item = _savedSection.playlistItems[col];
-        return cells.playlist(
-          item,
-          progress: _savedSection.playlistController.current.progressFor(item),
-          onOpen: () => _playlistActions.onPlaylistItemTap(item),
-        );
-    }
-  }
-
-  /// Theater mode: after the ambient trailer has been SHOWING frames for a
-  /// dwell, the shelf/tabs (and their bottom scrim) recede so the video owns
-  /// the whole screen — logo + AMBIENT chip hold. Any key wakes the lights
-  /// (observe-only: the key still does its job), and if playback continues
-  /// uninterrupted the dwell re-arms. The shelf is hidden VISUALLY only
-  /// (opacity/slide, never unmounted), so focus stays exactly where it was.
-  late final HomeStageTheater _stageTheater = HomeStageTheater(
-    isCurrent: () => mounted,
-    isEligible: () => _theaterEligible,
-    isShowing: () => _heroPreview.heroTrailerShowing.value,
-    onChanged: () => setState(() {}),
-  );
-  bool get _canvasTheater => _stageTheater.active;
-
-  void _onCanvasTrailerShowingChanged() => _stageTheater.showingChanged();
-
-  bool _onCanvasTheaterKey(KeyEvent event) => _stageTheater.handleKey(event);
-
-  String _canvasRailKeyOf(HomeRail rail) {
-    return 'row:${_canvasRailRowId(rail)}';
-  }
-
-  /// Where the active rail currently sits in [rails] — re-resolved every
-  /// build so insertions above it never change WHICH rail is shown.
-  int _resolveCanvasRailIndex(List<HomeRail> rails) =>
-      _stageNavigation.resolveIndex(rails);
-
-  FocusNode? _nearestMountedNode(List<FocusNode> nodes, int col) =>
-      HomeStageNavigation.nearestMountedNode(nodes, col);
-
   // ── Spotlight ───────────────────────────────────────────────────────────
-
-  final GlobalKey<SpotlightBoardState> _spotlightKey =
-      GlobalKey<SpotlightBoardState>();
-  final FocusNode _spotlightHeroNode = FocusNode(debugLabel: 'spotlight-hero');
-
-  /// The hero reel fetched from the user's chosen source (`random`/`custom`
-  /// modes), fetched by [_resolveSpotlightHeroSource] independently of the
-  /// board batches — the chosen catalog may sit pages down the board, or be
-  /// hidden as a row entirely. Null in `auto` mode, while the fetch is in
-  /// flight, and when every candidate came up dead — all of which fall back
-  /// to the first non-empty board row below.
-  CatalogSection? _spotlightHeroOverride;
-
-  /// Guards [_resolveSpotlightHeroSource] against overlapping runs (a Home
-  /// Rows save landing mid-load): only the newest run may commit.
-  int _heroSourceResolveGen = 0;
-  bool _heroSourceResolving = false;
-  // The presentation deadline can expire while the underlying request is
-  // still pending. A return snapshot must resume that request too.
-  bool _heroSourceResolutionPending = false;
-  bool _spotlightEntryRevealed = false;
-
-  /// Fetch the hero reel for the current [_heroSource] pref.
-  ///
-  /// Candidates come from the FULL browsable set, not [_boardRefs] — hiding a
-  /// catalog's row on the board must not blank a hero pinned to that same
-  /// catalog. Candidates are shuffled so `random` mode and a multi-pick
-  /// `custom` re-roll on every board load; the first candidate that returns
-  /// items wins. Attempts are capped so a wall of dead catalogs can't fan out
-  /// unbounded fetches; exhausting the cap (or the candidates) clears the
-  /// override, which IS the auto fallback.
-  Future<void> _resolveSpotlightHeroSource(List<StremioAddon> addons) async {
-    final gen = ++_heroSourceResolveGen;
-    _heroSourceResolving = true;
-    _heroSourceResolutionPending = true;
-    try {
-      // The initial presentation must not wait forever on a dead hero source.
-      // A late result may still populate the reel after the cards fallback.
-      await _fetchSpotlightHeroSource(addons, gen).whenComplete(() {
-        if (mounted && gen == _heroSourceResolveGen) {
-          _heroSourceResolutionPending = false;
-        }
-      }).timeout(
-        const Duration(seconds: 25),
-        onTimeout: () {},
-      );
-    } finally {
-      if (mounted && gen == _heroSourceResolveGen) {
-        setState(() => _heroSourceResolving = false);
-      }
-    }
-  }
-
-  Future<void> _fetchSpotlightHeroSource(List<StremioAddon> addons, int gen) async {
-    final source = _heroSource;
-    if (source.mode != HomeHeroSourceMode.auto) {
-      final all = [
-        for (final a in addons)
-          for (final c in a.catalogs)
-            if (c.isBrowsable) (a, c),
-      ];
-      final List<(StremioAddon, StremioAddonCatalog)> candidates;
-      if (source.mode == HomeHeroSourceMode.random) {
-        // Random draws TITLES only. Live catalogs — 'tv' is what the
-        // Stremio-IPTV service itself keys on, 'channel'/'radio' are the
-        // spec's other live-ish types — serve channel logos as their art, so
-        // the reel cover-crops a wordmark to a full screen (TvVoo's logo,
-        // full-bleed, was the report). An EXPLICIT custom pick of such a
-        // catalog is left alone: choosing it by name is a deliberate act.
-        const live = {'tv', 'channel', 'radio'};
-        candidates = [
-          for (final ref in all)
-            if (!live.contains(ref.$2.type.toLowerCase())) ref,
-        ];
-      } else {
-        // Stored picks that no longer resolve (addon uninstalled, catalog
-        // gone from its manifest) simply drop out; they are NOT removed from
-        // the pref, so reinstalling the addon brings the pick back.
-        final byId = {
-          for (final (a, c) in all) '${a.id}:${c.type}:${c.id}': (a, c),
-        };
-        candidates = [
-          for (final id in source.ids)
-            if (byId.containsKey(id)) byId[id]!,
-        ];
-      }
-      candidates.shuffle(Random());
-      const maxAttempts = 8;
-      var attempts = 0;
-      for (final (addon, catalog) in candidates) {
-        if (attempts++ >= maxAttempts) break;
-        if (!mounted || gen != _heroSourceResolveGen) return;
-        try {
-          final page = await fetchFilteredPage(
-            (skip, onRaw) => _stremio.fetchCatalog(
-              addon,
-              catalog,
-              skip: skip,
-              onRawCount: onRaw,
-            ),
-            skip: 0,
-            hides: WatchedFilter.predicate,
-            minItems: 8,
-          );
-          if (!mounted || gen != _heroSourceResolveGen) return;
-          if (page.items.isEmpty) continue;
-          setState(() {
-            _spotlightHeroOverride = CatalogSection(
-              title: CatalogSection.rowTitle(catalog),
-              addon: addon,
-              catalog: catalog,
-              items: page.items.toList(),
-              nextSkip: page.nextSkip,
-            );
-          });
-          _publishTopShelfSpotlight();
-          return;
-        } catch (_) {
-          // Dead addon or catalog — try the next candidate.
-        }
-      }
-    }
-    // Auto mode, no usable candidate, or every attempt failed — drop any
-    // stale override so the reel falls back rather than pinning old prefs.
-    if (!mounted || gen != _heroSourceResolveGen) return;
-    if (_spotlightHeroOverride != null) {
-      setState(() => _spotlightHeroOverride = null);
-    }
-    _publishTopShelfSpotlight();
-  }
-
-  /// The hero reel.
-  ///
-  /// NOT `_stageRails[0]`: the user's first row may be a channel, playlist, or
-  /// Continue Watching rail rather than a catalog, and rails can arrive as
-  /// tracker data lands. The hero needs a
-  /// stable list of real catalog titles, so it takes the user's resolved
-  /// source pick when there is one, else the first section that has any items
-  /// — and caps it either way: a reel longer than about eight is a list, not
-  /// a hero.
-  CatalogSection? get _spotlightHeroSection {
-    // A catalog search swaps `_sections` to results, and the reel follows
-    // them — the pinned source is Home-board furniture and must not paint
-    // over a search.
-    final override = _spotlightHeroOverride;
-    if (override != null &&
-        _catalogSection.catalogQuery.isEmpty &&
-        !_catalogSection.catalogSearching) {
-      return override;
-    }
-    for (final section in _sections) {
-      // Folder tiles aren't titles, so they can't feed the hero reel.
-      if (section is HomeCollectionSection) continue;
-      if (section.items.isNotEmpty) return section;
-    }
-    return null;
-  }
-
-  List<StremioMeta> get _spotlightHero =>
-      _spotlightHeroSection?.items.take(8).toList() ?? const [];
-
-  void _publishTopShelfSpotlight() {
-    if (!PlatformUtil.isTvOS || widget.searchMode || widget.discoverMode) {
-      return;
-    }
-    unawaited(
-      TvosTopShelfService.instance.publishSpotlight(
-        _spotlightHero,
-        sourceTitle: _spotlightHeroSection?.title,
-      ),
-    );
-  }
-
-  List<SpotlightShelf> get _spotlightShelves => [
-    for (final rail in _canvasRails) _spotlightShelfForRail(rail),
-  ];
-
-  SpotlightShelf _spotlightShelfForRail(HomeRail rail) =>
-      buildHomeSpotlightShelf(
-        rail,
-        railKey: _canvasRailKeyOf(rail),
-        landscape: _homeLandscapeCards,
-        hideCollectionNames: _hideHomeCollectionNames,
-        sections: _sections,
-        rowNodes: _rowNodes,
-        catalogTag: _catalogSourceTag,
-        onSeeAll: _openCatalogSeeAll,
-        onCollectionOpen: _openCollectionFolder,
-        onContinuationOptions: _continuationMenu.openCwCardMenu,
-        favoriteShelf: _spotlightFavShelf,
-        catalogCard: (item, addon) => _spotlightCatalogCards.resolve(
-          item,
-          addon,
-          landscape: _homeLandscapeCards,
-        ),
-      );
-
-  /// A favourites rail as Spotlight cards.
-  ///
-  /// The four kinds are NOT the same shape. A playlist is a container rather
-  /// than a title, so it keeps the poster it was given (or its override) and
-  /// says how many items it holds. The three channel kinds carry LOGOS — wide,
-  /// frequently transparent marks — which a 2:3 crop cuts in half, so they get
-  /// a square tile that contains the art on a plate instead of filling with it.
-  SpotlightShelf _spotlightFavShelf(HomeFavoriteRowRef ref, {String? id}) {
-    final nodes = _savedSection.favNodesFor(ref);
-    if (ref.isIptvList) {
-      final row = _savedSection.iptvListRows[ref.list];
-      return buildSpotlightIptvFavorites(
-        id: id,
-        title: row.title,
-        nodes: nodes,
-        channels: row.channels,
-        landscape: _homeLandscapeCards,
-        previewVolume: () => _heroPreview.heroTrailerVolume,
-        onOpen: _savedIptv.playIptvListChannel,
-      );
-    }
-    switch (ref.kind) {
-      case HomeFavoriteKind.watchlistMovies:
-      case HomeFavoriteKind.watchlistSeries:
-        final movies = ref.kind == HomeFavoriteKind.watchlistMovies;
-        return buildSpotlightWatchlist(
-          id: id,
-          nodes: nodes,
-          items: movies
-              ? _savedSection.watchlistMovieItems
-              : _savedSection.watchlistSeriesItems,
-          movies: movies,
-          landscape: _homeLandscapeCards,
-          onOpen: _watchlistActions.openMyWatchlistItem,
-        );
-      case HomeFavoriteKind.playlist:
-        return buildSpotlightPlaylists(
-          id: id,
-          nodes: nodes,
-          items: _savedSection.playlistItems,
-          progress: _savedSection.playlistController.current.progressFor,
-          onOpen: _playlistActions.onPlaylistItemTap,
-        );
-      case HomeFavoriteKind.iptv:
-        return buildSpotlightIptvFavorites(
-          id: id,
-          title: 'IPTV Favourites',
-          nodes: nodes,
-          channels: _savedSection.iptvFavChannels,
-          landscape: _homeLandscapeCards,
-          previewVolume: () => _heroPreview.heroTrailerVolume,
-          onOpen: _savedIptv.playIptvChannel,
-        );
-      case HomeFavoriteKind.debrify:
-        return buildSpotlightDebrifyFavorites(
-          id: id,
-          nodes: nodes,
-          channels: _savedSection.tvFavChannels,
-          landscape: _homeLandscapeCards,
-          onOpen: _savedSection.playChannel,
-        );
-      case HomeFavoriteKind.stremio:
-        return buildSpotlightStremioFavorites(
-          id: id,
-          nodes: nodes,
-          channels: _savedSection.stvFavChannels,
-          landscape: _homeLandscapeCards,
-          artwork: _stvFavArt,
-          nowPlaying: (channel) => _savedSection.stvNowPlaying(channel)?.item,
-          onOpen: _savedSection.playStremioTvChannel,
-        );
-    }
-  }
-
-  /// A Stremio TV favourite's card art: the channel's rotating now-playing
-  /// poster — the same resolution the classic and Canvas rails use. Spotlight
-  /// landscape mode instead chooses the title's best wide art. Null
-  /// (placeholder) until the channel's items load.
-  String? _stvFavArt(HomeStremioFavorite ch, {bool landscape = false}) {
-    final item = _savedSection.stvNowPlaying(ch)?.item;
-    if (item == null) return null;
-    if (landscape) return homeStageWideArtwork(item);
-    return _firstNonEmpty(item.poster, item.background);
-  }
 
   HomeBoardMedia get _boardMedia => HomeBoardMedia(
     item: _heroSection.heroItem,
     enriched: _heroSection.heroEnriched,
-    favorite: _canvasFavFocus,
+    favorite: _stageFavorites.canvasFavFocus,
     cacheWidth: _tvHeroArtworkCacheWidth,
     cacheHeight: _tvHeroArtworkCacheHeight,
     trailer: _heroPreview.heroTrailer,
@@ -4101,166 +3627,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     onLivePlaybackFailed: _heroLive.onHeroLivePlaybackFailed,
   );
 
-  Widget _buildSearchSpotlightBoard() => buildSearchSpotlightBoard(
-    context: context,
-    sections: List<CatalogSection>.of(_sections),
-    rowNodes: _rowNodes,
-    boardKey: _spotlightKey,
-    heroNode: _spotlightHeroNode,
-    query: _catalogSection.catalogQuery,
-    searching: _catalogSection.catalogSearching,
-    failures: _catalogSearchFailures,
-    landscape: _homeLandscapeCards,
-    showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
-    expandFocusedCard: _spotlightFocusDetails,
-    trailersEnabled: _heroPreview.heroTrailerEnabled,
-    trailerVolume: _heroPreview.heroTrailerVolume,
-    onExitTop: _leaveBoardTop,
-    onTrailerStop: _heroPreview.clearHeroTrailer,
-    onHeroOpen: _itemActions.openItem,
-    onOpen: _sectionOpenItem,
-    onPlay: _pikpakOnly ? null : _catalogActions.onCatalogPlay,
-    sourceTag: _catalogSourceTag,
-    onSeeAll: _openCatalogSeeAll,
-    onLoadMore: (section) {
-      final current = _sections.indexOf(section);
-      if (current >= 0) unawaited(_loadMoreRow(current));
-    },
-  );
-
-  Widget _buildSpotlightBoard() {
-    // Snapshot row descriptors with the shelf list: async inserts must not
-    // make a callback page a different catalog than the shelf it came from.
-    final rails = _canvasRails;
-    return SpotlightBoard(
-      largeScreenInteractions: true,
-      key: _spotlightKey,
-      animationsEnabled: _homeAnimationsEnabled,
-      animationStyle: _homeAnimationStyle,
-      hero: _spotlightHero,
-      sections: _spotlightShelves,
-      heroNode: _spotlightHeroNode,
-      heroAddon: _spotlightHeroSection?.addon,
-      dpad: widget.isTelevision,
-      showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
-      expandFocusedCard: _spotlightFocusDetails,
-      cardTrailerVolume: _heroPreview.heroTrailerVolume,
-      onHeroOpen: _itemActions.openItem,
-      onLoadMoreRow: (row) {
-        if (row < 0 || row >= rails.length) return;
-        final catalogRow = rails[row].sectionIndex;
-        if (catalogRow != null) unawaited(_loadMoreRow(catalogRow));
-      },
-      onLoadMoreShelves: _loadMoreBoard,
-      pendingShelves: PlatformUtil.isAndroidTvCached && _boardRowsPending,
-      // The board owns the CADENCE; the resolve and the video stay here.
-      //
-      // Every other entry into `_heroPreview.scheduleHeroTrailer` is still excluded for
-      // this style — init, section loads, focus changes, `_heroSection.applyHero`, route
-      // return, sidebar return — so the board's clock is the single owner and
-      // the two cannot start a trailer under different titles.
-      // Suppression is enforced inside
-      // _heroPreview.scheduleHeroTrailer. Folding it in here disarms the board's dwell
-      // clock entirely — and the dwell is the only event that can LIFT the
-      // suppression when the reel moves to a new title, so one post-playback
-      // rebuild would have frozen trailers until the tab was recreated.
-      trailersEnabled: _heroPreview.heroTrailerEnabled,
-      onDwell: (item) =>
-          _heroPreview.scheduleHeroTrailer(item, fromSpotlight: true),
-      onTrailerStop: _heroPreview.clearHeroTrailer,
-      // Full bleed on every form factor — a letterboxed 16:9 band was tried
-      // on the phone and read as a TV set embedded in the artwork (user call).
-      // The portrait cover-crop is the design; sharpness comes from the 1080p
-      // resolve and medium-filter texture sampling.
-      trailer: _heroPreview.heroTrailerRenderable
-          ? _boardMedia.trailerLayer(540, fullBleed: true)
-          : null,
-      // TV only: the glass stage the publish feeds exists behind the TV
-      // sidebar rail. Off-TV there is no consumer, and writing the shared
-      // notifiers from a phone Home would leave stale art for the next TV
-      // session of a hot-restarted debug run.
-      onAmbient: widget.isTelevision
-          ? (art, tint) {
-              if (!mounted) return;
-              MainPageBridge.tvAmbientArt.value = art;
-              MainPageBridge.tvHeroTint.value = tint;
-            }
-          : null,
-    );
-  }
-
-  /// The displayed Canvas rail's best focus target (sidebar hand-off, tab
-  /// re-entry, auto-focus and dead-focus reclaim all route through this via
-  /// [_topBoardFocusNode]).
-  FocusNode? _stageFocusTarget() {
-    // Spotlight owns its own cursor — the hero is a focusable row, which the
-    // rail-based resolution below cannot describe.
-    if (_homeStyleEffective == 'spotlight') {
-      return _spotlightKey.currentState?.focusTarget();
-    }
-    // Tonight parks focus in its vertical queue until the user walks down
-    // into the rail zone; the rail resolution below is only right for the
-    // rail zone.
-    if (_homeStyleEffective == 'tonight' && _tonightZoneIsQueue) {
-      final queue = _tonightQueue;
-      if (queue.isNotEmpty) {
-        final e = queue[_resolveTonightQueueIndex(queue)];
-        return _nearestMountedNode(e.rail.cw!.nodes, e.col);
-      }
-    }
-    return _stageNavigation.railTarget(
-      _stageRails,
-      focusedAtriumKey: _homeStyleEffective == 'atrium'
-          ? _atriumFocusedRailKey.value
-          : null,
-    );
-  }
-
-  /// Every non-empty Home rail in the board's built-in order. Search's
-  /// dedicated Lists mode has its own body and never enters this collection.
-  /// FocusNode lists are reused from the classic board's per-row lists — only
-  /// one view is ever mounted, and reuse keeps node counts synced through
-  /// paging for free.
-  List<HomeRail> get _canonicalCanvasRails => HomeRailComposition.canonical(
-    continuation: _continuationProjection.cwVisible
-        ? _continuationProjection.cwRows
-        : const [],
-    favorites: _savedSection.favRowKinds,
-    favoriteCount: _canvasFavItemCount,
-    sectionCount: _sections.length,
-    nodeRowCount: _rowNodes.length,
-    sectionHasItems: (index) => _sections[index].items.isNotEmpty,
-    rowId: _canvasRailRowId,
-  );
-
-  List<HomeRail> _orderedHomeRails(List<HomeRail> rails) => _homeRowOrderActive
-      ? HomeRowOrder.apply(rails, _effectiveHomeRowOrder, _canvasRailRowId)
-      : rails;
-
-  List<HomeRail> get _canvasRails => _orderedHomeRails(_canonicalCanvasRails);
-
-  List<HomeRail> get _classicHomeRails => _orderedHomeRails(
-    HomeRailComposition.classic(
-      canonical: _canonicalCanvasRails,
-      reserveTrakt: _continuationProjection.traktReserving,
-      mergeTrakt: _continuationSection.cwMergeTrakt,
-      disabled: _homeDisabled,
-    ),
-  );
-
-  String _canvasRailRowId(HomeRail rail) {
-    if (rail.cw != null) return rail.cw!.rowId;
-    if (rail.favKind != null) return _savedSection.favRowId(rail.favKind!);
-    if (rail.traktSkeletonIndex >= 0) {
-      return rail.traktSkeletonIndex == 0 ? 'trakt:movies' : 'trakt:shows';
-    }
-    return _sectionRowId(_sections[rail.sectionIndex!]);
-  }
-
   late final _classicNavigation = HomeClassicNavigation(
-    rails: () => _canvasRails,
-    rowIdOf: _canvasRailRowId,
-    nodesFor: _canvasRailNodes,
+    rails: () => _stageRailsSection.canvasRails,
+    rowIdOf: _stageRailsSection.canvasRailRowId,
+    nodesFor: _stageRailsSection.canvasRailNodes,
     requestFocus: _requestRowFocus,
     leaveTop: _leaveBoardTop,
     loadingMore: () => _boardLoadingMore,
@@ -4277,937 +3647,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _focusRelativeHomeRail(String rowId, int delta, int column) =>
       _classicNavigation.move(rowId, delta, column);
 
-  // ── TONIGHT zone state ───────────────────────────────────────────────────
-
-  late final _tonightFocus = HomeTonightFocus(
-    railKeyOf: _canvasRailKeyOf,
-    nearestNode: _nearestMountedNode,
-  );
-  bool get _tonightZoneIsQueue => _tonightFocus.isQueue;
-  set _tonightZoneIsQueue(bool value) => _tonightFocus.isQueue = value;
-  ValueNotifier<HomeTonightCardInfo?> get _tonightCard => _tonightFocus.card;
-
-  final HomeStageHoldLatch _stageHold = HomeStageHoldLatch();
-
-  List<HomeTonightQueueEntry> get _tonightQueue =>
-      _continuationProjection.cwVisible
-      ? HomeRailComposition.tonightQueue(_canvasRails)
-      : [];
-
-  List<HomeRail> get _stageRails => HomeRailComposition.stage(
-    _canvasRails,
-    tonight: _homeStyleEffective == 'tonight',
-  );
-
-  int _canvasFavItemCount(HomeFavoriteRowRef ref) {
-    if (ref.isIptvList) {
-      return _savedSection.iptvListRows[ref.list].channels.length;
-    }
-    switch (ref.kind) {
-      case HomeFavoriteKind.watchlistMovies:
-        return _savedSection.watchlistMovieItems.length;
-      case HomeFavoriteKind.watchlistSeries:
-        return _savedSection.watchlistSeriesItems.length;
-      case HomeFavoriteKind.iptv:
-        return _savedSection.iptvFavChannels.length;
-      case HomeFavoriteKind.debrify:
-        return _savedSection.tvFavChannels.length;
-      case HomeFavoriteKind.stremio:
-        return _savedSection.stvFavChannels.length;
-      case HomeFavoriteKind.playlist:
-        return _savedSection.playlistItems.length;
-    }
-  }
-
-  String _canvasFavTitle(HomeFavoriteRowRef ref) {
-    if (ref.isIptvList) return _savedSection.iptvListRows[ref.list].title;
-    switch (ref.kind) {
-      case HomeFavoriteKind.watchlistMovies:
-        return 'Watchlist Movies';
-      case HomeFavoriteKind.watchlistSeries:
-        return 'Watchlist Series';
-      case HomeFavoriteKind.iptv:
-        return 'IPTV Favorites';
-      case HomeFavoriteKind.debrify:
-        return 'Debrify TV';
-      case HomeFavoriteKind.stremio:
-        return 'Stremio TV';
-      case HomeFavoriteKind.playlist:
-        return 'Playlist';
-    }
-  }
-
-  String _canvasRailTitle(HomeRail rail) {
-    if (rail.cw != null) return rail.cw!.title;
-    if (rail.favKind != null) return _canvasFavTitle(rail.favKind!);
-    final section = _sections[rail.sectionIndex!];
-    if (_hideHomeCollectionNames && section is HomeCollectionSection) {
-      return '';
-    }
-    return section.title;
-  }
-
-  List<StremioMeta> _canvasRailItems(HomeRail rail) =>
-      rail.cw?.items ?? _sections[rail.sectionIndex!].items;
-
-  List<FocusNode> _canvasRailNodes(HomeRail rail) {
-    if (rail.cw != null) return rail.cw!.nodes;
-    if (rail.favKind != null) return _savedSection.favNodesFor(rail.favKind!);
-    return _rowNodes[rail.sectionIndex!];
-  }
-
-  /// UP/DOWN on the shelf: swap which rail the shelf shows — the screen never
-  /// scrolls. DOWN past the last loaded rail pulls the next catalog batch;
-  /// the new rail becomes reachable when it lands.
-  void _stageSwitchRail(int delta) {
-    _stageNavigation.switchRail(
-      rails: _stageRails,
-      delta: delta,
-      rowsPending: () => _boardRowsPending,
-      canAdvance: () => _boardCanAdvance,
-      focusContinuation: _focusCatalogContinuation,
-      deferAdvance: _stageDeferredAdvance.defer,
-      loadMore: _loadMoreBoard,
-      activate: (nextKey) {
-        setState(() {
-          _canvasRailKey = nextKey;
-          // Re-anchor Atrium's visible window before resolving deferred focus.
-          if (_homeStyleEffective == 'atrium') {
-            _atriumFocusedRailKey.value = nextKey;
-          }
-        });
-      },
-      scheduleFocus: () => _stageFocusRequests.schedule(_stageFocusTarget),
-    );
-  }
-
-  /// The CANVAS home: full-bleed stage (idle art → ambient trailer via the
-  /// same underlay engine, whose hole simply gets the whole canvas) with ONE
-  /// shelf of large posters at the bottom and quiet rail tabs above it. No
-  /// vertical scrolling, nothing clips at a fold, no row headers.
-  Widget _buildCanvasBoard() {
-    final view = _resolveStageRail();
-    if (view == null) {
-      // First batch still streaming (or every loaded row is empty) — hold
-      // the brand stage rather than an empty black canvas.
-      return BrandLoadingStage(isTelevision: widget.isTelevision);
-    }
-    _seedStageFocusOnce();
-    return buildHomeCanvasBoard(
-      hostContext: context,
-      view: view,
-      media: () => _boardMedia,
-      theater: () => _canvasTheater,
-      trailerActive: () => _heroPreview.heroTrailerActive,
-      trailerShowing: _heroPreview.heroTrailerShowing,
-      cardAspect: () => _stageCardAspect(view.rail),
-      captionBandHeight: () => _homeArtPosterCaptionBand,
-      favoriteCount: () => _canvasFavItemCount(view.rail.favKind!),
-      railTitle: (index) => _canvasTabTitle(view.rails, index),
-      favoriteBuilder: (_, col) =>
-          _canvasFavCell(view.rail.favKind!, view.key, col),
-      itemBuilder: (_, col) => _canvasCell(view, col),
-    );
-  }
-
-  late final _stageCards = HomeStageCards(
-    sectionAt: (index) => _sections[index],
-    collectionFor: _stageCollection,
-    aspectOf: _stageCardAspect,
-    artOf: _stageCardArt,
-    isBound: _isBound,
-    pikpakOnly: () => _pikpakOnly,
-    openSection: _sectionOpenItem,
-    playSection: _sectionQuickPlay,
-    openContinuationMenu: _continuationMenu.openCwCardMenu,
-    onFocused: (railKey, item, column) {
-      _heroSection.setHero(item);
-      _canvasCols[railKey] = column;
-    },
-    focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
-    switchRail: _stageSwitchRail,
-    loadMore: _loadMoreRow,
-  );
-
-  Widget _canvasCell(HomeStageRailView view, int col) {
-    final rail = view.rail;
-    final railKey = view.key;
-    final items = view.items;
-    final nodes = view.nodes;
-    return _stageCards.build(
-      rail: rail,
-      railKey: railKey,
-      item: items[col],
-      nodes: nodes,
-      column: col,
-    );
-  }
-
-  /// A DOWN that ran off the end of the rail list asked for another batch.
-  /// Called when one lands: completes the move only if the user is STILL on
-  /// the rail they pressed DOWN from, and the request hasn't gone stale — a
-  /// late batch must never yank focus out of wherever they went instead.
-  void _maybeCompleteStageAdvance() {
-    late final List<HomeRail> rails;
-    late final int i;
-    final move = _stageDeferredAdvance.take(
-      waitingForMore: (key) {
-        rails = _stageRails;
-        i = rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
-        return _boardRowsPending && i >= 0 && i + 1 >= rails.length;
-      },
-    );
-    if (move == null) return;
-    final key = move.railKey;
-    final fillLower = move.fillsLower;
-    final origin = move.origin;
-    if (i < 0 || i + 1 >= rails.length) return;
-    // Still where the key was pressed? On Atrium that means the focused ROW,
-    // everywhere else the active rail.
-    final whereNow = _homeStyleEffective == 'atrium'
-        ? (_atriumFocusedRailKey.value ?? _canvasRailKey)
-        : _canvasRailKey;
-    if (whereNow != key) return;
-    if (fillLower) {
-      // Atrium had only a top row: the window stays put and focus drops into
-      // the row that just landed beneath it.
-      _stageFocusRequests.schedule(() {
-        if (!identical(FocusManager.instance.primaryFocus, origin)) return null;
-        final now = _stageRails;
-        final at = now.indexWhere((r) => _canvasRailKeyOf(r) == key);
-        if (at < 0 || at + 1 >= now.length) return null;
-        final rail = now[at + 1];
-        _atriumFocusedRailKey.value = _canvasRailKeyOf(rail);
-        return _nearestMountedNode(
-          _canvasRailNodes(rail),
-          _canvasCols[_canvasRailKeyOf(rail)] ?? 0,
-        );
-      });
-      return;
-    }
-    if (_homeStyleEffective == 'atrium') {
-      // Atrium pressed DOWN from the window's BOTTOM row; its own advance
-      // re-resolves the window and lands focus on the new bottom row.
-      _atriumAdvance(origin: origin);
-      return;
-    }
-    setState(() => _canvasRailKey = _canvasRailKeyOf(rails[i + 1]));
-    _stageFocusRequests.schedule(() {
-      if (!(ModalRoute.of(context)?.isCurrent ?? true)) return null;
-      final primary = FocusManager.instance.primaryFocus;
-      // Deck/Mosaic replace the entire rail. That intentional replacement
-      // detaches the origin before this frame callback and leaves route-scope
-      // focus. A different attached card still means the user moved elsewhere.
-      final detachedBySwap = origin?.parent == null &&
-          (primary == null || identical(primary, FocusScope.of(context)));
-      return identical(primary, origin) || detachedBySwap
-          ? _stageFocusTarget() : null;
-    });
-  }
-
-  /// A rail strip reserves ONE box height for every rail kind (invariant: a
-  /// per-kind height bounces the layout on every fav↔catalog switch). The two
-  /// kinds FILL it differently rather than one wasting the other's space: a
-  /// catalog poster is the full box, a favourite's poster is the box minus its
-  /// caption band, so both end exactly on the box's bottom edge.
-  /// TITLE cards follow the Home Cards orientation setting; everything else
-  /// (favourites, channels, playlists) keeps its own fixed shape.
-  double get _titleCardAspect =>
-      homeTitleCardAspect(landscape: _homeLandscapeCards);
-
-  /// The art for a title card under the current orientation. Null keeps the
-  /// cell's own default (the 2:3 poster) — only landscape needs a derived
-  /// wide still.
-  String? _titleArtUrl(StremioMeta item) =>
-      _homeLandscapeCards ? homeStageWideArtwork(item) : null;
-
-  HomeCollectionSection? _stageCollection(HomeRail rail) {
-    final index = rail.sectionIndex;
-    if (index == null) return null;
-    final section = _sections[index];
-    return section is HomeCollectionSection ? section : null;
-  }
-
-  double _stageCardAspect(HomeRail rail, {double? fallback}) =>
-      _stageCollection(rail)?.tileAspectRatio ?? fallback ?? _titleCardAspect;
-
-  String? _stageCardArt(HomeRail rail, StremioMeta item, {bool wide = false}) =>
-      _stageCollection(rail) != null
-          ? item.poster
-          : wide
-          ? homeStageWideArtwork(item)
-          : _titleArtUrl(item);
-
-  double _stageFavW(BuildContext context, double boxH) {
-    // Poster + caption must equal the box EXACTLY. A width floor here would
-    // make the poster taller than the space left by a scaled caption and
-    // overflow the row — so the art simply gets whatever is left (never
-    // below a hairline, so the cell is still hit-testable).
-    final art = boxH - _homeArtPosterCaptionBand;
-    return (art < 16 ? 16.0 : art) * 2 / 3;
-  }
-
-  /// The box height a rail strip may actually use: the layout's preference,
-  /// but never less than a favourite cell needs at the CURRENT text scale
-  /// (its two-line caption grows with accessibility settings, and a fixed box
-  /// would clip it), and never more than [maxH].
-  double _stageRailBoxH(
-    BuildContext context,
-    double preferred, {
-    required double maxH,
-  }) {
-    final floor = _homeArtPosterCaptionBand + _kStageMinPosterH;
-    final lo = min(floor, maxH);
-    return preferred.clamp(lo, max(lo, maxH));
-  }
-
-  /// One-shot: hand entry focus to the active rail the first time a stage
-  /// board builds. Shared by every stage layout — the target resolution
-  /// ([_stageFocusTarget]) already knows which zone owns focus.
-  void _seedStageFocusOnce() => _stageNavigation.seedFocus(
-    schedule: _stageFocusRequests.schedule,
-    resolveTarget: _stageFocusTarget,
-  );
-
-  /// Every stage board resolves the same four things before painting: the
-  /// rails, which one is active, its identity key (persisted so a rail
-  /// streaming in above it can't swap the content under the user) and its
-  /// nodes. Null means "nothing to show yet" — the caller holds the brand
-  /// stage.
-  HomeStageRailView? _resolveStageRail() =>
-      _stageNavigation.resolveView(_stageRails);
-
   // ── PROMENADE view ───────────────────────────────────────────────────────
-
-  /// PROMENADE: Canvas's stage, symmetric. The identity sits centred in the
-  /// lower third and the rail becomes a CENTRE-LOCKED strip — the focused
-  /// cell is pinned to the middle of the board and the strip travels under
-  /// it. Centre-lock is free: board cards already
-  /// `ensureVisible(alignment: 0.5)`; the half-viewport pads below simply let
-  /// the FIRST and LAST cell reach the middle too, which a plain list can't.
-  Widget _buildPromenadeBoard() {
-    final view = _resolveStageRail();
-    if (view == null) {
-      return BrandLoadingStage(isTelevision: widget.isTelevision);
-    }
-    _seedStageFocusOnce();
-    return buildHomePromenadeBoard(
-      hostContext: context,
-      view: view,
-      media: () => _boardMedia,
-      theater: () => _canvasTheater,
-      trailerActive: () => _heroPreview.heroTrailerActive,
-      trailerShowing: _heroPreview.heroTrailerShowing,
-      railBoxHeight: _stageRailBoxH,
-      favoriteWidth: _stageFavW,
-      cardAspect: () => _stageCardAspect(view.rail, fallback: 16 / 9),
-      favoriteCount: () => _canvasFavItemCount(view.rail.favKind!),
-      railTitle: () => _canvasTabTitle(view.rails, view.index),
-      favoriteBuilder: (_, col) =>
-          _canvasFavCell(view.rail.favKind!, view.key, col),
-      itemBuilder: (_, col) =>
-          _promenadeCell(view.rail, view.key, view.items, view.nodes, col),
-    );
-  }
-
-  /// One wide strip cell — the SAME [HomeBoardCell] every board uses, in a 16:9
-  /// box with derived landscape art, so hold-OK menus, quick-play, paging and
-  /// the focus grammar are identical to Canvas's shelf.
-  Widget _promenadeCell(
-    HomeRail rail,
-    String railKey,
-    List<StremioMeta> items,
-    List<FocusNode> nodes,
-    int col,
-  ) {
-    return _stageCards.build(
-      rail: rail,
-      railKey: railKey,
-      item: items[col],
-      nodes: nodes,
-      column: col,
-      wide: true,
-      restVeil: _kPromRestVeil,
-    );
-  }
 
   // ── ATRIUM view ──────────────────────────────────────────────────────────
 
-  /// Which rail currently owns focus in Atrium's two-row wall — drives the
-  /// eyebrow above the identity only, so it is a notifier rather than
-  /// setState: crossing between the rows must not rebuild the board.
-  final ValueNotifier<String?> _atriumFocusedRailKey = ValueNotifier<String?>(
-    null,
-  );
-
-  /// Focus the nearest mounted cell of the rail at [index] (its own remembered
-  /// column). Both wall rows are mounted, so this always has a target.
-  void _atriumFocusRail(int index) {
-    final rails = _stageRails;
-    if (index < 0 || index >= rails.length) return;
-    final rail = rails[index];
-    _nearestMountedNode(
-      _canvasRailNodes(rail),
-      _canvasCols[_canvasRailKeyOf(rail)] ?? 0,
-    )?.requestFocus();
-  }
-
-  /// DOWN from the BOTTOM row: scroll the two-row window on by one, so the
-  /// row you were on becomes the top row and focus lands on the rail below
-  /// it. (Plain [_stageSwitchRail] would focus the rail you are already on.)
-  void _atriumAdvance({FocusNode? origin}) {
-    final rails = _stageRails;
-    final cur = _resolveCanvasRailIndex(rails);
-    if (cur + 2 >= rails.length) {
-      // Nothing below the bottom row yet — pull the next catalog batch and
-      // remember the move so it completes when the rail lands.
-      if (_boardCanAdvance) {
-        _stageDeferredAdvance.defer(
-          _canvasRailKeyOf(rails[min(cur + 1, rails.length - 1)]),
-        );
-        _loadMoreBoard();
-      }
-      return;
-    }
-    setState(() => _canvasRailKey = _canvasRailKeyOf(rails[cur + 1]));
-    _stageFocusRequests.schedule(() {
-      if (_homeStyleEffective != 'atrium') return null;
-      // Deferred completions pass the node that pressed DOWN; focus can move
-      // during the frame gap, and a late batch must not yank it back.
-      if (origin != null &&
-          !identical(FocusManager.instance.primaryFocus, origin)) {
-        return null;
-      }
-      // After the shift the window is [cur+1, cur+2]; land on its bottom row.
-      final rails = _stageRails;
-      final i = _resolveCanvasRailIndex(rails) + 1;
-      if (i >= rails.length) return null;
-      final rail = rails[i];
-      _atriumFocusedRailKey.value = _canvasRailKeyOf(rail);
-      return _nearestMountedNode(
-        _canvasRailNodes(rail),
-        _canvasCols[_canvasRailKeyOf(rail)] ?? 0,
-      );
-    });
-  }
-
-  /// ATRIUM: a hard vertical cut. Left is a flat ink column carrying the
-  /// title's dossier and never taking focus; right is the art (and the
-  /// trailer, in the same rect — the hole simply follows the layer's box)
-  /// with a two-row poster wall standing on its lower half.
-  Widget _buildAtriumBoard() {
-    final app = AppThemeScope.of(context);
-    final view = _resolveStageRail();
-    if (view == null) {
-      return BrandLoadingStage(isTelevision: widget.isTelevision);
-    }
-    _seedStageFocusOnce();
-    return buildHomeAtriumBoard(
-      view: view,
-      media: () => _boardMedia,
-      trailerActive: () => _heroPreview.heroTrailerActive,
-      focusedRailKey: _atriumFocusedRailKey,
-      trailerShowing: _heroPreview.heroTrailerShowing,
-      panelColor: app.home.bg,
-      seamColor: app.fade(app.core.tx, 0.09),
-      labelHeight: _atriumLabelHeight,
-      labelGap: _kAtriumLabelGap,
-      minimumRowHeight: () => _homeArtPosterCaptionBand + _kStageMinPosterH,
-      railBoxHeight: _stageRailBoxH,
-      railKeyOf: _canvasRailKeyOf,
-      railTitle: (index) => _canvasTabTitle(view.rails, index),
-      rowBuilder: (index, height, {required isTopRow, required hasRowBelow}) =>
-          _atriumRow(
-            view.rails,
-            index,
-            height,
-            isTopRow: isTopRow,
-            hasRowBelow: hasRowBelow,
-          ),
-    );
-  }
-
-  /// One row of Atrium's wall: a quiet rail label over a horizontal strip of
-  /// the SAME cells every other board uses.
-  Widget _atriumRow(
-    List<HomeRail> rails,
-    int index,
-    double rowBoxH, {
-    required bool isTopRow,
-    required bool hasRowBelow,
-  }) {
-    final rail = rails[index];
-    final railKey = _canvasRailKeyOf(rail);
-    final favRail = rail.favKind != null;
-    final items = favRail ? const <StremioMeta>[] : _canvasRailItems(rail);
-    final nodes = _canvasRailNodes(rail);
-    final cardW = favRail
-        ? _stageFavW(context, rowBoxH)
-        : rowBoxH * _stageCardAspect(rail);
-    final count = favRail ? _canvasFavItemCount(rail.favKind!) : items.length;
-
-    // The window is [active, active+1]. From the top row UP leaves the
-    // window; from the bottom row DOWN scrolls it on. Crossing between them
-    // is a plain focus request.
-    final onUp = isTopRow
-        ? () => _stageSwitchRail(-1)
-        : () => _atriumFocusRail(index - 1);
-    final onDown = isTopRow
-        ? (hasRowBelow
-              ? () => _atriumFocusRail(index + 1)
-              : (rails.length > index + 1
-                    // Only one row is drawn: DOWN scrolls the window on.
-                    ? () => _stageSwitchRail(1)
-                    : () {
-                        // No lower row YET — remember the move so focus drops into
-                        // it when the batch lands, instead of eating the keypress.
-                        if (_boardCanAdvance) {
-                          _stageDeferredAdvance.defer(
-                            railKey,
-                            fillsLower: true,
-                          );
-                          _loadMoreBoard();
-                        }
-                      }))
-        : _atriumAdvance;
-
-    return buildHomeAtriumRow(
-      context: context,
-      title: _canvasTabTitle(rails, index),
-      androidTv: PlatformUtil.isAndroidTvCached,
-      labelGap: _kAtriumLabelGap,
-      rowHeight: rowBoxH,
-      railKey: railKey,
-      itemCount: count,
-      itemBuilder: (context, col) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 7),
-        child: Center(
-          child: SizedBox(
-            width: cardW,
-            child: favRail
-                ? _canvasFavCell(
-                    rail.favKind!,
-                    railKey,
-                    col,
-                    onUp: () {
-                      _atriumFocusedRailKey.value = railKey;
-                      onUp();
-                    },
-                    onDown: () {
-                      _atriumFocusedRailKey.value = railKey;
-                      onDown();
-                    },
-                  )
-                : SizedBox(
-                    height: rowBoxH,
-                    child: _stageCards.build(
-                      rail: rail,
-                      railKey: railKey,
-                      item: items[col],
-                      readActionItem: () => items[col],
-                      nodes: nodes,
-                      column: col,
-                      onUp: onUp,
-                      onDown: onDown,
-                      onFocusedExtra: () =>
-                          _atriumFocusedRailKey.value = railKey,
-                    ),
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-
   // ── MOSAIC view ──────────────────────────────────────────────────────────
-
-  /// MOSAIC: no hero at all. The active rail becomes a WALL of posters on a
-  /// heavily veiled wash of the focused title's art, with the identity moved
-  /// to a fixed top band. The cheapest layout on the list: one image, one
-  /// flat veil, one grid — and no ambient video (see [_stageWantsAmbient]),
-  /// which is why it stays smooth on weak TV hardware.
-  Widget _buildMosaicBoard() {
-    final app = AppThemeScope.of(context);
-    final view = _resolveStageRail();
-    if (view == null) {
-      return BrandLoadingStage(isTelevision: widget.isTelevision);
-    }
-    _seedStageFocusOnce();
-    final count = view.rail.favKind != null
-        ? _canvasFavItemCount(view.rail.favKind!)
-        : view.items.length;
-    return buildHomeMosaicBoard(
-      hostContext: context,
-      view: view,
-      itemCount: count,
-      media: () => _boardMedia,
-      trailerActive: () => _heroPreview.heroTrailerActive,
-      trailerShowing: _heroPreview.heroTrailerShowing,
-      cardAspect: () => _stageCardAspect(view.rail),
-      captionBandHeight: () => _homeArtPosterCaptionBand,
-      hintColor: app.fade(app.core.tx, 0.34),
-      railTitle: () => _canvasTabTitle(view.rails, view.index),
-      itemBuilder: (col, perRow, cellWidth) => _mosaicCell(
-        view.rail,
-        view.key,
-        view.items,
-        view.nodes,
-        col,
-        count,
-        perRow,
-        cellWidth,
-      ),
-    );
-  }
-
-  /// One wall cell. The grid overrides all four arrows: LEFT hands off to the
-  /// sidebar only at a ROW edge (a grid's leftmost cell is not column 0, so
-  /// the row grammar would leave the sidebar unreachable from every row but
-  /// the first), and UP/DOWN step a whole row before falling through to rail
-  /// switching.
-  Widget _mosaicCell(
-    HomeRail rail,
-    String railKey,
-    List<StremioMeta> items,
-    List<FocusNode> nodes,
-    int col,
-    int count,
-    int perRow,
-    double cellW,
-  ) {
-    final navigation = HomeMosaicCellNavigation(
-      column: col,
-      count: count,
-      perRow: perRow,
-      nodes: nodes,
-      hold: _stageHold,
-      focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
-      switchRail: _stageSwitchRail,
-      loadMore: rail.sectionIndex == null
-          ? null
-          : () => _loadMoreRow(rail.sectionIndex!),
-      deferRight: () => _stageDeferredRight.defer(railKey, col),
-    );
-
-    if (rail.favKind != null) {
-      return _canvasFavCell(
-        rail.favKind!,
-        railKey,
-        col,
-        onUp: navigation.up,
-        onDown: navigation.down,
-        onLeft: navigation.left,
-        onRight: navigation.right,
-        onUpHold: navigation.upHold,
-        onDownHold: navigation.downHold,
-      );
-    }
-    return SizedBox(
-      height: cellW / _stageCardAspect(rail),
-      child: _stageCards.build(
-        rail: rail,
-        railKey: railKey,
-        item: items[col],
-        nodes: nodes,
-        column: col,
-        pageNearEnd: false,
-        onUp: navigation.up,
-        onDown: navigation.down,
-        onUpHold: navigation.upHold,
-        onDownHold: navigation.downHold,
-        onLeft: navigation.left,
-        onRight: navigation.right,
-      ),
-    );
-  }
 
   // ── DECK view ────────────────────────────────────────────────────────────
 
-  /// DECK: the trailer stops being wallpaper and becomes an OBJECT — a
-  /// rounded 16:9 card floating on ink with the next two titles stacked
-  /// behind it. The hole follows the card's laid-out rect (Canvas proved that
-  /// needs no native work); the rounded corners are four ink wedges painted
-  /// ABOVE the layers, because a clip would put a saveLayer over the hole.
-  Widget _buildDeckBoard() {
-    final app = AppThemeScope.of(context);
-    final view = _resolveStageRail();
-    if (view == null) {
-      return BrandLoadingStage(isTelevision: widget.isTelevision);
-    }
-    _seedStageFocusOnce();
-    return buildHomeDeckBoard(
-      hostContext: context,
-      view: view,
-      itemCount: view.rail.favKind != null
-          ? _canvasFavItemCount(view.rail.favKind!)
-          : view.items.length,
-      media: () => _boardMedia,
-      theater: () => _canvasTheater,
-      trailerActive: () => _heroPreview.heroTrailerActive,
-      focusedColumn: _stageCol,
-      trailerShowing: _heroPreview.heroTrailerShowing,
-      borderColor: app.fade(app.core.tx, 0.10),
-      railBoxHeight: _stageRailBoxH,
-      labelHeight: _atriumLabelHeight,
-      labelGap: _kAtriumLabelGap,
-      favoriteWidth: _stageFavW,
-      cardAspect: () => _stageCardAspect(view.rail),
-      railTitle: () => _canvasTabTitle(view.rails, view.index),
-      favoriteBuilder: (_, col) =>
-          _canvasFavCell(view.rail.favKind!, view.key, col),
-      itemBuilder: (_, col) =>
-          _stageShelfCell(view.rail, view.key, view.items, view.nodes, col),
-    );
-  }
-
-  /// The shared poster shelf cell (Canvas grammar: L/R along the rail, U/D
-  /// switches rails) — used by Deck and Tonight's bottom strip.
-  Widget _stageShelfCell(
-    HomeRail rail,
-    String railKey,
-    List<StremioMeta> items,
-    List<FocusNode> nodes,
-    int col, {
-    VoidCallback? onUp,
-    VoidCallback? onDown,
-    VoidCallback? onUpHold,
-    VoidCallback? onDownHold,
-    VoidCallback? onFocusedExtra,
-  }) {
-    return _stageCards.build(
-      rail: rail,
-      railKey: railKey,
-      item: items[col],
-      nodes: nodes,
-      column: col,
-      onUp: onUp,
-      onDown: onDown,
-      onUpHold: onUpHold,
-      onDownHold: onDownHold,
-      onFocusedExtra: () {
-        _stageCol.value = col;
-        onFocusedExtra?.call();
-      },
-    );
-  }
-
   // ── TONIGHT view ─────────────────────────────────────────────────────────
-
-  int _resolveTonightQueueIndex(List<HomeTonightQueueEntry> queue) =>
-      _tonightFocus.resolveIndex(queue);
-
-  bool _tonightFocusQueue() => _tonightFocus.focusQueue(_tonightQueue);
-
-  bool _tonightFocusRail() {
-    final node = () {
-      final rails = _stageRails;
-      if (rails.isEmpty) return null;
-      final rail = rails[_resolveCanvasRailIndex(rails)];
-      return _nearestMountedNode(
-        _canvasRailNodes(rail),
-        _canvasCols[_canvasRailKeyOf(rail)] ?? 0,
-      );
-    }();
-    return _tonightFocus.focusRail(node);
-  }
-
-  /// TONIGHT: resume-first. A large card carries whatever has focus, a
-  /// vertical Continue queue stands beside it, and one rail runs underneath.
-  /// UP/DOWN walks the two zones as a single column, so the Continue rows sit
-  /// "above" the first rail exactly as they read.
-  Widget _buildTonightBoard() {
-    final queue = _tonightQueue;
-    final rails = _stageRails;
-    if (queue.isEmpty && rails.isEmpty) {
-      return BrandLoadingStage(isTelevision: widget.isTelevision);
-    }
-    // A zone that no longer exists can't hold focus.
-    if (_tonightZoneIsQueue && queue.isEmpty) _tonightZoneIsQueue = false;
-    if (!_tonightZoneIsQueue && rails.isEmpty) _tonightZoneIsQueue = true;
-    final view = rails.isEmpty ? null : _resolveStageRail();
-    _seedStageFocusOnce();
-
-    return buildHomeTonightBoard(
-      hostContext: context,
-      queueCount: queue.length,
-      hasRail: rails.isNotEmpty,
-      media: () => _boardMedia,
-      trailerActive: () => _heroPreview.heroTrailerActive,
-      cardInfo: _tonightCard,
-      labelHeight: _atriumLabelHeight,
-      labelGap: _kAtriumLabelGap,
-      railBoxHeight: _stageRailBoxH,
-      onQueueHidden: () => _tonightZoneIsQueue = false,
-      queueBuilder: (height, width) =>
-          _tonightQueueList(queue, height, width, rails.isNotEmpty),
-      railBuilder: view == null
-          ? null
-          : (height, queueAbove) =>
-                _tonightRail(view, height, queueAbove: queueAbove),
-    );
-  }
-
-  Widget _tonightQueueList(
-    List<HomeTonightQueueEntry> queue,
-    double rowH,
-    double queueW,
-    bool hasRail,
-  ) {
-    return buildHomeTonightQueueList(
-      itemCount: queue.length,
-      rowHeight: rowH,
-      queueWidth: queueW,
-      itemBuilder: (context, i, thumbW) {
-        final e = queue[i];
-        final cw = e.rail.cw!;
-        final item = cw.items[e.col];
-        return HomeTonightQueueRow(
-          item: item,
-          height: rowH,
-          thumbWidth: thumbW,
-          focusNode: cw.nodes[e.col],
-          episode: cw.episodeOf(item),
-          progress: cw.progressOf(item),
-          hasBoundSource: _isBound(item),
-          onFocused: () {
-            _tonightFocus.selectQueue(e, i, item);
-            _heroSection.setHero(item);
-          },
-          onOpen: () => cw.onOpen(item),
-          onLongPress: () =>
-              _continuationMenu.openCwCardMenu(cw, item, e.rail.cwIndex, e.col),
-          onUp: () {
-            if (_stageHold.swallows(LogicalKeyboardKey.arrowUp)) return;
-            if (i > 0) {
-              _nearestMountedNode(
-                queue[i - 1].rail.cw!.nodes,
-                queue[i - 1].col,
-              )?.requestFocus();
-            }
-          },
-          onDown: () {
-            if (_stageHold.swallows(LogicalKeyboardKey.arrowDown)) return;
-            if (i + 1 < queue.length) {
-              _nearestMountedNode(
-                queue[i + 1].rail.cw!.nodes,
-                queue[i + 1].col,
-              )?.requestFocus();
-            } else if (hasRail) {
-              _tonightFocusRail();
-            }
-          },
-          // HELD down: leave the queue for the rail in one gesture.
-          // The queue is every Continue Watching item from every
-          // source flattened into one column, so stepping past it a
-          // row at a time can be a long walk.
-          onDownHold: hasRail
-              ? () => _stageHold.jump(
-                  LogicalKeyboardKey.arrowDown,
-                  _tonightFocusRail,
-                )
-              : null,
-          onLeft: () => MainPageBridge.focusTvSidebar?.call(),
-        );
-      },
-    );
-  }
-
-  Widget _tonightRail(
-    HomeStageRailView view,
-    double boxH, {
-    required bool queueAbove,
-  }) {
-    final rail = view.rail;
-    final railKey = view.key;
-    final favRail = rail.favKind != null;
-    final items = view.items;
-    final nodes = view.nodes;
-    final count = favRail ? _canvasFavItemCount(rail.favKind!) : items.length;
-    // UP walks back through the rails and then into the queue — the two zones
-    // are one vertical column.
-    void up() {
-      if (_stageHold.swallows(LogicalKeyboardKey.arrowUp)) return;
-      if (view.index > 0) {
-        _stageSwitchRail(-1);
-      } else if (queueAbove) {
-        _tonightFocusQueue();
-      }
-    }
-
-    void down() {
-      if (_stageHold.swallows(LogicalKeyboardKey.arrowDown)) return;
-      _stageSwitchRail(1);
-    }
-
-    // HELD up: back to the Continue queue from any rail, the mirror of the
-    // queue's held DOWN.
-    final upHold = queueAbove
-        ? () => _stageHold.jump(LogicalKeyboardKey.arrowUp, _tonightFocusQueue)
-        : null;
-
-    return buildHomeTonightRail(
-      railHeight: boxH,
-      labelGap: _kAtriumLabelGap,
-      railKey: railKey,
-      itemCount: count,
-      label: buildHomeStageRowLabel(
-        context: context,
-        title: _canvasTabTitle(view.rails, view.index),
-      ),
-      itemBuilder: (context, col) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 7),
-        child: Center(
-          child: SizedBox(
-            width: favRail
-                ? _stageFavW(context, boxH)
-                : boxH * _stageCardAspect(rail),
-            child: favRail
-                ? _canvasFavCell(
-                    rail.favKind!,
-                    railKey,
-                    col,
-                    onUp: up,
-                    onDown: down,
-                    onUpHold: upHold,
-                  )
-                : SizedBox(
-                    height: boxH,
-                    child: _stageShelfCell(
-                      rail,
-                      railKey,
-                      items,
-                      nodes,
-                      col,
-                      onUp: up,
-                      onDown: down,
-                      onUpHold: upHold,
-                      onFocusedExtra: () {
-                        _tonightFocus.selectRail(rail, items[col]);
-                      },
-                    ),
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Tab label for a rail, with colliding titles disambiguated by the
-  /// section's provenance tag. Titles carry their content type themselves
-  /// now ("Popular Movies" — [CatalogSection.rowTitle]), so the only way two
-  /// tabs still collide is the same catalog name+type from two ADDONS — and
-  /// the addon is exactly what tells those apart.
-  String _canvasTabTitle(List<HomeRail> rails, int i) {
-    final title = _canvasRailTitle(rails[i]);
-    if (title.isEmpty) return '';
-    final rail = rails[i];
-    if (rail.sectionIndex == null) return title;
-    final duplicated = rails.any(
-      (r) => !identical(r, rail) && _canvasRailTitle(r) == title,
-    );
-    if (!duplicated) return title;
-    return '$title · ${_sectionTag(_sections[rail.sectionIndex!])}';
-  }
 
   // ── Hero ─────────────────────────────────────────────────────────────────
 
@@ -5254,7 +3702,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _heroSection.enrichHero(item);
       _heroPreview.scheduleHeroTrailer(
         item,
-        fromSpotlight: _homeStyleEffective == 'spotlight',
+        fromSpotlight: _displaySection.homeStyleEffective == 'spotlight',
       );
     }
   }
@@ -5275,7 +3723,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _resumeHomeProgress();
       } else {
         _clearDeferredDown();
-        _stageDeferredAdvance.reset();
+        _stageSection.stageDeferredAdvance.reset();
       }
     }
     _heroShell.bindRoute(context);
@@ -5341,29 +3789,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     discoverMode: widget.discoverMode,
     isTelevision: widget.isTelevision,
     dedicatedSearch: widget.searchMode,
-    spotlightActive: () => _spotlightShellActive,
+    spotlightActive: () => _spotlightShell.spotlightShellActive,
     discover: _discoverSection.buildDiscover,
     board: _buildBoard,
-    spotlight: _buildSpotlightShell,
+    spotlight: _spotlightShell.buildSpotlightShell,
     header: _inputSection.buildHeader,
     sourcesBar: _inputSection.buildUnifiedCatalogSourcesBar,
     body: _inputSection.buildBody,
   );
-
-  Widget _buildSpotlightShell() {
-    // Preserve the build-time latch for async default-mode/query restoration.
-    _searchSheet.observeForcedState();
-    return buildSpotlightSearchShell(
-      context: context,
-      sheetOpen: _searchSheetOpen,
-      canClose: !_sheetForced && _searchController.text.isEmpty,
-      onClose: _searchSheet.close,
-      onOpen: _searchSheet.open,
-      header: _inputSection.buildHeader,
-      sourcesBar: _inputSection.buildUnifiedCatalogSourcesBar,
-      body: _inputSection.buildBody,
-    );
-  }
 
   /// Poster width for a board rail. On TV the logical canvas can be as short as
   /// 540px (a 1080p panel at density 320 → devicePixelRatio 2.0), where a poster
@@ -5376,7 +3809,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   Size _railTitleCardSize(BuildContext context) => homeClassicCardSize(
     posterWidth: _railPosterW(context),
-    landscape: _homeLandscapeCards,
+    landscape: _displaySection.homeLandscapeCards,
   );
 
   double _railTitleCardW(BuildContext context) =>
@@ -5397,8 +3830,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   void _restoreCatalogContinuationFocus() {
     if (_catalogFocus.restore([
-      _stageFocusTarget(),
-      for (final rail in _canvasRails) ..._canvasRailNodes(rail),
+      _stageSection.stageFocusTarget(),
+      for (final rail in _stageRailsSection.canvasRails)
+        ..._stageRailsSection.canvasRailNodes(rail),
     ])) {
       return;
     }
@@ -5472,20 +3906,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   Widget _buildBoardContent() {
     if (!_loading &&
-        !_spotlightEntryRevealed &&
+        !_spotlightSection.spotlightEntryRevealed &&
         widget.isTelevision &&
         !widget.searchMode &&
         !widget.discoverMode &&
         _catalogSection.catalogQuery.isEmpty &&
         !_catalogSection.catalogSearching &&
-        _homeStyleEffective == 'spotlight') {
-      if (_spotlightHero.isEmpty &&
-          (_boardRefreshing || _heroSourceResolving)) {
+        _displaySection.homeStyleEffective == 'spotlight') {
+      if (_spotlightSection.spotlightHero.isEmpty &&
+          (_boardRefreshing || _spotlightSection.heroSourceResolving)) {
         return BrandLoadingStage(isTelevision: true);
       }
       // Reveal once: background refreshes must not hide an already usable
       // board. Hero success enters on the hero; exhaustion enters on a card.
-      _spotlightEntryRevealed = true;
+      _spotlightSection.spotlightEntryRevealed = true;
       _autoFocusSettled = false;
       _maybeAutoFocusBoard();
     }
@@ -5500,19 +3934,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       query: _catalogSection.catalogQuery,
       searchFailures: _catalogSearchFailures,
       searchMode: widget.searchMode,
-      style: _homeStyleEffective,
+      style: _displaySection.homeStyleEffective,
       spotlightHasContent: () =>
-          _spotlightShelves.any((s) => s.items.isNotEmpty),
+          _spotlightRows.spotlightShelves.any((s) => s.items.isNotEmpty),
       layouts: {
-        'canvas': _buildCanvasBoard,
-        'atrium': _buildAtriumBoard,
-        'mosaic': _buildMosaicBoard,
-        'promenade': _buildPromenadeBoard,
-        'deck': _buildDeckBoard,
-        'tonight': _buildTonightBoard,
-        'spotlight': _buildSpotlightBoard,
+        'canvas': _stageBoards.buildCanvasBoard,
+        'atrium': _atriumLayout.buildAtriumBoard,
+        'mosaic': _stageBoards.buildMosaicBoard,
+        'promenade': _stageBoards.buildPromenadeBoard,
+        'deck': _stageBoards.buildDeckBoard,
+        'tonight': _tonightLayout.buildTonightBoard,
+        'spotlight': _spotlightBoards.buildSpotlightBoard,
       },
-      searchSpotlight: _buildSearchSpotlightBoard,
+      searchSpotlight: _spotlightResults.buildSearchSpotlightBoard,
       classic: _buildClassicBoard,
       onRetry: () => unawaited(_load()),
       message: _message,
@@ -5532,12 +3966,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         compact: widget.searchMode,
         isTelevision: tv,
         artworkCacheWidth: tv
-            ? (_homeBoardMode
+            ? (_displaySection.homeBoardMode
                   ? _tvHeroArtworkCacheWidth
                   : HomeTheme.heroBackdropCacheWidthTv)
             : HomeTheme.heroBackdropCacheWidth,
         artworkCacheHeight: tv
-            ? (_homeBoardMode
+            ? (_displaySection.homeBoardMode
                   ? _tvHeroArtworkCacheHeight
                   : HomeTheme.heroBackdropCacheHeightTv)
             : null,
@@ -5559,13 +3993,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // every row family. Catalog search results never read
     // that Home order.
     final orderedHome = _homeRowOrderActive;
-    final homeRails = orderedHome ? _classicHomeRails : const <HomeRail>[];
+    final homeRails = orderedHome
+        ? _stageRailsSection.classicHomeRails
+        : const <HomeRail>[];
     return HomeClassicRows.fromRails(
       scrollController: _boardScroll,
       generation: _boardGen,
       catalogRowCount: _sections.length,
       rails: orderedHome ? homeRails : null,
-      rowIdOf: _canvasRailRowId,
+      rowIdOf: _stageRailsSection.canvasRailRowId,
       catalog: _buildRow,
       skeleton: _continuationRows.buildTraktSkeletonRow,
       continuation: _continuationRows.buildContinueWatchingRow,
@@ -5612,7 +4048,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// provenance. Continue Watching type tags bypass this helper and remain
   /// visible so identically titled Movies/Series rows stay distinguishable.
   String? _catalogSourceTag(CatalogSection section) =>
-      _hideHomeCatalogAddonNames ? null : _sectionTag(section);
+      _displaySection.hideHomeCatalogAddonNames ? null : _sectionTag(section);
 
   /// Poster walls reached by expanding a Home row share Discover's card-detail
   /// controls. Search stays independent: its standalone result walls retain
@@ -5679,8 +4115,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     CatalogSection? section,
   }) => measureHomeClassicRowExtent(
     context,
-    hideHeader: _hideHomeCollectionNames && section is HomeCollectionSection,
-    hideSourceTags: _hideHomeCatalogAddonNames,
+    hideHeader:
+        _displaySection.hideHomeCollectionNames &&
+        section is HomeCollectionSection,
+    hideSourceTags: _displaySection.hideHomeCatalogAddonNames,
     titleStyle: () => homeCatalogRowTitleStyle(this.context, fontSize: 15),
     cardHeight: () => _railTitleCardH(context),
   );
@@ -5709,7 +4147,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // other rail, so the row grammar stays intact.
     final collection = section is HomeCollectionSection ? section : null;
     final cellH = _railTitleCardH(context);
-    final cellAspect = collection?.tileAspectRatio ?? _titleCardAspect;
+    final cellAspect =
+        collection?.tileAspectRatio ?? _stageGeometry.titleCardAspect;
     final posterW = collection == null
         ? _railTitleCardW(context)
         : cellH * cellAspect;
@@ -5745,7 +4184,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       section: section,
       nodes: nodes,
       tv: tv,
-      header: collection == null || !_hideHomeCollectionNames
+      header: collection == null || !_displaySection.hideHomeCollectionNames
           ? _railHeader(
               title: section.title,
               tag: _catalogSourceTag(section),
@@ -5757,8 +4196,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       posterW: posterW,
       heroTagFor: (col) => 'poster-${identityHashCode(this)}-$rowIndex-$col',
       isBound: _isBound,
-      artOf: _titleArtUrl,
-      showTitle: () => !_hideHomeCardTitlesAndRatings,
+      artOf: (item) => _stageGeometry.titleArtUrl(item),
+      showTitle: () => !_displaySection.hideHomeCardTitlesAndRatings,
       pikpakOnly: () => _pikpakOnly,
       onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
       up: up,
