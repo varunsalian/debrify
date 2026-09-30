@@ -154,4 +154,17 @@ class HomeDisplaySection {
     if (!_deps.mounted() || !homeBoardMode) return;
     _deps.setState(() {});
   }
+
+  /// Re-read hero trailer prefs when Home survives Settings or a WebDAV
+  /// update. TV also needs the live read now that trailer volume can sync
+  /// without switching tabs. The existing audio/enable gates remain local.
+  ///
+  /// Sound/volume read the DETAIL surface keys off-TV: that is the pair the
+  /// settings page has always shown on these platforms, so a stored "sound
+  /// off" keeps meaning what it meant. Writes go to both surfaces now, so
+  /// the pairs converge on first change.
+  void reloadSearchCardPrefs() {
+    unawaited(loadHomeCardOrientation());
+    unawaited(_heroPreview.reloadHeroTrailerPrefs());
+  }
 }

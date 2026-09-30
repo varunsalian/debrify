@@ -155,4 +155,9 @@ class SearchInputSection {
       targetHasFocus: () => target.hasFocus,
     );
   }
+
+  void disposeFocus() {
+    searchFocusNode.removeListener(onSearchFocusForSources);
+    searchFocus.dispose();
+  }
 }

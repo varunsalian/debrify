@@ -14,6 +14,9 @@ import 'home_hero_tint_surface.dart';
 import 'home_hero_title_art.dart';
 import 'home_hero_trailer_indicators.dart';
 
+/// The Stremio-style spotlight. Reflects the currently focused board title —
+/// backdrop bleeding in from the right behind a left/bottom scrim, with title,
+/// meta line and a short synopsis.
 class HomeHeroSpotlight extends StatefulWidget {
   final StremioMeta item;
   final String? background;

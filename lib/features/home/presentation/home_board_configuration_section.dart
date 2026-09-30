@@ -66,6 +66,38 @@ class HomeBoardConfigurationSection {
   final HomeSpotlightSection _spotlightSection;
   final HomeSavedContentSection _savedSection;
 
+  /// Registers Home refresh sources before the layout and initial content loads.
+  void observeChanges({
+    required void Function(VoidCallback) addHomeSettings,
+    required void Function(ValueChanged<Set<HomeRowRefresh>>) addRows,
+    required void Function(VoidCallback) addAddons,
+    required Listenable Function() iptvRevision,
+    required bool restoredKeyword,
+  }) {
+    addHomeSettings(reloadForHomeSettings);
+    addRows(queueHomeRows);
+    addAddons(onHomeAddonsChanged);
+    // IPTV list mutations (picker, IPTV settings, provider deletion,
+    // reconcile, import) all bump the store revision — the only signal a
+    // Home that stays alive across tab switches gets about them.
+    iptvRevision().addListener(_savedSection.onIptvListsRevision);
+    if (!restoredKeyword) {
+      unawaited(loadHomeDefaultView());
+    }
+  }
+
+  /// Stops data notifications and then releases the refresh queue in order.
+  void stopObservingChanges({
+    required void Function(ValueChanged<Set<HomeRowRefresh>>) removeRows,
+    required void Function(VoidCallback) removeAddons,
+    required Listenable Function() iptvRevision,
+  }) {
+    removeRows(queueHomeRows);
+    removeAddons(onHomeAddonsChanged);
+    homeRefreshQueue.dispose();
+    iptvRevision().removeListener(_savedSection.onIptvListsRevision);
+  }
+
   late final ProviderSubscription<HomeDefaultView> homeDefaultViewSubscription;
   HomeDefaultView get homeDefaultView => homeDefaultViewSubscription.read();
 

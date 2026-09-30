@@ -1,3 +1,4 @@
+import '../../../models/home_collection_rows.dart';
 import '../../../services/home_load_progress.dart';
 import '../../../services/home_load_deadline.dart';
 import '../../../models/home_collection.dart';
@@ -33,6 +34,29 @@ class HomeBoardServices {
     required bool showsCollectionRows,
   })
   claimedCatalogs;
+
+  Future<List<HomeListSection>> resolveReturnLists(
+    List<HomeExtraRow> extras, {
+    required List<CatalogSection> previousRows,
+    required bool Function() isCurrent,
+    required void Function(List<HomeListSection>) onUpdate,
+  }) => resolveLists(
+    extras,
+    previous: previousRows.whereType<HomeListSection>().toList(),
+    isCurrent: isCurrent,
+    onUpdate: onUpdate,
+  ).catchError((_) => <HomeListSection>[]);
+
+  static bool isTracker(String rowId) => HomeExtraRowIds.isTracker(rowId);
+
+  static HomeListSection? listOf(CatalogSection row) =>
+      row is HomeListSection ? row : null;
+
+  static String rowId(CatalogSection section) => section is HomeListSection
+      ? section.rowId
+      : section is HomeCollectionSection
+      ? section.rowId
+      : '${section.addon.id}:${section.catalog.type}:${section.catalog.id}';
 
   static List<HomeListSection> previousLists(List<CatalogSection> rows) =>
       rows.whereType<HomeListSection>().toList();

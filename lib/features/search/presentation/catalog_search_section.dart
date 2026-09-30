@@ -32,6 +32,10 @@ class CatalogSearchSection {
   final CatalogSearchSectionDeps _deps;
 
   /// Committed catalog query (drives per-addon catalog search). Empty = board.
+  // Catalogs that errored (timeout / HTTP / network) during the current
+  // catalog search — distinct from "returned no results". Drives the quiet
+  // "N sources didn't respond" note so failing addons don't just vanish.
+
   CatalogSearchState get catalogState => _deps.bindings().catalog;
   CatalogSearchController get catalogController =>
       _ref.read(catalogSearchProvider(_deps.session()).notifier);

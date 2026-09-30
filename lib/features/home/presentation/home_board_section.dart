@@ -42,6 +42,9 @@ class HomeBoardSection {
   bool get catalogContinuing => catalogContinuationController.busy;
   bool loading = true;
   String? error;
+  // Board state. [homeSections] is the homepage cache; [sections] is whatever
+  // is currently shown (homepage OR per-addon catalog search results). Both the
+  // board and catalog search render through the same horizontal-row layout.
   List<CatalogSection> get homeSections => homeCatalogController.rows;
   List<CatalogSection> sections = [];
   final boardViewport = HomeBoardViewport();
@@ -99,6 +102,9 @@ class HomeBoardSection {
   /// results — running [_load] then would stomp the search view, so it's
   /// latched here and consumed by [_restoreHome].
   bool pendingBoardReload = false;
+
+  // Riverpod owns inventory, reservation and the last accepted snapshot for
+  // this view. Search detours retain the subscription and its cursor.
 
   HomeCatalogController get homeCatalogController => _deps.bindings().catalog;
   List<HomeCatalogReference> get boardRefs =>

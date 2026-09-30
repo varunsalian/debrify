@@ -12,9 +12,9 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv")
 # Register extracted/adopted application files outside the feature directories.
-# The original screen/parts are tracked temporary exceptions in the phase plan;
-# add a retained facade here once its migration is complete.
+# Retained facades join this source set when their migration reaches its final checks.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
+    "lib/screens/search_screen.dart",
     "lib/ui/core/retry_message.dart",
     "lib/models/mdblist_list_choice.dart",
     "lib/ui/core/source_results_pane.dart",
@@ -84,6 +84,14 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # Immutable session identity declaration only; no static state or I/O.
+    "lib/features/discover/presentation/discover_session_lifecycle.dart": {
+        "lib/services/profiles/profile_session_memory.dart": {"ProfileSessionOwner"},
+    },
+    # Immutable profile-session identity only; capture and storage operations stay outside.
+    "lib/features/search/presentation/search_session_lifecycle.dart": {
+        "lib/services/profiles/profile_session_memory.dart": {"ProfileSessionOwner"},
+    },
     # Plain exception declaration only; no authorization service I/O is exposed.
     "lib/features/home/presentation/home_saved_iptv_actions.dart": {
         "lib/services/profiles/connection_resource_service.dart": {"ResourceAuthorizationException"},

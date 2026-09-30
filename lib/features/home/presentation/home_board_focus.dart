@@ -334,4 +334,18 @@ class HomeBoardFocus {
     }
     _deps.focusSidebar();
   }
+
+  /// Await the initial board content loads, then end the auto-focus "arrival
+  /// window": one final placement pass, then latch [autoFocusSettled] so
+  /// re-anchoring never fires again (a background CW/Trakt refresh, or focus
+  /// restoration after returning from playback, must not move the user's focus).
+  Future<void> settleAutoFocusAfter(List<Future<void>> loads) async {
+    await Future.wait(loads.map((f) => f.catchError((_) {})));
+    if (!_deps.mounted()) return;
+    maybeAutoFocusBoard();
+    // Latch on the following frame so the placement pass above runs first.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_deps.mounted()) autoFocusSettled = true;
+    });
+  }
 }

@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/stremio_addon.dart';
-import 'package:debrify/screens/search_screen.dart'
+import 'package:debrify/features/home/presentation/spotlight_iptv_card_preview.dart'
     show SpotlightIptvCardPreview;
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';

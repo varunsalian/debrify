@@ -126,6 +126,13 @@ class HomeHeroPreview {
     },
   );
 
+  /// Debounced ambient-trailer load for the spotlighted title. The previous
+  /// trailer is torn down IMMEDIATELY on any hero change (a playing trailer
+  /// under the wrong title is worse than the static backdrop), then a new one
+  /// only starts once focus has RESTED on the card — flying across a row costs
+  /// nothing but a timer reset, never a resolve or a decoder spin-up. Both
+  /// lookups (Cinemeta /meta for the YouTube id, then the stream resolve) are
+  /// cached in their services, so re-resting on a recent card starts fast.
   void scheduleHeroTrailer(StremioMeta item, {bool fromSpotlight = false}) {
     // Search previews belong to the focused result card, never a hidden hero.
     if (_deps.isTelevision() && _deps.searchMode()) return;

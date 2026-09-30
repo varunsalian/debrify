@@ -151,46 +151,50 @@ void main() {
     );
   });
 
-  test(
-    'search result preservation is owned by the mounted profile session',
-    () {
-      final source = File('lib/screens/search_screen.dart').readAsStringSync();
-      final repository = File(
-        'lib/features/search/data/memory_keyword_snapshot_repository.dart',
-      ).readAsStringSync();
-      expect(
-        repository,
-        contains(
-          'static final ProfileSessionMemory<KeywordSnapshot> _preserved',
-        ),
-      );
-      expect(
-        source,
-        contains('_profileSessionOwner = ProfileSessionMemory.captureOwner()'),
-      );
-      final keywordReturn = File(
-        'lib/features/search/presentation/keyword_return.dart',
-      ).readAsStringSync();
-      expect(source, contains('repository: () => _keywordSnapshots'));
-      expect(keywordReturn, contains('_deps.repository().take('));
-      expect(keywordReturn, contains('_deps.repository().store('));
-      expect(repository, contains('_preserved.take('));
-      expect(repository, contains('_preserved.store(owner, snapshot)'));
-      expect(
-        repository,
-        contains('owner == ProfileSessionMemory.captureOwner()'),
-      );
-      expect(repository, contains('if (_current) _preserved.store'));
-      expect(
-        source,
-        allOf(
-          isNot(contains('static KeywordSnapshot?')),
-          isNot(contains('static _KwPreservedState? _kwPreserved')),
-        ),
-        reason: 'Raw screen statics can carry content across profile switches.',
-      );
-    },
-  );
+  test('search result preservation is owned by the mounted profile session', () {
+    final source = File('lib/screens/search_screen.dart').readAsStringSync();
+    final repository = File(
+      'lib/features/search/data/memory_keyword_snapshot_repository.dart',
+    ).readAsStringSync();
+    expect(
+      repository,
+      contains('static final ProfileSessionMemory<KeywordSnapshot> _preserved'),
+    );
+    expect(
+      source,
+      matches(
+        r'_searchLifecycle\.profileSessionOwner\s*=\s*ProfileSessionMemory\.captureOwner\(\)',
+      ),
+    );
+    final keywordReturn = File(
+      'lib/features/search/presentation/keyword_return.dart',
+    ).readAsStringSync();
+    final searchComposition = File(
+      'lib/features/search/presentation/search_presentation_composition.dart',
+    ).readAsStringSync();
+    expect(source, contains('session: () => _searchLifecycle'));
+    expect(
+      searchComposition,
+      contains('repository: () => deps.session().keywordSnapshots'),
+    );
+    expect(keywordReturn, contains('_deps.repository().take('));
+    expect(keywordReturn, contains('_deps.repository().store('));
+    expect(repository, contains('_preserved.take('));
+    expect(repository, contains('_preserved.store(owner, snapshot)'));
+    expect(
+      repository,
+      contains('owner == ProfileSessionMemory.captureOwner()'),
+    );
+    expect(repository, contains('if (_current) _preserved.store'));
+    expect(
+      source,
+      allOf(
+        isNot(contains('static KeywordSnapshot?')),
+        isNot(contains('static _KwPreservedState? _kwPreserved')),
+      ),
+      reason: 'Raw screen statics can carry content across profile switches.',
+    );
+  });
 
   test(
     'Android protects recents before pause and notifications stay generic',

@@ -1,3 +1,4 @@
+import '../../../models/mdblist_list_choice.dart';
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import '../../../services/main_page_bridge.dart';
@@ -6,6 +7,36 @@ import 'discover_preview.dart';
 /// Discover's borrowed app-shell registrations. Preview resources remain owned
 /// by the route and are disposed after this bridge releases its listeners.
 class DiscoverShellBridge {
+  static void openMdblistList(MdblistListChoice choice) {
+    MainPageBridge.pendingMdblistListOpen = {
+      'id': choice.id,
+      'name': choice.name,
+      'ownerName': choice.ownerName,
+      'itemCount': choice.itemCount,
+      'liked': choice.liked,
+      'likes': choice.likes,
+    };
+    // Discover tab — main.dart `case 18`.
+    MainPageBridge.switchTab?.call(MainTab.discover);
+  }
+
+  static void claimMdblistList(ValueChanged<MdblistListChoice> accept) {
+    final pending = MainPageBridge.pendingMdblistListOpen;
+    if (pending != null) {
+      MainPageBridge.pendingMdblistListOpen = null;
+      accept(
+        MdblistListChoice(
+          id: (pending['id'] as num?)?.toInt() ?? -1,
+          name: pending['name'] as String? ?? 'Untitled list',
+          ownerName: pending['ownerName'] as String?,
+          itemCount: (pending['itemCount'] as num?)?.toInt() ?? 0,
+          liked: pending['liked'] == true,
+          likes: (pending['likes'] as num?)?.toInt() ?? 0,
+        ),
+      );
+    }
+  }
+
   DiscoverShellBridge({
     required this.readPreview,
     required this.isTelevision,

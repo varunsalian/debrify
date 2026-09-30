@@ -98,6 +98,24 @@ class SearchSpotlightShell {
   );
   bool get searchSheetOpen => searchSheet.isOpen;
 
+  void observeSearchFocus() {
+    // Unified (non-TV) layout: drive the catalog Sources bar off search-field
+    // focus, with a delayed hide so clicking the button doesn't yank it away
+    // before the tap lands (blurring the field would otherwise unmount it
+    // mid-click). See _inputSection.buildUnifiedCatalogSourcesBar.
+    if (!_deps.isTelevision() && !_deps.searchMode()) {
+      _inputSection.searchFocusNode.addListener(
+        _inputSection.onSearchFocusForSources,
+      );
+    }
+    // The focus latch: interacting with the field pins the sheet open, even
+    // while the Spotlight shell is not yet eligible — an async style/hero
+    // arrival can then never unmount a focused (still blank) field.
+    if (!_deps.isTelevision() && !_deps.searchMode() && !_deps.discoverMode()) {
+      _inputSection.searchFocusNode.addListener(searchSheet.onFocusChanged);
+    }
+  }
+
   Widget buildSpotlightShell() {
     // Preserve the build-time latch for async default-mode/query restoration.
     searchSheet.observeForcedState();

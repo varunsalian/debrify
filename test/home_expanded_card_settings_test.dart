@@ -42,23 +42,22 @@ void main() {
   late String source;
 
   setUpAll(() {
-    source = File('lib/screens/search_screen.dart').readAsStringSync();
+    source = File(
+      'lib/features/home/presentation/home_rows_navigation.dart',
+    ).readAsStringSync();
   });
 
   test('every Home poster-browser route applies Discover card settings', () {
     final helperStart = source.indexOf(
-      'Widget _withHomeExpandedCardSettings(Widget child)',
+      'Widget withHomeExpandedCardSettings(Widget child)',
     );
-    final catalogStart = source.indexOf(
-      'void _openCatalogSeeAll(',
-      helperStart,
-    );
+    final catalogStart = source.indexOf('void openCatalogSeeAll(', helperStart);
     expect(helperStart, isNonNegative);
     expect(catalogStart, isNonNegative);
 
     final helper = source.substring(helperStart, catalogStart);
-    expect(helper, contains('_discoverCardSettingsController.readSnapshot('));
-    expect(helper, contains('isCurrent: () => mounted'));
+    expect(helper, contains('_deps.cardSettings().readSnapshot('));
+    expect(helper, contains('isCurrent: () => _deps.mounted()'));
     expect(helper, contains('showTypeTags: settings.showTypeTags'));
     expect(helper, contains('showRatings: settings.showRatings'));
     expect(helper, contains('showTitles: settings.showTitles'));
@@ -67,12 +66,12 @@ void main() {
     // used by Simkl/MDBList), Trakt Continue Watching, and collection folders
     // each push a different screen. All five builders must use the helper:
     // collection folders here, the other four through HomeSeeAllNavigation,
-    // which the screen wires with the same helper.
+    // which the row-navigation owner wires with the same helper.
     final routeUses = RegExp(
-      r'builder: \(_\) => _withHomeExpandedCardSettings\(',
+      r'builder: \(_\) => withHomeExpandedCardSettings\(',
     ).allMatches(source);
     expect(routeUses.length, 1);
-    expect(source, contains('wrap: _withHomeExpandedCardSettings,'));
+    expect(source, contains('wrap: withHomeExpandedCardSettings,'));
     final seeAll = File(
       'lib/features/home/presentation/home_see_all_navigation.dart',
     ).readAsStringSync();
