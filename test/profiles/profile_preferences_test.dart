@@ -1073,4 +1073,29 @@ void main() {
     await snapshot.timeout(const Duration(seconds: 2));
     expect(snapshotRan, isTrue);
   });
+
+  test(
+    'a nested write that outlives its writer still holds the barrier off',
+    () async {
+      final gate = Completer<void>();
+      late Future<void> nested;
+      await ProfilePreferences.synchronizeExternalMutation(() async {
+        // Started inside the open writer but not awaited by it.
+        nested = ProfilePreferences.synchronizeExternalMutation(
+          () => gate.future,
+          marksMutation: true,
+        );
+      }, marksMutation: false);
+      var snapshotRan = false;
+      final snapshot = ProfilePreferences.captureMutationSnapshot((_) async {
+        snapshotRan = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(snapshotRan, isFalse, reason: 'the nested write is still running');
+      gate.complete();
+      await nested;
+      await snapshot.timeout(const Duration(seconds: 2));
+      expect(snapshotRan, isTrue);
+    },
+  );
 }

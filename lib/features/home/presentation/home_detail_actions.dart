@@ -106,6 +106,7 @@ class HomeDetailActions {
             ),
             presetRating: presetRating,
             isCurrent: _playback.catalogNavigationCurrent,
+            canPrompt: () => detailRoute.isActive,
           );
         },
       );

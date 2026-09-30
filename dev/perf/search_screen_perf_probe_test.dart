@@ -7,9 +7,11 @@
 //
 //   flutter test dev/perf/search_screen_perf_probe_test.dart
 //
-// Numbers are deterministic for a given revision because time is driven by
-// fixed pump windows. They are not frame timings; on-device profiling stays a
-// separate, manual check.
+// Time is driven by fixed pump windows, but loads race real async I/O inside
+// runAsync windows, so compare several runs per revision: rebuild counts were
+// stable across runs, while paging request counts vary by one with timing.
+// Run on an idle machine; CPU load changes the pump counts. These are not
+// frame timings; on-device profiling stays a separate, manual check.
 //
 // It lives outside test/ so the regular suite does not run it, but it drives
 // the same test-only hooks the suite uses.

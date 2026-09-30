@@ -132,25 +132,20 @@ class ProfilePreferences implements SharedPreferences {
   ) async {
     _assertMutationOutsideExclusive();
     final enclosing = Zone.current[_ordinaryMutationZoneKey];
-    if (enclosing is _OrdinaryMutationFrame && enclosing.open) {
-      // Nested inside an already-registered ordinary mutation (for example a
-      // preference setter inside [synchronizeExternalMutation]). The outer
-      // registration already holds exclusive acquirers off; waiting on a
-      // barrier raised after it would deadlock, because that barrier waits
-      // for the outer writer to drain. Work that merely inherited the zone and
-      // runs after the outer writer finished (timers, unawaited futures) sees
-      // a closed frame and registers normally.
-      var mutated = false;
-      try {
-        return await operation(() => mutated = true);
-      } finally {
-        if (mutated) _mutationRevision++;
+    // Nested inside a still-registered ordinary mutation (for example a
+    // preference setter inside [synchronizeExternalMutation]): the outer
+    // registration already holds exclusive acquirers off, and waiting on a
+    // barrier raised after it would deadlock, because that barrier waits for
+    // the outer writer to drain. The nested write still registers itself, so
+    // one that outlives the outer writer (started unawaited) keeps the barrier
+    // off until it finishes. Work that merely inherited a closed frame (timers,
+    // later callbacks) waits on the barrier like any writer.
+    if (enclosing is! _OrdinaryMutationFrame || !enclosing.open) {
+      while (true) {
+        final released = _exclusiveMutationReleased;
+        if (released == null) break;
+        await released.future;
       }
-    }
-    while (true) {
-      final released = _exclusiveMutationReleased;
-      if (released == null) break;
-      await released.future;
     }
     _activeMutations++;
     _activeMutationsDrained ??= Completer<void>();

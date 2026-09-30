@@ -15,12 +15,21 @@ FEATURES = ("search", "home", "discover", "sources", "stremio_tv")
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
 FACADE = "lib/screens/search_screen.dart"
+# The screen's composition root (formerly the State's own body) binds
+# concrete services, as AGENTS.md allows for composition. Every other file in
+# COMPOSITION is presentation and keeps the presentation import rules.
+COMPOSITION_ROOTS = {
+    FACADE,
+    f"{COMPOSITION}/search_screen_composer.dart",
+    f"{COMPOSITION}/search_screen_search_composition.dart",
+    f"{COMPOSITION}/search_screen_home_composition.dart",
+    f"{COMPOSITION}/search_screen_session_composition.dart",
+}
 # Register extracted/adopted application files outside the feature directories.
 # Retained facades join this source set when their migration reaches its final checks.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/ui/core/trailer_indicators.dart",
     "lib/ui/core/spotlight_search_button.dart",
-    "lib/ui/core/catalog_search_status_strip.dart",
     "lib/screens/search_screen.dart",
     "lib/ui/core/retry_message.dart",
     "lib/models/mdblist_list_choice.dart",
@@ -108,6 +117,10 @@ PRESENTATION_BRIDGE_IMPORTS = {
         "lib/services/home_list_rows.dart": {"HomeListSection", "HomeExtraRowIds"},
     },
     # App-shell callback/listener adapter; no persistence or business operations.
+    # Tab-shell handler registration: the app-shell callback slots only.
+    "lib/screens/search_screen/home_tab_shell_registration.dart": {
+        "lib/services/main_page_bridge.dart",
+    },
     "lib/features/discover/presentation/discover_shell_bridge.dart": {
         "lib/services/main_page_bridge.dart",
     },
@@ -203,6 +216,8 @@ def violations(path: Path) -> list[str]:
         layer = "data"
     if relative.startswith(("lib/ui/", "lib/widgets/")):
         layer = "presentation"
+    if relative.startswith(COMPOSITION + "/") and relative not in COMPOSITION_ROOTS:
+        layer = "presentation"
     for declaration in DIRECTIVES.findall(source):
         for uri in URIS.findall(declaration):
             target = uri
@@ -245,7 +260,7 @@ def violations(path: Path) -> list[str]:
                         # COMPOSITION, outside lib/features.
                         problems.append(
                             f"cross-feature import outside {other}/models: {uri}")
-                if target.startswith(COMPOSITION + "/"):
+                if target.startswith(COMPOSITION + "/") or target == FACADE:
                     problems.append(f"feature imports the composition layer: {uri}")
     return [f"{relative}: {problem}" for problem in problems]
 

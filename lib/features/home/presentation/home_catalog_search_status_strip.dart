@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme_scope.dart';
+import '../../../theme/app_theme_scope.dart';
 
 /// Fixed-height streaming status preserves card positions when search settles.
 Widget buildCatalogSearchStatus(

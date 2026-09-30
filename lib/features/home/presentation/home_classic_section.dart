@@ -3,7 +3,7 @@ import '../../../models/stremio_addon.dart';
 import '../../../models/home_collection_rows.dart';
 import '../../../widgets/home/home_theme.dart';
 import '../models/home_catalog_search_status.dart';
-import '../../../ui/core/catalog_search_status_strip.dart';
+import 'home_catalog_search_status_strip.dart';
 import 'home_board_section.dart';
 import 'home_board_focus.dart';
 import 'home_board_deferred.dart';

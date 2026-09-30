@@ -81,11 +81,11 @@ HomeBoardWorkflow createHomeBoardWorkflow(
   required ValueNotifier<bool> ready,
 }) {
   final HomeScreenControls controls = HomeScreenControlsAdapter(
-    input: () => inputSection,
-    modes: () => modeSection,
-    lists: () => listsSection,
-    keyword: () => keywordSection,
-    discover: () => discoverSection,
+    input: inputSection,
+    modes: modeSection,
+    lists: listsSection,
+    keyword: keywordSection,
+    discover: discoverSection,
   );
   late final HomeBoardSection boardSection;
   late final HomeBoardPublication boardPublication;

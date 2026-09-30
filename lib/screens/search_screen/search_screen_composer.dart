@@ -89,7 +89,15 @@ class SearchScreenComposer {
   final StremioService stremio = StremioService.instance;
 
   final TextEditingController searchController = TextEditingController();
-  late final titleSearch = widget.titleSearch ?? TmdbTitleSearch();
+  // Ownership is decided when the instance is resolved: a title search passed
+  // in by the caller is borrowed and must survive this screen.
+  bool _ownsTitleSearch = false;
+  late final TmdbTitleSearch titleSearch =
+      widget.titleSearch ??
+      (() {
+        _ownsTitleSearch = true;
+        return TmdbTitleSearch();
+      })();
   final TvSearchFocusHandoff searchSubmitFocus = TvSearchFocusHandoff();
 
   // Rows the user hid via Settings → Home Page → Home Rows (fixed-section
@@ -232,7 +240,7 @@ class SearchScreenComposer {
     search.keyword.keywordSection.closeAppearance();
     searchLifecycle.searchResultBindings.closeKeyword();
     titleSearch.removeListener(search.modes.title.publishTitleSuggestions);
-    if (widget.titleSearch == null) titleSearch.dispose(); // else borrowed
+    if (_ownsTitleSearch) titleSearch.dispose();
     search.modes.title.presentation.dispose();
     search.input.inputSection.disposeFocus();
     search.modes.lists.disposeListsNodes();

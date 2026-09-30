@@ -228,6 +228,11 @@ Future<void> handleTraktMenuAction(
   /// before.
   int? presetRating,
   bool Function()? isCurrent,
+  // Whether a prompt that appears after an await may still be shown (for
+  // example the list picker once lists load). Writes and the result feedback
+  // follow [isCurrent] only, so a user who leaves a detail page does not
+  // cancel an accepted action — but it cannot open a dialog behind them.
+  bool Function()? canPrompt,
   TrackerTitleActions? actions,
 }) async {
   final owner = ProfileSessionMemory.captureOwner();
@@ -292,7 +297,7 @@ Future<void> handleTraktMenuAction(
         final list = await showTraktCustomListPickerDialog(
           context,
           actions: writer,
-          isCurrent: current,
+          isCurrent: () => current() && (canPrompt?.call() ?? true),
         );
         if (list == null || !current()) return;
         final listSlug =
@@ -485,9 +490,14 @@ List<TraktMenuOption> buildTraktAddOnlyMenuOptions({
       ),
     // these flip between Add and Remove to mirror the user's real library.
     if (isTraktAuthenticated) ...[
-      const TraktMenuOption(action: TraktItemMenuAction.clearTraktProgress,
-        icon: Icons.restart_alt_rounded, color: Color(0xFFEF4444),
-        label: 'Clear watch progress on Trakt', caption: 'Clear progress', isTrakt: true),
+      const TraktMenuOption(
+        action: TraktItemMenuAction.clearTraktProgress,
+        icon: Icons.restart_alt_rounded,
+        color: Color(0xFFEF4444),
+        label: 'Clear watch progress on Trakt',
+        caption: 'Clear progress',
+        isTrakt: true,
+      ),
       if (inWatchlist)
         const TraktMenuOption(
           action: TraktItemMenuAction.removeFromWatchlist,

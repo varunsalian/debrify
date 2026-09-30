@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../widgets/home/spotlight_board.dart';
 import '../application/home_stage_metadata.dart';
-import '../../../ui/core/catalog_search_status_strip.dart';
+import 'home_catalog_search_status_strip.dart';
 
 /// Search's shelves-only Spotlight view. The supplied section snapshot anchors
 /// callbacks to their original section even when more catalogs arrive later.

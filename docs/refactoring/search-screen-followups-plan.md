@@ -176,3 +176,37 @@ is present.
   layers, the entrance reveal) cancel out exactly. No unexplained growth.
 - **Not measured here:** keyword search (needs real torrent engines) and
   on-device frame timing. Both stay in the manual device checklist.
+
+## Final review (`/code-review high` over `c60f6229^..5f620df6`)
+
+Fixed:
+- **Post-await prompts after back-out:** `handleTraktMenuAction` gained
+  `canPrompt`; the list picker (which appears after lists load) now also needs
+  the detail page to be live. Writes and feedback still follow view/profile
+  currency. Test: `trakt_list_picker_prompt_test.dart`.
+- **Nested preference write outliving its writer:** nested ordinary mutations
+  now register as active (they skip only the barrier wait), so an unawaited
+  nested write holds a snapshot off until it finishes. The test fails on the
+  previous version.
+- **Guard gap:** files in `lib/screens/search_screen/` are checked as
+  presentation, except the composition root (facade, composer, three
+  factories), which may bind concrete services. A feature importing the facade is
+  flagged. Tab-shell registration is a named `main_page_bridge` bridge.
+- **`titleSearch` ownership** is recorded when it is resolved.
+- **Catalog search status strip** is back in Home (its only users).
+- **Screen-controls adapter** takes its sections directly.
+- **Probe wording:** its numbers are compared across runs, not claimed
+  deterministic.
+
+Accepted, with rationale:
+- **Composer fields shared by the three factories:** the composer is the
+  screen's composition root. Its groups reference each other lazily in
+  cycles (search needs board, board needs search), which `late` fields on one
+  root express. Only composition code in this folder can reach them.
+- **`homeSourcesNavigationProvider` in the composition folder:** it binds Home
+  to the Sources screen, so it belongs to neither feature; Home receives it
+  through its dependencies.
+- **Rejected saved-content writes are silent:** consistent with every other
+  owner/profile guard in these features; a rejection only happens while the
+  screen's profile session is being replaced.
+
