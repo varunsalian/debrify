@@ -1,3 +1,4 @@
+import '../../../services/native_series_metadata_service.dart';
 import '../../../models/custom_series_identity.dart';
 import '../../../models/media_identity.dart';
 import '../../../models/stremio_addon.dart';
@@ -12,6 +13,9 @@ class HomeCatalogOriginRepository {
     required this.readCustomOrigin,
     required this.isOwnerCurrent,
   });
+
+  static StremioAddon addonForItem(StremioMeta item) =>
+      NativeSeriesMetadataService.addonForItem(item);
 
   final StremioAddon nativeAddon;
   final Future<StremioMeta> Function(StremioMeta, StremioAddon, bool Function())

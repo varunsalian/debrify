@@ -1,3 +1,13 @@
+import '../features/home/presentation/home_continuation_see_all.dart';
+import '../features/home/presentation/home_continuation_return.dart';
+import '../features/home/presentation/home_continuation_rows.dart';
+import '../features/home/presentation/home_continuation_menu.dart';
+import '../features/home/presentation/home_continuation_projection.dart';
+import '../features/home/presentation/home_continuation_removal.dart';
+import '../features/home/presentation/home_continuation_playback.dart';
+import '../features/home/presentation/home_continuation_announcements.dart';
+import '../features/home/presentation/home_continuation_loading.dart';
+import '../features/home/presentation/home_continuation_section.dart';
 import '../features/home/presentation/home_watchlist_actions.dart';
 import '../features/home/presentation/home_saved_iptv_actions.dart';
 import '../features/home/presentation/home_saved_content_rows.dart';
@@ -27,7 +37,6 @@ import '../features/discover/presentation/discover_loading.dart';
 import '../features/discover/presentation/discover_section.dart';
 import '../features/home/presentation/home_media_bindings.dart';
 import '../features/home/presentation/home_board_bindings.dart';
-import '../features/home/presentation/home_continuation_nodes.dart';
 import '../features/home/presentation/home_see_all_navigation.dart';
 import '../features/home/application/home_refresh_queue.dart';
 import '../features/home/presentation/home_favorite_bindings.dart';
@@ -54,16 +63,10 @@ import '../ui/core/retry_message.dart';
 import '../features/home/presentation/home_board_content.dart';
 import '../features/home/application/home_detail_action_dependencies.dart';
 import '../features/home/presentation/home_detail_menus.dart';
-import '../features/home/presentation/home_detail_route.dart';
 import '../features/home/application/home_simkl_continuation_dependencies.dart';
-import '../features/home/application/home_iptv_continuation_dependencies.dart';
-import '../models/simkl_continue_watching_item.dart';
 import '../features/home/presentation/home_detail_action_bridge.dart';
-import '../features/home/application/home_local_history_removal_dependencies.dart';
-import '../features/home/presentation/home_continuation_row.dart';
 import '../features/home/presentation/home_catalog_row.dart';
 import '../features/home/presentation/home_catalog_row_header.dart';
-import '../features/home/application/home_post_playback_refresh_controller.dart';
 import '../features/discover/presentation/discover_panels.dart';
 import '../features/home/presentation/home_stage_theater.dart';
 import '../features/home/presentation/home_hero_shell_bridge.dart';
@@ -86,7 +89,6 @@ import '../features/home/presentation/home_stage_deferred_right.dart';
 import '../features/home/presentation/home_stage_deferred_advance.dart';
 import '../features/home/presentation/home_hero_preview_policy.dart';
 import '../widgets/skeleton_poster.dart' show BrandLoadingStage;
-import '../features/home/presentation/home_trakt_skeleton_row.dart';
 import '../features/home/presentation/home_stage_rows.dart';
 import '../features/home/presentation/home_tonight_queue_row.dart';
 import '../features/home/presentation/home_favorite_focus.dart';
@@ -102,8 +104,6 @@ import '../features/home/presentation/home_card_style.dart';
 import '../features/discover/models/discover_source_state.dart';
 import '../features/discover/application/metadata_feature_controller.dart';
 import '../features/discover/models/metadata_feature_policy.dart';
-import '../features/home/application/home_episode_artwork_controller.dart';
-import '../features/home/models/home_episode_artwork.dart';
 import '../features/home/models/home_tracker_authentication.dart';
 import '../features/home/application/home_tracker_authentication_controller.dart';
 import '../features/home/models/home_return_snapshot.dart';
@@ -122,19 +122,8 @@ import '../features/home/application/home_display_preferences_controller.dart';
 import '../features/home/models/home_display_preferences.dart';
 import '../features/home/presentation/home_progress_publication.dart';
 import '../features/home/models/home_stremio_favorites.dart';
-import '../features/home/application/home_mdblist_continuation_controller.dart';
-import '../features/home/models/home_mdblist_continuation.dart';
-import '../features/home/application/home_simkl_continuation_controller.dart';
-import '../features/home/models/home_simkl_continuation.dart';
 import '../features/home/presentation/home_continuation_bindings.dart';
-import '../features/home/application/home_trakt_continuation_controller.dart';
-import '../features/home/models/home_trakt_continuation.dart';
-import '../features/home/application/home_continuation_layout_controller.dart';
-import '../features/home/application/home_iptv_continuation_controller.dart';
-import '../features/home/models/home_iptv_continuation_state.dart';
-import '../features/home/application/home_local_continuation_controller.dart';
 import '../features/home/models/home_continuation_session.dart';
-import '../features/home/models/home_local_continuation_state.dart';
 import '../features/home/application/home_row_snapshot.dart';
 import '../features/home/application/home_board_load.dart';
 import '../features/home/application/home_board_dependencies.dart';
@@ -172,7 +161,6 @@ import 'dart:developer' as developer;
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import '../models/custom_series_identity.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme_scope.dart';
@@ -205,14 +193,9 @@ import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/tvos_top_shelf_service.dart';
 import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
-import '../models/trakt_continue_watching_item.dart';
-import '../features/home/application/home_trakt_continuation_dependencies.dart';
 import '../services/video_player_launcher.dart';
-import '../services/tracking_source_policy.dart';
 import '../utils/tv_search_focus_handoff.dart';
 import '../services/youtube_service.dart';
-import '../features/home/presentation/home_continue_watching_actions.dart';
-import '../features/home/application/home_cw_hold_preference.dart';
 import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/home/spotlight_board.dart';
@@ -222,10 +205,8 @@ import '../services/metadata_title_service.dart';
 import 'collections/collection_folder_screen.dart';
 import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
-import '../models/mdblist_continue_watching.dart';
 import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../widgets/see_all/discover_card_settings_scope.dart';
-import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import '../features/home/application/home_layout_policy.dart';
 
@@ -318,6 +299,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   int get _tabIndex => widget.searchMode ? 17 : (widget.discoverMode ? 18 : 15);
 
   final StremioService _stremio = StremioService.instance;
+  late final HomeContinuationSeeAll _continuationSeeAll;
+  late final HomeContinuationReturn _continuationReturn;
+  late final HomeContinuationRows _continuationRows;
+  late final HomeContinuationMenu _continuationMenu;
+  late final HomeContinuationProjection _continuationProjection;
+  late final HomeContinuationRemoval _continuationRemoval;
+  late final HomeContinuationPlayback _continuationPlayback;
+  late final HomeContinuationAnnouncements _continuationAnnouncements;
+  late final HomeContinuationLoading _continuationLoading;
+  late final HomeContinuationSection _continuationSection;
+  late final HomeContinuationBindings _continuationBindings;
   late final HomeWatchlistActions _watchlistActions;
   late final HomeSavedIptvActions _savedIptv;
   late final HomeSavedContentRows _savedRows;
@@ -567,170 +559,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         ((ModalRoute.of(context)?.isCurrent ?? true) &&
           !_homePublication.hasPending && !_homePublication.isScheduled));
 
-  // LOCAL Continue Watching rows. Reads the SAME local store Home writes to
-  // (StorageService `continue_watching_v1`) — read-only here, so Home is never
-  // affected. Split into two recency-ordered rows (Movies, then Series), each
-  // shown as a leading board row when non-empty. Removal happens only from the
-  // detail screen's action.
-  late final HomeContinuationBindings _continuationBindings;
-  HomeLocalContinuationController get _localContinuationController =>
-      _continuationBindings.local;
-  HomeLocalContinuationState get _localContinuation =>
-      _localContinuationController.current;
-  bool get _cwEnabled => _localContinuation.enabled;
-  List<StremioMeta> get _cwMovies => _localContinuation.movies;
-  List<StremioMeta> get _cwSeries => _localContinuation.series;
-  List<StremioMeta> get _cwAll => _localContinuation.data.items;
-  Map<String, double> get _cwProgress => _continuationBindings.localProgress;
-  Map<String, String> get _cwEpisode => _localContinuation.data.episode;
-  Map<String, int> get _cwRemainingMinutes =>
-      _localContinuation.data.remainingMinutes;
-  Set<String> get _cwIds => _localContinuation.data.ids;
-  Map<String, String?> get _cwAddonId => _localContinuation.data.addonIds;
-  Map<String, String> get _cwEpisodeArtwork =>
-      _episodeArtworkController.current[HomeEpisodeArtworkSource.local] ??
-      const {};
-
-  final _continuationNodes = HomeContinuationNodes();
-  List<FocusNode> get _cwMovieNodes =>
-      _continuationNodes.movies(HomeContinuationKind.local);
-  List<FocusNode> get _cwSeriesNodes =>
-      _continuationNodes.series(HomeContinuationKind.local);
-
-  // Per-provider "one Continue Watching row" preferences. When a provider is
-  // merged, its MOVIES slot carries the combined recency-ordered list (the
-  // same `_xxxAll` the See-All grid uses) on the movies node list, and its
-  // Series row is suppressed — so row ids, saved Home order, and the
-  // hide-rows page keep working off the existing `<provider>:movies` id.
-  // Loaded once before the first node sync (each CW loader awaits
-  // [_ensureCwMergeFlags]); [_reloadForHomeSettings] re-reads and re-syncs
-  // node counts when a toggle changes.
-  HomeContinuationLayoutController get _continuationLayoutController =>
-      _continuationBindings.layout;
-  bool get _cwMergeLocal => _continuationLayoutController.current.local;
-  bool get _cwMergeTrakt => _continuationLayoutController.current.trakt;
-  bool get _cwMergeSimkl => _continuationLayoutController.current.simkl;
-  bool get _cwMergeMdblist => _continuationLayoutController.current.mdblist;
-
-  Future<void> _ensureCwMergeFlags() =>
-      _continuationLayoutController.ensureLoaded(isCurrent: () => mounted);
-
-  // IPTV Continue Watching (Xtream VOD movies + series), sourced from the
-  // player's own watch history via [IptvCwRouter] — kept separate from the
-  // metadata-addon rows above because IPTV items aren't IMDb-keyed, so their
-  // progress/episode lookups and routing key off the router's routeKey (stored
-  // as the synthetic meta id) instead of an imdbId.
-  HomeIptvContinuationController get _iptvContinuationController =>
-      _continuationBindings.iptv;
-  HomeIptvContinuationState get _iptvContinuation =>
-      _iptvContinuationController.current;
-  List<StremioMeta> get _iptvCwMovies => _iptvContinuation.movies;
-  List<StremioMeta> get _iptvCwSeries => _iptvContinuation.series;
-  Map<String, double> get _iptvCwProgress => _iptvContinuation.progress;
-  Map<String, String> get _iptvCwEpisode => _iptvContinuation.episode;
-  Map<String, IptvCwEntry> get _iptvCwByKey => _iptvContinuation.byKey;
-  List<FocusNode> get _iptvCwMovieNodes =>
-      _continuationNodes.movies(HomeContinuationKind.iptv);
-  List<FocusNode> get _iptvCwSeriesNodes =>
-      _continuationNodes.series(HomeContinuationKind.iptv);
-
-  /// Set when a real content player launches (any path — in-app route, native
-  /// TV activity, external app; never trailers), consumed by
-  /// [_refreshAfterPlayback].
-  ///
-  /// This is what keeps the post-playback refresh from becoming a tax on plain
-  /// browsing: Trakt and Simkl each still require multiple paged calls, and
-  /// [_refreshAfterPlayback] runs on EVERY detail-page close — so without this
-  /// latch, opening a title and pressing Back would hit both tracker APIs. Only
-  /// a session that actually played something can have moved a tracker's
-  /// position. Tracker rows changed by menu actions (mark watched, remove from
-  /// Continue Watching) are refreshed by those handlers directly.
-  HomePostPlaybackRefreshController get _postPlaybackRefreshController =>
-      _homeBoardBindings.playbackRefresh;
-  bool get _playedSinceRefresh =>
-      _postPlaybackRefreshController.playedSinceRefresh;
-
-  // TRAKT Continue Watching rows ("Trakt Movies" / "Trakt Shows"), fetched live
-  // from the Trakt account (no local store). Shown after the local rows when
-  // connected + non-empty. Network-loaded on init / integration change,
-  // post-playback, and throttled app resume, then cached in memory.
-  HomeTraktContinuationController get _traktContinuationController =>
-      _continuationBindings.trakt;
-  HomeTraktContinuation get _traktContinuation =>
-      _traktContinuationController.current.data;
-  List<StremioMeta> get _traktMovies => _traktContinuation.movies;
-  List<StremioMeta> get _traktSeries => _traktContinuation.series;
-  List<StremioMeta> get _traktAll => _traktContinuation.all;
-  Map<String, double> get _traktProgress => _continuationBindings.traktProgress;
-  Map<String, String> get _traktEpisode => _traktContinuation.episode;
-  Map<String, int> get _traktRemainingMinutes =>
-      _traktContinuation.remainingMinutes;
-  Map<String, TraktContinueWatchingItem> get _traktByImdb =>
-      _traktContinuation.byImdb;
-  Map<String, String> get _traktEpisodeArtwork =>
-      _episodeArtworkController.current[HomeEpisodeArtworkSource.trakt] ??
-      const {};
-  List<FocusNode> get _traktMovieNodes =>
-      _continuationNodes.movies(HomeContinuationKind.trakt);
-  List<FocusNode> get _traktSeriesNodes =>
-      _continuationNodes.series(HomeContinuationKind.trakt);
-
-  // SIMKL Continue Watching rows ("Simkl Movies" / "Simkl Shows") — a parallel
-  // strip below the Trakt rows, built from the account's paused playback
-  // sessions (same `/sync/playback` lists the scrobble resume already fetches).
-  // Independent of the Trakt block above so neither can regress the other.
-  HomeSimklContinuationController get _simklContinuationController =>
-      _continuationBindings.simkl;
-  HomeSimklContinuation get _simklContinuation =>
-      _simklContinuationController.current;
-  List<StremioMeta> get _simklMovies => _simklContinuation.movies;
-  List<StremioMeta> get _simklSeries => _simklContinuation.series;
-  List<StremioMeta> get _simklAll => _simklContinuation.all;
-  Map<String, double> get _simklProgress => _continuationBindings.simklProgress;
-  Map<String, String> get _simklEpisode => _simklContinuation.episode;
-  Map<String, SimklContinueWatchingItem> get _simklByImdb =>
-      _simklContinuation.byImdb;
-  Map<String, String> get _simklEpisodeArtwork =>
-      _episodeArtworkController.current[HomeEpisodeArtworkSource.simkl] ??
-      const {};
-
-  List<FocusNode> get _simklMovieNodes =>
-      _continuationNodes.movies(HomeContinuationKind.simkl);
-  List<FocusNode> get _simklSeriesNodes =>
-      _continuationNodes.series(HomeContinuationKind.simkl);
-  HomeMdblistContinuationController get _mdblistContinuationController =>
-      _continuationBindings.mdblist;
-  HomeMdblistContinuation get _mdblistContinuation =>
-      _mdblistContinuationController.current;
-  List<StremioMeta> get _mdblistMovies => _mdblistContinuation.movies;
-  List<StremioMeta> get _mdblistSeries => _mdblistContinuation.series;
-  List<StremioMeta> get _mdblistAll => _mdblistContinuation.all;
-  Map<String, double> get _mdblistProgress =>
-      _continuationBindings.mdblistProgress;
-  Map<String, String> get _mdblistEpisode => _mdblistContinuation.episode;
-  Map<String, MdblistContinueWatchingItem> get _mdblistByImdb =>
-      _mdblistContinuation.byImdb;
-  List<FocusNode> get _mdblistMovieNodes =>
-      _continuationNodes.movies(HomeContinuationKind.mdblist);
-  List<FocusNode> get _mdblistSeriesNodes =>
-      _continuationNodes.series(HomeContinuationKind.mdblist);
-
-  /// Last Trakt CW network attempt. The row is refreshed when the app returns
-  /// from the background (where the user may have changed Trakt in another app
-  /// or browser), but lifecycle noise within this window is coalesced.
-  DateTime? get _lastTraktCwRefreshAttemptAt =>
-      _traktContinuationController.lastAttemptAt;
-  static const Duration _traktCwResumeRefreshInterval = Duration(seconds: 30);
-
-  /// Whether a Trakt Continue Watching fetch is currently in flight for a
-  /// connected account. While true — and there are no real Trakt rows to show
-  /// yet — the Trakt slot is held open with skeleton placeholders (see
-  /// [_traktReserving]) so the real rows fill in place instead of inserting
-  /// mid-board and shoving everything below them down. Set at the start of each
-  /// load and cleared on every terminal path, so a mid-session connect (which
-  /// re-runs the load) reserves the slot again.
-  bool get _traktCwLoading => _traktContinuationController.current.loading;
-
   /// TV auto-focus "settle to the top" state. On arrival the board focuses the
   /// best card available immediately (an addon row if the Trakt rows above it
   /// are still loading), remembering that node in [_autoFocusedNode]. As higher
@@ -766,239 +594,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool get _isMdblistAuthenticated =>
       _trackerAuthControllers[HomeTracker.mdblist]!.current;
 
-  /// The Progress source, mirrored for the CW card lookups below. Smart until
-  /// the first load resolves it (Smart = every row keeps its own numbers,
-  /// which is also the pre-Tracking behaviour).
-  WatchProgressSource get _cwProgressSource => _localContinuation.progressSource;
-
-  /// Continue Watching cards show the title from whichever row owns it, but
-  /// the PROGRESS comes from the selected Progress source — so a card can
-  /// never advertise a resume point the detail page and Play button refuse to
-  /// honour. In Smart mode each row keeps its own numbers (legacy behaviour);
-  /// in a dedicated mode a title the chosen source doesn't know simply renders
-  /// as a plain poster. IPTV rows are exempt: they are routeKey-keyed player
-  /// history that no tracker can describe.
-  String? _simklCardKey(StremioMeta item) =>
-      HomeSimklContinuation.cardKey(item);
-
-  String? _cwCardKey(HomeContinuationKind kind, StremioMeta item) =>
-      _cwProgressSource == WatchProgressSource.simkl ||
-          (_cwProgressSource == WatchProgressSource.smart && kind == HomeContinuationKind.simkl)
-      ? _simklCardKey(item) : item.progressId;
-
-  double? _cwCardProgress(HomeContinuationKind kind, StremioMeta item) =>
-      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwProgress[item.imdbId] : _cwCardMaps(kind).progress[_cwCardKey(kind, item)];
-
-  String? _cwCardEpisode(HomeContinuationKind kind, StremioMeta item) =>
-      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwEpisode[item.imdbId] : _cwCardMaps(kind).episode[_cwCardKey(kind, item)];
-
-  int? _cwCardRemainingMinutes(HomeContinuationKind kind, StremioMeta item) =>
-      CustomSeriesIdentity.isCustom(item.imdbId) ? _cwRemainingMinutes[item.imdbId] : _cwCardMaps(kind).remaining?[item.progressId];
-
-  ({
-    Map<String, double> progress,
-    Map<String, String> episode,
-    Map<String, int>? remaining,
-  })
-  _cwCardMaps(HomeContinuationKind kind) {
-    final effective = kind == HomeContinuationKind.iptv
-        ? kind
-        : switch (_cwProgressSource) {
-            WatchProgressSource.smart => kind,
-            WatchProgressSource.local => HomeContinuationKind.local,
-            WatchProgressSource.trakt => HomeContinuationKind.trakt,
-            WatchProgressSource.simkl => HomeContinuationKind.simkl,
-            WatchProgressSource.mdblist => HomeContinuationKind.mdblist,
-          };
-    return switch (effective) {
-      HomeContinuationKind.local => (
-        progress: _cwProgress,
-        episode: _cwEpisode,
-        remaining: _cwRemainingMinutes,
-      ),
-      HomeContinuationKind.trakt => (
-        progress: _traktProgress,
-        episode: _traktEpisode,
-        remaining: _traktRemainingMinutes,
-      ),
-      HomeContinuationKind.simkl => (
-        progress: _simklProgress,
-        episode: _simklEpisode,
-        remaining: null,
-      ),
-      HomeContinuationKind.mdblist => (
-        progress: _mdblistProgress,
-        episode: _mdblistEpisode,
-        remaining: null,
-      ),
-      HomeContinuationKind.iptv => (
-        progress: _iptvCwProgress,
-        episode: _iptvCwEpisode,
-        remaining: null,
-      ),
-    };
-  }
-
   // Addons that produced homepage rows, indexed by id, so a Continue Watching
   // tap can route back through the right addon (for Episodes / next-episode).
   final Map<String, StremioAddon> _addonsById = {};
-
-  /// The leading Continue Watching rows to render, in order: local Movies /
-  /// Series (when enabled), then Trakt Movies / Shows (when connected). Only
-  /// non-empty groups are included. Each row carries its own progress lookup
-  /// and open / quick-play handlers so local and Trakt sources coexist.
-  List<HomeContinuationRow> get _cwRows => [
-    ...buildHomeContinuationFamily(
-      movieId: 'cw:movies',
-      seriesId: 'cw:series',
-      title: 'Continue Watching',
-      seriesTag: 'Series',
-      kind: HomeContinuationKind.local,
-      enabled: _cwEnabled,
-      merged: _cwMergeLocal,
-      disabled: _homeDisabled,
-      movieItems: _cwMergeLocal ? _cwAll : _cwMovies,
-      seriesItems: _cwSeries,
-      movieNodes: _cwMovieNodes,
-      seriesNodes: _cwSeriesNodes,
-      progress: (m) => _cwCardProgress(HomeContinuationKind.local, m),
-      episode: (m) => _cwCardEpisode(HomeContinuationKind.local, m),
-      remaining: (m) => _cwCardRemainingMinutes(HomeContinuationKind.local, m),
-      artwork: (m) => _cwEpisodeArtwork[m.imdbId],
-      onOpen: _openContinueItem,
-      onQuickPlay: _onContinuePlay,
-      onRemove: _removeLocalCwItem,
-      movieSeeAll: () =>
-          _openContinueWatchingSeeAll(_cwMergeLocal ? 'all' : 'movie'),
-      seriesSeeAll: () => _openContinueWatchingSeeAll('series'),
-    ),
-    ...buildHomeContinuationFamily(
-      movieId: 'trakt:movies',
-      seriesId: 'trakt:shows',
-      title: 'Trakt Continue Watching',
-      seriesTag: 'Shows',
-      kind: HomeContinuationKind.trakt,
-      enabled: true,
-      merged: _cwMergeTrakt,
-      disabled: _homeDisabled,
-      movieItems: _cwMergeTrakt ? _traktAll : _traktMovies,
-      seriesItems: _traktSeries,
-      movieNodes: _traktMovieNodes,
-      seriesNodes: _traktSeriesNodes,
-      progress: (m) => _cwCardProgress(HomeContinuationKind.trakt, m),
-      episode: (m) => _cwCardEpisode(HomeContinuationKind.trakt, m),
-      remaining: (m) => _cwCardRemainingMinutes(HomeContinuationKind.trakt, m),
-      artwork: (m) => _traktEpisodeArtwork[m.imdbId],
-      onOpen: _openTraktItem,
-      onQuickPlay: _playTraktItem,
-      onRemove: _removeTraktCwItem,
-      movieSeeAll: () => _openTraktSeeAll(_cwMergeTrakt ? 'all' : 'movie'),
-      seriesSeeAll: () => _openTraktSeeAll('series'),
-    ),
-    ...buildHomeContinuationFamily(
-      movieId: 'simkl:movies',
-      seriesId: 'simkl:shows',
-      title: 'Simkl Continue Watching',
-      seriesTag: 'Shows',
-      kind: HomeContinuationKind.simkl,
-      enabled: true,
-      merged: _cwMergeSimkl,
-      disabled: _homeDisabled,
-      movieItems: _cwMergeSimkl ? _simklAll : _simklMovies,
-      seriesItems: _simklSeries,
-      movieNodes: _simklMovieNodes,
-      seriesNodes: _simklSeriesNodes,
-      progress: (m) => _cwCardProgress(HomeContinuationKind.simkl, m),
-      episode: (m) => _cwCardEpisode(HomeContinuationKind.simkl, m),
-      remaining: (m) => _cwCardRemainingMinutes(HomeContinuationKind.simkl, m),
-      artwork: (m) => _simklEpisodeArtwork[m.progressId],
-      onOpen: _openSimklCwItem,
-      onQuickPlay: _playSimklCwItem,
-      onRemove: _removeSimklCwItem,
-      movieSeeAll: () => _openSimklCwSeeAll(_cwMergeSimkl ? 'all' : 'movie'),
-      seriesSeeAll: () => _openSimklCwSeeAll('series'),
-    ),
-    ...buildHomeContinuationFamily(
-      movieId: 'mdblist:movies',
-      seriesId: 'mdblist:shows',
-      title: 'MDBList Continue Watching',
-      seriesTag: 'Shows',
-      kind: HomeContinuationKind.mdblist,
-      enabled: true,
-      merged: _cwMergeMdblist,
-      disabled: _homeDisabled,
-      movieItems: _cwMergeMdblist ? _mdblistAll : _mdblistMovies,
-      seriesItems: _mdblistSeries,
-      movieNodes: _mdblistMovieNodes,
-      seriesNodes: _mdblistSeriesNodes,
-      progress: (m) => _cwCardProgress(HomeContinuationKind.mdblist, m),
-      episode: (m) => _cwCardEpisode(HomeContinuationKind.mdblist, m),
-      remaining: (m) =>
-          _cwCardRemainingMinutes(HomeContinuationKind.mdblist, m),
-      artwork: (m) => null,
-      onOpen: _openMdblistCwItem,
-      onQuickPlay: _playMdblistCwItem,
-      onRemove: _removeMdblistCwItem,
-      canRemove: _canRemoveMdblistCwItem,
-      movieSeeAll: () =>
-          _openMdblistCwSeeAll(_cwMergeMdblist ? 'all' : 'movie'),
-      seriesSeeAll: () => _openMdblistCwSeeAll('series'),
-    ),
-    ...buildHomeContinuationFamily(
-      movieId: 'iptv:movies',
-      seriesId: 'iptv:series',
-      title: 'IPTV Continue Watching',
-      seriesTag: 'Series',
-      kind: HomeContinuationKind.iptv,
-      enabled: true,
-      merged: false,
-      disabled: _homeDisabled,
-      movieItems: _iptvCwMovies,
-      seriesItems: _iptvCwSeries,
-      movieNodes: _iptvCwMovieNodes,
-      seriesNodes: _iptvCwSeriesNodes,
-      progress: (m) => _iptvCwProgress[m.id],
-      episode: (m) => _iptvCwEpisode[m.id],
-      remaining: (m) => _iptvRemainingMinutes(m.id),
-      artwork: (m) => _iptvCwByKey[m.id]?.posterUrl,
-      onOpen: _openIptvCwItem,
-      onQuickPlay: _openIptvCwItem,
-      onRemove: _removeIptvCwItem,
-    ),
-  ];
-
-  /// Whether any Continue Watching row is currently on-screen (drives focus
-  /// wiring between it and the first catalog row). Uses allocation-free field
-  /// checks (not `_cwRows`) since it's read on the per-card build hot path —
-  /// keep these conditions in lock-step with the `_cwRows` row gates above.
-  bool get _cwVisible =>
-      ((_cwEnabled &&
-              (((_cwMergeLocal ? _cwAll : _cwMovies).isNotEmpty &&
-                      !_homeDisabled.contains('cw:movies')) ||
-                  (!_cwMergeLocal &&
-                      _cwSeries.isNotEmpty &&
-                      !_homeDisabled.contains('cw:series')))) ||
-          ((_cwMergeTrakt ? _traktAll : _traktMovies).isNotEmpty &&
-              !_homeDisabled.contains('trakt:movies')) ||
-          (!_cwMergeTrakt &&
-              _traktSeries.isNotEmpty &&
-              !_homeDisabled.contains('trakt:shows')) ||
-          ((_cwMergeSimkl ? _simklAll : _simklMovies).isNotEmpty &&
-              !_homeDisabled.contains('simkl:movies')) ||
-          (!_cwMergeSimkl &&
-              _simklSeries.isNotEmpty &&
-              !_homeDisabled.contains('simkl:shows')) ||
-          ((_cwMergeMdblist ? _mdblistAll : _mdblistMovies).isNotEmpty &&
-              !_homeDisabled.contains('mdblist:movies')) ||
-          (!_cwMergeMdblist &&
-              _mdblistSeries.isNotEmpty &&
-              !_homeDisabled.contains('mdblist:shows')) ||
-          (_iptvCwMovies.isNotEmpty &&
-              !_homeDisabled.contains('iptv:movies')) ||
-          (_iptvCwSeries.isNotEmpty &&
-              !_homeDisabled.contains('iptv:series'))) &&
-      _catalogSection.catalogQuery.isEmpty &&
-      !_catalogSection.catalogSearching;
 
   /// Home ordering is presentation state for the Home board only. Search and
   /// Discover share some rail/focus helpers, but keep result-source order.
@@ -1025,29 +623,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         if (!c.pinToTop) HomeCollectionRowIds.collection(c.id),
     ],
   );
-
-  /// Whether the Trakt rows should be held open with skeleton placeholders: the
-  /// account is connected, its (slow, network) Continue Watching fetch is in
-  /// flight, and there are no real Trakt rows on-screen yet. Reserving the slot
-  /// keeps the row count stable so the real rows fill in place — nothing below
-  /// reflows, and the auto-focus anchor stays put.
-  ///
-  /// Shown on every platform (the placeholder header omits the phone/desktop
-  /// See-All link, which pops in harmlessly when the real row loads). Only on
-  /// the homepage board (not the dedicated Search / Discover tabs, and not while
-  /// a catalog search is showing its own results). Requiring the real rows to be
-  /// empty means a refresh that already has data updates in place — no skeletons
-  /// stacked on top of live rows.
-  bool get _traktReserving =>
-      !widget.searchMode &&
-      !widget.discoverMode &&
-      _isTraktAuthenticated &&
-      _traktCwLoading &&
-      _traktMovies.isEmpty &&
-      _traktSeries.isEmpty &&
-      _catalogSection.catalogQuery.isEmpty &&
-      !_catalogSection.catalogSearching;
-
   // Hero state. Driven by ValueNotifiers so focus-driven hero swaps rebuild
   // only the spotlight, never the whole board (important on low-power TVs).
   final ValueNotifier<StremioMeta?> _heroItem = ValueNotifier<StremioMeta?>(
@@ -1204,25 +779,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         onOpenCatalog: (item, addon, {isMdblistSource = false}) => _itemActions
             .openItem(item, addon, isMdblistSource: isMdblistSource),
         onPlayCatalog: _catalogActions.onCatalogPlay,
-        traktItems: _traktAll,
-        traktProgress: () => _cwCardMaps(HomeContinuationKind.trakt).progress,
-        onOpenTrakt: _openTraktItem,
-        onPlayTrakt: _playTraktItem,
-        simklItems: _simklAll,
-        simklProgress: _simklProgress,
-        onOpenSimkl: _openSimklItem,
-        onPlaySimkl: _playSimklItem,
-        onOpenSimklContinuation: _openSimklCwItem,
-        onPlaySimklContinuation: _playSimklCwItem,
+        traktItems: _continuationSection.traktAll,
+        traktProgress: () => _continuationSection
+            .cwCardMaps(HomeContinuationKind.trakt)
+            .progress,
+        onOpenTrakt: _continuationPlayback.openTraktItem,
+        onPlayTrakt: _continuationPlayback.playTraktItem,
+        simklItems: _continuationSection.simklAll,
+        simklProgress: _continuationSection.simklProgress,
+        onOpenSimkl: _continuationPlayback.openSimklItem,
+        onPlaySimkl: _continuationPlayback.playSimklItem,
+        onOpenSimklContinuation: _continuationPlayback.openSimklCwItem,
+        onPlaySimklContinuation: _continuationPlayback.playSimklCwItem,
         mdblistList: _discoverSection.discMdblistList,
-        localItems: _cwAll,
-        localProgress: (m) => _cwCardProgress(HomeContinuationKind.local, m),
-        onOpenLocal: _openContinueItem,
-        onPlayLocal: _onContinuePlay,
+        localItems: _continuationSection.cwAll,
+        localProgress: (m) =>
+            _continuationSection.cwCardProgress(HomeContinuationKind.local, m),
+        onOpenLocal: _continuationPlayback.openContinueItem,
+        onPlayLocal: _continuationPlayback.onContinuePlay,
         reloadLocal: () async {
-          await _loadContinueWatching();
+          await _continuationLoading.loadContinueWatching();
           if (!mounted) return const <StremioMeta>[];
-          return List<StremioMeta>.of(_cwAll);
+          return List<StremioMeta>.of(_continuationSection.cwAll);
         },
       ),
     ));
@@ -1233,10 +811,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       setState: setState,
       metadataFeaturePolicy: () => _metadataFeaturePolicy,
       refreshMetadataFeaturePolicy: _refreshMetadataFeaturePolicy,
-      loadContinueWatching: _loadContinueWatching,
-      loadTraktContinueWatching: _loadTraktContinueWatching,
-      loadSimklContinueWatching: _loadSimklContinueWatching,
-      loadMdblistContinueWatching: _loadMdblistContinueWatching,
+      loadContinueWatching: () => _continuationLoading.loadContinueWatching(),
+      loadTraktContinueWatching: ({refreshBound = true}) => _continuationLoading
+          .loadTraktContinueWatching(refreshBound: refreshBound),
+      loadSimklContinueWatching: ({refreshBound = true}) => _continuationLoading
+          .loadSimklContinueWatching(refreshBound: refreshBound),
+      loadMdblistContinueWatching: ({refreshBound = true}) =>
+          _continuationLoading.loadMdblistContinueWatching(
+            refreshBound: refreshBound,
+          ),
       refreshBoundSources: _refreshBoundSources,
     ), _addonsById);
     _keywordSection = KeywordSearchSection(ref, (
@@ -1379,7 +962,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           _addonForContinue(item.sourceAddon?.id),
           isMdblistSource: true,
         ),
-        afterReturn: _afterSeeAllReturn,
+        afterReturn: _continuationReturn.afterSeeAllReturn,
       ),
     ));
     _titleSection = SearchTitleSection((
@@ -1545,7 +1128,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       isTelevision: () => widget.isTelevision,
       clearResume: _clearSeriesResume,
       refreshBoundSources: _refreshBoundSources,
-      refreshAfterPlayback: _refreshAfterPlayback,
+      refreshAfterPlayback: ({trackers = false}) =>
+          _continuationReturn.refreshAfterPlayback(trackers: trackers),
       imdbOf: _imdbOf,
       boundCountFor: _boundCountFor,
       editSource: (item, {isCurrent}) =>
@@ -1564,7 +1148,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         mdblist: _isMdblistAuthenticated,
       ),
       cachedTrakt: (item) =>
-          _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
+          _continuationSection.traktByImdb[item.progressId] ??
+          _continuationSection.traktByImdb[item.id],
     ), _playbackNavigation);
     _sourceActions = HomeSourceActions(ref, (
       context: () => context,
@@ -1582,15 +1167,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               _playbackNavigation.catalogNavigationCurrent() && route.isActive,
           isSearch: () => widget.searchMode,
           clearResume: _clearSeriesResume,
-          refreshLocal: _loadContinueWatching,
-          refreshTrakt: () => _loadTraktContinueWatching(refreshBound: false),
-          refreshSimkl: () => _loadSimklContinueWatching(refreshBound: false),
-          refreshMdblist: () =>
-              _loadMdblistContinueWatching(refreshBound: false),
+          refreshLocal: _continuationLoading.loadContinueWatching,
+          refreshTrakt: () => _continuationLoading.loadTraktContinueWatching(
+            refreshBound: false,
+          ),
+          refreshSimkl: () => _continuationLoading.loadSimklContinueWatching(
+            refreshBound: false,
+          ),
+          refreshMdblist: () => _continuationLoading
+              .loadMdblistContinueWatching(refreshBound: false),
         ),
-        removeLocal: _handleContinueDetailAction,
-        removeTrakt: _removeFromTraktContinueWatching,
-        removeMdblist: _removeMdblistCwItem,
+        removeLocal: (action, id, route) =>
+            _continuationRemoval.handleContinueDetailAction(action, id, route),
+        removeTrakt: (id, {detailRoute}) => _continuationRemoval
+            .removeFromTraktContinueWatching(id, detailRoute: detailRoute),
+        removeMdblist: (item) => _continuationRemoval.removeMdblistCwItem(item),
         invokeSimkl: (item, action, detailRoute, presetRating) =>
             handleSimklMenuAction(
               context,
@@ -1640,14 +1231,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         pikpakOnly: () => _pikpakOnly,
         mergedSeriesPage: () => _mergedSeriesPage,
         imdbOf: _imdbOf,
-        cwIds: () => _cwIds,
-        removeLocalHistory: _removeLocalHistory,
+        cwIds: () => _continuationSection.cwIds,
+        removeLocalHistory: (id) => _continuationRemoval.removeLocalHistory(id),
         onHistoryRemoved: () async {
           _clearSeriesResume();
-          await _loadContinueWatching();
+          await _continuationLoading.loadContinueWatching();
         },
         onClosed: (returnToTabOnClose) {
-          unawaited(_refreshAfterPlayback());
+          unawaited(_continuationReturn.refreshAfterPlayback());
           _refreshTraktAuthState();
           _refreshSimklAuthState();
           _refreshMdblistAuthState();
@@ -1658,9 +1249,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         menus: (item, imdb, inCw) {
           // Same for the Trakt Continue Watching rows — removal goes through the
           // Trakt playback/history APIs rather than local storage.
-          final inTraktCw = imdb != null && _traktByImdb.containsKey(imdb);
+          final inTraktCw =
+              imdb != null &&
+              _continuationSection.traktByImdb.containsKey(imdb);
           final inMdblistCw =
-              imdb != null && _mdblistByImdb[imdb]?.paused == true;
+              imdb != null &&
+              _continuationSection.mdblistByImdb[imdb]?.paused == true;
 
           return HomeDetailMenus(
             type: item.type,
@@ -1674,7 +1268,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             simklAuthenticated: () => _isSimklAuthenticated,
             mdblistAuthenticated: () => _isMdblistAuthenticated,
             hasSimklPause: () =>
-                _simklByImdb[_simklCardKey(item)]?.progress != null,
+                _continuationSection
+                    .simklByImdb[_continuationSection.simklCardKey(item)]
+                    ?.progress !=
+                null,
           );
         },
         boundCountFor: _boundCountFor,
@@ -1755,7 +1352,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         remove: (item) => StorageService.setMyWatchlistItem(item, false),
         reload: _savedSection.loadMyWatchlist,
         addonForContinue: _addonForContinue,
-        refreshAfterPlayback: _refreshAfterPlayback,
+        refreshAfterPlayback: ({trackers = false}) =>
+            _continuationReturn.refreshAfterPlayback(trackers: trackers),
       ),
       _savedIptv,
       _itemActions,
@@ -1783,6 +1381,161 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       ),
       _savedSection,
       _playlistActions,
+    );
+    _continuationSection = HomeContinuationSection((
+      bindings: () => _continuationBindings,
+      artwork: () => _homeBoardBindings.artwork,
+      mounted: () => mounted,
+      setState: setState,
+    ));
+    _continuationAnnouncements = HomeContinuationAnnouncements(
+      (
+        mounted: () => mounted,
+        isTelevision: () => widget.isTelevision,
+        searchMode: () => widget.searchMode,
+        discoverMode: () => widget.discoverMode,
+        loading: () => _loading,
+        activeTab: () => MainPageBridge.activeTvTabIndex == _tabIndex,
+        context: () => context,
+        disabled: () => _homeDisabled,
+        rowNodes: () => _rowNodes,
+      ),
+      _continuationSection,
+      _savedSection,
+    );
+    _continuationLoading = HomeContinuationLoading(
+      (
+        mounted: () => mounted,
+        setState: setState,
+        searchMode: () => widget.searchMode,
+        discoverMode: () => widget.discoverMode,
+        context: () => context,
+        requestRowFocus: _requestRowFocus,
+        autoFocus: _maybeAutoFocusBoard,
+        announceTrakt: _continuationAnnouncements.maybeAnnounceTraktRows,
+        announceSimkl: _continuationAnnouncements.maybeAnnounceSimklRows,
+        announceMdblist: _continuationAnnouncements.maybeAnnounceMdblistRows,
+        refreshBound: _refreshBoundSources,
+      ),
+      _continuationSection,
+      kMdblistEnabled,
+    );
+    _continuationPlayback = HomeContinuationPlayback(
+      (
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        addonForContinue: _addonForContinue,
+        imdbOf: _imdbOf,
+        markPlaybackStarted: () => _continuationReturn.markPlaybackStarted(),
+        refreshAfterPlayback: ({trackers = false}) =>
+            _continuationReturn.refreshAfterPlayback(trackers: trackers),
+        openIptv: IptvCwRouter.open,
+      ),
+      _continuationSection,
+      _playbackNavigation,
+      _catalogActions,
+      _itemActions,
+    );
+    _continuationRemoval = HomeContinuationRemoval(
+      ref,
+      (
+        mounted: () => mounted,
+        profileCurrent: () =>
+            _profileSessionOwner == ProfileSessionMemory.captureOwner(),
+        session: () => _homeCatalogSession,
+        imdbOf: _imdbOf,
+        removeSimkl: (item) => handleSimklMenuAction(
+          context,
+          item,
+          SimklItemMenuAction.removeFromContinueWatching,
+          isCurrent: _playbackNavigation.catalogNavigationCurrent,
+          removeContinueWatching: () => ref
+              .read(homeSimklHistoryRemovalProvider(_profileSessionOwner))
+              .remove(
+                item.progressId ?? item.id,
+                item.type,
+                isCurrent: _playbackNavigation.catalogNavigationCurrent,
+              ),
+        ),
+      ),
+      _continuationSection,
+      _continuationLoading,
+      _playbackNavigation,
+    );
+    _continuationProjection = HomeContinuationProjection(
+      (
+        disabled: () => _homeDisabled,
+        openLocal: (category) =>
+            _continuationSeeAll.openContinueWatchingSeeAll(category),
+        openTrakt: (category) => _continuationSeeAll.openTraktSeeAll(category),
+        openSimkl: (category) =>
+            _continuationSeeAll.openSimklCwSeeAll(category),
+        openMdblist: (category) =>
+            _continuationSeeAll.openMdblistCwSeeAll(category),
+        searchMode: () => widget.searchMode,
+        discoverMode: () => widget.discoverMode,
+        traktAuthenticated: () => _isTraktAuthenticated,
+      ),
+      _continuationSection,
+      _continuationPlayback,
+      _continuationRemoval,
+      _catalogSection,
+    );
+    _continuationMenu = HomeContinuationMenu(
+      ref,
+      (
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        pikpakOnly: () => _pikpakOnly,
+        session: () => _homeCatalogSession,
+        requestRowFocus: _requestRowFocus,
+        leaveBoardTop: _leaveBoardTop,
+      ),
+      _continuationProjection,
+      _playbackNavigation,
+    );
+    _continuationRows = HomeContinuationRows(
+      (
+        header: ({required title, tag, onSeeAll}) =>
+            _railHeader(title: title, tag: tag, onSeeAll: onSeeAll),
+        isTelevision: () => widget.isTelevision,
+        posterWidth: () => _railTitleCardW(context),
+        cellHeight: () => _railTitleCardH(context),
+        aspectRatio: () => _titleCardAspect,
+        showTitleOverlay: () => !_hideHomeCardTitlesAndRatings,
+        artOf: _titleArtUrl,
+        isBound: _isBound,
+        sidebar: () => MainPageBridge.focusTvSidebar?.call(),
+        onFocused: _setHero,
+        focusRelativeRail: _focusRelativeHomeRail,
+      ),
+      _continuationSection,
+      _continuationMenu,
+    );
+    _continuationReturn = HomeContinuationReturn(
+      (
+        controller: () => _homeBoardBindings.playbackRefresh,
+        mounted: () => mounted,
+        searchMode: () => widget.searchMode,
+        context: () => context,
+        traktAuthenticated: () => _isTraktAuthenticated,
+        clearResume: _clearSeriesResume,
+        refreshBound: _refreshBoundSources,
+      ),
+      _continuationSection,
+      _continuationLoading,
+      _savedSection,
+    );
+    _continuationSeeAll = HomeContinuationSeeAll(
+      (
+        context: () => context,
+        navigation: () => _seeAllNavigation,
+        pikpakOnly: () => _pikpakOnly,
+      ),
+      _continuationSection,
+      _continuationPlayback,
+      _continuationLoading,
+      _continuationReturn,
     );
     _titleSearch.addListener(_titleSection.publishTitleSuggestions);
     _searchController.addListener(_titleSection.onTitleSearchEditingChanged);
@@ -1932,10 +1685,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
     if (!widget.searchMode && !widget.discoverMode) {
       StorageService.localCompletionRevision.addListener(
-        _onLocalCompletionChanged,
+        _continuationLoading.onLocalCompletionChanged,
       );
       MdblistService.instance.playbackRevision.addListener(
-        _onMdblistPlaybackRevision,
+        _continuationLoading.onMdblistPlaybackRevision,
       );
       MainPageBridge.addPlaylistChangeListener(
         _savedSection.loadPlaylistFavorites,
@@ -2026,11 +1779,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // DeoVR, external app) pushes no Flutter route, so nothing on the board
     // ever learns it ended — the Continue Watching rows would keep showing the
     // episode the user just finished. This is that missing signal.
-    MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
+    MainPageBridge.addPlaybackReturnListener(
+      _continuationReturn.onPlaybackReturned,
+    );
     // Unconditional (the _heroTrailerActive block below registers its own
     // trailer-suppression listener; this one is just the latch that tells the
     // post-playback refresh whether anything was actually played).
-    MainPageBridge.addPlayerLaunchListener(_markPlaybackStarted);
+    MainPageBridge.addPlayerLaunchListener(
+      _continuationReturn.markPlaybackStarted,
+    );
     if (widget.isTelevision && widget.searchMode) {
       _reloadSearchCardPrefs();
       MainPageBridge.addHomeSettingsListener(_reloadSearchCardPrefs);
@@ -2154,14 +1911,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           _restoreHomeSnapshot(homeSnapshot)
         else
           _load(),
-        _loadContinueWatching(),
-        _loadTraktContinueWatching(),
+        _continuationLoading.loadContinueWatching(),
+        _continuationLoading.loadTraktContinueWatching(),
         // refreshBound:false — _load()'s bound-source scan (which now covers the
         // Simkl rows) runs after this on cold start, so a 2nd concurrent scan
         // here would be pure duplicate startup work on weak TV hardware.
-        _loadSimklContinueWatching(refreshBound: false),
-        _loadMdblistContinueWatching(refreshBound: false),
-        _loadIptvContinueWatching(),
+        _continuationLoading.loadSimklContinueWatching(refreshBound: false),
+        _continuationLoading.loadMdblistContinueWatching(refreshBound: false),
+        _continuationLoading.loadIptvContinueWatching(),
         _savedSection.loadTvFavorites(),
         _savedSection.loadStremioTvFavorites(),
         _savedSection.loadIptvFavorites(),
@@ -2230,13 +1987,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // single-owner rule keys off scrobbling), so re-read local CW before the
     // tracker rows; _reloadForHomeSettings can legitimately return early when
     // no row/layout preference changed.
-    if (!widget.searchMode && !widget.discoverMode) _loadContinueWatching();
+    if (!widget.searchMode && !widget.discoverMode) {
+      _continuationLoading.loadContinueWatching();
+    }
     // Trakt/Simkl Continue Watching rows are never rendered on the dedicated
     // Search tab, so don't refetch them there.
     if (!widget.searchMode) {
-      _loadTraktContinueWatching();
-      _loadSimklContinueWatching();
-      _loadMdblistContinueWatching();
+      _continuationLoading.loadTraktContinueWatching();
+      _continuationLoading.loadSimklContinueWatching();
+      _continuationLoading.loadMdblistContinueWatching();
     }
     // Opted-in tracker LIST rows live in the board's section pipeline, so a
     // connect/disconnect needs a board reload to add/drop them. Home board
@@ -2369,7 +2128,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     MetadataPreferencesService.revision.removeListener(_metadataSettingsChanged);
     _catalogFocus.dispose();
     WidgetsBinding.instance.removeObserver(this);
-    _mdblistContinuationController.cancelRevisionRefresh();
+    _continuationSection.mdblistContinuationController.cancelRevisionRefresh();
     _spotlightHeroNode.dispose();
     _keywordReturn.preserve();
     MainPageBridge.unregisterTvContentFocusHandler(
@@ -2377,10 +2136,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _inputSection.focusContent,
     );
     StorageService.localCompletionRevision.removeListener(
-      _onLocalCompletionChanged,
+      _continuationLoading.onLocalCompletionChanged,
     );
     MdblistService.instance.playbackRevision.removeListener(
-      _onMdblistPlaybackRevision,
+      _continuationLoading.onMdblistPlaybackRevision,
     );
     if (!widget.searchMode && !widget.discoverMode) {
       MainPageBridge.removePlaylistChangeListener(
@@ -2408,8 +2167,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // Safe no-op in the variants that never registered it.
     FocusManager.instance.removeListener(_onGlobalFocusChange);
     MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
-    MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
-    MainPageBridge.removePlayerLaunchListener(_markPlaybackStarted);
+    MainPageBridge.removePlaybackReturnListener(
+      _continuationReturn.onPlaybackReturned,
+    );
+    MainPageBridge.removePlayerLaunchListener(
+      _continuationReturn.markPlaybackStarted,
+    );
     MainPageBridge.removeHomeSettingsListener(_reloadForHomeSettings);
     MainPageBridge.removeHomeSettingsListener(_reloadSearchCardPrefs);
     HomeRowRefreshSignal.removeListener(_queueHomeRows);
@@ -2482,9 +2245,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _catalogSection.catalogSourcesBtnFocus.dispose();
 
     _disposeNodes();
-    _continuationNodes.disposeNodes();
+    _continuationSection.continuationNodes.disposeNodes();
     _savedSection.favoriteNodes.disposeNodes();
-    _continuationNodes.clearNodes();
+    _continuationSection.continuationNodes.clearNodes();
     _savedSection.favoriteNodes.clearNodes();
     super.dispose();
   }
@@ -2500,8 +2263,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     refreshAppearance: (current) =>
         _keywordSection.loadSourceTextFormatting(isCurrent: current),
     refreshDisplay: (current) => _loadHomeCardOrientation(isCurrent: current),
-    refreshContinuation: (current) =>
-        _continuationLayoutController.refresh(isCurrent: current),
+    refreshContinuation: (current) => _continuationSection
+        .continuationLayoutController
+        .refresh(isCurrent: current),
     reconcileContinuation: _reconcileContinuationLayout,
     refreshTrailers: (current) => _reloadHeroTrailerPrefs(isCurrent: current),
     selectDefaultView: (current) => _loadHomeDefaultView(isCurrent: current),
@@ -2521,28 +2285,44 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // Reconcile nodes against accepted rows without refetching continuation data.
   void _reconcileContinuationLayout() {
     setState(() {
-      _continuationNodes.resize(
+      _continuationSection.continuationNodes.resize(
         HomeContinuationKind.local,
-        movies: _cwMergeLocal ? _cwAll.length : _cwMovies.length,
-        series: _cwMergeLocal ? 0 : _cwSeries.length,
+        movies: _continuationSection.cwMergeLocal
+            ? _continuationSection.cwAll.length
+            : _continuationSection.cwMovies.length,
+        series: _continuationSection.cwMergeLocal
+            ? 0
+            : _continuationSection.cwSeries.length,
         requestFocus: _requestRowFocus,
       );
-      _continuationNodes.resize(
+      _continuationSection.continuationNodes.resize(
         HomeContinuationKind.trakt,
-        movies: _cwMergeTrakt ? _traktAll.length : _traktMovies.length,
-        series: _cwMergeTrakt ? 0 : _traktSeries.length,
+        movies: _continuationSection.cwMergeTrakt
+            ? _continuationSection.traktAll.length
+            : _continuationSection.traktMovies.length,
+        series: _continuationSection.cwMergeTrakt
+            ? 0
+            : _continuationSection.traktSeries.length,
         requestFocus: _requestRowFocus,
       );
-      _continuationNodes.resize(
+      _continuationSection.continuationNodes.resize(
         HomeContinuationKind.simkl,
-        movies: _cwMergeSimkl ? _simklAll.length : _simklMovies.length,
-        series: _cwMergeSimkl ? 0 : _simklSeries.length,
+        movies: _continuationSection.cwMergeSimkl
+            ? _continuationSection.simklAll.length
+            : _continuationSection.simklMovies.length,
+        series: _continuationSection.cwMergeSimkl
+            ? 0
+            : _continuationSection.simklSeries.length,
         requestFocus: _requestRowFocus,
       );
-      _continuationNodes.resize(
+      _continuationSection.continuationNodes.resize(
         HomeContinuationKind.mdblist,
-        movies: _cwMergeMdblist ? _mdblistAll.length : _mdblistMovies.length,
-        series: _cwMergeMdblist ? 0 : _mdblistSeries.length,
+        movies: _continuationSection.cwMergeMdblist
+            ? _continuationSection.mdblistAll.length
+            : _continuationSection.mdblistMovies.length,
+        series: _continuationSection.cwMergeMdblist
+            ? 0
+            : _continuationSection.mdblistSeries.length,
         requestFocus: _requestRowFocus,
       );
     });
@@ -3004,14 +2784,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // section, so editing their sources must still refresh the CW card badge).
     final items = [
       for (final section in _sections) ...section.items,
-      ..._cwMovies,
-      ..._cwSeries,
-      ..._traktMovies,
-      ..._traktSeries,
-      ..._simklMovies,
-      ..._simklSeries,
-      ..._mdblistMovies,
-      ..._mdblistSeries,
+      ..._continuationSection.cwMovies,
+      ..._continuationSection.cwSeries,
+      ..._continuationSection.traktMovies,
+      ..._continuationSection.traktSeries,
+      ..._continuationSection.simklMovies,
+      ..._continuationSection.simklSeries,
+      ..._continuationSection.mdblistMovies,
+      ..._continuationSection.mdblistSeries,
     ];
     return _boundCountsController.load(
       ids: items.map(_imdbOf),
@@ -3025,117 +2805,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     isCurrent: () => mounted,
     onChanged: () => setState(() {}),
   );
-
-  /// Load the Continue Watching row from the shared local store. Mirrors
-  /// Home's join (item list + per-title playback progress) but is read-only —
-  /// it never writes, so Home's row is untouched. Safe to call repeatedly
-  /// (e.g. after returning from a detail/playback).
-  Future<void> _loadContinueWatching() => _localContinuationController.load(
-    isCurrent: () => mounted,
-    onProgressSourceChanged: () => setState(() {}),
-    beforeEnabledRows: _ensureCwMergeFlags,
-    beforeRows: (next) {
-      // Keep the same nodes on refresh. Merged mode uses the movies slot for
-      // every item; disabled rows release their nodes before data publication.
-      _continuationNodes.resize(
-        HomeContinuationKind.local,
-        movies: _cwMergeLocal ? next.data.items.length : next.movies.length,
-        series: _cwMergeLocal ? 0 : next.series.length,
-        requestFocus: _requestRowFocus,
-      );
-    },
-    onRows: (next, current) {
-      setState(
-        () => _episodeArtworkController.clear(HomeEpisodeArtworkSource.local),
-      );
-      if (!next.enabled) return;
-      unawaited(
-        _enrichCwEpisodeArtwork(
-          refs: next.data.episodeRefs,
-          source: HomeEpisodeArtworkSource.local,
-          isCurrent: current,
-        ),
-      );
-      _maybeAutoFocusBoard();
-    },
-  );
-
-  void _onLocalCompletionChanged() {
-    if (!mounted || widget.searchMode || widget.discoverMode) return;
-    unawaited(_loadContinueWatching());
-  }
-
-  /// Load the IPTV Continue Watching shelves (Xtream VOD movies + series) from
-  /// the player's own watch history. Independent of [_loadContinueWatching] —
-  /// different data source, different (non-IMDb) identity — but follows the same
-  /// token-guard + node-sync discipline so a slow reload can't clobber a newer
-  /// one or drop the focus node the user is sitting on.
-  Future<void> _loadIptvContinueWatching() {
-    // Dedicated Search does not load IPTV shelves, including playback returns.
-    if (widget.searchMode) return Future<void>.value();
-    return _iptvContinuationController.load(
-      isCurrent: () => mounted,
-      beforeRows: (next) {
-        _continuationNodes.resize(
-          HomeContinuationKind.iptv,
-          movies: next.movies.length,
-          series: next.series.length,
-          requestFocus: _requestRowFocus,
-        );
-      },
-      onRows: () {
-        setState(() {});
-        _maybeAutoFocusBoard();
-      },
-    );
-  }
-
-  int? _iptvRemainingMinutes(String routeKey) =>
-      _iptvContinuation.remainingMinutes[routeKey];
-
-  HomeEpisodeArtworkController get _episodeArtworkController =>
-      _homeBoardBindings.artwork;
-
-  Future<void> _enrichCwEpisodeArtwork({
-    required Map<String, HomeEpisodeReference> refs,
-    required HomeEpisodeArtworkSource source,
-    required bool Function() isCurrent,
-  }) => _episodeArtworkController.load(
-    source: source,
-    refs: refs,
-    isCurrent: () => mounted && isCurrent(),
-    onChanged: () => setState(() {}),
-  );
-
-  /// Open an IPTV Continue Watching card: a series routes to the merged Xtream
-  /// series page, a movie resumes playback. Both go through [IptvCwRouter];
-  /// [_playedSinceRefresh] latches so the return refresh rebuilds the shelves.
-  Future<void> _openIptvCwItem(StremioMeta item) async {
-    final entry = _iptvCwByKey[item.id];
-    if (entry == null) return;
-    _markPlaybackStarted();
-    await IptvCwRouter.open(context, entry, isTelevision: widget.isTelevision);
-    if (!mounted) return;
-    // Off-TV push() awaits to the pop; on TV the native-return hook
-    // ([_onPlaybackReturned]) refreshes. Refresh here too for the in-app path
-    // (series detail / in-app player) so a resumed position updates the shelf.
-    await _refreshAfterPlayback();
-  }
-
-  /// Focus a card in the Continue Watching row at [cwIndex] (index into the
-  /// visible CW rows), clamping the column to that row's length. Returns
-  /// whether a focus move was actually attempted — false means the target row
-  /// doesn't exist (yet), so callers can fall through or defer instead of
-  /// silently swallowing the DPAD press.
-  bool _focusCwRow(int cwIndex, int column) {
-    final rows = _cwRows;
-    if (cwIndex < 0 || cwIndex >= rows.length) return false;
-    final nodes = rows[cwIndex].nodes;
-    if (nodes.isEmpty) return false;
-    _requestRowFocus(nodes, column.clamp(0, nodes.length - 1));
-    return true;
-  }
-
   String _sectionRowId(CatalogSection section) => section is HomeListSection
       ? section.rowId
       : section is HomeCollectionSection
@@ -3235,8 +2904,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           unawaited(_savedSection.loadMyWatchlist());
         case HomeRowRefresh.playback:
           // Do not consume the local playback/tracker refresh latch here.
-          unawaited(_loadContinueWatching());
-          unawaited(_loadIptvContinueWatching());
+          unawaited(_continuationLoading.loadContinueWatching());
+          unawaited(_continuationLoading.loadIptvContinueWatching());
       }
     },
     refreshAddons: () {
@@ -3293,7 +2962,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Open a board-section item through the right pipeline for its source.
   /// Trakt list rows keep Trakt semantics (`isTraktSource` — status chips,
   /// Trakt-first resume label), Simkl rows open plainly (Discover's
-  /// [_openSimklItem] routing), and real catalog sections route through their
+  /// [_continuationPlayback.openSimklItem] routing), and real catalog sections route through their
   /// own addon exactly as before.
   void _sectionOpenItem(
     CatalogSection section,
@@ -3307,7 +2976,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     if (section is HomeListSection) {
       if (section.simklList != null) {
-        _openSimklItem(item, heroTag: heroTag);
+        _continuationPlayback.openSimklItem(item, heroTag: heroTag);
         return;
       }
       _itemActions.openItem(
@@ -3323,7 +2992,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   /// Quick-play counterpart to [_sectionOpenItem]. Trakt rows go through
-  /// [_playTraktItem] (CW-cached resume, else catalog play with Trakt-first
+  /// [_continuationPlayback.playTraktItem] (CW-cached resume, else catalog play with Trakt-first
   /// resume); Simkl rows play plainly like Discover's lists.
   void _sectionQuickPlay(CatalogSection section, StremioMeta item) {
     // A folder tile has nothing to play — open it instead.
@@ -3333,7 +3002,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     if (section is HomeListSection) {
       if (section.isTrakt) {
-        _playTraktItem(item);
+        _continuationPlayback.playTraktItem(item);
       } else if (section.isMdblist) {
         _catalogActions.onCatalogPlay(
           item,
@@ -3341,7 +3010,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           isMdblistSource: true,
         );
       } else {
-        _playSimklItem(item);
+        _continuationPlayback.playSimklItem(item);
       }
       return;
     }
@@ -3381,237 +3050,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             ),
           ),
         )
-        .then((_) => _afterSeeAllReturn());
-  }
-
-  /// Open a Continue Watching title as a normal detail page (no Home-style
-  /// list menu). The detail's action row + a "Remove from Continue Watching"
-  /// action are wired via [_itemActions.openItem] (which detects membership in [_cwIds]).
-  void _openContinueItem(StremioMeta item) {
-    _itemActions.openItem(
-      item,
-      item.sourceAddon ?? _addonForContinue(_cwAddonId[item.imdbId]),
-    );
-  }
-
-  /// Long-press quick-play for a Continue Watching title — resumes directly
-  /// (series resume the last-played episode) without opening the detail.
-  void _onContinuePlay(StremioMeta item) {
-    _catalogActions.onCatalogPlay(
-      item,
-      item.sourceAddon ?? _addonForContinue(_cwAddonId[item.imdbId]),
-    );
-  }
-
-  /// Open a plain Simkl-list title (Discover's Simkl Trending/watchlist lists) —
-  /// a normal catalog detail, no resume. The CW list uses [_openSimklCwItem]
-  /// instead, so a title browsed fresh here never opens mid-episode.
-  void _openSimklItem(StremioMeta item, {String? heroTag}) {
-    _itemActions.openItem(
-      item,
-      NativeSeriesMetadataService.addonForItem(item),
-      heroTag: heroTag,
-    );
-  }
-
-  /// Quick-play a plain Simkl-list title like any other catalog item (no
-  /// resume). The CW list uses [_playSimklCwItem].
-  void _playSimklItem(StremioMeta item) {
-    _catalogActions.onCatalogPlay(
-      item,
-      NativeSeriesMetadataService.addonForItem(item),
-    );
-  }
-
-  // ── Trakt Continue Watching ───────────────────────────────────────────────
-
-  /// Fetch the Trakt "Continue Watching" rows (in-progress movies + up-next
-  /// episodes) from the connected account. Uses Trakt's intent-aware Up Next
-  /// feed plus paged playback checkpoints. Runs on init / integration change,
-  /// post-playback, and a throttled app resume — never on every rebuild.
-  /// Token-guarded against overlap; hides the rows when Trakt isn't connected.
-  /// [refreshBound] runs a bound-source refresh at the end; pass false when the
-  /// caller already refreshes bound sources itself (avoids a double pass).
-  Future<void> _loadTraktContinueWatching({bool refreshBound = true}) =>
-      _traktContinuationController.load(
-        attemptedAt: DateTime.now(),
-        isCurrent: () => mounted,
-        beforeConnectedRows: _ensureCwMergeFlags,
-        beforeRows: (next) {
-          _continuationNodes.resize(
-            HomeContinuationKind.trakt,
-            movies: _cwMergeTrakt ? next.all.length : next.movies.length,
-            series: _cwMergeTrakt ? 0 : next.series.length,
-            requestFocus: _requestRowFocus,
-          );
-        },
-        onRows: (next, connected, hadRows, current) {
-          setState(
-            () =>
-                _episodeArtworkController.clear(HomeEpisodeArtworkSource.trakt),
-          );
-          if (!connected) return;
-          unawaited(
-            _enrichCwEpisodeArtwork(
-              refs: next.episodeRefs,
-              source: HomeEpisodeArtworkSource.trakt,
-              isCurrent: current,
-            ),
-          );
-          _maybeAutoFocusBoard();
-          if (!hadRows) _maybeAnnounceTraktRows();
-          if (refreshBound) unawaited(_refreshBoundSources());
-        },
-        onFailure: (error, accepted) {
-          debugPrint(
-            'SearchScreen: Trakt continue-watching load failed: $error',
-          );
-          if (accepted) setState(() {});
-        },
-      );
-
-  /// The Trakt rows just landed (skeleton → content), usually seconds after
-  /// the rest of the board. Local Continue Watching renders above them; Simkl,
-  /// IPTV, favourites and catalog rows below.
-  void _maybeAnnounceTraktRows() => _maybeAnnounceCwRows(
-    label: 'Trakt',
-    // Same merge-aware gates as _cwRows / _cwVisible, so a notice fires
-    // exactly when a row actually rendered.
-    visible:
-        ((_cwMergeTrakt ? _traktAll : _traktMovies).isNotEmpty &&
-            !_homeDisabled.contains('trakt:movies')) ||
-        (!_cwMergeTrakt &&
-            _traktSeries.isNotEmpty &&
-            !_homeDisabled.contains('trakt:shows')),
-    ownNodes: [_traktMovieNodes, _traktSeriesNodes],
-    aboveNodes: [_cwMovieNodes, _cwSeriesNodes],
-    belowNodes: [
-      _simklMovieNodes,
-      _simklSeriesNodes,
-      _mdblistMovieNodes,
-      _mdblistSeriesNodes,
-      _iptvCwMovieNodes,
-      _iptvCwSeriesNodes,
-    ],
-  );
-
-  /// Same for the Simkl rows, which land on their own schedule (and without a
-  /// reserved skeleton slot, so they push the board when they arrive). Local
-  /// Continue Watching and the Trakt rows render above them, IPTV below.
-  void _maybeAnnounceSimklRows() => _maybeAnnounceCwRows(
-    label: 'Simkl',
-    visible:
-        ((_cwMergeSimkl ? _simklAll : _simklMovies).isNotEmpty &&
-            !_homeDisabled.contains('simkl:movies')) ||
-        (!_cwMergeSimkl &&
-            _simklSeries.isNotEmpty &&
-            !_homeDisabled.contains('simkl:shows')),
-    ownNodes: [_simklMovieNodes, _simklSeriesNodes],
-    aboveNodes: [
-      _cwMovieNodes,
-      _cwSeriesNodes,
-      _traktMovieNodes,
-      _traktSeriesNodes,
-    ],
-    belowNodes: [
-      _mdblistMovieNodes,
-      _mdblistSeriesNodes,
-      _iptvCwMovieNodes,
-      _iptvCwSeriesNodes,
-    ],
-  );
-
-  void _maybeAnnounceMdblistRows() => _maybeAnnounceCwRows(
-    label: 'MDBList',
-    visible:
-        ((_cwMergeMdblist ? _mdblistAll : _mdblistMovies).isNotEmpty &&
-            !_homeDisabled.contains('mdblist:movies')) ||
-        (!_cwMergeMdblist &&
-            _mdblistSeries.isNotEmpty &&
-            !_homeDisabled.contains('mdblist:shows')),
-    ownNodes: [_mdblistMovieNodes, _mdblistSeriesNodes],
-    aboveNodes: [
-      _cwMovieNodes,
-      _cwSeriesNodes,
-      _traktMovieNodes,
-      _traktSeriesNodes,
-      _simklMovieNodes,
-      _simklSeriesNodes,
-    ],
-    belowNodes: [_iptvCwMovieNodes, _iptvCwSeriesNodes],
-  );
-
-  /// A tracker's Continue Watching rows just appeared on the board — if the
-  /// user is already browsing elsewhere, point them at the new rows with a
-  /// small toast, with the direction worked out from where DPAD focus currently
-  /// sits. [ownNodes] are the new rows themselves (focus already there → stay
-  /// quiet), [aboveNodes] / [belowNodes] the other Continue Watching rows they
-  /// slot between; favourites and catalog rows always render below.
-  void _maybeAnnounceCwRows({
-    required String label,
-    required bool visible,
-    required List<List<FocusNode>> ownNodes,
-    required List<List<FocusNode>> aboveNodes,
-    required List<List<FocusNode>> belowNodes,
-  }) {
-    if (!mounted || !widget.isTelevision) return;
-    if (widget.searchMode || widget.discoverMode) return;
-    // Still on the brand loading stage: the rows will simply be there when the
-    // board first paints — nothing to announce.
-    if (_loading) return;
-    // Only the board the user is actually looking at announces (not one
-    // reloading under a detail page/player or on an inactive tab).
-    if (MainPageBridge.activeTvTabIndex != _tabIndex) return;
-    final route = ModalRoute.of(context);
-    if (route != null && !route.isCurrent) return;
-    // Rows hidden by the Home Rows manager never reached the screen.
-    if (!visible) return;
-    final primary = FocusManager.instance.primaryFocus;
-    bool onRow(List<FocusNode> nodes) =>
-        primary != null && nodes.contains(primary);
-    bool onAny(List<List<FocusNode>> rows) => rows.any(onRow);
-    if (onAny(ownNodes)) return; // already looking at them
-    String? dir;
-    if (onAny(aboveNodes)) {
-      dir = 'down';
-    } else if (onAny(belowNodes)) {
-      dir = 'up';
-    } else {
-      for (final kind in _savedSection.favRowKinds) {
-        if (onRow(_savedSection.favNodesFor(kind))) {
-          dir = 'up';
-          break;
-        }
-      }
-      if (dir == null) {
-        for (final row in _rowNodes) {
-          if (onRow(row)) {
-            dir = 'up';
-            break;
-          }
-        }
-      }
-    }
-    final msg = dir == null
-        ? '$label Continue Watching loaded'
-        : '$label loaded — scroll $dir to view';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        width: 420,
-      ),
-    );
-  }
-
-  /// Open a Trakt Continue Watching title as a normal detail page.
-  void _openTraktItem(StremioMeta item) {
-    _itemActions.openItem(
-      item,
-      _addonForContinue(item.sourceAddon?.id),
-      isTraktSource: true,
-    );
+        .then((_) => _continuationReturn.afterSeeAllReturn());
   }
 
   /// Open a detail page requested by another tab (see [initState]). Builds a
@@ -3649,388 +3088,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     );
   }
 
-  /// Resume a Trakt Continue Watching title — resolves the paused/next episode
-  /// (an extra Trakt call for series) and plays.
-  Future<void> _playTraktItem(StremioMeta item) async {
-    if (!_playbackNavigation.catalogNavigationCurrent()) return;
-    final cwItem = _traktByImdb[_imdbOf(item)];
-    if (cwItem == null) {
-      // Not in Continue Watching — a fetched Trakt list title (Trending,
-      // Watchlist, …). Play it like a catalog title: addon-stream resolution
-      // with the same Trakt-first resume the detail page's Play button uses.
-      await _catalogActions.onCatalogPlay(
-        item,
-        _addonForContinue(item.sourceAddon?.id),
-        isTraktSource: true,
-        preferTraktResume: true,
-      );
-      return;
-    }
-    final resume = await _catalogActions.seriesResumeRepository.traktSelection(
-      item,
-      cached: cwItem,
-      isCurrent: _playbackNavigation.catalogNavigationCurrent,
-    );
-    if (!_playbackNavigation.catalogNavigationCurrent()) return;
-    final sel = resume?.sel;
-    if (sel == null) {
-      _playbackNavigation.snack(
-        "Couldn't resolve where to resume \"${item.name}\".",
-      );
-      return;
-    }
-    _playbackNavigation.playSelection(sel);
-  }
-
-  Future<bool> _removeLocalHistory(String id) async {
-    if (!_playbackNavigation.catalogNavigationCurrent()) return false;
-    return ref
-        .read(homeLocalHistoryRemovalProvider(_profileSessionOwner))
-        .remove(id, isCurrent: _playbackNavigation.catalogNavigationCurrent);
-  }
-
-  /// Detail-screen action for a Continue Watching title. Only handles removal;
-  /// closes its own detail and lets the route return callback refresh the row.
-  Future<void> _handleContinueDetailAction(
-    TraktItemMenuAction action,
-    String imdbId,
-    HomeDetailRoute detailRoute,
-  ) async {
-    if (!detailRoute.isActive ||
-        action != TraktItemMenuAction.removeFromPlayback) {
-      return;
-    }
-    if (!await _removeLocalHistory(imdbId) || !mounted || !detailRoute.isActive) {
-      return;
-    }
-    detailRoute.closeIfCurrent();
-    _playbackNavigation.snack('Removed from Continue Watching');
-  }
-
-  /// Detail-screen action for a Trakt Continue Watching title: delete the
-  /// title's playback entries (and watch history, so shows don't reappear via
-  /// "Up Next") on Trakt, then pop the detail and reload the Trakt rows —
-  /// mirroring the old home screen's remove flow.
-  ///
-  /// Row-menu removals have no detail route. Detail actions carry their exact
-  /// route so a delayed response cannot pop a newer page.
-  Future<void> _removeFromTraktContinueWatching(
-    String imdbId, {
-    HomeDetailRoute? detailRoute,
-  }) async {
-    bool current() =>
-        _playbackNavigation.catalogNavigationCurrent() &&
-        (detailRoute?.isActive ?? true);
-    if (!current()) return;
-    final cwItem = _traktByImdb[imdbId];
-    if (cwItem == null) return;
-    final removed = await ref
-        .read(homeTraktHistoryRemovalProvider(_profileSessionOwner))
-        .remove(cwItem, isCurrent: current);
-    if (!mounted || removed == null || !current()) return;
-    if (!removed) {
-      _playbackNavigation.snack(
-        'Failed to remove from Trakt Continue Watching',
-      );
-      return;
-    }
-    detailRoute?.closeIfCurrent();
-    _playbackNavigation.snack('Removed from Trakt Continue Watching');
-    await _loadTraktContinueWatching(refreshBound: false);
-  }
-
-  // ── Continue Watching card menu (long-press / hold-OK) ────────────────────
-
-  final _continueWatchingActions = HomeContinueWatchingActions();
-
-  Future<void> _openCwCardMenu(
-    HomeContinuationRow row,
-    StremioMeta item,
-    int cwIndex,
-    int col,
-  ) async {
-    if (!_playbackNavigation.catalogNavigationCurrent()) return;
-    final readPreference = ref.read(
-      homeCwHoldPreferenceProvider(_profileSessionOwner),
-    );
-    await _continueWatchingActions.open(
-      context: context,
-      row: row,
-      item: item,
-      pikpakOnly: _pikpakOnly,
-      isTelevision: () => widget.isTelevision,
-      isCurrent: _playbackNavigation.catalogNavigationCurrent,
-      readHoldToQuickPlay: readPreference,
-      refocusAfterRemoval: () => _refocusAfterCwRemoval(cwIndex, col),
-    );
-  }
-
-  /// Put TV focus back on the board after a removal: the card that had it is
-  /// gone (and its FocusNode with it, if the row shrank), which would otherwise
-  /// leave the remote dead until the global reclaim listener notices.
-  void _refocusAfterCwRemoval(int cwIndex, int col) {
-    if (!widget.isTelevision) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_playbackNavigation.catalogNavigationCurrent()) return;
-      // Same index first: if this row survived it's still here, and if it
-      // emptied out the row below has slid into its place.
-      if (_focusCwRow(cwIndex, col)) return;
-      for (var i = cwIndex - 1; i >= 0; i--) {
-        if (_focusCwRow(i, col)) return;
-      }
-      // No Continue Watching rows left at all — hand the remote to the shell.
-      _leaveBoardTop();
-    });
-  }
-
-  /// Remove a LOCAL Continue Watching title from the row itself. The same two
-  /// writes [_handleContinueDetailAction] makes (list entry + saved position),
-  /// without the detail pop — nothing was pushed here.
-  Future<void> _removeLocalCwItem(StremioMeta item) async {
-    final imdbId = _imdbOf(item) ?? item.id;
-    if (imdbId.isEmpty) return;
-    if (!await _removeLocalHistory(imdbId) || !mounted) return;
-    _playbackNavigation.snack('Removed from Continue Watching');
-    await _loadContinueWatching();
-  }
-
-  /// Remove a Trakt Continue Watching title from the row itself — the detail
-  /// page's flow minus the pop.
-  Future<void> _removeTraktCwItem(StremioMeta item) async {
-    final imdbId = _imdbOf(item);
-    if (imdbId == null) return;
-    await _removeFromTraktContinueWatching(imdbId);
-  }
-
-  /// Remove a Simkl Continue Watching title from the row itself. Routes through
-  /// the shared [handleSimklMenuAction] the detail sheet uses (which shows its
-  /// own result snackbar), so a series is moved to On Hold and its paused
-  /// session cleared, and a movie just loses the session.
-  Future<void> _removeSimklCwItem(StremioMeta item) async {
-    if (!_playbackNavigation.catalogNavigationCurrent()) return;
-    await handleSimklMenuAction(
-      context,
-      item,
-      SimklItemMenuAction.removeFromContinueWatching,
-      isCurrent: _playbackNavigation.catalogNavigationCurrent,
-      removeContinueWatching: () => ref
-          .read(homeSimklHistoryRemovalProvider(_profileSessionOwner))
-          .remove(
-            item.progressId ?? item.id,
-            item.type,
-            isCurrent: _playbackNavigation.catalogNavigationCurrent,
-          ),
-    );
-    if (!_playbackNavigation.catalogNavigationCurrent()) return;
-    await _loadSimklContinueWatching(refreshBound: false);
-  }
-
-  /// Remove an IPTV Continue Watching card: a movie drops its own history +
-  /// resume entry, a series drops every episode's (the card collapses them, so
-  /// leaving one behind would just rebuild it).
-  Future<void> _removeIptvCwItem(StremioMeta item) async {
-    if (!_playbackNavigation.catalogNavigationCurrent()) return;
-    final entry = _iptvCwByKey[item.id];
-    if (entry == null) return;
-    final removed = await ref
-        .read(homeIptvHistoryRemovalProvider(_profileSessionOwner))
-        .remove(entry, isCurrent: _playbackNavigation.catalogNavigationCurrent);
-    if (!removed) return;
-    _playbackNavigation.snack('Removed from Continue Watching');
-    await _loadIptvContinueWatching();
-  }
-
   // ── Simkl Continue Watching ───────────────────────────────────────────────
-
-  /// Fetch the Simkl "Continue Watching" rows (paused movies + paused episodes)
-  /// from the connected account's playback sessions — the same `/sync/playback`
-  /// lists the scrobble resume already fetches + caches, so this is cheap. Runs
-  /// once on init / integration change and caches in memory. Token-guarded
-  /// against overlap; hides the rows when Simkl isn't connected. [refreshBound]
-  /// runs a bound-source refresh at the end (skip when the caller already does).
-  Future<void> _loadSimklContinueWatching({bool refreshBound = true}) =>
-      _simklContinuationController.load(
-        isCurrent: () => mounted,
-        ensureLayout: _ensureCwMergeFlags,
-        beforeRows: (next) {
-          _continuationNodes.resize(
-            HomeContinuationKind.simkl,
-            movies: _cwMergeSimkl ? next.all.length : next.movies.length,
-            series: _cwMergeSimkl ? 0 : next.series.length,
-            requestFocus: _requestRowFocus,
-          );
-        },
-        onRows: (next, hadRows, current) {
-          setState(
-            () =>
-                _episodeArtworkController.clear(HomeEpisodeArtworkSource.simkl),
-          );
-          unawaited(
-            _enrichCwEpisodeArtwork(
-              refs: next.episodeRefs,
-              source: HomeEpisodeArtworkSource.simkl,
-              isCurrent: current,
-            ),
-          );
-          _maybeAutoFocusBoard();
-          if (!hadRows) _maybeAnnounceSimklRows();
-          if (refreshBound) unawaited(_refreshBoundSources());
-        },
-      );
-
-  /// Open a Simkl Continue Watching title as a detail page. For a series, scroll
-  /// the episodes panel to the paused episode (the same path the Calendar uses);
-  /// resume itself is handled by the detail's three-way resume when Simkl is
-  /// connected. No `isTraktSource` flag — this is a plain, source-neutral open.
-  void _openSimklCwItem(StremioMeta item) {
-    final cw = _simklByImdb[_simklCardKey(item)];
-    _itemActions.openItem(
-      item,
-      NativeSeriesMetadataService.addonForItem(item),
-      initialSeason: (cw != null && !cw.isMovie) ? cw.season : null,
-      initialEpisode: (cw != null && !cw.isMovie) ? cw.episode : null,
-    );
-  }
-
-  /// Resume a Simkl Continue Watching title directly (quick-play): builds a
-  /// selection carrying the paused season/episode + Simkl progress percent and
-  /// plays it, mirroring the Trakt quick-play.
-  Future<void> _playSimklCwItem(StremioMeta item) async {
-    if (!_playbackNavigation.catalogNavigationCurrent()) return;
-    _playbackNavigation.activeAddonId =
-        NativeSeriesMetadataService.addonForItem(item).id;
-    _playbackNavigation.playbackArtwork.capture(item);
-    final cw = _simklByImdb[_simklCardKey(item)];
-    if (cw == null) {
-      // Not in the CW map (a See-All grid title that fell out of the list) —
-      // play it like a plain catalog title; three-way resume still applies.
-      await _catalogActions.onCatalogPlay(
-        item,
-        NativeSeriesMetadataService.addonForItem(item),
-      );
-      return;
-    }
-    _playbackNavigation.playSelection(cw.selection);
-  }
-
-  /// Desktop "See All" for the Simkl Continue Watching rows — reuses the generic
-  /// Continue Watching grid, seeded with the paused-order list + progress.
-  void _openSimklCwSeeAll([String initialCategory = 'all']) {
-    _pushCwSeeAll(
-      title: 'Simkl Continue Watching',
-      initialCategory: initialCategory,
-      items: _simklAll,
-      progressOf: (m) => _cwCardProgress(HomeContinuationKind.simkl, m),
-      onOpen: _openSimklCwItem,
-      onQuickPlay: _pikpakOnly ? null : _playSimklCwItem,
-      // One uniform pass instead of an explicit Simkl fetch followed by
-      // _afterSeeAllReturn: `trackers: true` because this grid renders Simkl's
-      // own list and must refetch whether or not anything was played here, and
-      // folding it in stops the two from fetching Simkl twice after a playback.
-      onReload: () async {
-        await _refreshAfterPlayback(trackers: true);
-        return List<StremioMeta>.of(_simklAll);
-      },
-    );
-  }
-
-  Future<void> _loadMdblistContinueWatching({
-    bool refreshBound = true,
-    bool force = false,
-  }) => _mdblistContinuationController.load(
-    enabled: kMdblistEnabled,
-    force: force,
-    refreshBound: refreshBound,
-    isCurrent: () => mounted,
-    ensureLayout: _ensureCwMergeFlags,
-    now: DateTime.now,
-    trace: debugPrint,
-    onDisabled: () => setState(() {}),
-    beforeRows: (next) {
-      _continuationNodes.resize(
-        HomeContinuationKind.mdblist,
-        movies: _cwMergeMdblist ? next.all.length : next.movies.length,
-        series: _cwMergeMdblist ? 0 : next.series.length,
-        requestFocus: _requestRowFocus,
-      );
-    },
-    onRows: (next, hadRows) {
-      setState(() {});
-      _maybeAutoFocusBoard();
-      if (!hadRows) _maybeAnnounceMdblistRows();
-      if (refreshBound) unawaited(_refreshBoundSources());
-    },
-  );
-
-  void _onMdblistPlaybackRevision() {
-    if (widget.searchMode || widget.discoverMode) return;
-    unawaited(
-      _mdblistContinuationController.refreshAfterRevision(
-        isCurrent: () => mounted,
-        isVisible: () => ModalRoute.of(context)?.isCurrent ?? true,
-        wait: (duration) => Future<void>.delayed(duration),
-        reload: () =>
-            _loadMdblistContinueWatching(refreshBound: false, force: true),
-      ),
-    );
-  }
-
-  void _openMdblistCwItem(StremioMeta item) {
-    final cw = _mdblistByImdb[_imdbOf(item)];
-    _itemActions.openItem(
-      item,
-      _addonForContinue(item.sourceAddon?.id),
-      initialSeason: cw?.selection.season,
-      initialEpisode: cw?.selection.episode,
-      isMdblistSource: true,
-    );
-  }
-
-  Future<void> _playMdblistCwItem(StremioMeta item) async {
-    if (!_playbackNavigation.catalogNavigationCurrent()) return;
-    final cw = _mdblistByImdb[_imdbOf(item)];
-    if (cw == null) {
-      await _catalogActions.onCatalogPlay(
-        item,
-        _addonForContinue(item.sourceAddon?.id),
-        isMdblistSource: true,
-      );
-      return;
-    }
-    _playbackNavigation.playSelection(cw.selection);
-  }
-
-  bool _canRemoveMdblistCwItem(StremioMeta item) =>
-      _mdblistByImdb[_imdbOf(item)]?.paused == true;
-
-  Future<void> _removeMdblistCwItem(StremioMeta item) async {
-    final removed = await _mdblistContinuationController.remove(
-      _imdbOf(item),
-      isCurrent: _playbackNavigation.catalogNavigationCurrent,
-    );
-    if (!mounted ||
-        !removed ||
-        _profileSessionOwner != ProfileSessionMemory.captureOwner()) {
-      return;
-    }
-    _playbackNavigation.snack('Removed from MDBList Continue Watching');
-    await _loadMdblistContinueWatching();
-  }
-
-  void _openMdblistCwSeeAll([String initialCategory = 'all']) {
-    _pushCwSeeAll(
-      title: 'MDBList Continue Watching',
-      initialCategory: initialCategory,
-      items: _mdblistAll,
-      progressOf: (m) => _cwCardProgress(HomeContinuationKind.mdblist, m),
-      onOpen: _openMdblistCwItem,
-      onQuickPlay: _pikpakOnly ? null : _playMdblistCwItem,
-      onReload: () async {
-        await _loadMdblistContinueWatching();
-        return List<StremioMeta>.of(_mdblistAll);
-      },
-    );
-  }
 
   /// Swap the displayed sections (homepage or search results): rebuild the
   /// per-row focus nodes and reset the hero to the first item.
@@ -4287,14 +3345,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return true;
     }
     if (anyOf(_listsSection.listsNodes)) return true;
-    if (anyOf(_cwMovieNodes) ||
-        anyOf(_cwSeriesNodes) ||
-        anyOf(_traktMovieNodes) ||
-        anyOf(_traktSeriesNodes) ||
-        anyOf(_simklMovieNodes) ||
-        anyOf(_simklSeriesNodes) ||
-        anyOf(_mdblistMovieNodes) ||
-        anyOf(_mdblistSeriesNodes) ||
+    if (anyOf(_continuationSection.cwMovieNodes) ||
+        anyOf(_continuationSection.cwSeriesNodes) ||
+        anyOf(_continuationSection.traktMovieNodes) ||
+        anyOf(_continuationSection.traktSeriesNodes) ||
+        anyOf(_continuationSection.simklMovieNodes) ||
+        anyOf(_continuationSection.simklSeriesNodes) ||
+        anyOf(_continuationSection.mdblistMovieNodes) ||
+        anyOf(_continuationSection.mdblistSeriesNodes) ||
         anyOf(_savedSection.tvFavNodes) ||
         anyOf(_savedSection.stvFavNodes) ||
         anyOf(_savedSection.iptvFavNodes) ||
@@ -4404,7 +3462,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Returns false when the target catalog row isn't loaded/focusable (after
   /// kicking the next batch load if one is available) — same contract as
-  /// [_focusCwRow], so DPAD wiring can defer the move instead of eating it.
+  /// [_continuationMenu.focusCwRow], so DPAD wiring can defer the move instead of eating it.
   bool _focusRow(int row, int column) {
     if (row >= _rowNodes.length) {
       // Reach visible actions before starting another batch. When no action
@@ -5018,7 +4076,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         catalogTag: _catalogSourceTag,
         onSeeAll: _openCatalogSeeAll,
         onCollectionOpen: _openCollectionFolder,
-        onContinuationOptions: _openCwCardMenu,
+        onContinuationOptions: _continuationMenu.openCwCardMenu,
         favoriteShelf: _spotlightFavShelf,
         catalogCard: (item, addon) => _spotlightCatalogCards.resolve(
           item,
@@ -5250,7 +4308,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// one view is ever mounted, and reuse keeps node counts synced through
   /// paging for free.
   List<HomeRail> get _canonicalCanvasRails => HomeRailComposition.canonical(
-    continuation: _cwVisible ? _cwRows : const [],
+    continuation: _continuationProjection.cwVisible
+        ? _continuationProjection.cwRows
+        : const [],
     favorites: _savedSection.favRowKinds,
     favoriteCount: _canvasFavItemCount,
     sectionCount: _sections.length,
@@ -5268,8 +4328,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   List<HomeRail> get _classicHomeRails => _orderedHomeRails(
     HomeRailComposition.classic(
       canonical: _canonicalCanvasRails,
-      reserveTrakt: _traktReserving,
-      mergeTrakt: _cwMergeTrakt,
+      reserveTrakt: _continuationProjection.traktReserving,
+      mergeTrakt: _continuationSection.cwMergeTrakt,
       disabled: _homeDisabled,
     ),
   );
@@ -5316,7 +4376,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final HomeStageHoldLatch _stageHold = HomeStageHoldLatch();
 
   List<HomeTonightQueueEntry> get _tonightQueue =>
-      _cwVisible ? HomeRailComposition.tonightQueue(_canvasRails) : [];
+      _continuationProjection.cwVisible
+      ? HomeRailComposition.tonightQueue(_canvasRails)
+      : [];
 
   List<HomeRail> get _stageRails => HomeRailComposition.stage(
     _canvasRails,
@@ -5443,7 +4505,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     pikpakOnly: () => _pikpakOnly,
     openSection: _sectionOpenItem,
     playSection: _sectionQuickPlay,
-    openContinuationMenu: _openCwCardMenu,
+    openContinuationMenu: _continuationMenu.openCwCardMenu,
     onFocused: (railKey, item, column) {
       _setHero(item);
       _canvasCols[railKey] = column;
@@ -6098,7 +5160,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
             _setHero(item);
           },
           onOpen: () => cw.onOpen(item),
-          onLongPress: () => _openCwCardMenu(cw, item, e.rail.cwIndex, e.col),
+          onLongPress: () =>
+              _continuationMenu.openCwCardMenu(cw, item, e.rail.cwIndex, e.col),
           onUp: () {
             if (_stageHold.swallows(LogicalKeyboardKey.arrowUp)) return;
             if (i > 0) {
@@ -6386,7 +5449,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _metadataFeatureController.invalidate();
     _titleSection.cancelTitleSuggestions();
     unawaited(_refreshMetadataFeaturePolicy());
-    _episodeArtworkController.refresh(
+    _continuationSection.episodeArtworkController.refresh(
       isCurrent: () => mounted,
       onChanged: () => setState(() {}),
     );
@@ -6731,6 +5794,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) =>
+      _continuationReturn.didChangeAppLifecycleState(state);
+
+  @override
   Widget build(BuildContext context) => buildSearchPageShell(
     context: context,
     glassHome: _heroTrailerActive,
@@ -6851,7 +5918,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       hasError: _error != null,
       hasCatalogs: _sections.isNotEmpty,
       catalogsEmpty: _sections.every((s) => s.items.isEmpty),
-      continuationVisible: _cwVisible,
+      continuationVisible: _continuationProjection.cwVisible,
       favoritesVisible: _savedSection.anyFavVisible,
       hasPausedRows: pending.isNotEmpty,
       hasMoreCatalogs: hasMoreCatalogs,
@@ -6889,10 +5956,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       loading: _loading,
       isTelevision: widget.isTelevision,
       error: _error,
-      continuationVisible: _cwVisible,
+      continuationVisible: _continuationProjection.cwVisible,
       catalogsEmpty: _sections.isEmpty,
       favoritesVisible: _savedSection.anyFavVisible,
-      traktReserving: _traktReserving,
+      traktReserving: _continuationProjection.traktReserving,
       query: _catalogSection.catalogQuery,
       searchFailures: _catalogSearchFailures,
       searchMode: widget.searchMode,
@@ -6963,8 +6030,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       rails: orderedHome ? homeRails : null,
       rowIdOf: _canvasRailRowId,
       catalog: _buildRow,
-      skeleton: _buildTraktSkeletonRow,
-      continuation: _buildContinueWatchingRow,
+      skeleton: _continuationRows.buildTraktSkeletonRow,
+      continuation: _continuationRows.buildContinueWatchingRow,
       favorite: _savedRows.buildFavRow,
       showFooter: _boardLoadingMore,
       tailPadding: _classicAnchorTailPadding,
@@ -7031,18 +6098,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     pikpakOnly: () => _pikpakOnly,
     wrap: _withHomeExpandedCardSettings,
     isBound: _isBound,
-    afterReturn: _afterSeeAllReturn,
-    afterTrackerReturn: () => _refreshAfterPlayback(trackers: true),
-    traktItems: () => _traktAll,
-    traktProgress: () => _cwCardMaps(HomeContinuationKind.trakt).progress,
-    simklItems: () => _simklAll,
-    simklProgress: () => _simklProgress,
-    openTraktItem: _openTraktItem,
-    playTraktItem: _playTraktItem,
-    openSimklItem: _openSimklItem,
-    playSimklItem: _playSimklItem,
-    openSimklCwItem: _openSimklCwItem,
-    playSimklCwItem: _playSimklCwItem,
+    afterReturn: _continuationReturn.afterSeeAllReturn,
+    afterTrackerReturn: () =>
+        _continuationReturn.refreshAfterPlayback(trackers: true),
+    traktItems: () => _continuationSection.traktAll,
+    traktProgress: () =>
+        _continuationSection.cwCardMaps(HomeContinuationKind.trakt).progress,
+    simklItems: () => _continuationSection.simklAll,
+    simklProgress: () => _continuationSection.simklProgress,
+    openTraktItem: _continuationPlayback.openTraktItem,
+    playTraktItem: _continuationPlayback.playTraktItem,
+    openSimklItem: _continuationPlayback.openSimklItem,
+    playSimklItem: _continuationPlayback.playSimklItem,
+    openSimklCwItem: _continuationPlayback.openSimklCwItem,
+    playSimklCwItem: _continuationPlayback.playSimklCwItem,
     openMdblist: (item) => _itemActions.openItem(
       item,
       _addonForContinue(item.sourceAddon?.id),
@@ -7067,128 +6136,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _seeAllNavigation.openCatalog(context, section);
     }
   }
-
-  /// A real content player launched — see [_playedSinceRefresh].
-  void _markPlaybackStarted() =>
-      _postPlaybackRefreshController.markPlaybackStarted();
-
-  /// Re-read everything a finished playback (or a detail/See-All visit) can
-  /// change: local Continue Watching, then — when something actually played —
-  /// the Trakt and Simkl rows, then the bound-source badges.
-  ///
-  /// The tracker rows matter because they're SEPARATE rows ([_cwRows]):
-  /// reloading only the local list left a tracker user staring at the episode
-  /// they'd just finished. They're gated on [_playedSinceRefresh] (or an
-  /// explicit [trackers]) so plain browsing doesn't hit two APIs per Back press.
-  ///
-  /// Bound sources go LAST: _refreshBoundSources scans the CW lists the loaders
-  /// replace, so running them concurrently would count the pre-reload set.
-  ///
-  /// Fire-and-forget from route callbacks and the playback-return listener, so
-  /// a transient storage/network error must not become an unhandled async
-  /// exception (a stale row is recoverable; a crash-log isn't warranted).
-  Future<void> _refreshAfterPlayback({bool trackers = false}) =>
-      _postPlaybackRefreshController.refresh(
-        searchMode: widget.searchMode,
-        trackers: trackers,
-        isCurrent: () => mounted,
-        clearResume: _clearSeriesResume,
-        watchlist: _savedSection.loadMyWatchlist,
-        local: _loadContinueWatching,
-        iptv: _loadIptvContinueWatching,
-        trakt: () => _loadTraktContinueWatching(refreshBound: false),
-        simkl: () => _loadSimklContinueWatching(refreshBound: false),
-        shouldRefreshMdblist: () => _mdblistContinuationController
-            .shouldRefreshAfterPlayback(DateTime.now()),
-        mdblist: () =>
-            _loadMdblistContinueWatching(refreshBound: false, force: true),
-        boundSources: _refreshBoundSources,
-        onError: (error) =>
-            debugPrint('SearchScreen: post-playback refresh failed: $error'),
-      );
-
-  /// Playback ran in a separate ACTIVITY and the app just came back (see
-  /// [MainPageBridge.notifyPlaybackReturned]). Only refresh when the board is
-  /// the top route: with a detail page or See-All open on top, THAT screen owns
-  /// the refresh and the board re-reads through the covering route's `.then`
-  /// when it pops — so this can't double up with it. The latch survives until
-  /// then, so the deferred refresh still knows playback happened.
-  void _onPlaybackReturned() {
-    if (!mounted) return;
-    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
-    unawaited(_refreshAfterPlayback());
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed ||
-        !mounted ||
-        widget.searchMode ||
-        !_isTraktAuthenticated ||
-        _playedSinceRefresh ||
-        !(ModalRoute.of(context)?.isCurrent ?? false)) {
-      return;
-    }
-    final lastAttempt = _lastTraktCwRefreshAttemptAt;
-    if (lastAttempt != null &&
-        DateTime.now().difference(lastAttempt) <
-            _traktCwResumeRefreshInterval) {
-      return;
-    }
-    unawaited(_loadTraktContinueWatching());
-  }
-
-  /// Refresh state that a See-All screen may have changed (Continue Watching
-  /// progress/removal, bound sources) when it pops back to the board — plus the
-  /// tracker rows when the user played something from the grid.
-  Future<void> _afterSeeAllReturn() => _refreshAfterPlayback();
-
-  void _pushCwSeeAll({
-    required String title,
-    required String initialCategory,
-    required List<StremioMeta> items,
-    required double? Function(StremioMeta) progressOf,
-    required void Function(StremioMeta) onOpen,
-    required void Function(StremioMeta)? onQuickPlay,
-    required Future<List<StremioMeta>> Function()? onReload,
-    VoidCallback? onReturn,
-  }) => _seeAllNavigation.pushContinuation(
-    context,
-    title: title,
-    initialCategory: initialCategory,
-    items: items,
-    progressOf: progressOf,
-    onOpen: onOpen,
-    onQuickPlay: onQuickPlay,
-    onReload: onReload,
-    onReturn: onReturn,
-  );
-
-  /// Local Continue Watching "See All", pre-filtered to [initialCategory]
-  /// ('movie' / 'series') of the row the user came from. Re-fetches (via
-  /// onReload) whenever a detail/player route pops back onto it, so finished
-  /// titles drop out and progress stays fresh.
-  void _openContinueWatchingSeeAll([String initialCategory = 'all']) {
-    _pushCwSeeAll(
-      title: 'Continue Watching',
-      initialCategory: initialCategory,
-      items: _cwAll,
-      progressOf: (m) => _cwCardProgress(HomeContinuationKind.local, m),
-      onOpen: _openContinueItem,
-      onQuickPlay: _pikpakOnly ? null : _onContinuePlay,
-      // Reload CW + refresh bound sources (sequenced), then hand the grid the
-      // fresh list. This runs on every detail/player return AND keeps the board
-      // beneath fresh, so no separate onReturn is needed (it would double the
-      // reload when a detail-close is immediately followed by a board-return).
-      onReload: () async {
-        await _afterSeeAllReturn();
-        return List<StremioMeta>.of(_cwAll);
-      },
-    );
-  }
-
-  void _openTraktSeeAll([String initialCategory = 'all']) =>
-      _seeAllNavigation.openTrakt(context, initialCategory);
 
   double _classicCatalogRowExtent(
     BuildContext context, {
@@ -7241,8 +6188,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   _savedSection.favRowCount - 1,
                   col,
                 )
-              : (_cwVisible
-                    ? () => _focusCwRow(_cwRows.length - 1, col)
+              : (_continuationProjection.cwVisible
+                    ? () => _continuationMenu.focusCwRow(
+                        _continuationProjection.cwRows.length - 1,
+                        col,
+                      )
                     : () => _leaveBoardTop()))
         : () => _focusRow(rowIndex - 1, col);
     // Down past the last loaded row kicks the next batch load
@@ -7298,47 +6248,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       ),
-    );
-  }
-
-  Widget _buildContinueWatchingRow(
-    HomeContinuationRow row,
-    int cwIndex,
-    String homeRowId,
-  ) => buildHomeContinuationRow(
-    row: row,
-    header: _railHeader(title: row.title, tag: row.tag, onSeeAll: row.onSeeAll),
-    isTelevision: widget.isTelevision,
-    posterWidth: _railTitleCardW(context),
-    cellHeight: _railTitleCardH(context),
-    aspectRatio: () => _titleCardAspect,
-    showTitleOverlay: () => !_hideHomeCardTitlesAndRatings,
-    artOf: _titleArtUrl,
-    isBound: _isBound,
-    onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
-    onFocused: _setHero,
-    onMenu: (item, col) => _openCwCardMenu(row, item, cwIndex, col),
-    onUp: (col) => _focusRelativeHomeRail(homeRowId, -1, col),
-    onDown: (col) => _focusRelativeHomeRail(homeRowId, 1, col),
-  );
-
-  /// A skeleton Trakt Continue Watching row shown while the account's fetch is
-  /// still in flight (see [_traktReserving]). Sized identically to a real CW row
-  /// — same header, poster width and cell height — so when the data arrives and
-  /// replaces it there's zero layout shift. Purely decorative: no focus nodes,
-  /// so the DPAD skips over it entirely. [idx] is 0 (Movies) or 1 (Shows).
-  Widget _buildTraktSkeletonRow(int idx) {
-    final posterW = _railTitleCardW(context);
-    final cellH = _railTitleCardH(context);
-    final rowH = cellH + 14;
-    return HomeTraktSkeletonRow(
-      header: _railHeader(
-        title: 'Trakt Continue Watching',
-        tag: idx == 0 ? (_cwMergeTrakt ? null : 'Movies') : 'Shows',
-      ),
-      posterW: posterW,
-      cellH: cellH,
-      rowH: rowH,
     );
   }
 
