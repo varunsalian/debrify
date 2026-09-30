@@ -131,8 +131,7 @@ class HomeBoardRows {
     // Streaming arrivals are not a fresh board: preserve keyed row elements,
     // entrance state, and any pending user-directed move to the next rail.
     if (!incremental) {
-      _boardSection.boardGen++;
-      _boardSection.boardAppliedAt = DateTime.now();
+      _boardSection.markFreshBoard();
       // Rail keys are content-addressed by stable Home-row id, so a reload can
       // preserve the active rail even when its numeric section index changes.
       _stageSection.stageDeferredAdvance.invalidateForBoardReseed();
@@ -146,7 +145,7 @@ class HomeBoardRows {
       incremental: incremental,
     );
     _deps.setState(() {
-      _boardSection.sections = sections;
+      _boardSection.showRows(sections);
       if (anchor != null && anchorHeight != null) {
         final nextOrder = _stageRailsSection.classicHomeRails
             .map(_stageRailsSection.canvasRailRowId)
@@ -154,10 +153,7 @@ class HomeBoardRows {
         if (nextOrder
             .takeWhile((id) => id != anchor)
             .any((id) => !previousOrder.contains(id))) {
-          _boardSection.classicAnchorTailPadding = max(
-            _boardSection.classicAnchorTailPadding,
-            anchorTailPadding,
-          );
+          _boardSection.growClassicAnchorTailPadding(anchorTailPadding);
         }
         preserveHomeInsertionAnchor(
           scroll: _boardSection.boardScroll,
@@ -229,8 +225,7 @@ class HomeBoardRows {
     // A settings/integration reload arrived mid-search and was deferred so it
     // couldn't stomp the results view — run it now instead of restoring the
     // stale cached board.
-    if (_boardSection.pendingBoardReload) {
-      _boardSection.pendingBoardReload = false;
+    if (_boardSection.takeDeferredBoardReload()) {
       _boardLoading.load();
       return;
     }

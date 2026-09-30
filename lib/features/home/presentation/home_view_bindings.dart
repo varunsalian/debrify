@@ -153,9 +153,9 @@ class HomeViewBindings {
       localContinuationSession,
       initiallyLoadingTrakt: !_deps.searchMode(),
     );
-    _board.homeLastScroll = restoredHome && !_deps.isTelevision()
-        ? homeSnapshot.scrollOffset
-        : 0;
+    _board.rememberScroll(
+      restoredHome && !_deps.isTelevision() ? homeSnapshot.scrollOffset : 0,
+    );
     _board.boardViewport.initializeScroll(_board.homeLastScroll);
     this.homeSnapshot = homeSnapshot;
     this.restoredHome = restoredHome;

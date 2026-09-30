@@ -205,7 +205,7 @@ class HomeBoardConfigurationSection {
   void requestBoardReload() {
     if (_catalogSection.catalogQuery.isNotEmpty ||
         _catalogSection.catalogSearching) {
-      _boardSection.pendingBoardReload = true;
+      _boardSection.deferBoardReload();
       return;
     }
     _boardLoading.load();
@@ -243,7 +243,7 @@ class HomeBoardConfigurationSection {
     refreshAddons: () {
       if (_catalogSection.catalogQuery.isNotEmpty ||
           _catalogSection.catalogSearching) {
-        _boardSection.pendingBoardReload = true;
+        _boardSection.deferBoardReload();
       } else {
         unawaited(_boardLoading.load(preserveVisibleRows: true));
       }

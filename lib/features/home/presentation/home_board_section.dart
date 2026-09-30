@@ -1,3 +1,4 @@
+import 'dart:math';
 import '../data/home_collections_repository.dart';
 import '../data/home_return_repository.dart';
 import 'package:flutter/material.dart';
@@ -33,20 +34,28 @@ class HomeBoardSection {
   final HomeBoardDeps _deps;
   final CatalogSearchSection _catalogSection;
 
-  int homeReturnRevision = -1;
-  DateTime? homeLoadedAt;
-  double homeLastScroll = 0;
+  // Display state below is written only through this class's transitions, at
+  // the points each workflow already used; readers go through the getters.
+  int _homeReturnRevision = -1;
+  int get homeReturnRevision => _homeReturnRevision;
+  DateTime? _homeLoadedAt;
+  DateTime? get homeLoadedAt => _homeLoadedAt;
+  double _homeLastScroll = 0;
+  double get homeLastScroll => _homeLastScroll;
 
   HomeCatalogContinuationController get catalogContinuationController =>
       _deps.bindings().continuation;
   bool get catalogContinuing => catalogContinuationController.busy;
-  bool loading = true;
-  String? error;
+  bool _loading = true;
+  bool get loading => _loading;
+  String? _error;
+  String? get error => _error;
   // Board state. [homeSections] is the homepage cache; [sections] is whatever
   // is currently shown (homepage OR per-addon catalog search results). Both the
   // board and catalog search render through the same horizontal-row layout.
   List<CatalogSection> get homeSections => homeCatalogController.rows;
-  List<CatalogSection> sections = [];
+  List<CatalogSection> _sections = [];
+  List<CatalogSection> get sections => _sections;
   final boardViewport = HomeBoardViewport();
   List<List<FocusNode>> get rowNodes => boardViewport.nodes;
   // Per-row remembered focus column (leanback-style). DPAD up/down into a row
@@ -56,8 +65,10 @@ class HomeBoardSection {
   // Board entrance: bumped each time the displayed sections are swapped
   // (initial load, search results in/out), so the first rows replay their
   // one-shot fade/rise entrance. Appends don't bump it.
-  int boardGen = 0;
-  DateTime boardAppliedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  int _boardGen = 0;
+  int get boardGen => _boardGen;
+  DateTime _boardAppliedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime get boardAppliedAt => _boardAppliedAt;
   HomeBoardConfiguration get homeConfiguration =>
       homeCatalogController.current.configuration;
   Set<String> get homeDisabled => homeConfiguration.preferences.disabled;
@@ -93,15 +104,19 @@ class HomeBoardSection {
   /// stale sections nor advance the new load's cursor.
   int get boardLoadGen => homeCatalogController.generation;
   bool get boardRefreshing => homeCatalogController.current.refreshing;
-  bool progressiveHomeLoadPending = false;
-  bool homePaginationDeferred = false;
-  double classicAnchorTailPadding = 0;
+  bool _progressiveHomeLoadPending = false;
+  bool get progressiveHomeLoadPending => _progressiveHomeLoadPending;
+  bool _homePaginationDeferred = false;
+  bool get homePaginationDeferred => _homePaginationDeferred;
+  double _classicAnchorTailPadding = 0;
+  double get classicAnchorTailPadding => _classicAnchorTailPadding;
   final homePublication = HomeProgressPublication();
 
   /// A triggered board reload arrived while a catalog search was showing its
   /// results — running [_load] then would stomp the search view, so it's
   /// latched here and consumed by [_restoreHome].
-  bool pendingBoardReload = false;
+  bool _pendingBoardReload = false;
+  bool get pendingBoardReload => _pendingBoardReload;
 
   // Riverpod owns inventory, reservation and the last accepted snapshot for
   // this view. Search detours retain the subscription and its cursor.
@@ -170,4 +185,72 @@ class HomeBoardSection {
   void commitBoardSnapshot() {
     homeCatalogController.commit(addonsById);
   }
+
+  // ── Display-state transitions ────────────────────────────────────────────
+  // Callers invoke these where they previously assigned the fields, inside the
+  // same setState calls, so ordering and rebuilds are unchanged.
+
+  /// Captures the Home return cache revision a load or restore is based on.
+  void recordReturnRevision() =>
+      _homeReturnRevision = homeReturnRepository.revision;
+
+  /// When the displayed Home rows were last accepted (null while loading).
+  void recordHomeLoadedAt(DateTime? at) => _homeLoadedAt = at;
+
+  void rememberScroll(double offset) => _homeLastScroll = offset;
+
+  /// A load cycle starts: pagination resumes and progressive reveal is armed.
+  void startLoadCycle({required bool progressive}) {
+    _homePaginationDeferred = false;
+    _progressiveHomeLoadPending = progressive;
+  }
+
+  /// Visible loading state for a (re)load. Kept rows keep their anchor space.
+  void beginLoading({required bool keepRows}) {
+    if (!keepRows) {
+      _loading = true;
+      _classicAnchorTailPadding = 0;
+    }
+    _error = null;
+  }
+
+  void endProgressiveLoad() => _progressiveHomeLoadPending = false;
+
+  void finishLoading() => _loading = false;
+
+  void failLoading(String message) => _error = message;
+
+  /// Rows were published by a progressive load.
+  void publishRows({required bool hasRows}) {
+    _loading = false;
+    if (hasRows) _error = null;
+  }
+
+  void deferPagination() => _homePaginationDeferred = true;
+
+  void resumePagination() => _homePaginationDeferred = false;
+
+  /// A reload that arrived during a catalog search, run when Home returns.
+  void deferBoardReload() => _pendingBoardReload = true;
+
+  /// Consumes a deferred reload; true when one was pending.
+  bool takeDeferredBoardReload() {
+    if (!_pendingBoardReload) return false;
+    _pendingBoardReload = false;
+    return true;
+  }
+
+  /// A fresh (non-incremental) board replaces the rows: replay entrances.
+  void markFreshBoard() {
+    _boardGen++;
+    _boardAppliedAt = DateTime.now();
+  }
+
+  void showRows(List<CatalogSection> rows) => _sections = rows;
+
+  void appendRows(List<CatalogSection> more) =>
+      _sections = [..._sections, ...more];
+
+  void growClassicAnchorTailPadding(double padding) =>
+      _classicAnchorTailPadding = max(_classicAnchorTailPadding, padding);
 }

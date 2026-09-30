@@ -61,9 +61,8 @@ class HomeBoardLoading {
 
   Future<void> load({bool preserveVisibleRows = false}) async {
     final context = _deps.context();
-    _boardSection.homeReturnRevision =
-        _boardSection.homeReturnRepository.revision;
-    _boardSection.homeLoadedAt = null;
+    _boardSection.recordReturnRevision();
+    _boardSection.recordHomeLoadedAt(null);
     final previousLists = HomeBoardServices.previousLists(
       _boardSection.homeSections,
     );
@@ -111,22 +110,15 @@ class HomeBoardLoading {
     if (progressive) developer.Timeline.instantSync('Home.loadStarted');
     var completionGen = gen;
     var expired = false;
-    _boardSection.homePaginationDeferred = false;
-    _boardSection.progressiveHomeLoadPending = progressive;
-    _deps.setState(() {
-      if (!keepRows) {
-        _boardSection.loading = true;
-        _boardSection.classicAnchorTailPadding = 0;
-      }
-      _boardSection.error = null;
-    });
+    _boardSection.startLoadCycle(progressive: progressive);
+    _deps.setState(() => _boardSection.beginLoading(keepRows: keepRows));
     unawaited(_deps.refreshPikpakOnly());
     try {
       await HomeBoardServices.runWithDeadline(
         retire: () {
           if (!current()) return;
           expired = true;
-          _boardSection.progressiveHomeLoadPending = false;
+          _boardSection.endProgressiveLoad();
           completionGen =
               _boardSection.homeCatalogController.retireLoad(gen) ?? gen;
           _boardSection.homePublication.retireGeneration(gen, completionGen);
@@ -199,13 +191,13 @@ class HomeBoardLoading {
             onCompleted: (rows) {
               if (rows == null) {
                 _boardSection.commitBoardSnapshot();
-                _boardSection.homeLoadedAt = DateTime.now();
+                _boardSection.recordHomeLoadedAt(DateTime.now());
                 return;
               }
               _boardSection.homeCatalogController.replaceRows(rows);
               _boardSection.commitBoardSnapshot();
-              _boardSection.homeLoadedAt = DateTime.now();
-              _deps.setState(() => _boardSection.loading = false);
+              _boardSection.recordHomeLoadedAt(DateTime.now());
+              _deps.setState(_boardSection.finishLoading);
               _ready.value = true;
               // Keep accepted Home data during a catalog search without
               // replacing its visible results or stealing its focus.
@@ -230,18 +222,20 @@ class HomeBoardLoading {
       // for _restoreHome instead.
       if (_catalogSection.catalogQuery.isNotEmpty ||
           _catalogSection.catalogSearching) {
-        _boardSection.pendingBoardReload = true;
-        _deps.setState(() => _boardSection.loading = false);
+        _boardSection.deferBoardReload();
+        _deps.setState(_boardSection.finishLoading);
         _ready.value = true;
         return;
       }
       _deps.setState(() {
         if (!keepRows && progress?.hasPublished != true) {
-          _boardSection.error = expired
-              ? 'Home took too long to load. Please try again.'
-              : e.toString();
+          _boardSection.failLoading(
+            expired
+                ? 'Home took too long to load. Please try again.'
+                : e.toString(),
+          );
         }
-        _boardSection.loading = false;
+        _boardSection.finishLoading();
       });
       if (expired && keepRows) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -267,7 +261,7 @@ class HomeBoardLoading {
       if (completionGen == _boardSection.boardLoadGen &&
           scope == _deps.scope()) {
         _boardSection.homeCatalogController.finishLoad(completionGen);
-        _boardSection.progressiveHomeLoadPending = false;
+        _boardSection.endProgressiveLoad();
         // Empty/failed catalogs can end without another content publication.
         // Rebuild the initial Spotlight gate so its cards fallback is shown.
         if (_deps.mounted() &&

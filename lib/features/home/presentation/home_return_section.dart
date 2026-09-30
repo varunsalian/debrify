@@ -52,14 +52,13 @@ class HomeReturnSection {
   final ValueNotifier<bool> _ready;
 
   Future<void> restoreHomeSnapshot(HomeReturnSnapshot snapshot) async {
-    _boardSection.homeReturnRevision =
-        _boardSection.homeReturnRepository.revision;
-    _boardSection.homeLoadedAt = snapshot.loadedAt;
+    _boardSection.recordReturnRevision();
+    _boardSection.recordHomeLoadedAt(snapshot.loadedAt);
     _spotlightSection.spotlightHeroOverride = snapshot.hero;
     _boardSection.addonsById
       ..clear()
       ..addAll(snapshot.board.addons);
-    _boardSection.loading = false;
+    _boardSection.finishLoading();
     _spotlightSection.spotlightEntryRevealed = true;
     if (snapshot.heroResolutionPending) {
       unawaited(

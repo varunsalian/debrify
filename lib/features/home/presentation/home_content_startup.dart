@@ -58,13 +58,13 @@ class HomeContentStartup {
     // never runs _board.boardLoading.load(), which is what clears _board.boardSection.loading, so clear it here or the
     // results grid (HomeBoardRendering.buildBoard) would sit on its initial spinner forever.
     if (_deps.searchMode()) {
-      _board.boardSection.loading = false;
+      _board.boardSection.finishLoading();
     } else if (_deps.discoverMode()) {
       // Discover browses one source at a time via the Source dropdown, so it
       // skips the board's catalog pipeline and just primes the Continue Watching
       // + Trakt rows its first two sources draw from. _badges.refreshPikpakOnly gates the
       // Quick-Play affordance the same way the board does.
-      _board.boardSection.loading = false;
+      _board.boardSection.finishLoading();
       _catalog.badges.refreshPikpakOnly();
       _discover.loadAddons();
       _discover.primeRows();

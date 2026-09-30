@@ -40,7 +40,7 @@ class HomeBoardPaging {
         !(ModalRoute.of(_deps.context())?.isCurrent ?? true)) {
       return;
     }
-    _boardSection.homePaginationDeferred = false;
+    _boardSection.resumePagination();
     if (_boardSection.boardHasMore) unawaited(loadMoreBoard());
   }
 
@@ -72,7 +72,7 @@ class HomeBoardPaging {
   /// Fire off the next batch as the user nears the bottom of the board.
   void onBoardScroll() {
     if (_boardSection.boardScroll.hasClients) {
-      _boardSection.homeLastScroll = _boardSection.boardScroll.offset;
+      _boardSection.rememberScroll(_boardSection.boardScroll.offset);
     }
     if (!_boardSection.canPageHome ||
         !_boardSection.boardHasMore ||
@@ -92,7 +92,7 @@ class HomeBoardPaging {
     final context = _deps.context();
     if (_boardSection.boardRefreshing) {
       if (PlatformUtil.isAndroidTvCached && _boardSection.boardHasMore) {
-        _boardSection.homePaginationDeferred = true;
+        _boardSection.deferPagination();
       }
       return false;
     }
@@ -164,9 +164,7 @@ class HomeBoardPaging {
   /// grow the per-row focus nodes in lockstep with [_boardSection.sections].
   void appendSections(List<CatalogSection> more) {
     _boardSection.boardViewport.appendRows(more);
-    _deps.setState(
-      () => _boardSection.sections = [..._boardSection.sections, ...more],
-    );
+    _deps.setState(() => _boardSection.appendRows(more));
     unawaited(_deps.refreshBoundSources());
   }
 

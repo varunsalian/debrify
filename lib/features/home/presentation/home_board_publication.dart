@@ -63,10 +63,7 @@ class HomeBoardPublication {
     }
     _boardSection.homePublication.clear();
     if (!first && _deps.boardHasFocus()) _deps.settleAutoFocus();
-    _deps.setState(() {
-      _boardSection.loading = false;
-      if (rows.isNotEmpty) _boardSection.error = null;
-    });
+    _deps.setState(() => _boardSection.publishRows(hasRows: rows.isNotEmpty));
     _deps.applySections(rows, preserveFocus: !first, incremental: !first);
     _ready.value = true;
     _deps.autoFocus();
