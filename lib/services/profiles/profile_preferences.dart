@@ -64,6 +64,7 @@ class ProfilePreferences implements SharedPreferences {
       'remote_webdav_sync_library_records_v1';
   static final Lock _atomicStringListMutationLock = Lock();
   static final Object _exclusiveMutationZoneKey = Object();
+  static final Object _ordinaryMutationZoneKey = Object();
   static int _mutationRevision = 0;
   static int _activeMutations = 0;
   static Completer<void>? _activeMutationsDrained;
@@ -130,6 +131,22 @@ class ProfilePreferences implements SharedPreferences {
     Future<T> Function(void Function() markMutated) operation,
   ) async {
     _assertMutationOutsideExclusive();
+    final enclosing = Zone.current[_ordinaryMutationZoneKey];
+    if (enclosing is _OrdinaryMutationFrame && enclosing.open) {
+      // Nested inside an already-registered ordinary mutation (for example a
+      // preference setter inside [synchronizeExternalMutation]). The outer
+      // registration already holds exclusive acquirers off; waiting on a
+      // barrier raised after it would deadlock, because that barrier waits
+      // for the outer writer to drain. Work that merely inherited the zone and
+      // runs after the outer writer finished (timers, unawaited futures) sees
+      // a closed frame and registers normally.
+      var mutated = false;
+      try {
+        return await operation(() => mutated = true);
+      } finally {
+        if (mutated) _mutationRevision++;
+      }
+    }
     while (true) {
       final released = _exclusiveMutationReleased;
       if (released == null) break;
@@ -138,9 +155,14 @@ class ProfilePreferences implements SharedPreferences {
     _activeMutations++;
     _activeMutationsDrained ??= Completer<void>();
     var mutated = false;
+    final frame = _OrdinaryMutationFrame();
     try {
-      return await operation(() => mutated = true);
+      return await runZoned(
+        () => operation(() => mutated = true),
+        zoneValues: <Object, Object>{_ordinaryMutationZoneKey: frame},
+      );
     } finally {
+      frame.open = false;
       if (mutated) _mutationRevision++;
       _activeMutations--;
       if (_activeMutations == 0) {
@@ -731,7 +753,9 @@ class ProfilePreferences implements SharedPreferences {
   }
 
   static void _validateSyncEntry(String key, Object value) {
-    if (key.isEmpty || (key.length > 256 && !CustomSeriesIdentity.isPortableSourceKey(key)) || key.contains('\u0000')) {
+    if (key.isEmpty ||
+        (key.length > 256 && !CustomSeriesIdentity.isPortableSourceKey(key)) ||
+        key.contains('\u0000')) {
       throw ArgumentError.value(key, 'key', 'Invalid sync preference key');
     }
     if (value is double && !value.isFinite) {
@@ -984,4 +1008,9 @@ class DevicePreferences {
     _assertAllowed(key);
     return _delegate.remove(key);
   }
+}
+
+/// Marks an ordinary preference mutation's zone while it is registered.
+class _OrdinaryMutationFrame {
+  bool open = true;
 }
