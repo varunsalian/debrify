@@ -189,13 +189,16 @@ Fixed:
   nested write holds a snapshot off until it finishes. The test fails on the
   previous version.
 - **Guard gap:** files in `lib/screens/search_screen/` are checked as
-  presentation, except the composition root (composer and three factories),
-  which may import `lib/services/` directly. The rule covers `lib/services/`
-  and platform packages, as it does for feature presentation; presentation
-  reading its own feature's data adapters through providers stays an existing
-  allowed pattern. A feature importing the facade is flagged, missing roots
-  fail the guard, and tab-shell registration's `main_page_bridge` import is
-  pinned with `show MainPageBridge`.
+  presentation, except the composition root (the facade, the composer and its
+  three factories), which may import services directly. The presentation rule
+  is the one feature presentation already had: it rejects imports of
+  `lib/services/`, `package:http`, `package:shared_preferences` and
+  `package:sqflite` (other plugins and platform channels are not checked).
+  Presentation reading its own feature's data adapters through providers stays
+  an allowed pattern. A feature importing the facade is flagged, and missing
+  roots fail the guard. Tab-shell registration is a named `main_page_bridge`
+  bridge like the other shell bridges; a `show` list could not narrow it, since
+  `MainPageBridge` carries every app-shell hook.
 - **`titleSearch` ownership** is recorded when it is resolved.
 - **Catalog search status strip** is back in Home (its only users).
 - **Screen-controls adapter** takes its sections directly.
@@ -223,4 +226,16 @@ Second review (`cbbc4e94`):
 - Accepted: Simkl and MDBList take no `canPrompt` today because they have no
   prompt that appears after an await. If one is added, it should follow the
   Trakt pattern.
+
+Third review (`b55e729b`):
+- The facade is an explicit composition root again, registered once.
+- The `show MainPageBridge` pin was reverted: it restricted almost nothing, so
+  it was replaced with the plain entry the other shell bridges use and an
+  accurate comment. Narrowing any shell bridge would need a small injected
+  contract, which is out of scope here.
+- The detail-route picker test now has a positive control (the picker opens
+  while the page is live) and, after back-out, asserts no picker, no tracker
+  write and no snackbar. Only the back-out variants fail when the wiring is
+  removed.
+- Guard wording corrected to name exactly what it rejects.
 

@@ -5,7 +5,7 @@ import '../../features/home/presentation/home_rows_navigation.dart';
 import '../../features/home/presentation/home_saved_content_section.dart';
 import '../../features/search/presentation/search_mode_section.dart';
 import '../../features/search/presentation/search_title_section.dart';
-import '../../services/main_page_bridge.dart' show MainPageBridge;
+import '../../services/main_page_bridge.dart';
 
 typedef HomeTabShellDeps = ({
   bool Function() mounted,

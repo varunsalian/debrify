@@ -15,10 +15,13 @@ FEATURES = ("search", "home", "discover", "sources", "stremio_tv")
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
 FACADE = "lib/screens/search_screen.dart"
-# The screen's composition root (formerly the State's own body) binds
-# concrete services, as AGENTS.md allows for composition. Every other file in
-# COMPOSITION is presentation and keeps the presentation import rules.
+# The screen's composition root binds concrete services, as AGENTS.md allows
+# for composition: the facade (it captures the bootstrap Home configuration and
+# profile scope for the State) plus the composer and its three factories. They
+# are not import-checked. Every other file in COMPOSITION is presentation and
+# keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    FACADE,
     f"{COMPOSITION}/search_screen_composer.dart",
     f"{COMPOSITION}/search_screen_search_composition.dart",
     f"{COMPOSITION}/search_screen_home_composition.dart",
@@ -29,7 +32,6 @@ COMPOSITION_ROOTS = {
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     "lib/ui/core/trailer_indicators.dart",
     "lib/ui/core/spotlight_search_button.dart",
-    "lib/screens/search_screen.dart",
     "lib/ui/core/retry_message.dart",
     "lib/models/mdblist_list_choice.dart",
     "lib/ui/core/source_results_pane.dart",
@@ -116,9 +118,11 @@ PRESENTATION_BRIDGE_IMPORTS = {
         "lib/services/home_list_rows.dart": {"HomeListSection", "HomeExtraRowIds"},
     },
     # App-shell callback/listener adapter; no persistence or business operations.
-    # Tab-shell handler registration: the app-shell callback slots only.
+    # Tab-shell handler registration. Like the other shell bridges it may use
+    # the MainPageBridge statics; a `show` list could not narrow that further
+    # because the class itself carries every app-shell hook.
     "lib/screens/search_screen/home_tab_shell_registration.dart": {
-        "lib/services/main_page_bridge.dart": {"MainPageBridge"},
+        "lib/services/main_page_bridge.dart",
     },
     "lib/features/discover/presentation/discover_shell_bridge.dart": {
         "lib/services/main_page_bridge.dart",
@@ -215,7 +219,9 @@ def violations(path: Path) -> list[str]:
         layer = "data"
     if relative.startswith(("lib/ui/", "lib/widgets/")):
         layer = "presentation"
-    if relative.startswith(COMPOSITION + "/") and relative not in COMPOSITION_ROOTS:
+    if relative in COMPOSITION_ROOTS:
+        layer = None
+    elif relative.startswith(COMPOSITION + "/"):
         layer = "presentation"
     for declaration in DIRECTIVES.findall(source):
         for uri in URIS.findall(declaration):
