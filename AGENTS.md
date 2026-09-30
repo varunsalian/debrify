@@ -4,7 +4,8 @@ These rules describe the destination for new code and incremental refactoring of
 project-owned Dart, native code, tests, and build configuration. Follow the user's
 task and scope; these rules do not authorize unrelated rewrites or migrations.
 
-The first migration is tracked in the [search-screen plan](docs/refactoring/search-screen-plan.md).
+The first migration is tracked in the [search-screen finish plan](docs/refactoring/search-screen-finish-plan.md),
+which supersedes the original [search-screen plan](docs/refactoring/search-screen-plan.md).
 Keep durable rules here and migration progress, evidence, and temporary exceptions
 in the relevant plan. When sharing external URLs, show the complete URL.
 

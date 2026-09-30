@@ -1,5 +1,9 @@
 # Search screen incremental refactoring plan
 
+> **Superseded 2026-09-30.** Remaining work follows
+> [search-screen-finish-plan.md](search-screen-finish-plan.md). This file is frozen
+> history; do not update it.
+
 Status: implementation started on `refactor/search-screen`; the automated baseline
 and phases 1–3 are reviewed. Phases 4A catalog and 4B keyword extraction are
 implemented and reviewed; phases 4C–8 remain in progress. The delivery batches
