@@ -69,7 +69,9 @@ void _noop() {}
 
 void main() {
   for (final width in [550.0, 900.0, 1400.0]) {
-    testWidgets('shelf entry uses actual non-TV geometry at width $width', (tester) async {
+    testWidgets('shelf entry uses actual non-TV geometry at width $width', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({});
       tester.view.physicalSize = Size(width, 800);
       tester.view.devicePixelRatio = 1;
@@ -78,18 +80,41 @@ void main() {
       final key = GlobalKey<SpotlightBoardState>();
       final heroNode = FocusNode();
       final nodes = List.generate(65, (_) => FocusNode());
-      await tester.pumpWidget(MaterialApp(home: AppThemeScope(
-        theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
-        child: Scaffold(body: SpotlightBoard(
-          key: key, hero: const [], heroNode: heroNode, heroAddon: null,
-          onHeroOpen: (_, __) {}, dpad: false, shelvesOnly: true,
-          trailersEnabled: false,
-          sections: List.generate(nodes.length, (i) => SpotlightShelf(
-            id: '$i', title: 'Category $i', tag: 'Source', nodes: [nodes[i]],
-            items: [SpotlightCard(title: 'Title $i', subtitle: '2026', onOpen: () {})],
-          )),
-        )),
-      )));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppThemeScope(
+            theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+            child: Scaffold(
+              body: SpotlightBoard(
+                key: key,
+                hero: const [],
+                heroNode: heroNode,
+                heroAddon: null,
+                onHeroOpen: (_, __) {},
+                dpad: false,
+                shelvesOnly: true,
+                trailersEnabled: false,
+                sections: List.generate(
+                  nodes.length,
+                  (i) => SpotlightShelf(
+                    id: '$i',
+                    title: 'Category $i',
+                    tag: 'Source',
+                    nodes: [nodes[i]],
+                    items: [
+                      SpotlightCard(
+                        title: 'Title $i',
+                        subtitle: '2026',
+                        onOpen: () {},
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       key.currentState!.focusShelf(60);
       await tester.pumpAndSettle();
@@ -97,7 +122,9 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       heroNode.dispose();
-      for (final node in nodes) { node.dispose(); }
+      for (final node in nodes) {
+        node.dispose();
+      }
     });
   }
   late FocusNode hero;
@@ -151,154 +178,265 @@ void main() {
   );
 
   for (final shape in [SpotlightCardShape.poster, SpotlightCardShape.wide]) {
-  testWidgets('$shape card trailers dwell, expand on frames, and cancel on focus or settings changes', (tester) async {
-    final shelves = [SpotlightShelf(title: 'Popular', nodes: rows[0], items: [
-      for (final name in ['Alpha', 'Bravo']) SpotlightCard(
-        metadata: _meta('tt$name', name), title: name,
-        shape: shape, onOpen: _noop,
-      ),
-    ])];
-    var stoppedHero = 0;
-    await tester.pumpWidget(host([], shelves, expandFocusedCard: true,
-      onTrailerStop: () => stoppedHero++));
-    await tester.pumpAndSettle();
-    rows[0][0].requestFocus();
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.byType(SpotlightCardTrailer), findsNothing);
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.byType(SpotlightCardTrailer), findsOneWidget);
-    expect(stoppedHero, greaterThan(0));
-    final before = (rows[0][0].context!.findRenderObject() as RenderBox).size.width;
-    tester.widget<SpotlightCardTrailer>(find.byType(SpotlightCardTrailer))
-        .onPlayingChanged(true);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 750));
-    final after = (rows[0][0].context!.findRenderObject() as RenderBox).size.width;
-    expect(after / before, closeTo(1.38 / 1.18, 0.01));
-    final focusedSize = (rows[0][0].context!.findRenderObject() as RenderBox).size;
-    expect(focusedSize.width / focusedSize.height,
-        closeTo((shape == SpotlightCardShape.wide
-            ? SpotlightCardShape.wide.aspect : 470 / 390) * 1.38, 0.01));
-    await tester.pump(const Duration(seconds: 2));
-    expect(tester.widget<AnimatedOpacity>(find.byKey(
-      const ValueKey('spotlight-trailer-text-ttAlpha'))).opacity, 0);
-    tester.widget<SpotlightCardTrailer>(find.byType(SpotlightCardTrailer))
-        .onPlayingChanged(false);
-    await tester.pump();
-    expect(tester.widget<AnimatedOpacity>(find.byKey(
-      const ValueKey('spotlight-trailer-text-ttAlpha'))).opacity, 1);
-    final attempts = stoppedHero;
-    await tester.pumpWidget(host([], shelves, expandFocusedCard: true,
-      onTrailerStop: () => stoppedHero++));
-    await tester.pump(const Duration(seconds: 5));
-    expect(stoppedHero, attempts, reason: 'rebuild must not repeat the focused preview');
-    rows[0][1].requestFocus();
-    await tester.pump();
-    await tester.pump();
-    expect(find.byType(SpotlightCardTrailer), findsNothing);
-    await tester.pumpWidget(host([], shelves, expandFocusedCard: true,
-      trailersEnabled: false));
-    await tester.pump(const Duration(seconds: 5));
-    expect(find.byType(SpotlightCardTrailer), findsNothing);
-    await tester.pumpWidget(const SizedBox());
-  });
-
+    testWidgets(
+      '$shape card trailers dwell, expand on frames, and cancel on focus or settings changes',
+      (tester) async {
+        final shelves = [
+          SpotlightShelf(
+            title: 'Popular',
+            nodes: rows[0],
+            items: [
+              for (final name in ['Alpha', 'Bravo'])
+                SpotlightCard(
+                  metadata: _meta('tt$name', name),
+                  title: name,
+                  shape: shape,
+                  onOpen: _noop,
+                ),
+            ],
+          ),
+        ];
+        var stoppedHero = 0;
+        await tester.pumpWidget(
+          host(
+            [],
+            shelves,
+            expandFocusedCard: true,
+            onTrailerStop: () => stoppedHero++,
+          ),
+        );
+        await tester.pumpAndSettle();
+        rows[0][0].requestFocus();
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.byType(SpotlightCardTrailer), findsNothing);
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.byType(SpotlightCardTrailer), findsOneWidget);
+        expect(stoppedHero, greaterThan(0));
+        final before =
+            (rows[0][0].context!.findRenderObject() as RenderBox).size.width;
+        tester
+            .widget<SpotlightCardTrailer>(find.byType(SpotlightCardTrailer))
+            .onPlayingChanged(true);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 750));
+        final after =
+            (rows[0][0].context!.findRenderObject() as RenderBox).size.width;
+        expect(after / before, closeTo(1.38 / 1.18, 0.01));
+        final focusedSize =
+            (rows[0][0].context!.findRenderObject() as RenderBox).size;
+        expect(
+          focusedSize.width / focusedSize.height,
+          closeTo(
+            (shape == SpotlightCardShape.wide
+                    ? SpotlightCardShape.wide.aspect
+                    : 470 / 390) *
+                1.38,
+            0.01,
+          ),
+        );
+        await tester.pump(const Duration(seconds: 2));
+        expect(
+          tester
+              .widget<AnimatedOpacity>(
+                find.byKey(const ValueKey('spotlight-trailer-text-ttAlpha')),
+              )
+              .opacity,
+          0,
+        );
+        tester
+            .widget<SpotlightCardTrailer>(find.byType(SpotlightCardTrailer))
+            .onPlayingChanged(false);
+        await tester.pump();
+        expect(
+          tester
+              .widget<AnimatedOpacity>(
+                find.byKey(const ValueKey('spotlight-trailer-text-ttAlpha')),
+              )
+              .opacity,
+          1,
+        );
+        final attempts = stoppedHero;
+        await tester.pumpWidget(
+          host(
+            [],
+            shelves,
+            expandFocusedCard: true,
+            onTrailerStop: () => stoppedHero++,
+          ),
+        );
+        await tester.pump(const Duration(seconds: 5));
+        expect(
+          stoppedHero,
+          attempts,
+          reason: 'rebuild must not repeat the focused preview',
+        );
+        rows[0][1].requestFocus();
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(SpotlightCardTrailer), findsNothing);
+        await tester.pumpWidget(
+          host([], shelves, expandFocusedCard: true, trailersEnabled: false),
+        );
+        await tester.pump(const Duration(seconds: 5));
+        expect(find.byType(SpotlightCardTrailer), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
   }
 
-  testWidgets('enhanced portrait focus uses backdrop and restores poster on blur', (tester) async {
-    final shelves = [SpotlightShelf(title: 'Popular', nodes: rows[0], items: [
-      for (final name in ['Alpha', 'Bravo']) SpotlightCard(
-        metadata: StremioMeta(id: name, type: 'movie', name: name,
-          poster: 'https://example.invalid/$name-poster.jpg',
-          background: 'https://example.invalid/$name-wide.jpg'),
-        title: name, image: 'https://example.invalid/$name-poster.jpg', onOpen: _noop,
-      ),
-    ])];
-    Finder image(String suffix) => find.byWidgetPredicate((w) =>
-        w is RecoverableNetworkImage && w.imageUrl == 'https://example.invalid/Alpha-$suffix.jpg');
-    await tester.pumpWidget(host([], shelves, expandFocusedCard: true, trailersEnabled: false));
-    await tester.pumpAndSettle();
-    rows[0][0].requestFocus();
-    await tester.pumpAndSettle();
-    expect(image('wide'), findsOneWidget);
-    expect(image('poster'), findsNothing);
-    final focused = (rows[0][0].context!.findRenderObject() as RenderBox).size;
-    expect(focused.width / focused.height, closeTo(470 / 390 * 1.18, .01));
-    rows[0][1].requestFocus();
-    await tester.pumpAndSettle();
-    expect(image('poster'), findsOneWidget);
-    final resting = (rows[0][0].context!.findRenderObject() as RenderBox).size;
-    expect(resting.width / resting.height, closeTo(2 / 3, .01));
-    expect(focused.height, closeTo(resting.height, .01));
-    await tester.pumpWidget(host([], shelves, expandFocusedCard: false, trailersEnabled: false));
-    rows[0][0].requestFocus();
-    await tester.pumpAndSettle();
-    expect(image('poster'), findsOneWidget);
-    expect(image('wide'), findsNothing);
-    await tester.pumpWidget(const SizedBox());
-  });
-
-  testWidgets('expanded cards remain visible when navigating back left and up', (tester) async {
-    for (final row in rows) {
-      for (final node in row) { node.dispose(); }
-    }
-    rows = List.generate(4, (_) => _rowNodes(7));
-    final shelves = List.generate(4, (r) => SpotlightShelf(
-      title: 'Row $r', nodes: rows[r],
-      items: List.generate(7, (c) => SpotlightCard(
-        metadata: _meta('item-$r-$c', 'Item $r $c'),
-        image: null, title: 'Item $r $c',
-        shape: SpotlightCardShape.wide, onOpen: _noop,
-      )),
-    ));
-    await tester.pumpWidget(host([], shelves, expandFocusedCard: true));
-    await tester.pumpAndSettle();
-    rows[0][0].requestFocus();
-    await tester.pumpAndSettle();
-    for (final direction in [
-      ...List.filled(6, LogicalKeyboardKey.arrowRight),
-      ...List.filled(6, LogicalKeyboardKey.arrowLeft),
-      ...List.filled(3, LogicalKeyboardKey.arrowDown),
-      ...List.filled(3, LogicalKeyboardKey.arrowUp),
-    ]) {
-      await tester.sendKeyEvent(direction);
+  testWidgets(
+    'enhanced portrait focus uses backdrop and restores poster on blur',
+    (tester) async {
+      final shelves = [
+        SpotlightShelf(
+          title: 'Popular',
+          nodes: rows[0],
+          items: [
+            for (final name in ['Alpha', 'Bravo'])
+              SpotlightCard(
+                metadata: StremioMeta(
+                  id: name,
+                  type: 'movie',
+                  name: name,
+                  poster: 'https://example.invalid/$name-poster.jpg',
+                  background: 'https://example.invalid/$name-wide.jpg',
+                ),
+                title: name,
+                image: 'https://example.invalid/$name-poster.jpg',
+                onOpen: _noop,
+              ),
+          ],
+        ),
+      ];
+      Finder image(String suffix) => find.byWidgetPredicate(
+        (w) =>
+            w is RecoverableNetworkImage &&
+            w.imageUrl == 'https://example.invalid/Alpha-$suffix.jpg',
+      );
+      await tester.pumpWidget(
+        host([], shelves, expandFocusedCard: true, trailersEnabled: false),
+      );
       await tester.pumpAndSettle();
-      final node = rows.expand((row) => row).singleWhere((node) => node.hasFocus);
-      final box = node.context!.findRenderObject() as RenderBox;
-      final center = box.localToGlobal(box.size.center(Offset.zero));
-      expect(center.dx, inInclusiveRange(0, 800));
-      expect(center.dy, inInclusiveRange(0, 600));
-    }
-    expect(rows[0][0].hasFocus, isTrue);
-    await tester.pumpWidget(const SizedBox());
-  });
+      rows[0][0].requestFocus();
+      await tester.pumpAndSettle();
+      expect(image('wide'), findsOneWidget);
+      expect(image('poster'), findsNothing);
+      final focused =
+          (rows[0][0].context!.findRenderObject() as RenderBox).size;
+      expect(focused.width / focused.height, closeTo(470 / 390 * 1.18, .01));
+      rows[0][1].requestFocus();
+      await tester.pumpAndSettle();
+      expect(image('poster'), findsOneWidget);
+      final resting =
+          (rows[0][0].context!.findRenderObject() as RenderBox).size;
+      expect(resting.width / resting.height, closeTo(2 / 3, .01));
+      expect(focused.height, closeTo(resting.height, .01));
+      await tester.pumpWidget(
+        host([], shelves, expandFocusedCard: false, trailersEnabled: false),
+      );
+      rows[0][0].requestFocus();
+      await tester.pumpAndSettle();
+      expect(image('poster'), findsOneWidget);
+      expect(image('wide'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
-  testWidgets('focused descriptions follow focus and toggle off cleanly', (tester) async {
+  testWidgets(
+    'expanded cards remain visible when navigating back left and up',
+    (tester) async {
+      for (final row in rows) {
+        for (final node in row) {
+          node.dispose();
+        }
+      }
+      rows = List.generate(4, (_) => _rowNodes(7));
+      final shelves = List.generate(
+        4,
+        (r) => SpotlightShelf(
+          title: 'Row $r',
+          nodes: rows[r],
+          items: List.generate(
+            7,
+            (c) => SpotlightCard(
+              metadata: _meta('item-$r-$c', 'Item $r $c'),
+              image: null,
+              title: 'Item $r $c',
+              shape: SpotlightCardShape.wide,
+              onOpen: _noop,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(host([], shelves, expandFocusedCard: true));
+      await tester.pumpAndSettle();
+      rows[0][0].requestFocus();
+      await tester.pumpAndSettle();
+      for (final direction in [
+        ...List.filled(6, LogicalKeyboardKey.arrowRight),
+        ...List.filled(6, LogicalKeyboardKey.arrowLeft),
+        ...List.filled(3, LogicalKeyboardKey.arrowDown),
+        ...List.filled(3, LogicalKeyboardKey.arrowUp),
+      ]) {
+        await tester.sendKeyEvent(direction);
+        await tester.pumpAndSettle();
+        final node = rows
+            .expand((row) => row)
+            .singleWhere((node) => node.hasFocus);
+        final box = node.context!.findRenderObject() as RenderBox;
+        final center = box.localToGlobal(box.size.center(Offset.zero));
+        expect(center.dx, inInclusiveRange(0, 800));
+        expect(center.dy, inInclusiveRange(0, 600));
+      }
+      expect(rows[0][0].hasFocus, isTrue);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('focused descriptions follow focus and toggle off cleanly', (
+    tester,
+  ) async {
     final items = [_meta('tt1', 'Alpha'), _meta('tt2', 'Bravo')];
-    final shelves = [SpotlightShelf(
-      title: 'Popular', nodes: rows.first,
-      items: [for (final item in items) SpotlightCard(
-        metadata: item, image: null, title: item.name,
-        shape: SpotlightCardShape.wide, onOpen: () {},
-      )],
-    )];
+    final shelves = [
+      SpotlightShelf(
+        title: 'Popular',
+        nodes: rows.first,
+        items: [
+          for (final item in items)
+            SpotlightCard(
+              metadata: item,
+              image: null,
+              title: item.name,
+              shape: SpotlightCardShape.wide,
+              onOpen: () {},
+            ),
+        ],
+      ),
+    ];
     await tester.pumpWidget(host([], shelves, expandFocusedCard: true));
     await tester.pumpAndSettle();
     rows.first.first.requestFocus();
     await tester.pumpAndSettle();
     expect(find.text('About Alpha.'), findsOneWidget);
     expect(find.text('About Bravo.'), findsNothing);
-    final expandedWidth = (rows.first.first.context!.findRenderObject() as RenderBox).size.width;
+    final expandedWidth =
+        (rows.first.first.context!.findRenderObject() as RenderBox).size.width;
     final focusHostBefore = tester.element(find.byType(ParallaxFocus).first);
     rows.first.last.requestFocus();
     await tester.pumpAndSettle();
     expect(find.text('About Alpha.'), findsNothing);
     expect(find.text('About Bravo.'), findsOneWidget);
-    final restingWidth = (rows.first.first.context!.findRenderObject() as RenderBox).size.width;
-    expect(identical(focusHostBefore,
-        tester.element(find.byType(ParallaxFocus).first)), isTrue,
-        reason: 'focus changes must preserve the parallax animation subtree');
+    final restingWidth =
+        (rows.first.first.context!.findRenderObject() as RenderBox).size.width;
+    expect(
+      identical(
+        focusHostBefore,
+        tester.element(find.byType(ParallaxFocus).first),
+      ),
+      isTrue,
+      reason: 'focus changes must preserve the parallax animation subtree',
+    );
     expect(expandedWidth, greaterThan(restingWidth));
     await tester.pumpWidget(host([], shelves));
     await tester.pumpAndSettle();
@@ -774,65 +912,71 @@ void main() {
     expect(find.text('About Bravo.'), findsOneWidget);
   });
 
-  testWidgets('the TV hero asks for a trailer after two seconds without paging, and '
-      're-arms after a deliberate move', (tester) async {
-    // Each deliberate selection gets its own two-second preview dwell.
-    final a = _meta('tt1', 'Alpha');
-    final b = _meta('tt2', 'Bravo');
-    final dwelled = <String>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        home: AppThemeScope(
-          theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
-          child: Scaffold(
-            body: SpotlightBoard(
-              hero: [a, b],
-              sections: [
-                _section('Top', [a, b]),
-              ],
-              heroNode: hero,
-              heroAddon: _addon,
-              onHeroOpen: (_, __) {},
-              trailersEnabled: true,
-              onDwell: (m) => dwelled.add(m.id),
+  testWidgets(
+    'the TV hero asks for a trailer after two seconds without paging, and '
+    're-arms after a deliberate move',
+    (tester) async {
+      // Each deliberate selection gets its own two-second preview dwell.
+      final a = _meta('tt1', 'Alpha');
+      final b = _meta('tt2', 'Bravo');
+      final dwelled = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppThemeScope(
+            theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+            child: Scaffold(
+              body: SpotlightBoard(
+                hero: [a, b],
+                sections: [
+                  _section('Top', [a, b]),
+                ],
+                heroNode: hero,
+                heroAddon: _addon,
+                onHeroOpen: (_, __) {},
+                trailersEnabled: true,
+                onDwell: (m) => dwelled.add(m.id),
+              ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    // Unfocused: no dwell — the clock is armed by hero focus.
-    await tester.pump(const Duration(seconds: 5));
-    expect(dwelled, isEmpty);
+      // Unfocused: no dwell — the clock is armed by hero focus.
+      await tester.pump(const Duration(seconds: 5));
+      expect(dwelled, isEmpty);
 
-    hero.requestFocus();
-    await tester.pumpAndSettle();
-    expect(dwelled, isEmpty);
-    await tester.pump(const Duration(seconds: 2));
-    expect(dwelled, ['tt1'], reason: 'focused: resolve starts after dwell');
-    expect(
-      find.text('About Alpha.'),
-      findsOneWidget,
-      reason: 'and the reel has not paged',
-    );
+      hero.requestFocus();
+      await tester.pumpAndSettle();
+      expect(dwelled, isEmpty);
+      await tester.pump(const Duration(seconds: 2));
+      expect(dwelled, ['tt1'], reason: 'focused: resolve starts after dwell');
+      expect(
+        find.text('About Alpha.'),
+        findsOneWidget,
+        reason: 'and the reel has not paged',
+      );
 
-    // RIGHT pages, tears the roll down, and re-arms for the new slide.
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pumpAndSettle();
-    expect(find.text('About Bravo.'), findsOneWidget);
-    // Return before B starts: A must get a fresh session, not retain its latch.
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 2));
-    expect(dwelled, ['tt1', 'tt1']);
-    await tester.pump(const Duration(seconds: 5));
-    expect(dwelled, ['tt1', 'tt1'], reason: 'same selection still plays once');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 2));
-    expect(dwelled, ['tt1', 'tt1', 'tt2']);
-  });
+      // RIGHT pages, tears the roll down, and re-arms for the new slide.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(find.text('About Bravo.'), findsOneWidget);
+      // Return before B starts: A must get a fresh session, not retain its latch.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
+      expect(dwelled, ['tt1', 'tt1']);
+      await tester.pump(const Duration(seconds: 5));
+      expect(dwelled, [
+        'tt1',
+        'tt1',
+      ], reason: 'same selection still plays once');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
+      expect(dwelled, ['tt1', 'tt1', 'tt2']);
+    },
+  );
 
   testWidgets('a shrinking board does not strand the cursor past the end', (
     tester,
@@ -1320,7 +1464,10 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
-          home: SpotlightIptvCardPreview(channel: channel, ambientVolume: volume),
+          home: SpotlightIptvCardPreview(
+            channel: channel,
+            ambientVolume: volume,
+          ),
         ),
       ),
     );
@@ -1370,40 +1517,65 @@ void main() {
     expect(find.byKey(preview), findsNothing);
   });
 
-  testWidgets('collection previews follow desktop keyboard focus and row glow', (tester) async {
-    const preview = ValueKey('collection-card-preview');
-    await tester.pumpWidget(host([_meta('tt1', 'Alpha')], [
-      SpotlightShelf(title: 'Collections', nodes: rows[0], items: [
-        SpotlightCard(title: 'Brand', shape: SpotlightCardShape.wide,
-          onOpen: _noop, focusGlowEnabled: true, previewOnKeyboardFocus: true,
-          previewBuilder: (_) => const SizedBox.expand(key: preview)),
-      ]),
-    ], dpad: false));
-    await tester.pumpAndSettle();
-    expect(find.byKey(preview), findsNothing);
-    rows[0][0].requestFocus();
-    await tester.pumpAndSettle();
-    expect(find.byKey(preview), findsOneWidget);
-    final glow = tester.widget<CollectionFocusGlow>(find.byType(CollectionFocusGlow));
-    expect(glow.enabled, isTrue);
-    expect(glow.active, isTrue);
-    hero.requestFocus();
-    await tester.pumpAndSettle();
-    expect(find.byKey(preview), findsNothing);
-  });
+  testWidgets(
+    'collection previews follow desktop keyboard focus and row glow',
+    (tester) async {
+      const preview = ValueKey('collection-card-preview');
+      await tester.pumpWidget(
+        host(
+          [_meta('tt1', 'Alpha')],
+          [
+            SpotlightShelf(
+              title: 'Collections',
+              nodes: rows[0],
+              items: [
+                SpotlightCard(
+                  title: 'Brand',
+                  shape: SpotlightCardShape.wide,
+                  onOpen: _noop,
+                  focusGlowEnabled: true,
+                  previewOnKeyboardFocus: true,
+                  previewBuilder: (_) => const SizedBox.expand(key: preview),
+                ),
+              ],
+            ),
+          ],
+          dpad: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(preview), findsNothing);
+      rows[0][0].requestFocus();
+      await tester.pumpAndSettle();
+      expect(find.byKey(preview), findsOneWidget);
+      final glow = tester.widget<CollectionFocusGlow>(
+        find.byType(CollectionFocusGlow),
+      );
+      expect(glow.enabled, isTrue);
+      expect(glow.active, isTrue);
+      hero.requestFocus();
+      await tester.pumpAndSettle();
+      expect(find.byKey(preview), findsNothing);
+    },
+  );
 
   testWidgets('a hidden shelf header keeps its collection cards visible', (
     tester,
   ) async {
-    await tester.pumpWidget(host([_meta('tt1', 'Hero')], [
-      SpotlightShelf(
-        title: 'Streaming',
-        tag: 'Collection',
-        showHeader: false,
-        nodes: rows[0],
-        items: [SpotlightCard(title: 'Netflix', onOpen: _noop)],
+    await tester.pumpWidget(
+      host(
+        [_meta('tt1', 'Hero')],
+        [
+          SpotlightShelf(
+            title: 'Streaming',
+            tag: 'Collection',
+            showHeader: false,
+            nodes: rows[0],
+            items: [SpotlightCard(title: 'Netflix', onOpen: _noop)],
+          ),
+        ],
       ),
-    ]));
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Streaming'), findsNothing);
@@ -1501,7 +1673,9 @@ void main() {
     cardMouseRegion.onExit!(const PointerExitEvent());
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 3));
-    expect(dwelled, ['tt1'], reason: 'same hero must not replay after another preview');
+    expect(dwelled, [
+      'tt1',
+    ], reason: 'same hero must not replay after another preview');
   });
 
   testWidgets('a single-item reel shows no dots', (tester) async {
@@ -1628,23 +1802,43 @@ void main() {
     );
   });
 
-  testWidgets('square collection covers retain their ratio and per-card hidden titles', (tester) async {
-    await tester.pumpWidget(host([_meta('tt1', 'Hero')], [
-      SpotlightShelf(title: 'Folders', nodes: rows[0], items: [
-        SpotlightCard(title: 'Hidden folder', shape: SpotlightCardShape.square,
-          showCaption: false, onOpen: _noop),
-        SpotlightCard(title: 'Visible folder', shape: SpotlightCardShape.square,
-          onOpen: _noop),
-      ]),
-    ]));
-    await tester.pumpAndSettle();
-    final cardHost = tester.widgetList<ParallaxFocus>(find.byType(ParallaxFocus))
-        .firstWhere((p) => p.fixedScaleForeground != null);
-    final box = tester.getSize(find.byWidget(cardHost));
-    expect(box.width / box.height, closeTo(1, 0.005));
-    expect(find.text('Hidden folder'), findsNothing);
-    expect(find.text('Visible folder'), findsOneWidget);
-  });
+  testWidgets(
+    'square collection covers retain their ratio and per-card hidden titles',
+    (tester) async {
+      await tester.pumpWidget(
+        host(
+          [_meta('tt1', 'Hero')],
+          [
+            SpotlightShelf(
+              title: 'Folders',
+              nodes: rows[0],
+              items: [
+                SpotlightCard(
+                  title: 'Hidden folder',
+                  shape: SpotlightCardShape.square,
+                  showCaption: false,
+                  onOpen: _noop,
+                ),
+                SpotlightCard(
+                  title: 'Visible folder',
+                  shape: SpotlightCardShape.square,
+                  onOpen: _noop,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      final cardHost = tester
+          .widgetList<ParallaxFocus>(find.byType(ParallaxFocus))
+          .firstWhere((p) => p.fixedScaleForeground != null);
+      final box = tester.getSize(find.byWidget(cardHost));
+      expect(box.width / box.height, closeTo(1, 0.005));
+      expect(find.text('Hidden folder'), findsNothing);
+      expect(find.text('Visible folder'), findsOneWidget);
+    },
+  );
 
   testWidgets('a wide shelf uses the readable landscape rail width', (
     tester,

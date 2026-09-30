@@ -58,11 +58,13 @@ void main() {
       PlatformUtil.debugSetAndroidTvCached(true);
       PlatformUtil.debugSetTvOS(false);
       final previousTab = MainPageBridge.activeTvTabIndex;
+      final previousStyle = StorageService.tvHomeStyleCached;
       MainPageBridge.setActiveTvTab(15);
       addTearDown(() {
         PlatformUtil.debugSetAndroidTvCached(null);
         PlatformUtil.debugSetTvOS(null);
         MainPageBridge.setActiveTvTab(previousTab);
+        StorageService.tvHomeStyleCached = previousStyle;
       });
       final addon = StremioAddon(
         id: 'navigation',
