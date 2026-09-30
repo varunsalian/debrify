@@ -19,7 +19,6 @@ FACADE = "lib/screens/search_screen.dart"
 # concrete services, as AGENTS.md allows for composition. Every other file in
 # COMPOSITION is presentation and keeps the presentation import rules.
 COMPOSITION_ROOTS = {
-    FACADE,
     f"{COMPOSITION}/search_screen_composer.dart",
     f"{COMPOSITION}/search_screen_search_composition.dart",
     f"{COMPOSITION}/search_screen_home_composition.dart",
@@ -119,7 +118,7 @@ PRESENTATION_BRIDGE_IMPORTS = {
     # App-shell callback/listener adapter; no persistence or business operations.
     # Tab-shell handler registration: the app-shell callback slots only.
     "lib/screens/search_screen/home_tab_shell_registration.dart": {
-        "lib/services/main_page_bridge.dart",
+        "lib/services/main_page_bridge.dart": {"MainPageBridge"},
     },
     "lib/features/discover/presentation/discover_shell_bridge.dart": {
         "lib/services/main_page_bridge.dart",
@@ -274,7 +273,11 @@ def main() -> int:
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)
     paths.update((ROOT / COMPOSITION).rglob("*.dart"))
     paths.add(ROOT / FACADE)
-    problems = []
+    problems = [
+        f"Composition root is missing (update COMPOSITION_ROOTS): {root}"
+        for root in sorted(COMPOSITION_ROOTS)
+        if not (ROOT / root).is_file()
+    ]
     if not paths:
         problems.append("No migrated sources found; check the measured source set.")
     for path in sorted(paths):

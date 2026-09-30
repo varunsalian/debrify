@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/tracker_title_actions.dart';
 import 'package:debrify/widgets/trakt/trakt_menu_helpers.dart';
 import 'package:flutter/material.dart';
@@ -13,51 +15,55 @@ class _Lists extends Fake implements TrackerTitleActions {
   }) => loaded.future;
 }
 
-// The list picker loads lists before it can show. A detail page closed during
-// that load must not get a picker (or its empty-state feedback) behind it.
+// "Add to List" loads the user's lists before its picker can show. A detail
+// page closed during that load must not get the picker behind it, while the
+// action itself stays admitted by view/profile currency only.
 void main() {
-  Future<({BuildContext context, _Lists lists})> host(
-    WidgetTester tester,
-  ) async {
-    late BuildContext context;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Builder(
-            builder: (value) {
-              context = value;
-              return const SizedBox();
-            },
-          ),
-        ),
-      ),
-    );
-    return (context: context, lists: _Lists());
-  }
+  setUp(() {
+    ProfileRuntime.debugReset();
+    ProfileRuntime.initializeLegacy();
+  });
+  tearDown(ProfileRuntime.debugReset);
 
-  for (final open in [true, false]) {
-    testWidgets('picker after lists load when prompting allowed=$open', (
+  for (final pageLive in [true, false]) {
+    testWidgets('Add to List picker after load, detail live=$pageLive', (
       tester,
     ) async {
-      final h = await host(tester);
-      var promptable = true;
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (value) {
+                context = value;
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      final lists = _Lists();
+      var live = true;
       unawaited(
-        showTraktCustomListPickerDialog(
-          h.context,
-          actions: h.lists,
-          isCurrent: () => promptable,
+        handleTraktMenuAction(
+          context,
+          StremioMeta.fromJson({'id': 'tt1', 'type': 'movie', 'name': 'Title'}),
+          TraktItemMenuAction.addToList,
+          actions: lists,
+          isCurrent: () => true,
+          canPrompt: () => live,
         ),
       );
       await tester.pump();
-      promptable = open;
-      h.lists.loaded.complete([
+      live = pageLive;
+      lists.loaded.complete([
         {
           'name': 'Weekend',
           'ids': {'slug': 'weekend'},
         },
       ]);
       await tester.pumpAndSettle();
-      expect(find.text('Weekend'), open ? findsOneWidget : findsNothing);
+      expect(find.text('Weekend'), pageLive ? findsOneWidget : findsNothing);
     });
   }
 }

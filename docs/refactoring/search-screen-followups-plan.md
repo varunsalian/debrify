@@ -189,9 +189,13 @@ Fixed:
   nested write holds a snapshot off until it finishes. The test fails on the
   previous version.
 - **Guard gap:** files in `lib/screens/search_screen/` are checked as
-  presentation, except the composition root (facade, composer, three
-  factories), which may bind concrete services. A feature importing the facade is
-  flagged. Tab-shell registration is a named `main_page_bridge` bridge.
+  presentation, except the composition root (composer and three factories),
+  which may import `lib/services/` directly. The rule covers `lib/services/`
+  and platform packages, as it does for feature presentation; presentation
+  reading its own feature's data adapters through providers stays an existing
+  allowed pattern. A feature importing the facade is flagged, missing roots
+  fail the guard, and tab-shell registration's `main_page_bridge` import is
+  pinned with `show MainPageBridge`.
 - **`titleSearch` ownership** is recorded when it is resolved.
 - **Catalog search status strip** is back in Home (its only users).
 - **Screen-controls adapter** takes its sections directly.
@@ -209,4 +213,14 @@ Accepted, with rationale:
 - **Rejected saved-content writes are silent:** consistent with every other
   owner/profile guard in these features; a rejection only happens while the
   screen's profile session is being replaced.
+
+Second review (`cbbc4e94`):
+- The picker test now goes through `handleTraktMenuAction` with `canPrompt`,
+  and the detail route screen test proves the detail-page wiring. Both fail
+  when their piece is removed.
+- `canPrompt` doc corrected: it also stops the picker's list fetch, which
+  exists only to show that prompt.
+- Accepted: Simkl and MDBList take no `canPrompt` today because they have no
+  prompt that appears after an await. If one is added, it should follow the
+  Trakt pattern.
 

@@ -81,6 +81,17 @@ class WaitingDetailSources extends Fake implements HomeSourceEditingRepository {
 
 class WaitingDetailActions extends Fake implements TrackerTitleActions {
   final release = Completer<bool>();
+  final lists = Completer<List<Map<String, dynamic>>>();
+  var listLoads = 0;
+
+  @override
+  Future<List<Map<String, dynamic>>> customLists({
+    required bool Function() isCurrent,
+  }) {
+    listLoads++;
+    return lists.future;
+  }
+
   final calls = <(TrackingSource, TrackerTitleMutation, String, String)>[];
   bool Function()? current;
 
@@ -193,6 +204,61 @@ void main() {
         },
       );
     }
+    testWidgets(
+      'real detail does not open the Trakt list picker after back-out: merged=$merged',
+      (tester) async {
+        final home = HomeFixture(tester);
+        final actions = WaitingDetailActions();
+        await home.mount(
+          initialPreferences: {'merged_series_page_enabled': merged},
+          wrap: (child) => ProviderScope(
+            overrides: [
+              homeCatalogOriginRepositoryProvider.overrideWith(
+                (ref, owner) => ReadyOrigin(),
+              ),
+              homeDetailActionsProvider.overrideWith((ref, owner) => actions),
+            ],
+            child: child,
+          ),
+        );
+        await home.settle();
+        await home.focusFast();
+        await home.key(LogicalKeyboardKey.enter);
+        await home.settle();
+        void dispatch() {
+          if (merged) {
+            unawaited(
+              tester
+                  .widget<MergedDetailScreen>(find.byType(MergedDetailScreen))
+                  .onTraktAction!(TraktItemMenuAction.addToList),
+            );
+          } else {
+            tester
+                .widget<CatalogItemDetailScreen>(
+                  find.byType(CatalogItemDetailScreen),
+                )
+                .onTraktAction!(TraktItemMenuAction.addToList);
+          }
+        }
+
+        await home.drive(dispatch);
+        expect(actions.listLoads, 1);
+        home.navigator.currentState!.pop();
+        await home.settle();
+        await home.drive(
+          () => actions.lists.complete([
+            {
+              'name': 'Weekend',
+              'ids': {'slug': 'weekend'},
+            },
+          ]),
+        );
+        await home.settle();
+        expect(find.text('Weekend'), findsNothing);
+        expect(find.text('Add to List'), findsNothing);
+        await home.dispose();
+      },
+    );
     for (final retire in [false, true]) {
       testWidgets(
         'detail metadata uses injected reader and route guard: merged=$merged retired=$retire',

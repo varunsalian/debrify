@@ -228,10 +228,11 @@ Future<void> handleTraktMenuAction(
   /// before.
   int? presetRating,
   bool Function()? isCurrent,
-  // Whether a prompt that appears after an await may still be shown (for
-  // example the list picker once lists load). Writes and the result feedback
-  // follow [isCurrent] only, so a user who leaves a detail page does not
-  // cancel an accepted action — but it cannot open a dialog behind them.
+  // Whether a prompt that appears after an await may still be shown. Today
+  // that is the list picker, whose list fetch exists only to show it, so the
+  // fetch stops too. Writes and the result feedback follow [isCurrent] only,
+  // so leaving a detail page does not cancel an accepted write, but it cannot
+  // open a dialog behind the user.
   bool Function()? canPrompt,
   TrackerTitleActions? actions,
 }) async {
