@@ -187,6 +187,8 @@ def violations(path: Path) -> list[str]:
     relative = path.relative_to(ROOT).as_posix()
     problems = []
     lines = len(source.splitlines())
+    if relative == FACADE and lines > 300:
+        problems.append(f"{lines} lines exceeds the 300-line facade limit")
     if lines > 800:
         problems.append(f"{lines} lines exceeds the 800-line ceiling")
     if re.search(r"^\s*part\s+of\b", source, re.MULTILINE):

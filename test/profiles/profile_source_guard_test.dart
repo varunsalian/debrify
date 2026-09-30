@@ -152,7 +152,16 @@ void main() {
   });
 
   test('search result preservation is owned by the mounted profile session', () {
-    final source = File('lib/screens/search_screen.dart').readAsStringSync();
+    // The screen is a facade; its composition lives in lib/screens/search_screen.
+    final source = [
+      File('lib/screens/search_screen.dart'),
+      ...Directory(
+        'lib/screens/search_screen',
+      ).listSync().whereType<File>().where((f) => f.path.endsWith('.dart')),
+    ].map((f) => f.readAsStringSync()).join('\n');
+    final session = File(
+      'lib/screens/search_screen/search_screen_session_composition.dart',
+    ).readAsStringSync();
     final repository = File(
       'lib/features/search/data/memory_keyword_snapshot_repository.dart',
     ).readAsStringSync();
@@ -161,9 +170,9 @@ void main() {
       contains('static final ProfileSessionMemory<KeywordSnapshot> _preserved'),
     );
     expect(
-      source,
+      session,
       matches(
-        r'_searchLifecycle\.profileSessionOwner\s*=\s*ProfileSessionMemory\.captureOwner\(\)',
+        r'c\.searchLifecycle\.profileSessionOwner\s*=\s*ProfileSessionMemory\.captureOwner\(\)',
       ),
     );
     final keywordReturn = File(
@@ -172,7 +181,12 @@ void main() {
     final searchComposition = File(
       'lib/screens/search_screen/search_presentation_composition.dart',
     ).readAsStringSync();
-    expect(source, contains('session: () => _searchLifecycle'));
+    expect(
+      File(
+        'lib/screens/search_screen/search_screen_search_composition.dart',
+      ).readAsStringSync(),
+      contains('session: () => c.searchLifecycle'),
+    );
     expect(
       searchComposition,
       contains('repository: () => deps.session().keywordSnapshots'),
