@@ -77,8 +77,28 @@ void main() {
   // supplement the rendered shared-card tests; they catch a layout reverting
   // to global title geometry while the shared presentation stays correct.
   final source = File('lib/screens/search_screen.dart').readAsStringSync();
+  // Every stage layout builds its cells through the shared HomeStageCards
+  // builder, which owns collection shape, artwork and focus preview.
+  final stageCards = File(
+    'lib/features/home/presentation/home_stage_cards.dart',
+  ).readAsStringSync();
+  test(
+    'shared stage cards use collection artwork, shape and focus preview',
+    () {
+      expect(stageCards, contains('aspectOf(rail'));
+      expect(stageCards, contains('artOf(rail'));
+      expect(stageCards, contains('focusArtOf('));
+      expect(stageCards, contains('focusVideoOf('));
+      expect(stageCards, contains('focusGlowEnabled:'));
+      expect(stageCards, contains('hideTitle'));
+      // The screen wires the collection-aware geometry, not global title
+      // geometry, into the shared builder.
+      expect(source, contains('aspectOf: _stageCardAspect,'));
+      expect(source, contains('artOf: _stageCardArt,'));
+    },
+  );
   for (final (start, end) in [
-    ('Widget _buildCanvasBoard', 'double get _titleCardAspect'),
+    ('Widget _canvasCell', 'void _maybeCompleteStageAdvance'),
     ('Widget _promenadeCell', 'Widget _buildAtriumBoard'),
     ('Widget _atriumRow', 'Widget _buildMosaicBoard'),
     ('Widget _mosaicCell', 'Widget _buildDeckBoard'),
@@ -90,21 +110,25 @@ void main() {
       expect(from, isNonNegative);
       expect(to, greaterThan(from));
       final body = source.substring(from, to);
-      expect(body, contains('_stageCardAspect(rail'));
-      expect(body, contains('_stageCardArt(rail'));
-      expect(body, contains('focusArtOf('));
-      expect(body, contains('focusVideoOf('));
-      expect(body, contains('focusGlowEnabled:'));
-      expect(body, contains('hideTitle'));
+      expect(body, contains('_stageCards.build('));
     });
   }
+  test('Canvas board sizes its rail with collection geometry', () {
+    final from = source.indexOf('Widget _buildCanvasBoard');
+    final to = source.indexOf('double get _titleCardAspect', from);
+    expect(from, isNonNegative);
+    expect(to, greaterThan(from));
+    final body = source.substring(from, to);
+    expect(body, contains('_stageCardAspect(view.rail)'));
+    expect(body, contains('_canvasCell(view, col)'));
+  });
   test('folder focus retires title work and owns the hero', () {
     final start = source.indexOf('  void _setHero(');
     final body = source.substring(
       start,
       source.indexOf('// A catalog/CW card owns', start),
     );
-    const cancel = '_heroMetadataSubscription.read().cancel()';
+    const cancel = '_homeMediaBindings.metadata.cancel()';
     expect(body, contains(cancel));
     // The loader's executable cancellation tests cover request retirement;
     // this guard checks the folder caller invokes it before replacing the hero.

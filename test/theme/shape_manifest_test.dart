@@ -35,6 +35,13 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  // Search presentation extracted from search_screen.dart (tokens moved, not lost).
+  'lib/features/search/presentation/catalog_search_prompt.dart': 0,
+  'lib/features/search/presentation/keyword_search_page.dart': 0,
+  'lib/features/search/presentation/keyword_selection_overlay.dart': 0,
+  'lib/features/search/presentation/keyword_source_tabs.dart': 0,
+  'lib/features/search/presentation/keyword_toolbar.dart': 0,
+  'lib/features/search/presentation/search_query_field.dart': 0,
   'lib/features/home/presentation/home_source_editor.dart': 0,
   'lib/features/home/presentation/home_bound_source_tile.dart': 0,
   'lib/features/home/presentation/home_canvas_tabs.dart': 0,
@@ -169,19 +176,25 @@ void main() {
     for (final entry in {...kShapeResidue, ...kExtractedShapeResidue}.entries) {
       final file = File(entry.key);
       if (!file.existsSync()) {
-        fail('\${entry.key} is in the shape manifest but no longer exists — '
-            'remove its entry if the file was deleted');
+        fail(
+          '\${entry.key} is in the shape manifest but no longer exists — '
+          'remove its entry if the file was deleted',
+        );
       }
       final found = _radius.allMatches(file.readAsStringSync()).length;
       if (found > entry.value) {
         grew.add('\${entry.key}: \${entry.value} → \$found');
       }
     }
-    expect(grew, isEmpty,
-        reason: 'these files are on the shape tokens; a new bare '
-            'BorderRadius.circular in one is a site that will not follow the '
-            'theme. Use app.shape.br()/brImg()/brPill, or lower the manifest '
-            'entry if you genuinely removed radii: \$grew');
+    expect(
+      grew,
+      isEmpty,
+      reason:
+          'these files are on the shape tokens; a new bare '
+          'BorderRadius.circular in one is a site that will not follow the '
+          'theme. Use app.shape.br()/brImg()/brPill, or lower the manifest '
+          'entry if you genuinely removed radii: \$grew',
+    );
   });
 
   test('the manifest describes files that are actually swept', () {
@@ -192,8 +205,11 @@ void main() {
       final src = File(path).readAsStringSync();
       if (!src.contains('app.shape.')) unswept.add(path);
     }
-    expect(unswept, isEmpty,
-        reason: 'listed as swept but contains no shape-token call: \$unswept');
+    expect(
+      unswept,
+      isEmpty,
+      reason: 'listed as swept but contains no shape-token call: \$unswept',
+    );
   });
 
   test('the sweep is still substantial', () {
@@ -202,11 +218,16 @@ void main() {
     // quietly disappears — this is the backstop for that.
     var calls = 0;
     for (final path in kShapeResidue.keys) {
-      calls += RegExp(r'app\.shape\.br')
-          .allMatches(File(path).readAsStringSync())
-          .length;
+      calls += RegExp(
+        r'app\.shape\.br',
+      ).allMatches(File(path).readAsStringSync()).length;
     }
-    expect(calls, greaterThanOrEqualTo(490),
-        reason: 'the shape sweep converted 500 sites; only \$calls remain');
+    // 488, not 490: refactor 8b6e1627 merged two duplicated Sources pills into
+    // the shared control, removing two token call sites without reverting any.
+    expect(
+      calls,
+      greaterThanOrEqualTo(488),
+      reason: 'the shape sweep converted 500 sites; only \$calls remain',
+    );
   });
 }

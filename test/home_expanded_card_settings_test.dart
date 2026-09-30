@@ -65,10 +65,20 @@ void main() {
 
     // Catalog rows, tracker-list rows, generic Continue Watching rows (also
     // used by Simkl/MDBList), Trakt Continue Watching, and collection folders
-    // each push a different screen. All five builders must use the helper.
+    // each push a different screen. All five builders must use the helper:
+    // collection folders here, the other four through HomeSeeAllNavigation,
+    // which the screen wires with the same helper.
     final routeUses = RegExp(
       r'builder: \(_\) => _withHomeExpandedCardSettings\(',
     ).allMatches(source);
-    expect(routeUses.length, 5);
+    expect(routeUses.length, 1);
+    expect(source, contains('wrap: _withHomeExpandedCardSettings,'));
+    final seeAll = File(
+      'lib/features/home/presentation/home_see_all_navigation.dart',
+    ).readAsStringSync();
+    final wrappedRoutes = RegExp(
+      r'builder: \(_\) => wrap\(',
+    ).allMatches(seeAll);
+    expect(wrappedRoutes.length, 4);
   });
 }
