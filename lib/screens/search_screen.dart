@@ -1,3 +1,6 @@
+import '../features/discover/application/discover_card_settings_controller.dart';
+import '../features/discover/presentation/discover_loading.dart';
+import '../features/discover/presentation/discover_section.dart';
 import '../features/home/presentation/home_media_bindings.dart';
 import '../features/home/presentation/home_board_bindings.dart';
 import '../features/home/presentation/home_continuation_nodes.dart';
@@ -12,9 +15,7 @@ import '../features/search/presentation/lists_navigation.dart';
 import '../features/search/presentation/catalog_search_prompt.dart';
 import '../features/search/presentation/lists_search_rail.dart';
 import '../features/search/presentation/lists_focus.dart';
-import '../features/discover/presentation/discover_shell_bridge.dart';
 import '../features/discover/presentation/discover_bindings.dart';
-import '../features/discover/presentation/discover_focus.dart';
 import '../features/home/presentation/home_classic_favorite_rows.dart';
 import '../features/home/presentation/home_rail_composition.dart';
 import '../features/home/presentation/home_stage_favorite_cards.dart';
@@ -62,17 +63,12 @@ import '../features/home/presentation/home_catalog_row.dart';
 import '../features/home/presentation/home_catalog_row_header.dart';
 import '../features/home/application/home_post_playback_refresh_controller.dart';
 import '../features/discover/presentation/discover_panels.dart';
-import '../features/discover/presentation/discover_content.dart';
-import '../features/discover/application/discover_card_settings_controller.dart';
-import '../features/discover/models/discover_card_settings.dart';
-import '../features/discover/application/discover_layout_controller.dart';
-import '../features/discover/presentation/discover_preview.dart';
 import '../features/home/presentation/home_stage_theater.dart';
 import '../features/home/presentation/home_hero_shell_bridge.dart';
 import '../features/home/presentation/home_hero_swap.dart';
 import '../features/home/presentation/home_hero_spotlight.dart';
-export '../features/home/presentation/spotlight_iptv_card_preview.dart' show SpotlightIptvCardPreview;
-import '../features/home/presentation/home_hero_trailer_indicators.dart';
+export '../features/home/presentation/spotlight_iptv_card_preview.dart'
+    show SpotlightIptvCardPreview;
 import '../features/search/presentation/search_page_shell.dart';
 import '../features/home/presentation/home_promenade_board.dart';
 import '../features/home/presentation/home_atrium_board.dart';
@@ -101,7 +97,6 @@ import '../features/home/models/home_favorite_row_ref.dart';
 import '../features/home/presentation/home_favorite_cell.dart';
 import '../features/home/presentation/home_art_poster.dart';
 import '../features/home/presentation/home_card_style.dart';
-import '../features/discover/application/discover_source_controller.dart';
 import '../features/discover/models/discover_source_state.dart';
 import '../features/discover/application/metadata_feature_controller.dart';
 import '../features/discover/models/metadata_feature_policy.dart';
@@ -200,7 +195,6 @@ import '../features/home/presentation/home_catalog_playback_bridge.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../models/metadata_preferences.dart';
 import '../services/metadata_preferences_service.dart';
-import '../widgets/see_all/discover_browsing_input.dart';
 import '../services/home_load_deadline.dart';
 import '../services/home_load_progress.dart';
 import '../features/home/presentation/home_board_viewport.dart';
@@ -355,8 +349,6 @@ class SearchScreen extends ConsumerStatefulWidget {
 /// 'a:{addonId}').
 const String _discCw = DiscoverSources.cw;
 const String _discTmdb = DiscoverSources.tmdb;
-const String _discJellyfin = DiscoverSources.jellyfin;
-const String _discEmby = DiscoverSources.emby;
 const String _discMdblist = DiscoverSources.mdblist;
 
 /// Smallest poster art a stage rail will draw before it is simply too small
@@ -1405,79 +1397,78 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool get _heroTrailerRenderable =>
       _heroTrailerActive || _heroTrailerOffTvEligible;
 
-  // Discover tab: the active source key (CW / tracker / `a:{addonId}`) + its
-  // DPAD focus node (the "Source" dropdown is the leading filter of whichever
-  // embedded See-All panel is shown). [_discAddons] is the browsable addon list
-  // appended to the Source dropdown.
-  late final DiscoverBindings _discoverBindings;
-  DiscoverSourceController get _discoverSourceController =>
-      _discoverBindings.source;
-  String get _discSource => _discoverSourceController.current.source;
-  List<StremioAddon> get _discAddons =>
-      _discoverSourceController.current.addons;
-  final _discoverFocus = DiscoverFocus();
-  FocusNode get _discSourceNode => _discoverFocus.source;
-
-  /// An MDBList list handed off from the Search tab's Lists mode (consumed
-  /// from MainPageBridge.pendingMdblistListOpen on mount). Passed into the
-  /// MDBList panel, which opens focused on it with the ♥ like toggle.
-  MdblistListChoice? _discMdblistList;
-
-  // The grid tile the DPAD is currently on, mirrored into the two-pane detail
-  // rail (TV Discover). A ValueNotifier — not setState — so a focus move only
-  // rebuilds the rail, never the grid subtree.
-  ValueNotifier<StremioMeta?> get _discFocused => _discoverFocus.focused;
-  void _onDiscFocused(StremioMeta item) => _discoverFocus.selectTitle(item);
-
-  // Local preview signals are borrowed by the resolving rail and player stage.
-  late final DiscoverPreview _discPreview = DiscoverPreview(
-    isCurrent: () => mounted,
-  );
-
-  DiscoverShellBridge? _discoverShellBridge;
-
-  // ── Discover layout (grid / stage) ───────────────────────────────────────
-
-  DiscoverLayoutController get _discoverLayoutController =>
-      _discoverBindings.layout;
-  String get _discLayout => _discoverLayoutController.current;
-
   DiscoverCardSettingsController get _discoverCardSettingsController =>
       _discoverBindings.cards;
-  DiscoverCardSettings get _discCardSettings =>
-      _discoverCardSettingsController.current;
-
-  /// Whether the STAGE layout is what this surface should render: the pref, on
-  /// the Discover tab, on a TV. The canvas-size guard lives in the LayoutBuilder
-  /// (a too-small canvas falls back to the flat panel, exactly like the grid's
-  /// two-pane does).
-  bool get _discStage =>
-      widget.discoverMode && widget.isTelevision && _discLayout == 'stage';
-
-  Future<void> _loadDiscoverLayout() => _discoverLayoutController.load(
-    isCurrent: () => mounted,
-    onChanged: () => setState(() {}),
-  );
-
-  /// Settings picker fired: tear the trailer down BEFORE the relayout, so the
-  /// player is never re-parented mid-play into the other layout's tree (the
-  /// Home board's rule for the same swap), then re-read the pref and rebuild.
-  void _onDiscoverLayoutChanged() {
-    if (!mounted) return;
-    _discPreview.resetPlayback();
-    unawaited(_loadDiscoverLayout());
-  }
-
-  void _onDiscoverCardSettingsChanged() {
-    if (!mounted) return;
-    if (_discoverCardSettingsController.refresh(isCurrent: () => mounted)) {
-      setState(() {});
-    }
-  }
+  late final DiscoverSection _discoverSection;
+  late final DiscoverLoading _discoverLoading;
+  late final DiscoverBindings _discoverBindings;
 
   @override
   void initState() {
     super.initState();
+    _discoverSection = DiscoverSection((
+      bindings: () => _discoverBindings,
+      mounted: () => mounted,
+      discoverMode: () => widget.discoverMode,
+      isTelevision: () => widget.isTelevision,
+      discoveryEnabled: () =>
+          _metadataFeaturePolicy?.features.contains(
+            MetadataFeature.discovery,
+          ) ==
+          true,
+      context: () => context,
+      setState: setState,
+      buildPanel: () => buildDiscoverPanels(
+        selected: _discoverSection.discSource,
+        isTelevision: widget.isTelevision,
+        sourceNode: _discoverSection.discSourceNode,
+        preferences: _metadataFeaturePolicy,
+        mdblistEnabled: kMdblistEnabled,
+        mdblistAuthenticated: _isMdblistAuthenticated,
+        addons: _discoverSection.discAddons,
+        onSelectSource: _discoverSection.selectDiscoverSource,
+        pikpakOnly: _pikpakOnly,
+        onItemFocused: _discoverSection.onDiscFocused,
+        isBound: _isBound,
+        findAddon: (id) => _addonsById[id],
+        addonForContinue: _addonForContinue,
+        onOpenCatalog: _openItem,
+        onPlayCatalog: _onCatalogPlay,
+        traktItems: _traktAll,
+        traktProgress: () => _cwCardMaps(HomeContinuationKind.trakt).progress,
+        onOpenTrakt: _openTraktItem,
+        onPlayTrakt: _playTraktItem,
+        simklItems: _simklAll,
+        simklProgress: _simklProgress,
+        onOpenSimkl: _openSimklItem,
+        onPlaySimkl: _playSimklItem,
+        onOpenSimklContinuation: _openSimklCwItem,
+        onPlaySimklContinuation: _playSimklCwItem,
+        mdblistList: _discoverSection.discMdblistList,
+        localItems: _cwAll,
+        localProgress: (m) => _cwCardProgress(HomeContinuationKind.local, m),
+        onOpenLocal: _openContinueItem,
+        onPlayLocal: _onContinuePlay,
+        reloadLocal: () async {
+          await _loadContinueWatching();
+          if (!mounted) return const <StremioMeta>[];
+          return List<StremioMeta>.of(_cwAll);
+        },
+      ),
+    ));
+    _discoverLoading = DiscoverLoading((
+      source: () => _discoverBindings.source,
+      mounted: () => mounted,
+      mdblistEnabled: kMdblistEnabled,
+      setState: setState,
+      metadataFeaturePolicy: () => _metadataFeaturePolicy,
+      refreshMetadataFeaturePolicy: _refreshMetadataFeaturePolicy,
+      loadContinueWatching: _loadContinueWatching,
+      loadTraktContinueWatching: _loadTraktContinueWatching,
+      loadSimklContinueWatching: _loadSimklContinueWatching,
+      loadMdblistContinueWatching: _loadMdblistContinueWatching,
+      refreshBoundSources: _refreshBoundSources,
+    ), _addonsById);
     _titleSearch.addListener(_publishTitleSuggestions);
     _searchController.addListener(_onTitleSearchEditingChanged);
     ProfileRuntime.scope.addListener(_onSearchProfileChanged);
@@ -1664,7 +1655,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       final pending = MainPageBridge.pendingMdblistListOpen;
       if (pending != null) {
         MainPageBridge.pendingMdblistListOpen = null;
-        _discMdblistList = MdblistListChoice(
+        _discoverSection.discMdblistList = MdblistListChoice(
           id: (pending['id'] as num?)?.toInt() ?? -1,
           name: pending['name'] as String? ?? 'Untitled list',
           ownerName: pending['ownerName'] as String?,
@@ -1677,13 +1668,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final discoverSession = (
       owner: _profileSessionOwner,
       viewIdentity: Object(),
-      initialSource: _discMdblistList == null ? _discCw : _discMdblist,
-      hasHandoff: _discMdblistList != null,
+      initialSource: _discoverSection.discMdblistList == null
+          ? _discCw
+          : _discMdblist,
+      hasHandoff: _discoverSection.discMdblistList != null,
     );
     _discoverBindings = DiscoverBindings(ref, discoverSession);
-    if (_discMdblistList != null) {
+    if (_discoverSection.discMdblistList != null) {
       unawaited(
-        _discoverSourceController.rememberCurrent(isCurrent: () => mounted),
+        _discoverSection.discoverSourceController.rememberCurrent(
+          isCurrent: () => mounted,
+        ),
       );
     }
     // Ambient hero trailer gates (Home board TV only) — read before the board
@@ -1705,13 +1700,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     // the rail hides when the trailer goes fullscreen. The showing listener
     // arms the theater timer (deep lights-off a few seconds into playback).
     if (widget.discoverMode) {
-      _discoverShellBridge = DiscoverShellBridge(
-        readPreview: () => _discPreview,
-        isTelevision: widget.isTelevision,
-        onCardSettings: _onDiscoverCardSettingsChanged,
-        onLayout: _onDiscoverLayoutChanged,
-        loadLayout: _loadDiscoverLayout,
-      );
+      _discoverSection.startShell();
     }
     MainPageBridge.addIntegrationListener(_onIntegrationsChanged);
     // Playback that ran in a separate ACTIVITY (Android TV native player,
@@ -1818,8 +1807,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // Quick-Play affordance the same way the board does.
       _loading = false;
       _refreshPikpakOnly();
-      _loadDiscoverAddons();
-      _primeDiscoverRows();
+      _discoverLoading.loadAddons();
+      _discoverLoading.primeRows();
     } else {
       // TV board: last-resort focus reclaim. Several load/reload paths dispose
       // FocusNodes wholesale (_applySections rebuilds every catalog row's
@@ -2217,9 +2206,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _searchFocusNode.removeListener(_onSearchFocusForSources);
     _searchFocus.dispose();
     _disposeListsNodes();
-    _discoverFocus.dispose();
-    _discoverShellBridge?.dispose();
-    _discPreview.dispose();
+    _discoverSection.dispose();
     _boardViewport.disposeScroll();
     _keywordViewport.dispose();
     _keywordFocus.dispose();
@@ -4687,7 +4674,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   bool _boardHasFocus() {
     bool anyOf(List<FocusNode> ns) => ns.any((n) => n.hasFocus);
     if (_searchFocus.hasFocus ||
-        _discSourceNode.hasFocus ||
+        _discoverSection.discSourceNode.hasFocus ||
         // Spotlight's hero is a focus target the rail lists know nothing
         // about; without this the arrival machinery thinks the board is
         // unfocused while the hero holds the cursor and steals it back.
@@ -4815,7 +4802,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     searchMode: widget.searchMode,
     isTelevision: widget.isTelevision,
     mode: _mode,
-    discoverSource: _discSourceNode,
+    discoverSource: _discoverSection.discSourceNode,
     keywordToolbar: _kwToolbarVisible ? _kwToolbarNodes.first : null,
     listsResult: _listsResults.isNotEmpty && _listsNodes.isNotEmpty
         ? _listsNodes.first
@@ -6841,9 +6828,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           setState(() {});
           _scheduleTitleSuggestions();
           if (widget.discoverMode &&
-              _discSource == _discTmdb &&
+              _discoverSection.discSource == _discTmdb &&
               !prefs.features.contains(MetadataFeature.discovery)) {
-            _selectDiscoverSource(_discCw);
+            _discoverSection.selectDiscoverSource(_discCw);
           }
         },
       );
@@ -8674,7 +8661,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     isTelevision: widget.isTelevision,
     dedicatedSearch: widget.searchMode,
     spotlightActive: () => _spotlightShellActive,
-    discover: _buildDiscover,
+    discover: _discoverSection.buildDiscover,
     board: _buildBoard,
     spotlight: _buildSpotlightShell,
     header: _buildHeader,
@@ -9174,131 +9161,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   );
 
   // ── Discover tab ────────────────────────────────────────────────────────────
-
-  /// Load Continue Watching + Trakt rows, then refresh the pinned-source badge
-  /// counts once. The board's `_load` does this via `_refreshBoundSources`; the
-  /// Trakt loader only refreshes bound counts when Trakt is connected, so
-  /// non-Trakt users would otherwise never get badges in Discover.
-  Future<void> _primeDiscoverRows() async {
-    await Future.wait([
-      _loadContinueWatching(),
-      _loadTraktContinueWatching(refreshBound: false),
-      // Populates _simklAll/_simklProgress for the Simkl source's Continue
-      // Watching list (folded into that source, like Trakt's).
-      _loadSimklContinueWatching(refreshBound: false),
-      _loadMdblistContinueWatching(refreshBound: false),
-    ]);
-    if (mounted) await _refreshBoundSources();
-  }
-
-  /// Apply fixed/remembered sources from local preferences immediately, then
-  /// hydrate add-ons separately. Add-on defaults wait only for the inventory
-  /// needed to validate them, and a source picked during that wait always wins.
-  Future<void> _loadDiscoverAddons() => _discoverSourceController.load(
-    isCurrent: () => mounted,
-    mdblistEnabled: kMdblistEnabled,
-    discoveryEnabled: () async {
-      if (_metadataFeaturePolicy == null) await _refreshMetadataFeaturePolicy();
-      return _metadataFeaturePolicy?.features.contains(
-            MetadataFeature.discovery,
-          ) ==
-          true;
-    },
-    onInventory: (addons) {
-      for (final addon in addons) {
-        _addonsById.putIfAbsent(addon.id, () => addon);
-      }
-    },
-    onChanged: () => setState(() {}),
-  );
-
-  /// The Discover tab: a "Source" dropdown over a single browsable grid. Each
-  /// source is rendered by the matching See-All panel in [embedded] mode (no
-  /// Scaffold/back header), with the Source dropdown injected as its leading
-  /// filter so DPAD walks Source → the panel's own filters → grid. All item
-  /// open/play/bound wiring is this screen's existing board handlers.
-  Widget _buildDiscover() => DiscoverBrowsingInput(
-    onActivity: _discPreview.onActivity,
-    child: _buildDiscoverContent(),
-  );
-
-  Widget _buildDiscoverContent() => buildDiscoverContent(
-    context,
-    sourcePanel: _buildDiscoverPanel(),
-    cardSettings: _discCardSettings,
-    showPreview:
-        widget.isTelevision &&
-        _discSource != _discJellyfin &&
-        _discSource != _discEmby,
-    stage: _discStage,
-    focused: _discFocused,
-    preview: _discPreview,
-    isCurrent: () => mounted,
-    loadingIndicator: (visible) => HomeHeroTrailerLoadingPill(visible: visible),
-    ambientIndicator: (visible) => HomeHeroAmbientChip(visible: visible),
-  );
-
-  void _selectDiscoverSource(String source) {
-    final selected = _discoverSourceController.select(
-      source,
-      discoveryEnabled:
-          _metadataFeaturePolicy?.features.contains(
-            MetadataFeature.discovery,
-          ) ==
-          true,
-      isCurrent: () => mounted,
-      beforeChange: () {
-        _discFocused.value = null;
-        _discPreview.shown.value = null;
-        if (source == _discJellyfin || source == _discEmby) {
-          _discPreview.resetPlayback();
-        }
-      },
-      onChanged: () => setState(() {}),
-    );
-    // The embedded panel reattaches this shared node when the source changes.
-    if (selected && widget.isTelevision) {
-      _discoverFocus.restoreSource(isCurrent: () => mounted);
-    }
-  }
-
-  Widget _buildDiscoverPanel() => buildDiscoverPanels(
-    selected: _discSource,
-    isTelevision: widget.isTelevision,
-    sourceNode: _discSourceNode,
-    preferences: _metadataFeaturePolicy,
-    mdblistEnabled: kMdblistEnabled,
-    mdblistAuthenticated: _isMdblistAuthenticated,
-    addons: _discAddons,
-    onSelectSource: _selectDiscoverSource,
-    pikpakOnly: _pikpakOnly,
-    onItemFocused: _onDiscFocused,
-    isBound: _isBound,
-    findAddon: (id) => _addonsById[id],
-    addonForContinue: _addonForContinue,
-    onOpenCatalog: _openItem,
-    onPlayCatalog: _onCatalogPlay,
-    traktItems: _traktAll,
-    traktProgress: () => _cwCardMaps(HomeContinuationKind.trakt).progress,
-    onOpenTrakt: _openTraktItem,
-    onPlayTrakt: _playTraktItem,
-    simklItems: _simklAll,
-    simklProgress: _simklProgress,
-    onOpenSimkl: _openSimklItem,
-    onPlaySimkl: _playSimklItem,
-    onOpenSimklContinuation: _openSimklCwItem,
-    onPlaySimklContinuation: _playSimklCwItem,
-    mdblistList: _discMdblistList,
-    localItems: _cwAll,
-    localProgress: (m) => _cwCardProgress(HomeContinuationKind.local, m),
-    onOpenLocal: _openContinueItem,
-    onPlayLocal: _onContinuePlay,
-    reloadLocal: () async {
-      await _loadContinueWatching();
-      if (!mounted) return const <StremioMeta>[];
-      return List<StremioMeta>.of(_cwAll);
-    },
-  );
 
   bool _focusCatalogContinuation() => _catalogFocus.focusAction();
 

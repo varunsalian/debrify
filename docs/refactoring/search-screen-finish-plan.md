@@ -463,6 +463,8 @@ of this is dropped silently:
 | --- | --- | --- | --- |
 | 0 | `5b632a61` docs, `c1aa91b9` guard fix | 9,964 | Accepted baseline `finish/gate0b.jsonl`: 10,262 pass / 22 fail / 29 err / 20 skip, same failure set as `165fd015`, no new skips. Only expected missing identity: `collections_stage_regression_test.dart::Widget _buildCanvasBoard uses collection artwork, shape and focus preview`, replaced by `_canvasCell` + Canvas-geometry guards in `c1aa91b9`. First run (`gate0`) found 8 stale source guards (fixed) + 1 flake (see Found, not fixed). Analyzer: `finish/analyze-gate0.txt`, 836 issues. Its only 2 "added" identities vs the original baseline are pre-existing deprecations relocated from `search_screen.dart`/`search_sources.dart`. |
 
+| 1 | `:/refactor: move Discover section coordinators` | 9,826 | Source/layout/focus/preview → `discover_section.dart`; priming/inventory → `discover_loading.dart`. Panel cross-feature wiring is a construction callback; binding/handoff lifecycle stays ordered for step 10. Scoped analyze: same 2 infos; 311 focused passes plus corrected source assertion (5 baseline failures/errors); Discover recheck 106 pass, final panel wiring 7 pass; guard passes. |
+
 ## Found, not fixed
 
 (Bugs or cleanups noticed during moves. Each needs a separate change after the
