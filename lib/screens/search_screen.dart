@@ -1,3 +1,8 @@
+import '../features/home/presentation/home_item_actions.dart';
+import '../features/home/presentation/home_detail_actions.dart';
+import '../features/home/presentation/home_source_actions.dart';
+import '../features/home/presentation/home_catalog_actions.dart';
+import '../features/home/presentation/home_playback_navigation.dart';
 import '../features/search/presentation/lists_search_rows.dart';
 import '../features/search/presentation/search_input_section.dart';
 import '../features/search/presentation/search_mode_section.dart';
@@ -44,19 +49,12 @@ import '../features/home/presentation/home_board_media.dart';
 import '../ui/core/retry_message.dart';
 import '../features/home/presentation/home_board_content.dart';
 import '../features/home/application/home_detail_action_dependencies.dart';
-import '../features/home/application/home_detail_dependencies.dart';
 import '../features/home/presentation/home_detail_menus.dart';
-import '../features/home/presentation/home_detail_presentation.dart';
-import '../features/home/presentation/home_catalog_play_action.dart';
 import '../features/home/presentation/home_detail_route.dart';
 import '../features/home/application/home_simkl_continuation_dependencies.dart';
 import '../features/home/application/home_iptv_continuation_dependencies.dart';
-import '../features/home/application/home_catalog_playback_resolver_dependencies.dart';
 import '../models/simkl_continue_watching_item.dart';
 import '../features/home/presentation/home_detail_action_bridge.dart';
-import '../features/home/presentation/home_source_editor.dart';
-import '../features/home/application/home_source_editing_dependencies.dart';
-import '../features/sources/presentation/local_source_picker_composition.dart';
 import '../features/home/application/home_local_history_removal_dependencies.dart';
 import '../features/home/presentation/home_continuation_row.dart';
 import '../features/home/presentation/home_catalog_row.dart';
@@ -156,7 +154,6 @@ import '../features/home/application/home_catalog_continuation_controller.dart';
 import '../features/home/models/home_catalog_state.dart';
 import '../features/home/models/home_catalog_plan.dart';
 import '../features/home/application/home_catalog_preferences_dependencies.dart';
-import '../features/home/presentation/home_sources_navigation.dart';
 import '../features/search/application/keyword_snapshot_dependencies.dart';
 import '../features/search/data/keyword_snapshot_repository.dart';
 import '../features/search/models/keyword_cache_state.dart';
@@ -164,15 +161,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/search/models/search_session.dart';
 import '../features/search/models/search_mode.dart';
 import '../services/native_series_metadata_service.dart';
-import '../models/media_identity.dart';
-import '../features/home/presentation/home_random_playback_action.dart';
-import '../features/home/presentation/home_detail_navigation.dart';
-import '../features/home/application/home_random_episode_dependencies.dart';
-import '../features/home/application/home_catalog_episode_identity_dependencies.dart';
-import '../features/home/application/home_catalog_origin_dependencies.dart';
-import '../features/home/application/home_tracking_policy_dependencies.dart';
-import '../features/home/data/home_catalog_playback_payload.dart';
-import '../features/home/presentation/home_catalog_playback_bridge.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../models/metadata_preferences.dart';
 import '../services/metadata_preferences_service.dart';
@@ -193,7 +181,6 @@ import 'package:flutter/material.dart';
 import '../models/custom_series_identity.dart';
 import 'package:flutter/services.dart';
 
-import '../models/advanced_search_selection.dart';
 import '../theme/app_theme_scope.dart';
 import '../features/home/presentation/home_classic_row_metrics.dart';
 import '../utils/platform_util.dart';
@@ -201,7 +188,6 @@ import '../utils/tvos_device.dart';
 import '../models/debrify_tv/channel.dart';
 import '../models/home_collection.dart';
 import '../models/iptv_playlist.dart';
-import '../features/home/presentation/home_playback_artwork.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/stremio_addon.dart';
 import '../models/stremio_tv/stremio_tv_now_playing.dart';
@@ -231,9 +217,6 @@ import '../models/trakt_continue_watching_item.dart';
 import '../features/home/application/home_trakt_continuation_dependencies.dart';
 import '../services/video_player_launcher.dart';
 import '../services/tracking_source_policy.dart';
-import '../features/home/models/home_series_resume_signals.dart';
-import '../features/home/data/home_series_resume_repository.dart';
-import '../features/home/application/home_series_resume_dependencies.dart';
 import '../utils/tv_search_focus_handoff.dart';
 import '../services/youtube_service.dart';
 import '../widgets/debrid_action_sheet.dart';
@@ -256,9 +239,6 @@ import '../widgets/see_all/discover_card_settings_scope.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import '../features/home/application/home_layout_policy.dart';
-import 'episodes_screen.dart';
-import 'stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
-
 
 /// TV focus ring for board cards — violet-300, deliberately LIGHTER than the
 /// board's chrome accent: a light ring over dark art pops at 10ft, while the
@@ -349,6 +329,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   int get _tabIndex => widget.searchMode ? 17 : (widget.discoverMode ? 18 : 15);
 
   final StremioService _stremio = StremioService.instance;
+  late HomeItemActions _itemActions;
+  late HomeDetailActions _detailActions;
+  late HomeSourceActions _sourceActions;
   late final HomeCollectionsRepository _homeCollectionsRepository;
 
   final TextEditingController _searchController = TextEditingController();
@@ -360,11 +343,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // MainPageBridge.pendingMdblistListOpen. One focus node per card.
   late final SearchSession _searchSession;
   late final SearchResultBindings _searchResultBindings;
-
-  /// The addon that produced the item currently being played/browsed, threaded
-  /// into playback so Continue Watching can route resume / next-episode back to
-  /// it (matching Home's `addonId`). Set whenever we open a catalog item.
-  String? _activeAddonId;
 
   // Retain the plain snapshot adapter: disposal must not resolve WidgetRef.
   late final KeywordSnapshotRepository _keywordSnapshots;
@@ -458,7 +436,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   List<HomeCollection> get _homeCollections => _homeConfiguration.collections;
   late final _spotlightCatalogCards = SpotlightCatalogCardCache(
     wideArtwork: homeStageWideArtwork,
-    onOpen: (item, addon) => _openItem(item, addon),
+    onOpen: (item, addon) => _itemActions.openItem(item, addon),
   );
 
   /// Stable ids in the user's global Home-row order. Rows not present append
@@ -1250,6 +1228,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   DiscoverCardSettingsController get _discoverCardSettingsController =>
       _discoverBindings.cards;
+  late final HomeCatalogActions _catalogActions;
+  late final HomePlaybackNavigation _playbackNavigation;
   late final SearchInputSection _inputSection;
   late final SearchModeSection _modeSection;
   late final CatalogSearchSection _catalogSection;
@@ -1296,8 +1276,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         isBound: _isBound,
         findAddon: (id) => _addonsById[id],
         addonForContinue: _addonForContinue,
-        onOpenCatalog: _openItem,
-        onPlayCatalog: _onCatalogPlay,
+        onOpenCatalog: (item, addon, {isMdblistSource = false}) => _itemActions
+            .openItem(item, addon, isMdblistSource: isMdblistSource),
+        onPlayCatalog: _catalogActions.onCatalogPlay,
         traktItems: _traktAll,
         traktProgress: () => _cwCardMaps(HomeContinuationKind.trakt).progress,
         onOpenTrakt: _openTraktItem,
@@ -1373,7 +1354,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           TorrentPlaybackService.supportsDirectStreamDownload(torrent),
       download: TorrentPlaybackService.downloadDirectStream,
       copyText: (link) => Clipboard.setData(ClipboardData(text: link)),
-      snack: _snack,
+      snack: (message) => _playbackNavigation.snack(message),
       freeze: _keywordSection.kwFreeze,
       selection: _keywordSelection,
     ));
@@ -1463,12 +1444,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         isTelevision: () => widget.isTelevision,
         pikpakOnly: () => _pikpakOnly,
         isBound: _isBound,
-        onOpen: (item) => _openItem(
+        onOpen: (item) => _itemActions.openItem(
           item,
           _addonForContinue(item.sourceAddon?.id),
           isMdblistSource: true,
         ),
-        onQuickPlay: (item) => _onCatalogPlay(
+        onQuickPlay: (item) => _catalogActions.onCatalogPlay(
           item,
           _addonForContinue(item.sourceAddon?.id),
           isMdblistSource: true,
@@ -1503,7 +1484,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         originCurrent: () => _titleSearchScope == ProfileRuntime.scope.value,
         cancelSubmitFocus: _searchSubmitFocus.cancel,
         cancelTitleSuggestions: _titleSection.cancelTitleSuggestions,
-        openItem: _openItem,
+        openItem: (item, addon) => _itemActions.openItem(item, addon),
         resolver: () =>
             widget.suggestedTitleResolver ??
             MetadataTitleService.instance.resolve,
@@ -1631,6 +1612,153 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       focusSidebar: () => MainPageBridge.focusTvSidebar?.call(),
       onUp: _leaveBoardTop,
     ));
+    _playbackNavigation = HomePlaybackNavigation(ref, (
+      mounted: () => mounted,
+      profileCurrent: () =>
+          _profileSessionOwner == ProfileSessionMemory.captureOwner(),
+      context: () => context,
+      isTelevision: () => widget.isTelevision,
+      clearResume: _clearSeriesResume,
+      refreshBoundSources: _refreshBoundSources,
+      refreshAfterPlayback: _refreshAfterPlayback,
+      imdbOf: _imdbOf,
+      boundCountFor: _boundCountFor,
+      editSource: (item, {isCurrent}) =>
+          _sourceActions.editOrSelectSource(item, isCurrent: isCurrent),
+    ));
+    _catalogActions = HomeCatalogActions(ref, (
+      mounted: () => mounted,
+      profileCurrent: () =>
+          _profileSessionOwner == ProfileSessionMemory.captureOwner(),
+      context: () => context,
+      session: () => _homeCatalogSession,
+      imdbOf: _imdbOf,
+      availability: () => (
+        trakt: _isTraktAuthenticated,
+        simkl: _isSimklAuthenticated,
+        mdblist: _isMdblistAuthenticated,
+      ),
+      cachedTrakt: (item) =>
+          _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
+    ), _playbackNavigation);
+    _sourceActions = HomeSourceActions(ref, (
+      context: () => context,
+      session: () => _homeCatalogSession,
+      imdbOf: _imdbOf,
+      refreshBindings: _refreshBoundSources,
+    ), _playbackNavigation);
+    _detailActions = HomeDetailActions(
+      ref,
+      (
+        context: () => context,
+        session: () => _homeCatalogSession,
+        bridge: (route) => HomeDetailActionBridge(
+          isCurrent: () =>
+              _playbackNavigation.catalogNavigationCurrent() && route.isActive,
+          isSearch: () => widget.searchMode,
+          clearResume: _clearSeriesResume,
+          refreshLocal: _loadContinueWatching,
+          refreshTrakt: () => _loadTraktContinueWatching(refreshBound: false),
+          refreshSimkl: () => _loadSimklContinueWatching(refreshBound: false),
+          refreshMdblist: () =>
+              _loadMdblistContinueWatching(refreshBound: false),
+        ),
+        removeLocal: _handleContinueDetailAction,
+        removeTrakt: _removeFromTraktContinueWatching,
+        removeMdblist: _removeMdblistCwItem,
+        invokeSimkl: (item, action, detailRoute, presetRating) =>
+            handleSimklMenuAction(
+              context,
+              item,
+              action,
+              actions: ref.read(
+                homeDetailActionsProvider(_profileSessionOwner),
+              ),
+              presetRating: presetRating,
+              isCurrent: () =>
+                  _playbackNavigation.catalogNavigationCurrent() &&
+                  detailRoute.isActive,
+              removeContinueWatching: () => ref
+                  .read(homeSimklHistoryRemovalProvider(_profileSessionOwner))
+                  .remove(
+                    item.progressId ?? item.id,
+                    item.type,
+                    isCurrent: () =>
+                        _playbackNavigation.catalogNavigationCurrent() &&
+                        detailRoute.isActive,
+                  ),
+            ),
+        invokeMdblist: (item, action, detailRoute, presetRating) =>
+            handleMdblistMenuAction(
+              context,
+              item,
+              action,
+              actions: ref.read(
+                homeDetailActionsProvider(_profileSessionOwner),
+              ),
+              presetRating: presetRating,
+              isCurrent: () =>
+                  _playbackNavigation.catalogNavigationCurrent() &&
+                  detailRoute.isActive,
+            ),
+      ),
+      _playbackNavigation,
+      _catalogActions,
+      _sourceActions,
+    );
+    _itemActions = HomeItemActions(
+      ref,
+      (
+        context: () => context,
+        session: () => _homeCatalogSession,
+        isTelevision: () => widget.isTelevision,
+        pikpakOnly: () => _pikpakOnly,
+        mergedSeriesPage: () => _mergedSeriesPage,
+        imdbOf: _imdbOf,
+        cwIds: () => _cwIds,
+        removeLocalHistory: _removeLocalHistory,
+        onHistoryRemoved: () async {
+          _clearSeriesResume();
+          await _loadContinueWatching();
+        },
+        onClosed: (returnToTabOnClose) {
+          unawaited(_refreshAfterPlayback());
+          _refreshTraktAuthState();
+          _refreshSimklAuthState();
+          _refreshMdblistAuthState();
+          if (returnToTabOnClose != null) {
+            MainPageBridge.switchTab?.call(returnToTabOnClose);
+          }
+        },
+        menus: (item, imdb, inCw) {
+          // Same for the Trakt Continue Watching rows — removal goes through the
+          // Trakt playback/history APIs rather than local storage.
+          final inTraktCw = imdb != null && _traktByImdb.containsKey(imdb);
+          final inMdblistCw =
+              imdb != null && _mdblistByImdb[imdb]?.paused == true;
+
+          return HomeDetailMenus(
+            type: item.type,
+            identity: imdb,
+            removalColor: AppThemeScope.of(context).home.danger,
+            inLocalContinueWatching: inCw,
+            inTraktContinueWatching: inTraktCw,
+            inMdblistContinueWatching: inMdblistCw,
+            hasBoundSource: () => _isBound(item),
+            traktAuthenticated: () => _isTraktAuthenticated,
+            simklAuthenticated: () => _isSimklAuthenticated,
+            mdblistAuthenticated: () => _isMdblistAuthenticated,
+            hasSimklPause: () =>
+                _simklByImdb[_simklCardKey(item)]?.progress != null,
+          );
+        },
+        boundCountFor: _boundCountFor,
+      ),
+      _playbackNavigation,
+      _catalogActions,
+      _detailActions,
+      _sourceActions,
+    );
     _titleSearch.addListener(_titleSection.publishTitleSuggestions);
     _searchController.addListener(_titleSection.onTitleSearchEditingChanged);
     ProfileRuntime.scope.addListener(_onSearchProfileChanged);
@@ -3575,7 +3703,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return;
     }
 
-    _openItem(item, _addonForContinue(item.sourceAddon?.id));
+    _itemActions.openItem(item, _addonForContinue(item.sourceAddon?.id));
   }
 
   /// Refresh accepted playlist rows, posters, favourite flags and progress.
@@ -3818,7 +3946,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _openSimklItem(item, heroTag: heroTag);
         return;
       }
-      _openItem(
+      _itemActions.openItem(
         item,
         _addonForContinue(item.sourceAddon?.id),
         isTraktSource: section.isTrakt,
@@ -3827,7 +3955,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
       return;
     }
-    _openItem(item, section.addon, heroTag: heroTag);
+    _itemActions.openItem(item, section.addon, heroTag: heroTag);
   }
 
   /// Quick-play counterpart to [_sectionOpenItem]. Trakt rows go through
@@ -3843,7 +3971,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       if (section.isTrakt) {
         _playTraktItem(item);
       } else if (section.isMdblist) {
-        _onCatalogPlay(
+        _catalogActions.onCatalogPlay(
           item,
           _addonForContinue(item.sourceAddon?.id),
           isMdblistSource: true,
@@ -3853,7 +3981,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       }
       return;
     }
-    _onCatalogPlay(item, section.addon);
+    _catalogActions.onCatalogPlay(item, section.addon);
   }
 
   /// A folder tile on a collection row opens that folder's merged grid.
@@ -3862,7 +3990,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _openCollectionScreen(section.collection, index < 0 ? 0 : index);
   }
 
-  /// Push the folder browser on [folderIndex]. Items open through [_openItem]
+  /// Push the folder browser on [folderIndex]. Items open through [_itemActions.openItem]
   /// with the addon that served them (the catalog fetch stamps
   /// `sourceAddon`), so the detail flow is the catalog rows' own.
   void _openCollectionScreen(HomeCollection collection, int folderIndex) {
@@ -3875,11 +4003,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 initialFolderIndex: folderIndex,
                 fromHome: true,
                 isTelevision: widget.isTelevision,
-                onOpenItem: (item) =>
-                    _openItem(item, item.sourceAddon ?? _addonForContinue(null)),
+                onOpenItem: (item) => _itemActions.openItem(
+                  item,
+                  item.sourceAddon ?? _addonForContinue(null),
+                ),
                 onQuickPlay: _pikpakOnly
                     ? null
-                    : (item) => _onCatalogPlay(
+                    : (item) => _catalogActions.onCatalogPlay(
                         item,
                         item.sourceAddon ?? _addonForContinue(null),
                       ),
@@ -3892,28 +4022,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Open a Continue Watching title as a normal detail page (no Home-style
   /// list menu). The detail's action row + a "Remove from Continue Watching"
-  /// action are wired via [_openItem] (which detects membership in [_cwIds]).
+  /// action are wired via [_itemActions.openItem] (which detects membership in [_cwIds]).
   void _openContinueItem(StremioMeta item) {
-    _openItem(item, item.sourceAddon ?? _addonForContinue(_cwAddonId[item.imdbId]));
+    _itemActions.openItem(
+      item,
+      item.sourceAddon ?? _addonForContinue(_cwAddonId[item.imdbId]),
+    );
   }
 
   /// Long-press quick-play for a Continue Watching title — resumes directly
   /// (series resume the last-played episode) without opening the detail.
   void _onContinuePlay(StremioMeta item) {
-    _onCatalogPlay(item, item.sourceAddon ?? _addonForContinue(_cwAddonId[item.imdbId]));
+    _catalogActions.onCatalogPlay(
+      item,
+      item.sourceAddon ?? _addonForContinue(_cwAddonId[item.imdbId]),
+    );
   }
 
   /// Open a plain Simkl-list title (Discover's Simkl Trending/watchlist lists) —
   /// a normal catalog detail, no resume. The CW list uses [_openSimklCwItem]
   /// instead, so a title browsed fresh here never opens mid-episode.
   void _openSimklItem(StremioMeta item, {String? heroTag}) {
-    _openItem(item, NativeSeriesMetadataService.addonForItem(item), heroTag: heroTag);
+    _itemActions.openItem(
+      item,
+      NativeSeriesMetadataService.addonForItem(item),
+      heroTag: heroTag,
+    );
   }
 
   /// Quick-play a plain Simkl-list title like any other catalog item (no
   /// resume). The CW list uses [_playSimklCwItem].
   void _playSimklItem(StremioMeta item) {
-    _onCatalogPlay(item, NativeSeriesMetadataService.addonForItem(item));
+    _catalogActions.onCatalogPlay(
+      item,
+      NativeSeriesMetadataService.addonForItem(item),
+    );
   }
 
   // ── Trakt Continue Watching ───────────────────────────────────────────────
@@ -4100,7 +4243,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Open a Trakt Continue Watching title as a normal detail page.
   void _openTraktItem(StremioMeta item) {
-    _openItem(
+    _itemActions.openItem(
       item,
       _addonForContinue(item.sourceAddon?.id),
       isTraktSource: true,
@@ -4109,7 +4252,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   /// Open a detail page requested by another tab (see [initState]). Builds a
   /// minimal Trakt-sourced [StremioMeta] from the handoff map and routes through
-  /// the normal [_openItem] path, so every action button behaves exactly as on
+  /// the normal [_itemActions.openItem] path, so every action button behaves exactly as on
   /// the Home board. For a series it scrolls to the requested season/episode,
   /// and it returns to the origin tab when the detail closes.
   Future<void> _openPendingCatalogDetail(Map<String, dynamic> data) async {
@@ -4132,7 +4275,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       poster: data['poster'] as String?,
       year: (data['year'] as int?)?.toString(),
     );
-    _openItem(
+    _itemActions.openItem(
       meta,
       _addonForContinue(null),
       isTraktSource: true,
@@ -4145,13 +4288,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// Resume a Trakt Continue Watching title — resolves the paused/next episode
   /// (an extra Trakt call for series) and plays.
   Future<void> _playTraktItem(StremioMeta item) async {
-    if (!_catalogNavigationCurrent()) return;
+    if (!_playbackNavigation.catalogNavigationCurrent()) return;
     final cwItem = _traktByImdb[_imdbOf(item)];
     if (cwItem == null) {
       // Not in Continue Watching — a fetched Trakt list title (Trending,
       // Watchlist, …). Play it like a catalog title: addon-stream resolution
       // with the same Trakt-first resume the detail page's Play button uses.
-      await _onCatalogPlay(
+      await _catalogActions.onCatalogPlay(
         item,
         _addonForContinue(item.sourceAddon?.id),
         isTraktSource: true,
@@ -4159,25 +4302,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       );
       return;
     }
-    final resume = await _seriesResumeRepository.traktSelection(
+    final resume = await _catalogActions.seriesResumeRepository.traktSelection(
       item,
       cached: cwItem,
-      isCurrent: _catalogNavigationCurrent,
+      isCurrent: _playbackNavigation.catalogNavigationCurrent,
     );
-    if (!_catalogNavigationCurrent()) return;
+    if (!_playbackNavigation.catalogNavigationCurrent()) return;
     final sel = resume?.sel;
     if (sel == null) {
-      _snack("Couldn't resolve where to resume \"${item.name}\".");
+      _playbackNavigation.snack(
+        "Couldn't resolve where to resume \"${item.name}\".",
+      );
       return;
     }
-    _playSelection(sel);
+    _playbackNavigation.playSelection(sel);
   }
 
   Future<bool> _removeLocalHistory(String id) async {
-    if (!_catalogNavigationCurrent()) return false;
+    if (!_playbackNavigation.catalogNavigationCurrent()) return false;
     return ref
         .read(homeLocalHistoryRemovalProvider(_profileSessionOwner))
-        .remove(id, isCurrent: _catalogNavigationCurrent);
+        .remove(id, isCurrent: _playbackNavigation.catalogNavigationCurrent);
   }
 
   /// Detail-screen action for a Continue Watching title. Only handles removal;
@@ -4195,7 +4340,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       return;
     }
     detailRoute.closeIfCurrent();
-    _snack('Removed from Continue Watching');
+    _playbackNavigation.snack('Removed from Continue Watching');
   }
 
   /// Detail-screen action for a Trakt Continue Watching title: delete the
@@ -4210,7 +4355,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     HomeDetailRoute? detailRoute,
   }) async {
     bool current() =>
-        _catalogNavigationCurrent() && (detailRoute?.isActive ?? true);
+        _playbackNavigation.catalogNavigationCurrent() &&
+        (detailRoute?.isActive ?? true);
     if (!current()) return;
     final cwItem = _traktByImdb[imdbId];
     if (cwItem == null) return;
@@ -4219,11 +4365,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         .remove(cwItem, isCurrent: current);
     if (!mounted || removed == null || !current()) return;
     if (!removed) {
-      _snack('Failed to remove from Trakt Continue Watching');
+      _playbackNavigation.snack(
+        'Failed to remove from Trakt Continue Watching',
+      );
       return;
     }
     detailRoute?.closeIfCurrent();
-    _snack('Removed from Trakt Continue Watching');
+    _playbackNavigation.snack('Removed from Trakt Continue Watching');
     await _loadTraktContinueWatching(refreshBound: false);
   }
 
@@ -4237,7 +4385,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     int cwIndex,
     int col,
   ) async {
-    if (!_catalogNavigationCurrent()) return;
+    if (!_playbackNavigation.catalogNavigationCurrent()) return;
     final readPreference = ref.read(
       homeCwHoldPreferenceProvider(_profileSessionOwner),
     );
@@ -4247,7 +4395,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       item: item,
       pikpakOnly: _pikpakOnly,
       isTelevision: () => widget.isTelevision,
-      isCurrent: _catalogNavigationCurrent,
+      isCurrent: _playbackNavigation.catalogNavigationCurrent,
       readHoldToQuickPlay: readPreference,
       refocusAfterRemoval: () => _refocusAfterCwRemoval(cwIndex, col),
     );
@@ -4259,7 +4407,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _refocusAfterCwRemoval(int cwIndex, int col) {
     if (!widget.isTelevision) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_catalogNavigationCurrent()) return;
+      if (!_playbackNavigation.catalogNavigationCurrent()) return;
       // Same index first: if this row survived it's still here, and if it
       // emptied out the row below has slid into its place.
       if (_focusCwRow(cwIndex, col)) return;
@@ -4278,7 +4426,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     final imdbId = _imdbOf(item) ?? item.id;
     if (imdbId.isEmpty) return;
     if (!await _removeLocalHistory(imdbId) || !mounted) return;
-    _snack('Removed from Continue Watching');
+    _playbackNavigation.snack('Removed from Continue Watching');
     await _loadContinueWatching();
   }
 
@@ -4295,21 +4443,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// own result snackbar), so a series is moved to On Hold and its paused
   /// session cleared, and a movie just loses the session.
   Future<void> _removeSimklCwItem(StremioMeta item) async {
-    if (!_catalogNavigationCurrent()) return;
+    if (!_playbackNavigation.catalogNavigationCurrent()) return;
     await handleSimklMenuAction(
       context,
       item,
       SimklItemMenuAction.removeFromContinueWatching,
-      isCurrent: _catalogNavigationCurrent,
+      isCurrent: _playbackNavigation.catalogNavigationCurrent,
       removeContinueWatching: () => ref
           .read(homeSimklHistoryRemovalProvider(_profileSessionOwner))
           .remove(
             item.progressId ?? item.id,
             item.type,
-            isCurrent: _catalogNavigationCurrent,
+            isCurrent: _playbackNavigation.catalogNavigationCurrent,
           ),
     );
-    if (!_catalogNavigationCurrent()) return;
+    if (!_playbackNavigation.catalogNavigationCurrent()) return;
     await _loadSimklContinueWatching(refreshBound: false);
   }
 
@@ -4317,14 +4465,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// resume entry, a series drops every episode's (the card collapses them, so
   /// leaving one behind would just rebuild it).
   Future<void> _removeIptvCwItem(StremioMeta item) async {
-    if (!_catalogNavigationCurrent()) return;
+    if (!_playbackNavigation.catalogNavigationCurrent()) return;
     final entry = _iptvCwByKey[item.id];
     if (entry == null) return;
     final removed = await ref
         .read(homeIptvHistoryRemovalProvider(_profileSessionOwner))
-        .remove(entry, isCurrent: _catalogNavigationCurrent);
+        .remove(entry, isCurrent: _playbackNavigation.catalogNavigationCurrent);
     if (!removed) return;
-    _snack('Removed from Continue Watching');
+    _playbackNavigation.snack('Removed from Continue Watching');
     await _loadIptvContinueWatching();
   }
 
@@ -4372,7 +4520,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// connected. No `isTraktSource` flag — this is a plain, source-neutral open.
   void _openSimklCwItem(StremioMeta item) {
     final cw = _simklByImdb[_simklCardKey(item)];
-    _openItem(
+    _itemActions.openItem(
       item,
       NativeSeriesMetadataService.addonForItem(item),
       initialSeason: (cw != null && !cw.isMovie) ? cw.season : null,
@@ -4384,17 +4532,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// selection carrying the paused season/episode + Simkl progress percent and
   /// plays it, mirroring the Trakt quick-play.
   Future<void> _playSimklCwItem(StremioMeta item) async {
-    if (!_catalogNavigationCurrent()) return;
-    _activeAddonId = NativeSeriesMetadataService.addonForItem(item).id;
-    _playbackArtwork.capture(item);
+    if (!_playbackNavigation.catalogNavigationCurrent()) return;
+    _playbackNavigation.activeAddonId =
+        NativeSeriesMetadataService.addonForItem(item).id;
+    _playbackNavigation.playbackArtwork.capture(item);
     final cw = _simklByImdb[_simklCardKey(item)];
     if (cw == null) {
       // Not in the CW map (a See-All grid title that fell out of the list) —
       // play it like a plain catalog title; three-way resume still applies.
-      await _onCatalogPlay(item, NativeSeriesMetadataService.addonForItem(item));
+      await _catalogActions.onCatalogPlay(
+        item,
+        NativeSeriesMetadataService.addonForItem(item),
+      );
       return;
     }
-    _playSelection(cw.selection);
+    _playbackNavigation.playSelection(cw.selection);
   }
 
   /// Desktop "See All" for the Simkl Continue Watching rows — reuses the generic
@@ -4461,7 +4613,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   void _openMdblistCwItem(StremioMeta item) {
     final cw = _mdblistByImdb[_imdbOf(item)];
-    _openItem(
+    _itemActions.openItem(
       item,
       _addonForContinue(item.sourceAddon?.id),
       initialSeason: cw?.selection.season,
@@ -4471,17 +4623,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   }
 
   Future<void> _playMdblistCwItem(StremioMeta item) async {
-    if (!_catalogNavigationCurrent()) return;
+    if (!_playbackNavigation.catalogNavigationCurrent()) return;
     final cw = _mdblistByImdb[_imdbOf(item)];
     if (cw == null) {
-      await _onCatalogPlay(
+      await _catalogActions.onCatalogPlay(
         item,
         _addonForContinue(item.sourceAddon?.id),
         isMdblistSource: true,
       );
       return;
     }
-    _playSelection(cw.selection);
+    _playbackNavigation.playSelection(cw.selection);
   }
 
   bool _canRemoveMdblistCwItem(StremioMeta item) =>
@@ -4490,14 +4642,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   Future<void> _removeMdblistCwItem(StremioMeta item) async {
     final removed = await _mdblistContinuationController.remove(
       _imdbOf(item),
-      isCurrent: _catalogNavigationCurrent,
+      isCurrent: _playbackNavigation.catalogNavigationCurrent,
     );
     if (!mounted ||
         !removed ||
         _profileSessionOwner != ProfileSessionMemory.captureOwner()) {
       return;
     }
-    _snack('Removed from MDBList Continue Watching');
+    _playbackNavigation.snack('Removed from MDBList Continue Watching');
     await _loadMdblistContinueWatching();
   }
 
@@ -5622,9 +5774,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     trailerVolume: _heroTrailerVolume,
     onExitTop: _leaveBoardTop,
     onTrailerStop: _clearHeroTrailer,
-    onHeroOpen: _openItem,
+    onHeroOpen: _itemActions.openItem,
     onOpen: _sectionOpenItem,
-    onPlay: _pikpakOnly ? null : _onCatalogPlay,
+    onPlay: _pikpakOnly ? null : _catalogActions.onCatalogPlay,
     sourceTag: _catalogSourceTag,
     onSeeAll: _openCatalogSeeAll,
     onLoadMore: (section) {
@@ -5650,7 +5802,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       showCardTitlesAndRatings: !_hideHomeCardTitlesAndRatings,
       expandFocusedCard: _spotlightFocusDetails,
       cardTrailerVolume: _heroTrailerVolume,
-      onHeroOpen: _openItem,
+      onHeroOpen: _itemActions.openItem,
       onLoadMoreRow: (row) {
         if (row < 0 || row >= rails.length) return;
         final catalogRow = rails[row].sectionIndex;
@@ -7198,678 +7350,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
   }
 
-  void _openItem(
-    StremioMeta item,
-    StremioAddon addon, {
-    bool isTraktSource = false,
-    bool isMdblistSource = false,
-    // Shared-element tag from the tapped board cell: the poster flies into the
-    // detail page's backdrop. Null (non-board callers) = regular transition.
-    String? heroTag,
-    // For a series opened at a specific episode (Trakt Calendar): scroll the
-    // episodes panel to this season/episode. Ignored by the movie/legacy paths.
-    int? initialSeason,
-    int? initialEpisode,
-    // When set, switch back to this tab once the detail route closes — lets a
-    // cross-tab opener (the Calendar) return the user to where they came from.
-    int? returnToTabOnClose,
-  }) {
-    bool current() =>
-        mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
-    if (!current()) return;
-    final navigation = HomeDetailNavigation(
-      ref.read(homeCatalogOriginRepositoryProvider(_profileSessionOwner)),
-    );
-    unawaited(
-      navigation.open(
-        context: context,
-        item: item,
-        addon: addon,
-        routeName: kCatalogDetailRouteName,
-        isCurrent: current,
-        hasLocalHistory: (item) => _cwIds.contains(item.imdbId),
-        removeLocalHistory: _removeLocalHistory,
-        onHistoryRemoved: () async {
-          _clearSeriesResume();
-          await _loadContinueWatching();
-        },
-        showMessage: _snack,
-        onClosed: () {
-          unawaited(_refreshAfterPlayback());
-          _refreshTraktAuthState();
-          _refreshSimklAuthState();
-          _refreshMdblistAuthState();
-          if (returnToTabOnClose != null) {
-            MainPageBridge.switchTab?.call(returnToTabOnClose);
-          }
-        },
-        prepareBuilder: (item, addon, detailRoute) {
-          _activeAddonId = addon.id;
-          final imdb = _imdbOf(item);
-          // Show a "Remove from Continue Watching" action when this title is on the
-          // Continue Watching row (regardless of which row opened it).
-          final inCw = imdb != null && _cwIds.contains(imdb);
-          // Same for the Trakt Continue Watching rows — removal goes through the
-          // Trakt playback/history APIs rather than local storage.
-          final inTraktCw = imdb != null && _traktByImdb.containsKey(imdb);
-          final inMdblistCw =
-              imdb != null && _mdblistByImdb[imdb]?.paused == true;
-
-          final menus = HomeDetailMenus(
-            type: item.type,
-            identity: imdb,
-            removalColor: AppThemeScope.of(context).home.danger,
-            inLocalContinueWatching: inCw,
-            inTraktContinueWatching: inTraktCw,
-            inMdblistContinueWatching: inMdblistCw,
-            hasBoundSource: () => _isBound(item),
-            traktAuthenticated: () => _isTraktAuthenticated,
-            simklAuthenticated: () => _isSimklAuthenticated,
-            mdblistAuthenticated: () => _isMdblistAuthenticated,
-            hasSimklPause: () =>
-                _simklByImdb[_simklCardKey(item)]?.progress != null,
-          );
-
-          // Choose the layout at opening time, as before, rather than on a route rebuild.
-          final mergedDetail = _mergedSeriesPage;
-          final readers = ref.read(
-            homeDetailReadersProvider(_profileSessionOwner),
-          );
-          bool detailCurrent() => detailRoute.isActive;
-          return (_) => buildHomeDetail(
-            item: item,
-            addon: addon,
-            merged: mergedDetail,
-            isTelevision: widget.isTelevision,
-            pikpakOnly: _pikpakOnly,
-            hasBoundSource: () => _isBound(item),
-            isTraktSource: isTraktSource,
-            isMdblistSource: isMdblistSource,
-            heroTag: heroTag,
-            initialSeason: initialSeason,
-            initialEpisode: initialEpisode,
-            resumeInfo: () => _resolveResumeInfo(
-              item,
-              addon,
-              isTraktSource: isTraktSource,
-              isMdblistSource: isMdblistSource,
-            ),
-            play:
-                ({
-                  bool startFromBeginning = false,
-                  bool preferTraktResume = false,
-                  bool skipEpisodeFallback = false,
-                  bool browseSourcesOnly = false,
-                  HomeDetailPromise? promisedTarget,
-                }) => _onCatalogPlay(
-                  item,
-                  addon,
-                  isCurrent: () => detailRoute.isActive,
-                  isTraktSource: isTraktSource,
-                  isMdblistSource: isMdblistSource,
-                  startFromBeginning: startFromBeginning,
-                  preferTraktResume: preferTraktResume,
-                  skipEpisodeFallback: skipEpisodeFallback,
-                  browseSourcesOnly: browseSourcesOnly,
-                  promisedTarget: promisedTarget,
-                ),
-            browse: () => _onCatalogBrowse(
-              item,
-              addon,
-              isTraktSource: isTraktSource,
-              isMdblistSource: isMdblistSource,
-            ),
-            browseSelection: (selection) => _browseSelection(
-              selection,
-              metadataAddonId: addon.id,
-              catalogItem: item.withSourceAddon(addon),
-            ),
-            playSelection: (selection) => _playSelection(
-              selection,
-              metadataAddonId: addon.id,
-              catalogItem: item.withSourceAddon(addon),
-            ),
-            boundSourceCount: _boundCountFor,
-            selectSource: (show) {
-              if (!detailRoute.isActive) return Future.value();
-              _activeAddonId = addon.id;
-              return _handleEditOrSelectSource(
-                show.withSourceAddon(addon),
-                isCurrent: () => detailRoute.isActive,
-              );
-            },
-            adoptArtwork: (art) => _playbackArtwork.adopt(item, art),
-            menus: menus,
-            traktAction: (action, {rating}) => _handleDetailQuickAction(
-              item,
-              addon,
-              action,
-              inCw: inCw,
-              detailRoute: detailRoute,
-              imdb: imdb,
-              presetRating: rating,
-            ),
-            traktStatus:
-                (_isTraktAuthenticated &&
-                    imdb != null &&
-                    MediaIdentity.isImdb(imdb))
-                ? () => readers.trakt(imdb, item.type, isCurrent: detailCurrent)
-                : null,
-            simklAction: (action, {rating}) => _handleDetailSimklQuickAction(
-              item,
-              action,
-              detailRoute: detailRoute,
-              presetRating: rating,
-            ),
-            simklStatus: (_isSimklAuthenticated && imdb != null)
-                ? () => readers.simkl(imdb, item.type, isCurrent: detailCurrent)
-                : null,
-            mdblistAction: (action, {rating}) =>
-                _handleDetailMdblistQuickAction(
-                  item,
-                  action,
-                  detailRoute: detailRoute,
-                  presetRating: rating,
-                ),
-            mdblistStatus:
-                (_isMdblistAuthenticated &&
-                    imdb != null &&
-                    MediaIdentity.isImdb(imdb))
-                ? () =>
-                      readers.mdblist(imdb, item.type, isCurrent: detailCurrent)
-                : null,
-            recommendations: imdb != null && MediaIdentity.isImdb(imdb)
-                ? () => readers.recommendations(
-                    imdb,
-                    item.type,
-                    isCurrent: detailCurrent,
-                  )
-                : null,
-            openRecommendation: (rec) =>
-                _openItem(rec, rec.sourceAddon ?? addon),
-            enrich: (id, type) =>
-                readers.metadata(id, type, isCurrent: detailCurrent),
-          );
-        },
-      ),
-    );
-  }
-
-  HomeDetailActionBridge _detailActionBridge(HomeDetailRoute route) =>
-      HomeDetailActionBridge(
-        isCurrent: () => _catalogNavigationCurrent() && route.isActive,
-        isSearch: () => widget.searchMode,
-        clearResume: _clearSeriesResume,
-        refreshLocal: _loadContinueWatching,
-        refreshTrakt: () => _loadTraktContinueWatching(refreshBound: false),
-        refreshSimkl: () => _loadSimklContinueWatching(refreshBound: false),
-        refreshMdblist: () => _loadMdblistContinueWatching(refreshBound: false),
-      );
-
-  Future<void> _handleDetailQuickAction(
-    StremioMeta item,
-    StremioAddon addon,
-    TraktItemMenuAction action, {
-    required bool inCw,
-    required HomeDetailRoute detailRoute,
-    String? imdb,
-    int? presetRating,
-  }) => _detailActionBridge(detailRoute).trakt(
-    action,
-    removeLocal: () async {
-      if (imdb != null) {
-        await _handleContinueDetailAction(action, imdb, detailRoute);
-      }
-    },
-    removeTrakt: () async {
-      if (imdb != null) {
-        await _removeFromTraktContinueWatching(imdb, detailRoute: detailRoute);
-      }
-    },
-    invoke: (clearOnly) async {
-      if (clearOnly) {
-        await handleTraktMenuAction(
-          context,
-          item,
-          action,
-          actions: ref.read(homeDetailActionsProvider(_profileSessionOwner)),
-          isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
-        );
-        return;
-      }
-      _activeAddonId = addon.id;
-      await handleTraktMenuAction(
-        context,
-        item.withSourceAddon(addon),
-        action,
-        onSelectSource: (item) =>
-            _openSourceBinding(item, isCurrent: () => detailRoute.isActive),
-        onEditSource: (item) => _handleEditOrSelectSource(
-          item,
-          isCurrent: () => detailRoute.isActive,
-        ),
-        onPlayRandomEpisode: (m) => _playRandomEpisodeFromDetail(m, addon),
-        onSearchPacks: _searchPacksFromDetail,
-        onAddToStremioTv: (item) =>
-            _addToStremioTvFromDetail(item, detailRoute),
-        actions: ref.read(homeDetailActionsProvider(_profileSessionOwner)),
-        presetRating: presetRating,
-        isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
-      );
-    },
-  );
-
-  Future<void> _handleDetailSimklQuickAction(
-    StremioMeta item,
-    SimklItemMenuAction action, {
-    required HomeDetailRoute detailRoute,
-    int? presetRating,
-  }) => _detailActionBridge(detailRoute).simkl(
-    action,
-    invoke: () => handleSimklMenuAction(
-      context,
-      item,
-      action,
-      actions: ref.read(homeDetailActionsProvider(_profileSessionOwner)),
-      presetRating: presetRating,
-      isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
-      removeContinueWatching: () => ref
-          .read(homeSimklHistoryRemovalProvider(_profileSessionOwner))
-          .remove(
-            item.progressId ?? item.id,
-            item.type,
-            isCurrent: () =>
-                _catalogNavigationCurrent() && detailRoute.isActive,
-          ),
-    ),
-  );
-
-  Future<void> _handleDetailMdblistQuickAction(
-    StremioMeta item,
-    MdblistItemMenuAction action, {
-    required HomeDetailRoute detailRoute,
-    int? presetRating,
-  }) => _detailActionBridge(detailRoute).mdblist(
-    action,
-    remove: () => _removeMdblistCwItem(item),
-    invoke: () => handleMdblistMenuAction(
-      context,
-      item,
-      action,
-      actions: ref.read(homeDetailActionsProvider(_profileSessionOwner)),
-      presetRating: presetRating,
-      isCurrent: () => _catalogNavigationCurrent() && detailRoute.isActive,
-    ),
-  );
-
-  Future<void> _handleEditOrSelectSource(
-    StremioMeta item, {
-    bool Function()? isCurrent,
-  }) async {
-    bool current() =>
-        _catalogNavigationCurrent() && (isCurrent?.call() ?? true);
-    if (!current()) return;
-    await HomeSourceEditor(
-      context: context,
-      item: item,
-      id: _imdbOf(item),
-      repository: ref.read(
-        homeSourceEditingRepositoryProvider(_profileSessionOwner),
-      ),
-      localPicker: ref.read(localSourcePickerProvider),
-      isCurrent: current,
-      refreshBindings: _refreshBoundSources,
-      showMessage: _snack,
-      openTorrent: (item) => _openSourceBinding(item, isCurrent: current),
-      openKeyword: (item) =>
-          _openSourceBinding(item, keyword: true, isCurrent: current),
-    ).open();
-  }
-
-  Future<void> _addToStremioTvFromDetail(
-    StremioMeta item,
-    HomeDetailRoute route,
-  ) async {
-    bool current() => _catalogNavigationCurrent() && route.isActive;
-    if (!current()) return;
-    final result = await StremioTvCatalogPickerDialog.show(
-      context,
-      item: item,
-      isCurrent: current,
-    );
-    if (!current() || result == null) return;
-    _snack(result.message);
-  }
-
-  void _searchPacksFromDetail(StremioMeta item) {
-    final imdb = _imdbOf(item);
-    if (imdb == null) {
-      _snack('No IMDb match to find packs for "${item.name}".');
-      return;
-    }
-    _browseSelection(
-      AdvancedSearchSelection(
-        imdbId: imdb,
-        isSeries: true,
-        title: item.name,
-        year: item.year,
-        contentType: item.type,
-        posterUrl: item.poster,
-      ),
-    );
-  }
-
-  Future<void> _playRandomEpisodeFromDetail(
-    StremioMeta item,
-    StremioAddon addon,
-  ) {
-    bool current() =>
-        mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
-    if (!current()) return Future.value();
-    return runHomeRandomPlayback(
-      context: context,
-      item: item,
-      addon: addon,
-      isCurrent: current,
-      prepare: (continuous) => ref
-          .read(homeRandomPlaybackRepositoryProvider(_profileSessionOwner))
-          .prepare(
-            item: item,
-            addon: addon,
-            progressId: _imdbOf(item),
-            continuous: continuous,
-            isCurrent: current,
-          ),
-      showMessage: _snack,
-      launch: _playSelection,
-    );
-  }
-
-  Future<void> _onCatalogPlay(
-    StremioMeta item,
-    StremioAddon addon, {
-    bool isTraktSource = false,
-    bool isMdblistSource = false,
-    bool startFromBeginning = false,
-    bool skipEpisodeFallback = false,
-    bool preferTraktResume = false,
-    ({bool started, int season, int episode})? promisedTarget,
-    bool browseSourcesOnly = false,
-    bool Function()? isCurrent,
-  }) async {
-    bool current() =>
-        _catalogNavigationCurrent() && (isCurrent?.call() ?? true);
-    if (!current()) return;
-    await HomeCatalogPlayAction(
-      log: debugPrint,
-      origin: ref.read(
-        homeCatalogOriginRepositoryProvider(_profileSessionOwner),
-      ),
-      policies: ref.read(
-        homeTrackingPolicyRepositoryProvider(_profileSessionOwner),
-      ),
-      targets: ref.read(
-        homeCatalogPlaybackResolverProvider(_homeCatalogSession),
-      ),
-      identity: ref.read(
-        homeCatalogEpisodeIdentityProvider(_profileSessionOwner),
-      ),
-      artwork: _playbackArtwork,
-    ).run(
-      context,
-      item,
-      addon,
-      isCurrent: current,
-      availability: () => (
-        trakt: _isTraktAuthenticated,
-        simkl: _isSimklAuthenticated,
-        mdblist: _isMdblistAuthenticated,
-      ),
-      cachedTrakt: (item) =>
-          _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
-      showMessage: _snack,
-      activateAddon: (id) => _activeAddonId = id,
-      openEpisodes: _openEpisodes,
-      browse: _browseSelection,
-      play: _playSelection,
-      isTraktSource: isTraktSource,
-      isMdblistSource: isMdblistSource,
-      startFromBeginning: startFromBeginning,
-      skipEpisodeFallback: skipEpisodeFallback,
-      preferTraktResume: preferTraktResume,
-      promisedTarget: promisedTarget,
-      browseSourcesOnly: browseSourcesOnly,
-    );
-  }
-
   void _clearSeriesResume() {
     if (mounted) _homeMediaBindings.seriesResume.clear();
-  }
-
-  HomeSeriesResumeRepository get _seriesResumeRepository =>
-      ref.read(homeSeriesResumeRepositoryProvider(_profileSessionOwner));
-
-  Future<TrackingSourcePolicy?> _loadTrackingPolicy(StremioMeta item) async {
-    bool current() =>
-        mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
-    if (!current()) return null;
-    return ref
-        .read(homeTrackingPolicyRepositoryProvider(_profileSessionOwner))
-        .loadForContent(item.progressId, isCurrent: current);
-  }
-
-  Future<HomeResumePosition> _resolveResumeInfo(
-    StremioMeta item,
-    StremioAddon addon, {
-    bool isTraktSource = false,
-    bool isMdblistSource = false,
-  }) async {
-    final trackingPolicy = await _loadTrackingPolicy(item);
-    if (!_catalogNavigationCurrent() || trackingPolicy == null) {
-      return (started: false, season: null, episode: null);
-    }
-    return ref
-        .read(homeCatalogPlaybackResolverProvider(_homeCatalogSession))
-        .label(
-          item,
-          addon,
-          trackingPolicy: trackingPolicy,
-          availability: () => (
-            trakt: _isTraktAuthenticated,
-            simkl: _isSimklAuthenticated,
-            mdblist: _isMdblistAuthenticated,
-          ),
-          cachedTrakt: () =>
-              _traktByImdb[item.progressId] ?? _traktByImdb[item.id],
-          isCurrent: _catalogNavigationCurrent,
-          isTraktSource: isTraktSource,
-          isMdblistSource: isMdblistSource,
-        );
-  }
-
-  void _onCatalogBrowse(
-    StremioMeta item,
-    StremioAddon addon, {
-    bool isTraktSource = false,
-    bool isMdblistSource = false,
-  }) {
-    if (item.type == 'series') {
-      _openEpisodes(
-        item,
-        addon,
-        isTraktSource: isTraktSource,
-        isMdblistSource: isMdblistSource,
-      );
-    } else {
-      _browseSelection(
-        homeCatalogMovieSelection(
-          item,
-          isTraktSource: isTraktSource,
-          isMdblistSource: isMdblistSource,
-        ),
-        metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon),
-      );
-    }
-  }
-
-  void _openEpisodes(
-    StremioMeta item,
-    StremioAddon addon, {
-    bool isTraktSource = false,
-    bool isMdblistSource = false,
-  }) {
-    _activeAddonId = addon.id;
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            settings: const RouteSettings(name: kEpisodesRouteName),
-            builder: (_) => EpisodesScreen(
-              show: item,
-              addon: addon,
-              isTelevision: widget.isTelevision,
-              isTraktSource: isTraktSource,
-              isMdblistSource: isMdblistSource,
-              // EpisodesScreen pops itself (and the detail route) before firing
-              // these, so we're back on the Search screen when they run.
-              onQuickPlay: (selection) => _playSelection(
-                selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon),
-              ),
-              onItemSelected: (selection) => _browseSelection(
-                selection, metadataAddonId: addon.id, catalogItem: item.withSourceAddon(addon),
-              ),
-              // "Select Source" button: manage/pin sources via the same picker
-              // the detail screen uses (edit dialog when already bound, else the
-              // Torrent Search / Local / RD / TorBox picker) for a consistent
-              // entry point.
-              boundSourceCount: _boundCountFor,
-              onSelectSource: (show) {
-                _activeAddonId = addon.id;
-                return _handleEditOrSelectSource(show.withSourceAddon(addon));
-              },
-            ),
-          ),
-        )
-        .then((_) {
-          // EpisodesScreen can mark watched / play; its plays route through
-          // _playSelection (which clears too), but marks don't — never let a
-          // pre-visit reconciled answer survive the trip.
-          _clearSeriesResume();
-          _refreshBoundSources();
-        });
-  }
-
-  /// Binding payloads and keyword seeds belong to the Sources presentation bridge.
-  void _openSourceBinding(
-    StremioMeta item, {
-    bool keyword = false,
-    bool Function()? isCurrent,
-  }) {
-    bool current() =>
-        _catalogNavigationCurrent() && (isCurrent?.call() ?? true);
-    if (!current()) return;
-    unawaited(
-      ref
-          .read(homeSourcesNavigationProvider)
-          .bindCatalog(
-            context,
-            item: item,
-            progressId: _imdbOf(item),
-            keyword: keyword,
-            buildMeta: (selection) => _metaFor(selection, catalogItem: item),
-            isTelevision: () => widget.isTelevision,
-            isCurrent: current,
-            onReturned: _refreshBoundSources,
-          ),
-    );
-  }
-
-  PlaybackMeta _metaFor(
-    AdvancedSearchSelection sel, {
-    String? addonId,
-    StremioMeta? catalogItem,
-  }) => homeCatalogPlaybackMeta(
-    sel,
-    addonId: addonId,
-    fallbackAddonId: _activeAddonId,
-    catalogItem: catalogItem,
-    art: _playbackArtwork.forSelection(sel.imdbId, sel.title),
-  );
-
-  final HomePlaybackArtwork _playbackArtwork = HomePlaybackArtwork();
-
-  /// Catalog auto-best play — the service picks the provider, shows the real
-  /// cinematic overlay, searches, and plays (with source list + content
-  /// metadata so the in-player Sources switcher + Continue Watching work).
-  Future<void> _playSelection(
-    AdvancedSearchSelection sel, {
-    String? metadataAddonId,
-    StremioMeta? catalogItem,
-  }) async {
-    bool current() =>
-        mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
-    if (!current()) return;
-    // Capture the originating detail's provider for delayed Sources handoffs.
-    final addonId = metadataAddonId ?? _activeAddonId;
-    // No pre-playback reconciled answer may survive into post-playback reads.
-    _clearSeriesResume();
-    await ref
-        .read(homeCatalogPlaybackBridgeProvider)
-        .play(
-          context,
-          selection: sel,
-          buildMeta: () =>
-              _metaFor(sel, addonId: addonId, catalogItem: catalogItem),
-          // Honor "Play button opens" for this exact episode. A manual source tap
-          // must play directly rather than asking the user's intent a second time.
-          openSourcePicker: () => _browseSelection(
-            sel,
-            forcePlayOnTap: true,
-            metadataAddonId: addonId,
-            catalogItem: catalogItem,
-          ),
-          isCurrent: current,
-          refreshBoundSources: _refreshBoundSources,
-          refreshAfterPlayback: _refreshAfterPlayback,
-        );
-  }
-
-  bool _catalogNavigationCurrent() =>
-      mounted && _profileSessionOwner == ProfileSessionMemory.captureOwner();
-
-  /// Manual sources list in-tab — the screen searches itself (own loading) and
-  /// each tap plays with the full source list + content metadata.
-  void _browseSelection(
-    AdvancedSearchSelection sel, {
-    // Play has already expressed intent; manual Sources keeps the usual prompt.
-    bool forcePlayOnTap = false,
-    String? metadataAddonId,
-    StremioMeta? catalogItem,
-  }) {
-    if (!_catalogNavigationCurrent()) return;
-    unawaited(
-      ref
-          .read(homeSourcesNavigationProvider)
-          .browse(
-            context,
-            selection: sel,
-            buildMeta: () => _metaFor(
-              sel,
-              addonId: metadataAddonId,
-              catalogItem: catalogItem,
-            ),
-            isTelevision: () => widget.isTelevision,
-            forcePlayOnTap: forcePlayOnTap,
-            isCurrent: _catalogNavigationCurrent,
-            onReturned: _refreshAfterPlayback,
-          ),
-    );
-  }
-
-  void _snack(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-    );
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -8187,18 +7669,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     playSimklItem: _playSimklItem,
     openSimklCwItem: _openSimklCwItem,
     playSimklCwItem: _playSimklCwItem,
-    openMdblist: (item) => _openItem(
+    openMdblist: (item) => _itemActions.openItem(
       item,
       _addonForContinue(item.sourceAddon?.id),
       isMdblistSource: true,
     ),
-    playMdblist: (item) => _onCatalogPlay(
+    playMdblist: (item) => _catalogActions.onCatalogPlay(
       item,
       _addonForContinue(item.sourceAddon?.id),
       isMdblistSource: true,
     ),
-    openItem: _openItem,
-    playItem: _onCatalogPlay,
+    openItem: (item, addon) => _itemActions.openItem(item, addon),
+    playItem: _catalogActions.onCatalogPlay,
   );
 
   void _openCatalogSeeAll(CatalogSection section) {

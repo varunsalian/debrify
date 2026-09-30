@@ -1,3 +1,4 @@
+import '../models/home_series_resume_signals.dart';
 import '../../../services/tracking_source_policy.dart';
 
 /// Fresh tracking preferences for one explicit catalog/resume action.
@@ -52,5 +53,18 @@ class HomeTrackingPolicyRepository {
       progressSource: progress,
       homeTickSources: ticks,
     ).forContent(id);
+  }
+
+  /// Keeps policy loading and the accepted label handoff behind the data boundary.
+  static Future<HomeResumePosition> resolveLabel({
+    required Future<TrackingSourcePolicy?> Function() loadPolicy,
+    required bool Function() isCurrent,
+    required Future<HomeResumePosition> Function(TrackingSourcePolicy) label,
+  }) async {
+    final trackingPolicy = await loadPolicy();
+    if (!isCurrent() || trackingPolicy == null) {
+      return (started: false, season: null, episode: null);
+    }
+    return label(trackingPolicy);
   }
 }
