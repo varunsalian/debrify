@@ -1,3 +1,5 @@
+import '../../../services/storage_service.dart';
+import '../../../services/stremio_iptv_service.dart';
 import '../../../models/iptv_playlist.dart';
 
 /// Hydrates the existing live-only favourites projection in stored map order.
@@ -11,6 +13,33 @@ class HomeIptvFavoritesRepository {
 
   final Future<Map<String, Map<String, dynamic>>> Function() _favorites;
   final Map<String, String> Function(Map<String, dynamic>) _headers;
+
+  static Future<void> recordWatch(IptvChannel channel) =>
+      StorageService.recordIptvWatch(
+        channel.url,
+        channelName: channel.name,
+        logoUrl: channel.logoUrl,
+        group: channel.group,
+        playlistId: channel.attributes['list_playlist_id'],
+        httpHeaders: channel.httpHeaders.isEmpty ? null : channel.httpHeaders,
+      );
+
+  static Future<List<IptvPlaylist>> playlists() =>
+      StorageService.getIptvPlaylists(forSettings: false);
+
+  static bool isStremioChannelUrl(String url) =>
+      StremioIptvService.isStremioChannelUrl(url);
+
+  static Future<List<StremioIptvCandidate>> resolveCandidates(
+    String url, {
+    required bool refreshIfEmpty,
+  }) => StremioIptvService.instance.resolveCandidates(
+    url,
+    refreshIfEmpty: refreshIfEmpty,
+  );
+
+  static String unplayableMessage(String url, String name) =>
+      StremioIptvService.instance.unplayableMessage(url, name);
 
   /// Null denotes retirement; malformed metadata and read failures propagate to
   /// the controller's existing silent-retention policy.

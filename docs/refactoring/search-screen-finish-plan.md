@@ -465,7 +465,8 @@ of this is dropped silently:
 | 1 | `99a2b30e` | 9,826 | Source/layout/focus/preview → `discover_section.dart`; priming/inventory → `discover_loading.dart`. Panel cross-feature wiring is a construction callback; binding/handoff lifecycle stays ordered for step 10. Scoped analyze: same 2 infos; 311 focused passes plus corrected source assertion (5 baseline failures/errors); Discover recheck 106 pass, final panel wiring 7 pass; guard passes. |
 | 2 | `28b800d5` | 8,957 | Streaming/focus, dialogs/actions, selection, row/frame rendering, pure projections and completed-search return moved into Search presentation owners (all ≤384 lines). Same 2 analyzer infos; 215 focused passes and 5 step-0 failures/errors, no missing identities/new skips; final affected recheck 25 pass plus 2 baseline failures/errors; guard passes. |
 | 3 | `7d8495f0` | 8,597 | Search mode/query/header/focus, Catalog search, Lists and title suggestion orchestration moved into Search presentation owners. Same 2 analyzer infos; whole Search feature + screen/source guards: 427 pass, 5 step-0 failures/errors, no missing identities/new skips; guard passes. |
-| 4 | `:/refactor: move Home item and playback actions` | 8,079 | Item opening, detail menus, source editing and catalog playback/navigation moved into five Home presentation owners (48–228 lines). Tracking-policy label handoff uses the existing repository; Simkl/MDBList service calls remain composition callbacks with enum-only imports. Scoped analyze: same 2 infos; focused screen/source/adapter tests: 268 pass, 5 step-0 failures/errors, no missing identities/new skips; guard passes. |
+| 4 | `9c6b7599` | 8,079 | Item opening, detail menus, source editing and catalog playback/navigation moved into five Home presentation owners (48–228 lines). Tracking-policy label handoff uses the existing repository; Simkl/MDBList service calls remain composition callbacks with enum-only imports. Scoped analyze: same 2 infos; focused screen/source/adapter tests: 268 pass, 5 step-0 failures/errors, no missing identities/new skips; guard passes. |
+| 5 | `:/refactor: move Home saved content coordinators` | 7,365 | Saved loading/focus, row rendering, playlist, IPTV and watchlist actions moved (new files 110–337 lines). Scoped analyze: same 2 infos; focused tests 244 pass, 5 step-0 failures/errors after correcting shape-manifest placement; guard passes. Gate 1 accepted: 10,261 pass / 22 fail / 30 err / 20 skip; only additional error is the user-verified Kid setup flake below. No missing identities versus gate0b or new skips; original baseline has only the already-accepted Canvas guard replacement. Comparisons: `finish/gate1-vs-original.txt`, `finish/gate1-vs-gate0b.txt`. |
 
 ## Found, not fixed
 
@@ -477,6 +478,12 @@ refactor merges.)
   is still present when the test checks. It passes 3/3 in isolation, and no
   remote code changed after `165fd015`. Not related to this refactor; treat
   that single identity as flaky in gate comparisons.
+- `test/profiles/profile_setup_flow_test.dart::the Kid walk-through writes the preset policy`
+  is a load-dependent flake accepted by the user at gate 1. The user verified
+  3/3 isolated passes and checked all 157 reachable imports: none was changed
+  in step 5. The registry read precedes the asynchronous profile write under
+  full-suite load (`Bad state: No element` for Maya at line 377). Treat only
+  this identity as flaky in gate comparisons; fix separately after the refactor.
 - `test/theme/shape_manifest_test.dart::no swept file grows a new bare radius`
   is a historical failure (failing in the original baseline). Its failure
   message prints `${entry.key}` literally, so it never names the files.

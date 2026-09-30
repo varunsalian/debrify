@@ -84,6 +84,10 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # Plain exception declaration only; no authorization service I/O is exposed.
+    "lib/features/home/presentation/home_saved_iptv_actions.dart": {
+        "lib/services/profiles/connection_resource_service.dart": {"ResourceAuthorizationException"},
+    },
     # Legacy row DTO/ID grammar only; the route bridge performs no list reads.
     "lib/features/home/presentation/home_see_all_navigation.dart": {
         "lib/services/home_list_rows.dart": {"HomeListSection", "HomeExtraRowIds"},

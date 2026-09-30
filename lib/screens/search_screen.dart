@@ -1,3 +1,8 @@
+import '../features/home/presentation/home_watchlist_actions.dart';
+import '../features/home/presentation/home_saved_iptv_actions.dart';
+import '../features/home/presentation/home_saved_content_rows.dart';
+import '../features/home/presentation/home_saved_content_section.dart';
+import '../features/home/presentation/home_playlist_actions.dart';
 import '../features/home/presentation/home_item_actions.dart';
 import '../features/home/presentation/home_detail_actions.dart';
 import '../features/home/presentation/home_source_actions.dart';
@@ -25,7 +30,6 @@ import '../features/home/presentation/home_board_bindings.dart';
 import '../features/home/presentation/home_continuation_nodes.dart';
 import '../features/home/presentation/home_see_all_navigation.dart';
 import '../features/home/application/home_refresh_queue.dart';
-import '../features/home/presentation/home_favorite_nodes.dart';
 import '../features/home/presentation/home_favorite_bindings.dart';
 import '../features/search/presentation/search_result_bindings.dart';
 import '../features/search/presentation/lists_navigation.dart';
@@ -117,16 +121,7 @@ import '../features/home/application/home_default_view_dependencies.dart';
 import '../features/home/application/home_display_preferences_controller.dart';
 import '../features/home/models/home_display_preferences.dart';
 import '../features/home/presentation/home_progress_publication.dart';
-import '../features/home/application/home_playlist_controller.dart';
-import '../features/home/models/home_playlist.dart';
-import '../features/home/application/home_watchlist_controller.dart';
-import '../features/home/application/home_iptv_lists_controller.dart';
-import '../features/home/models/home_iptv_list.dart';
-import '../features/home/presentation/home_iptv_list_focus.dart';
-import '../features/home/application/home_iptv_favorites_controller.dart';
-import '../features/home/application/home_stremio_favorites_controller.dart';
 import '../features/home/models/home_stremio_favorites.dart';
-import '../features/home/application/home_tv_favorites_controller.dart';
 import '../features/home/application/home_mdblist_continuation_controller.dart';
 import '../features/home/models/home_mdblist_continuation.dart';
 import '../features/home/application/home_simkl_continuation_controller.dart';
@@ -172,7 +167,6 @@ import '../widgets/home/home_row_focus.dart'
 import '../features/home/presentation/home_continuation_focus.dart';
 import '../features/home/presentation/home_board_frame.dart';
 import '../services/home_row_refresh.dart';
-import '../services/profiles/connection_resource_service.dart';
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:math';
@@ -185,12 +179,10 @@ import '../theme/app_theme_scope.dart';
 import '../features/home/presentation/home_classic_row_metrics.dart';
 import '../utils/platform_util.dart';
 import '../utils/tvos_device.dart';
-import '../models/debrify_tv/channel.dart';
 import '../models/home_collection.dart';
 import '../models/iptv_playlist.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/stremio_addon.dart';
-import '../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../services/analytics_service.dart';
 import '../services/home_collection_rows.dart';
 import '../services/home_collections_store.dart';
@@ -219,7 +211,6 @@ import '../services/video_player_launcher.dart';
 import '../services/tracking_source_policy.dart';
 import '../utils/tv_search_focus_handoff.dart';
 import '../services/youtube_service.dart';
-import '../widgets/debrid_action_sheet.dart';
 import '../features/home/presentation/home_continue_watching_actions.dart';
 import '../features/home/application/home_cw_hold_preference.dart';
 import '../widgets/home/card_focus_rise.dart';
@@ -229,8 +220,6 @@ import '../widgets/home/spotlight_catalog_card_cache.dart';
 import '../services/tmdb_title_search.dart';
 import '../services/metadata_title_service.dart';
 import 'collections/collection_folder_screen.dart';
-import 'iptv/xtream_series_detail.dart';
-import 'playlist_content_view_screen.dart';
 import '../services/mdblist/mdblist_list_source.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../models/mdblist_continue_watching.dart';
@@ -329,6 +318,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   int get _tabIndex => widget.searchMode ? 17 : (widget.discoverMode ? 18 : 15);
 
   final StremioService _stremio = StremioService.instance;
+  late final HomeWatchlistActions _watchlistActions;
+  late final HomeSavedIptvActions _savedIptv;
+  late final HomeSavedContentRows _savedRows;
+  late final HomeSavedContentSection _savedSection;
+  late final HomeFavoriteBindings _favoriteBindings;
+  late final HomePlaylistActions _playlistActions;
   late HomeItemActions _itemActions;
   late HomeDetailActions _detailActions;
   late HomeSourceActions _sourceActions;
@@ -719,76 +714,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _continuationNodes.movies(HomeContinuationKind.mdblist);
   List<FocusNode> get _mdblistSeriesNodes =>
       _continuationNodes.series(HomeContinuationKind.mdblist);
-  // Debrify TV favourites — a leading "Debrify TV" row of the user's starred
-  // keyword channels, shown between Continue Watching and the catalog rows.
-  // Channels have no artwork, so they render as Stremio-shaped cards with a
-  // gradient + glyph placeholder (see [HomeArtPoster]).
-  final _favoriteNodes = HomeFavoriteNodes();
-  late final HomeFavoriteBindings _favoriteBindings;
-  HomeTvFavoritesController get _tvFavoritesController => _favoriteBindings.tv;
-  List<DebrifyTvChannel> get _tvFavChannels => _tvFavoritesController.current;
-  List<FocusNode> get _tvFavNodes =>
-      _favoriteNodes.nodes(HomeFavoriteKind.debrify);
-
-  // Stremio TV favourites — a leading row of the user's starred Stremio
-  // "channels" (catalogs treated as TV channels). Each card shows the channel's
-  // current now-playing item poster (same time-based rotation as the Home /
-  // Stremio TV screens); tapping opens the channel. Loaded once on init.
-  HomeStremioFavoritesController get _stremioFavoritesController =>
-      _favoriteBindings.stremio;
-  List<HomeStremioFavorite> get _stvFavChannels =>
-      _stremioFavoritesController.current.channels;
-  List<FocusNode> get _stvFavNodes =>
-      _favoriteNodes.nodes(HomeFavoriteKind.stremio);
-
-  // IPTV favourites — a leading row of the user's starred live IPTV channels.
-  // Cards show the channel logo (glyph fallback); tapping plays the stream
-  // directly via VideoPlayerLauncher (no tab switch). Reloaded whenever list
-  // membership or manual order changes.
-  HomeIptvFavoritesController get _iptvFavoritesController =>
-      _favoriteBindings.iptv;
-  List<IptvChannel> get _iptvFavChannels => _iptvFavoritesController.current;
-  List<FocusNode> get _iptvFavNodes =>
-      _favoriteNodes.nodes(HomeFavoriteKind.iptv);
-
-  // Debrify's account-independent movie/series watchlist. Full metadata is
-  // stored locally and presented as separate movie and series rows, so neither
-  // row needs a tracker or catalog network request.
-  HomeWatchlistController get _watchlistController =>
-      _favoriteBindings.watchlist;
-  List<StremioMeta> get _watchlistMovieItems =>
-      _watchlistController.current.movies;
-  List<StremioMeta> get _watchlistSeriesItems =>
-      _watchlistController.current.series;
-  List<FocusNode> get _watchlistMovieNodes =>
-      _favoriteNodes.nodes(HomeFavoriteKind.watchlistMovies);
-  List<FocusNode> get _watchlistSeriesNodes =>
-      _favoriteNodes.nodes(HomeFavoriteKind.watchlistSeries);
-
-  // Opted-in IPTV custom lists as Home rows (`iptvlist:` extras), rendered
-  // through the favourites-row family after the IPTV favourites row. Rebuilt
-  // by [_loadIptvListRows] on init, on Home Rows saves, and whenever
-  // [IptvMediaStore.listsRevision] bumps (any list mutation anywhere in the
-  // app). The view owns FocusNodes, reconciled by list id across reloads.
-  HomeIptvListsController get _iptvListsController =>
-      _favoriteBindings.iptvLists;
-  List<HomeIptvList> get _iptvListRows => _iptvListsController.current;
-  final _iptvListFocus = HomeIptvListFocus();
-
-  // Playlist favourites — a leading row of the user's saved playlist items
-  // (movies / collections added from search or cloud). Cards show the item
-  // poster with resume progress; tapping opens a full action menu (play / play
-  // random / view files / favorite / clear progress / launch-on-startup /
-  // delete), so this row is a complete playlist manager on its own now that the
-  // Home playlist section is being phased out. Loaded once on init.
-  HomePlaylistController get _playlistController => _favoriteBindings.playlist;
-  List<HomePlaylistItem> get _playlistItems =>
-      _playlistController.current.items;
-  List<FocusNode> get _playlistFavNodes =>
-      _favoriteNodes.nodes(HomeFavoriteKind.playlist);
-  // Guards against launching a second concurrent playback while the first is
-  // still resolving links (the menu closes immediately, giving no other cue).
-  bool _playlistLaunching = false;
 
   /// Last Trakt CW network attempt. The row is refreshed when the app returns
   /// from the background (where the user may have changed Trakt in another app
@@ -1759,6 +1684,106 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _detailActions,
       _sourceActions,
     );
+    _playlistActions = HomePlaylistActions((
+      mounted: () => mounted,
+      context: () => context,
+      controller: () => _savedSection.playlistController,
+      reload: () => _savedSection.loadPlaylistFavorites(),
+      play: PlaylistPlayerService.play,
+    ));
+    _savedSection = HomeSavedContentSection((
+      bindings: () => _favoriteBindings,
+      mounted: () => mounted,
+      setState: setState,
+      disabled: () => _homeDisabled,
+      autoFocus: _maybeAutoFocusBoard,
+      focusContent: _inputSection.focusContent,
+      requestRowFocus: _requestRowFocus,
+      debrifyTvAllowed: () =>
+          ProfilePolicyGuard.allowsSync(ProfileFeature.debrifyTv),
+      stremioTvAllowed: () =>
+          ProfilePolicyGuard.allowsSync(ProfileFeature.stremioTv),
+      iptvAllowed: () => ProfilePolicyGuard.allowsSync(ProfileFeature.iptv),
+      iptvListId: HomeExtraRowIds.iptvList,
+      playChannel: (channel) {
+        if (MainPageBridge.watchDebrifyTvChannel != null) {
+          MainPageBridge.watchDebrifyTvChannel!(channel.id);
+          return;
+        }
+        MainPageBridge.notifyDebrifyTvChannelToAutoPlay(channel.id);
+        MainPageBridge.switchTab?.call(MainTab.debrifyTv);
+      },
+      playStremio: (channel) {
+        if (MainPageBridge.watchStremioTvChannel != null) {
+          MainPageBridge.watchStremioTvChannel!(channel.id);
+          return;
+        }
+        MainPageBridge.notifyStremioTvChannelToAutoPlay(channel.id);
+        MainPageBridge.switchTab?.call(MainTab.stremioTv);
+      },
+    ), _catalogSection);
+    _savedIptv = HomeSavedIptvActions((
+      mounted: () => mounted,
+      context: () => context,
+      isTelevision: () => widget.isTelevision,
+      launch: (context, videoUrl, channel, isStremio) {
+        VideoPlayerLauncher.push(
+          context,
+          VideoPlayerLaunchArgs(
+            videoUrl: videoUrl,
+            title: channel.name,
+            subtitle: channel.group ?? 'IPTV',
+            viewMode: PlaylistViewMode.sorted,
+            // Identify the launch as IPTV for plain channels too (only the
+            // Stremio branch used to): it routes playback down the live path
+            // and lets the player report a dead stream instead of sitting on a
+            // black screen.
+            iptvChannels: [channel],
+            iptvStartIndex: 0,
+            // Playlist-declared headers (+ browser UA fallback) for the launch
+            // channel; Stremio-addon links keep the addon's own defaults.
+            httpHeaders: isStremio ? null : channel.playbackHeaders,
+          ),
+        );
+      },
+    ));
+    _watchlistActions = HomeWatchlistActions(
+      (
+        mounted: () => mounted,
+        context: () => context,
+        isTelevision: () => widget.isTelevision,
+        remove: (item) => StorageService.setMyWatchlistItem(item, false),
+        reload: _savedSection.loadMyWatchlist,
+        addonForContinue: _addonForContinue,
+        refreshAfterPlayback: _refreshAfterPlayback,
+      ),
+      _savedIptv,
+      _itemActions,
+    );
+    _savedRows = HomeSavedContentRows(
+      (
+        classicRows: (rowId, nodes) => HomeClassicFavoriteRows(
+          context: context,
+          isTelevision: widget.isTelevision,
+          posterWidth: _railPosterW(context),
+          captionBand: _homeArtPosterCaptionBand,
+          showTitle: () => !_hideHomeCardTitlesAndRatings,
+          nodes: nodes,
+          up: (col) => _favRowOnUp(rowId, col),
+          down: (col) => _favRowOnDown(rowId, col),
+          sidebar: () => MainPageBridge.focusTvSidebar?.call(),
+          clearLive: _clearHeroLiveIptv,
+          previewLive: _setHeroLiveIptv,
+        ),
+        playChannel: _savedSection.playChannel,
+        playStremio: _savedSection.playStremioTvChannel,
+        playIptv: _savedIptv.playIptvChannel,
+        playIptvList: _savedIptv.playIptvListChannel,
+        openWatchlist: _watchlistActions.openMyWatchlistItem,
+      ),
+      _savedSection,
+      _playlistActions,
+    );
     _titleSearch.addListener(_titleSection.publishTitleSuggestions);
     _searchController.addListener(_titleSection.onTitleSearchEditingChanged);
     ProfileRuntime.scope.addListener(_onSearchProfileChanged);
@@ -1912,7 +1937,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       MdblistService.instance.playbackRevision.addListener(
         _onMdblistPlaybackRevision,
       );
-      MainPageBridge.addPlaylistChangeListener(_loadPlaylistFavorites);
+      MainPageBridge.addPlaylistChangeListener(
+        _savedSection.loadPlaylistFavorites,
+      );
     }
     if (widget.searchMode) {
       MainPageBridge.registerTabBackHandler(
@@ -2024,7 +2051,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       // IPTV list mutations (picker, IPTV settings, provider deletion,
       // reconcile, import) all bump the store revision — the only signal a
       // Home that stays alive across tab switches gets about them.
-      IptvMediaStore.listsRevision.addListener(_onIptvListsRevision);
+      IptvMediaStore.listsRevision.addListener(
+        _savedSection.onIptvListsRevision,
+      );
       if (!restoredKeyword) unawaited(_loadHomeDefaultView());
       // Home layout pref: loaded once here, then live-reloaded whenever the
       // Settings picker fires the bridge. HOME board instance only — the
@@ -2133,12 +2162,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         _loadSimklContinueWatching(refreshBound: false),
         _loadMdblistContinueWatching(refreshBound: false),
         _loadIptvContinueWatching(),
-        _loadTvFavorites(),
-        _loadStremioTvFavorites(),
-        _loadIptvFavorites(),
-        _loadMyWatchlist(),
-        _loadIptvListRows(),
-        _loadPlaylistFavorites(),
+        _savedSection.loadTvFavorites(),
+        _savedSection.loadStremioTvFavorites(),
+        _savedSection.loadIptvFavorites(),
+        _savedSection.loadMyWatchlist(),
+        _savedSection.loadIptvListRows(),
+        _savedSection.loadPlaylistFavorites(),
       ]);
     }
   }
@@ -2354,7 +2383,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       _onMdblistPlaybackRevision,
     );
     if (!widget.searchMode && !widget.discoverMode) {
-      MainPageBridge.removePlaylistChangeListener(_loadPlaylistFavorites);
+      MainPageBridge.removePlaylistChangeListener(
+        _savedSection.loadPlaylistFavorites,
+      );
       MainPageBridge.unregisterCatalogDetailOpenHandler(
         _openPendingCatalogDetail,
       );
@@ -2384,8 +2415,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     HomeRowRefreshSignal.removeListener(_queueHomeRows);
     _stremio.removeAddonsChangedListener(_onHomeAddonsChanged);
     _homeRefreshQueue.dispose();
-    IptvMediaStore.listsRevision.removeListener(_onIptvListsRevision);
-    _iptvListFocus.dispose();
+    IptvMediaStore.listsRevision.removeListener(
+      _savedSection.onIptvListsRevision,
+    );
+    _savedSection.iptvListFocus.dispose();
     if (MainPageBridge.tvHomeStyleChanged == _onTvHomeStyleChanged) {
       MainPageBridge.tvHomeStyleChanged = null;
     }
@@ -2450,9 +2483,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
     _disposeNodes();
     _continuationNodes.disposeNodes();
-    _favoriteNodes.disposeNodes();
+    _savedSection.favoriteNodes.disposeNodes();
     _continuationNodes.clearNodes();
-    _favoriteNodes.clearNodes();
+    _savedSection.favoriteNodes.clearNodes();
     super.dispose();
   }
 
@@ -2528,7 +2561,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     }
     // IPTV list rows live outside the board's section pipeline. The loader
     // reads its own extras from storage, so it can't race the reload above.
-    if (changes.reloadIptv) unawaited(_loadIptvListRows());
+    if (changes.reloadIptv) unawaited(_savedSection.loadIptvListRows());
   }
 
   /// Run [_load] for a TRIGGERED reload (Home Rows save, integration
@@ -3103,124 +3136,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     return true;
   }
 
-  // The leading favourites rows (between Continue Watching and the catalog) are
-  // only shown on the board, never over search results — same gate as
-  // [_cwVisible]. Each has its own visibility so an empty source just drops out.
-  bool get _iptvFavVisible =>
-      _iptvFavChannels.isNotEmpty &&
-      !_homeDisabled.contains('fav:iptv') &&
-      _catalogSection.catalogQuery.isEmpty &&
-      !_catalogSection.catalogSearching;
-  bool get _tvFavVisible =>
-      _tvFavChannels.isNotEmpty &&
-      !_homeDisabled.contains('fav:debrify') &&
-      _catalogSection.catalogQuery.isEmpty &&
-      !_catalogSection.catalogSearching;
-  bool get _stvFavVisible =>
-      _stvFavChannels.isNotEmpty &&
-      !_homeDisabled.contains('fav:stremio') &&
-      _catalogSection.catalogQuery.isEmpty &&
-      !_catalogSection.catalogSearching;
-  bool get _playlistFavVisible =>
-      _playlistItems.isNotEmpty &&
-      !_homeDisabled.contains('fav:playlist') &&
-      _catalogSection.catalogQuery.isEmpty &&
-      !_catalogSection.catalogSearching;
-  bool get _watchlistMoviesVisible =>
-      _watchlistMovieItems.isNotEmpty &&
-      !_homeDisabled.contains('watchlist:movies') &&
-      _catalogSection.catalogQuery.isEmpty &&
-      !_catalogSection.catalogSearching;
-  bool get _watchlistSeriesVisible =>
-      _watchlistSeriesItems.isNotEmpty &&
-      !_homeDisabled.contains('watchlist:series') &&
-      _catalogSection.catalogQuery.isEmpty &&
-      !_catalogSection.catalogSearching;
-
-  /// The visible saved-content rows in render order: Watchlist Movies,
-  /// Watchlist Series, Playlist, Debrify TV, Stremio TV, IPTV favourites, then
-  /// opted-in IPTV custom lists.
-  /// This is the single source of truth for both rendering ([_buildBoard]) and
-  /// the index-based DPAD focus wiring below, so the two never drift out of
-  /// sync. IPTV list rows share the favourites gates (board only, non-empty)
-  /// and are opt-in by construction — [_iptvListRows] only ever holds enabled
-  /// lists.
-  // Reach-sweep rule: a feature that's off drops its Home rows too, not
-  // just its tab — the profile should never see a shelf it can't open.
-  List<HomeFavoriteRowRef> get _favRowKinds => [
-    if (_watchlistMoviesVisible) const HomeFavoriteRowRef(HomeFavoriteKind.watchlistMovies),
-    if (_watchlistSeriesVisible) const HomeFavoriteRowRef(HomeFavoriteKind.watchlistSeries),
-    if (_playlistFavVisible) const HomeFavoriteRowRef(HomeFavoriteKind.playlist),
-    if (_tvFavVisible &&
-        ProfilePolicyGuard.allowsSync(ProfileFeature.debrifyTv))
-      const HomeFavoriteRowRef(HomeFavoriteKind.debrify),
-    if (_stvFavVisible &&
-        ProfilePolicyGuard.allowsSync(ProfileFeature.stremioTv))
-      const HomeFavoriteRowRef(HomeFavoriteKind.stremio),
-    if (_iptvFavVisible && ProfilePolicyGuard.allowsSync(ProfileFeature.iptv))
-      const HomeFavoriteRowRef(HomeFavoriteKind.iptv),
-    if (_catalogSection.catalogQuery.isEmpty &&
-        !_catalogSection.catalogSearching &&
-        ProfilePolicyGuard.allowsSync(ProfileFeature.iptv))
-      for (var i = 0; i < _iptvListRows.length; i++)
-        if (_iptvListRows[i].channels.isNotEmpty) HomeFavoriteRowRef(HomeFavoriteKind.iptv, i),
-  ];
-
-  int get _favRowCount => _favRowKinds.length;
-  bool get _anyFavVisible => _favRowKinds.isNotEmpty;
-
-  String _favRowId(HomeFavoriteRowRef ref) {
-    if (ref.isIptvList) {
-      return HomeExtraRowIds.iptvList(_iptvListRows[ref.list].listId);
-    }
-    return switch (ref.kind) {
-      HomeFavoriteKind.watchlistMovies => 'watchlist:movies',
-      HomeFavoriteKind.watchlistSeries => 'watchlist:series',
-      HomeFavoriteKind.playlist => 'fav:playlist',
-      HomeFavoriteKind.debrify => 'fav:debrify',
-      HomeFavoriteKind.stremio => 'fav:stremio',
-      HomeFavoriteKind.iptv => 'fav:iptv',
-    };
-  }
-
   String _sectionRowId(CatalogSection section) => section is HomeListSection
       ? section.rowId
       : section is HomeCollectionSection
       ? section.rowId
       : '${section.addon.id}:${section.catalog.type}:${section.catalog.id}';
-
-  /// The focus-node list backing a favourites row of the given [ref].
-  List<FocusNode> _favNodesFor(HomeFavoriteRowRef ref) {
-    if (ref.isIptvList) {
-      return _iptvListFocus.nodesFor(_iptvListRows[ref.list].listId);
-    }
-    switch (ref.kind) {
-      case HomeFavoriteKind.watchlistMovies:
-        return _watchlistMovieNodes;
-      case HomeFavoriteKind.watchlistSeries:
-        return _watchlistSeriesNodes;
-      case HomeFavoriteKind.iptv:
-        return _iptvFavNodes;
-      case HomeFavoriteKind.debrify:
-        return _tvFavNodes;
-      case HomeFavoriteKind.stremio:
-        return _stvFavNodes;
-      case HomeFavoriteKind.playlist:
-        return _playlistFavNodes;
-    }
-  }
-
-  /// Focus a card in the favourites row at [favIndex] (index into the visible
-  /// favourites rows), clamping the column to that row's length. Returns false
-  /// when no such row is focusable (same contract as [_focusCwRow]).
-  bool _focusFavRowAt(int favIndex, int column) {
-    final kinds = _favRowKinds;
-    if (favIndex < 0 || favIndex >= kinds.length) return false;
-    final nodes = _favNodesFor(kinds[favIndex]);
-    if (nodes.isEmpty) return false;
-    _requestRowFocus(nodes, column.clamp(0, nodes.length - 1));
-    return true;
-  }
 
   // A DPAD-down pressed while everything below was still loading (Trakt row a
   // focusless skeleton, favourites absent, first catalog batch in flight) used
@@ -3306,13 +3226,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     refreshRow: (row) {
       switch (row) {
         case HomeRowRefresh.tvFavorites:
-          unawaited(_loadTvFavorites());
+          unawaited(_savedSection.loadTvFavorites());
         case HomeRowRefresh.stremioTvFavorites:
-          unawaited(_loadStremioTvFavorites());
+          unawaited(_savedSection.loadStremioTvFavorites());
         case HomeRowRefresh.playlist:
-          unawaited(_loadPlaylistFavorites());
+          unawaited(_savedSection.loadPlaylistFavorites());
         case HomeRowRefresh.watchlist:
-          unawaited(_loadMyWatchlist());
+          unawaited(_savedSection.loadMyWatchlist());
         case HomeRowRefresh.playback:
           // Do not consume the local playback/tracker refresh latch here.
           unawaited(_loadContinueWatching());
@@ -3333,568 +3253,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   void _queueHomeRows(Set<HomeRowRefresh> rows) =>
       _homeRefreshQueue.enqueue(rows);
-  /// Reload starred channels without replacing newer row data.
-  Future<void> _loadTvFavorites() => _tvFavoritesController.load(
-    isCurrent: () => mounted,
-    onRows: (hasFavoriteIds) {
-      setState(() {});
-      _syncTvFavNodes();
-      if (hasFavoriteIds) _maybeAutoFocusBoard();
-    },
-  );
-
-  /// Grow/shrink the favourites row's focus nodes to match the channel count.
-  void _syncTvFavNodes() =>
-      _syncFavoriteNodes(HomeFavoriteKind.debrify, _tvFavChannels.length);
-
-  /// Launch a Debrify TV channel (same path the Home screen uses): hand off to
-  /// the live player if it's mounted, else queue an auto-play and switch tabs.
-  void _playChannel(DebrifyTvChannel channel) {
-    if (MainPageBridge.watchDebrifyTvChannel != null) {
-      MainPageBridge.watchDebrifyTvChannel!(channel.id);
-      return;
-    }
-    MainPageBridge.notifyDebrifyTvChannelToAutoPlay(channel.id);
-    MainPageBridge.switchTab?.call(MainTab.debrifyTv);
-  }
-
-  /// Reload starred Stremio TV channels without replacing newer row data.
-  Future<void> _loadStremioTvFavorites() => _stremioFavoritesController.load(
-    isCurrent: () => mounted,
-    onRows: (hasFavoriteIds) {
-      setState(() {});
-      _syncStvFavNodes();
-      if (hasFavoriteIds) _maybeAutoFocusBoard();
-    },
-  );
-
-  void _syncStvFavNodes() =>
-      _syncFavoriteNodes(HomeFavoriteKind.stremio, _stvFavChannels.length);
 
   /// First of [a], [b] that is a non-empty string, else null.
   String? _firstNonEmpty(String? a, String? b) {
     if (a != null && a.isNotEmpty) return a;
     if (b != null && b.isNotEmpty) return b;
     return null;
-  }
-
-  /// The now-playing item for a Stremio TV channel, using the same time-based
-  /// rotation as the Home / Stremio TV screens (series rotate on their own
-  /// cadence). Null when the channel has no loaded items.
-  StremioTvNowPlaying? _stvNowPlaying(HomeStremioFavorite channel) {
-    if (channel.items.isEmpty) return null;
-    return _stremioFavoritesController.playingAt(channel, DateTime.now());
-  }
-
-  /// Open a Stremio TV channel (same path the Home screen uses): hand off to the
-  /// live player if it's mounted, else queue an auto-play and switch tabs.
-  void _playStremioTvChannel(HomeStremioFavorite channel) {
-    if (MainPageBridge.watchStremioTvChannel != null) {
-      MainPageBridge.watchStremioTvChannel!(channel.id);
-      return;
-    }
-    MainPageBridge.notifyStremioTvChannelToAutoPlay(channel.id);
-    MainPageBridge.switchTab?.call(MainTab.stremioTv);
-  }
-
-  /// Reload the live-only favourites projection; custom lists retain their own mapping.
-  Future<void> _loadIptvFavorites() => _iptvFavoritesController.load(
-    isCurrent: () => mounted,
-    onRows: (hasFavorites) {
-      setState(() {});
-      _syncIptvFavNodes();
-      if (hasFavorites) _maybeAutoFocusBoard();
-    },
-  );
-
-  void _syncIptvFavNodes() =>
-      _syncFavoriteNodes(HomeFavoriteKind.iptv, _iptvFavChannels.length);
-
-  /// Apply a complete custom-list snapshot while retaining surviving row nodes.
-  Future<void> _loadIptvListRows() => _iptvListsController.load(
-    isCurrent: () => mounted,
-    beforeRows: _iptvListFocus.reconcile,
-    onRows: () {
-      setState(() {});
-      _maybeAutoFocusBoard();
-    },
-  );
-
-  /// [IptvMediaStore.listsRevision] bumped — some list mutated somewhere in
-  /// the app (picker, IPTV settings, provider deletion, reconcile, import).
-  void _onIptvListsRevision() {
-    if (!mounted) return;
-    unawaited(_loadIptvFavorites());
-    unawaited(_loadIptvListRows());
-  }
-
-  /// Play an IPTV custom-list entry by CONTENT TYPE — a list can hold VOD and
-  /// collapsed series alongside live channels, and each routes differently
-  /// (mirroring [IptvCwRouter]): live → the favourites-row live launch; VOD →
-  /// watch-record + direct launch (the player restores resume by URL); an
-  /// `xtream-series://` sentinel → the merged Xtream series page.
-  Future<void> _playIptvListChannel(IptvChannel channel) async {
-    if (channel.url.startsWith('xtream-series://')) {
-      return _openIptvListSeries(channel);
-    }
-    if (!channel.isLive) {
-      // Remember on-demand plays so the IPTV Continue Watching shelf can
-      // rebuild the row later — recorded BEFORE the launch (the player
-      // process can be killed outright on TV), same as the IPTV page.
-      await StorageService.recordIptvWatch(
-        channel.url,
-        channelName: channel.name,
-        logoUrl: channel.logoUrl,
-        group: channel.group,
-        playlistId: channel.attributes['list_playlist_id'],
-        httpHeaders: channel.httpHeaders.isEmpty ? null : channel.httpHeaders,
-      );
-      if (!mounted) return;
-    }
-    await _playIptvChannel(channel);
-  }
-
-  /// A collapsed series sentinel stored in a list: resolve its Xtream origin
-  /// and open the merged series page (the episode list / Resume plays from
-  /// there) — the sentinel URL itself is not a stream.
-  Future<List<IptvPlaylist>?> _readIptvPlaylistsForAction() async {
-    try {
-      return await StorageService.getIptvPlaylists(forSettings: false);
-    } on ResourceAuthorizationException {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('IPTV is unavailable. Please retry or sign in.'),
-          ),
-        );
-      }
-      return null;
-    }
-  }
-
-  Future<void> _openIptvListSeries(IptvChannel channel) async {
-    // xtream-series://<originId>/<seriesId>
-    final rest = channel.url.substring('xtream-series://'.length);
-    final slash = rest.indexOf('/');
-    final originId = slash < 0
-        ? (channel.attributes['list_playlist_id'] ?? '')
-        : rest.substring(0, slash);
-    final seriesId = slash < 0 ? rest : rest.substring(slash + 1);
-    if (seriesId.isEmpty) return;
-    final playlists = await _readIptvPlaylistsForAction();
-    if (!mounted || playlists == null) return;
-    IptvPlaylist? origin;
-    for (final p in playlists) {
-      if (p.id == originId && p.isXtreamCodes) {
-        origin = p;
-        break;
-      }
-    }
-    if (origin == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("This series' provider is no longer available"),
-        ),
-      );
-      return;
-    }
-    await openXtreamSeries(
-      context,
-      playlist: origin,
-      series: IptvChannel(
-        name: channel.name,
-        url: channel.url,
-        logoUrl: channel.logoUrl,
-        group: channel.group ?? channel.name,
-        contentType: 'series',
-        attributes: {
-          'series_id': seriesId,
-          if (originId.isNotEmpty) 'series_playlist_id': originId,
-        },
-      ),
-      isTelevision: widget.isTelevision,
-    );
-  }
-
-  /// Play an IPTV favourite. Unlike the TV channels there's no bridge/tab
-  /// handoff — the stream launches directly in the player (same as Home).
-  /// Stremio-addon favourites carry a stremio-tv:// key instead of a stream
-  /// URL — resolve it first, and hand the channel through the IPTV path so
-  /// both players can walk the remaining candidates if the first one dies.
-  /// Latch across the resolve window — repeated OK presses while a Stremio
-  /// favourite resolves must not stack player launches.
-  bool _iptvFavLaunching = false;
-
-  Future<void> _playIptvChannel(IptvChannel channel) async {
-    if (_iptvFavLaunching) return;
-    _iptvFavLaunching = true;
-    try {
-      var videoUrl = channel.url;
-      final isStremio = StremioIptvService.isStremioChannelUrl(channel.url);
-      if (isStremio) {
-        // Explicit play intent: bypass a cached-empty resolve and explain an
-        // empty answer specifically (addon unreachable vs. no streams).
-        final candidates = await StremioIptvService.instance.resolveCandidates(
-          channel.url,
-          refreshIfEmpty: true,
-        );
-        if (!mounted) return;
-        if (candidates.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                StremioIptvService.instance.unplayableMessage(
-                  channel.url,
-                  channel.name,
-                ),
-              ),
-            ),
-          );
-          return;
-        }
-        videoUrl = candidates.first.url;
-      }
-      VideoPlayerLauncher.push(
-        context,
-        VideoPlayerLaunchArgs(
-          videoUrl: videoUrl,
-          title: channel.name,
-          subtitle: channel.group ?? 'IPTV',
-          viewMode: PlaylistViewMode.sorted,
-          // Identify the launch as IPTV for plain channels too (only the
-          // Stremio branch used to): it routes playback down the live path
-          // and lets the player report a dead stream instead of sitting on a
-          // black screen.
-          iptvChannels: [channel],
-          iptvStartIndex: 0,
-          // Playlist-declared headers (+ browser UA fallback) for the launch
-          // channel; Stremio-addon links keep the addon's own defaults.
-          httpHeaders: isStremio ? null : channel.playbackHeaders,
-        ),
-      );
-    } finally {
-      _iptvFavLaunching = false;
-    }
-  }
-
-  Future<void> _loadMyWatchlist() => _watchlistController.load(
-    isCurrent: () => mounted,
-    onRows: () {
-      setState(() {});
-      _syncMyWatchlistNodes();
-      _maybeAutoFocusBoard();
-    },
-  );
-
-  void _syncFavoriteNodes(HomeFavoriteKind kind, int count) =>
-      _favoriteNodes.sync(
-        kind,
-        count,
-        isCurrent: () => mounted,
-        onEmpty: _inputSection.focusContent,
-      );
-
-  void _syncMyWatchlistNodes() {
-    _syncFavoriteNodes(
-      HomeFavoriteKind.watchlistMovies,
-      _watchlistMovieItems.length,
-    );
-    _syncFavoriteNodes(
-      HomeFavoriteKind.watchlistSeries,
-      _watchlistSeriesItems.length,
-    );
-  }
-
-  Future<void> _offerRemoveUnavailableWatchlistItem(
-    StremioMeta item, {
-    required String message,
-  }) async {
-    final remove = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Series unavailable'),
-        content: Text('$message\n\nRemove it from My Watchlist?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Keep'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-    if (remove != true || !mounted) return;
-
-    try {
-      await StorageService.setMyWatchlistItem(item, false);
-      if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      await _loadMyWatchlist();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(content: Text('Removed from My Watchlist')),
-        );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Couldn't update My Watchlist")),
-      );
-    }
-  }
-
-  Future<void> _openMyWatchlistItem(StremioMeta item) async {
-    final xtream = parseXtreamSeriesMetaId(item.id);
-    if (xtream != null || item.sourceAddon?.id == 'xtream-iptv') {
-      if (xtream == null) {
-        await _offerRemoveUnavailableWatchlistItem(
-          item,
-          message: "This series' saved source is invalid.",
-        );
-        return;
-      }
-
-      final playlists = await _readIptvPlaylistsForAction();
-      if (!mounted || playlists == null) return;
-      IptvPlaylist? playlist;
-      for (final candidate in playlists) {
-        if (candidate.id == xtream.playlistId && candidate.isXtreamCodes) {
-          playlist = candidate;
-          break;
-        }
-      }
-      if (playlist == null) {
-        await _offerRemoveUnavailableWatchlistItem(
-          item,
-          message: "This series' provider is no longer available.",
-        );
-        return;
-      }
-
-      await openXtreamSeries(
-        context,
-        playlist: playlist,
-        series: IptvChannel(
-          name: item.name,
-          url: 'xtream-series://${xtream.seriesId}',
-          logoUrl: item.poster,
-          group: item.name,
-          contentType: 'series',
-          attributes: {
-            'series_id': xtream.seriesId,
-            'series_playlist_id': xtream.playlistId,
-            if (item.background?.isNotEmpty ?? false)
-              'backdrop': item.background!,
-            if (item.description?.isNotEmpty ?? false)
-              'plot': item.description!,
-            if (item.year?.isNotEmpty ?? false) 'releaseDate': item.year!,
-            if (item.imdbRating != null) 'rating': item.imdbRating!.toString(),
-            if (item.genres?.isNotEmpty ?? false)
-              'genre': item.genres!.join(', '),
-          },
-        ),
-        isTelevision: widget.isTelevision,
-      );
-      if (mounted) await _refreshAfterPlayback();
-      return;
-    }
-
-    _itemActions.openItem(item, _addonForContinue(item.sourceAddon?.id));
-  }
-
-  /// Refresh accepted playlist rows, posters, favourite flags and progress.
-  Future<void> _loadPlaylistFavorites() => _playlistController.load(
-    isCurrent: () => mounted,
-    onRows: () {
-      setState(() {});
-      _syncPlaylistFavNodes();
-      _maybeAutoFocusBoard();
-    },
-  );
-
-  void _syncPlaylistFavNodes() =>
-      _syncFavoriteNodes(HomeFavoriteKind.playlist, _playlistItems.length);
-
-  /// The full action menu for a playlist item — the same set of actions as the
-  /// Home playlist section (Home is being phased out, so this row is a complete
-  /// playlist manager on its own). Rendered with the post-torrent Neon action
-  /// sheet: bottom sheet on phones, centered card on desktop/TV, with the
-  /// first three actions as primary pills.
-  Future<void> _onPlaylistItemTap(HomePlaylistItem selected) async {
-    if (!mounted) return;
-    final item = selected.toLegacyItem();
-    final playlist = _playlistController.current;
-    final isFavorited = playlist.isFavorite(selected);
-    final hasProgress = playlist.hasProgress(selected);
-    final isCollection = selected.isCollection;
-    final title = selected.title;
-
-    // The sheet pops itself before running an action, so route every choice
-    // through the handler instead of awaiting a dialog result.
-    void run(String choice) =>
-        unawaited(_handlePlaylistMenuChoice(choice, item, isFavorited));
-
-    final app = AppThemeScope.of(context);
-    await showDebridActionSheet(
-      context,
-      providerLabel: 'Playlist',
-      torrentName: title,
-      gradient: [app.seeAll.accent, app.seeAll.accent2],
-      providerIcon: Icons.playlist_play_rounded,
-      subtitle: isCollection
-          ? 'Saved collection. Choose your next step.'
-          : 'Saved item. Choose your next step.',
-      actions: [
-        DebridActionItem(
-          icon: Icons.play_circle_fill_rounded,
-          color: const Color(0xFF10B981),
-          title: 'Play',
-          subtitle: 'Start playback',
-          onTap: () => run('play'),
-        ),
-        if (isCollection)
-          DebridActionItem(
-            icon: Icons.shuffle_rounded,
-            color: const Color(0xFFA78BFA),
-            title: 'Play Random',
-            subtitle: 'Start a random file from this collection',
-            pillLabel: 'Random',
-            onTap: () => run('play_random'),
-          ),
-        DebridActionItem(
-          icon: Icons.folder_open_rounded,
-          color: const Color(0xFF818CF8),
-          title: 'View Files',
-          subtitle: 'Browse folder contents',
-          pillLabel: 'Files',
-          onTap: () => run('view_files'),
-        ),
-        DebridActionItem(
-          icon: isFavorited ? Icons.star_rounded : Icons.star_border_rounded,
-          color: const Color(0xFFFFD700),
-          title: isFavorited ? 'Remove from Favorites' : 'Add to Favorites',
-          subtitle: isFavorited
-              ? 'Remove from your favorites list'
-              : 'Add to your favorites list',
-          pillLabel: 'Favorite',
-          onTap: () => run('favorite'),
-        ),
-        if (hasProgress)
-          DebridActionItem(
-            icon: Icons.replay_rounded,
-            color: const Color(0xFF60A5FA),
-            title: 'Clear Progress',
-            subtitle: 'Reset playback progress',
-            onTap: () => run('clear_progress'),
-          ),
-        DebridActionItem(
-          icon: Icons.delete_outline_rounded,
-          color: app.home.danger,
-          title: 'Delete',
-          subtitle: 'Remove from playlist',
-          onTap: () => run('delete'),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _handlePlaylistMenuChoice(
-    String choice,
-    Map<String, dynamic> item,
-    bool isFavorited,
-  ) async {
-    if (!mounted) return;
-    switch (choice) {
-      case 'play':
-        _playPlaylistItem(item);
-        break;
-      case 'play_random':
-        _playPlaylistItem(item, playRandom: true);
-        break;
-      case 'view_files':
-        await Navigator.of(context).push(
-          // Both doors are themed now (Search always was, Playlist since
-          // phase two), so this screen resolves the same palette either way —
-          // which is what the freeze was here to guarantee while they
-          // disagreed.
-          MaterialPageRoute(
-            builder: (_) => PlaylistContentViewScreen(playlistItem: item),
-          ),
-        );
-        // Progress / poster may have changed while browsing.
-        _loadPlaylistFavorites();
-        break;
-      case 'favorite':
-        await StorageService.setPlaylistItemFavorited(item, !isFavorited);
-        HapticFeedback.mediumImpact();
-        _loadPlaylistFavorites();
-        break;
-      case 'clear_progress':
-        // Empty (not 'Unknown') fallback so a null-titled item clears nothing
-        // instead of fuzzy-matching the literal word 'unknown' and wiping an
-        // unrelated item's resume point — matches the Home section.
-        await StorageService.clearPlaylistProgress(
-          title: (item['title'] as String?) ?? '',
-        );
-        HapticFeedback.mediumImpact();
-        _loadPlaylistFavorites();
-        break;
-      case 'delete':
-        await _confirmDeletePlaylistItem(item);
-        break;
-    }
-  }
-
-  Future<void> _playPlaylistItem(
-    Map<String, dynamic> item, {
-    bool playRandom = false,
-  }) async {
-    if (_playlistLaunching) return;
-    _playlistLaunching = true;
-    try {
-      await PlaylistPlayerService.play(context, item, playRandom: playRandom);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to play: $e')));
-    } finally {
-      if (mounted) _playlistLaunching = false;
-    }
-  }
-
-  Future<void> _confirmDeletePlaylistItem(Map<String, dynamic> item) async {
-    final title = (item['title'] as String?) ?? 'this item';
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete?'),
-        content: Text('Remove "$title" from your playlist?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppThemeScope.of(dialogContext).home.danger,
-            ),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && mounted) {
-      final dedupeKey = StorageService.computePlaylistDedupeKey(item);
-      await StorageService.removePlaylistItemByKey(dedupeKey);
-      HapticFeedback.mediumImpact();
-      _loadPlaylistFavorites();
-    }
   }
 
   /// Resolve the addon that a Continue Watching title should route through.
@@ -4213,8 +3577,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     } else if (onAny(belowNodes)) {
       dir = 'up';
     } else {
-      for (final kind in _favRowKinds) {
-        if (onRow(_favNodesFor(kind))) {
+      for (final kind in _savedSection.favRowKinds) {
+        if (onRow(_savedSection.favNodesFor(kind))) {
           dir = 'up';
           break;
         }
@@ -4931,12 +4295,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         anyOf(_simklSeriesNodes) ||
         anyOf(_mdblistMovieNodes) ||
         anyOf(_mdblistSeriesNodes) ||
-        anyOf(_tvFavNodes) ||
-        anyOf(_stvFavNodes) ||
-        anyOf(_iptvFavNodes) ||
-        anyOf(_watchlistMovieNodes) ||
-        anyOf(_watchlistSeriesNodes) ||
-        anyOf(_playlistFavNodes)) {
+        anyOf(_savedSection.tvFavNodes) ||
+        anyOf(_savedSection.stvFavNodes) ||
+        anyOf(_savedSection.iptvFavNodes) ||
+        anyOf(_savedSection.watchlistMovieNodes) ||
+        anyOf(_savedSection.watchlistSeriesNodes) ||
+        anyOf(_savedSection.playlistFavNodes)) {
       return true;
     }
     for (final row in _rowNodes) {
@@ -5370,7 +4734,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     VoidCallback? onDownHold,
   }) {
     final cells = HomeStageFavoriteCards(
-      nodes: _favNodesFor(ref),
+      nodes: _savedSection.favNodesFor(ref),
       column: col,
       showTitle: !_hideHomeCardTitlesAndRatings,
       onLeftEdge: () => MainPageBridge.focusTvSidebar?.call(),
@@ -5384,47 +4748,53 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           _canvasFavFocused(railKey, col, focus, liveChannel: liveChannel),
     );
     if (ref.isIptvList) {
-      final row = _iptvListRows[ref.list];
+      final row = _savedSection.iptvListRows[ref.list];
       final channel = row.channels[col];
       return cells.iptv(
         channel,
         subtitle: () => 'IPTV · ${row.title.toUpperCase()}',
         previewLive: channel.isLive,
-        onOpen: () => _playIptvListChannel(channel),
+        onOpen: () => _savedIptv.playIptvListChannel(channel),
       );
     }
     switch (ref.kind) {
       case HomeFavoriteKind.watchlistMovies:
       case HomeFavoriteKind.watchlistSeries:
         final items = ref.kind == HomeFavoriteKind.watchlistMovies
-            ? _watchlistMovieItems
-            : _watchlistSeriesItems;
+            ? _savedSection.watchlistMovieItems
+            : _savedSection.watchlistSeriesItems;
         final item = items[col];
-        return cells.watchlist(item, onOpen: () => _openMyWatchlistItem(item));
+        return cells.watchlist(
+          item,
+          onOpen: () => _watchlistActions.openMyWatchlistItem(item),
+        );
       case HomeFavoriteKind.iptv:
-        final channel = _iptvFavChannels[col];
+        final channel = _savedSection.iptvFavChannels[col];
         return cells.iptv(
           channel,
           subtitle: () => 'IPTV · FAVORITES',
           previewLive: true,
-          onOpen: () => _playIptvChannel(channel),
+          onOpen: () => _savedIptv.playIptvChannel(channel),
         );
       case HomeFavoriteKind.debrify:
-        final channel = _tvFavChannels[col];
-        return cells.debrify(channel, onOpen: () => _playChannel(channel));
+        final channel = _savedSection.tvFavChannels[col];
+        return cells.debrify(
+          channel,
+          onOpen: () => _savedSection.playChannel(channel),
+        );
       case HomeFavoriteKind.stremio:
-        final channel = _stvFavChannels[col];
+        final channel = _savedSection.stvFavChannels[col];
         return cells.stremio(
           channel,
-          item: _stvNowPlaying(channel)?.item,
-          onOpen: () => _playStremioTvChannel(channel),
+          item: _savedSection.stvNowPlaying(channel)?.item,
+          onOpen: () => _savedSection.playStremioTvChannel(channel),
         );
       case HomeFavoriteKind.playlist:
-        final item = _playlistItems[col];
+        final item = _savedSection.playlistItems[col];
         return cells.playlist(
           item,
-          progress: _playlistController.current.progressFor(item),
-          onOpen: () => _onPlaylistItemTap(item),
+          progress: _savedSection.playlistController.current.progressFor(item),
+          onOpen: () => _playlistActions.onPlaylistItemTap(item),
         );
     }
   }
@@ -5665,9 +5035,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// frequently transparent marks — which a 2:3 crop cuts in half, so they get
   /// a square tile that contains the art on a plate instead of filling with it.
   SpotlightShelf _spotlightFavShelf(HomeFavoriteRowRef ref, {String? id}) {
-    final nodes = _favNodesFor(ref);
+    final nodes = _savedSection.favNodesFor(ref);
     if (ref.isIptvList) {
-      final row = _iptvListRows[ref.list];
+      final row = _savedSection.iptvListRows[ref.list];
       return buildSpotlightIptvFavorites(
         id: id,
         title: row.title,
@@ -5675,7 +5045,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         channels: row.channels,
         landscape: _homeLandscapeCards,
         previewVolume: () => _heroTrailerVolume,
-        onOpen: _playIptvListChannel,
+        onOpen: _savedIptv.playIptvListChannel,
       );
     }
     switch (ref.kind) {
@@ -5685,46 +5055,48 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         return buildSpotlightWatchlist(
           id: id,
           nodes: nodes,
-          items: movies ? _watchlistMovieItems : _watchlistSeriesItems,
+          items: movies
+              ? _savedSection.watchlistMovieItems
+              : _savedSection.watchlistSeriesItems,
           movies: movies,
           landscape: _homeLandscapeCards,
-          onOpen: _openMyWatchlistItem,
+          onOpen: _watchlistActions.openMyWatchlistItem,
         );
       case HomeFavoriteKind.playlist:
         return buildSpotlightPlaylists(
           id: id,
           nodes: nodes,
-          items: _playlistItems,
-          progress: _playlistController.current.progressFor,
-          onOpen: _onPlaylistItemTap,
+          items: _savedSection.playlistItems,
+          progress: _savedSection.playlistController.current.progressFor,
+          onOpen: _playlistActions.onPlaylistItemTap,
         );
       case HomeFavoriteKind.iptv:
         return buildSpotlightIptvFavorites(
           id: id,
           title: 'IPTV Favourites',
           nodes: nodes,
-          channels: _iptvFavChannels,
+          channels: _savedSection.iptvFavChannels,
           landscape: _homeLandscapeCards,
           previewVolume: () => _heroTrailerVolume,
-          onOpen: _playIptvChannel,
+          onOpen: _savedIptv.playIptvChannel,
         );
       case HomeFavoriteKind.debrify:
         return buildSpotlightDebrifyFavorites(
           id: id,
           nodes: nodes,
-          channels: _tvFavChannels,
+          channels: _savedSection.tvFavChannels,
           landscape: _homeLandscapeCards,
-          onOpen: _playChannel,
+          onOpen: _savedSection.playChannel,
         );
       case HomeFavoriteKind.stremio:
         return buildSpotlightStremioFavorites(
           id: id,
           nodes: nodes,
-          channels: _stvFavChannels,
+          channels: _savedSection.stvFavChannels,
           landscape: _homeLandscapeCards,
           artwork: _stvFavArt,
-          nowPlaying: (channel) => _stvNowPlaying(channel)?.item,
-          onOpen: _playStremioTvChannel,
+          nowPlaying: (channel) => _savedSection.stvNowPlaying(channel)?.item,
+          onOpen: _savedSection.playStremioTvChannel,
         );
     }
   }
@@ -5734,7 +5106,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// landscape mode instead chooses the title's best wide art. Null
   /// (placeholder) until the channel's items load.
   String? _stvFavArt(HomeStremioFavorite ch, {bool landscape = false}) {
-    final item = _stvNowPlaying(ch)?.item;
+    final item = _savedSection.stvNowPlaying(ch)?.item;
     if (item == null) return null;
     if (landscape) return homeStageWideArtwork(item);
     return _firstNonEmpty(item.poster, item.background);
@@ -5879,7 +5251,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   /// paging for free.
   List<HomeRail> get _canonicalCanvasRails => HomeRailComposition.canonical(
     continuation: _cwVisible ? _cwRows : const [],
-    favorites: _favRowKinds,
+    favorites: _savedSection.favRowKinds,
     favoriteCount: _canvasFavItemCount,
     sectionCount: _sections.length,
     nodeRowCount: _rowNodes.length,
@@ -5904,7 +5276,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   String _canvasRailRowId(HomeRail rail) {
     if (rail.cw != null) return rail.cw!.rowId;
-    if (rail.favKind != null) return _favRowId(rail.favKind!);
+    if (rail.favKind != null) return _savedSection.favRowId(rail.favKind!);
     if (rail.traktSkeletonIndex >= 0) {
       return rail.traktSkeletonIndex == 0 ? 'trakt:movies' : 'trakt:shows';
     }
@@ -5952,25 +5324,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   );
 
   int _canvasFavItemCount(HomeFavoriteRowRef ref) {
-    if (ref.isIptvList) return _iptvListRows[ref.list].channels.length;
+    if (ref.isIptvList) {
+      return _savedSection.iptvListRows[ref.list].channels.length;
+    }
     switch (ref.kind) {
       case HomeFavoriteKind.watchlistMovies:
-        return _watchlistMovieItems.length;
+        return _savedSection.watchlistMovieItems.length;
       case HomeFavoriteKind.watchlistSeries:
-        return _watchlistSeriesItems.length;
+        return _savedSection.watchlistSeriesItems.length;
       case HomeFavoriteKind.iptv:
-        return _iptvFavChannels.length;
+        return _savedSection.iptvFavChannels.length;
       case HomeFavoriteKind.debrify:
-        return _tvFavChannels.length;
+        return _savedSection.tvFavChannels.length;
       case HomeFavoriteKind.stremio:
-        return _stvFavChannels.length;
+        return _savedSection.stvFavChannels.length;
       case HomeFavoriteKind.playlist:
-        return _playlistItems.length;
+        return _savedSection.playlistItems.length;
     }
   }
 
   String _canvasFavTitle(HomeFavoriteRowRef ref) {
-    if (ref.isIptvList) return _iptvListRows[ref.list].title;
+    if (ref.isIptvList) return _savedSection.iptvListRows[ref.list].title;
     switch (ref.kind) {
       case HomeFavoriteKind.watchlistMovies:
         return 'Watchlist Movies';
@@ -6002,7 +5376,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   List<FocusNode> _canvasRailNodes(HomeRail rail) {
     if (rail.cw != null) return rail.cw!.nodes;
-    if (rail.favKind != null) return _favNodesFor(rail.favKind!);
+    if (rail.favKind != null) return _savedSection.favNodesFor(rail.favKind!);
     return _rowNodes[rail.sectionIndex!];
   }
 
@@ -7478,7 +6852,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       hasCatalogs: _sections.isNotEmpty,
       catalogsEmpty: _sections.every((s) => s.items.isEmpty),
       continuationVisible: _cwVisible,
-      favoritesVisible: _anyFavVisible,
+      favoritesVisible: _savedSection.anyFavVisible,
       hasPausedRows: pending.isNotEmpty,
       hasMoreCatalogs: hasMoreCatalogs,
       busy: busy,
@@ -7517,7 +6891,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       error: _error,
       continuationVisible: _cwVisible,
       catalogsEmpty: _sections.isEmpty,
-      favoritesVisible: _anyFavVisible,
+      favoritesVisible: _savedSection.anyFavVisible,
       traktReserving: _traktReserving,
       query: _catalogSection.catalogQuery,
       searchFailures: _catalogSearchFailures,
@@ -7591,7 +6965,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       catalog: _buildRow,
       skeleton: _buildTraktSkeletonRow,
       continuation: _buildContinueWatchingRow,
-      favorite: _buildFavRow,
+      favorite: _savedRows.buildFavRow,
       showFooter: _boardLoadingMore,
       tailPadding: _classicAnchorTailPadding,
       footerBuilder: (_) => _buildBoardFooter(),
@@ -7719,7 +7093,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         trackers: trackers,
         isCurrent: () => mounted,
         clearResume: _clearSeriesResume,
-        watchlist: _loadMyWatchlist,
+        watchlist: _savedSection.loadMyWatchlist,
         local: _loadContinueWatching,
         iptv: _loadIptvContinueWatching,
         trakt: () => _loadTraktContinueWatching(refreshBound: false),
@@ -7862,8 +7236,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     VoidCallback up(int col) => homeRowId != null
         ? () => _focusRelativeHomeRail(homeRowId, -1, col)
         : rowIndex == 0
-        ? (_anyFavVisible
-              ? () => _focusFavRowAt(_favRowCount - 1, col)
+        ? (_savedSection.anyFavVisible
+              ? () => _savedSection.focusFavRowAt(
+                  _savedSection.favRowCount - 1,
+                  col,
+                )
               : (_cwVisible
                     ? () => _focusCwRow(_cwRows.length - 1, col)
                     : () => _leaveBoardTop()))
@@ -7964,97 +7341,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       rowH: rowH,
     );
   }
-
-  /// Dispatch to the right favourites-row builder for [ref].
-  Widget _buildFavRow(HomeFavoriteRowRef ref, String homeRowId) {
-    if (ref.isIptvList) {
-      return _buildIptvListRow(ref, homeRowId);
-    }
-    switch (ref.kind) {
-      case HomeFavoriteKind.watchlistMovies:
-      case HomeFavoriteKind.watchlistSeries:
-        return _buildWatchlistRow(ref, homeRowId);
-      case HomeFavoriteKind.iptv:
-        return _buildIptvFavRow(homeRowId);
-      case HomeFavoriteKind.debrify:
-        return _buildTvFavRow(homeRowId);
-      case HomeFavoriteKind.stremio:
-        return _buildStremioTvFavRow(homeRowId);
-      case HomeFavoriteKind.playlist:
-        return _buildPlaylistFavRow(homeRowId);
-    }
-  }
-
-  HomeClassicFavoriteRows _classicFavoriteRows(
-    String rowId,
-    List<FocusNode> Function() nodes,
-  ) => HomeClassicFavoriteRows(
-    context: context,
-    isTelevision: widget.isTelevision,
-    posterWidth: _railPosterW(context),
-    captionBand: _homeArtPosterCaptionBand,
-    showTitle: () => !_hideHomeCardTitlesAndRatings,
-    nodes: nodes,
-    up: (col) => _favRowOnUp(rowId, col),
-    down: (col) => _favRowOnDown(rowId, col),
-    sidebar: () => MainPageBridge.focusTvSidebar?.call(),
-    clearLive: _clearHeroLiveIptv,
-    previewLive: _setHeroLiveIptv,
-  );
-
-  Widget _buildWatchlistRow(HomeFavoriteRowRef ref, String homeRowId) {
-    final movies = ref.kind == HomeFavoriteKind.watchlistMovies;
-    final items = movies ? _watchlistMovieItems : _watchlistSeriesItems;
-    final nodes = movies ? _watchlistMovieNodes : _watchlistSeriesNodes;
-    return _classicFavoriteRows(
-      homeRowId,
-      () => nodes,
-    ).watchlist(movies: movies, items: items, onOpen: _openMyWatchlistItem);
-  }
-
-  Widget _buildTvFavRow(String homeRowId) =>
-      _classicFavoriteRows(homeRowId, () => _tvFavNodes).debrify(
-        count: _tvFavChannels.length,
-        itemAt: (col) => _tvFavChannels[col],
-        onOpen: _playChannel,
-      );
-
-  Widget _buildStremioTvFavRow(String homeRowId) =>
-      _classicFavoriteRows(homeRowId, () => _stvFavNodes).stremio(
-        count: _stvFavChannels.length,
-        itemAt: (col) => _stvFavChannels[col],
-        nowPlaying: (channel) => _stvNowPlaying(channel)?.item,
-        onOpen: _playStremioTvChannel,
-      );
-
-  Widget _buildIptvFavRow(String homeRowId) =>
-      _classicFavoriteRows(homeRowId, () => _iptvFavNodes).iptv(
-        title: 'IPTV',
-        customList: false,
-        count: _iptvFavChannels.length,
-        itemAt: (col) => _iptvFavChannels[col],
-        onOpen: _playIptvChannel,
-      );
-
-  Widget _buildIptvListRow(HomeFavoriteRowRef ref, String homeRowId) {
-    final row = _iptvListRows[ref.list];
-    final nodes = _iptvListFocus.nodesFor(row.listId);
-    return _classicFavoriteRows(homeRowId, () => nodes).iptv(
-      title: row.title,
-      customList: true,
-      count: row.channels.length,
-      itemAt: (col) => row.channels[col],
-      onOpen: _playIptvListChannel,
-    );
-  }
-
-  Widget _buildPlaylistFavRow(String homeRowId) =>
-      _classicFavoriteRows(homeRowId, () => _playlistFavNodes).playlist(
-        count: _playlistItems.length,
-        itemAt: (col) => _playlistItems[col],
-        progress: (item) => _playlistController.current.progressFor(item),
-        onOpen: _onPlaylistItemTap,
-      );
 
   Widget _message(
     IconData icon,
