@@ -1,4 +1,3 @@
-import 'package:debrify/features/home/presentation/home_sources_navigation.dart';
 import 'package:debrify/features/sources/application/source_search_dependencies.dart';
 import 'package:debrify/features/sources/application/source_settings_dependencies.dart';
 import 'package:debrify/features/sources/data/service_source_search_repository.dart';
@@ -14,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../sources/source_cache_screen_test.dart' show ReadySettings;
+import 'package:debrify/screens/search_screen/home_sources_entry.dart';
 
 void main() {
   for (final mode in ['browse', 'play', 'bind', 'keyword']) {

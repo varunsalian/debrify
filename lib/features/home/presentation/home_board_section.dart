@@ -12,7 +12,7 @@ import '../application/home_row_order.dart';
 import '../models/home_catalog_state.dart';
 import '../models/home_catalog_plan.dart';
 import '../models/home_board_configuration.dart';
-import '../../search/presentation/catalog_search_section.dart';
+import '../models/home_catalog_search_status.dart';
 import 'home_board_bindings.dart';
 import 'home_board_viewport.dart';
 import 'home_progress_publication.dart';
@@ -32,7 +32,7 @@ class HomeBoardSection {
   late final HomeReturnRepository homeReturnRepository;
   late final HomeCollectionsRepository homeCollectionsRepository;
   final HomeBoardDeps _deps;
-  final CatalogSearchSection _catalogSection;
+  final HomeCatalogSearchStatus _catalogSection;
 
   // Display state below is written only through this class's transitions, at
   // the points each workflow already used; readers go through the getters.

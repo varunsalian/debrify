@@ -1,14 +1,15 @@
 import 'package:flutter/widgets.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../models/metadata_preferences.dart';
-import '../../discover/application/metadata_feature_controller.dart';
+import '../../discover/models/metadata_feature_policy.dart';
 import '../models/search_mode.dart';
 import 'title_suggestion_presentation.dart';
 
 typedef SearchTitleSectionDeps = ({
   SearchMode Function() mode,
   bool Function() searchMode,
-  MetadataFeatureController Function() metadata,
+  // Only the current policy state is read; its controller stays with its owner.
+  MetadataFeaturePolicy Function() metadata,
   String? Function() activeTab,
   bool Function() originCurrent,
   void Function(
@@ -45,7 +46,7 @@ class SearchTitleSection {
   }
 
   void scheduleTitleSuggestions() {
-    final preferences = _deps.metadata().current.preferences;
+    final preferences = _deps.metadata().preferences;
     final editing = _searchController.value;
     _deps.update(
       editing.text,
@@ -56,7 +57,7 @@ class SearchTitleSection {
           _deps.searchMode() &&
           _deps.mode() == SearchMode.catalog &&
           _deps.activeTab() == 'search' &&
-          _deps.metadata().current.ready &&
+          _deps.metadata().ready &&
           !presentation.opening &&
           _deps.originCurrent() &&
           (preferences?.features.contains(MetadataFeature.discovery) ?? false),

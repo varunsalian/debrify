@@ -8,9 +8,7 @@ import '../application/home_catalog_preferences_dependencies.dart';
 import '../application/home_board_dependencies.dart';
 import '../application/home_refresh_queue.dart';
 import '../models/home_row_refresh.dart';
-import '../../search/presentation/keyword_search_section.dart';
-import '../../search/presentation/catalog_search_section.dart';
-import '../../search/presentation/search_mode_section.dart';
+import '../models/home_catalog_search_status.dart';
 import 'home_board_bindings.dart';
 import 'home_board_section.dart';
 import 'home_board_loading.dart';
@@ -22,6 +20,7 @@ import 'home_continuation_loading.dart';
 import 'home_saved_content_section.dart';
 import 'home_spotlight_section.dart';
 import 'home_stage_rows.dart';
+import 'home_screen_controls.dart';
 
 typedef HomeBoardConfigurationDeps = ({
   bool Function() mounted,
@@ -41,12 +40,11 @@ class HomeBoardConfigurationSection {
     this._boardSection,
     this._boardLoading,
     this._boardFocus,
-    this._keywordSection,
+    this._controls,
     this._displaySection,
     this._continuationSection,
     this._continuationLoading,
     this._heroPreview,
-    this._modeSection,
     this._catalogSection,
     this._spotlightSection,
     this._savedSection,
@@ -56,13 +54,12 @@ class HomeBoardConfigurationSection {
   final HomeBoardSection _boardSection;
   final HomeBoardLoading _boardLoading;
   final HomeBoardFocus _boardFocus;
-  final KeywordSearchSection _keywordSection;
+  final HomeScreenControls _controls;
   final HomeDisplaySection _displaySection;
   final HomeContinuationSection _continuationSection;
   final HomeContinuationLoading _continuationLoading;
   final HomeHeroPreview _heroPreview;
-  final SearchModeSection _modeSection;
-  final CatalogSearchSection _catalogSection;
+  final HomeCatalogSearchStatus _catalogSection;
   final HomeSpotlightSection _spotlightSection;
   final HomeSavedContentSection _savedSection;
 
@@ -108,7 +105,7 @@ class HomeBoardConfigurationSection {
   Future<void> reloadForHomeSettings() => _deps.bindings().settings.run(
     isCurrent: () => _deps.mounted(),
     refreshAppearance: (current) =>
-        _keywordSection.loadSourceTextFormatting(isCurrent: current),
+        _controls.loadSourceTextFormatting(isCurrent: current),
     refreshDisplay: (current) =>
         _displaySection.loadHomeCardOrientation(isCurrent: current),
     refreshContinuation: (current) => _continuationSection
@@ -217,7 +214,7 @@ class HomeBoardConfigurationSection {
         isHome: !_deps.searchMode() && !_deps.discoverMode(),
         isCurrent: () => _deps.mounted() && (isCurrent?.call() ?? true),
         select: (mode) {
-          if (_modeSection.mode != mode) _modeSection.switchMode(mode);
+          if (_controls.mode != mode) _controls.switchMode(mode);
         },
       );
 

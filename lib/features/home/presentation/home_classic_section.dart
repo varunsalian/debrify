@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../models/home_collection_rows.dart';
 import '../../../widgets/home/home_theme.dart';
-import '../../search/presentation/catalog_search_section.dart';
-import '../../search/presentation/catalog_search_status.dart';
+import '../models/home_catalog_search_status.dart';
+import '../../../ui/core/catalog_search_status_strip.dart';
 import 'home_board_section.dart';
 import 'home_board_focus.dart';
 import 'home_board_deferred.dart';
@@ -70,7 +70,7 @@ class HomeClassicSection {
   final HomeBoardFocus _boardFocus;
   final HomeBoardDeferred _boardDeferred;
   final HomeBoardPaging _boardPaging;
-  final CatalogSearchSection _catalogSection;
+  final HomeCatalogSearchStatus _catalogSection;
   final HomeDisplaySection _displaySection;
   final HomeStageRails _stageRailsSection;
   final HomeStageGeometry _stageGeometry;
@@ -142,7 +142,7 @@ class HomeClassicSection {
       showSearchStatus: () =>
           _catalogSection.catalogQuery.isNotEmpty &&
           (_catalogSection.catalogSearching ||
-              _catalogSection.catalogState.failures > 0),
+              _catalogSection.catalogFailures > 0),
       searchStatus: buildSearchStatusStrip,
       rowsBuilder: (_) => buildClassicRows(),
     );
@@ -181,7 +181,7 @@ class HomeClassicSection {
   Widget buildSearchStatusStrip() => buildCatalogSearchStatus(
     _deps.context(),
     searching: _catalogSection.catalogSearching,
-    failures: _catalogSection.catalogState.failures,
+    failures: _catalogSection.catalogFailures,
   );
 
   double classicCatalogRowExtent(

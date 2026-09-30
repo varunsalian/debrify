@@ -6,7 +6,7 @@ import '../../../models/home_preferences.dart';
 import '../../../models/home_collection_rows.dart';
 import '../../../utils/platform_util.dart';
 import '../../../widgets/home/spotlight_board.dart';
-import '../../search/presentation/catalog_search_section.dart';
+import '../models/home_catalog_search_status.dart';
 import '../data/home_catalog_repository.dart';
 
 typedef HomeSpotlightDeps = ({
@@ -25,7 +25,7 @@ typedef HomeSpotlightDeps = ({
 class HomeSpotlightSection {
   HomeSpotlightSection(this._deps, this._catalogSection);
   final HomeSpotlightDeps _deps;
-  final CatalogSearchSection _catalogSection;
+  final HomeCatalogSearchStatus _catalogSection;
 
   final GlobalKey<SpotlightBoardState> spotlightKey =
       GlobalKey<SpotlightBoardState>();

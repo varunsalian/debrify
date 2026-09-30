@@ -11,9 +11,16 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv")
+# Screen-level wiring that composes several features (the composition
+# boundary). Measured for size; features must not import it.
+COMPOSITION = "lib/screens/search_screen"
+FACADE = "lib/screens/search_screen.dart"
 # Register extracted/adopted application files outside the feature directories.
 # Retained facades join this source set when their migration reaches its final checks.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
+    "lib/ui/core/trailer_indicators.dart",
+    "lib/ui/core/spotlight_search_button.dart",
+    "lib/ui/core/catalog_search_status_strip.dart",
     "lib/screens/search_screen.dart",
     "lib/ui/core/retry_message.dart",
     "lib/models/mdblist_list_choice.dart",
@@ -89,7 +96,7 @@ PRESENTATION_BRIDGE_IMPORTS = {
         "lib/services/profiles/profile_session_memory.dart": {"ProfileSessionOwner"},
     },
     # Immutable profile-session identity only; capture and storage operations stay outside.
-    "lib/features/search/presentation/search_session_lifecycle.dart": {
+    "lib/screens/search_screen/search_session_lifecycle.dart": {
         "lib/services/profiles/profile_session_memory.dart": {"ProfileSessionOwner"},
     },
     # Plain exception declaration only; no authorization service I/O is exposed.
@@ -225,6 +232,19 @@ def violations(path: Path) -> list[str]:
                 problems.append(f"view directly imports data/platform API: {uri}")
             if target.startswith("package:provider/"):
                 problems.append(f"new feature DI must use Riverpod: {uri}")
+            if relative.startswith("lib/features/"):
+                own = relative.split("/")[2]
+                if target.startswith("lib/features/"):
+                    other = target.split("/")[2]
+                    if other != own and not target.startswith(
+                            f"lib/features/{other}/models/"):
+                        # Features meet through small model contracts; the
+                        # wiring that needs several features lives in
+                        # COMPOSITION, outside lib/features.
+                        problems.append(
+                            f"cross-feature import outside {other}/models: {uri}")
+                if target.startswith(COMPOSITION + "/"):
+                    problems.append(f"feature imports the composition layer: {uri}")
     return [f"{relative}: {problem}" for problem in problems]
 
 
@@ -235,6 +255,8 @@ def main() -> int:
         if not p.name.endswith(GENERATED_SUFFIXES)
     }
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)
+    paths.update((ROOT / COMPOSITION).rglob("*.dart"))
+    paths.add(ROOT / FACADE)
     problems = []
     if not paths:
         problems.append("No migrated sources found; check the measured source set.")

@@ -11,8 +11,8 @@ import '../../../screens/torbox/torbox_downloads_screen.dart';
 import '../../../screens/premiumize/premiumize_files_screen.dart';
 import '../../../screens/alldebrid/alldebrid_files_screen.dart';
 import '../../../screens/pikpak/pikpak_files_screen.dart';
-import '../../sources/presentation/local_source_picker.dart';
 import '../data/home_source_editing_repository.dart';
+import 'home_local_source_picker.dart';
 
 /// One detail action's editor and add-source navigation. Persistence and native
 /// picking are injected; accepted routes borrow the originating view guard.
@@ -34,7 +34,7 @@ class HomeSourceEditor {
   final StremioMeta item;
   final String? id;
   final HomeSourceEditingRepository repository;
-  final LocalSourcePicker localPicker;
+  final HomeLocalSourcePicker localPicker;
   final bool Function() isCurrent;
   final Future<void> Function() refreshBindings;
   final void Function(String) showMessage;

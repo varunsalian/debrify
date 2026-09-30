@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../utils/platform_util.dart';
 import '../../../models/stremio_addon.dart';
-import '../../search/presentation/catalog_search_section.dart';
+import '../models/home_catalog_search_status.dart';
 import 'home_board_section.dart';
 import 'home_board_loading.dart' show kBoardBatchSize;
 import 'home_board_publication.dart';
@@ -29,7 +29,7 @@ class HomeBoardPaging {
   );
   final HomeBoardPagingDeps _deps;
   final HomeBoardSection _boardSection;
-  final CatalogSearchSection _catalogSection;
+  final HomeCatalogSearchStatus _catalogSection;
   final HomeBoardPublication _boardPublication;
   final HomeStageSection _stageSection;
 

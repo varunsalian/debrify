@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../ui/core/retry_message.dart';
 import '../../../widgets/skeleton_poster.dart' show BrandLoadingStage;
-import '../../search/presentation/catalog_search_section.dart';
+import '../models/home_catalog_search_status.dart';
 import 'home_board_section.dart';
 import 'home_board_loading.dart';
 import 'home_board_paging.dart';
@@ -47,7 +47,7 @@ class HomeBoardRendering {
   final HomeBoardLoading _boardLoading;
   final HomeBoardPaging _boardPaging;
   final HomeBoardFocus _boardFocus;
-  final CatalogSearchSection _catalogSection;
+  final HomeCatalogSearchStatus _catalogSection;
   final HomeDisplaySection _displaySection;
   final HomeSpotlightSection _spotlightSection;
   final HomeSpotlightRows _spotlightRows;
@@ -152,7 +152,7 @@ class HomeBoardRendering {
       favoritesVisible: _savedSection.anyFavVisible,
       traktReserving: _continuationProjection.traktReserving,
       query: _catalogSection.catalogQuery,
-      searchFailures: _catalogSection.catalogState.failures,
+      searchFailures: _catalogSection.catalogFailures,
       searchMode: _deps.searchMode(),
       style: _displaySection.homeStyleEffective,
       spotlightHasContent: () =>

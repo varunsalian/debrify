@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../models/mdblist_list_choice.dart';
 import '../../../widgets/see_all/discover_browsing_input.dart';
-import '../../home/presentation/home_hero_trailer_indicators.dart';
+import '../../../ui/core/trailer_indicators.dart';
 import '../application/discover_source_controller.dart';
 import '../application/discover_layout_controller.dart';
 import '../application/discover_card_settings_controller.dart';

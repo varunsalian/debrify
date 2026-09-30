@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/custom_series_identity.dart';
 import '../../../models/playback_meta.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../utils/tv_keys.dart';
-import '../../sources/presentation/sources_screen.dart';
 
 typedef HomeSourcesBuilder =
     Widget Function({
@@ -18,16 +16,13 @@ typedef HomeSourcesBuilder =
       bool forcePlayOnTap,
     });
 
-final homeSourcesNavigationProvider = Provider<HomeSourcesNavigation>(
-  (ref) => const HomeSourcesNavigation(),
-);
-
 /// Home's three Sources entry points share route ownership, not data policy.
 /// The Sources feature continues to own searching, binding and playback.
 class HomeSourcesNavigation {
-  const HomeSourcesNavigation({
-    HomeSourcesBuilder buildScreen = SourcesScreen.new,
-  }) : _buildScreen = buildScreen;
+  /// The Sources screen is supplied by the composition that binds Home to the
+  /// Sources feature (see `homeSourcesNavigationProvider`).
+  const HomeSourcesNavigation({required HomeSourcesBuilder buildScreen})
+    : _buildScreen = buildScreen;
 
   final HomeSourcesBuilder _buildScreen;
 

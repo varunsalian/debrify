@@ -12,7 +12,7 @@ import 'home_hero_surface.dart';
 import 'home_hero_transitions.dart';
 import 'home_hero_tint_surface.dart';
 import 'home_hero_title_art.dart';
-import 'home_hero_trailer_indicators.dart';
+import '../../../ui/core/trailer_indicators.dart';
 
 /// The Stremio-style spotlight. Reflects the currently focused board title —
 /// backdrop bleeding in from the right behind a left/bottom scrim, with title,

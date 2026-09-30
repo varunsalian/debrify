@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../home/application/home_layout_policy.dart';
 import '../models/search_mode.dart';
 import 'search_page_shell.dart';
 import 'search_input_section.dart';
@@ -13,9 +12,10 @@ typedef SearchSpotlightShellDeps = ({
   bool Function() isTelevision,
   bool Function() searchMode,
   bool Function() discoverMode,
-  String Function() rawStyle,
-  bool Function() loading,
-  bool Function() hasHero,
+  // Home's layout policy answers, evaluated by the composition:
+  // the stored style resolves to Spotlight off-TV, and the shell should show.
+  bool Function() offTvSpotlightStyle,
+  bool Function() offTvSpotlightShell,
 });
 
 /// Off-TV Spotlight search-sheet eligibility, focus latch and shell rendering.
@@ -49,8 +49,7 @@ class SearchSpotlightShell {
 
   /// The stored style, resolved for this platform, is Spotlight. Off-TV only.
   bool get spotlightSelected =>
-      !_deps.isTelevision() &&
-      effectiveOffTvHomeStyle(_deps.rawStyle()) == 'spotlight';
+      !_deps.isTelevision() && _deps.offTvSpotlightStyle();
 
   /// Whether the off-TV Home renders the Spotlight shell branch. While the
   /// selected layout is loading, retain this branch so a newly mounted Home
@@ -60,11 +59,7 @@ class SearchSpotlightShell {
   bool get spotlightShellActive =>
       !_deps.searchMode() &&
       !_deps.discoverMode() &&
-      shouldUseOffTvSpotlightShell(
-        rawStyle: _deps.rawStyle(),
-        loading: _deps.loading(),
-        hasHero: _deps.hasHero(),
-      );
+      _deps.offTvSpotlightShell();
 
   /// Search state that forces the header/sheet to be visible. Typing is
   /// covered by the focus latch (one can only type while the field is

@@ -4,7 +4,7 @@ import '../../../models/debrify_tv/channel.dart';
 import '../../../models/iptv_playlist.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
-import '../../search/presentation/catalog_search_section.dart';
+import '../models/home_catalog_search_status.dart';
 import '../application/home_tv_favorites_controller.dart';
 import '../application/home_stremio_favorites_controller.dart';
 import '../application/home_iptv_favorites_controller.dart';
@@ -39,7 +39,7 @@ typedef HomeSavedContentDeps = ({
 class HomeSavedContentSection {
   HomeSavedContentSection(this._deps, this._catalog);
   final HomeSavedContentDeps _deps;
-  final CatalogSearchSection _catalog;
+  final HomeCatalogSearchStatus _catalog;
 
   /// Launch a Debrify TV channel (same path the Home screen uses): hand off to
   /// the live player if it's mounted, else queue an auto-play and switch tabs.

@@ -1,5 +1,5 @@
-import 'package:debrify/features/home/presentation/home_hero_trailer_indicators.dart';
-import 'package:debrify/features/home/presentation/home_spotlight_search_button.dart';
+import 'package:debrify/ui/core/trailer_indicators.dart';
+import 'package:debrify/ui/core/spotlight_search_button.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/platform_util.dart';
@@ -65,11 +65,9 @@ void main() {
     'floating search button retains target size and dispatches one tap',
     (tester) async {
       var taps = 0;
-      await tester.pumpWidget(
-        host(HomeSpotlightSearchButton(onTap: () => taps++)),
-      );
+      await tester.pumpWidget(host(SpotlightSearchButton(onTap: () => taps++)));
       expect(
-        tester.getSize(find.byType(HomeSpotlightSearchButton)),
+        tester.getSize(find.byType(SpotlightSearchButton)),
         const Size(40, 40),
       );
       await tester.tap(find.byIcon(Icons.search_rounded));

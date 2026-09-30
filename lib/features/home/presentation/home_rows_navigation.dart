@@ -4,7 +4,7 @@ import '../../../models/home_collection.dart';
 import '../../../models/home_collection_rows.dart';
 import '../../../screens/collections/collection_folder_screen.dart';
 import '../../../widgets/see_all/discover_card_settings_scope.dart';
-import '../../discover/application/discover_card_settings_controller.dart';
+import '../../discover/models/discover_card_settings.dart';
 import '../data/home_board_services.dart';
 import 'home_board_section.dart';
 import 'home_display_section.dart';
@@ -27,7 +27,9 @@ typedef HomeRowsNavigationDeps = ({
   bool Function() discoverMode,
   StremioAddon Function() nativeAddon,
   Future<bool> Function() readMergedSeriesEnabled,
-  DiscoverCardSettingsController Function() cardSettings,
+  // Reads Discover's current card flags; the controller stays with Discover.
+  DiscoverCardSettings Function({required bool Function() isCurrent})
+  readCardSettings,
 });
 
 /// Resolves a row's source and wires collection, See-All and handed-off detail routes.
@@ -263,9 +265,7 @@ class HomeRowsNavigation {
   /// their normal labels and badges.
   Widget withHomeExpandedCardSettings(Widget child) {
     if (_deps.searchMode() || _deps.discoverMode()) return child;
-    final settings = _deps.cardSettings().readSnapshot(
-      isCurrent: () => _deps.mounted(),
-    );
+    final settings = _deps.readCardSettings(isCurrent: () => _deps.mounted());
     return DiscoverCardSettingsScope(
       showTypeTags: settings.showTypeTags,
       showRatings: settings.showRatings,

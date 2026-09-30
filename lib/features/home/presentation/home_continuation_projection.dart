@@ -1,4 +1,4 @@
-import '../../search/presentation/catalog_search_section.dart';
+import '../models/home_catalog_search_status.dart';
 import 'home_continuation_section.dart';
 import 'home_continuation_playback.dart';
 import 'home_continuation_removal.dart';
@@ -28,7 +28,7 @@ class HomeContinuationProjection {
   final HomeContinuationSection _section;
   final HomeContinuationPlayback _playback;
   final HomeContinuationRemoval _removal;
-  final CatalogSearchSection _catalog;
+  final HomeCatalogSearchStatus _catalog;
 
   /// The leading Continue Watching rows to render, in order: local Movies /
   /// Series (when enabled), then Trakt Movies / Shows (when connected). Only

@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import '../models/home_tracker_authentication.dart';
 import '../application/home_tracker_authentication_controller.dart';
 import '../../search/models/search_mode.dart';
-import '../../search/presentation/search_mode_section.dart';
-import '../../search/presentation/lists_search_section.dart';
-import '../../search/presentation/catalog_search_section.dart';
-import '../../search/presentation/search_input_section.dart';
+import '../models/home_catalog_search_status.dart';
 import 'home_board_bindings.dart';
 import 'home_board_section.dart';
 import 'home_board_configuration_section.dart';
 import 'home_catalog_badges.dart';
 import 'home_continuation_loading.dart';
+import 'home_screen_controls.dart';
 
 typedef HomeIntegrationDeps = ({
   bool Function() mounted,
@@ -29,10 +27,8 @@ class HomeIntegrationSection {
     this._boardConfiguration,
     this._catalogBadges,
     this._continuationLoading,
-    this._modeSection,
-    this._listsSection,
+    this._controls,
     this._catalogSection,
-    this._inputSection,
     this._searchController,
   );
   final HomeIntegrationDeps _deps;
@@ -40,10 +36,8 @@ class HomeIntegrationSection {
   final HomeBoardConfigurationSection _boardConfiguration;
   final HomeCatalogBadges _catalogBadges;
   final HomeContinuationLoading _continuationLoading;
-  final SearchModeSection _modeSection;
-  final ListsSearchSection _listsSection;
-  final CatalogSearchSection _catalogSection;
-  final SearchInputSection _inputSection;
+  final HomeScreenControls _controls;
+  final HomeCatalogSearchStatus _catalogSection;
   final TextEditingController _searchController;
 
   /// Whether Trakt is connected — gates the Trakt-syncing detail quick actions
@@ -117,12 +111,12 @@ class HomeIntegrationSection {
     return trackerAuthControllers[HomeTracker.mdblist]!.load(
       isCurrent: () => _deps.mounted(),
       beforeChange: (auth) {
-        leaveLists = !auth && _modeSection.mode == SearchMode.lists;
-        if (leaveLists) _listsSection.clearListsSearch();
+        leaveLists = !auth && _controls.mode == SearchMode.lists;
+        if (leaveLists) _controls.clearListsSearch();
       },
       onChanged: (_) {
         _deps.setState(() {
-          if (leaveLists) _modeSection.mode = SearchMode.catalog;
+          if (leaveLists) _controls.mode = SearchMode.catalog;
         });
         // A disconnect can remove the currently selected mode. Keep the shared
         // query useful by resolving it through Catalog after the selector falls
@@ -134,7 +128,7 @@ class HomeIntegrationSection {
           }
           if (_deps.isTelevision()) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_deps.mounted()) _inputSection.searchFocusNode.requestFocus();
+              if (_deps.mounted()) _controls.searchFieldNode.requestFocus();
             });
           }
         }

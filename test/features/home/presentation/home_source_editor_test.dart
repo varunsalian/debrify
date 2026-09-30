@@ -12,6 +12,7 @@ import 'package:debrify/models/series_source.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:debrify/screens/search_screen/home_sources_entry.dart';
 
 SeriesSource source(String name) => SeriesSource(
   torrentHash: name,
@@ -122,16 +123,18 @@ class Fixture {
               showMessage: messages.add,
               openTorrent: (_) => torrents++,
               openKeyword: (_) => keywords++,
-              localPicker: LocalSourcePicker(
-                androidFolderSelection: false,
-                disabledReason: localEnabled ? null : 'Unavailable',
-                file: (_, {canContinue}) async => source('Local'),
-                movieFolder: (_, {required title, year, canContinue}) async =>
-                    source('Local'),
-                seriesFolder: (_, {required title, canContinue}) async {
-                  localPicks++;
-                  return source('Local');
-                },
+              localPicker: HomeLocalSourcePickerAdapter(
+                LocalSourcePicker(
+                  androidFolderSelection: false,
+                  disabledReason: localEnabled ? null : 'Unavailable',
+                  file: (_, {canContinue}) async => source('Local'),
+                  movieFolder: (_, {required title, year, canContinue}) async =>
+                      source('Local'),
+                  seriesFolder: (_, {required title, canContinue}) async {
+                    localPicks++;
+                    return source('Local');
+                  },
+                ),
               ),
             );
             return Scaffold(

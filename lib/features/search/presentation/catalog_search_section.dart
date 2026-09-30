@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/stremio_addon.dart';
+import '../../home/models/home_catalog_search_status.dart';
 import '../models/search_session.dart';
 import '../models/catalog_search_state.dart';
 import '../application/catalog_search_controller.dart';
@@ -26,7 +27,7 @@ typedef CatalogSearchSectionDeps = ({
 });
 
 /// Catalog submit and Sources actions preserve batch publication and focus handoff.
-class CatalogSearchSection {
+class CatalogSearchSection implements HomeCatalogSearchStatus {
   CatalogSearchSection(this._ref, this._deps);
   final WidgetRef _ref;
   final CatalogSearchSectionDeps _deps;
@@ -39,7 +40,12 @@ class CatalogSearchSection {
   CatalogSearchState get catalogState => _deps.bindings().catalog;
   CatalogSearchController get catalogController =>
       _ref.read(catalogSearchProvider(_deps.session()).notifier);
+  @override
   String get catalogQuery => catalogState.query;
+  @override
+  int get catalogFailures => catalogState.failures;
+  @override
+  void clearCatalogResults() => catalogController.clear();
 
   /// DPAD focus for the catalog-mode "Sources" button (empty-prompt state) —
   /// its keyword-mode twin, for picking which searchable addons are queried.
@@ -49,6 +55,7 @@ class CatalogSearchSection {
 
   /// Cross-addon catalog search, grouped as one horizontal row per addon so it
   /// matches the board (not a merged grid).
+  @override
   Future<void> runCatalogSearch(String query) async {
     // Reclaim TV focus before disposing the previous result nodes.
     if (_deps.isTelevision() && !_deps.searchField().hasFocus) {
@@ -109,5 +116,6 @@ class CatalogSearchSection {
     }
   }
 
+  @override
   bool get catalogSearching => catalogState.searching;
 }

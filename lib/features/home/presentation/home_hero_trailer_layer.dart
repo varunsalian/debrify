@@ -4,8 +4,8 @@ import '../../../models/youtube_resolved_streams.dart';
 import '../../../theme/app_theme_scope.dart';
 import '../../../widgets/hero_trailer_backdrop.dart';
 import 'home_hero_surface.dart';
-import 'home_hero_trailer_indicators.dart';
-import 'home_spotlight_search_button.dart';
+import '../../../ui/core/trailer_indicators.dart';
+import '../../../ui/core/spotlight_search_button.dart';
 
 /// Full-board ambient trailer layer (TV Home board only). Sits ABOVE the hero +
 /// rows as an [IgnorePointer] overlay and paints the trailer into a right-
@@ -311,7 +311,5 @@ class _HomeHeroTrailerLayerState extends State<HomeHeroTrailerLayer> {
 
   double get _chipRight => widget.isTelevision
       ? 22.0
-      : HomeSpotlightSearchButton.rightInset +
-            HomeSpotlightSearchButton.diameter +
-            12;
+      : SpotlightSearchButton.rightInset + SpotlightSearchButton.diameter + 12;
 }

@@ -1,6 +1,6 @@
 import 'package:debrify/features/home/presentation/home_hero_trailer_layer.dart';
-import 'package:debrify/features/home/presentation/home_hero_trailer_indicators.dart';
-import 'package:debrify/features/home/presentation/home_spotlight_search_button.dart';
+import 'package:debrify/ui/core/trailer_indicators.dart';
+import 'package:debrify/ui/core/spotlight_search_button.dart';
 import 'package:debrify/models/youtube_resolved_streams.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
@@ -169,8 +169,8 @@ void main() {
         pill.right,
         closeTo(
           800 -
-              HomeSpotlightSearchButton.rightInset -
-              HomeSpotlightSearchButton.diameter -
+              SpotlightSearchButton.rightInset -
+              SpotlightSearchButton.diameter -
               12,
           0.001,
         ),

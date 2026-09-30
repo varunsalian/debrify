@@ -21,6 +21,6 @@ jobs:
       - run: flutter pub get
       # Scoped to migrated code: the rest of the repo predates formatting
       # enforcement and is not bulk-reformatted by this migration.
-      - run: dart format --output=none --set-exit-if-changed lib/features lib/screens/search_screen.dart test/features
+      - run: dart format --output=none --set-exit-if-changed lib/features lib/screens/search_screen.dart lib/screens/search_screen test/features
       - run: python3 dev/tool/check_search_architecture.py
-      - run: flutter analyze --no-fatal-infos lib/features lib/screens/search_screen.dart
+      - run: flutter analyze --no-fatal-infos lib/features lib/screens/search_screen.dart lib/screens/search_screen

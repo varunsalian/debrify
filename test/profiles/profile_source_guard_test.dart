@@ -170,7 +170,7 @@ void main() {
       'lib/features/search/presentation/keyword_return.dart',
     ).readAsStringSync();
     final searchComposition = File(
-      'lib/features/search/presentation/search_presentation_composition.dart',
+      'lib/screens/search_screen/search_presentation_composition.dart',
     ).readAsStringSync();
     expect(source, contains('session: () => _searchLifecycle'));
     expect(

@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/stremio_addon.dart';
-import '../../sources/presentation/local_source_picker_composition.dart';
 import '../application/home_source_editing_dependencies.dart';
 import '../models/home_catalog_session.dart';
 import 'home_playback_navigation.dart';
 import 'home_source_editor.dart';
+import 'home_local_source_picker.dart';
 
 typedef HomeSourceActionsDeps = ({
   BuildContext Function() context,
   HomeCatalogSession Function() session,
   String? Function(StremioMeta) imdbOf,
   Future<void> Function() refreshBindings,
+  HomeLocalSourcePicker Function() localPicker,
 });
 
 /// Presents the existing source editor for the originating catalog action.
@@ -35,7 +36,7 @@ class HomeSourceActions {
       repository: _ref.read(
         homeSourceEditingRepositoryProvider(_deps.session().owner),
       ),
-      localPicker: _ref.read(localSourcePickerProvider),
+      localPicker: _deps.localPicker(),
       isCurrent: current,
       refreshBindings: _deps.refreshBindings,
       showMessage: _playback.snack,

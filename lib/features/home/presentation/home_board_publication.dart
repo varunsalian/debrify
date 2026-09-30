@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../models/stremio_addon.dart';
-import '../../search/presentation/catalog_search_section.dart';
+import '../models/home_catalog_search_status.dart';
 import 'home_board_section.dart';
 import 'home_stage_section.dart';
 
@@ -29,7 +29,7 @@ class HomeBoardPublication {
   );
   final HomeBoardPublicationDeps _deps;
   final HomeBoardSection _boardSection;
-  final CatalogSearchSection _catalogSection;
+  final HomeCatalogSearchStatus _catalogSection;
   final HomeStageSection _stageSection;
   final ValueNotifier<bool> _ready;
 

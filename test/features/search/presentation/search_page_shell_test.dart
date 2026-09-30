@@ -1,4 +1,4 @@
-import 'package:debrify/features/home/presentation/home_spotlight_search_button.dart';
+import 'package:debrify/ui/core/spotlight_search_button.dart';
 import 'package:debrify/features/search/models/search_mode.dart';
 import 'package:debrify/features/search/presentation/search_page_shell.dart';
 import 'package:flutter/material.dart';
@@ -176,7 +176,7 @@ void main() {
     );
     expect(find.text('header'), findsNothing);
     expect(find.text('content'), findsOneWidget);
-    await tester.tap(find.byType(HomeSpotlightSearchButton));
+    await tester.tap(find.byType(SpotlightSearchButton));
     await tester.pump();
     expect(find.text('header'), findsOneWidget);
     expect(find.text('sources'), findsOneWidget);

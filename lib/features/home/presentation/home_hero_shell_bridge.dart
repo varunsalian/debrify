@@ -1,13 +1,7 @@
 import 'home_integration_section.dart';
 import 'home_continuation_return.dart';
 import 'home_board_configuration_section.dart';
-import '../../search/presentation/search_mode_section.dart';
-import '../../search/presentation/search_title_section.dart';
-import 'home_continuation_loading.dart';
-import 'home_saved_content_section.dart';
-import 'home_rows_navigation.dart';
 import 'dart:async';
-import '../../search/presentation/search_spotlight_shell.dart';
 import 'home_display_section.dart';
 import 'home_hero_preview.dart';
 import 'home_stage_section.dart';
@@ -37,7 +31,9 @@ class HomeHeroShellBridge {
     required HomeDisplaySection display,
     required HomeHeroPreview preview,
     required HomeStageSection stage,
-    required SearchSpotlightShell spotlight,
+    // The Spotlight search sheet belongs to Search; Home registers its hooks.
+    required bool Function() closeSearchSheet,
+    required VoidCallback restoreSearchSheet,
   }) {
     // Home layout pref: loaded once here, then live-reloaded whenever the
     // Settings picker fires the bridge. HOME board instance only — the
@@ -66,13 +62,10 @@ class HomeHeroShellBridge {
       // mechanism — a nested PopScope would race the root scope in
       // main.dart (its didPop==false path continues into double-back-exit
       // arming even when an inner scope consumed the press).
-      MainPageBridge.registerTabBackHandler(
-        'home',
-        spotlight.searchSheet.close,
-      );
+      MainPageBridge.registerTabBackHandler('home', closeSearchSheet);
       // Restored keyword results must come back with the sheet open — the
       // full-bleed shell would otherwise hide them behind a hero.
-      if (restoredKeyword) spotlight.searchSheet.restore();
+      if (restoredKeyword) restoreSearchSheet();
       // Hero trailer prefs for the OFF-TV Spotlight reel. Only the pieces
       // that mean "resolve and paint a video" — none of the TV shell
       // machinery the preview.heroTrailerActive block registers.
@@ -130,7 +123,8 @@ class HomeHeroShellBridge {
   /// Removes borrowed change listeners before their view owners are disposed.
   static void disposeContentSignals({
     required bool Function() offTvHome,
-    required SearchSpotlightShell spotlight,
+    required bool Function() closeSearchSheet,
+    required VoidCallback searchSheetFocusChanged,
     required FocusNode Function() searchField,
     required HomeHeroPreview preview,
     required VoidCallback reclaimFocus,
@@ -141,11 +135,8 @@ class HomeHeroShellBridge {
   }) {
     if (offTvHome()) {
       // Same closure that registered — the bridge's mid-transition contract.
-      MainPageBridge.unregisterTabBackHandler(
-        'home',
-        spotlight.searchSheet.close,
-      );
-      searchField().removeListener(spotlight.searchSheet.onFocusChanged);
+      MainPageBridge.unregisterTabBackHandler('home', closeSearchSheet);
+      searchField().removeListener(searchSheetFocusChanged);
       MainPageBridge.removePlayerLaunchListener(preview.onContentPlayerLaunch);
     }
     // Safe no-op in the variants that never registered it.
@@ -254,97 +245,6 @@ class HomeHeroShellBridge {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         MainPageBridge.tvStageLightsOff.value = false;
       });
-    }
-  }
-}
-
-typedef HomeTabShellDeps = ({
-  bool Function() mounted,
-  int Function() tabIndex,
-  bool Function() searchMode,
-  bool Function() discoverMode,
-  Listenable Function() localCompletion,
-  Listenable Function() mdblistPlayback,
-});
-
-/// Borrows the tab's shell handlers and releases the same handlers at teardown.
-/// Construction registers nothing; the route calls start at its original point.
-class HomeTabShellRegistration {
-  HomeTabShellRegistration(
-    this._deps,
-    this._focusContent,
-    this._continuation,
-    this._saved,
-    this._mode,
-    this._title,
-    this._navigation,
-  );
-  final HomeTabShellDeps _deps;
-  final VoidCallback _focusContent;
-  final HomeContinuationLoading _continuation;
-  final HomeSavedContentSection _saved;
-  final SearchModeSection _mode;
-  final SearchTitleSection _title;
-  final HomeRowsNavigation _navigation;
-
-  void start() {
-    MainPageBridge.registerTvContentFocusHandler(
-      _deps.tabIndex(),
-      _focusContent,
-    );
-    if (!_deps.searchMode() && !_deps.discoverMode()) {
-      _deps.localCompletion().addListener(
-        _continuation.onLocalCompletionChanged,
-      );
-      _deps.mdblistPlayback().addListener(
-        _continuation.onMdblistPlaybackRevision,
-      );
-      MainPageBridge.addPlaylistChangeListener(_saved.loadPlaylistFavorites);
-    }
-    if (_deps.searchMode()) {
-      MainPageBridge.registerTabBackHandler('search', _mode.handleSearchBack);
-      MainPageBridge.activeTab.addListener(_title.onTitleSearchTabChanged);
-    }
-    // A detail-open handed off from another tab (e.g. the Trakt Calendar, a
-    // separate tab that can't reach this screen's state). Only the Home board
-    // (not the Search/Discover variants) claims it; the opener switches here via
-    // switchTab(15) right after setting it, so it's present by the time we mount.
-    if (!_deps.searchMode() && !_deps.discoverMode()) {
-      MainPageBridge.registerCatalogDetailOpenHandler(
-        _navigation.openPendingCatalogDetail,
-      );
-      final pending = MainPageBridge.pendingCatalogDetailOpen;
-      if (pending != null) {
-        MainPageBridge.pendingCatalogDetailOpen = null;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_deps.mounted()) {
-            unawaited(_navigation.openPendingCatalogDetail(pending));
-          }
-        });
-      }
-    }
-  }
-
-  void dispose() {
-    MainPageBridge.unregisterTvContentFocusHandler(
-      _deps.tabIndex(),
-      _focusContent,
-    );
-    _deps.localCompletion().removeListener(
-      _continuation.onLocalCompletionChanged,
-    );
-    _deps.mdblistPlayback().removeListener(
-      _continuation.onMdblistPlaybackRevision,
-    );
-    if (!_deps.searchMode() && !_deps.discoverMode()) {
-      MainPageBridge.removePlaylistChangeListener(_saved.loadPlaylistFavorites);
-      MainPageBridge.unregisterCatalogDetailOpenHandler(
-        _navigation.openPendingCatalogDetail,
-      );
-    }
-    if (_deps.searchMode()) {
-      MainPageBridge.unregisterTabBackHandler('search', _mode.handleSearchBack);
-      MainPageBridge.activeTab.removeListener(_title.onTitleSearchTabChanged);
     }
   }
 }

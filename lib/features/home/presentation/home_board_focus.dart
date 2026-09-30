@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../discover/presentation/discover_section.dart';
-import '../../search/presentation/search_input_section.dart';
-import '../../search/presentation/lists_search_section.dart';
 import 'home_board_section.dart';
 import 'home_classic_navigation.dart';
 import 'home_continuation_focus.dart';
@@ -12,6 +9,7 @@ import 'home_stage_section.dart';
 import 'home_stage_rails.dart';
 import 'home_spotlight_section.dart';
 import 'home_hero_preview.dart';
+import 'home_screen_controls.dart';
 
 typedef HomeBoardFocusDeps = ({
   bool Function() mounted,
@@ -34,9 +32,7 @@ class HomeBoardFocus {
   HomeBoardFocus(
     this._deps,
     this._boardSection,
-    this._inputSection,
-    this._discoverSection,
-    this._listsSection,
+    this._controls,
     this._continuationSection,
     this._savedSection,
     this._displaySection,
@@ -47,9 +43,7 @@ class HomeBoardFocus {
   );
   final HomeBoardFocusDeps _deps;
   final HomeBoardSection _boardSection;
-  final SearchInputSection _inputSection;
-  final DiscoverSection _discoverSection;
-  final ListsSearchSection _listsSection;
+  final HomeScreenControls _controls;
   final HomeContinuationSection _continuationSection;
   final HomeSavedContentSection _savedSection;
   final HomeDisplaySection _displaySection;
@@ -147,15 +141,15 @@ class HomeBoardFocus {
   /// avoid stealing focus from the user in [maybeAutoFocusBoard].
   bool boardHasFocus() {
     bool anyOf(List<FocusNode> ns) => ns.any((n) => n.hasFocus);
-    if (_inputSection.searchFocus.hasFocus ||
-        _discoverSection.discSourceNode.hasFocus ||
+    if (_controls.searchFieldHasFocus ||
+        _controls.discoverSourceNode.hasFocus ||
         // Spotlight's hero is a focus target the rail lists know nothing
         // about; without this the arrival machinery thinks the board is
         // unfocused while the hero holds the cursor and steals it back.
         _spotlightSection.spotlightHeroNode.hasFocus) {
       return true;
     }
-    if (anyOf(_listsSection.listsNodes)) return true;
+    if (anyOf(_controls.listsNodes)) return true;
     if (anyOf(_continuationSection.cwMovieNodes) ||
         anyOf(_continuationSection.cwSeriesNodes) ||
         anyOf(_continuationSection.traktMovieNodes) ||
@@ -179,7 +173,7 @@ class HomeBoardFocus {
   }
 
   /// The focus node for the board's current top card — the same target
-  /// [_inputSection.focusContent] would pick on the board path (Continue Watching →
+  /// the search input's focusContent would pick on the board path (Continue Watching →
   /// favourites → catalog rows), or null if nothing is focusable yet. Skeleton
   /// Trakt rows carry no nodes, so they're naturally skipped: while Trakt is
   /// reserving, the top is whatever real row sits below the skeletons, and once
@@ -267,7 +261,7 @@ class HomeBoardFocus {
   void leaveBoardTop() {
     _heroPreview.heroPreviewPolicy.resetAttempt();
     if (_deps.searchMode()) {
-      _inputSection.searchFocusNode.requestFocus();
+      _controls.searchFieldNode.requestFocus();
     }
   }
 

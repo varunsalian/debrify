@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../theme/app_theme_scope.dart';
-import '../../home/presentation/home_spotlight_search_button.dart';
+import '../../../ui/core/spotlight_search_button.dart';
 import '../models/search_mode.dart';
 
 /// Route chrome shared by Home, Discover and the dedicated Search surface.
@@ -108,8 +108,8 @@ Widget buildSpotlightSearchShell({
         Positioned.fill(child: body()),
         Positioned(
           top: topInset + 10,
-          right: HomeSpotlightSearchButton.rightInset,
-          child: HomeSpotlightSearchButton(onTap: onOpen),
+          right: SpotlightSearchButton.rightInset,
+          child: SpotlightSearchButton(onTap: onOpen),
         ),
       ],
     ),

@@ -1,20 +1,20 @@
-import '../features/home/presentation/home_leading_content_composition.dart';
-import '../features/search/presentation/search_presentation_composition.dart';
-import '../features/discover/presentation/discover_composition.dart';
-import '../features/home/presentation/home_board_presentation_composition.dart';
-import '../features/home/presentation/home_catalog_presentation_composition.dart';
+import 'search_screen/home_leading_content_composition.dart';
+import 'search_screen/search_presentation_composition.dart';
+import 'search_screen/discover_composition.dart';
+import 'search_screen/home_board_presentation_composition.dart';
+import 'search_screen/home_catalog_presentation_composition.dart';
 import '../features/discover/presentation/discover_session_lifecycle.dart';
-import '../features/search/presentation/search_title_composition.dart';
-import '../features/discover/presentation/discover_panel_composition.dart';
-import '../features/home/presentation/home_item_composition.dart';
+import 'search_screen/search_title_composition.dart';
+import 'search_screen/discover_panel_composition.dart';
+import 'search_screen/home_item_composition.dart';
 import '../features/home/presentation/home_hero_shell_bridge.dart';
-import '../features/home/presentation/home_content_startup.dart';
-import '../features/home/presentation/home_view_bindings.dart';
-import '../features/search/presentation/search_session_lifecycle.dart';
-import '../features/home/presentation/home_media_composition.dart';
-import '../features/home/presentation/home_hero_composition.dart';
-import '../features/home/presentation/home_stage_composition.dart';
-import '../features/search/presentation/search_profile_handoff.dart';
+import 'search_screen/home_content_startup.dart';
+import 'search_screen/home_view_bindings.dart';
+import 'search_screen/search_session_lifecycle.dart';
+import 'search_screen/home_media_composition.dart';
+import 'search_screen/home_hero_composition.dart';
+import 'search_screen/home_stage_composition.dart';
+import 'search_screen/search_profile_handoff.dart';
 import '../features/home/presentation/home_return_section.dart';
 import '../features/home/application/home_catalog_dependencies.dart';
 import '../features/home/presentation/home_detail_actions.dart';
@@ -236,7 +236,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           mode: readMode,
           searchMode: () => widget.searchMode,
           metadata: () =>
-              _catalogPresentation.metadata.metadataFeatureController,
+              _catalogPresentation.metadata.metadataFeatureController.current,
           activeTab: () => MainPageBridge.activeTab.value,
           originCurrent: () => _titleSearchScope == ProfileRuntime.scope.value,
           update:
@@ -657,7 +657,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         display: _hero.displaySection,
         preview: _hero.heroPreview,
         stage: _board.stages.stageSection,
-        spotlight: _hero.spotlightShell,
+        closeSearchSheet: _hero.spotlightShell.searchSheet.close,
+        restoreSearchSheet: _hero.spotlightShell.searchSheet.restore,
       );
     }
     _hero.spotlightShell.observeSearchFocus();
@@ -685,7 +686,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     HomeHeroShellBridge.disposeContentSignals(
       offTvHome: () =>
           !widget.isTelevision && !widget.searchMode && !widget.discoverMode,
-      spotlight: _hero.spotlightShell,
+      closeSearchSheet: _hero.spotlightShell.searchSheet.close,
+      searchSheetFocusChanged: _hero.spotlightShell.searchSheet.onFocusChanged,
       searchField: () => _search.input.inputSection.searchFocusNode,
       preview: _hero.heroPreview,
       reclaimFocus: _board.workflow.boardFocus.onGlobalFocusChange,

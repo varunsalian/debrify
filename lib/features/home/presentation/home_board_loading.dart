@@ -9,7 +9,7 @@ import '../application/home_board_load.dart';
 import '../application/home_catalog_preferences_dependencies.dart';
 import '../application/home_board_dependencies.dart';
 import '../data/home_board_services.dart';
-import '../../search/presentation/catalog_search_section.dart';
+import '../models/home_catalog_search_status.dart';
 import 'home_board_section.dart';
 import 'home_board_publication.dart';
 import 'home_display_section.dart';
@@ -53,7 +53,7 @@ class HomeBoardLoading {
   final WidgetRef _ref;
   final HomeBoardLoadingDeps _deps;
   final HomeBoardSection _boardSection;
-  final CatalogSearchSection _catalogSection;
+  final HomeCatalogSearchStatus _catalogSection;
   final HomeBoardPublication _boardPublication;
   final HomeDisplaySection _displaySection;
   final HomeSpotlightSection _spotlightSection;

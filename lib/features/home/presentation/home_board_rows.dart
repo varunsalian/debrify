@@ -5,7 +5,7 @@ import '../../../models/stremio_addon.dart';
 import '../../../models/home_collection_rows.dart';
 import '../../../widgets/home/home_row_focus.dart'
     show homeRowHeight, preserveHomeInsertionAnchor;
-import '../../search/presentation/catalog_search_section.dart';
+import '../models/home_catalog_search_status.dart';
 import 'home_board_section.dart';
 import 'home_board_loading.dart';
 import 'home_board_paging.dart';
@@ -47,7 +47,7 @@ class HomeBoardRows {
   final HomeBoardSection _boardSection;
   final HomeBoardLoading _boardLoading;
   final HomeBoardPaging _boardPaging;
-  final CatalogSearchSection _catalogSection;
+  final HomeCatalogSearchStatus _catalogSection;
   final HomeDisplaySection _displaySection;
   final HomeStageSection _stageSection;
   final HomeStageRails _stageRailsSection;
@@ -221,7 +221,7 @@ class HomeBoardRows {
 
   /// Cancel any pending search and return to the homepage board.
   void restoreHome() {
-    _catalogSection.catalogController.clear();
+    _catalogSection.clearCatalogResults();
     // A settings/integration reload arrived mid-search and was deferred so it
     // couldn't stomp the results view — run it now instead of restoring the
     // stale cached board.

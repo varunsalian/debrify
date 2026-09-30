@@ -21,6 +21,8 @@ typedef HomePlaybackNavigationDeps = ({
   String? Function(StremioMeta) imdbOf,
   int Function(StremioMeta) boundCountFor,
   Future<void> Function(StremioMeta, {bool Function()? isCurrent}) editSource,
+  // Resolved per navigation, as the provider read was.
+  HomeSourcesNavigation Function() sources,
 });
 
 /// Owns playback metadata and selection/episode/source navigation for this route.
@@ -121,18 +123,16 @@ class HomePlaybackNavigation {
     if (!current()) return;
     final context = _deps.context();
     unawaited(
-      _ref
-          .read(homeSourcesNavigationProvider)
-          .bindCatalog(
-            context,
-            item: item,
-            progressId: _deps.imdbOf(item),
-            keyword: keyword,
-            buildMeta: (selection) => metaFor(selection, catalogItem: item),
-            isTelevision: () => _deps.isTelevision(),
-            isCurrent: current,
-            onReturned: _deps.refreshBoundSources,
-          ),
+      _deps.sources().bindCatalog(
+        context,
+        item: item,
+        progressId: _deps.imdbOf(item),
+        keyword: keyword,
+        buildMeta: (selection) => metaFor(selection, catalogItem: item),
+        isTelevision: () => _deps.isTelevision(),
+        isCurrent: current,
+        onReturned: _deps.refreshBoundSources,
+      ),
     );
   }
 
@@ -200,21 +200,16 @@ class HomePlaybackNavigation {
     if (!catalogNavigationCurrent()) return;
     final context = _deps.context();
     unawaited(
-      _ref
-          .read(homeSourcesNavigationProvider)
-          .browse(
-            context,
-            selection: sel,
-            buildMeta: () => metaFor(
-              sel,
-              addonId: metadataAddonId,
-              catalogItem: catalogItem,
-            ),
-            isTelevision: () => _deps.isTelevision(),
-            forcePlayOnTap: forcePlayOnTap,
-            isCurrent: catalogNavigationCurrent,
-            onReturned: _deps.refreshAfterPlayback,
-          ),
+      _deps.sources().browse(
+        context,
+        selection: sel,
+        buildMeta: () =>
+            metaFor(sel, addonId: metadataAddonId, catalogItem: catalogItem),
+        isTelevision: () => _deps.isTelevision(),
+        forcePlayOnTap: forcePlayOnTap,
+        isCurrent: catalogNavigationCurrent,
+        onReturned: _deps.refreshAfterPlayback,
+      ),
     );
   }
 
