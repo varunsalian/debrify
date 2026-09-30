@@ -160,17 +160,26 @@ void main() {
       ).readAsStringSync();
       expect(
         repository,
-        contains('static final ProfileSessionMemory<KeywordSnapshot> _preserved'),
+        contains(
+          'static final ProfileSessionMemory<KeywordSnapshot> _preserved',
+        ),
       );
       expect(
         source,
         contains('_profileSessionOwner = ProfileSessionMemory.captureOwner()'),
       );
-      expect(source, contains('_keywordSnapshots.take('));
-      expect(source, contains('_keywordSnapshots.store('));
+      final keywordReturn = File(
+        'lib/features/search/presentation/keyword_return.dart',
+      ).readAsStringSync();
+      expect(source, contains('repository: () => _keywordSnapshots'));
+      expect(keywordReturn, contains('_deps.repository().take('));
+      expect(keywordReturn, contains('_deps.repository().store('));
       expect(repository, contains('_preserved.take('));
       expect(repository, contains('_preserved.store(owner, snapshot)'));
-      expect(repository, contains('owner == ProfileSessionMemory.captureOwner()'));
+      expect(
+        repository,
+        contains('owner == ProfileSessionMemory.captureOwner()'),
+      );
       expect(repository, contains('if (_current) _preserved.store'));
       expect(
         source,
