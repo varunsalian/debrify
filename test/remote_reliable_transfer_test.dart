@@ -310,6 +310,10 @@ void main() {
       );
       expect(received, 1);
       expect(previous, 8 * 1024 * 1024);
+      // The sender returns once the receipt reports `complete`; the receiver
+      // journals the receipt and deletes the partial file afterwards in its
+      // background work. Settle that work before checking for leftovers.
+      await receiver.close();
       expect(
         (await receiver.directory.list().toList()).where(
           (f) => f.path.endsWith('.part'),

@@ -92,6 +92,22 @@ void main() {
     await pumpFrames(tester);
   }
 
+  // A tap that creates a profile drives a chain of real sqflite IO whose
+  // duration depends on machine load, so a fixed number of runAsync windows
+  // can end before the row exists. Pump bounded windows until it does.
+  Future<void> createByLabel(
+    WidgetTester tester,
+    String label,
+    String name,
+  ) async {
+    await nextByLabel(tester, label);
+    for (var i = 0; i < 200; i++) {
+      final profiles = await io(tester, registry.listProfiles);
+      if (profiles.any((p) => p.name == name)) return;
+      await pumpFrames(tester);
+    }
+  }
+
   Future<void> openFlow(
     WidgetTester tester, {
     required ValueChanged<bool> onClosed,
@@ -371,7 +387,7 @@ void main() {
     await nextByLabel(tester, 'Review'); // → review
     expect(find.text("Maya's corner of Debrify"), findsOneWidget);
 
-    await nextByLabel(tester, 'Create Maya');
+    await createByLabel(tester, 'Create Maya', 'Maya');
 
     final profiles = await io(tester, registry.listProfiles);
     final maya = profiles.singleWhere((p) => p.name == 'Maya');
@@ -406,7 +422,7 @@ void main() {
     await pumpFrames(tester);
     await nextByLabel(tester, 'Next'); // abilities
     await nextByLabel(tester, 'Review');
-    await nextByLabel(tester, 'Create Sam');
+    await createByLabel(tester, 'Create Sam', 'Sam');
 
     final profiles = await io(tester, registry.listProfiles);
     final sam = profiles.singleWhere((p) => p.name == 'Sam');
@@ -422,11 +438,12 @@ void main() {
     // questionnaire never asks about). An untouched save must round-trip
     // BOTH — the asked one via seeding, the unasked one because edit-saves
     // base on the stored policy, not the role preset.
-    final diverged = Set<ProfileFeature>.from(
-      ProfilePolicy.defaultsFor(UserProfileRole.child).enabled,
-    )
-      ..add(ProfileFeature.youtube)
-      ..remove(ProfileFeature.trackersAndDiscovery);
+    final diverged =
+        Set<ProfileFeature>.from(
+            ProfilePolicy.defaultsFor(UserProfileRole.child).enabled,
+          )
+          ..add(ProfileFeature.youtube)
+          ..remove(ProfileFeature.trackersAndDiscovery);
     final kid = await io(
       tester,
       () => registry.createProfile(
@@ -456,7 +473,8 @@ void main() {
     expect(
       saved!.policy.enabled,
       diverged,
-      reason: 'an untouched edit round-trips the stored policy exactly — '
+      reason:
+          'an untouched edit round-trips the stored policy exactly — '
           'including features the questionnaire never asks about',
     );
   });
