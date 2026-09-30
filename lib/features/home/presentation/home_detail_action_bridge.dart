@@ -7,8 +7,13 @@ import '../../../services/mdblist/mdblist_menu_helpers.dart'
 
 /// Detail actions borrow the view's existing handlers and row controllers.
 /// This boundary owns dispatch/refresh ordering, not tracker transport or writes.
+///
+/// [canStart] admits a new action only while its detail page is live.
+/// [isCurrent] (view and profile) governs everything after that: a user may
+/// back out while tracker calls finish, and the rows still refresh.
 class HomeDetailActionBridge {
   const HomeDetailActionBridge({
+    required this.canStart,
     required this.isCurrent,
     required this.isSearch,
     required this.clearResume,
@@ -18,7 +23,7 @@ class HomeDetailActionBridge {
     required this.refreshMdblist,
   });
 
-  final bool Function() isCurrent, isSearch;
+  final bool Function() canStart, isCurrent, isSearch;
   final void Function() clearResume;
   final Future<void> Function() refreshLocal,
       refreshTrakt,
@@ -31,7 +36,7 @@ class HomeDetailActionBridge {
     required Future<void> Function() removeLocal,
     required Future<void> Function() removeTrakt,
   }) async {
-    if (!isCurrent()) return;
+    if (!canStart()) return;
     if (action == TraktItemMenuAction.removeFromPlayback) {
       await removeLocal();
       return;
@@ -65,7 +70,7 @@ class HomeDetailActionBridge {
     SimklItemMenuAction action, {
     required Future<void> Function() invoke,
   }) async {
-    if (!isCurrent()) return;
+    if (!canStart()) return;
     await invoke();
     if (!isCurrent() || isSearch()) return;
     if (action == SimklItemMenuAction.clearWatchProgress ||
@@ -84,7 +89,7 @@ class HomeDetailActionBridge {
     required Future<void> Function() invoke,
     required Future<void> Function() remove,
   }) async {
-    if (!isCurrent()) return;
+    if (!canStart()) return;
     if (action == MdblistItemMenuAction.removeFromContinueWatching) {
       await remove();
       return;

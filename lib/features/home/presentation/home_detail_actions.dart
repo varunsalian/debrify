@@ -79,8 +79,7 @@ class HomeDetailActions {
               actions: _ref.read(
                 homeDetailActionsProvider(_deps.session().owner),
               ),
-              isCurrent: () =>
-                  _playback.catalogNavigationCurrent() && detailRoute.isActive,
+              isCurrent: _playback.catalogNavigationCurrent,
             );
             return;
           }
@@ -106,8 +105,7 @@ class HomeDetailActions {
               homeDetailActionsProvider(_deps.session().owner),
             ),
             presetRating: presetRating,
-            isCurrent: () =>
-                _playback.catalogNavigationCurrent() && detailRoute.isActive,
+            isCurrent: _playback.catalogNavigationCurrent,
           );
         },
       );

@@ -120,7 +120,7 @@ void main() {
       TrackingSource.mdblist,
     ]) {
       testWidgets(
-        'real detail injects $tracker mutation and retires feedback: merged=$merged',
+        'real detail injects $tracker mutation that survives back-out: merged=$merged',
         (tester) async {
           final home = HomeFixture(tester);
           final actions = WaitingDetailActions();
@@ -180,10 +180,13 @@ void main() {
           expect(actions.current!(), isTrue);
           home.navigator.currentState!.pop();
           await home.settle();
-          expect(actions.current!(), isFalse);
+          // Backing out of the detail must not cancel the accepted tracker
+          // write; only a retired view or profile does.
+          expect(actions.current!(), isTrue);
           await home.drive(() => actions.release.complete(true));
           await home.settle();
-          expect(find.byType(SnackBar), findsNothing);
+          // As before the refactor, the completed write reports on the board.
+          expect(find.byType(SnackBar), findsOneWidget);
           await home.drive(dispatch);
           expect(actions.calls, hasLength(1));
           await home.dispose();

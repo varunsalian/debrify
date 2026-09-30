@@ -281,7 +281,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           context: () => context,
           session: () => _homeView.homeCatalogSession,
           bridge: (route) => _leading.continuation.returning.detailBridge(
-            () => playback.catalogNavigationCurrent() && route.isActive,
+            canStart: () =>
+                playback.catalogNavigationCurrent() && route.isActive,
+            isCurrent: playback.catalogNavigationCurrent,
           ),
           removeLocal: (action, id, route) =>
               _leading.removal.handleContinueDetailAction(action, id, route),
@@ -299,8 +301,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   ),
                 ),
                 presetRating: presetRating,
-                isCurrent: () =>
-                    playback.catalogNavigationCurrent() && detailRoute.isActive,
+                isCurrent: playback.catalogNavigationCurrent,
                 removeContinueWatching: () => ref
                     .read(
                       homeSimklHistoryRemovalProvider(
@@ -310,9 +311,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                     .remove(
                       item.progressId ?? item.id,
                       item.type,
-                      isCurrent: () =>
-                          playback.catalogNavigationCurrent() &&
-                          detailRoute.isActive,
+                      isCurrent: playback.catalogNavigationCurrent,
                     ),
               ),
           invokeMdblist: (item, action, detailRoute, presetRating) =>
@@ -326,8 +325,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   ),
                 ),
                 presetRating: presetRating,
-                isCurrent: () =>
-                    playback.catalogNavigationCurrent() && detailRoute.isActive,
+                isCurrent: playback.catalogNavigationCurrent,
               ),
         ),
         playback,

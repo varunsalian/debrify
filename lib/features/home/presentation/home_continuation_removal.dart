@@ -67,14 +67,15 @@ class HomeContinuationRemoval {
   /// mirroring the old home screen's remove flow.
   ///
   /// Row-menu removals have no detail route. Detail actions carry their exact
-  /// route so a delayed response cannot pop a newer page.
+  /// route so a delayed response cannot pop a newer page. The route only
+  /// admits the action and is closed if still current: users may back out
+  /// while the Trakt calls finish, and those calls must still complete.
   Future<void> removeFromTraktContinueWatching(
     String imdbId, {
     HomeDetailRoute? detailRoute,
   }) async {
-    bool current() =>
-        _playback.catalogNavigationCurrent() && (detailRoute?.isActive ?? true);
-    if (!current()) return;
+    final current = _playback.catalogNavigationCurrent;
+    if (!current() || !(detailRoute?.isActive ?? true)) return;
     final cwItem = _section.traktByImdb[imdbId];
     if (cwItem == null) return;
     final removed = await _ref

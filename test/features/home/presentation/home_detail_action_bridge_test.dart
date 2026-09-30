@@ -7,11 +7,12 @@ import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class Fixture {
-  bool current = true, search = false;
+  bool current = true, live = true, search = false;
   final events = <String>[];
   Completer<void>? invocation, refresh;
   Object? failure;
   late final bridge = HomeDetailActionBridge(
+    canStart: () => current && live,
     isCurrent: () => current,
     isSearch: () => search,
     clearResume: () => events.add('clear'),
@@ -53,6 +54,36 @@ class Fixture {
 }
 
 void main() {
+  test('leaving the detail page mid-action still refreshes rows', () async {
+    // The page closing is not a reason to drop an accepted tracker write or
+    // its refresh; only the view/profile being retired is.
+    for (final (action, refresh) in [
+      (TraktItemMenuAction.markWatched, 'trakt'),
+      (TraktItemMenuAction.clearTraktProgress, 'trakt'),
+    ]) {
+      final f = Fixture()..invocation = Completer<void>();
+      final done = f.trakt(action);
+      f.live = false;
+      f.invocation!.complete();
+      await done;
+      expect(f.events, ['invoke', refresh], reason: action.name);
+    }
+    final simkl = Fixture()..invocation = Completer<void>();
+    final simklDone = simkl.simkl(SimklItemMenuAction.moveToCompleted);
+    simkl.live = false;
+    simkl.invocation!.complete();
+    await simklDone;
+    expect(simkl.events, ['invoke', 'simkl']);
+  });
+
+  test('a closed detail page cannot start a new action', () async {
+    final f = Fixture()..live = false;
+    await f.trakt(TraktItemMenuAction.markWatched);
+    await f.simkl(SimklItemMenuAction.moveToCompleted);
+    await f.mdblist(MdblistItemMenuAction.markWatched);
+    expect(f.events, isEmpty);
+  });
+
   for (final search in [false, true]) {
     test(
       'Trakt dispatch and refresh contracts for every action, search=$search',

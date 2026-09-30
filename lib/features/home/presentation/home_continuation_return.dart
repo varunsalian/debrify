@@ -24,19 +24,20 @@ class HomeContinuationReturn {
   final HomeContinuationLoading _loading;
   final HomeSavedContentSection _saved;
 
-  HomeDetailActionBridge detailBridge(bool Function() isCurrent) =>
-      HomeDetailActionBridge(
-        isCurrent: isCurrent,
-        isSearch: _deps.searchMode,
-        clearResume: _deps.clearResume,
-        refreshLocal: _loading.loadContinueWatching,
-        refreshTrakt: () =>
-            _loading.loadTraktContinueWatching(refreshBound: false),
-        refreshSimkl: () =>
-            _loading.loadSimklContinueWatching(refreshBound: false),
-        refreshMdblist: () =>
-            _loading.loadMdblistContinueWatching(refreshBound: false),
-      );
+  HomeDetailActionBridge detailBridge({
+    required bool Function() canStart,
+    required bool Function() isCurrent,
+  }) => HomeDetailActionBridge(
+    canStart: canStart,
+    isCurrent: isCurrent,
+    isSearch: _deps.searchMode,
+    clearResume: _deps.clearResume,
+    refreshLocal: _loading.loadContinueWatching,
+    refreshTrakt: () => _loading.loadTraktContinueWatching(refreshBound: false),
+    refreshSimkl: () => _loading.loadSimklContinueWatching(refreshBound: false),
+    refreshMdblist: () =>
+        _loading.loadMdblistContinueWatching(refreshBound: false),
+  );
 
   /// Set when a real content player launches (any path — in-app route, native
   /// TV activity, external app; never trailers), consumed by
