@@ -31,6 +31,7 @@ typedef HomeSavedCompositionDeps = ({
   HomeClassicSection Function() classic,
   HomeHeroComposition Function() hero,
   bool Function(ProfileFeature) allowed,
+  bool Function() profileCurrent,
 });
 
 typedef HomeSavedComposition = ({
@@ -64,6 +65,7 @@ HomeSavedComposition createHomeSavedContent(
   late final HomeSavedContentRows rows;
   playlist = HomePlaylistActions((
     mounted: deps.mounted,
+    profileCurrent: deps.profileCurrent,
     context: deps.context,
     controller: () => section.playlistController,
     reload: () => section.loadPlaylistFavorites(),
@@ -96,6 +98,7 @@ HomeSavedComposition createHomeSavedContent(
   watchlist = HomeWatchlistActions(
     (
       mounted: deps.mounted,
+      profileCurrent: deps.profileCurrent,
       context: deps.context,
       isTelevision: deps.isTelevision,
       remove: removeWatchlist,

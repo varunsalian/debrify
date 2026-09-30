@@ -83,6 +83,7 @@ HomeLeadingContent createHomeLeadingContent(
       classic: () => deps.board().rendering.classic,
       hero: () => deps.hero(),
       allowed: deps.allowed,
+      profileCurrent: deps.profileCurrent,
     ),
     input: search.input.inputSection,
     catalog: search.modes.catalog,

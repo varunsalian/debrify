@@ -10,6 +10,9 @@ import '../models/home_playlist.dart';
 
 typedef HomePlaylistActionsDeps = ({
   bool Function() mounted,
+  // The playlist storage APIs write to whichever profile is active when they
+  // run, so every write rechecks the originating profile after its prompt.
+  bool Function() profileCurrent,
   BuildContext Function() context,
   HomePlaylistController Function() controller,
   Future<void> Function() reload,
@@ -137,6 +140,7 @@ class HomePlaylistActions {
         _deps.reload();
         break;
       case 'favorite':
+        if (!_deps.profileCurrent()) return;
         await HomePlaylistRepository.setFavorite(item, !isFavorited);
         HapticFeedback.mediumImpact();
         _deps.reload();
@@ -145,6 +149,7 @@ class HomePlaylistActions {
         // Empty (not 'Unknown') fallback so a null-titled item clears nothing
         // instead of fuzzy-matching the literal word 'unknown' and wiping an
         // unrelated item's resume point — matches the Home section.
+        if (!_deps.profileCurrent()) return;
         await HomePlaylistRepository.clearProgress(
           title: (item['title'] as String?) ?? '',
         );
@@ -198,7 +203,7 @@ class HomePlaylistActions {
         ],
       ),
     );
-    if (confirmed == true && context.mounted) {
+    if (confirmed == true && context.mounted && _deps.profileCurrent()) {
       final dedupeKey = HomePlaylistRepository.dedupeKey(item);
       await HomePlaylistRepository.removeByKey(dedupeKey);
       HapticFeedback.mediumImpact();

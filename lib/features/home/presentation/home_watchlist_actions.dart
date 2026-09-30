@@ -8,6 +8,9 @@ import 'home_saved_iptv_actions.dart';
 
 typedef HomeWatchlistActionsDeps = ({
   bool Function() mounted,
+  // Removal writes to whichever profile is active when it runs, so it
+  // rechecks the originating profile after the confirmation prompt.
+  bool Function() profileCurrent,
   BuildContext Function() context,
   bool Function() isTelevision,
   Future<void> Function(StremioMeta) remove,
@@ -45,7 +48,7 @@ class HomeWatchlistActions {
         ],
       ),
     );
-    if (remove != true || !context.mounted) return;
+    if (remove != true || !context.mounted || !_deps.profileCurrent()) return;
 
     try {
       await _deps.remove(item);

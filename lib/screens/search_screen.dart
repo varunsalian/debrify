@@ -721,7 +721,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     _search.keyword.keywordSection.closeAppearance();
     _searchLifecycle.searchResultBindings.closeKeyword();
     _titleSearch.removeListener(_search.modes.title.publishTitleSuggestions);
-    _titleSearch.dispose();
+    if (widget.titleSearch == null) _titleSearch.dispose(); // else borrowed
     _search.modes.title.presentation.dispose();
     _search.input.inputSection.disposeFocus();
     _search.modes.lists.disposeListsNodes();
