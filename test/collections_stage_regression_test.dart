@@ -123,22 +123,25 @@ void main() {
     expect(body, contains('_canvasCell(view, col)'));
   });
   test('folder focus retires title work and owns the hero', () {
-    final start = source.indexOf('  void _setHero(');
+    final source = File(
+      'lib/features/home/presentation/home_hero_section.dart',
+    ).readAsStringSync();
+    final start = source.indexOf('  void setHero(');
     final body = source.substring(
       start,
       source.indexOf('// A catalog/CW card owns', start),
     );
-    const cancel = '_homeMediaBindings.metadata.cancel()';
+    const cancel = '_deps.media().metadata.cancel()';
     expect(body, contains(cancel));
     // The loader's executable cancellation tests cover request retirement;
     // this guard checks the folder caller invokes it before replacing the hero.
     expect(
       body.indexOf(cancel),
-      lessThan(body.indexOf('_heroItem.value = item')),
+      lessThan(body.indexOf('heroItem.value = item')),
     );
-    expect(body, contains('_clearHeroTrailer()'));
-    expect(body, contains('_clearHeroLiveIptv()'));
-    expect(body, contains('_heroItem.value = item'));
-    expect(body, contains('_heroEnriched.value = null'));
+    expect(body, contains('_deps.preview().clearHeroTrailer()'));
+    expect(body, contains('_deps.clearLive()'));
+    expect(body, contains('heroItem.value = item'));
+    expect(body, contains('heroEnriched.value = null'));
   });
 }
