@@ -291,7 +291,7 @@ Each step is **one commit** (two at most). Line counts are approximate. The
 | 3 | Search modes, header, query, Lists, catalog search, title suggestions | `features/search/presentation/search_mode_section.dart` | ~8,060 |
 | 4 | Item open / detail / playback actions | `features/home/presentation/home_item_actions.dart` | ~7,380 |
 | 5 | Favorites, watchlist, playlist, IPTV lists | `home_saved_content_section.dart` (load/actions) + `home_saved_content_rows.dart` (row builders) | ~6,310 |
-| — | **Full-suite gate 1.** `run_full.py finish/gate1`, then `compare.py` against both the original baseline and `--against finish/gate0.jsonl`, by test identity and outcome, including missing tests and new skips. | | |
+| — | **Full-suite gate 1.** `run_full.py finish/gate1`, then `compare.py` against both the original baseline and `--against finish/gate0b.jsonl` (the accepted baseline, see Progress), by test identity and outcome, including missing tests and new skips. | | |
 | 6 | Continue Watching | `home_continuation_section.dart` (load/announce/remove) + `home_continuation_rows.dart` (rows, card menu, See-All) | ~4,750 |
 | 7 | Hero / trailer / live preview | `home_hero_section.dart` | ~4,190 |
 | 7b | **Safety net before the riskiest move.** Existing layout coverage is thinner than it looks. `home_progressive_{screen,pagination}_test.dart` loop over every style, but they check build and pagination, not directional navigation. The stage deferred-Right, hold and theater screen tests cover shared stage navigation. Add one parameterised widget test: reuse the fakes and harness from `home_progressive_screen_test.dart`, pump `SearchScreen` (TV) for each of the 8 styles with a fixed fake catalog, press Down/Right/Left/Up/Select, and assert focus lands on the same card key as today and no exception is thrown. Commit it on its own **before** step 8. It must pass unchanged after step 8. This is the only new test in the plan. | `test/features/home/home_layout_dpad_smoke_test.dart` | — |
@@ -461,12 +461,21 @@ of this is dropped silently:
 
 | Step | Commit | Screen lines | Notes |
 | --- | --- | --- | --- |
-| 0 | | 9,964 | |
+| 0 | `5b632a61` docs, `c1aa91b9` guard fix | 9,964 | Accepted baseline `finish/gate0b.jsonl`: 10,262 pass / 22 fail / 29 err / 20 skip, same failure set as `165fd015`, no new skips. Only expected missing identity: `collections_stage_regression_test.dart::Widget _buildCanvasBoard uses collection artwork, shape and focus preview`, replaced by `_canvasCell` + Canvas-geometry guards in `c1aa91b9`. First run (`gate0`) found 8 stale source guards (fixed) + 1 flake (see Found, not fixed). Analyzer: `finish/analyze-gate0.txt`, 836 issues. Its only 2 "added" identities vs the original baseline are pre-existing deprecations relocated from `search_screen.dart`/`search_sources.dart`. |
 
 ## Found, not fixed
 
 (Bugs or cleanups noticed during moves. Each needs a separate change after the
 refactor merges.)
+
+- `test/remote_reliable_transfer_test.dart::large binary file arrives intact with
+  bounded progress blocks` is flaky under full-suite load: a temp `.part` file
+  is still present when the test checks. It passes 3/3 in isolation, and no
+  remote code changed after `165fd015`. Not related to this refactor; treat
+  that single identity as flaky in gate comparisons.
+- `test/theme/shape_manifest_test.dart::no swept file grows a new bare radius`
+  is a historical failure (failing in the original baseline). Its failure
+  message prints `${entry.key}` literally, so it never names the files.
 
 ## Manual smoke checklist (user, after gate 2, on real devices)
 
