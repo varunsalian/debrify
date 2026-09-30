@@ -45,12 +45,12 @@ screen being disposed.
 
 ## Batch C — P2s
 
-1. **Detail-route liveness.** `detailRoute.isActive` gates only navigation
-   (closing the route), snackbars and the post-action row refresh. It must not
-   gate the tracker writes. Profile/owner currency (`catalogNavigationCurrent`)
-   still gates writes. This matches `main`: users can back out of the detail page
-   while tracker calls finish. After a completed write, the tracker rows refresh
-   while the screen is mounted, as they did on `main`.
+1. **Detail-route liveness.** `detailRoute.isActive` gates only *starting* an
+   action from the page and closing the route (`closeIfCurrent`). It must not
+   gate the tracker writes, the row refresh or the result feedback; those use
+   profile/owner currency (`catalogNavigationCurrent`). This matches `main`:
+   users can back out of the detail page while tracker calls finish, and the
+   rows refresh and feedback shows on the board afterwards.
 2. **Preference-mutation deadlock.** Make ordinary preference mutations
    re-entrant in `ProfilePreferences`. `_runOrdinaryMutation` marks its zone,
    and a nested ordinary mutation in that zone runs without re-waiting on the
@@ -136,3 +136,43 @@ timing stays pending and is listed in the manual checklist.
 
 | Batch | Commit | Result |
 | --- | --- | --- |
+| A | `7fec21b2` | Remote transfer: the sender sees `complete` before the receiver deletes `.part`; the test now settles the receiver (`close()`) before checking. Reproduced 3/20 under CPU load before, 0/30 after. Kid walk-through: a fixed 10-window pump budget raced the real SQLite create chain; the test now pumps until the row exists (same fix for "divergence"). Not reproducible locally even with 12 parallel copies, so this fix follows from reading the code; the gate 1 stack matched this race. |
+| B | `45c7bd47` | Playlist favourite/clear/delete and watchlist removal check `profileCurrent` after their prompt. The profile-switch tests fail without the guard; same-profile paths still write. A borrowed `TmdbTitleSearch` is no longer disposed by the screen. |
+| C1 | `99fbbaf0` | `HomeDetailActionBridge.canStart` (live page) admits actions; tracker writes, row refresh and feedback use `catalogNavigationCurrent`. The detail route screen test now asserts the write survives back-out and reports on the board (6 test ids renamed "…retires feedback" → "…survives back-out"). |
+| C2 | `da583a92` | Ordinary preference mutations are re-entrant inside an open zone frame; frames close when the outer writer ends. The deterministic interleaving test timed out before the fix and passes after; tests for nested-revision and inherited-zone behaviour were added. |
+| D | `5abeac90` | 12 board display fields private with named transitions called at the same points inside the same `setState`s; external writes no longer compile. |
+| E | `1b2cbd4d` | Features acyclic: cross-feature imports only to `models/`; 25+ wiring files in `lib/screens/search_screen/`; contracts `HomeCatalogSearchStatus`, `HomeScreenControls`, `HomeLocalSourcePicker`; shared widgets in `lib/ui/core`; `HomeHeroShellBridge` split. Guard enforces both rules (verified it fails on a planted violation). |
+| F | `46ae8213` | `search_screen.dart` 800 → **131** lines; `SearchScreenComposer` (291) plus search (119), home (276) and session (123) factories; one `profileCurrent()`; guard enforces the 300-line facade. |
+| Gate | `finish/followups-gate.jsonl` | 10,279 pass / 22 fail / 29 err / 20 skip: the same failure set as gate 2 and the original baseline, with no new failures or skips. The only missing identities are the intentional renames (6 detail-route ids from C1, plus the Canvas guard from step 0). Both former flakes passed. Whole-repo analyzer identical to `analyze-gate0.txt`. |
+| G | (this commit) | Probe `dev/perf/search_screen_perf_probe_test.dart`, 3 runs each on `main` (`9619c10b`, the only change being no `ProviderScope`, since `main` has no Riverpod) and the branch. Results below. |
+
+### Performance measurement (batch G)
+
+Host-side, fixed fixtures (1 addon, 12 catalogs × 10 titles), classic layout,
+TV and phone. Requests: counting mock client. Rebuilds: Flutter's
+`debugOnRebuildDirtyWidget`. First content: 100 ms pumps until the first card
+is present.
+
+| Scenario | Requests main / branch | Rebuilds main / branch | First content (pumps) |
+| --- | --- | --- | --- |
+| Home first load, TV | 14 / 14 | 2,521 / 2,572 | 1 / 1 |
+| Home paging, TV | 19–20 / 19 | 13,990 / 14,275 | — |
+| Catalog search, TV | 12 / 12 | 1,595 / 1,599 | 1 / 1 |
+| Home first load, phone | 9 / 9 | 3,022 / 3,074 | 1 / 1 |
+| Home paging, phone | 3–4 / 3–4 | 5,474 / 5,579 | — |
+| Catalog search, phone | 12 / 12 | 2,833 / 2,880 | 1 / 1 |
+
+- **Requests:** same count, same order. The first request of each load is
+  a random catalog picked for the automatic hero source on both revisions
+  (for example `row8`, `row11`, `row2`); the board then requests `row0`–`row7` in
+  the same order. Paging counts vary by one run to run on both revisions
+  (real-IO timing).
+- **Rebuilds:** +1–2%, explained by a per-type histogram (TV first load, +51).
+  The refactor split `_StremioCard` into `HomeCatalogCard` plus a separate
+  `HomeCardMetadataView` element: 80 whole-card rebuilds became 41 card plus 82
+  metadata-view rebuilds, so metadata arrival now rebuilds only the small
+  metadata view (+43 elements, less work per rebuild). `ProviderScope`
+  contributes +7; renamed widgets (`_BoardCell` → `HomeBoardCell`, the hero
+  layers, the entrance reveal) cancel out exactly. No unexplained growth.
+- **Not measured here:** keyword search (needs real torrent engines) and
+  on-device frame timing. Both stay in the manual device checklist.

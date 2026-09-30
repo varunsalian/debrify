@@ -440,6 +440,13 @@ plus the two gate comparisons.
 
 ## Carried over from the old plan: explicitly not done here
 
+> **Update 2026-09-30:** the design cleanup, the three older bugs, the two
+> P2s, the two flaky tests, the 300-line facade and a host-side performance
+> comparison are done in
+> [search-screen-followups-plan.md](search-screen-followups-plan.md). Still
+> pending: on-device playback/performance checks and the legacy service audits
+> listed below.
+
 The old plan's completion criteria asked for more than this plan delivers. None
 of this is dropped silently:
 
