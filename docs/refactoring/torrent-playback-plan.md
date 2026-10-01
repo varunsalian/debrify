@@ -297,8 +297,20 @@ this file's source text.
 
 | Step | Commit | Service lines | Result |
 | --- | --- | --- | --- |
-| 0 | | 7,103 | |
+| 0 | step-0 commit (this entry) | 7,103 | Reused `finish/bugfixes.jsonl` at `1d6fa710`; SDK matches. Whole-repo `flutter analyze`: 836 existing diagnostics in `<E>/tps/analyze-gate0.txt`. |
 
 ## Found, not fixed
 
 (none yet)
+
+### Retained oversized service and structural exceptions
+
+- `lib/services/torrent_playback_service.dart` remains oversized during steps
+  1–4 to preserve usable checkpoints. Remaining responsibilities follow the
+  inventory above; step 5 reduces it to a forwarding facade at most 400 lines.
+- `presentation/legacy_playback/` retains existing service orchestration and
+  unchanged legacy user-facing text. After this plan, move service calls behind
+  Sources data contracts, dissolve the bridge folder, and migrate the retained
+  text through the app localization infrastructure.
+- The final service facade is temporary: repoint its production callers to the
+  Sources bridges and delete it in the subsequent playback migration.
