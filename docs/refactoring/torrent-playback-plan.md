@@ -378,3 +378,12 @@ this file's source text.
   Temporary facade cross-calls are presentation-only and retire in step 4.
 
 - Gate 1 local CI commands: formatting 988 files unchanged; scoped analyzer passed with 5 baseline infos. Gate run revision `396c93c0`; private CI verification follows the evidence commit.
+
+### Step 4 pipeline checkpoints
+
+- `playBest` → `presentation/legacy_playback/automatic_play_best.dart`
+  (739 lines including imports/comments). Whole method retained. Temporary
+  size exception: split the method in the next playback control-flow refactor.
+  Focused suite 1,106 pass / same 2 baseline failures; no new diagnostics;
+  verbatim comparison and size/import guards pass. Evidence:
+  `<E>/tps/step4-best.jsonl`, `analyze-step4-best.txt`.

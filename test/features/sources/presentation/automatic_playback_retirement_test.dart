@@ -1,17 +1,17 @@
-import 'package:debrify/services/main_page_bridge.dart';
-import 'dart:io';
-import 'package:debrify/services/storage_service.dart';
-import 'package:flutter/services.dart';
-import 'package:debrify/services/video_player_launcher.dart';
 import 'dart:async';
+import 'dart:io';
 
+import 'package:debrify/features/sources/presentation/legacy_playback/automatic_play_best.dart';
+import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/torrent_playback_service.dart';
+import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/video_player_launcher.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -78,7 +78,7 @@ void main() {
         });
         addTearDown(client.close);
         playback = http.runWithClient(
-          () => TorrentPlaybackService.playBest(page, [
+          () => AutomaticPlayBest.playBest(page, [
             fixture.torrent,
           ], provider: 'debrid'),
           () => client,

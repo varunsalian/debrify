@@ -28,7 +28,6 @@
 3441 lib/screens/pikpak/pikpak_files_screen.dart
 3412 lib/screens/addons/addon_hub_screen.dart
 3394 lib/widgets/detail/showcase_parts.dart
-3148 lib/services/torrent_playback_service.dart
 3112 lib/widgets/episodes_panel.dart
 3071 lib/widgets/trakt/trakt_results_view.dart
 3035 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
@@ -40,6 +39,7 @@
 2608 lib/screens/settings/stremio_addons_page.dart
 2584 lib/services/webdav_sync/webdav_sync_local_adapter.dart
 2476 lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart
+2464 lib/services/torrent_playback_service.dart
 2398 lib/services/mdblist/mdblist_service.dart
 2321 lib/services/webdav_sync/webdav_sync_runtime.dart
 2304 lib/widgets/iptv/spotlight/spotlight_live_timeline.dart
