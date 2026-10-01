@@ -9,6 +9,7 @@ import '../../features/home/presentation/home_hero_preview.dart';
 import '../../features/home/presentation/home_spotlight_section.dart';
 import '../../features/home/presentation/home_item_actions.dart';
 import '../../features/home/presentation/home_catalog_actions.dart';
+import '../../features/home/presentation/home_catalog_item_actions.dart';
 
 typedef SearchSpotlightResultsDeps = ({
   BuildContext Function() context,
@@ -16,10 +17,7 @@ typedef SearchSpotlightResultsDeps = ({
   List<List<FocusNode>> Function() rowNodes,
   int Function() failures,
   VoidCallback leaveTop,
-  void Function(CatalogSection, StremioMeta) openSection,
-  bool Function() pikpakOnly,
-  String? Function(CatalogSection) catalogTag,
-  void Function(CatalogSection) seeAll,
+  HomeCatalogItemActions items,
   Future<void> Function(int) loadMoreRow,
 });
 
@@ -59,10 +57,10 @@ class SearchSpotlightResults {
     onExitTop: _deps.leaveTop,
     onTrailerStop: _heroPreview.clearHeroTrailer,
     onHeroOpen: _itemActions.openItem,
-    onOpen: _deps.openSection,
-    onPlay: _deps.pikpakOnly() ? null : _catalogActions.onCatalogPlay,
-    sourceTag: _deps.catalogTag,
-    onSeeAll: _deps.seeAll,
+    onOpen: _deps.items.open,
+    onPlay: _deps.items.pikpakOnly ? null : _catalogActions.onCatalogPlay,
+    sourceTag: _deps.items.sourceTag,
+    onSeeAll: _deps.items.openSeeAll,
     onLoadMore: (section) {
       final current = _deps.sections().indexOf(section);
       if (current >= 0) unawaited(_deps.loadMoreRow(current));

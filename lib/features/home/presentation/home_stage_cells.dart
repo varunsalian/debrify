@@ -8,6 +8,7 @@ import 'home_stage_favorites.dart';
 import 'home_hero_section.dart';
 import 'home_continuation_menu.dart';
 import 'home_mosaic_cell_navigation.dart';
+import 'home_catalog_item_actions.dart';
 
 /// Dim painted over every strip cell that isn't focused, so the centre-locked
 /// cell reads as the lit one. A flat fill inside the card's own clip (see
@@ -16,10 +17,7 @@ const Color _kPromRestVeil = Color(0x8C0D0B1A);
 
 typedef HomeStageCellsDeps = ({
   CatalogSection Function(int) sectionAt,
-  bool Function(StremioMeta) isBound,
-  bool Function() pikpakOnly,
-  void Function(CatalogSection, StremioMeta) openSection,
-  void Function(CatalogSection, StremioMeta) playSection,
+  HomeCatalogItemActions items,
   VoidCallback sidebar,
   Future<void> Function(int) loadMore,
 });
@@ -46,10 +44,7 @@ class HomeStageCells {
     collectionFor: _stageGeometry.stageCollection,
     aspectOf: _stageGeometry.stageCardAspect,
     artOf: _stageGeometry.stageCardArt,
-    isBound: _deps.isBound,
-    pikpakOnly: () => _deps.pikpakOnly(),
-    openSection: _deps.openSection,
-    playSection: _deps.playSection,
+    items: _deps.items,
     openContinuationMenu: _continuationMenu.openCwCardMenu,
     onFocused: (railKey, item, column) {
       _heroSection.setHero(item);

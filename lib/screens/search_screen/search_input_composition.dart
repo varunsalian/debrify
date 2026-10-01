@@ -122,8 +122,8 @@ SearchInputComposition createSearchInput(
     state: () => listsSection.listsState,
     nodes: () => listsSection.listsNodes,
     isTelevision: () => deps.isTelevision(),
-    posterWidth: (context) => deps.classic().railPosterW(context),
-    header: (onSeeAll) => deps.classic().railHeader(
+    posterWidth: (context) => deps.classic().geometry.railPosterW(context),
+    header: (onSeeAll) => deps.classic().geometry.railHeader(
       title: 'MDBList Lists',
       tag: 'LISTS',
       onSeeAll: onSeeAll,

@@ -3,6 +3,7 @@ import '../../../models/home_collection_rows.dart';
 import '../../../models/stremio_addon.dart';
 import 'home_board_cell.dart';
 import 'home_stage_rows.dart';
+import 'home_catalog_item_actions.dart';
 
 /// Shared stage title-card composition and action dispatch. The host owns the
 /// current catalog, focus history and accepted actions; this object owns no
@@ -13,10 +14,7 @@ class HomeStageCards {
     required this.collectionFor,
     required this.aspectOf,
     required this.artOf,
-    required this.isBound,
-    required this.pikpakOnly,
-    required this.openSection,
-    required this.playSection,
+    required this.items,
     required this.openContinuationMenu,
     required this.onFocused,
     required this.focusSidebar,
@@ -28,10 +26,7 @@ class HomeStageCards {
   final HomeCollectionSection? Function(HomeRail) collectionFor;
   final double Function(HomeRail, {double? fallback}) aspectOf;
   final String? Function(HomeRail, StremioMeta, {bool wide}) artOf;
-  final bool Function(StremioMeta) isBound;
-  final bool Function() pikpakOnly;
-  final void Function(CatalogSection, StremioMeta) openSection;
-  final void Function(CatalogSection, StremioMeta) playSection;
+  final HomeCatalogItemActions items;
   final void Function(HomeContinuationRow, StremioMeta, int, int)
   openContinuationMenu;
   final void Function(String, StremioMeta, int) onFocused;
@@ -68,7 +63,7 @@ class HomeStageCards {
       focusNode: nodes[column],
       column: column,
       rowNodes: nodes,
-      hasBoundSource: isBound(item),
+      hasBoundSource: items.isBound(item),
       // Stage layouts use white; Classic retains its own focus treatment.
       ringColor: Colors.white,
       aspectRatio: aspectOf(rail, fallback: wide ? 16 / 9 : null),
@@ -80,9 +75,9 @@ class HomeStageCards {
       restVeil: restVeil,
       progress: rail.cw?.progressOf(item),
       episodeLabel: rail.cw?.episodeOf(item),
-      onQuickPlay: rail.cw != null || pikpakOnly()
+      onQuickPlay: rail.cw != null || items.pikpakOnly
           ? null
-          : () => playSection(sectionAt(rail.sectionIndex!), actionItem()),
+          : () => items.quickPlay(sectionAt(rail.sectionIndex!), actionItem()),
       onLongPress: rail.cw == null
           ? null
           : () => openContinuationMenu(
@@ -105,7 +100,7 @@ class HomeStageCards {
         if (rail.cw != null) {
           rail.cw!.onOpen(actionItem());
         } else {
-          openSection(sectionAt(rail.sectionIndex!), actionItem());
+          items.open(sectionAt(rail.sectionIndex!), actionItem());
         }
       },
       onNearEnd: !pageNearEnd || rail.sectionIndex == null

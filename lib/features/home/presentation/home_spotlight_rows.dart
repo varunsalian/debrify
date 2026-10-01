@@ -12,12 +12,12 @@ import 'home_stage_favorites.dart';
 import 'home_display_section.dart';
 import 'home_continuation_menu.dart';
 import 'home_item_actions.dart';
+import 'home_catalog_item_actions.dart';
 
 typedef HomeSpotlightRowsDeps = ({
   List<CatalogSection> Function() sections,
   List<List<FocusNode>> Function() rowNodes,
-  String? Function(CatalogSection) catalogTag,
-  void Function(CatalogSection) seeAll,
+  HomeCatalogItemActions items,
   void Function(HomeCollectionSection, StremioMeta) openCollection,
 });
 
@@ -58,8 +58,8 @@ class HomeSpotlightRows {
         hideCollectionNames: _displaySection.hideHomeCollectionNames,
         sections: _deps.sections(),
         rowNodes: _deps.rowNodes(),
-        catalogTag: _deps.catalogTag,
-        onSeeAll: _deps.seeAll,
+        catalogTag: _deps.items.sourceTag,
+        onSeeAll: _deps.items.openSeeAll,
         onCollectionOpen: _deps.openCollection,
         onContinuationOptions: _continuationMenu.openCwCardMenu,
         favoriteShelf: _stageFavorites.spotlightFavShelf,

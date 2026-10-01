@@ -33,6 +33,7 @@ import '../../features/home/presentation/home_continuation_menu.dart';
 import '../../features/home/presentation/home_item_actions.dart';
 import '../../features/home/presentation/home_catalog_actions.dart';
 import '../../features/search/presentation/catalog_search_section.dart';
+import 'home_catalog_item_actions_adapter.dart';
 
 typedef HomeStageCompositionDeps = ({
   bool Function() mounted,
@@ -82,6 +83,10 @@ HomeStages createHomeStages(
   required ValueNotifier<String?> ambientArt,
   required ValueNotifier<Color?> heroTint,
 }) {
+  final items = HomeCatalogItemActionsAdapter(
+    badges: () => deps.badges(),
+    navigation: () => deps.navigation(),
+  );
   late final HomeStageRails stageRailsSection;
   late final HomeStageSection stageSection;
   late final HomeStageFavorites stageFavorites;
@@ -146,12 +151,7 @@ HomeStages createHomeStages(
   stageCells = HomeStageCells(
     (
       sectionAt: (index) => deps.board().sections[index],
-      isBound: (item) => deps.badges().isBound(item),
-      pikpakOnly: () => deps.badges().pikpakOnly,
-      openSection: (section, item, {String? heroTag}) =>
-          deps.navigation().sectionOpenItem(section, item, heroTag: heroTag),
-      playSection: (section, item) =>
-          deps.navigation().sectionQuickPlay(section, item),
+      items: items,
       sidebar: deps.sidebar,
       loadMore: (row, {bool resume = false}) =>
           deps.paging().loadMoreRow(row, resume: resume),
@@ -194,7 +194,7 @@ HomeStages createHomeStages(
       isTelevision: deps.isTelevision,
       media: deps.media,
       sidebar: deps.sidebar,
-      isBound: (item) => deps.badges().isBound(item),
+      items: items,
     ),
     stageSection,
     stageRailsSection,
@@ -209,8 +209,7 @@ HomeStages createHomeStages(
     (
       sections: () => deps.board().sections,
       rowNodes: () => deps.board().rowNodes,
-      catalogTag: (section) => deps.navigation().catalogSourceTag(section),
-      seeAll: (section) => deps.navigation().openCatalogSeeAll(section),
+      items: items,
       openCollection: (section, item) =>
           deps.navigation().openCollectionFolder(section, item),
     ),
@@ -228,11 +227,7 @@ HomeStages createHomeStages(
       rowNodes: () => deps.board().rowNodes,
       failures: () => catalogSection.catalogState.failures,
       leaveTop: () => deps.focus().leaveBoardTop(),
-      openSection: (section, item, {String? heroTag}) =>
-          deps.navigation().sectionOpenItem(section, item, heroTag: heroTag),
-      pikpakOnly: () => deps.badges().pikpakOnly,
-      catalogTag: (section) => deps.navigation().catalogSourceTag(section),
-      seeAll: (section) => deps.navigation().openCatalogSeeAll(section),
+      items: items,
       loadMoreRow: (row, {bool resume = false}) =>
           deps.paging().loadMoreRow(row, resume: resume),
     ),

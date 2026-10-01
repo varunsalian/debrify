@@ -244,8 +244,10 @@ HomeBoardWorkflow createHomeBoardWorkflow(
       setState: deps.setState,
       context: deps.context,
       rowId: HomeBoardServices.rowId,
-      classicRowExtent: (context, {CatalogSection? section}) =>
-          deps.classic().classicCatalogRowExtent(context, section: section),
+      classicRowExtent: (context, {CatalogSection? section}) => deps
+          .classic()
+          .geometry
+          .classicCatalogRowExtent(context, section: section),
       refreshBoundSources: () => deps.badges().refreshBoundSources(),
     ),
     boardSection,

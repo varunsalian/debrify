@@ -30,3 +30,8 @@ then push to `private`.
 
 | Batch | Commit | Result |
 | --- | --- | --- |
+| 1 | `9f98a9f6` | 67 provider-only files → 10 area files (Home split six ways, each under 300 lines); declaration counts verified per area. `keyword_providers.dart` is the torrent-provider policy, not DI, and stays. Guard: 667 → 610 measured files. |
+| 2 | `40f3353a` | 9 dead forwarding getters removed. No other unreferenced public members. The `() => x` closures are forward references into the composition's late-field graph or reads of live state, not needless; the remaining getters are used and keep callers out of section internals. The earlier "1,235 `Function()`" count is mostly these legitimate callbacks. |
+| 3 | `0a99b198` | Stremio TV picker 780 → 617, hero spotlight 776 → 675, catalog card 558 → 487 (builders, so the widget tree is unchanged). Reviewed and kept: Sources screen 678 (a subscription coordinator; rendering already extracted) and the playback resolver 513 (`label` and `resolve` share all five collaborators). Follow-up: `resolve()` is one 350-line method; splitting it changes control flow and needs its own change. |
+| 4 | (this commit) | `HomeClassicGeometry` extracted from `HomeClassicSection` (sizing only depends on display prefs). `HomeCatalogItemActions` replaces the open, quick-play, See-All, source-tag, bound and PikPak-only callbacks, which were wired identically in five places (Classic, stage cells and cards, Tonight, Spotlight rows, Spotlight results). Classic deps 14 → 9, stage cells 4, Spotlight rows 4. The earlier ">12-field" count included named parameters inside function types; by top-level fields, 10 records exceed 12, mostly composition-layer wiring. |
+

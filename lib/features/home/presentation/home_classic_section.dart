@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../models/stremio_addon.dart';
 import '../../../models/home_collection_rows.dart';
 import '../../../widgets/home/home_theme.dart';
 import '../models/home_catalog_search_status.dart';
@@ -12,9 +11,7 @@ import 'home_board_media.dart';
 import 'home_display_section.dart';
 import 'home_classic_board.dart';
 import 'home_classic_rows.dart';
-import 'home_classic_row_metrics.dart';
 import 'home_catalog_row.dart';
-import 'home_catalog_row_header.dart';
 import 'home_stage_rows.dart';
 import 'home_stage_rails.dart';
 import 'home_stage_geometry.dart';
@@ -26,6 +23,8 @@ import 'home_continuation_rows.dart';
 import 'home_hero_section.dart';
 import 'home_hero_preview.dart';
 import 'home_hero_live.dart';
+import 'home_classic_geometry.dart';
+import 'home_catalog_item_actions.dart';
 
 typedef HomeClassicSectionDeps = ({
   BuildContext Function() context,
@@ -34,20 +33,16 @@ typedef HomeClassicSectionDeps = ({
   HomeBoardMedia Function() media,
   int Function() artworkWidth,
   int Function() artworkHeight,
-  String? Function(CatalogSection) sourceTag,
-  void Function(CatalogSection) openSeeAll,
   int Function() heroIdentity,
-  bool Function(StremioMeta) isBound,
-  bool Function() pikpakOnly,
   VoidCallback sidebar,
-  void Function(CatalogSection, StremioMeta, {String? heroTag}) openItem,
-  void Function(CatalogSection, StremioMeta) quickPlay,
+  HomeCatalogItemActions items,
 });
 
 /// Classic board composition, row geometry and catalog-cell interaction wiring.
 class HomeClassicSection {
   HomeClassicSection(
     this._deps,
+    this.geometry,
     this._boardSection,
     this._boardFocus,
     this._boardDeferred,
@@ -66,6 +61,9 @@ class HomeClassicSection {
     this._heroLive,
   );
   final HomeClassicSectionDeps _deps;
+
+  /// Classic sizing, shared with the composition's other rails.
+  final HomeClassicGeometry geometry;
   final HomeBoardSection _boardSection;
   final HomeBoardFocus _boardFocus;
   final HomeBoardDeferred _boardDeferred;
@@ -83,41 +81,13 @@ class HomeClassicSection {
   final HomeHeroPreview _heroPreview;
   final HomeHeroLive _heroLive;
 
-  /// Poster width for a board rail. On TV the logical canvas can be as short as
-  /// 540px (a 1080p panel at density 320 → devicePixelRatio 2.0), where a poster
-  /// tuned for a 720-logical canvas leaves no room for a row (plus its header and
-  /// the next row's header) under the hero. So scale the poster with the screen
-  /// height.
-  double railPosterW(BuildContext context) => homeRailPosterWidth(
-    context,
-    isTelevision: _deps.isTelevision(),
-    searchResults: _deps.searchMode(),
-  );
-
-  Size railTitleCardSize(BuildContext context) => homeClassicCardSize(
-    posterWidth: railPosterW(context),
-    landscape: _displaySection.homeLandscapeCards,
-  );
-
-  double railTitleCardW(BuildContext context) =>
-      railTitleCardSize(context).width;
-  double railTitleCardH(BuildContext context) =>
-      railTitleCardSize(context).height;
-
-  double tvHeroBudget(double boardH) => homeClassicHeroBudget(
-    boardHeight: boardH,
-    cardHeight: railTitleCardH(_deps.context()),
-    isTelevision: _deps.isTelevision(),
-    searchResults: _deps.searchMode(),
-  );
-
   Widget buildClassicBoard() {
     final context = _deps.context();
     final tv = _deps.isTelevision();
     return buildHomeClassicBoard(
       context: context,
       isTelevision: tv,
-      tvHeroBudget: tvHeroBudget,
+      tvHeroBudget: geometry.tvHeroBudget,
       media: () => _deps.media(),
       trailerActive: () => _heroPreview.heroTrailerActive,
       heroActive: () => _heroSection.heroActive,
@@ -184,31 +154,6 @@ class HomeClassicSection {
     failures: _catalogSection.catalogFailures,
   );
 
-  double classicCatalogRowExtent(
-    BuildContext context, {
-    CatalogSection? section,
-  }) => measureHomeClassicRowExtent(
-    context,
-    hideHeader:
-        _displaySection.hideHomeCollectionNames &&
-        section is HomeCollectionSection,
-    hideSourceTags: _displaySection.hideHomeCatalogAddonNames,
-    titleStyle: () => homeCatalogRowTitleStyle(_deps.context(), fontSize: 15),
-    cardHeight: () => railTitleCardH(context),
-  );
-
-  Widget railHeader({
-    required String title,
-    String? tag,
-    VoidCallback? onSeeAll,
-  }) => buildHomeCatalogRowHeader(
-    _deps.context(),
-    isTelevision: _deps.isTelevision(),
-    title: title,
-    tag: tag,
-    onSeeAll: onSeeAll,
-  );
-
   Widget buildRow(int rowIndex, {String? homeRowId}) {
     final context = _deps.context();
     final section = _boardSection.sections[rowIndex];
@@ -221,11 +166,11 @@ class HomeClassicSection {
     // wide even when Home cards are portrait) at the same height as every
     // other rail, so the row grammar stays intact.
     final collection = section is HomeCollectionSection ? section : null;
-    final cellH = railTitleCardH(context);
+    final cellH = geometry.railTitleCardH(context);
     final cellAspect =
         collection?.tileAspectRatio ?? _stageGeometry.titleCardAspect;
     final posterW = collection == null
-        ? railTitleCardW(context)
+        ? geometry.railTitleCardW(context)
         : cellH * cellAspect;
     // Rows start straight on the first poster (Stremio-style, no
     // leading See-All tile). DPAD-up from row 0 leaves the board;
@@ -260,20 +205,20 @@ class HomeClassicSection {
       nodes: nodes,
       tv: tv,
       header: collection == null || !_displaySection.hideHomeCollectionNames
-          ? railHeader(
+          ? geometry.railHeader(
               title: section.title,
-              tag: _deps.sourceTag(section),
-              onSeeAll: () => _deps.openSeeAll(section),
+              tag: _deps.items.sourceTag(section),
+              onSeeAll: () => _deps.items.openSeeAll(section),
             )
           : const SizedBox(height: 8),
       cellH: cellH,
       cellAspect: cellAspect,
       posterW: posterW,
       heroTagFor: (col) => 'poster-${_deps.heroIdentity()}-$rowIndex-$col',
-      isBound: _deps.isBound,
+      isBound: _deps.items.isBound,
       artOf: (item) => _stageGeometry.titleArtUrl(item),
       showTitle: () => !_displaySection.hideHomeCardTitlesAndRatings,
-      pikpakOnly: () => _deps.pikpakOnly(),
+      pikpakOnly: () => _deps.items.pikpakOnly,
       onLeftEdge: () => _deps.sidebar(),
       up: up,
       down: down,
@@ -282,8 +227,8 @@ class HomeClassicSection {
         _boardSection.rowCol[rowIndex] = col;
       },
       onOpen: (item, heroTag) =>
-          _deps.openItem(section, item, heroTag: heroTag),
-      onQuickPlay: (item) => _deps.quickPlay(section, item),
+          _deps.items.open(section, item, heroTag: heroTag),
+      onQuickPlay: (item) => _deps.items.quickPlay(section, item),
       onLoadMore: () => _boardPaging.loadMoreRow(rowIndex),
     );
   }

@@ -115,7 +115,7 @@ HomeSavedComposition createHomeSavedContent(
       classicRows: (rowId, nodes) => HomeClassicFavoriteRows(
         context: deps.context(),
         isTelevision: deps.isTelevision(),
-        posterWidth: deps.classic().railPosterW(deps.context()),
+        posterWidth: deps.classic().geometry.railPosterW(deps.context()),
         captionBand: deps.hero().displaySection.homeArtPosterCaptionBand,
         showTitle: () =>
             !deps.hero().displaySection.hideHomeCardTitlesAndRatings,

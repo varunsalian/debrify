@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../widgets/skeleton_poster.dart' show BrandLoadingStage;
-import '../../../models/stremio_addon.dart';
 import 'home_stage_rows.dart';
 import 'home_stage_section.dart';
 import 'home_stage_rails.dart';
@@ -17,13 +16,14 @@ import 'home_tonight_rail.dart';
 import 'home_stage_row_label.dart';
 import 'home_hero_section.dart';
 import 'home_continuation_menu.dart';
+import 'home_catalog_item_actions.dart';
 
 typedef HomeTonightSectionDeps = ({
   BuildContext Function() context,
   bool Function() isTelevision,
   HomeBoardMedia Function() media,
   VoidCallback sidebar,
-  bool Function(StremioMeta) isBound,
+  HomeCatalogItemActions items,
 });
 
 /// Tonight's queue/rail layout composition and held-key dispatch.
@@ -111,7 +111,7 @@ class HomeTonightSection {
           focusNode: cw.nodes[e.col],
           episode: cw.episodeOf(item),
           progress: cw.progressOf(item),
-          hasBoundSource: _deps.isBound(item),
+          hasBoundSource: _deps.items.isBound(item),
           onFocused: () {
             _stageSection.tonightFocus.selectQueue(e, i, item);
             _heroSection.setHero(item);

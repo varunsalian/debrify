@@ -92,11 +92,13 @@ HomeContinuationPresentation createHomeContinuationPresentation(
   );
   rows = HomeContinuationRows(
     (
-      header: ({required title, tag, onSeeAll}) =>
-          deps.classic().railHeader(title: title, tag: tag, onSeeAll: onSeeAll),
+      header: ({required title, tag, onSeeAll}) => deps
+          .classic()
+          .geometry
+          .railHeader(title: title, tag: tag, onSeeAll: onSeeAll),
       isTelevision: deps.isTelevision,
-      posterWidth: () => deps.classic().railTitleCardW(deps.context()),
-      cellHeight: () => deps.classic().railTitleCardH(deps.context()),
+      posterWidth: () => deps.classic().geometry.railTitleCardW(deps.context()),
+      cellHeight: () => deps.classic().geometry.railTitleCardH(deps.context()),
       aspectRatio: () => deps.stages().stageGeometry.titleCardAspect,
       showTitleOverlay: () =>
           !deps.hero().displaySection.hideHomeCardTitlesAndRatings,

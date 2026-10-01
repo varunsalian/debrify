@@ -15,6 +15,8 @@ import '../../features/home/presentation/home_saved_content_section.dart';
 import '../../features/home/presentation/home_saved_content_rows.dart';
 import '../../features/home/presentation/home_spotlight_section.dart';
 import 'home_stage_composition.dart';
+import '../../features/home/presentation/home_classic_geometry.dart';
+import 'home_catalog_item_actions_adapter.dart';
 
 typedef HomeRenderingCompositionDeps = ({
   bool Function() mounted,
@@ -58,17 +60,18 @@ HomeRenderingComposition createHomeRendering(
       media: () => deps.media().media,
       artworkWidth: () => deps.media().artworkCacheWidth,
       artworkHeight: () => deps.media().artworkCacheHeight,
-      sourceTag: (section) => deps.navigation().catalogSourceTag(section),
-      openSeeAll: (section) => deps.navigation().openCatalogSeeAll(section),
       heroIdentity: deps.heroIdentity,
-      isBound: (item) => deps.badges().isBound(item),
-      pikpakOnly: () => deps.badges().pikpakOnly,
       sidebar: HomeHeroShellBridge.focusTvSidebar,
-      openItem: (section, item, {String? heroTag}) =>
-          deps.navigation().sectionOpenItem(section, item, heroTag: heroTag),
-      quickPlay: (section, item) =>
-          deps.navigation().sectionQuickPlay(section, item),
+      items: HomeCatalogItemActionsAdapter(
+        badges: () => deps.badges(),
+        navigation: () => deps.navigation(),
+      ),
     ),
+    HomeClassicGeometry((
+      context: deps.context,
+      isTelevision: deps.isTelevision,
+      searchMode: deps.searchMode,
+    ), hero.displaySection),
     board.boardSection,
     board.boardFocus,
     board.boardDeferred,

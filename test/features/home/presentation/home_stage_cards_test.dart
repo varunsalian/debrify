@@ -3,6 +3,7 @@ import 'package:debrify/features/home/presentation/home_stage_rows.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:debrify/features/home/presentation/home_catalog_item_actions.dart';
 
 void main() {
   for (final liveItem in [false, true]) {
@@ -38,10 +39,11 @@ void main() {
           collectionFor: (_) => null,
           aspectOf: (_, {fallback}) => fallback ?? 2 / 3,
           artOf: (_, item, {bool wide = false}) => item.poster,
-          isBound: (_) => false,
-          pikpakOnly: () => restricted,
-          openSection: (s, m) => calls.add('open:${s.title}:${m.id}'),
-          playSection: (s, m) => calls.add('play:${s.title}:${m.id}'),
+          items: _Items(
+            pikpakOnly: () => restricted,
+            open: (s, m) => calls.add('open:${s.title}:${m.id}'),
+            play: (s, m) => calls.add('play:${s.title}:${m.id}'),
+          ),
           openContinuationMenu: (_, _, _, _) => fail('not a continuation row'),
           onFocused: (_, m, _) => calls.add('focus:${m.id}'),
           focusSidebar: () {},
@@ -80,4 +82,33 @@ void main() {
       },
     );
   }
+}
+
+/// Records the catalog item actions the stage cards dispatch.
+class _Items implements HomeCatalogItemActions {
+  _Items({
+    required bool Function() pikpakOnly,
+    required void Function(CatalogSection, StremioMeta) open,
+    required void Function(CatalogSection, StremioMeta) play,
+  }) : _pikpakOnly = pikpakOnly,
+       _open = open,
+       _play = play;
+  final bool Function() _pikpakOnly;
+  final void Function(CatalogSection, StremioMeta) _open;
+  final void Function(CatalogSection, StremioMeta) _play;
+
+  @override
+  bool isBound(StremioMeta item) => false;
+  @override
+  bool get pikpakOnly => _pikpakOnly();
+  @override
+  void open(CatalogSection section, StremioMeta item, {String? heroTag}) =>
+      _open(section, item);
+  @override
+  void quickPlay(CatalogSection section, StremioMeta item) =>
+      _play(section, item);
+  @override
+  void openSeeAll(CatalogSection section) => fail('not used by stage cards');
+  @override
+  String? sourceTag(CatalogSection section) => null;
 }
