@@ -2,7 +2,5 @@
 # Stale source-text guards in manual_source_validation_contract_test, failing
 # since before the torrent-playback refactor (see its plan). Remove each entry
 # when its guard is ported; `check` fails if a listed test passes or vanishes.
-test/manual_source_validation_contract_test.dart::bound startup recovery retains the preferred provider
 test/manual_source_validation_contract_test.dart::delayed startup recovery waits for the exact player route
-test/manual_source_validation_contract_test.dart::every saved-source launch preserves remaining-pin recovery
 test/manual_source_validation_contract_test.dart::recovery uses automatic probes without changing manual source resolution

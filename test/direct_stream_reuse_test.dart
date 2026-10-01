@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:debrify/features/sources/data/source_series_fetcher.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_player_launch.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/profiles/profile_preference_portability.dart';
@@ -97,7 +98,7 @@ void main() {
             pin: source,
           );
       expect(await read(custom), isNull);
-      await TorrentPlaybackService.validatedSourceCommitterForTesting(
+      await SourcePlayerLaunch.validatedSourceCommitterForTesting(
         'rd',
         const PlaybackMeta(
           imdbId: 'tt123',
@@ -194,7 +195,7 @@ void main() {
           .toList();
       expect(missing, isEmpty);
       expect(missingNotices, 1);
-      await TorrentPlaybackService.validatedSourceCommitterForTesting(
+      await SourcePlayerLaunch.validatedSourceCommitterForTesting(
         SeriesSource.addonDirectService,
         launch,
       )(candidate);

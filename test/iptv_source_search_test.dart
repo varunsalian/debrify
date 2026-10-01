@@ -6,6 +6,8 @@ import 'package:debrify/features/sources/application/source_iptv_availability.da
 import 'package:debrify/features/sources/application/source_probing.dart';
 import 'package:debrify/features/sources/data/iptv_quick_play_search.dart';
 import 'package:debrify/features/sources/data/recovery_source_resolution.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_binding_actions.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_player_launch.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/quick_play_rules.dart';
@@ -878,7 +880,7 @@ void main() {
     );
 
     expect(
-      await TorrentPlaybackService.bindIptvSource(
+      await SourceBindingActions.bindIptvSource(
         context,
         descriptor,
         imdbId: 'tt2',
@@ -1103,7 +1105,7 @@ void main() {
           ),
       ]);
       final sources = (await IptvSourceSearch.search(movie)).single.torrents;
-      final commit = TorrentPlaybackService.validatedSourceCommitterForTesting(
+      final commit = SourcePlayerLaunch.validatedSourceCommitterForTesting(
         SeriesSource.iptvDirectService,
         const PlaybackMeta(imdbId: 'tt1', contentType: 'movie', title: 'Dune'),
       );
@@ -1133,7 +1135,7 @@ void main() {
       )).single.torrents.single;
       await StorageService.saveApiKey('rd-key');
       await StorageService.setDefaultTorrentProvider('debrid');
-      final commit = TorrentPlaybackService.validatedSourceCommitterForTesting(
+      final commit = SourcePlayerLaunch.validatedSourceCommitterForTesting(
         SeriesSource.iptvDirectService,
         const PlaybackMeta(imdbId: 'tt1', contentType: 'movie', title: 'Dune'),
       );

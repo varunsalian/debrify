@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:debrify/features/sources/application/source_candidate_ranking.dart';
 import 'package:debrify/features/sources/data/source_movie_fetcher.dart';
 import 'package:debrify/features/sources/data/source_series_fetcher.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/provider_accepted_actions.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_player_args.dart';
 import 'package:debrify/models/media_server.dart';
 import 'package:debrify/models/media_server_library.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
@@ -880,7 +882,7 @@ void main() {
         );
         expect(source.directUrl, isNot(contains('token-secret')));
         expect(source.httpHeaders!['X-Emby-Token'], 'token-secret');
-        final args = TorrentPlaybackService.playerArgsForTesting(
+        final args = SourcePlayerArgs.playerArgsForTesting(
           null,
           httpHeaders: source.httpHeaders,
         );
@@ -1060,7 +1062,7 @@ void main() {
         return (await search()).first;
       }))!;
       expect(
-        TorrentPlaybackService.supportsDirectStreamDownload(source),
+        ProviderAcceptedActions.supportsDirectStreamDownload(source),
         isFalse,
       );
       final ordinary = Torrent.fromJson({
@@ -1068,7 +1070,7 @@ void main() {
         'source': 'stremio:example',
       });
       expect(
-        TorrentPlaybackService.supportsDirectStreamDownload(ordinary),
+        ProviderAcceptedActions.supportsDirectStreamDownload(ordinary),
         isTrue,
       );
       late BuildContext pageContext;
@@ -1085,7 +1087,7 @@ void main() {
         ),
       );
       final requestsBefore = requestCount;
-      await TorrentPlaybackService.downloadDirectStream(pageContext, source);
+      await ProviderAcceptedActions.downloadDirectStream(pageContext, source);
       await tester.pump();
       expect(
         find.text('Jellyfin and Emby downloads are not supported yet.'),

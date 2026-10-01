@@ -26,6 +26,12 @@ void main() {
   final recoveryResolution = File(
     'lib/features/sources/data/recovery_source_resolution.dart',
   ).readAsStringSync();
+  final playerLaunch = File(
+    'lib/features/sources/presentation/legacy_playback/source_player_launch.dart',
+  ).readAsStringSync();
+  final bindingActions = File(
+    'lib/features/sources/presentation/legacy_playback/source_binding_actions.dart',
+  ).readAsStringSync();
   final launcher = File(
     'lib/services/video_player_launcher.dart',
   ).readAsStringSync();
@@ -98,16 +104,16 @@ void main() {
 
   test('saved direct recovery snapshots its effective acquisition provider', () {
     final launch = _between(
-      playbackService,
-      'static Future<void> _launch(',
-      'static bool _isSeriesPlaylist(',
+      playerLaunch,
+      'static Future<void> launch(',
+      'static SourcePlaylistResolve resolverFor(',
     );
     expect(launch, contains('final resolverProvider ='));
     expect(
       launch,
       contains('await SourceProviderConfig.defaultConfiguredProvider('),
     );
-    expect(launch, contains('_resolverFor(resolverProvider, committer)'));
+    expect(launch, contains('resolverFor(resolverProvider, committer)'));
     expect(launch, contains('startupResolverProvider: resolverProvider'));
     expect(
       launch,
@@ -352,26 +358,29 @@ void main() {
         ),
       );
       expect(playbackService, contains('remainingSources'));
-      expect(playbackService, contains('skipBoundSources: true'));
+      expect(bindingActions, contains('skipBoundSources: true'));
     },
   );
 
   test('every saved-source launch preserves remaining-pin recovery', () {
     final boundPlayback = _between(
       playbackService,
-      'static Future<bool> _playViaBound(',
-      '/// Continue after a saved source resolved successfully',
+      'static Future<bool> playViaBound(',
+      '\n  }\n',
     );
-    // Direct addons, local files, and debrid/native-cloud packs all need the
+    // Direct addons, media-server pins, local files, and debrid/native-cloud packs need the
     // flag, including when native startup has only one permitted attempt.
-    final launches = boundPlayback.split('await _launch(').skip(1).toList();
-    expect(launches, hasLength(3));
+    final launches = boundPlayback
+        .split('await SourcePlayerLaunch.launch(')
+        .skip(1)
+        .toList();
+    expect(launches, hasLength(4));
     for (final launch in launches) {
       final arguments = launch.split('onStartupSourcesExhausted:').first;
       final cleanup = _between(
         launch,
         'onStartupSourcesExhausted:',
-        'await _recoverAfterBoundStartupFailure(',
+        'await SourceBindingActions.recoverAfterBoundStartupFailure(',
       );
       expect(cleanup, contains('await FailedSavedSource.cleanup('));
       expect(
@@ -395,27 +404,27 @@ void main() {
     );
     final boundPlayback = _between(
       playbackService,
-      'static Future<bool> _playViaBound(',
-      '/// Continue after a saved source resolved successfully',
+      'static Future<bool> playViaBound(',
+      '\n  }\n',
     );
     final recovery = _between(
-      playbackService,
-      'static Future<void> _recoverAfterBoundStartupFailure(',
+      bindingActions,
+      'static Future<void> recoverAfterBoundStartupFailure(',
       '/// Pin [torrent] as the playback source',
     );
 
     expect(
       RegExp(
-        r'_playViaBound\([\s\S]*?preferredProvider: preferredProvider',
+        r'playViaBound\([\s\S]*?preferredProvider: preferredProvider',
       ).hasMatch(selection),
       isTrue,
     );
     expect(boundPlayback, contains('String? preferredProvider'));
     expect(
       RegExp(
-        r'_recoverAfterBoundStartupFailure\([\s\S]*?preferredProvider: preferredProvider',
+        r'SourceBindingActions\.recoverAfterBoundStartupFailure\([\s\S]*?preferredProvider: preferredProvider',
       ).allMatches(boundPlayback),
-      hasLength(3),
+      hasLength(4),
     );
     expect(recovery, contains('String? preferredProvider'));
     expect(recovery, contains('preferredProvider: preferredProvider'));

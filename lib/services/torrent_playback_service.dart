@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:android_intent_plus/android_intent.dart';
 import 'package:debrify/features/sources/application/source_cache_ordering.dart';
 import 'package:debrify/features/sources/application/source_candidate_checks.dart';
 import 'package:debrify/features/sources/application/source_candidate_ranking.dart';
@@ -20,53 +18,38 @@ import 'package:debrify/features/sources/data/source_movie_fetcher.dart';
 import 'package:debrify/features/sources/data/source_series_fetcher.dart';
 import 'package:debrify/features/sources/models/playback_cancel_token.dart';
 import 'package:debrify/features/sources/models/resolved_source.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/provider_accepted_actions.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/provider_action_menu.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_binding_actions.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_loading_overlays.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_next_episode.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_play_action.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_player_args.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_player_launch.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_provider_choice.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../features/sources/data/automatic_source_bindings.dart';
 import '../features/sources/data/manual_source_preparation.dart';
 import '../features/sources/data/pikpak_source_preparation.dart';
 import '../features/sources/data/provider_cloud_source.dart';
-import '../features/sources/data/provider_source_actions.dart';
 import '../features/sources/data/source_acquisition.dart';
 import '../features/sources/data/source_acquisition_cleanup.dart';
 import '../features/sources/data/source_binding_committer.dart';
-import '../features/sources/data/source_download.dart';
-import '../features/sources/data/source_file_ordering.dart';
 import '../features/sources/data/source_magnet.dart';
-import '../features/sources/data/source_playlist.dart';
-import '../features/sources/data/source_playlist_resolver.dart';
 import '../features/sources/data/source_single_episode.dart';
-import '../features/sources/presentation/direct_source_binding.dart';
-import '../features/sources/presentation/iptv_source_binding.dart';
-import '../features/sources/presentation/local_source_binding.dart';
-import '../features/sources/presentation/source_download_action.dart';
-import '../features/sources/presentation/source_download_picker.dart';
-import '../features/sources/presentation/source_provider_picker.dart';
-import '../features/sources/presentation/torrent_source_binding.dart';
 import '../models/playback_meta.dart';
-import '../models/playlist_view_mode.dart';
 import '../models/profiles/profile_policy.dart';
 import '../models/quick_play_rules.dart';
-import '../models/source_playlist_resolver.dart';
 import '../models/torrent.dart';
 import '../screens/video_player/models/playlist_entry.dart';
-import '../theme/app_theme_scope.dart';
-import '../utils/deovr_utils.dart' as deovr;
-import '../utils/dialog_tap_guard.dart';
 import '../utils/file_utils.dart';
 import '../utils/filter_ladder.dart';
-import '../utils/formatters.dart';
-import '../utils/series_parser.dart';
 import '../utils/torrent_coverage_detector.dart';
-import '../widgets/debrid_action_sheet.dart';
-import '../widgets/debrid_loading_overlay.dart';
 import '../widgets/debrify_tv_channel_add_bridge.dart';
-import '../widgets/not_cached_dialog.dart';
 import '../widgets/pipeline_loading_overlay.dart';
-import '../widgets/provider_picker_dialog.dart';
 import 'alldebrid_service.dart';
 import 'android_local_source_service.dart';
 import 'debrid_service.dart';
@@ -74,9 +57,7 @@ import 'direct_source_authorization.dart';
 import 'failed_saved_source.dart';
 import 'iptv_source_search.dart';
 import 'local_bound_source_service.dart';
-import 'local_playback_resume_resolver.dart';
 import 'media_server_service.dart';
-import 'play_loader_style.dart';
 import 'profiles/profile_policy_guard.dart';
 import 'profiles/profile_runtime.dart';
 import 'profiles/profile_session_memory.dart';
@@ -199,7 +180,7 @@ class TorrentPlaybackService {
         final target = meta?.season == null || meta?.episode == null
             ? 'This episode'
             : 'S${meta!.season.toString().padLeft(2, '0')}E${meta.episode.toString().padLeft(2, '0')}';
-        _snack(
+        SourceLoadingOverlays.snack(
           context,
           resolution.status == IptvEpisodeResolutionStatus.missing
               ? '$target is not available in this IPTV series.'
@@ -220,7 +201,7 @@ class TorrentPlaybackService {
       await DirectSourceAuthorization.authorize(torrent);
     } catch (_) {
       if (context.mounted && bindingOwner.isCurrent) {
-        _snack(context, 'IPTV connection changed. Search sources again.');
+        SourceLoadingOverlays.snack(context, 'IPTV connection changed. Search sources again.');
       }
       return;
     }
@@ -249,7 +230,7 @@ class TorrentPlaybackService {
       final launchSourceIndex = sources == null || sources.isEmpty
           ? 0
           : sourceIndex.clamp(0, launchSources.length - 1);
-      final committer = _validatedLaunchCommitter(
+      final committer = SourcePlayerLaunch.validatedLaunchCommitter(
         resolverProvider ?? SeriesSource.addonDirectService,
         meta,
         sourceBindings: bindingOwner,
@@ -257,7 +238,7 @@ class TorrentPlaybackService {
       try {
         await VideoPlayerLauncher.push(
           context,
-          _playerArgs(
+          SourcePlayerArgs.playerArgs(
             videoUrl: torrent.directUrl!,
             httpHeaders: torrent.httpHeaders,
             title: torrent.displayTitle,
@@ -266,7 +247,7 @@ class TorrentPlaybackService {
             stremioCurrentSourceIndex: launchSourceIndex,
             resolveSourceToPlaylist:
                 (launchSources.length > 1 || fetcher != null)
-                ? _lazyProviderResolver(committer)
+                ? SourcePlayerLaunch.lazyProviderResolver(committer)
                 : null,
             startupFailoverEnabled: true,
             startupResolverProvider: resolverProvider,
@@ -277,7 +258,7 @@ class TorrentPlaybackService {
           retainSourceSession: committer.retain,
           sourceOwner: committer.bindings.owner,
           canContinue: () => committer.isCurrent,
-          onQuickPlayNextEpisode: _nextEpisodeHandlerFor(
+          onQuickPlayNextEpisode: SourceNextEpisode.nextEpisodeHandlerFor(
             context,
             meta,
             sourceBindings: bindingOwner,
@@ -299,47 +280,47 @@ class TorrentPlaybackService {
       );
       if (!context.mounted || !bindingOwner.isCurrent) return;
       if (!externalAllowed) {
-        _snack(context, 'External players are disabled for this profile.');
+        SourceLoadingOverlays.snack(context, 'External players are disabled for this profile.');
         return;
       }
       final uri = Uri.tryParse(torrent.directUrl!);
       if (uri == null) {
-        _snack(context, 'Invalid stream URL.');
+        SourceLoadingOverlays.snack(context, 'Invalid stream URL.');
         return;
       }
       try {
         final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
         if (!ok && context.mounted) {
-          _snack(context, 'Could not open link — no app to handle it.');
+          SourceLoadingOverlays.snack(context, 'Could not open link — no app to handle it.');
         }
       } catch (e) {
         if (context.mounted && bindingOwner.isCurrent) {
-          _snack(context, 'Could not open link: $e');
+          SourceLoadingOverlays.snack(context, 'Could not open link: $e');
         }
       }
       return;
     }
 
-    final provider = await _pickProvider(
+    final provider = await SourceProviderChoice.pickProvider(
       context,
       canContinue: () => context.mounted && bindingOwner.isCurrent,
     );
     if (!context.mounted || !bindingOwner.isCurrent) return;
     if (provider == SourceProviderConfig.cancelled) return; // user dismissed the picker
     if (provider == null) {
-      _snack(context, 'No debrid provider configured. Add one in Settings.');
+      SourceLoadingOverlays.snack(context, 'No debrid provider configured. Add one in Settings.');
       return;
     }
     final magnet = await sourceMagnet(torrent);
     if (!context.mounted || !bindingOwner.isCurrent) return;
     if (magnet == null) {
-      _snack(context, 'This result has no magnet or infohash to play.');
+      SourceLoadingOverlays.snack(context, 'This result has no magnet or infohash to play.');
       return;
     }
-    final action = forcePlay ? 'play' : await _postAction(provider);
+    final action = forcePlay ? 'play' : await ProviderAcceptedActions.postAction(provider);
     if (!context.mounted || !bindingOwner.isCurrent) return;
 
-    final loading = _showLoading(context, provider, torrent.displayTitle);
+    final loading = SourceLoadingOverlays.showLoading(context, provider, torrent.displayTitle);
     ResolvedSource? resolved;
     Object? notCached;
     try {
@@ -361,7 +342,7 @@ class TorrentPlaybackService {
     } on PikPakSourceStillProcessing {
       loading.dismiss();
       if (context.mounted && bindingOwner.isCurrent) {
-        _snack(
+        SourceLoadingOverlays.snack(
           context,
           'Files still processing on PikPak. Check the PikPak Files page later.',
         );
@@ -370,13 +351,13 @@ class TorrentPlaybackService {
     } on PikPakSourceFailed {
       loading.dismiss();
       if (context.mounted && bindingOwner.isCurrent) {
-        _snack(context, 'Download failed on PikPak.');
+        SourceLoadingOverlays.snack(context, 'Download failed on PikPak.');
       }
       return;
     } catch (e) {
       loading.dismiss();
       if (context.mounted && bindingOwner.isCurrent) {
-        _snack(context, 'Could not resolve source: $e');
+        SourceLoadingOverlays.snack(context, 'Could not resolve source: $e');
       }
       return;
     }
@@ -384,7 +365,7 @@ class TorrentPlaybackService {
     if (!context.mounted || !bindingOwner.isCurrent) return;
 
     if (notCached != null) {
-      await _handleNotCached(
+      await SourceProviderChoice.handleNotCached(
         context,
         notCached,
         provider,
@@ -394,17 +375,17 @@ class TorrentPlaybackService {
       return;
     }
     if (resolved == null) {
-      _snack(context, 'No playable source found for this result.');
+      SourceLoadingOverlays.snack(context, 'No playable source found for this result.');
       return;
     }
 
     switch (action) {
       case 'none':
-        _snack(context, 'Torrent added to ${_label(provider)} successfully.');
+        SourceLoadingOverlays.snack(context, 'Torrent added to ${SourceProviderChoice.label(provider)} successfully.');
         break;
       case 'open':
         if (resolved.isRarArchive) {
-          _snack(context, 'Not available for RAR archives.');
+          SourceLoadingOverlays.snack(context, 'Not available for RAR archives.');
         } else {
           resolved.openInTab?.call();
         }
@@ -413,20 +394,20 @@ class TorrentPlaybackService {
         if (resolved.playUrl != null && resolved.playUrl!.isNotEmpty) {
           await Clipboard.setData(ClipboardData(text: resolved.playUrl!));
           if (context.mounted && bindingOwner.isCurrent) {
-            _snack(
+            SourceLoadingOverlays.snack(
               context,
-              'Torrent added to ${_label(provider)}! Download link copied to clipboard.',
+              'Torrent added to ${SourceProviderChoice.label(provider)}! Download link copied to clipboard.',
             );
           }
         } else {
-          _snack(
+          SourceLoadingOverlays.snack(
             context,
-            'Added to ${_label(provider)}, but no link was available to copy.',
+            'Added to ${SourceProviderChoice.label(provider)}, but no link was available to copy.',
           );
         }
         break;
       case 'download':
-        await _download(
+        await ProviderAcceptedActions.download(
           context,
           resolved,
           torrent,
@@ -435,7 +416,7 @@ class TorrentPlaybackService {
         );
         break;
       case 'playlist':
-        await _addToPlaylist(
+        await ProviderAcceptedActions.addToPlaylist(
           context,
           resolved,
           torrent,
@@ -455,7 +436,7 @@ class TorrentPlaybackService {
         );
         break;
       case 'choose':
-        await _showChooser(
+        await ProviderActionMenu.showChooser(
           context,
           resolved,
           torrent,
@@ -471,7 +452,7 @@ class TorrentPlaybackService {
         break;
       case 'play':
       default:
-        await _play(
+        await SourcePlayAction.play(
           context,
           resolved,
           torrent,
@@ -574,12 +555,12 @@ class TorrentPlaybackService {
               canContinue: () => context.mounted && bindingOwner.isCurrent,
             );
         if (!context.mounted || !bindingOwner.isCurrent) return;
-        committer = _validatedLaunchCommitter(
+        committer = SourcePlayerLaunch.validatedLaunchCommitter(
           resolverProvider ?? SeriesSource.addonDirectService,
           meta,
           sourceBindings: bindingOwner,
         );
-        final args = _playerArgs(
+        final args = SourcePlayerArgs.playerArgs(
           videoUrl: direct.directUrl!,
           httpHeaders: direct.httpHeaders,
           title: direct.displayTitle,
@@ -589,8 +570,8 @@ class TorrentPlaybackService {
           resolveSourceToPlaylist:
               (torrents.length > 1 || seriesFetcher != null)
               ? (resolverProvider == null
-                    ? _lazyProviderResolver(committer)
-                    : _resolverFor(resolverProvider, committer))
+                    ? SourcePlayerLaunch.lazyProviderResolver(committer)
+                    : SourcePlayerLaunch.resolverFor(resolverProvider, committer))
               : null,
           startupFailoverEnabled: true,
           startupResolverProvider: resolverProvider,
@@ -598,7 +579,7 @@ class TorrentPlaybackService {
           seriesSourceFetcher: seriesFetcher,
           meta: meta,
         );
-        final nextEpisodeHandler = _nextEpisodeHandlerFor(
+        final nextEpisodeHandler = SourceNextEpisode.nextEpisodeHandlerFor(
           context,
           meta,
           provider: provider,
@@ -820,7 +801,7 @@ class TorrentPlaybackService {
           return;
         }
         if (!providerWasChecked) {
-          strictProvider = await _pickProvider(
+          strictProvider = await SourceProviderChoice.pickProvider(
             context,
             canContinue: () => context.mounted && bindingOwner.isCurrent,
           );
@@ -847,7 +828,7 @@ class TorrentPlaybackService {
               )
               .toList();
           if (strictProvider == 'torbox' || strictProvider == 'premiumize') {
-            ov ??= _showPipeline(
+            ov ??= SourceLoadingOverlays.showPipeline(
               context,
               provider: strictProvider,
               meta: meta,
@@ -910,7 +891,7 @@ class TorrentPlaybackService {
         if (strictProvider == 'pikpak' && pikPakTorrentProbed) continue;
         attempts++;
         if (strictProvider == 'pikpak') pikPakTorrentProbed = true;
-        ov ??= _showPipeline(
+        ov ??= SourceLoadingOverlays.showPipeline(
           context,
           provider: strictProvider,
           meta: meta,
@@ -933,7 +914,7 @@ class TorrentPlaybackService {
         if (resolved == null || winner == null) continue;
         if (cancelled()) return;
         ov.setStage(PlayLoadStage.starting);
-        await _launch(
+        await SourcePlayerLaunch.launch(
           context,
           resolved,
           winner.displayTitle,
@@ -951,7 +932,7 @@ class TorrentPlaybackService {
       }
       if (ov != null) closeLoading();
       if (context.mounted) {
-        _snack(
+        SourceLoadingOverlays.snack(
           context,
           providerUnavailable
               ? 'No direct stream played. Add a debrid provider in Settings for torrent sources.'
@@ -1008,7 +989,7 @@ class TorrentPlaybackService {
         )) {
       if (ov != null) closeLoading();
       if (context.mounted) {
-        _snack(
+        SourceLoadingOverlays.snack(
           context,
           "This title's stream links appear to be offline. Open Sources to try one manually.",
         );
@@ -1018,7 +999,7 @@ class TorrentPlaybackService {
 
     final prov =
         provider ??
-        await _pickProvider(
+        await SourceProviderChoice.pickProvider(
           context,
           canContinue: () => context.mounted && bindingOwner.isCurrent,
         );
@@ -1039,7 +1020,7 @@ class TorrentPlaybackService {
       // is still the guaranteed instant play (pre-ladder behavior).
       if (await playFirstAliveDirect()) return;
       if (ov != null) closeLoading();
-      _snack(context, 'No debrid provider configured. Add one in Settings.');
+      SourceLoadingOverlays.snack(context, 'No debrid provider configured. Add one in Settings.');
       return;
     }
 
@@ -1051,11 +1032,11 @@ class TorrentPlaybackService {
     if (candidates.isEmpty) {
       if (await playFirstAliveDirect()) return;
       if (ov != null) closeLoading();
-      _snack(context, 'No playable sources found for this title.');
+      SourceLoadingOverlays.snack(context, 'No playable sources found for this title.');
       return;
     }
     // Standalone play (no loader passed by the search flow): show one now.
-    ov ??= _showPipeline(
+    ov ??= SourceLoadingOverlays.showPipeline(
       context,
       provider: prov,
       meta: meta,
@@ -1146,14 +1127,14 @@ class TorrentPlaybackService {
       // the loader up and hands its dismissal to the launcher).
       if (await playFirstAliveDirect()) return;
       closeLoading();
-      _snack(
+      SourceLoadingOverlays.snack(
         context,
         'No instantly-playable source found. Open Sources to pick or download one.',
       );
       return;
     }
     final idx = torrents.indexOf(winner!);
-    await _launch(
+    await SourcePlayerLaunch.launch(
       context,
       res,
       winner.displayTitle,
@@ -1172,6 +1153,7 @@ class TorrentPlaybackService {
   /// Full catalog-play flow: pick provider, show the cinematic overlay (with the
   /// real provider name), search torrents for the title, and auto-play the best
   /// — all under ONE overlay. Used by the Search tab's catalog Play button.
+  // TEMP(tps): moves in step 4
   static Future<void> playFromSelection(
     BuildContext context, {
     required String imdbId,
@@ -1206,11 +1188,11 @@ class TorrentPlaybackService {
     );
     final label = meta.title ?? '';
     if (imdbId.isEmpty) {
-      _snack(context, 'No IMDb match to find sources for "$label".');
+      SourceLoadingOverlays.snack(context, 'No IMDb match to find sources for "$label".');
       return;
     }
     var cancelled = false;
-    final resolving = showResolvingOverlay(
+    final resolving = SourceLoadingOverlays.showResolvingOverlay(
       context,
       meta: meta,
       title: label,
@@ -1274,7 +1256,7 @@ class TorrentPlaybackService {
       // ignore: invalid_use_of_visible_for_testing_member
       if (!SourceSearchPlans.allowsAddonSearch(rules)) {
         resolving.dismiss();
-        _snack(
+        SourceLoadingOverlays.snack(
           context,
           'Torrent engines can’t search "$label" without an IMDb ID. Choose a source mode that allows addons.',
         );
@@ -1291,7 +1273,7 @@ class TorrentPlaybackService {
       // worse answer than the explicit message.
       if (handedToPicker()) return;
       resolving.dismiss();
-      await _playAddonStream(
+      await playAddonStream(
         context,
         imdbId,
         isMovie: isMovie,
@@ -1332,7 +1314,7 @@ class TorrentPlaybackService {
           (isMovie || (meta.season != null && meta.episode != null));
       if (boundUsable) {
         resolving.dismiss();
-        final played = await _playViaBound(
+        final played = await playViaBound(
           context,
           imdbId,
           bound,
@@ -1363,7 +1345,7 @@ class TorrentPlaybackService {
     // ordinary torrent-vs-addon preference for canonical titles.
     if (meta.hasStremioEpisodeIdentity) {
       resolving.dismiss();
-      await _playAddonStream(
+      await playAddonStream(
         context,
         imdbId,
         isMovie: isMovie,
@@ -1394,7 +1376,7 @@ class TorrentPlaybackService {
       resolving.dismiss();
       final fallBackToEngines =
           rules.sourceMode == QuickPlaySourceMode.addonsThenTorrents;
-      final handled = await _playAddonStream(
+      final handled = await playAddonStream(
         context,
         imdbId,
         isMovie: isMovie,
@@ -1421,7 +1403,7 @@ class TorrentPlaybackService {
     resolving.dismiss();
     final provider =
         preferredProvider ??
-        await _pickProvider(
+        await SourceProviderChoice.pickProvider(
           context,
           canContinue: () => context.mounted && bindingOwner.isCurrent,
         );
@@ -1429,7 +1411,7 @@ class TorrentPlaybackService {
     if (provider == SourceProviderConfig.cancelled) return;
     if (provider == null) {
       if (addonFallbackAlreadySearched) {
-        _snack(
+        SourceLoadingOverlays.snack(
           context,
           'No direct stream for "$label". Add a debrid provider in Settings for more sources.',
         );
@@ -1437,7 +1419,7 @@ class TorrentPlaybackService {
       }
       // ignore: invalid_use_of_visible_for_testing_member
       if (!SourceSearchPlans.allowsAddonSearch(activeRules)) {
-        _snack(
+        SourceLoadingOverlays.snack(
           context,
           'No debrid provider configured. Add one in Settings to use torrent-only Quick Play.',
         );
@@ -1446,7 +1428,7 @@ class TorrentPlaybackService {
       // No debrid provider — but some titles still have a direct addon stream
       // that plays without one. Run an addon-only search and let playBest open
       // a direct link; if there's none it shows the "add a provider" snack.
-      await _playAddonStream(
+      await playAddonStream(
         context,
         imdbId,
         isMovie: isMovie,
@@ -1464,7 +1446,7 @@ class TorrentPlaybackService {
     // The Pipeline loader spans search → cache-check → prepare → start; its
     // checklist advances via setStage as this flow progresses.
     final cancel = PlaybackCancelToken();
-    final overlay = _showPipeline(
+    final overlay = SourceLoadingOverlays.showPipeline(
       context,
       provider: provider,
       meta: meta,
@@ -1523,7 +1505,7 @@ class TorrentPlaybackService {
         closeLoading();
         return null;
       }
-      _applyLadderNote(overlay, ladder, packs);
+      SourceLoadingOverlays.applyLadderNote(overlay, ladder, packs);
       if (cancel.cancelled) return null;
       if (!context.mounted || !bindingOwner.isCurrent) {
         closeLoading();
@@ -1551,7 +1533,7 @@ class TorrentPlaybackService {
           // No closeLoading here: the loader stays up through the launch prep
           // and _launch has it dismissed when the player takes the screen.
           final idx = packs.indexOf(packWinner);
-          await _launch(
+          await SourcePlayerLaunch.launch(
             context,
             packResolved,
             packWinner.displayTitle,
@@ -1762,7 +1744,7 @@ class TorrentPlaybackService {
     } catch (e) {
       if (cancel.cancelled) return; // overlay already dismissed by Cancel
       closeLoading();
-      if (context.mounted) _snack(context, 'Search failed: $e');
+      if (context.mounted) SourceLoadingOverlays.snack(context, 'Search failed: $e');
       return;
     }
     if (cancel.cancelled) return;
@@ -1807,7 +1789,7 @@ class TorrentPlaybackService {
         if (packed != false) return;
       }
       closeLoading();
-      _snack(context, 'No sources found for "$label".');
+      SourceLoadingOverlays.snack(context, 'No sources found for "$label".');
       return;
     }
 
@@ -1816,10 +1798,10 @@ class TorrentPlaybackService {
     // performs its own final defensive ordering before selection.
     if (torrents.isEmpty) {
       closeLoading();
-      _snack(context, 'No sources match your Quick Play rules for "$label".');
+      SourceLoadingOverlays.snack(context, 'No sources match your Quick Play rules for "$label".');
       return;
     }
-    _applyLadderNote(overlay, ladder, torrents);
+    SourceLoadingOverlays.applyLadderNote(overlay, ladder, torrents);
     await playBest(
       context,
       torrents,
@@ -1845,17 +1827,8 @@ class TorrentPlaybackService {
     );
   }
 
-  static void _applyLadderNote(
-    PipelineLoadingOverlay overlay,
-    FilterLadder ladder,
-    List<Torrent> ordered,
-  ) {
-    // ignore: invalid_use_of_visible_for_testing_member
-    final note = SourceFilterLadder.ladderNote(ladder, ordered);
-    if (note != null) overlay.setNote(note);
-  }
-
-  static Future<bool> _playAddonStream(
+  // TEMP(tps): moves in step 4
+  static Future<bool> playAddonStream(
     BuildContext context,
     String id, {
     required bool isMovie,
@@ -1879,7 +1852,7 @@ class TorrentPlaybackService {
     final cancel = PlaybackCancelToken();
     // Direct addon/IPTV stream — the loader dismisses as soon as playBest opens
     // the direct stream. Neutral "Stream" identity (no debrid provider).
-    final overlay = _showPipeline(
+    final overlay = SourceLoadingOverlays.showPipeline(
       context,
       provider: 'stream',
       meta: meta,
@@ -1899,7 +1872,7 @@ class TorrentPlaybackService {
     if (meta.hasStremioEpisodeIdentity && originVideoId == null) {
       closeLoading();
       if (context.mounted) {
-        _snack(context, 'This episode is not available from its catalog.');
+        SourceLoadingOverlays.snack(context, 'This episode is not available from its catalog.');
       }
       return true;
     }
@@ -2065,7 +2038,7 @@ class TorrentPlaybackService {
       if (cancel.cancelled) return true;
       closeLoading();
       if (fallbackWhenEmpty) return false;
-      if (context.mounted) _snack(context, 'Search failed: $e');
+      if (context.mounted) SourceLoadingOverlays.snack(context, 'Search failed: $e');
       return true;
     }
     if (res['earlyDirect'] == true) {
@@ -2099,7 +2072,7 @@ class TorrentPlaybackService {
           meta: meta,
           initialEpisodeSearch: remaining,
         );
-        await _launch(
+        await SourcePlayerLaunch.launch(
           context,
           ResolvedSource(
             title: selected.displayTitle,
@@ -2214,7 +2187,7 @@ class TorrentPlaybackService {
             .where((entry) => entry.key.startsWith('mediaserver:'))
             .map((entry) => entry.value)
             .toSet();
-        _snack(
+        SourceLoadingOverlays.snack(
           context,
           nativeErrors.isEmpty
               ? '$failed didn\'t respond for "$label" — try again.'
@@ -2225,7 +2198,7 @@ class TorrentPlaybackService {
         // playable. Torrent engines were skipped (they need a provider), so the
         // actionable next step is to add one — but don't claim the title has no
         // stream at all, only that none plays without a provider.
-        _snack(
+        SourceLoadingOverlays.snack(
           context,
           noProvider
               ? 'No direct stream for "$label". Add a debrid provider in Settings for more sources.'
@@ -2261,7 +2234,7 @@ class TorrentPlaybackService {
         return false;
       }
     }
-    _applyLadderNote(overlay, ladder, torrents);
+    SourceLoadingOverlays.applyLadderNote(overlay, ladder, torrents);
     // playBest plays a direct addon stream instantly (no provider needed); if
     // there somehow isn't one it falls through to the normal provider path.
     await playBest(
@@ -2367,7 +2340,7 @@ class TorrentPlaybackService {
         // Episode not in folder → search fallback.
         return (
           null,
-          '${_seLabel(meta.season!, meta.episode!)} not found in local source. Falling back to search.',
+          '${SourceLoadingOverlays.seLabel(meta.season!, meta.episode!)} not found in local source. Falling back to search.',
         );
       }
       final playlist = episodes
@@ -2430,10 +2403,6 @@ class TorrentPlaybackService {
       null,
     );
   }
-
-  /// "S04E01"-style label for bound-source hint messages.
-  static String _seLabel(int season, int episode) =>
-      'S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}';
 
   /// Reconstruct a [Torrent] from a stored binding so it can flow through the
   /// normal add→resolve→launch pipeline (debrid dedup makes the re-add instant).
@@ -2502,7 +2471,8 @@ class TorrentPlaybackService {
   /// Play a pinned source directly (no search). Tries each bound source in
   /// priority order; returns true once one plays. Self-heals a source that is
   /// confirmed dead/uncached (removes it) so the caller can fall back to search.
-  static Future<bool> _playViaBound(
+  // TEMP(tps): moves in step 4
+  static Future<bool> playViaBound(
     BuildContext context,
     String imdbId,
     List<SeriesSource> sources, {
@@ -2522,7 +2492,7 @@ class TorrentPlaybackService {
     final cancel = PlaybackCancelToken();
     // Bound-source play: the short (prepare → start) checklist — there's no
     // search, we're resolving an already-pinned source.
-    final overlay = _showPipeline(
+    final overlay = SourceLoadingOverlays.showPipeline(
       context,
       provider: firstProv,
       meta: meta,
@@ -2619,7 +2589,7 @@ class TorrentPlaybackService {
               season: meta.season,
               episode: meta.episode,
             );
-            await _launch(
+            await SourcePlayerLaunch.launch(
               context,
               ResolvedSource(
                 title: fresh.displayTitle,
@@ -2651,7 +2621,7 @@ class TorrentPlaybackService {
                   ),
                 );
                 if (!context.mounted || !sourceBindings.isCurrent) return;
-                await _recoverAfterBoundStartupFailure(
+                await SourceBindingActions.recoverAfterBoundStartupFailure(
                   context,
                   imdbId,
                   remainingSources,
@@ -2814,7 +2784,7 @@ class TorrentPlaybackService {
               closeLoading();
               return false;
             }
-            await _launch(
+            await SourcePlayerLaunch.launch(
               context,
               ResolvedSource(
                 title: fresh.displayTitle,
@@ -2852,7 +2822,7 @@ class TorrentPlaybackService {
                   ),
                 );
                 if (!context.mounted || !sourceBindings.isCurrent) return;
-                await _recoverAfterBoundStartupFailure(
+                await SourceBindingActions.recoverAfterBoundStartupFailure(
                   context,
                   imdbId,
                   remainingSources,
@@ -2912,7 +2882,7 @@ class TorrentPlaybackService {
           }
           // Loader stays up through the launch prep; _launch has it dismissed
           // when the player takes the screen.
-          await _launch(
+          await SourcePlayerLaunch.launch(
             context,
             r,
             r.title,
@@ -2929,7 +2899,7 @@ class TorrentPlaybackService {
                   canContinue: () => context.mounted && !cancel.cancelled,
                 ),
               );
-              await _recoverAfterBoundStartupFailure(
+              await SourceBindingActions.recoverAfterBoundStartupFailure(
                 context,
                 imdbId,
                 remainingSources,
@@ -2998,7 +2968,7 @@ class TorrentPlaybackService {
             // different file. Keep the binding: it's still valid for the
             // seasons it covers.
             fallbackHint =
-                '${_seLabel(season, episode)} not in saved sources. Use Edit Source to change them.';
+                '${SourceLoadingOverlays.seLabel(season, episode)} not in saved sources. Use Edit Source to change them.';
             // RD's addMagnet / PikPak's addOfflineDownload created a fresh
             // account entry just for this attempt — delete it so repeated
             // fallbacks don't pile up orphans. TorBox/AllDebrid dedup the
@@ -3041,7 +3011,7 @@ class TorrentPlaybackService {
         }
         // Loader stays up through the launch prep; _launch has it dismissed
         // when the player takes the screen.
-        await _launch(
+        await SourcePlayerLaunch.launch(
           context,
           res,
           nativeCloud ? source.torrentName : t!.displayTitle,
@@ -3067,7 +3037,7 @@ class TorrentPlaybackService {
                 canContinue: () => context.mounted && !cancel.cancelled,
               ),
             );
-            await _recoverAfterBoundStartupFailure(
+            await SourceBindingActions.recoverAfterBoundStartupFailure(
               context,
               imdbId,
               remainingSources,
@@ -3091,58 +3061,17 @@ class TorrentPlaybackService {
     closeLoading();
     // Mirror Home: say why bound playback failed before the caller falls back
     // to a normal search.
-    if (fallbackHint != null && context.mounted) _snack(context, fallbackHint);
+    if (fallbackHint != null && context.mounted) SourceLoadingOverlays.snack(context, fallbackHint);
     return false;
   }
 
-  /// Continue after a saved source resolved successfully but the real player
-  /// rejected it before startup committed. [remainingSources] preserves the
-  /// saved priority order and [_playViaBound] keeps its exact-episode guards;
-  /// only after those candidates fail do we re-enter search below the binding
-  /// gate so the rejected source cannot loop.
-  static Future<void> _recoverAfterBoundStartupFailure(
-    BuildContext context,
-    String imdbId,
-    List<SeriesSource> remainingSources, {
-    required String label,
-    required PlaybackMeta meta,
-    String? preferredProvider,
-    bool skipLinkCache = false,
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    if (!context.mounted || !sourceBindings.isCurrent) return;
-    if (remainingSources.isNotEmpty) {
-      final played = await _playViaBound(
-        context,
-        imdbId,
-        remainingSources,
-        label: label,
-        meta: meta,
-        preferredProvider: preferredProvider,
-        skipLinkCache: skipLinkCache,
+  static PipelineLoadingOverlay showResolvingOverlay(
+    BuildContext context, {
+    required PlaybackMeta? meta,
+    required String title,
+    VoidCallback? onCancel,
+  }) => SourceLoadingOverlays.showResolvingOverlay(context, meta: meta, title: title, onCancel: onCancel);
 
-        sourceBindings: sourceBindings,
-      );
-      if (played || (!context.mounted || !sourceBindings.isCurrent)) return;
-    }
-    await playFromSelection(
-      context,
-      imdbId: imdbId,
-      isMovie: meta.contentType == 'movie',
-      season: meta.season,
-      episode: meta.episode,
-      meta: meta,
-      preferredProvider: preferredProvider,
-      skipBoundSources: true,
-
-      sourceBindings: sourceBindings,
-    );
-  }
-
-  /// Pin [torrent] as the playback source for [imdbId]. Adds it to the chosen
-  /// provider first to confirm it's instantly playable (Home only binds cached
-  /// sources); on success stores a [SeriesSource] — movies keep one, series
-  /// accumulate a priority list. Returns true if bound.
   static Future<bool> bindSource(
     BuildContext context,
     Torrent torrent, {
@@ -3153,40 +3082,8 @@ class TorrentPlaybackService {
     String? addonCatalogId,
     String? addonCatalogKey,
     ManualSourcePreparation preparation = const ManualSourcePreparation(),
-  }) => presentTorrentSourceBinding(
-    context,
-    imdbId: imdbId,
-    cancelledProvider: SourceProviderConfig.cancelled,
-    canContinue: canContinue,
-    pickProvider: () => _pickProvider(context, canContinue: canContinue),
-    showLoading: (provider) =>
-        _showLoading(context, provider, torrent.name).dismiss,
-    prepare: (provider) => preparation.prepare(
-      provider,
-      torrent,
-      canContinue: canContinue,
-    ),
-    describe: (provider) => SeriesSource(
-      torrentHash: torrent.infohash,
-      torrentName: torrent.name,
-      debridService: SourceProviderConfig.storedProviderKey(provider),
-      debridTorrentId: '',
-      boundAt: DateTime.now().millisecondsSinceEpoch,
-      addonCatalogId: addonCatalogId,
-      addonCatalogKey: addonCatalogKey,
-    ),
-    save: (source) => _persistManualBinding(
-      source,
-      imdbId: imdbId,
-      isMovie: isMovie,
-      saveBinding: saveBinding,
-    ),
-    providerLabel: _label,
-  );
+  }) => SourceBindingActions.bindSource(context, torrent, imdbId: imdbId, isMovie: isMovie, saveBinding: saveBinding, canContinue: canContinue, addonCatalogId: addonCatalogId, addonCatalogKey: addonCatalogKey, preparation: preparation);
 
-  /// Pin a playable Stremio addon stream without persisting its usually
-  /// signed/temporary URL. Playback re-queries the same addon and stream
-  /// profile for each movie play or requested series episode.
   static Future<bool> bindDirectSource(
     BuildContext context,
     Torrent torrent, {
@@ -3196,28 +3093,8 @@ class TorrentPlaybackService {
     bool Function()? canContinue,
     String? addonCatalogId,
     String? addonCatalogKey,
-  }) => presentDirectSourceBinding(
-    context,
-    torrent,
-    imdbId: imdbId,
-    canContinue: canContinue,
-    authorize: DirectSourceAuthorization.authorize,
-    describe: (source) => AutomaticSourceBindings.describe(
-      source,
-      SeriesSource.addonDirectService,
-      addonCatalogId: addonCatalogId,
-      addonCatalogKey: addonCatalogKey,
-    ),
-    save: (source) => _persistManualBinding(
-      source,
-      imdbId: imdbId,
-      isMovie: isMovie,
-      saveBinding: saveBinding,
-    ),
-  );
+  }) => SourceBindingActions.bindDirectSource(context, torrent, imdbId: imdbId, isMovie: isMovie, saveBinding: saveBinding, canContinue: canContinue, addonCatalogId: addonCatalogId, addonCatalogKey: addonCatalogKey);
 
-  /// Pin an IPTV movie or whole series by its secret-free catalog identity.
-  /// Playback always resolves the current URL from the saved connection.
   static Future<bool> bindIptvSource(
     BuildContext context,
     Torrent torrent, {
@@ -3225,1525 +3102,47 @@ class TorrentPlaybackService {
     required bool isMovie,
     Future<bool> Function(SeriesSource)? saveBinding,
     bool Function()? canContinue,
-  }) => presentIptvSourceBinding(
-    context,
-    torrent,
-    imdbId: imdbId,
-    isMovie: isMovie,
-    canContinue: canContinue,
-    authorize: DirectSourceAuthorization.authorize,
-    describe: (source) =>
-        AutomaticSourceBindings.describe(source, SeriesSource.iptvDirectService),
-    save: (source) => _persistManualBinding(
-      source,
-      imdbId: imdbId,
-      isMovie: isMovie,
-      saveBinding: saveBinding,
-    ),
-    log: logIptvSourceEvent,
-  );
+  }) => SourceBindingActions.bindIptvSource(context, torrent, imdbId: imdbId, isMovie: isMovie, saveBinding: saveBinding, canContinue: canContinue);
 
-  /// Pin an ON-DEVICE file (movie) or folder (series) as [imdbId]'s source via
-  /// the shared local picker. Desktop-only — the picker shows its own
-  /// "unavailable on mobile" message on Android/iOS (matching Home). Returns
-  /// true if a local source was pinned.
-  static Future<bool> bindLocalSource(
-    BuildContext context, {
-    required String imdbId,
-    required bool isMovie,
-    Future<bool> Function(SeriesSource)? saveBinding,
-    bool Function()? canContinue,
-    required String title,
-    String? year,
-  }) => presentLocalSourceBinding(
-    context,
-    imdbId: imdbId,
-    canContinue: canContinue,
-    pick: () => isMovie
-        ? LocalBoundSourceService.pickMovieSource(
-            context,
-            title: title,
-            canContinue: canContinue,
-            year: year,
-          )
-        : LocalBoundSourceService.pickSeriesSource(
-            context,
-            title: title,
-            canContinue: canContinue,
-          ),
-    save: (source) => _persistManualBinding(
-      source,
-      imdbId: imdbId,
-      isMovie: isMovie,
-      saveBinding: saveBinding,
-    ),
-  );
-
-  /// Compatibility writer for callers that have not migrated their binding
-  /// persistence. Sources supplies its profile-owned repository callback.
-  static Future<bool> _persistManualBinding(
-    SeriesSource source, {
-    required String imdbId,
-    required bool isMovie,
-    Future<bool> Function(SeriesSource)? saveBinding,
-  }) async {
-    if (saveBinding != null) return saveBinding(source);
-    if (isMovie) {
-      await SeriesSourceService.setSources(imdbId, [source]);
-    } else {
-      await SeriesSourceService.addSource(imdbId, source);
-    }
-    return true;
-  }
-
-  /// Whether on-device local binding is available on this platform (false on
-  /// Android/iOS). Lets the UI hide/adjust the local-pin affordance.
-  static bool get localBindingAvailable =>
-      !LocalBoundSourceService.isLocalBindingDisabled;
-
-  // ── Post-action branch handlers ────────────────────────────────────────────
-
-  static Future<void> _play(
-    BuildContext context,
-    ResolvedSource r,
-    Torrent torrent, {
-    required String provider,
-    PlaybackMeta? meta,
-    List<Torrent>? sources,
-    int sourceIndex = 0,
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    if (r.playUrl == null || r.playUrl!.isEmpty) {
-      _snack(context, 'No playable link for this source.');
-      return;
-    }
-    // Refuse a resolved single file that clearly isn't a video (parity with the
-    // old screen's MIME check). Scoped to KEYWORD play (meta == null) so this
-    // shared path doesn't add a new constraint to catalog board plays. Only
-    // fires when we know the real filename; packs are video-filtered upstream.
-    if (meta == null &&
-        !r.hasPlaylist &&
-        r.fileName != null &&
-        r.fileName!.isNotEmpty &&
-        !FileUtils.isVideoFile(r.fileName!)) {
-      _snack(
-        context,
-        'Added to ${_label(provider)}, but the file is not a video.',
-      );
-      return;
-    }
-    // For keyword play (no catalog meta) prefer the provider's canonical file
-    // name as the title, so the player's resume/Continue-Watching key matches
-    // the same item played from the Debrid screen (old-screen parity). Catalog
-    // play keeps its clean meta title.
-    final playTitle =
-        (meta == null &&
-            !r.hasPlaylist &&
-            r.fileName != null &&
-            r.fileName!.isNotEmpty)
-        ? r.fileName!
-        : torrent.displayTitle;
-    await _launch(
-      context,
-      r,
-      playTitle,
-      provider: provider,
-      meta: meta,
-      sources: sources ?? [torrent],
-      sourceIndex: sourceIndex,
-
-      sourceBindings: sourceBindings,
-    );
-  }
-
-  /// Player "Next Episode" hand-back (matching Home's _quickPlayNextCallback):
-  /// when a series playback runs out of playlist items and the user taps Next,
-  /// both players hand the next episode back to the host — the Flutter player
-  /// pops with a quickPlayNext payload and the Android TV activity requests it
-  /// over the bridge (VideoPlayerLauncher resolves both to the same callback).
-  /// Without this callback the launcher drops the request and the player just
-  /// closes.
-  ///
-  /// [provider] is the debrid provider the CURRENT episode played with (null
-  /// for direct addon streams and local bound sources) — the advance reuses it
-  /// so a binge never re-prompts the provider picker mid-chain.
-  static Future<void> Function(Map<String, dynamic>)? _nextEpisodeHandlerFor(
-    BuildContext context,
-    PlaybackMeta? meta, {
-    String? provider,
-    required AutomaticSourceBindings sourceBindings,
-  }) {
-    final imdbId = meta?.imdbId;
-    if (meta == null ||
-        meta.contentType != 'series' ||
-        imdbId == null ||
-        imdbId.isEmpty) {
-      return null;
-    }
-    return (Map<String, dynamic> result) async {
-      // Both players already resolved WHICH episode comes next (via
-      // NextEpisodeService) — the payload names it directly.
-      final season = result['season'] as int?;
-      final episode = result['episode'] as int?;
-      if (season == null || episode == null) return;
-      final nextMeta = PlaybackMeta(
-        imdbId: imdbId,
-        contentType: 'series',
-        season: season,
-        episode: episode,
-        title: meta.title,
-        posterUrl: meta.posterUrl,
-        year: meta.year,
-        addonId: meta.addonId,
-        catalogItem: meta.catalogItem,
-        stremioAddonId: meta.stremioAddonId,
-        stremioAddonKey: meta.stremioAddonKey,
-        stremioCatalogId: meta.stremioCatalogId,
-        // Keep scrobbling across the binge — a Trakt-row play must not stop
-        // updating Trakt (and start saving duplicate local Continue Watching
-        // entries) from episode 2 onward. Home drops this and goes stale
-        // mid-binge; deliberately better here. traktProgressPercent IS
-        // dropped: the next episode starts fresh, not at the previous
-        // episode's resume point. Same for the Simkl pair.
-        traktScrobble: meta.traktScrobble,
-        simklScrobble: meta.simklScrobble,
-        mdblistScrobble: meta.mdblistScrobble,
-        resumePolicy: meta.resumePolicy,
-        // Show-level artwork, so the loader keeps its backdrop and logo for
-        // every episode of a binge instead of falling back to the poster from
-        // episode 2 onward. Nothing in it is episode-specific.
-        art: meta.art,
-      );
-      // Defer one frame (matching Home's addPostFrameCallback) so the previous
-      // episode's entire play chain unwinds before the next one starts — an
-      // awaited re-entry would nest one full search+play chain per episode,
-      // retaining every prior episode's scopes across a binge.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!context.mounted || !sourceBindings.isCurrent) return;
-        unawaited(
-          _advanceToNextEpisode(
-            context,
-            imdbId: imdbId,
-            meta: nextMeta,
-            provider: provider,
-
-            sourceBindings: sourceBindings,
-          ),
-        );
-      });
-    };
-  }
-
-  /// Play the next episode of a binge. Provider-backed playbacks re-enter
-  /// [playFromSelection] with the provider the previous episode used; direct
-  /// addon-stream / local playbacks (no debrid provider) replay bound sources
-  /// first, then the addon-stream flow — which plays direct streams without a
-  /// provider, i.e. the same path that produced the episode being advanced.
-  static Future<void> _advanceToNextEpisode(
-    BuildContext context, {
-    required String imdbId,
-    required PlaybackMeta meta,
-    String? provider,
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    logSourceSelection(
-      'next_episode_start',
-      season: meta.season,
-      episode: meta.episode,
-    );
-    final label = meta.title ?? '';
-    if (provider != null) {
-      await playFromSelection(
-        context,
-        imdbId: imdbId,
-        isMovie: false,
-        season: meta.season,
-        episode: meta.episode,
-        meta: meta,
-        preferredProvider: provider,
-
-        sourceBindings: sourceBindings,
-      );
-      return;
-    }
-    final bound = (await SeriesSourceService.getSources(
-      imdbId,
-    )).where((source) => SourceCandidateChecks.bindingMatchesMeta(source, meta)).toList();
-    if (!context.mounted || !sourceBindings.isCurrent) return;
-    if (bound.isNotEmpty && meta.season != null && meta.episode != null) {
-      final played = await _playViaBound(
-        context,
-        imdbId,
-        bound,
-        label: label,
-        meta: meta,
-
-        sourceBindings: sourceBindings,
-      );
-      if (played) return;
-      if (!context.mounted || !sourceBindings.isCurrent) return;
-    }
-    final rules = await StorageService.getQuickPlayRules(isMovie: false);
-    if (!context.mounted || !sourceBindings.isCurrent) return;
-    await _playAddonStream(
-      context,
-      imdbId,
-      isMovie: false,
-      season: meta.season,
-      episode: meta.episode,
-      meta: meta,
-      label: label,
-      rules: rules,
-
-      sourceBindings: sourceBindings,
-    );
-  }
-
-  /// Shared meta → player-args plumbing. ONE place builds the content-identity
-  /// fields for every push site — a field missed at a single site would
-  /// silently break Continue Watching / scrobble / Next Episode for that entry
-  /// path only.
-  static VideoPlayerLaunchArgs _playerArgs({
-    required String videoUrl,
-    required String title,
-    String? subtitle,
-    List<PlaylistEntry>? playlist,
-    int? startIndex,
-    List<Torrent>? stremioSources,
-    int? stremioCurrentSourceIndex,
-    SourcePlaylistResolve? resolveSourceToPlaylist,
-    bool startupFailoverEnabled = false,
-    String? startupResolverProvider,
-    Future<void> Function(Torrent)? onStremioSourceCommitted,
-    Future<void> Function()? onStartupSourcesExhausted,
-    bool startupHasRemainingSavedSources = false,
-    SeriesSourceFetcher? seriesSourceFetcher,
-    PlaybackMeta? meta,
-    String? rdTorrentId,
-    int? torboxTorrentId,
-    PlaylistViewMode? viewMode,
-    Map<String, String>? httpHeaders,
-  }) => VideoPlayerLaunchArgs(
-    // External apps receive only the URL, not media-server session headers.
-    // Continuous shuffle also needs the in-app episode-fetch/EOF callbacks.
-    disableExternalPlayer:
-        (meta?.initialContinuousShuffle ?? false) ||
-        (httpHeaders?.keys.any((key) => key.toLowerCase() == 'x-emby-token') ??
-            false),
-    initialContinuousShuffle: meta?.initialContinuousShuffle ?? false,
-    videoUrl: videoUrl,
-    httpHeaders: httpHeaders,
-    title: title,
-    subtitle: subtitle,
-    playlist: playlist,
-    startIndex: startIndex,
-    viewMode: viewMode,
-    stremioSources: stremioSources,
-    stremioCurrentSourceIndex: stremioCurrentSourceIndex,
-    resolveSourceToPlaylist: resolveSourceToPlaylist,
-    startupFailoverEnabled: startupFailoverEnabled,
-    startupResolverProvider: startupResolverProvider,
-    onStremioSourceCommitted: onStremioSourceCommitted,
-    onStartupSourcesExhausted: onStartupSourcesExhausted,
-    startupHasRemainingSavedSources: startupHasRemainingSavedSources,
-    seriesSourceFetcher: seriesSourceFetcher,
-    contentImdbId: meta?.progressIdentity,
-    contentType: meta?.contentType,
-    contentSeason: meta?.season,
-    contentEpisode: meta?.episode,
-    contentTitle: meta?.title,
-    posterUrl: meta?.posterUrl,
-    contentYear: meta?.year,
-    addonId: meta?.addonId,
-    suppressTrackerAutoSync: meta?.hasStremioEpisodeIdentity ?? false,
-    traktScrobble: meta?.hasStremioEpisodeIdentity == true
-        ? false
-        : meta?.traktScrobble ?? false,
-    traktProgressPercent: meta?.hasStremioEpisodeIdentity == true
-        ? null
-        : meta?.traktProgressPercent,
-    simklScrobble: meta?.hasStremioEpisodeIdentity == true
-        ? false
-        : meta?.simklScrobble ?? false,
-    simklProgressPercent: meta?.hasStremioEpisodeIdentity == true
-        ? null
-        : meta?.simklProgressPercent,
-    mdblistScrobble: meta?.hasStremioEpisodeIdentity == true
-        ? false
-        : meta?.mdblistScrobble ?? false,
-    mdblistProgressPercent: meta?.hasStremioEpisodeIdentity == true
-        ? null
-        : meta?.mdblistProgressPercent,
-    resumePolicy: meta?.resumePolicy ?? PlaybackResumePolicy.sourceSpecific,
-    // Debrid torrent ids let the player back-fill poster/IMDb onto a saved
-    // Playlist-library entry and power the in-player "Fix Metadata" action
-    // (matching Home). PikPak is intentionally omitted: the launcher wants a
-    // collection/folder id, but _Resolved only carries a per-file id.
-    rdTorrentId: rdTorrentId,
-    torboxTorrentId: torboxTorrentId?.toString(),
-  );
-
-  @visibleForTesting
-  static VideoPlayerLaunchArgs playerArgsForTesting(
-    PlaybackMeta? meta, {
-    Map<String, String>? httpHeaders,
-  }) => _playerArgs(videoUrl: 'video', title: 'Title', meta: meta, httpHeaders: httpHeaders);
-
-  static bool _isNonDebridLaunchProvider(String provider) =>
-      provider == SeriesSource.localService ||
-      provider == SeriesSource.addonDirectService ||
-      provider == SeriesSource.mediaServerService ||
-      provider == SeriesSource.iptvDirectService;
-
-  /// In-player Sources-switcher resolver for launches that didn't go through a
-  /// debrid provider (direct addon streams). Direct streams resolve without
-  /// one; a torrent switch silently uses the default/first-configured provider
-  /// (matching Home's _createSourcePlaylistResolver) and fails gracefully
-  /// (null) when none is configured.
-  static SourcePlaylistResolve _lazyProviderResolver(
-    SourceBindingCommitter committer,
-  ) => _resolverFor(null, committer);
-
-  /// Launch the player. Passes the full source list + a resolver (so the player
-  /// shows the in-player "Sources" switcher) and content metadata (so Continue
-  /// Watching, subtitles and the Episodes button work) — matching Home.
-  static Future<void> _launch(
-    BuildContext context,
-    ResolvedSource r,
-    String title, {
-    required String provider,
-    String? recoveryProvider,
-    PlaybackMeta? meta,
-    List<Torrent>? sources,
-    int sourceIndex = 0,
-    // "Load more sources" backend for the player's series source tabs (packs
-    // vs episodes) — null for movies/keyword plays, which keep the flat list.
-    SeriesSourceFetcher? seriesFetcher,
-    // The play flow's still-showing loader, when the caller kept it up. It
-    // covers the whole launch prep (auto-bind writes, the TV payload build
-    // with its debrid link resolution, the native activity start) and the
-    // launcher dismisses it only when the player actually takes the screen —
-    // closing the detail-screen flash between "loading" and "playing".
-    PipelineLoadingOverlay? overlay,
-    bool startupFailoverEnabled = false,
-    Future<void> Function()? onStartupSourcesExhausted,
-    bool startupHasRemainingSavedSources = false,
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    // Once push() takes the handoff callback the LAUNCHER owns the dismissal
-    // (player-visible time, or its own always-fires safety net); the finally
-    // here only covers exits before that point. dismiss() is idempotent.
-    var loaderHandedToLauncher = false;
-    SourceBindingCommitter? committer;
-    try {
-      // Secondary metadata line (file size / source / file count), matching Home.
-      final winner =
-          (sources != null && sourceIndex >= 0 && sourceIndex < sources.length)
-          ? sources[sourceIndex]
-          : null;
-      logSourceSelection(
-        'launch_candidate',
-        source: winner,
-        index: sourceIndex,
-        season: meta?.season,
-        episode: meta?.episode,
-        reason: startupFailoverEnabled
-            ? 'automatic_with_fallback'
-            : 'explicit_or_saved',
-      );
-      String? subtitleLine;
-      if (r.hasPlaylist) {
-        subtitleLine = '${r.playlist!.length} files';
-      } else if (winner != null) {
-        subtitleLine = winner.sizeBytes > 0
-            ? Formatters.formatFileSize(winner.sizeBytes)
-            : (winner.source.isNotEmpty ? winner.source : null);
-      }
-      // Organize the playlist as a TV series when the file names look like one, so
-      // a keyword-launched season pack groups by season/episode and "next" walks
-      // episode order — parity with the old screen. Scoped to KEYWORD play
-      // (meta == null): catalog already drives series/movie view from its own
-      // contentType, so this shared launcher must not override that. We pass
-      // `series` only when detected and leave it null otherwise (null lets the
-      // launcher's contentType fallback win).
-      final PlaylistViewMode? viewMode =
-          (meta == null && r.hasPlaylist && _isSeriesPlaylist(r.playlist!))
-          ? PlaylistViewMode.series
-          : null;
-      // VR hand-off (parity with the old search screen): for a single video file
-      // played from KEYWORD search (meta == null), when the user's VR mode says
-      // so, play in DeoVR instead of the in-app player. Scoped to keyword so this
-      // shared launcher doesn't newly divert catalog board plays. Packs keep the
-      // normal player (DeoVR takes one video).
-      if (meta == null && !r.hasPlaylist && await _shouldUseDeoVR(title)) {
-        // DeoVR runs its own dialog flow — drop the loader before it.
-        overlay?.dismiss();
-        if (!context.mounted || !sourceBindings.isCurrent) return;
-        await _launchWithDeoVR(context, videoUrl: r.playUrl!, filename: title);
-        return;
-      }
-      // Args built BEFORE the flag flips: a throw while constructing them
-      // must still hit the finally's dismiss, since push() never ran.
-      // Snapshot the provider used for any fetched torrent candidates. Native
-      // startup must know it before recovery so PikPak's acquisition cap also
-      // applies when the initial saved source is a direct link.
-      final resolverProvider = _isNonDebridLaunchProvider(provider)
-          ? recoveryProvider ??
-                await SourceProviderConfig.defaultConfiguredProvider(
-                  canContinue: () =>
-                      context.mounted && sourceBindings.isCurrent,
-                )
-          : provider;
-      if (!context.mounted || !sourceBindings.isCurrent) return;
-      committer = _isNonDebridLaunchProvider(provider)
-          ? _lazySourceCommitter(
-              meta,
-              preferredProvider: resolverProvider,
-              sourceBindings: sourceBindings,
-            )
-          : _validatedLaunchCommitter(
-              provider,
-              meta,
-              sourceBindings: sourceBindings,
-            );
-      final args = _playerArgs(
-        videoUrl: r.playUrl!,
-        httpHeaders: r.httpHeaders,
-        title: title,
-        subtitle: subtitleLine,
-        playlist: r.hasPlaylist ? r.playlist : null,
-        startIndex: r.hasPlaylist ? r.startIndex : null,
-        stremioSources: sources,
-        stremioCurrentSourceIndex: sources != null ? sourceIndex : null,
-        // A single-source launch still needs the resolver when the fetcher is
-        // along: "Load more" grows the list mid-session and the new entries
-        // must be switchable. A bound 'local' launch has no debrid provider —
-        // the lazy variant resolves one silently at switch time.
-        resolveSourceToPlaylist:
-            (sources != null &&
-                sources.isNotEmpty &&
-                (sources.length > 1 || seriesFetcher != null))
-            ? (resolverProvider == null
-                  ? _lazyProviderResolver(committer)
-                  : _resolverFor(resolverProvider, committer))
-            : null,
-        startupFailoverEnabled: startupFailoverEnabled,
-        startupResolverProvider: resolverProvider,
-        onStremioSourceCommitted: committer.call,
-        onStartupSourcesExhausted: onStartupSourcesExhausted,
-        startupHasRemainingSavedSources: startupHasRemainingSavedSources,
-        seriesSourceFetcher: seriesFetcher,
-        meta: meta,
-        rdTorrentId: r.rdTorrentId,
-        torboxTorrentId: r.torboxTorrentId,
-        viewMode: viewMode,
-      );
-      // 'local' isn't a debrid provider the advance could search with — the
-      // null makes the advance replay bound sources first, then addon streams.
-      final nextEpisodeHandler = _nextEpisodeHandlerFor(
-        context,
-        meta,
-        provider: _isNonDebridLaunchProvider(provider) ? null : provider,
-
-        sourceBindings: sourceBindings,
-      );
-      loaderHandedToLauncher = overlay != null;
-      await VideoPlayerLauncher.push(
-        context,
-        args,
-        retainSourceSession: committer.retain,
-        sourceOwner: committer.bindings.owner,
-        canContinue: () => committer!.isCurrent,
-        onPlayerHandoff: overlay?.dismiss,
-        onQuickPlayNextEpisode: nextEpisodeHandler,
-      );
-    } finally {
-      committer?.close();
-      if (!loaderHandedToLauncher) overlay?.dismiss();
-    }
-  }
-
-  /// Whether VR playback (DeoVR) should be used for [filename], per the user's
-  /// VR-mode setting. Android-only. Ported from the old search screen.
-  static Future<bool> _shouldUseDeoVR(String filename) async {
-    if (!Platform.isAndroid) return false;
-    final vrMode = await StorageService.getQuickPlayVrMode();
-    switch (vrMode) {
-      case 'always':
-        return true;
-      case 'auto':
-        return deovr.isVrContent(filename);
-      case 'disabled':
-      default:
-        return false;
-    }
-  }
-
-  /// Hand a single video file off to DeoVR: pick a screen/stereo format (auto
-  /// from the filename or the user's defaults, optionally confirmed via a
-  /// dialog), upload a DeoVR JSON descriptor to jsonblob, then launch the
-  /// `deovr://` intent. Ported verbatim from the old search screen.
-  static Future<void> _launchWithDeoVR(
-    BuildContext context, {
-    required String videoUrl,
-    required String filename,
-  }) async {
-    if (!Platform.isAndroid) return;
-    // Capture the root navigator while context is synchronously valid, so the
-    // loading overlay can always be dismissed even if the widget unmounts during
-    // the awaited upload below.
-    final rootNav = Navigator.of(context, rootNavigator: true);
-
-    final autoDetectFormat =
-        await StorageService.getQuickPlayVrAutoDetectFormat();
-    final showFormatDialog = await StorageService.getQuickPlayVrShowDialog();
-
-    String screenType;
-    String stereoMode;
-    if (autoDetectFormat) {
-      final detected = deovr.detectVRFormat(filename);
-      screenType = detected.screenType;
-      stereoMode = detected.stereoMode;
-    } else {
-      screenType = await StorageService.getQuickPlayVrDefaultScreenType();
-      stereoMode = await StorageService.getQuickPlayVrDefaultStereoMode();
-    }
-
-    if (showFormatDialog && context.mounted) {
-      String selectedScreenType = screenType;
-      String selectedStereoMode = stereoMode;
-      final result = await showDialog<bool>(
-        context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            title: const Text('DeoVR Format'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  filename,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Screen Type',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: selectedScreenType,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  items: deovr.screenTypeLabels.entries
-                      .map(
-                        (e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(e.value),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => selectedScreenType = value);
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Stereo Mode',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: selectedStereoMode,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  items: deovr.stereoModeLabels.entries
-                      .map(
-                        (e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(e.value),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => selectedStereoMode = value);
-                    }
-                  },
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  DialogTapGuard.markKeyAction();
-                  Navigator.of(context).pop(false);
-                },
-                child: const Text('Cancel'),
-              ),
-              FilledButton.icon(
-                onPressed: () {
-                  DialogTapGuard.markKeyAction();
-                  Navigator.of(context).pop(true);
-                },
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Play'),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (result != true || !context.mounted) return;
-      screenType = selectedScreenType;
-      stereoMode = selectedStereoMode;
-    }
-
-    // Tracks whether the blocking loading dialog is still on screen, so the
-    // catch below never pops the underlying screen after we've already
-    // dismissed the dialog (e.g. a failed `intent.launch()` when DeoVR isn't
-    // installed would otherwise bounce the user back a screen).
-    bool loadingShown = false;
-    try {
-      if (context.mounted) {
-        loadingShown = true;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) =>
-              const Center(child: CircularProgressIndicator()),
-        );
-      }
-
-      final json = deovr.generateDeoVRJson(
-        videoUrl: videoUrl,
-        title: filename,
-        screenType: screenType,
-        stereoMode: stereoMode,
-      );
-      final response = await http.post(
-        Uri.parse('https://jsonblob.com/api/jsonBlob'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(json),
-      );
-      if (response.statusCode != 201) {
-        throw Exception('Failed to upload JSON: ${response.statusCode}');
-      }
-      final location = response.headers['location'];
-      if (location == null) {
-        throw Exception('No location header in response');
-      }
-      final jsonUrl = 'https://jsonblob.com$location';
-
-      if (loadingShown) {
-        rootNav.pop();
-        loadingShown = false;
-      }
-
-      final intent = AndroidIntent(
-        action: 'action_view',
-        data: 'deovr://$jsonUrl',
-      );
-      await intent.launch();
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Launching DeoVR...'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (loadingShown) rootNav.pop();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to open with DeoVR: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  /// Builds the in-player source-switch resolver: given another [Torrent] the
-  /// user picked, add it to [provider] and return its playlist (so switching
-  /// sources works without leaving the player).
-  static SourcePlaylistResolve _resolverFor(
-    String? provider,
-    SourceBindingCommitter committer,
-  ) => SourcePlaylistResolver(
-    owner: committer.bindings.owner,
-    provider: provider,
-    canContinue: () => committer.isCurrent,
-    chooseProvider: (active) => SourceProviderConfig.defaultConfiguredProvider(canContinue: active),
-  ).resolve;
-
-  static SourceBindingCommitter _validatedLaunchCommitter(
-    String provider,
-    PlaybackMeta? meta, {
-    required AutomaticSourceBindings sourceBindings,
-  }) => SourceBindingCommitter(
-    bindings: sourceBindings,
-    meta: meta,
-    provider: provider,
-    chooseProvider: (active) => SourceProviderConfig.defaultConfiguredProvider(canContinue: active),
-  );
-
-  @visibleForTesting
-  static Future<void> Function(Torrent) validatedSourceCommitterForTesting(
-    String provider,
-    PlaybackMeta? meta,
-  ) => _validatedLaunchCommitter(
-    provider,
-    meta,
-    sourceBindings: AutomaticSourceBindings.capture(),
-  ).call;
-
-  static SourceBindingCommitter _lazySourceCommitter(
-    PlaybackMeta? meta, {
-    String? preferredProvider,
-    required AutomaticSourceBindings sourceBindings,
-  }) => SourceBindingCommitter(
-    bindings: sourceBindings,
-    meta: meta,
-    provider: preferredProvider,
-    lazy: true,
-    chooseProvider: (active) => SourceProviderConfig.defaultConfiguredProvider(canContinue: active),
-  );
-
-  /// Native media-server streams need credential-aware background downloads,
-  /// including redirect and resource-revocation handling, before enabling this.
-  static bool supportsDirectStreamDownload(Torrent torrent) =>
-      SourceDownload.supports(torrent);
-
-  /// Download a direct/external addon stream to device (parity with the old
-  /// screen's direct-stream "Download to device" action). Follows redirects
-  /// first — MediaFusion-style playback URLs 30x-hop to the real file — then
-  /// queues the resolved URL.
   static Future<void> downloadDirectStream(
     BuildContext context,
     Torrent torrent,
-  ) => downloadSource(context, torrent, const SourceDownload());
+  ) => ProviderAcceptedActions.downloadDirectStream(context, torrent);
 
-  /// User-requested provider actions (download, playlist add, ZIP, transfer,
-  /// keep-on-provider) finish once accepted, even if the user leaves the
-  /// screen meanwhile — as before the refactor. The operations still reject a
-  /// profile switch through their captured owner, and every snackbar checks
-  /// `context.mounted` itself.
-  static bool _acceptedProviderAction() => true;
+  static bool supportsDirectStreamDownload(Torrent torrent) => ProviderAcceptedActions.supportsDirectStreamDownload(torrent);
 
-  static Future<void> _download(
-    BuildContext context,
-    ResolvedSource r,
-    Torrent torrent,
-    String provider, {
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    final actions = ProviderSourceActions(
-      owner: sourceBindings.owner,
-      canContinue: _acceptedProviderAction,
-    );
-    if (!context.mounted || !actions.isCurrent) return;
-    if (r.playlist != null && r.playlist!.length > 1) {
-      final chosen = await showSourceDownloadPicker(context, r.playlist!);
-      if (chosen == null || chosen.isEmpty || !actions.isCurrent) return;
-      final n = await actions.queueEntries(
-        chosen,
-        provider: provider,
-        torrentName: torrent.displayTitle,
-      );
-      if (context.mounted && actions.isCurrent) {
-        _snack(
-          context,
-          n > 0
-              ? 'Queued $n file(s) for download.'
-              : 'Could not queue downloads.',
-        );
-      }
-      return;
-    }
-    if (r.playlist?.isNotEmpty == true) {
-      final n = await actions.queueEntries(
-        r.playlist!,
-        provider: provider,
-        torrentName: torrent.displayTitle,
-      );
-      if (context.mounted && actions.isCurrent) {
-        _snack(
-          context,
-          n > 0 ? 'Download queued.' : 'Could not queue download.',
-        );
-      }
-      return;
-    }
-    final url = r.downloadUrls.isNotEmpty ? r.downloadUrls.first : null;
-    if (url == null) {
-      _snack(context, 'Nothing to download for this source.');
-      return;
-    }
-    try {
-      await actions.queueUrl(
-        url,
-        provider: provider,
-        fileName: r.fileName ?? torrent.displayTitle,
-        torrentName: torrent.displayTitle,
-      );
-    } catch (_) {}
-    // Preserve the legacy single-URL feedback, including its best-effort enqueue.
-    if (context.mounted && actions.isCurrent) {
-      _snack(context, 'Download queued.');
-    }
-  }
+  static SeriesSourceFetcher? seriesFetcherFor({
+    required PlaybackMeta? meta,
+    String? provider,
+    bool packsFetched = false,
+    bool episodesFetched = false,
+    Future<List<Torrent>>? initialEpisodeSearch,
+  }) => SourceSeriesFetcher.seriesFetcherFor(meta: meta, provider: provider, packsFetched: packsFetched, episodesFetched: episodesFetched, initialEpisodeSearch: initialEpisodeSearch);
 
-  static Future<void> _addToPlaylist(
-    BuildContext context,
-    ResolvedSource r,
-    Torrent torrent,
-    String provider, {
-    PlaybackMeta? meta,
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    final playlist = SourcePlaylist(
-      owner: sourceBindings.owner,
-      canContinue: _acceptedProviderAction,
-    );
-    if (!playlist.isCurrent) return;
-    final ok = await playlist.add(r, torrent, provider, meta: meta);
-    if (context.mounted && playlist.isCurrent) {
-      _snack(context, ok ? 'Added to playlist.' : 'Already in playlist.');
-    }
-  }
+  static Future<List<Torrent>> prepareRecoverySources(
+    List<Torrent> raw, {
+    required QuickPlayRules rules,
+    required String? provider,
+    required FilterLadder ladder,
+    Future<List<Torrent>> Function(String, List<Torrent>)? cacheCheck,
+  }) => RecoverySourceResolution.prepareRecoverySources(raw, rules: rules, provider: provider, ladder: ladder, cacheCheck: cacheCheck);
 
-  /// The app's real post-add chooser (glass card + styled tiles), with the full
-  /// option set — Play / Download / Add to playlist / Add to channel / Open in
-  /// provider tab — matching Home's per-provider sheets.
-  static Future<void> _showChooser(
-    BuildContext context,
-    ResolvedSource r,
-    Torrent torrent,
-    String provider, {
-    String? magnet,
-    PlaybackMeta? meta,
-    List<Torrent>? sources,
-    int sourceIndex = 0,
-    String searchKeyword = '',
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    final hasVideo = r.playUrl != null && r.playUrl!.isNotEmpty;
-    final name = torrent.displayTitle;
-    await showDebridActionSheet(
-      context,
-      providerLabel: _label(provider),
-      torrentName: name,
-      gradient: _providerGradient(provider),
-      providerIcon: _providerIcon(provider),
-      subtitle: hasVideo
-          ? 'Ready on ${_label(provider)}. Choose your next step.'
-          : 'Added to ${_label(provider)}.',
-      actions: [
-        DebridActionItem(
-          icon: Icons.play_circle_fill_rounded,
-          color: const Color(0xFF10B981),
-          title: 'Play now',
-          subtitle: 'Stream it right away.',
-          pillLabel: 'Play',
-          enabled: hasVideo,
-          onTap: () => unawaited(
-            _play(
-              context,
-              r,
-              torrent,
-              provider: provider,
-              meta: meta,
-              sources: sources,
-              sourceIndex: sourceIndex,
-
-              sourceBindings: sourceBindings,
-            ),
-          ),
-        ),
-        // The service refuses anyway, but a profile that can't download
-        // shouldn't be offered a button that only fails.
-        if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads))
-          DebridActionItem(
-            icon: Icons.download_rounded,
-            color: const Color(0xFF3B82F6),
-            title: 'Download to device',
-            subtitle: 'Grab the file(s) via ${_label(provider)}.',
-            pillLabel: 'Download',
-            onTap: () => unawaited(
-              _download(
-                context,
-                r,
-                torrent,
-                provider,
-                sourceBindings: sourceBindings,
-              ),
-            ),
-          ),
-        DebridActionItem(
-          icon: Icons.playlist_add_rounded,
-          color: const Color(0xFF8B5CF6),
-          title: 'Add to playlist',
-          subtitle: 'Save it to your playlist for later.',
-          pillLabel: 'Playlist',
-          enabled: hasVideo,
-          onTap: () => unawaited(
-            _addToPlaylist(
-              context,
-              r,
-              torrent,
-              provider,
-              meta: meta,
-              sourceBindings: sourceBindings,
-            ),
-          ),
-        ),
-        DebridActionItem(
-          icon: Icons.connected_tv,
-          color: const Color(0xFF14B8A6),
-          title: 'Add to channel',
-          subtitle: 'Cache this torrent in a Debrify TV channel.',
-          onTap: () => unawaited(
-            DebrifyTvChannelAddBridge.addTorrentsToChannel(
-              context,
-              torrents: [torrent],
-              searchKeyword: searchKeyword,
-              owner: sourceBindings.owner,
-              canContinue: () => sourceBindings.isCurrent,
-            ),
-          ),
-        ),
-        // TorBox power actions: download the whole-torrent ZIP to device, or
-        // copy its permalink (parity with the old screen's TorBox download menu).
-        if (provider == 'torbox' && r.torboxTorrentId != null) ...[
-          DebridActionItem(
-            icon: Icons.folder_zip_rounded,
-            color: const Color(0xFFA78BFA),
-            title: 'Download as ZIP',
-            subtitle: 'Download all files as a ZIP to this device.',
-            onTap: () => unawaited(
-              _downloadTorboxZip(
-                context,
-                r.torboxTorrentId!,
-                name,
-                sourceBindings: sourceBindings,
-              ),
-            ),
-          ),
-          DebridActionItem(
-            icon: Icons.link_rounded,
-            color: const Color(0xFFEC4899),
-            title: 'Copy Download Link (Zip)',
-            subtitle: 'Copy ZIP download link to clipboard.',
-            onTap: () => unawaited(
-              _copyTorboxZipLink(
-                context,
-                r.torboxTorrentId!,
-                sourceBindings: sourceBindings,
-              ),
-            ),
-          ),
-        ],
-        // Premiumize power actions (need the magnet — cloud transfer + ZIP).
-        if (provider == 'premiumize' && magnet != null) ...[
-          DebridActionItem(
-            icon: Icons.cloud_upload_rounded,
-            color: const Color(0xFFF59E0B),
-            title: 'Transfer to Premiumize',
-            subtitle: 'Add this torrent to your Premiumize cloud.',
-            onTap: () => unawaited(
-              _premiumizeTransfer(
-                context,
-                magnet,
-                sourceBindings: sourceBindings,
-              ),
-            ),
-          ),
-          DebridActionItem(
-            icon: Icons.folder_zip_rounded,
-            color: const Color(0xFFA78BFA),
-            title: 'Download as ZIP',
-            subtitle: 'Transfer to cloud and download all files as a ZIP.',
-            onTap: () => unawaited(
-              _premiumizeZip(
-                context,
-                magnet,
-                name,
-                copyOnly: false,
-                sourceBindings: sourceBindings,
-              ),
-            ),
-          ),
-          DebridActionItem(
-            icon: Icons.link_rounded,
-            color: const Color(0xFFEC4899),
-            title: 'Copy ZIP Link',
-            subtitle: 'Copy ZIP download link to clipboard.',
-            onTap: () => unawaited(
-              _premiumizeZip(
-                context,
-                magnet,
-                name,
-                copyOnly: true,
-                sourceBindings: sourceBindings,
-              ),
-            ),
-          ),
-        ],
-        if (r.openInTab != null)
-          DebridActionItem(
-            icon: Icons.open_in_new_rounded,
-            color: const Color(0xFF6366F1),
-            title: 'Open in provider tab',
-            subtitle: r.isRarArchive
-                ? 'Not available for RAR archives'
-                : 'View it in ${_label(provider)}.',
-            enabled: !r.isRarArchive,
-            onTap: () {
-              if (context.mounted && sourceBindings.isCurrent) {
-                r.openInTab!.call();
-              }
-            },
-          ),
-      ],
-    );
-  }
-
-  // ── Provider-specific power actions (TorBox / Premiumize) ───────────────────
-
-  static Future<void> _copyTorboxZipLink(
-    BuildContext context,
-    int torrentId, {
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    final actions = ProviderSourceActions(
-      owner: sourceBindings.owner,
-      canContinue: _acceptedProviderAction,
-    );
-    if (!context.mounted || !actions.isCurrent) return;
-    final String? url;
-    try {
-      url = await actions.torboxZipUrl(torrentId);
-    } catch (_) {
-      return;
-    }
-    if (url == null || !actions.isCurrent) return;
-    await Clipboard.setData(ClipboardData(text: url));
-    if (context.mounted && actions.isCurrent) {
-      _snack(context, 'ZIP download link copied to clipboard!');
-    }
-  }
-
-  static Future<void> _downloadTorboxZip(
-    BuildContext context,
-    int torrentId,
-    String name, {
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    final actions = ProviderSourceActions(
-      owner: sourceBindings.owner,
-      canContinue: _acceptedProviderAction,
-    );
-    if (!context.mounted || !actions.isCurrent) return;
-    try {
-      final queued = await actions.queueTorboxZip(torrentId, name);
-      if (context.mounted && queued && actions.isCurrent) {
-        _snack(context, 'ZIP download queued.');
-      }
-    } catch (_) {
-      if (context.mounted && actions.isCurrent) {
-        _snack(context, 'Failed to queue ZIP download.');
-      }
-    }
-  }
-
-  static Future<void> _premiumizeTransfer(
-    BuildContext context,
-    String magnet, {
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    final actions = ProviderSourceActions(
-      owner: sourceBindings.owner,
-      canContinue: _acceptedProviderAction,
-    );
-    if (!context.mounted || !actions.isCurrent) return;
-    try {
-      final accepted = await actions.transferPremiumize(magnet);
-      if (context.mounted && accepted && actions.isCurrent) {
-        _snack(
-          context,
-          'Added to Premiumize. It will be available once the download finishes.',
-        );
-      }
-    } catch (_) {
-      if (context.mounted && actions.isCurrent) {
-        _snack(context, 'Failed to transfer to Premiumize.');
-      }
-    }
-  }
-
-  static Future<void> _premiumizeZip(
-    BuildContext context,
-    String magnet,
-    String name, {
-    required bool copyOnly,
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    final actions = ProviderSourceActions(
-      owner: sourceBindings.owner,
-      canContinue: _acceptedProviderAction,
-    );
-    if (!context.mounted || !actions.isCurrent) return;
-    DebridLoadingHandle? loading;
-    String? url;
-    var failed = false;
-    try {
-      url = await actions.premiumizeZipUrl(
-        magnet,
-        onStarted: () {
-          if (context.mounted) {
-            loading = DebridLoadingOverlay.showPremiumize(context, name);
-          }
-        },
-      );
-    } catch (_) {
-      failed = true;
-    } finally {
-      loading?.dismiss();
-    }
-    if (failed) {
-      if (context.mounted && actions.isCurrent) {
-        _snack(
-          context,
-          copyOnly ? 'Failed to generate ZIP link.' : 'Failed to generate ZIP.',
-        );
-      }
-      return;
-    }
-    if (url == null || !actions.isCurrent) return;
-    try {
-      if (copyOnly) {
-        await Clipboard.setData(ClipboardData(text: url));
-        if (context.mounted && actions.isCurrent) {
-          _snack(context, 'ZIP download link copied to clipboard!');
-        }
-      } else {
-        await actions.queueUrl(
-          url,
-          provider: 'premiumize',
-          fileName: '$name.zip',
-          torrentName: name,
-        );
-        if (context.mounted && actions.isCurrent) {
-          _snack(context, 'ZIP download queued successfully.');
-        }
-      }
-    } catch (_) {
-      if (context.mounted && actions.isCurrent) {
-        _snack(
-          context,
-          copyOnly ? 'Failed to generate ZIP link.' : 'Failed to generate ZIP.',
-        );
-      }
-    }
-  }
-
-  static List<Color> _providerGradient(String provider) {
-    switch (provider) {
-      case 'debrid':
-        return const [Color(0xFF10B981), Color(0xFF059669)];
-      case 'torbox':
-        return const [Color(0xFF8B5CF6), Color(0xFF7C3AED)];
-      case 'premiumize':
-        return const [Color(0xFFF59E0B), Color(0xFFD97706)];
-      case 'alldebrid':
-        return const [Color(0xFF26A69A), Color(0xFF00796B)];
-      case 'pikpak':
-        return const [Color(0xFF6366F1), Color(0xFF4338CA)];
-      default:
-        return const [Color(0xFF6366F1), Color(0xFF4338CA)];
-    }
-  }
-
-  static IconData _providerIcon(String provider) {
-    switch (provider) {
-      case 'debrid':
-        return Icons.cloud_download_rounded;
-      case 'torbox':
-        return Icons.flash_on_rounded;
-      case 'premiumize':
-        return Icons.workspace_premium_rounded;
-      case 'alldebrid':
-        return Icons.all_inclusive_rounded;
-      case 'pikpak':
-        return Icons.cloud_circle_rounded;
-      default:
-        return Icons.cloud_download_rounded;
-    }
-  }
-
-  // ── Not-cached handling (mirrors Home UX: warn, then keep-downloading) ──────
-
-  static Future<void> _handleNotCached(
-    BuildContext context,
-    Object marker,
-    String provider,
-    String magnet, {
-    required AutomaticSourceBindings sourceBindings,
-  }) async {
-    final actions = ProviderSourceActions(
-      owner: sourceBindings.owner,
-      canContinue: _acceptedProviderAction,
-    );
-    if (!context.mounted || !actions.isCurrent) return;
-    final keep = await showNotCachedDialog(context, _label(provider));
-    if (!context.mounted || !actions.isCurrent) return;
-    try {
-      await actions.decideNotCached(marker, provider, magnet, keep: keep);
-    } catch (_) {
-      if (!context.mounted || !actions.isCurrent) return;
-      rethrow;
-    }
-    if (context.mounted && keep && actions.isCurrent) {
-      _snack(
-        context,
-        'Added — it will download on ${_label(provider)}. Play it once ready.',
-      );
-    }
-  }
-
-  // ── Provider resolution ────────────────────────────────────────────────────
-
-  /// Resolves which provider to use. Honours the default; when none is set and
-  /// more than one is configured, asks the user (mirrors Home's behaviour).
-  static Future<String?> _pickProvider(
-    BuildContext context, {
+  static Future<List<PlaylistEntry>?> resolveRecoverySource(
+    Torrent source, {
+    required String? provider,
+    AutomaticSourceBindings? sourceBindings,
+    ProfileSessionOwner? owner,
     bool Function()? canContinue,
-  }) => pickSourceProvider(
-    context,
-    cancelledProvider: SourceProviderConfig.cancelled,
-    canContinue: canContinue,
-    loadConfiguration: () => SourceProviderConfig.configuredProviders(canContinue: canContinue),
-    optionFor: (provider) => ProviderPickerOption(
-      id: provider,
-      label: _label(provider),
-      gradient: _providerGradient(provider),
-      icon: _providerIcon(provider),
-    ),
-    remember: (provider) => StorageService.setDefaultTorrentProvider(
-      provider,
-      canContinue: canContinue,
-    ),
-  );
+    int? season,
+    int? episode,
+  }) => RecoverySourceResolution.resolveRecoverySource(source, provider: provider, sourceBindings: sourceBindings, owner: owner, canContinue: canContinue, season: season, episode: episode);
 
-  static Future<String> _postAction(String provider) async {
-    switch (provider) {
-      case 'torbox':
-        return StorageService.getTorboxPostTorrentAction();
-      case 'premiumize':
-        return StorageService.getPremiumizePostTorrentAction();
-      case 'alldebrid':
-        return StorageService.getAllDebridPostTorrentAction();
-      case 'pikpak':
-        return StorageService.getPikPakPostTorrentAction();
-      default:
-        return StorageService.getPostTorrentAction();
-    }
-  }
-
-  // ── File pickers: largest file that looks like video ───────────────────────
-
-  /// True when a resolved playlist's file names look like a TV series (multiple
-  /// files parseable as season/episode), so it should play in series view mode.
-  static bool _isSeriesPlaylist(List<PlaylistEntry> entries) {
-    if (entries.length <= 1) return false;
-    final names = [for (final e in entries) sourceFileName(e.title)];
-    return SeriesParser.isSeriesPlaylist(names);
-  }
-
-  static String _label(String provider) {
-    switch (provider) {
-      case 'preparing':
-        return 'Preparing';
-      case 'debrid':
-        return 'Real-Debrid';
-      case 'torbox':
-        return 'TorBox';
-      case 'premiumize':
-        return 'Premiumize';
-      case 'alldebrid':
-        return 'AllDebrid';
-      case 'pikpak':
-        return 'PikPak';
-      case SeriesSource.localService:
-        return 'On-device';
-      case SeriesSource.addonDirectService:
-        return 'Direct addon';
-      case SeriesSource.iptvDirectService:
-        return 'IPTV';
-      case SeriesSource.mediaServerService:
-        return 'Media server';
-      case 'stream':
-        return 'Stream';
-      default:
-        return provider;
-    }
-  }
-
-  /// Two-letter provider glyph for the Pipeline loader's provider chip.
-  static String _providerCode(String provider) {
-    switch (provider) {
-      case 'preparing':
-        return '···';
-      case 'debrid':
-        return 'RD';
-      case 'torbox':
-        return 'TB';
-      case 'premiumize':
-        return 'PM';
-      case 'alldebrid':
-        return 'AD';
-      case 'pikpak':
-        return 'PP';
-      case 'stream':
-        return 'TV';
-      case SeriesSource.addonDirectService:
-        return 'DL';
-      case SeriesSource.iptvDirectService:
-        return 'TV';
-      default:
-        return provider.isEmpty ? '·' : provider.substring(0, 1).toUpperCase();
-    }
-  }
-
-  /// Show the Pipeline play loader, wired to this provider. [bound] uses the
-  /// short (prepare → start) checklist; otherwise it's the full search flow.
-  static PipelineLoadingOverlay _showPipeline(
-    BuildContext context, {
-    required String provider,
-    required PlaybackMeta? meta,
-    required String title,
-    bool bound = false,
-    VoidCallback? onCancel,
-  }) {
-    final sub = (meta != null && meta.season != null && meta.episode != null)
-        ? _seLabel(meta.season!, meta.episode!)
-        : null;
-    final app = AppThemeScope.of(context);
-    return PipelineLoadingOverlay.show(
-      context,
-      posterUrl: meta?.posterUrl,
-      title: title,
-      subtitle: sub,
-      providerLabel: _label(provider),
-      providerCode: _providerCode(provider),
-      providerColor: _providerGradient(provider).first,
-      bound: bound,
-      hasCacheCheck: provider == 'torbox' || provider == 'premiumize',
-      // The loader is a dark cinematic plate on every theme (black Material,
-      // black-at-alpha scrims), so its ink is `onGlass`, never page ink.
-      // `inkOnFill` is already contrast-scored against the accent it sits on.
-      loaderGround: app.stremioTv.loaderGround,
-      loaderAccent: app.stremioTv.loaderAccent,
-      loaderAccent2: app.stremioTv.loaderAccent2,
-      railFar: app.stremioTv.loaderRailFar,
-      ink: app.onGlass,
-      inkOnFill: app.stremioTv.inkOnFill,
-      // Settings → Appearance → Play Loader. Read from the synchronous mirror:
-      // a play cannot await a preference, and the mirror's default IS the
-      // stored default, so an unwarmed read only ever mis-serves someone who
-      // explicitly chose Classic.
-      style:
-          PlayLoaderStyleController.cached == PlayLoaderStyleController.classic
-          ? PlayLoaderStyle.classic
-          : PlayLoaderStyle.marquee,
-      art: meta?.art,
-      onCancel: onCancel,
-    );
-  }
-
-  /// Immediate feedback while Quick Play resolves preferences, resume data,
-  /// and pinned sources before the provider-specific pipeline can begin.
-  static PipelineLoadingOverlay showResolvingOverlay(
-    BuildContext context, {
-    required PlaybackMeta? meta,
-    required String title,
-    VoidCallback? onCancel,
-  }) => _showPipeline(
-    context,
-    provider: 'preparing',
-    meta: meta,
-    title: title,
-    onCancel: onCancel,
-  );
-
-  // ── Minimal UI feedback ────────────────────────────────────────────────────
-
-  /// The app's shared cinematic add-loading overlay (not a plain spinner box).
-  static DebridLoadingHandle _showLoading(
-    BuildContext context,
-    String provider,
-    String name,
-  ) {
-    switch (provider) {
-      case 'debrid':
-        return DebridLoadingOverlay.showRealDebrid(context, name);
-      case 'torbox':
-        return DebridLoadingOverlay.showTorbox(context, name);
-      case 'premiumize':
-        return DebridLoadingOverlay.showPremiumize(context, name);
-      case 'alldebrid':
-        return DebridLoadingOverlay.showAllDebrid(context, name);
-      case 'pikpak':
-        return DebridLoadingOverlay.show(
-          context,
-          provider: 'PikPak',
-          torrentName: name,
-          accentColor: const Color(0xFF6366F1),
-          icon: Icons.cloud_circle_rounded,
-        );
-      default:
-        return DebridLoadingOverlay.show(
-          context,
-          provider: _label(provider),
-          torrentName: name,
-        );
-    }
-  }
-
-  static void _snack(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-    );
-  }
+  static Future<FilterLadder> loadLadder({
+    bool includeSize = true,
+    QuickPlayRules? rules,
+  }) => SourceFilterLadder.loadLadder(includeSize: includeSize, rules: rules);
 
   static int directValidationBudgetForRules(QuickPlayRules? rules) => SourceCandidateRanking.directValidationBudgetForRules(rules);
+
   static bool shouldPreflightDirectStream(Torrent torrent) => SourceCandidateRanking.shouldPreflightDirectStream(torrent);
-
-  static Future<FilterLadder> loadLadder({bool includeSize = true, QuickPlayRules? rules}) => SourceFilterLadder.loadLadder(includeSize: includeSize, rules: rules);
-
-  static SeriesSourceFetcher? seriesFetcherFor({required PlaybackMeta? meta, String? provider, bool packsFetched = false, bool episodesFetched = false, Future<List<Torrent>>? initialEpisodeSearch}) => SourceSeriesFetcher.seriesFetcherFor(meta: meta, provider: provider, packsFetched: packsFetched, episodesFetched: episodesFetched, initialEpisodeSearch: initialEpisodeSearch);
-  static Future<List<Torrent>> prepareRecoverySources(List<Torrent> raw, {required QuickPlayRules rules, required String? provider, required FilterLadder ladder, Future<List<Torrent>> Function(String, List<Torrent>)? cacheCheck}) => RecoverySourceResolution.prepareRecoverySources(raw, rules: rules, provider: provider, ladder: ladder, cacheCheck: cacheCheck);
-  static Future<List<PlaylistEntry>?> resolveRecoverySource(Torrent source, {required String? provider, AutomaticSourceBindings? sourceBindings, ProfileSessionOwner? owner, bool Function()? canContinue, int? season, int? episode}) => RecoverySourceResolution.resolveRecoverySource(source, provider: provider, sourceBindings: sourceBindings, owner: owner, canContinue: canContinue, season: season, episode: episode);
 }

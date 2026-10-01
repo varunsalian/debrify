@@ -299,7 +299,8 @@ this file's source text.
 | --- | --- | --- | --- |
 | 0 | `e0d3e932` | 7,103 | Reused `finish/bugfixes.jsonl` at `1d6fa710`; SDK matches. Whole-repo `flutter analyze`: 836 existing diagnostics in `<E>/tps/analyze-gate0.txt`. |
 | 1 | `1e47f83a` | 5,893 | Moved no-UI dependencies and models. Focused suite: 1,101 pass / 4 observed baseline failures; comparison PASS. Size/import guards pass. |
-| 2 | step-2 commit (this entry) | 4,749 | Search/fetcher owners wired; focused suite 1,101 pass / same 4 failures; comparison PASS. Analyzer and size/import guards unchanged/pass. |
+| 2 | `014502cf` | 4,749 | Search/fetcher owners wired; focused suite 1,101 pass / same 4 failures; comparison PASS. Analyzer and size/import guards unchanged/pass. |
+| 3 | step-3 commit (this entry) | 3,148 | Menu/launch/binding owners wired; 1,106 focused pass / 2 historical failures. No new analyzer diagnostics. Full-suite gate 1 pending. |
 
 ## Found, not fixed
 
@@ -358,3 +359,20 @@ this file's source text.
   Line-specific ignores preserve their original tokens. Review and add braces
   in the subsequent control-flow refactor; the existing baseline curly-brace
   diagnostics remain measured.
+
+### Step 3 evidence
+
+- Menu, ZIP/provider actions, provider choice, loading overlays, binding,
+  player arguments, launch, next-episode handoff, and DeoVR moved together
+  into 11 cohesive legacy presentation bridges, all under 500 lines.
+- Required DeoVR extraction: `data/deovr_json_upload.dart`. Three new tests
+  under `test/features/sources/data/` verify the unchanged request, location
+  URL, and original status/header errors using a scoped HTTP fake. The existing
+  CI directory entry includes these tests.
+- The two saved-source guards are ported to their actual new owners and
+  explicitly cover all four existing routes (including media servers). Their
+  stale three-route assumption is corrected; every per-route assertion remains.
+  Both now pass and are removed from the CI historical-failure list.
+- Evidence: `<E>/tps/step3-final.jsonl` (comparison PASS), `analyze-step3.txt`
+  (836 diagnostics, none added), verbatim comparison for all 119 members.
+  Temporary facade cross-calls are presentation-only and retire in step 4.

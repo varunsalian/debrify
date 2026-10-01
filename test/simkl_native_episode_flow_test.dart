@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:debrify/features/sources/data/source_series_fetcher.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_player_args.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/native_series_metadata_service.dart';
@@ -119,7 +120,7 @@ void main() {
             )?.resolveAdjacentEpisode,
             isNotNull,
           );
-          final args = TorrentPlaybackService.playerArgsForTesting(meta);
+          final args = SourcePlayerArgs.playerArgsForTesting(meta);
           expect(args.contentImdbId, 'tt0118360');
           expect(args.contentSeason, 2);
           expect(args.contentEpisode, 3);

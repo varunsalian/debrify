@@ -1,8 +1,9 @@
-import 'package:debrify/services/video_player_launcher.dart';
+import 'package:android_intent_plus/flag.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/source_player_args.dart';
+import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/local_playback_resume_resolver.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
-import 'package:debrify/models/torrent.dart';
-import 'package:android_intent_plus/flag.dart';
+import 'package:debrify/services/video_player_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,7 +12,7 @@ void main() {
     'media-server authentication forces internal playback for any default',
     () {
       for (final key in ['X-Emby-Token', 'x-emby-token']) {
-        final args = TorrentPlaybackService.playerArgsForTesting(
+        final args = SourcePlayerArgs.playerArgsForTesting(
           null,
           httpHeaders: {key: 'private-token'},
         );
@@ -25,7 +26,7 @@ void main() {
         );
       }
       expect(
-        TorrentPlaybackService.playerArgsForTesting(null).disableExternalPlayer,
+        SourcePlayerArgs.playerArgsForTesting(null).disableExternalPlayer,
         isFalse,
       );
     },
@@ -177,11 +178,11 @@ void main() {
         expect(catalog.resumePolicy, PlaybackResumePolicy.catalogCanonical);
         expect(generic.resumePolicy, PlaybackResumePolicy.sourceSpecific);
         expect(
-          TorrentPlaybackService.playerArgsForTesting(catalog).resumePolicy,
+          SourcePlayerArgs.playerArgsForTesting(catalog).resumePolicy,
           PlaybackResumePolicy.catalogCanonical,
         );
         expect(
-          TorrentPlaybackService.playerArgsForTesting(null).resumePolicy,
+          SourcePlayerArgs.playerArgsForTesting(null).resumePolicy,
           PlaybackResumePolicy.sourceSpecific,
         );
       },
