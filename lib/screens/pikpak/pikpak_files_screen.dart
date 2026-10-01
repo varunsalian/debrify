@@ -2756,7 +2756,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         return;
       }
 
-      // Use the same logic as torrent_search_screen.dart
+      // Same logic the retired TorrentSearchScreen used
       await _playPikPakVideos(videoFiles, folderName);
     } catch (e) {
       print('Error playing folder: $e');
@@ -2768,7 +2768,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
   }
 
-  /// Play PikPak videos (single or playlist) - mirrors torrent_search_screen.dart logic
+  /// Play PikPak videos (single or playlist) - mirrors the retired TorrentSearchScreen
   Future<void> _playPikPakVideos(
     List<Map<String, dynamic>> videoFiles,
     String collectionName,

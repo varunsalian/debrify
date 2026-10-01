@@ -18,8 +18,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'services/app_route_observer.dart';
-// Old Home board deprecated — moved to screens/deprecated/ and commented out.
-// import 'screens/torrent_search_screen.dart';
 import 'screens/browse_screen.dart';
 import 'screens/cloud_screen.dart';
 import 'screens/search_screen.dart';

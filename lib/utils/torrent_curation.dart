@@ -1,13 +1,13 @@
 import '../models/torrent.dart';
 
 /// Torrent candidate curation shared between the old Home engine
-/// (`torrent_search_screen.dart`) and the Search-tab playback service
+/// (the retired `TorrentSearchScreen`, removed 2026-10-01) and the Search-tab playback service
 /// (`torrent_playback_service.dart`), so auto-play probes the RIGHT torrent
 /// first instead of the raw seeder-ranked list (which can lead with a
 /// wrong-episode single or a wrong-season pack that resolves fine but is then
 /// rejected, burning the probe budget).
 ///
-/// This mirrors the logic inlined in `torrent_search_screen.dart` — episode
+/// This mirrors the logic the retired `TorrentSearchScreen` inlined — episode
 /// filter+sort at ~3134-3216 and `_torrentMatchesTitle` at ~13464. Kept here as
 /// pure functions (no widget state) so both callers stay in sync.
 

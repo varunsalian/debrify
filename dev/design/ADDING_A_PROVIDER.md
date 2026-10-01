@@ -71,7 +71,7 @@ Let users pick it as the default torrent provider.
 ---
 
 ## 9. Add / Play / Download from torrent search (DONE for Premiumize)
-Wire the provider into `lib/screens/torrent_search_screen.dart`. Premiumize is
+Wire the provider into the Sources and Search features (`lib/features/sources`, `lib/features/search`); the old `torrent_search_screen.dart` this step originally described was removed on 2026-10-01. Premiumize is
 simpler than RD/Torbox: `/transfer/directdl` returns ready-to-use direct links
 for every file in one call (no per-file unrestrict), so playlist entries carry
 real URLs and downloads enqueue those URLs directly.
