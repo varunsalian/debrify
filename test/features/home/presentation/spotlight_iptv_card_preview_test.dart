@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:debrify/features/home/application/home_hero_live_dependencies.dart';
+import 'package:debrify/features/home/application/home_hero_providers.dart';
 import 'package:debrify/features/home/data/home_hero_live_repository.dart';
 import 'package:debrify/features/home/presentation/spotlight_iptv_card_preview.dart';
 import 'package:debrify/models/iptv_playlist.dart';

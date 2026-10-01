@@ -3,8 +3,7 @@ import '../../../models/series_source.dart';
 import '../data/saved_sources_repository.dart';
 import '../models/saved_sources_state.dart';
 import '../models/sources_session.dart';
-import 'saved_sources_dependencies.dart';
-import 'source_seasons_dependencies.dart';
+import 'sources_providers.dart';
 
 final savedSourcesProvider = NotifierProvider.autoDispose
     .family<SavedSourcesController, SavedSourcesState, SourcesSession>(

@@ -8,7 +8,7 @@ import '../models/source_results_state.dart';
 import '../models/source_toolbar_state.dart';
 import '../models/sources_session.dart';
 import 'source_result_projection.dart';
-import 'source_seasons_dependencies.dart';
+import 'sources_providers.dart';
 
 final sourceResultsProvider = NotifierProvider.autoDispose
     .family<SourceResultsController, SourceResultsState, SourcesSession>(

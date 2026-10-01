@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:debrify/features/home/application/home_series_resume_dependencies.dart';
+import 'package:debrify/features/home/application/home_playback_providers.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/trakt_continue_watching_item.dart';

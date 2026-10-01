@@ -1,9 +1,8 @@
-import 'package:debrify/features/discover/application/discover_card_settings_dependencies.dart';
+import 'package:debrify/features/discover/application/discover_providers.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/widgets/see_all/discover_card_settings_scope.dart';
 import 'package:debrify/widgets/see_all/discover_browsing_input.dart';
 import 'dart:async';
-import 'package:debrify/features/discover/application/discover_source_dependencies.dart';
 import 'package:debrify/features/discover/data/discover_source_repository.dart';
 import 'package:debrify/features/discover/presentation/discover_stage_veils.dart';
 import 'package:debrify/screens/search_screen.dart';

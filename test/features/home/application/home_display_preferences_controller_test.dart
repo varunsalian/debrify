@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:debrify/features/home/application/home_display_preferences_controller.dart';
-import 'package:debrify/features/home/application/home_display_preferences_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/models/home_display_preferences.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

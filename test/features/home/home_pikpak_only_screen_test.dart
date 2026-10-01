@@ -1,4 +1,4 @@
-import 'package:debrify/features/home/application/home_pikpak_only_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import '../../home_progressive_pagination_test.dart' show HomeFixture, page;

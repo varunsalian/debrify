@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:debrify/features/search/application/keyword_appearance_controller.dart';
-import 'package:debrify/features/search/application/keyword_appearance_dependencies.dart';
+import 'package:debrify/features/search/application/search_providers.dart';
 import 'package:debrify/features/search/models/search_session.dart';
 import 'package:debrify/models/source_appearance.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';

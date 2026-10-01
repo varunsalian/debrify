@@ -7,7 +7,7 @@ import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 export 'package:debrify/features/home/application/home_local_continuation_controller.dart';
-export 'package:debrify/features/home/application/home_local_continuation_dependencies.dart';
+export 'package:debrify/features/home/application/home_continuation_providers.dart';
 export 'package:debrify/features/home/models/home_continuation_session.dart';
 export 'package:debrify/models/tracking_source.dart';
 export 'package:debrify/services/profiles/profile_session_memory.dart';

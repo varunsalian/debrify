@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:debrify/features/home/application/home_bound_counts_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/data/home_bound_counts_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

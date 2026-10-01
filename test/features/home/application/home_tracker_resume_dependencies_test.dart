@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:debrify/features/home/application/home_tracker_resume_dependencies.dart';
+import 'package:debrify/features/home/application/home_playback_providers.dart';
 import 'package:debrify/features/home/models/home_catalog_session.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';

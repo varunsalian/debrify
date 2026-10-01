@@ -4,7 +4,7 @@ import '../../../models/torrent.dart';
 import '../data/keyword_cache_repository.dart';
 import '../models/keyword_cache_state.dart';
 import '../models/search_session.dart';
-import 'keyword_cache_dependencies.dart';
+import 'search_providers.dart';
 import 'search_session_provider.dart';
 
 final keywordCacheProvider = NotifierProvider.autoDispose

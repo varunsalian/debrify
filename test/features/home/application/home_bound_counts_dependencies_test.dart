@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:debrify/features/home/application/home_bound_counts_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/models/home_catalog_session.dart';
 import 'package:debrify/models/series_source.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';

@@ -1,4 +1,4 @@
-import 'package:debrify/features/home/application/home_return_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

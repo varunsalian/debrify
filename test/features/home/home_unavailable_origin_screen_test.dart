@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 
-import 'package:debrify/features/home/application/home_catalog_origin_dependencies.dart';
-import 'package:debrify/features/home/application/home_local_continuation_dependencies.dart';
+import 'package:debrify/features/home/application/home_detail_providers.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/features/home/data/home_catalog_origin_repository.dart';
 import 'package:debrify/features/home/data/home_local_continuation_repository.dart';
 import 'package:debrify/features/home/models/home_catalog_origin.dart';

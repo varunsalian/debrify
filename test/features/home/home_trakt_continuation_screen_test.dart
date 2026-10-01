@@ -1,7 +1,6 @@
-import 'package:debrify/features/home/application/home_watchlist_dependencies.dart';
-import 'package:debrify/features/home/application/home_local_continuation_dependencies.dart';
-import 'package:debrify/features/home/application/home_iptv_continuation_dependencies.dart';
-import 'package:debrify/features/home/application/home_bound_counts_dependencies.dart';
+import 'package:debrify/features/home/application/home_saved_content_providers.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/data/home_bound_counts_repository.dart';
 import 'package:debrify/services/iptv_cw_history.dart';
 import 'fixtures/home_continuation_fixture.dart' show continuationRepository;
@@ -9,7 +8,6 @@ import 'package:debrify/screens/see_all/trakt_see_all_screen.dart';
 import 'package:debrify/features/home/models/home_trakt_continuation_state.dart';
 import 'dart:async';
 
-import 'package:debrify/features/home/application/home_trakt_continuation_dependencies.dart';
 import 'package:debrify/features/home/data/home_trakt_continuation_repository.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/trakt_continue_watching_item.dart';

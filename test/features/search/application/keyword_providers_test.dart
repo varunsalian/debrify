@@ -1,8 +1,8 @@
-import 'package:debrify/features/search/application/keyword_providers.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../keyword_torrent_fixture.dart';
+import 'package:debrify/features/search/application/keyword_providers.dart';
 
 KeywordProviders reconcile(
   List<Torrent> items, {

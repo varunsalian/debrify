@@ -1,5 +1,5 @@
 import 'package:debrify/features/sources/application/source_results_controller.dart';
-import 'package:debrify/features/sources/application/source_seasons_dependencies.dart';
+import 'package:debrify/features/sources/application/sources_providers.dart';
 import 'package:debrify/features/sources/models/source_results_state.dart';
 import 'package:debrify/features/sources/models/sources_session.dart';
 import 'package:debrify/models/advanced_search_selection.dart';

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:debrify/features/home/application/home_layout_preference_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/data/home_layout_preferences.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';

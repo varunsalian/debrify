@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:debrify/features/discover/application/metadata_feature_controller.dart';
-import 'package:debrify/features/discover/application/metadata_feature_dependencies.dart';
+import 'package:debrify/features/discover/application/discover_providers.dart';
 import 'package:debrify/features/discover/models/metadata_feature_policy.dart';
 import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';

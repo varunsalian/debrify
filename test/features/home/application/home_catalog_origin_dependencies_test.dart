@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:debrify/features/home/application/home_catalog_origin_dependencies.dart';
+import 'package:debrify/features/home/application/home_detail_providers.dart';
 import 'package:debrify/features/home/models/home_catalog_origin.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';

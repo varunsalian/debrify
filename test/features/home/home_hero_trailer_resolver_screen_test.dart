@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'package:debrify/features/home/application/home_hero_trailer_dependencies.dart';
-import 'package:debrify/features/home/application/home_trailer_preferences_dependencies.dart';
+import 'package:debrify/features/home/application/home_hero_providers.dart';
 import 'package:debrify/features/home/data/home_hero_trailer_repository.dart';
 import 'package:debrify/features/home/data/home_trailer_preferences_repository.dart';
 import 'package:debrify/models/metadata_preferences.dart';

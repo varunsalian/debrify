@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:debrify/features/sources/application/source_seasons_controller.dart';
-import 'package:debrify/features/sources/application/source_seasons_dependencies.dart';
+import 'package:debrify/features/sources/application/sources_providers.dart';
 import 'package:debrify/features/sources/data/source_seasons_repository.dart';
 import 'package:debrify/features/sources/models/source_seasons_state.dart';
 import 'package:debrify/features/sources/models/sources_session.dart';

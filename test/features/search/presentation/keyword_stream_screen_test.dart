@@ -1,15 +1,12 @@
-import 'package:debrify/features/search/application/keyword_appearance_dependencies.dart';
+import 'package:debrify/features/search/application/search_providers.dart';
 import 'package:debrify/models/source_appearance.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/widgets/source_row.dart';
-import 'package:debrify/features/home/application/home_default_view_dependencies.dart';
-import 'package:debrify/features/search/application/keyword_defaults_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
 import '../fakes/fake_keyword_defaults_repository.dart';
 import 'dart:async';
 
-import 'package:debrify/features/search/application/keyword_cache_dependencies.dart';
-import 'package:debrify/features/search/application/keyword_search_dependencies.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';

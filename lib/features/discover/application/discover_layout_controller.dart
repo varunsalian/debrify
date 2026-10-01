@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../data/discover_layout_preferences.dart';
 import '../models/discover_layout_session.dart';
-import 'discover_layout_dependencies.dart';
+import 'discover_providers.dart';
 
 final discoverLayoutProvider = NotifierProvider.autoDispose
     .family<DiscoverLayoutController, String, DiscoverLayoutSession>(

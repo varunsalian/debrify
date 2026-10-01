@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:debrify/features/home/application/home_tracker_authentication_controller.dart';
-import 'package:debrify/features/home/application/home_tracker_authentication_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/features/home/models/home_catalog_session.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

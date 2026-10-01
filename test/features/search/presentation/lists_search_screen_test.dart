@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'package:debrify/features/home/application/home_tracker_authentication_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/features/home/models/home_tracker_authentication.dart';
 
 import 'package:debrify/features/search/application/lists_search_controller.dart';
-import 'package:debrify/features/search/application/lists_search_dependencies.dart';
+import 'package:debrify/features/search/application/search_providers.dart';
 import 'package:debrify/features/search/models/search_session.dart';
 import 'package:debrify/features/search/models/search_mode.dart';
 import 'package:debrify/features/search/presentation/search_mode_toggle.dart';

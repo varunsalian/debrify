@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/keyword_sources_repository.dart';
 import '../models/keyword_source.dart';
 import '../models/search_session.dart';
-import 'keyword_sources_dependencies.dart';
+import 'search_providers.dart';
 import 'search_session_provider.dart';
 
 /// Null means the original loading presentation; an empty list means no engines.

@@ -1,6 +1,6 @@
 import '../data/source_download.dart';
 import 'source_download_action.dart';
-import '../application/source_playback_dependencies.dart';
+import '../application/sources_providers.dart';
 import '../data/automatic_source_bindings.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

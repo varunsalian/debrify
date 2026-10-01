@@ -4,8 +4,7 @@ import '../../../models/torrent.dart';
 import '../../../models/addon_search_status.dart';
 import '../data/source_search_repository.dart';
 import '../models/sources_session.dart';
-import 'source_search_dependencies.dart';
-import 'source_seasons_dependencies.dart';
+import 'sources_providers.dart';
 
 final sourceRetryProvider = NotifierProvider.autoDispose
     .family<SourceRetryController, Set<String>, SourcesSession>(

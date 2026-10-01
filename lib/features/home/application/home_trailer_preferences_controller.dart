@@ -3,7 +3,7 @@ import '../../../services/profiles/profile_session_memory.dart';
 import '../data/home_trailer_preferences_repository.dart';
 import '../models/home_catalog_session.dart';
 import '../models/home_trailer_preferences.dart';
-import 'home_trailer_preferences_dependencies.dart';
+import 'home_hero_providers.dart';
 
 final homeTrailerPreferencesProvider = NotifierProvider.autoDispose
     .family<

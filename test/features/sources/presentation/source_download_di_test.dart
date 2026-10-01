@@ -1,4 +1,4 @@
-import 'package:debrify/features/sources/application/source_playback_dependencies.dart';
+import 'package:debrify/features/sources/application/sources_providers.dart';
 import 'package:debrify/features/sources/data/source_download.dart';
 import 'package:debrify/features/sources/presentation/source_playback_bridge.dart';
 import 'package:debrify/models/torrent.dart';

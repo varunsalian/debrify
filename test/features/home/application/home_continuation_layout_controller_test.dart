@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:debrify/features/home/application/home_continuation_layout_controller.dart';
-import 'package:debrify/features/home/application/home_continuation_layout_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/features/home/data/home_continuation_layout_repository.dart';
 import 'package:debrify/features/home/models/home_continuation_layout.dart';
 import 'package:debrify/features/home/models/home_continuation_session.dart';

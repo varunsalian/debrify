@@ -1,4 +1,4 @@
-import 'package:debrify/features/sources/application/source_search_dependencies.dart';
+import 'package:debrify/features/sources/application/sources_providers.dart';
 import 'package:debrify/features/sources/data/service_source_search_repository.dart';
 import 'package:debrify/features/sources/data/source_search_api.dart';
 import 'package:debrify/features/sources/presentation/sources_screen.dart';

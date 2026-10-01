@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:debrify/features/search/application/keyword_cache_dependencies.dart';
+import 'package:debrify/features/search/application/search_providers.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/engine/engine_registry.dart';
 import 'package:debrify/services/engine/local_engine_storage.dart';

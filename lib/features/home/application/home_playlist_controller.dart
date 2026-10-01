@@ -3,7 +3,7 @@ import '../../../services/profiles/profile_session_memory.dart';
 import '../data/home_playlist_repository.dart';
 import '../models/home_favorites_session.dart';
 import '../models/home_playlist.dart';
-import 'home_playlist_dependencies.dart';
+import 'home_saved_content_providers.dart';
 
 final homePlaylistProvider = NotifierProvider.autoDispose
     .family<HomePlaylistController, HomePlaylist, HomeFavoritesSession>(

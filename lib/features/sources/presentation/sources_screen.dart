@@ -15,7 +15,7 @@ import '../../../widgets/source_row.dart';
 import '../application/source_session_ownership.dart';
 import '../application/source_startup.dart';
 import '../application/source_picker_diagnostics.dart';
-import '../application/source_binding_match_dependencies.dart';
+import '../application/sources_providers.dart';
 import '../application/source_provider_projection.dart';
 import '../application/source_binding_controller.dart';
 import '../application/source_results_controller.dart';

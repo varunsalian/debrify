@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:debrify/models/stremio_addon.dart';
-import 'package:debrify/features/home/application/home_hero_tint_dependencies.dart';
+import 'package:debrify/features/home/application/home_hero_providers.dart';
 import 'package:debrify/features/home/application/home_hero_tint_loader.dart';
 import 'package:debrify/features/home/models/home_catalog_session.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';

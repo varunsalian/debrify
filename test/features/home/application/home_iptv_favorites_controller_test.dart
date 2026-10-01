@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:debrify/features/home/application/home_iptv_favorites_controller.dart';
-import 'package:debrify/features/home/application/home_iptv_favorites_dependencies.dart';
+import 'package:debrify/features/home/application/home_saved_content_providers.dart';
 import 'package:debrify/features/home/data/home_iptv_favorites_repository.dart';
 import 'package:debrify/features/home/models/home_favorites_session.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';

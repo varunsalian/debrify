@@ -1,6 +1,6 @@
 import 'package:debrify/features/sources/application/source_batch_preparation.dart';
 import 'package:debrify/features/sources/application/saved_sources_controller.dart';
-import 'package:debrify/features/sources/application/source_binding_match_dependencies.dart';
+import 'package:debrify/features/sources/application/sources_providers.dart';
 import 'package:debrify/features/sources/application/source_results_controller.dart';
 import 'package:debrify/features/sources/application/source_search_controller.dart';
 import 'package:debrify/features/sources/data/source_binding_matcher.dart';

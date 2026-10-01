@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../data/home_bound_counts_repository.dart';
 import '../models/home_catalog_session.dart';
-import 'home_bound_counts_dependencies.dart';
+import 'home_board_providers.dart';
 
 final homeBoundCountsProvider = NotifierProvider.autoDispose
     .family<HomeBoundCountsController, Map<String, int>, HomeCatalogSession>(

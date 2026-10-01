@@ -4,7 +4,7 @@ import '../../../models/stremio_addon.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../data/discover_source_repository.dart';
 import '../models/discover_source_state.dart';
-import 'discover_source_dependencies.dart';
+import 'discover_providers.dart';
 
 final discoverSourceProvider = NotifierProvider.autoDispose
     .family<

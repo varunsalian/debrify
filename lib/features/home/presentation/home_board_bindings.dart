@@ -7,7 +7,7 @@ import '../application/home_bound_counts_controller.dart';
 import '../application/home_post_playback_refresh_controller.dart';
 import '../application/home_tracker_authentication_controller.dart';
 import '../application/home_settings_refresh.dart';
-import '../application/home_settings_refresh_dependencies.dart';
+import '../application/home_board_providers.dart';
 import '../models/home_catalog_session.dart';
 import '../models/home_catalog_state.dart';
 import '../models/home_episode_artwork.dart';

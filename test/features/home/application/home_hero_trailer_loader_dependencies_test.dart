@@ -1,4 +1,4 @@
-import 'package:debrify/features/home/application/home_hero_trailer_dependencies.dart';
+import 'package:debrify/features/home/application/home_hero_providers.dart';
 import 'package:debrify/features/home/application/home_hero_trailer_loader.dart';
 import 'package:debrify/features/home/data/home_hero_trailer_repository.dart';
 import 'package:debrify/features/home/models/home_catalog_session.dart';

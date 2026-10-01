@@ -1,4 +1,4 @@
-import 'package:debrify/features/home/application/home_catalog_episode_identity_dependencies.dart';
+import 'package:debrify/features/home/application/home_detail_providers.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';

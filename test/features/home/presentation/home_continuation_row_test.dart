@@ -1,4 +1,4 @@
-import 'package:debrify/features/home/application/home_card_metadata_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/presentation/home_board_cell.dart';
 import 'package:debrify/features/home/presentation/home_continuation_row.dart';
 import 'package:debrify/features/home/presentation/home_stage_rows.dart';

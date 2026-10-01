@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:debrify/features/home/application/home_episode_artwork_controller.dart';
-import 'package:debrify/features/home/application/home_episode_artwork_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/features/home/data/home_episode_artwork_repository.dart';
 import 'package:debrify/features/home/models/home_catalog_session.dart';
 import 'package:debrify/features/home/models/home_episode_artwork.dart';

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:debrify/features/home/application/home_card_metadata_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';

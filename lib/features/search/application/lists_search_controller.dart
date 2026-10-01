@@ -5,7 +5,7 @@ import '../../../services/mdblist/mdblist_models.dart';
 import '../data/lists_search_repository.dart';
 import '../models/search_session.dart';
 import '../models/lists_search_state.dart';
-import 'lists_search_dependencies.dart';
+import 'search_providers.dart';
 
 final listsSearchProvider = NotifierProvider.autoDispose
     .family<ListsSearchController, ListsSearchState, SearchSession>(

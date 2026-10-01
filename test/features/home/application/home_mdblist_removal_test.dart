@@ -2,7 +2,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'dart:async';
 import 'package:debrify/features/home/application/home_mdblist_continuation_controller.dart';
-import 'package:debrify/features/home/application/home_mdblist_continuation_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/features/home/data/home_mdblist_continuation_repository.dart';
 import 'package:debrify/features/home/models/home_continuation_session.dart';
 import 'package:debrify/models/advanced_search_selection.dart';

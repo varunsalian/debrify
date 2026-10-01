@@ -4,7 +4,7 @@ import '../../../services/profiles/profile_session_memory.dart';
 import '../data/home_simkl_continuation_reader.dart';
 import '../models/home_continuation_session.dart';
 import '../models/home_simkl_continuation.dart';
-import 'home_simkl_continuation_dependencies.dart';
+import 'home_continuation_providers.dart';
 
 final homeSimklContinuationProvider = NotifierProvider.autoDispose
     .family<

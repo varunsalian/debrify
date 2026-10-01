@@ -3,7 +3,7 @@ import '../../../services/profiles/profile_session_memory.dart';
 import '../data/home_iptv_lists_repository.dart';
 import '../models/home_favorites_session.dart';
 import '../models/home_iptv_list.dart';
-import 'home_iptv_lists_dependencies.dart';
+import 'home_saved_content_providers.dart';
 
 final homeIptvListsProvider = NotifierProvider.autoDispose
     .family<HomeIptvListsController, List<HomeIptvList>, HomeFavoritesSession>(

@@ -5,7 +5,7 @@ import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../data/home_stremio_favorites_repository.dart';
 import '../models/home_favorites_session.dart';
 import '../models/home_stremio_favorites.dart';
-import 'home_stremio_favorites_dependencies.dart';
+import 'home_saved_content_providers.dart';
 
 final homeStremioFavoritesProvider = NotifierProvider.autoDispose
     .family<

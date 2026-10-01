@@ -1,5 +1,5 @@
 import 'package:debrify/features/sources/application/source_cache_controller.dart';
-import 'package:debrify/features/sources/application/source_cache_dependencies.dart';
+import 'package:debrify/features/sources/application/sources_providers.dart';
 import '../fakes/fake_source_cache_repository.dart';
 import 'package:debrify/features/sources/models/source_cache_state.dart';
 import 'package:debrify/features/sources/models/sources_session.dart';

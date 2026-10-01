@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/home_return_snapshot.dart';
 import '../application/home_row_snapshot.dart';
-import '../application/home_board_dependencies.dart';
+import '../application/home_board_providers.dart';
 import '../data/home_board_services.dart';
 import 'home_board_section.dart';
 import 'home_board_rows.dart';

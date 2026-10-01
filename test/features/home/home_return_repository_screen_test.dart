@@ -1,5 +1,5 @@
 import 'package:debrify/services/profiles/profile_session_memory.dart';
-import 'package:debrify/features/home/application/home_return_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/data/home_return_repository.dart';
 import 'package:debrify/features/home/models/home_return_snapshot.dart';
 import 'package:debrify/screens/search_screen.dart';

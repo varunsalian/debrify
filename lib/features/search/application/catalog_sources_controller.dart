@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/catalog_search_repository.dart';
 import '../models/catalog_sources_state.dart';
 import '../models/search_session.dart';
-import 'catalog_search_dependencies.dart';
+import 'search_providers.dart';
 import 'search_session_provider.dart';
 
 final catalogSourcesProvider = NotifierProvider.autoDispose

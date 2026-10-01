@@ -1,6 +1,6 @@
 import 'package:debrify/core/metadata/metadata_presentation_cache.dart';
 import 'package:debrify/features/home/application/home_card_metadata_controller.dart';
-import 'package:debrify/features/home/application/home_card_metadata_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/data/home_card_metadata_repository.dart';
 import 'package:debrify/features/home/models/home_card_metadata.dart';
 import 'package:debrify/models/metadata_preferences.dart';

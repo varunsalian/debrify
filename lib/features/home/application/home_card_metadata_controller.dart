@@ -4,7 +4,7 @@ import '../../../models/hero_metadata_presentation.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../data/home_card_metadata_repository.dart';
 import '../models/home_card_metadata.dart';
-import 'home_card_metadata_dependencies.dart';
+import 'home_board_providers.dart';
 
 final homeCardMetadataProvider = NotifierProvider.autoDispose
     .family<

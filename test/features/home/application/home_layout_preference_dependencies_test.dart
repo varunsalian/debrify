@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:debrify/features/home/application/home_layout_preference_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/data/home_layout_preferences.dart';
 import 'package:debrify/features/home/models/home_catalog_session.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';

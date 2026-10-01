@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:debrify/features/home/application/home_stremio_favorites_dependencies.dart';
+import 'package:debrify/features/home/application/home_saved_content_providers.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/stremio_tv_service.dart' as shared;

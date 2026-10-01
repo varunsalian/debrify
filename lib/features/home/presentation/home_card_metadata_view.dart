@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/stremio_addon.dart';
 import '../application/home_card_metadata_controller.dart';
-import '../application/home_card_metadata_dependencies.dart';
+import '../application/home_board_providers.dart';
 import '../models/home_card_metadata.dart';
 
 /// Binds one mounted card to its metadata state without owning card focus/animation.

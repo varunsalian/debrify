@@ -5,7 +5,7 @@ import '../data/home_local_continuation_repository.dart';
 import '../models/home_continuation_session.dart';
 import '../models/home_local_continuation.dart';
 import '../models/home_local_continuation_state.dart';
-import 'home_local_continuation_dependencies.dart';
+import 'home_continuation_providers.dart';
 
 final homeLocalContinuationProvider = NotifierProvider.autoDispose
     .family<

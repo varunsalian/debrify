@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:debrify/features/home/application/home_watchlist_dependencies.dart';
+import 'package:debrify/features/home/application/home_saved_content_providers.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/home_row_refresh.dart';

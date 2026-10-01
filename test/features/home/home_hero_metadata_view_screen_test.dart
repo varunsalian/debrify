@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:debrify/features/home/application/home_card_metadata_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/models/metadata_presentation.dart';
 import 'package:debrify/models/stremio_addon.dart';

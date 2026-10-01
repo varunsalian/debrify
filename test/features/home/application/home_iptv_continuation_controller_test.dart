@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:debrify/features/home/application/home_iptv_continuation_controller.dart';
-import 'package:debrify/features/home/application/home_iptv_continuation_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/features/home/models/home_continuation_session.dart';
 import 'package:debrify/services/iptv_cw_history.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';

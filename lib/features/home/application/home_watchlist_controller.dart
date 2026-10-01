@@ -3,7 +3,7 @@ import '../../../models/stremio_addon.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../models/home_favorites_session.dart';
 import '../models/home_watchlist.dart';
-import 'home_watchlist_dependencies.dart';
+import 'home_saved_content_providers.dart';
 
 final homeWatchlistProvider = NotifierProvider.autoDispose
     .family<HomeWatchlistController, HomeWatchlist, HomeFavoritesSession>(

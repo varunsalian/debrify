@@ -5,7 +5,7 @@ import '../../services/profiles/profile_session_memory.dart'
     show ProfileSessionOwner;
 import '../../utils/tv_search_focus_handoff.dart';
 import '../../features/search/models/search_session.dart';
-import '../../features/search/application/keyword_snapshot_dependencies.dart';
+import '../../features/search/application/search_providers.dart';
 import '../../features/search/data/keyword_snapshot_repository.dart';
 import '../../features/search/models/keyword_snapshot.dart';
 import '../../features/search/models/keyword_cache_state.dart';

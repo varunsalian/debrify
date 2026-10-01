@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:debrify/features/home/application/home_iptv_continuation_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/models/iptv_cw_entry.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/iptv_media_store.dart';

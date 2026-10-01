@@ -6,7 +6,7 @@ import '../models/home_continuation_session.dart';
 import '../models/home_trakt_continuation.dart';
 import '../models/home_trakt_continuation_read.dart';
 import '../models/home_trakt_continuation_state.dart';
-import 'home_trakt_continuation_dependencies.dart';
+import 'home_continuation_providers.dart';
 
 /// Home/Discover seed loading before initState starts the first request.
 /// Search does not load on startup. Neither variant performs reads in build.

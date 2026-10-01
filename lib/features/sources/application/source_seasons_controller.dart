@@ -8,7 +8,7 @@ import '../data/source_seasons_repository.dart';
 import '../models/source_seasons_state.dart';
 import '../models/sources_session.dart';
 import 'source_seasons.dart';
-import 'source_seasons_dependencies.dart';
+import 'sources_providers.dart';
 
 final sourceSeasonsProvider = NotifierProvider.autoDispose
     .family<SourceSeasonsController, SourceSeasonsState, SourcesSession>(

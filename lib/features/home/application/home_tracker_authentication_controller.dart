@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../models/home_tracker_authentication.dart';
-import 'home_tracker_authentication_dependencies.dart';
+import 'home_continuation_providers.dart';
 
 final homeTrackerAuthenticationProvider = NotifierProvider.autoDispose
     .family<HomeTrackerAuthenticationController, bool, HomeTrackerAuthSession>(

@@ -1,9 +1,8 @@
-import 'package:debrify/features/home/application/home_detail_action_dependencies.dart';
+import 'package:debrify/features/home/application/home_detail_providers.dart';
 import 'package:debrify/services/tracker_title_actions.dart';
 import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/services/simkl/simkl_menu_helpers.dart';
 import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
-import 'package:debrify/features/home/application/home_detail_dependencies.dart';
 import 'package:debrify/features/home/data/home_detail_readers.dart';
 import 'package:debrify/features/home/presentation/home_catalog_playback_bridge.dart';
 import 'dart:async';
@@ -11,11 +10,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:debrify/features/home/application/home_catalog_origin_dependencies.dart';
-import 'package:debrify/features/home/application/home_source_editing_dependencies.dart';
 import 'package:debrify/features/home/data/home_source_editing_repository.dart';
 import 'package:debrify/models/series_source.dart';
-import 'package:debrify/features/home/application/home_local_history_removal_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/features/home/data/home_catalog_origin_repository.dart';
 import 'package:debrify/features/home/models/home_catalog_origin.dart';
 import 'package:debrify/models/stremio_addon.dart';

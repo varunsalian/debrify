@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../models/stremio_addon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../application/stremio_tv_catalog_editor_dependencies.dart';
+import '../application/stremio_tv_providers.dart';
 import '../data/stremio_tv_catalog_editor.dart';
 import '../models/stremio_tv_catalog_picker_result.dart';
 import '../models/stremio_tv_catalog_option.dart';

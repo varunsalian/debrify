@@ -1,4 +1,4 @@
-import 'package:debrify/features/home/application/home_random_episode_dependencies.dart';
+import 'package:debrify/features/home/application/home_playback_providers.dart';
 import 'package:debrify/features/home/data/home_random_episode_selector.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/custom_series_identity.dart';

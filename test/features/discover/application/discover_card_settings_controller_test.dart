@@ -1,5 +1,5 @@
 import 'package:debrify/features/discover/application/discover_card_settings_controller.dart';
-import 'package:debrify/features/discover/application/discover_card_settings_dependencies.dart';
+import 'package:debrify/features/discover/application/discover_providers.dart';
 import 'package:debrify/features/discover/models/discover_card_settings.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'home_mdblist_continuation_screen_test.dart' show FixtureImages;
-import 'package:debrify/features/home/application/home_hero_tint_dependencies.dart';
+import 'package:debrify/features/home/application/home_hero_providers.dart';
 import 'package:debrify/features/home/presentation/home_hero_spotlight.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:flutter/widgets.dart';

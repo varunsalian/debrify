@@ -4,7 +4,7 @@ import '../../../services/profiles/profile_session_memory.dart';
 import '../data/home_episode_artwork_repository.dart';
 import '../models/home_catalog_session.dart';
 import '../models/home_episode_artwork.dart';
-import 'home_episode_artwork_dependencies.dart';
+import 'home_continuation_providers.dart';
 
 final homeEpisodeArtworkProvider = NotifierProvider.autoDispose
     .family<

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:debrify/features/home/application/home_board_load.dart';
 import 'package:debrify/features/home/application/home_catalog_controller.dart';
-import 'package:debrify/features/home/application/home_catalog_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/data/home_board_services.dart';
 import 'package:debrify/features/home/data/home_catalog_preferences_repository.dart';
 import 'package:debrify/features/home/data/home_catalog_repository.dart';

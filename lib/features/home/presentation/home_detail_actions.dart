@@ -6,7 +6,7 @@ import '../../../services/simkl/simkl_menu_helpers.dart'
     show SimklItemMenuAction;
 import '../../../services/mdblist/mdblist_menu_helpers.dart'
     show MdblistItemMenuAction;
-import '../application/home_detail_action_dependencies.dart';
+import '../application/home_detail_providers.dart';
 import '../models/home_catalog_session.dart';
 import 'home_detail_action_bridge.dart';
 import 'home_detail_route.dart';

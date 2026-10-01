@@ -4,7 +4,7 @@ import '../../../services/profiles/profile_runtime.dart';
 import '../data/home_mdblist_continuation_repository.dart';
 import '../models/home_continuation_session.dart';
 import '../models/home_mdblist_continuation.dart';
-import 'home_mdblist_continuation_dependencies.dart';
+import 'home_continuation_providers.dart';
 
 final homeMdblistContinuationProvider = NotifierProvider.autoDispose
     .family<

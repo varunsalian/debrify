@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/source_appearance.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../models/search_session.dart';
-import 'keyword_appearance_dependencies.dart';
+import 'search_providers.dart';
 import 'search_session_provider.dart';
 
 final keywordAppearanceProvider = NotifierProvider.autoDispose

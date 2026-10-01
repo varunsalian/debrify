@@ -1,9 +1,8 @@
-import 'package:debrify/features/home/application/home_continuation_layout_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/features/home/data/home_continuation_layout_repository.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'dart:async';
 
-import 'package:debrify/features/home/application/home_local_continuation_dependencies.dart';
 import 'package:debrify/features/home/data/home_local_continuation_repository.dart';
 import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/screens/search_screen.dart';

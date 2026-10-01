@@ -4,7 +4,7 @@ import '../../../services/profiles/profile_session_memory.dart';
 import '../data/home_continuation_layout_repository.dart';
 import '../models/home_continuation_layout.dart';
 import '../models/home_continuation_session.dart';
-import 'home_continuation_layout_dependencies.dart';
+import 'home_continuation_providers.dart';
 
 final homeContinuationLayoutProvider = NotifierProvider.autoDispose
     .family<

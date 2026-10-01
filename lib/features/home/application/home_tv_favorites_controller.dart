@@ -3,7 +3,7 @@ import '../../../models/debrify_tv/channel.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../data/home_tv_favorites_repository.dart';
 import '../models/home_favorites_session.dart';
-import 'home_tv_favorites_dependencies.dart';
+import 'home_saved_content_providers.dart';
 
 final homeTvFavoritesProvider = NotifierProvider.autoDispose
     .family<

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:debrify/features/home/application/home_simkl_continuation_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/features/home/data/home_simkl_continuation_reader.dart';
 import 'package:debrify/models/simkl_continue_watching_item.dart';
 import 'package:debrify/models/stremio_addon.dart';

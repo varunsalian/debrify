@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:debrify/features/discover/application/discover_source_dependencies.dart';
+import 'package:debrify/features/discover/application/discover_providers.dart';
 import 'package:debrify/features/discover/data/discover_source_repository.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';

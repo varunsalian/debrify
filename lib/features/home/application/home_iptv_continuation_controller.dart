@@ -4,7 +4,7 @@ import '../../../services/iptv_cw_history.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../models/home_continuation_session.dart';
 import '../models/home_iptv_continuation_state.dart';
-import 'home_iptv_continuation_dependencies.dart';
+import 'home_continuation_providers.dart';
 
 final homeIptvContinuationProvider = NotifierProvider.autoDispose
     .family<

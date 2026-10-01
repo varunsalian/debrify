@@ -1,12 +1,10 @@
 import 'dart:async';
 import 'package:debrify/features/sources/application/source_cache_controller.dart';
-import 'package:debrify/features/sources/application/source_cache_dependencies.dart';
+import 'package:debrify/features/sources/application/sources_providers.dart';
 import 'package:debrify/features/sources/application/source_results_controller.dart';
 import 'package:debrify/features/sources/application/source_retry_controller.dart';
 import 'package:debrify/features/sources/data/source_cache_repository.dart';
 import 'package:debrify/features/sources/application/source_search_controller.dart';
-import 'package:debrify/features/sources/application/source_search_dependencies.dart';
-import 'package:debrify/features/sources/application/source_seasons_dependencies.dart';
 import 'package:debrify/features/sources/data/source_search_repository.dart';
 import 'package:debrify/features/sources/models/source_search_request.dart';
 import 'package:debrify/features/sources/models/source_search_result.dart';

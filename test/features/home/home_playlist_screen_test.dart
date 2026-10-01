@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:debrify/features/home/application/home_playlist_dependencies.dart';
+import 'package:debrify/features/home/application/home_saved_content_providers.dart';
 import 'fixtures/playlist_fixture.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/home_row_refresh.dart';

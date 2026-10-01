@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:debrify/features/home/application/home_tv_favorites_controller.dart';
-import 'package:debrify/features/home/application/home_tv_favorites_dependencies.dart';
+import 'package:debrify/features/home/application/home_saved_content_providers.dart';
 import 'package:debrify/features/home/data/home_tv_favorites_repository.dart';
 import 'package:debrify/features/home/models/home_favorites_session.dart';
 import 'package:debrify/models/debrify_tv_channel_record.dart';

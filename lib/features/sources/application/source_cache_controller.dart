@@ -3,8 +3,7 @@ import '../../../models/torrent.dart';
 import '../data/source_cache_repository.dart';
 import '../models/source_cache_state.dart';
 import '../models/sources_session.dart';
-import 'source_cache_dependencies.dart';
-import 'source_seasons_dependencies.dart';
+import 'sources_providers.dart';
 
 final sourceCacheProvider = NotifierProvider.autoDispose
     .family<SourceCacheController, SourceCacheState, SourcesSession>(

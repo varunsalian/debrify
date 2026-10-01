@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:debrify/features/home/application/home_random_episode_dependencies.dart';
+import 'package:debrify/features/home/application/home_playback_providers.dart';
 import 'package:debrify/features/home/models/home_random_playback_preparation.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';

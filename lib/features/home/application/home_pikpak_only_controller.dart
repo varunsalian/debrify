@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../data/home_pikpak_only_repository.dart';
 import '../models/home_catalog_session.dart';
-import 'home_pikpak_only_dependencies.dart';
+import 'home_board_providers.dart';
 
 final homePikpakOnlyProvider = NotifierProvider.autoDispose
     .family<HomePikpakOnlyController, bool, HomeCatalogSession>(

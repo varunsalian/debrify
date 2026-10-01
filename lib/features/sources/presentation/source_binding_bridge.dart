@@ -1,4 +1,4 @@
-import '../application/source_binding_dependencies.dart';
+import '../application/sources_providers.dart';
 import '../data/manual_source_preparation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

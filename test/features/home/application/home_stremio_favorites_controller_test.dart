@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:debrify/features/home/application/home_stremio_favorites_controller.dart';
-import 'package:debrify/features/home/application/home_stremio_favorites_dependencies.dart';
+import 'package:debrify/features/home/application/home_saved_content_providers.dart';
 import 'package:debrify/features/home/data/home_stremio_favorites_repository.dart';
 import 'package:debrify/features/home/models/home_favorites_session.dart';
 import 'package:debrify/models/stremio_tv/stremio_tv_channel.dart';

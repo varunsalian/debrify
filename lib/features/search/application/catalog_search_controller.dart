@@ -5,7 +5,7 @@ import '../data/catalog_search_repository.dart';
 import '../models/catalog_search_row.dart';
 import '../models/catalog_search_state.dart';
 import '../models/search_session.dart';
-import 'catalog_search_dependencies.dart';
+import 'search_providers.dart';
 
 final catalogSearchProvider = NotifierProvider.autoDispose
     .family<CatalogSearchController, CatalogSearchState, SearchSession>(

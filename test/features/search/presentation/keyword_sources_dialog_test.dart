@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:debrify/features/search/application/keyword_sources_controller.dart';
-import 'package:debrify/features/search/application/keyword_sources_dependencies.dart';
+import 'package:debrify/features/search/application/search_providers.dart';
 import 'package:debrify/features/search/data/keyword_sources_repository.dart';
 import 'package:debrify/features/search/models/keyword_source.dart';
 import 'package:debrify/features/search/models/search_session.dart';

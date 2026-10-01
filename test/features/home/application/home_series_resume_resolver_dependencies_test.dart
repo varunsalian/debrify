@@ -1,7 +1,5 @@
-import 'package:debrify/features/home/application/home_series_resume_dependencies.dart';
-import 'package:debrify/features/home/application/home_series_resume_resolver_dependencies.dart';
-import 'package:debrify/features/home/application/home_tracker_resume_dependencies.dart';
-import 'package:debrify/features/home/application/home_tracking_policy_dependencies.dart';
+import 'package:debrify/features/home/application/home_playback_providers.dart';
+import 'package:debrify/features/home/application/home_detail_providers.dart';
 import 'package:debrify/features/home/models/home_catalog_session.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';

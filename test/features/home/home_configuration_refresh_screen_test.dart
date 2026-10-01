@@ -1,8 +1,7 @@
-import 'package:debrify/features/search/application/keyword_appearance_dependencies.dart';
+import 'package:debrify/features/search/application/search_providers.dart';
 import 'package:debrify/models/source_appearance.dart';
 import 'dart:async';
-import 'package:debrify/features/home/application/home_catalog_preferences_dependencies.dart';
-import 'package:debrify/features/home/application/home_collections_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/data/home_catalog_preferences_repository.dart';
 import 'package:debrify/features/home/data/home_collections_repository.dart';
 import 'package:debrify/models/home_preferences.dart';

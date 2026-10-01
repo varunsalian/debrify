@@ -1,7 +1,7 @@
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'package:debrify/features/stremio_tv/application/stremio_tv_catalog_editor_dependencies.dart';
+import 'package:debrify/features/stremio_tv/application/stremio_tv_providers.dart';
 import 'package:debrify/features/stremio_tv/data/stremio_tv_catalog_editor.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';

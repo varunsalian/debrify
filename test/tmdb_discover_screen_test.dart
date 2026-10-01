@@ -1,8 +1,7 @@
-import 'package:debrify/features/discover/application/discover_source_dependencies.dart';
+import 'package:debrify/features/discover/application/discover_providers.dart';
 import 'package:debrify/features/discover/data/discover_source_repository.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'dart:async';
-import 'package:debrify/features/discover/application/metadata_feature_dependencies.dart';
 import 'package:debrify/features/discover/models/metadata_feature_policy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:debrify/models/metadata_preferences.dart';

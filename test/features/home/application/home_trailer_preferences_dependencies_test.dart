@@ -1,4 +1,4 @@
-import 'package:debrify/features/home/application/home_trailer_preferences_dependencies.dart';
+import 'package:debrify/features/home/application/home_hero_providers.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

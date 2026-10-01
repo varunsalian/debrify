@@ -5,7 +5,7 @@ import '../data/keyword_search_repository.dart';
 import '../models/keyword_search_state.dart';
 import '../models/search_session.dart';
 import 'keyword_cache_controller.dart';
-import 'keyword_search_dependencies.dart';
+import 'search_providers.dart';
 import 'search_session_provider.dart';
 
 final keywordSearchProvider = NotifierProvider.autoDispose

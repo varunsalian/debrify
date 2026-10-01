@@ -1,7 +1,7 @@
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'dart:async';
 
-import 'package:debrify/features/sources/application/source_binding_dependencies.dart';
+import 'package:debrify/features/sources/application/sources_providers.dart';
 import 'package:debrify/features/sources/data/source_acquisition.dart';
 import 'package:debrify/features/sources/models/acquired_source.dart';
 import 'package:debrify/features/sources/presentation/source_binding_bridge.dart';

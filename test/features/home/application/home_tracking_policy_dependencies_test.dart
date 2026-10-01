@@ -5,7 +5,7 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:debrify/features/home/application/home_tracking_policy_dependencies.dart';
+import 'package:debrify/features/home/application/home_detail_providers.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';

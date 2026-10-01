@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../models/discover_card_settings.dart';
-import 'discover_card_settings_dependencies.dart';
+import 'discover_providers.dart';
 
 final discoverCardSettingsProvider = NotifierProvider.autoDispose
     .family<

@@ -4,8 +4,7 @@ import '../../../services/profiles/profile_session_memory.dart';
 import '../data/saved_sources_repository.dart';
 import '../models/sources_session.dart';
 import 'saved_sources_controller.dart';
-import 'saved_sources_dependencies.dart';
-import 'source_seasons_dependencies.dart';
+import 'sources_providers.dart';
 
 typedef SourceBindingWriter = Future<bool> Function(SeriesSource source);
 typedef SourceBindingOperation =

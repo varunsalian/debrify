@@ -3,8 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/source_settings_repository.dart';
 import '../models/source_presentation_settings.dart';
 import '../models/sources_session.dart';
-import 'source_seasons_dependencies.dart';
-import 'source_settings_dependencies.dart';
+import 'sources_providers.dart';
 
 // In nested scopes, override this controller as well as its repository. With
 // pinned Riverpod 3.4.3, a repository-only override can reuse a parent instance.

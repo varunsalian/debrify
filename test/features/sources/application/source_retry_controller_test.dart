@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:debrify/features/sources/application/source_retry_controller.dart';
-import 'package:debrify/features/sources/application/source_search_dependencies.dart';
+import 'package:debrify/features/sources/application/sources_providers.dart';
 import 'package:debrify/features/sources/data/service_source_search_repository.dart';
 import 'package:debrify/features/sources/models/sources_session.dart';
 import 'package:debrify/models/advanced_search_selection.dart';

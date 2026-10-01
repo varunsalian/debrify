@@ -1,4 +1,4 @@
-import 'package:debrify/features/discover/application/discover_card_settings_dependencies.dart';
+import 'package:debrify/features/discover/application/discover_providers.dart';
 import 'package:debrify/ui/core/see_all_link.dart';
 import 'package:debrify/widgets/see_all/discover_card_settings_scope.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

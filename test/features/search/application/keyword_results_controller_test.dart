@@ -1,8 +1,7 @@
 import 'package:debrify/features/search/application/keyword_cache_controller.dart';
-import 'package:debrify/features/search/application/keyword_cache_dependencies.dart';
+import 'package:debrify/features/search/application/search_providers.dart';
 import 'package:debrify/features/search/application/keyword_result_snapshot.dart';
 import 'package:debrify/features/search/application/keyword_results_controller.dart';
-import 'package:debrify/features/search/application/keyword_search_dependencies.dart';
 import 'package:debrify/features/search/models/keyword_cache_state.dart';
 import 'package:debrify/features/search/models/keyword_results_state.dart';
 import 'package:debrify/features/search/models/search_session.dart';

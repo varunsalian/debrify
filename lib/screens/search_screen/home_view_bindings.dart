@@ -1,4 +1,4 @@
-import '../../features/home/application/home_layout_preference_dependencies.dart';
+import '../../features/home/application/home_board_providers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/search/models/keyword_snapshot.dart';
@@ -8,9 +8,6 @@ import '../../features/home/models/home_board_configuration.dart';
 import '../../features/home/models/home_catalog_session.dart';
 import '../../features/home/models/home_continuation_session.dart';
 import '../../features/home/models/home_display_preferences.dart';
-import '../../features/home/application/home_return_dependencies.dart';
-import '../../features/home/application/home_collections_dependencies.dart';
-import '../../features/home/application/home_default_view_dependencies.dart';
 import '../../features/home/application/home_display_preferences_controller.dart';
 import '../../features/home/presentation/home_board_bindings.dart';
 import '../../features/home/presentation/home_media_bindings.dart';

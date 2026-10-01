@@ -1,5 +1,5 @@
-import 'package:debrify/features/home/application/home_detail_dependencies.dart';
-import 'package:debrify/features/home/application/home_series_resume_dependencies.dart';
+import 'package:debrify/features/home/application/home_detail_providers.dart';
+import 'package:debrify/features/home/application/home_playback_providers.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
@@ -14,7 +14,7 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:debrify/features/home/application/home_trakt_continuation_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/trakt_continue_watching_item.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';

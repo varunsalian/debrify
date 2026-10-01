@@ -1,6 +1,6 @@
-import '../../features/home/application/home_catalog_dependencies.dart';
-import '../../features/home/application/home_detail_action_dependencies.dart';
-import '../../features/home/application/home_simkl_continuation_dependencies.dart';
+import '../../features/home/application/home_board_providers.dart';
+import '../../features/home/application/home_detail_providers.dart';
+import '../../features/home/application/home_continuation_providers.dart';
 import '../../features/home/presentation/home_detail_actions.dart';
 import '../../features/home/presentation/home_return_section.dart';
 import '../../models/playlist_view_mode.dart';

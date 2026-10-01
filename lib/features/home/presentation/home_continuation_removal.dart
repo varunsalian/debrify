@@ -2,9 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../widgets/trakt/trakt_menu_helpers.dart'
     show TraktItemMenuAction;
-import '../application/home_local_history_removal_dependencies.dart';
-import '../application/home_trakt_continuation_dependencies.dart';
-import '../application/home_iptv_continuation_dependencies.dart';
+import '../application/home_continuation_providers.dart';
 import '../models/home_catalog_session.dart';
 import 'home_detail_route.dart';
 import 'home_continuation_section.dart';

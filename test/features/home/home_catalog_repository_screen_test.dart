@@ -1,8 +1,7 @@
-import 'package:debrify/features/home/application/home_collections_dependencies.dart';
+import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/data/home_collections_repository.dart';
 import 'dart:async';
 
-import 'package:debrify/features/home/application/home_catalog_dependencies.dart';
 import 'package:debrify/features/home/data/home_catalog_repository.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/features/home/models/home_catalog_state.dart';

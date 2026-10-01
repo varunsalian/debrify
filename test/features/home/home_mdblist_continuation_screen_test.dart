@@ -4,7 +4,7 @@ import 'dart:io' as io;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file/local.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
-import 'package:debrify/features/home/application/home_mdblist_continuation_dependencies.dart';
+import 'package:debrify/features/home/application/home_continuation_providers.dart';
 import 'package:debrify/features/home/data/home_mdblist_continuation_repository.dart';
 import 'package:debrify/models/mdblist_continue_watching.dart';
 import 'package:debrify/models/advanced_search_selection.dart';

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:debrify/features/home/application/home_iptv_favorites_dependencies.dart';
+import 'package:debrify/features/home/application/home_saved_content_providers.dart';
 import 'package:debrify/features/home/data/home_iptv_favorites_repository.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/iptv_media_store.dart';

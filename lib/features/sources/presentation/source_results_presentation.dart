@@ -8,7 +8,7 @@ import '../../../models/series_source.dart';
 import '../../../models/torrent.dart';
 import '../application/saved_sources_controller.dart';
 import '../application/source_batch_preparation.dart';
-import '../application/source_binding_match_dependencies.dart';
+import '../application/sources_providers.dart';
 import '../application/source_results_controller.dart';
 import '../application/source_search_completion.dart';
 import '../application/source_selection_match.dart';

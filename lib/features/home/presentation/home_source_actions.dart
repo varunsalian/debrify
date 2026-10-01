@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/stremio_addon.dart';
-import '../application/home_source_editing_dependencies.dart';
+import '../application/home_detail_providers.dart';
 import '../models/home_catalog_session.dart';
 import 'home_playback_navigation.dart';
 import 'home_source_editor.dart';

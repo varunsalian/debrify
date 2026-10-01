@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:debrify/features/search/application/keyword_cache_controller.dart';
-import 'package:debrify/features/search/application/keyword_cache_dependencies.dart';
+import 'package:debrify/features/search/application/search_providers.dart';
 import 'package:debrify/features/search/data/keyword_cache_repository.dart';
 import 'package:debrify/features/search/models/keyword_cache_state.dart';
 import 'package:debrify/features/search/models/search_session.dart';

@@ -1,7 +1,7 @@
 import 'package:debrify/features/sources/application/source_results_controller.dart';
 import 'package:debrify/features/sources/application/source_search_completion.dart';
 import 'package:debrify/features/sources/application/source_seasons_controller.dart';
-import 'package:debrify/features/sources/application/source_seasons_dependencies.dart';
+import 'package:debrify/features/sources/application/sources_providers.dart';
 import 'package:debrify/features/sources/data/source_seasons_repository.dart';
 import 'package:debrify/features/sources/models/source_results_state.dart';
 import 'package:debrify/features/sources/models/source_toolbar_state.dart';

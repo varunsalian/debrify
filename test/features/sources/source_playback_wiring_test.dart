@@ -1,7 +1,6 @@
 import 'dart:async';
 
-import 'package:debrify/features/sources/application/saved_sources_dependencies.dart';
-import 'package:debrify/features/sources/application/source_settings_dependencies.dart';
+import 'package:debrify/features/sources/application/sources_providers.dart';
 import 'package:debrify/features/sources/data/saved_sources_repository.dart';
 import 'package:debrify/features/sources/data/source_settings_repository.dart';
 import 'package:debrify/features/sources/models/saved_sources_state.dart';

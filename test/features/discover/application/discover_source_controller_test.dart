@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:debrify/features/discover/application/discover_source_controller.dart';
-import 'package:debrify/features/discover/application/discover_source_dependencies.dart';
+import 'package:debrify/features/discover/application/discover_providers.dart';
 import 'package:debrify/features/discover/data/discover_source_repository.dart';
 import 'package:debrify/features/discover/models/discover_source_state.dart';
 import 'package:debrify/models/stremio_addon.dart';

@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../data/home_display_preferences_repository.dart';
 import '../models/home_display_preferences.dart';
-import 'home_display_preferences_dependencies.dart';
+import 'home_board_providers.dart';
 
 final homeDisplayPreferencesProvider = NotifierProvider.autoDispose
     .family<

@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/metadata_preferences.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../models/metadata_feature_policy.dart';
-import 'metadata_feature_dependencies.dart';
+import 'discover_providers.dart';
 
 final metadataFeaturePolicyProvider = NotifierProvider.autoDispose
     .family<

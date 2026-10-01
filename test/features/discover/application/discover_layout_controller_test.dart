@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:debrify/features/discover/application/discover_layout_controller.dart';
-import 'package:debrify/features/discover/application/discover_layout_dependencies.dart';
+import 'package:debrify/features/discover/application/discover_providers.dart';
 import 'package:debrify/features/discover/data/discover_layout_preferences.dart';
 import 'package:debrify/features/discover/models/discover_layout_session.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';

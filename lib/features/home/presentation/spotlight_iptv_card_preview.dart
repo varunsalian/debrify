@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/iptv_playlist.dart';
 import '../../../widgets/hero_trailer_backdrop.dart';
-import '../application/home_spotlight_live_dependencies.dart';
+import '../application/home_hero_providers.dart';
 import '../application/home_spotlight_live_preview.dart';
 
 /// Live IPTV preview drawn directly inside the active Spotlight card.
