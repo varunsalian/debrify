@@ -166,9 +166,16 @@ def cmd_compare(args):
     relocations = []
     while '--relocate' in args:
         i = args.index('--relocate')
-        source, _, prefix = args[i + 1].partition('=')
+        spec = args[i + 1] if i + 1 < len(args) else ''
+        source, sep, prefix = spec.partition('=')
+        if not sep or not source.strip() or not prefix.strip():
+            print(f'--relocate needs FROM=TO_PREFIX with both parts, got {spec!r}')
+            return 2
         relocations.append((source, prefix))
         del args[i:i + 2]
+    if moved and relocations:
+        print('--moved and --relocate cannot be combined')
+        return 2
     if against is None:
         print('compare needs --against <baseline>')
         return 2

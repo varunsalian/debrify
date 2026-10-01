@@ -34,10 +34,12 @@ when they merge.
 
 ## Facts that shape the plan (at `072407c3`)
 
-- **Members are grouped by subject, not by line range.** Key constants for
-  every subject sit together near the top (lines ~300–690). Their accessors
-  are spread through the file. So each step moves one subject's members
-  **wherever they are**, using the member map, not a block of lines.
+- **Members are grouped by subject, not by line range.** Many key constants
+  sit together near the top (lines ~300–690). Others are declared beside
+  their accessors throughout the file: detail-section keys at 1257, the
+  home-row-order key at 10817. Accessors are spread through the file too. So
+  each step moves one subject's members **wherever they are**, using the
+  member map, not a block of lines.
 - **Keys mostly belong to one subject.** The exceptions are cross-subject
   functions and shared helpers. The step 0 dependency report must find all
   of them. Known ones:
@@ -50,7 +52,10 @@ when they merge.
     Sources presentation preferences (217–220).
 - **Shared private helpers:**
   - `_getPlaybackStateMap`/`_savePlaybackStateMap` (3002, 3066): used in 17
-    sections. They take no lock.
+    sections, including outside playback progress: per-content audio and
+    subtitle preferences (4631, 4655) and playlist progress (6317). They take
+    no lock.
+  - The Trakt credential check (7075) uses the provider credential helper.
   - `_credentialConfigured`/`_readCurrentProviderCredential` (2375, 2357):
     provider credentials.
   - `_seriesProgressKey`, `_requiresExactProgressIdentity` and
@@ -73,11 +78,15 @@ when they merge.
 - **Profile-handoff reset:** `resetProfileCaches()` (10910–10933) resets
   every `*Cached` mirror, bumps `_launchSelectionGeneration` (10924) and
   clears `_startupIptvChannelCached` (10932).
-  - It is called only from
+  - Production calls it from
     `lib/services/profiles/profile_app_lifecycle_participant.dart:123`, as
     `_warmed('StorageService', scope, StorageService.resetProfileCaches)`.
     `_warmed` resets, then stamps `ProfileCacheLedger` under the name
     `'StorageService'`.
+  - Tests call it directly too, for example
+    `test/iptv_spotlight_style_settings_test.dart:43` and
+    `test/profiles/isolation_suite/preference_key_sweep_test.dart:95`. They
+    rely on it resetting **everything**.
   - Other resets are separate APIs with their own semantics, for example
     `resetSidebarConfiguration` (2146–2150). They are not part of the
     handoff.
@@ -169,22 +178,31 @@ together (the step table is arranged for this). Otherwise:
 - changing whether a member is async;
 - turning a static field into a getter, or the reverse.
 
-**Profile-handoff reset** (from the first step that moves a mirror):
-- Each storage class that owns `*Cached` mirrors, or the generation or
-  session state reset in the handoff, gets
+**Profile-handoff reset.** One entry point, created in step 1, so every
+caller resets everything at every step.
+- **The entry point:** `lib/services/storage/storage_profile_caches.dart`
+  declares the top-level `void resetStorageProfileCaches()`.
+  - In step 1 it calls only `StorageService.resetProfileCaches()`.
+  - From step 1 on, every caller uses it: the participant's
+    `_warmed('StorageService', scope, resetStorageProfileCaches)`, with the
+    same label and the same single ledger stamp, plus every test. The map
+    sends `resetProfileCaches` to it, `ref_kind` `top_level`.
+- **Per-class resets:** each storage class that owns `*Cached` mirrors, or
+  the generation or session state reset in the handoff, gets
   `static void resetProfileCaches()`. It contains those lines from the
   original, verbatim and in their original relative order.
-- `StorageService.resetProfileCaches()` keeps the lines not yet moved.
-- In the lifecycle participant, the single
-  `_warmed('StorageService', scope, ...)` call takes a closure that calls each
-  class's `resetProfileCaches()`, in the order their first line appeared in
-  the original, then the shrinking `StorageService.resetProfileCaches()`
-  while it exists.
-- One label and one ledger stamp, as today. The original assignments are
-  independent, so per-class grouping keeps behaviour.
-- The participant then imports each storage file that has a reset, which
-  keeps the existing "every reset-shaped file is wired into the participant"
-  guard passing without changes.
+  - `resetStorageProfileCaches()` calls the class resets in the order their
+    first line appeared in the original, then
+    `StorageService.resetProfileCaches()`, which keeps the lines not yet
+    moved, while that still exists.
+  - The original assignments are independent, so per-class grouping keeps
+    behaviour.
+- **Reset partition check** (in `check_storage_bodies.py`): every statement
+  of the original `resetProfileCaches()` appears exactly once across the
+  per-class resets and the remaining legacy one. Each keeps its value, and
+  each owner keeps the original relative order.
+- **Guard:** see Source-text tests, where the wiring test is adapted to the
+  entry point.
 
 **Repointing.** Callers change only their qualifier and imports; test names
 don't change. Code relying on `storage_service.dart`'s re-export of
@@ -197,14 +215,14 @@ The order keeps members that share private helpers or keys in the same step.
 
 | # | Work | Notes |
 | --- | --- | --- |
-| 0 | Baseline, member map, dependency report, tooling, guard and CI registration | See below. Nothing moves yet. |
-| 1 | Content sources (Reddit, Lemmy, YouTube), remote control, device, profile policy, the two enums, `ApiKeyValidator` | Proves the tooling on small subjects. |
+| 0 | Baseline, member map, dependency report, tooling | See below. Nothing moves, and no guard or CI registration yet (nothing to register). |
+| 1 | Create `lib/services/storage/`, the reset entry point and the enum files; register them in the guard and CI in the same commit. Move content sources (Reddit, Lemmy, YouTube), remote control, device, profile policy, the two enums and `ApiKeyValidator`. | Proves the tooling on small subjects. Ports `stale_runtime_guard_test` to the entry point. |
 | 2 | Provider credentials and actions, WebDAV, `clearAllIntegrationStates` | |
-| 3 | Trackers, search and Quick Play, player, external players | |
+| 3 | First `playback_state_store.dart` (the two map helpers and their keys, shared), then trackers, search and Quick Play, player, external players | The store moves first because playlist progress (step 6) and per-content audio/subtitle preferences use the map helpers. Per-content audio/subtitle preferences may move here or in step 7; the map decides. |
 | 4 | Appearance, home, `migrateDefaultsGeneration` | Most `*Cached` mirrors move here, so the handoff-reset wiring is exercised. **Full-suite gate 1** after this step. |
 | 5 | IPTV, startup settings (`clearAllStartupSettings`), Debrify TV, Stremio TV | `warmStartupIptv` and `_startupIptvChannelCached` move together. |
 | 6 | Watchlist, playlists, poster overrides, TVMaze mappings, `_getPlaylistItemUniqueKey`, `clearAllPlaylistMetadata` | Ports the playlist entries of the tombstone audit. |
-| 7 | Playback state | Moves last: it is the most shared. Starts with `playback_state_store.dart`. Ports the playback entries of the tombstone audit. |
+| 7 | The rest of playback state | Moves last: it is the most shared. Ports the playback entries of the tombstone audit. |
 | 8 | Delete `storage_service.dart`, final guards and CI, **full-suite gate 2** | See "Definition of done". |
 
 ### Step 0 — baseline, map, report, tooling
@@ -251,13 +269,19 @@ The order keeps members that share private helpers or keys in the same step.
      that file now uses. It handles `show`/`hide`/`as` imports, for example
      `test/features/home/home_catalog_preferences_screen_test.dart:10`
      (`show StorageService`), or fails loudly on them.
-   - **What it leaves alone:** it doesn't rewrite inside string literals or
-     comments. It lists them instead, for the source-text inventory below.
-   - **Running it:** it is idempotent (a second run changes nothing). Default
-     paths are `lib`, `test` and `dev`; `dev/perf/search_screen_perf_probe_test.dart:25,84`
-     must be handled. Other branches run it after merging.
-   - **Checked:** a small fixture test (`test/dev_tools/repoint_storage_test.dart`
-     or a script self-test) covers each of these forms.
+   - **Strings and comments:** it rewrites executable code inside string
+     interpolation (`${...}`, including nested strings), for example
+     `lib/theme/app_looks.dart:81` and `test/my_watchlist_storage_test.dart:274`.
+     It leaves plain string text and comments unchanged and lists them for
+     the source-text inventory below.
+   - **Scope:** every tracked Dart file (`git ls-files '*.dart'`), not a fixed
+     folder list. This covers `tool/native_player_settings_smoke.dart:19,123`
+     and `dev/perf/search_screen_perf_probe_test.dart:25,84`.
+   - **Running it:** it is idempotent (a second run changes nothing). Other
+     branches run it after merging.
+   - **Checked:** a fixture self-test covers each form: static call, tear-off,
+     field assignment, unqualified type, `show`/`as` import, interpolation,
+     plain string left alone, and the reset entry point.
 
 5. **Key and body checks.**
    - **`dev/tool/storage_key_inventory.json`**, generated now from the
@@ -273,12 +297,23 @@ The order keeps members that share private helpers or keys in the same step.
      declared once, none lost, changed or added. It runs at every step and in
      CI.
    - **`dev/tool/check_storage_bodies.py`** (local only, it reads the
-     original through `git show 072407c3:...`) compares each moved member's
-     normalised body with the original. Normalisation removes only
-     qualifiers, `_` changes recorded in the map, and whitespace. This is
-     what covers inline and generated keys (lines 725, 774, 976–981 and
-     6647), defaults, storage APIs and guards, which a declaration inventory
-     can't see. It runs at every step.
+     original through `git show 072407c3:...`).
+     - **What it compares:** each moved member's complete declaration against
+       the original: modifiers, type, parameters **and their defaults** (for
+       example `forRemoteTransfer = false` at 687), annotations, field
+       initialisers and body.
+     - **Normalisation:** it removes only map-authorised qualifier changes
+       and renames (including `Internal` suffixes), and whitespace outside
+       string literals.
+     - **What this covers:** inline and generated keys (lines 725, 774,
+       976–981 and 6647), defaults, storage APIs and guards, which a
+       declaration inventory can't see.
+     - **Reset partition:** it also runs the reset partition check described
+       under Technique.
+     - **Self-checked:** negative fixtures must fail for a changed parameter
+       default, a changed inline key, a changed storage receiver and changed
+       whitespace inside a literal.
+     - It runs at every step.
 
 6. **Source-text inventory: `dev/tool/storage_source_text.txt`.** List every
    test or tool that:
@@ -291,14 +326,9 @@ The order keeps members that share private helpers or keys in the same step.
 
    Each entry says which step ports it and how.
 
-7. **Guards and CI, registered before the first move:**
-   - Register `lib/services/storage/` and the two enum files in
-     `dev/tool/check_search_architecture.py` as a measured data-layer source
-     set: a 500-line cap and the data-layer import rules. An empty folder must
-     pass.
-   - Add the folder and the enum files to `checks.yml`'s scoped
-     `dart format` and `flutter analyze` steps.
-   - Add `check_storage_keys.py` to CI.
+7. **CI test coverage** (registration of the new paths happens in step 1,
+   when they exist; the guard rejects missing registered files).
+   - Add `check_storage_keys.py` to CI now; it passes on the unsplit file.
    - Add these contract suites to `dev/tool/ci_behavior_tests.txt`:
      - `test/profiles/isolation_suite`
      - `test/services/webdav_sync`
@@ -306,12 +336,27 @@ The order keeps members that share private helpers or keys in the same step.
      - `test/launch_animation/launch_selection_test.dart`
      - `test/tvos_keyboard_default_migration_test.dart`
      - `test/profiles/source_provider_credential_read_test.dart`
+     - `test/storage_service_vault_migration_test.dart`
+     - `test/episode_simkl_progress_storage_test.dart`
+     - `test/episode_local_progress_storage_test.dart`
+     - `test/local_watch_completion_storage_test.dart`
+     - `test/tracking_source_storage_test.dart`
+     - `test/tracking_source_policy_test.dart`
+     - `test/audio_settings_storage_test.dart`
      - every file in the source-text inventory
 
      Record any of their failures at `ss/base` in
-     `ci_behavior_known_failures.txt` by exact identity. Measure the job; if it
-     passes about 12 minutes, split it into a second job rather than dropping
-     tests.
+     `ci_behavior_known_failures.txt` by exact identity.
+   - Expect roughly 1.7–1.9× today's job (about 1,900–2,100 test cases).
+     Measure it on `private`; if it passes about 12 minutes, split the list
+     into two jobs rather than dropping tests.
+
+**Step 1 registration** (in the commit that creates the folder):
+- Register `lib/services/storage/` and the two enum files in
+  `dev/tool/check_search_architecture.py` as a measured data-layer source set:
+  a 500-line cap and the data-layer import rules. Each registered path exists
+  from step 1 on.
+- Add them to `checks.yml`'s scoped `dart format` and `flutter analyze` steps.
 
 ### Per step
 
@@ -346,17 +391,19 @@ identity is present with the same outcome.
 ### Source-text tests
 
 - **`test/profiles/isolation_suite/stale_runtime_guard_test.dart`.** This is
-  a profile-isolation guard. Port it in the first step that moves a mirror.
-  - The mirror test scans the remaining `storage_service.dart` **and** every
-    file under `lib/services/storage/`. Each `*Cached` mirror a file declares
-    must be reset in that file's `resetProfileCaches()`.
-  - Add assertions that the participant's `'StorageService'` warm closure
-    calls every storage class's `resetProfileCaches()`, and that the
-    generation bump and startup-channel clear are still present.
-  - Keep its wiring test (every reset-shaped file named in the participant)
-    unchanged.
-  - Mutation-check the port: temporarily remove one reset line, then one
-    class's call from the closure, confirm each fails, and restore.
+  a profile-isolation guard. Port it in step 1, with the entry point.
+  - **Mirror test:** it scans the remaining `storage_service.dart` **and**
+    every file under `lib/services/storage/`. Each `*Cached` mirror a file
+    declares must be reset in that file's `resetProfileCaches()`.
+  - **Wiring test:** for files under `lib/services/storage/`, require the
+    chain: each file with a reset-shaped method is called from
+    `storage_profile_caches.dart`, whose basename the participant names, and
+    whose function the participant passes to `_warmed('StorageService', ...)`.
+    Every other file in `lib/` keeps today's rule unchanged.
+  - **Handoff extras:** also assert that the generation bump and the
+    startup-channel clear are still present in some per-class reset.
+  - **Mutation check:** temporarily remove one reset line, then one class's
+    call from the entry point. Confirm each fails, then restore.
 - **`test/services/webdav_sync/webdav_sync_tombstone_audit_test.dart`.**
   - Port each audited API in the **same step** that moves it: playlist
     entries in step 6, playback entries in step 7.
@@ -371,13 +418,16 @@ identity is present with the same outcome.
 
 ## Definition of done
 
-1. `lib/services/storage_service.dart` is deleted. No executable reference
-   to `StorageService` remains, and no import of the old file.
+1. `lib/services/storage_service.dart` is deleted. A scan of every tracked
+   Dart file finds no executable reference to `StorageService`, and no import
+   of the old file.
    - The only permitted mentions of the name are:
      - the ledger label `'StorageService'` and its test assertions;
      - log text;
      - test group and test names;
-     - comments and `dev/design/` docs.
+     - comments and `dev/design/` docs;
+     - `repoint_storage.py`'s patterns and fixtures, and the body checker's
+       historical inputs.
    - Update comments in moved code only where they would now mislead.
 2. Every file in `lib/services/storage/` and both enum files are at most 500
    lines and pass the data-layer guard. The old file is removed from
