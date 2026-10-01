@@ -303,11 +303,7 @@ this file's source text.
 | 2 | `014502cf` | 4,749 | Search/fetcher owners wired; focused suite 1,101 pass / same 4 failures; comparison PASS. Analyzer and size/import guards unchanged/pass. |
 | 3 | `396c93c0` | 3,148 | Menu/launch/binding owners wired; 1,106 focused pass / 2 historical failures. No new analyzer diagnostics. Full-suite gate 1 comparison PASS: 10,294 pass / 20 fail / 29 err / 20 skip; same baseline identities and skips, 3 new passing tests. |
 | 4 | Pipeline commits listed below | 157 before final formatting | Five whole pipelines moved, each checked and committed. No new test/analyzer failures; static lifetimes retained. |
-| 5 | step-5 commit (this entry) | 206 | Forwarding-only facade, explicit source-set caps, CI formatting/analyzer coverage. Local checks pass; full-suite gate 2 pending. |
-
-## Found, not fixed
-
-- `test/profiles/profiles_hub_test.dart`, `settle` / disable-profile test: under full-suite load the disabled badge can miss the six 50 ms real-I/O windows. Gate-1 first attempt failed this unchanged test; isolated run passed all 5 and the same-SDK/configuration full rerun passed the baseline comparison. No allowlist or application change. Evidence: `<E>/tps/gate1-first.jsonl`, `gate1-profile-check.jsonl`, `gate1.jsonl`.
+| 5 | `f357f4bf` | 206 | Forwarding-only facade, explicit source-set caps, CI formatting/analyzer coverage. Full-suite gate 2 comparison PASS against the original baseline and gate 1: 10,294 pass / 20 fail / 29 err / 20 skip. No new failures, missing tests, skips, or analyzer diagnostics. |
 
 ### Retained oversized service and structural exceptions
 
@@ -459,3 +455,22 @@ Pipeline commits: `80c44f2c` (best), `ba6a3709` (selection), `ccc56861`
 - The service is removed from the repo size baseline; no other entry changes.
   SDK, lockfile, native code, and engine payloads are unchanged. Native/device
   playback was not exercised; this batch changes no native boundary payload.
+
+### Final gate and review handoff
+
+- Gate 2 ran at `f357f4bf` using the same Flutter/Dart SDK and default test
+  configuration. `<E>/tps/gate2.jsonl` compares PASS against both
+  `<E>/finish/bugfixes.jsonl` and `<E>/tps/gate1.jsonl`. All original test
+  identities remain; the three added DeoVR tests pass. Remaining 20 failures,
+  29 errors and 20 skips have their baseline outcomes. The two saved-source
+  guards fixed by porting still pass.
+- The final change after the test run is documentation-only. The completion
+  evidence is pushed to `private` on `refactor/codebase`, and the final report
+  records the live CI result for that exact pushed commit. Gate 1 private CI
+  already passed at `4c9aa004`, run `36840285688`.
+- Review range: `e0d3e932..HEAD`. No merge or push to `origin` is performed.
+  The pre-existing untracked `output/` directory is preserved.
+
+## Found, not fixed
+
+- `test/profiles/profiles_hub_test.dart`, `settle` / disable-profile test: under full-suite load the disabled badge can miss the six 50 ms real-I/O windows. Gate-1 first attempt failed this unchanged test; isolated run passed all 5 and the same-SDK/configuration full rerun passed the baseline comparison. No allowlist or application change. Evidence: `<E>/tps/gate1-first.jsonl`, `gate1-profile-check.jsonl`, `gate1.jsonl`.
