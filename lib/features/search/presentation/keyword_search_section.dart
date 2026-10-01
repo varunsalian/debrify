@@ -5,7 +5,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/torrent.dart';
-import '../../../models/torrent_filter_state.dart';
 import '../../../widgets/cinema_sources_layout.dart';
 import '../application/keyword_search_controller.dart';
 import '../application/keyword_results_controller.dart';
@@ -68,14 +67,9 @@ class KeywordSearchSection {
   // Providers / Sources / Select). A fixed pool of 5 covers the most pills ever
   // shown.
   List<FocusNode> get kwToolbarNodes => keywordFocus.toolbar;
-  TorrentFilterState get kwFilters => keywordResults.filters;
   String get kwSort => keywordResults.sort;
-  // Sort direction for kwSort (ignored for 'relevance', which is engine order).
-  // Defaults follow each field's natural direction; the sort dialog can flip it.
-  bool get kwSortAsc => keywordResults.sortAscending;
   KeywordCacheController get keywordCacheController =>
       _ref.read(keywordCacheProvider(_deps.session()).notifier);
-  Map<String, List<String>> get kwCache => _deps.bindings().cache.badges;
 
   // Provider (stream-type) multi-select filter, ported from the old search
   // screen: results are grouped into "Direct" (direct/external URL streams) and
@@ -90,14 +84,11 @@ class KeywordSearchSection {
   /// True when the results list is being narrowed to TorBox-cached torrents
   /// only (TorBox is the sole usable debrid provider and its cache-check is on)
   /// — mirrors the old screen's `_showingTorboxCachedOnly`. Drives the banner.
-  bool get kwCachedOnly => _deps.bindings().cache.cachedOnly;
 
   // Bulk-selection state for keyword results (mirrors Home's multi-select).
   bool get kwSelectionMode => keywordResults.selectionMode;
-  Set<String> get kwSelected => keywordResults.selected;
 
   int get kwSearchToken => keywordSearchState.request;
-  bool get kwSearching => keywordSearchState.searching;
 
   /// Set on the first real user interaction (scroll drag, row DPAD nav, row
   /// tap/long-press, toolbar use) — later arrivals then park in [kwPending]
@@ -122,7 +113,6 @@ class KeywordSearchSection {
   List<FocusNode> get kwTabNodes => keywordFocus.tabs;
 
   final keywordViewport = KeywordViewport();
-  ScrollController get kwScroll => keywordViewport.scroll;
 
   Future<void> loadDefaultKeywordFilters() async {
     final changed = await keywordResultsController.loadDefaults();

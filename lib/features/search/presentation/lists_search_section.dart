@@ -33,8 +33,6 @@ class ListsSearchSection {
       _ref.read(listsSearchProvider(_deps.session()).notifier);
   String get listsQuery => listsState.query;
   List<MdblistListChoice> get listsResults => listsState.results;
-  bool get listsSearching => listsState.searching;
-  String? get listsError => listsState.error;
   final listsFocus = ListsFocus();
   List<FocusNode> get listsNodes => listsFocus.nodes;
   // Debounce for opening a list from the rail — one fast double-press must not
