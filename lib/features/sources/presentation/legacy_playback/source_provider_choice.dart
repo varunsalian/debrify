@@ -7,7 +7,7 @@ import 'package:debrify/features/sources/presentation/legacy_playback/provider_a
 import 'package:debrify/features/sources/presentation/legacy_playback/source_loading_overlays.dart';
 import 'package:debrify/features/sources/presentation/source_provider_picker.dart';
 import 'package:debrify/services/series_source_service.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:debrify/widgets/not_cached_dialog.dart';
 import 'package:debrify/widgets/provider_picker_dialog.dart';
 import 'package:flutter/material.dart';
@@ -98,7 +98,7 @@ final class SourceProviderChoice {
       gradient: providerGradient(provider),
       icon: providerIcon(provider),
     ),
-    remember: (provider) => StorageService.setDefaultTorrentProvider(
+    remember: (provider) => TorrentProviderStorage.setDefaultTorrentProvider(
       provider,
       canContinue: canContinue,
     ),

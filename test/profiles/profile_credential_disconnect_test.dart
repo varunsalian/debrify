@@ -14,7 +14,7 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -139,7 +139,7 @@ void main() {
         resourceId: resource.id,
       );
 
-      expect(await StorageService.clearTraktAuth(), isFalse);
+      expect(await TraktStorage.clearTraktAuth(), isFalse);
       expect(await registry.getGrant(memberId, resource.id), isNull);
       expect(await registry.getResource(resource.id), isNotNull);
     },
@@ -204,9 +204,9 @@ void main() {
       ProfileScope(profileId: memberId, dataGeneration: 1, sessionEpoch: 2),
     );
 
-    expect(await StorageService.getTraktAccessToken(), 'access');
+    expect(await TraktStorage.getTraktAccessToken(), 'access');
     expect(
-      await StorageService.getTraktAccessToken(forRemoteTransfer: true),
+      await TraktStorage.getTraktAccessToken(forRemoteTransfer: true),
       isNull,
     );
 
@@ -228,7 +228,7 @@ void main() {
       ProfileScope(profileId: memberId, dataGeneration: 1, sessionEpoch: 4),
     );
     expect(
-      await StorageService.getTraktAccessToken(forRemoteTransfer: true),
+      await TraktStorage.getTraktAccessToken(forRemoteTransfer: true),
       'access',
     );
   });
@@ -280,7 +280,7 @@ void main() {
     );
 
     expect(
-      StorageService.clearTraktAuth,
+      TraktStorage.clearTraktAuth,
       throwsA(isA<ResourceImpactRequiredException>()),
     );
     expect(await registry.getResource(resource.id), isNotNull);
@@ -401,7 +401,7 @@ void main() {
     () async {
       final resource = await createTrakt();
 
-      expect(await StorageService.clearTraktAuth(), isTrue);
+      expect(await TraktStorage.clearTraktAuth(), isTrue);
       expect(await registry.getResource(resource.id), isNull);
       expect(
         await registry.getBoundResourceId(adminId, 'tracker.trakt'),

@@ -1,3 +1,5 @@
+import 'package:debrify/services/storage/mdblist_storage.dart';
+import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../screens/video_player/services/subtitle_settings_service.dart';
@@ -127,7 +129,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
       _warmed('Simkl', scope, SimklService.instance.resetProfileScope);
       _warmed('PikPak', scope, PikPakApiService.instance.resetProfileScope);
       _warmed('MDBList', scope, MdblistService.instance.resetProfileScope);
-      await StorageService.retireMdblistSavedCloneMarkers();
+      await MdblistStorage.retireMdblistSavedCloneMarkers();
       _warmed('IPTV', scope, IptvService.instance.clearCache);
       _warmed('Xtream', scope, XtreamCodesService.instance.clearCache);
       _warmed('DiscoverPrefs', scope, DiscoverPrefs.resetProfileScope);
@@ -168,7 +170,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
         debugPrint('ProfileAppLifecycle: resume-ghost purge failed — $e');
       }
       await Future.wait(<Future<Object?>>[
-        StorageService.getPlayerStartPortrait(),
+        PlayerSettingsStorage.getPlayerStartPortrait(),
         StorageService.getTvKeyboardEnabled(),
         StorageService.getTvHomeStyle(),
         StorageService.getTvSidebarStyle(),

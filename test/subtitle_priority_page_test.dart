@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/subtitle_source_priority.dart';
 import 'package:debrify/screens/settings/subtitle_priority_page.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
@@ -51,10 +51,10 @@ void main() {
         FocusManager.instance.primaryFocus?.debugLabel,
         'subtitle-priority-embedded',
       );
-      expect(await StorageService.getSubtitleSourcePriority(), ['embedded']);
+      expect(await SubtitleSettingsStorage.getSubtitleSourcePriority(), ['embedded']);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
-      expect(await StorageService.getSubtitleSourcePriority(), [
+      expect(await SubtitleSettingsStorage.getSubtitleSourcePriority(), [
         a,
         b,
         'embedded',
@@ -63,7 +63,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
-      expect(await StorageService.getSubtitleSourcePriority(), [
+      expect(await SubtitleSettingsStorage.getSubtitleSourcePriority(), [
         a,
         b,
         'embedded',

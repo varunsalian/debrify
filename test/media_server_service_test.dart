@@ -30,6 +30,7 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/series_source_service.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/services/torrent_service.dart';
@@ -1185,7 +1186,7 @@ void main() {
       (tester) async {
         await tester.runAsync(() async {
           await connect();
-          await StorageService.setQuickPlayRules(
+          await QuickPlayStorage.setQuickPlayRules(
             QuickPlayRules.debrifyDefault(
               isMovie: true,
             ).copyWith(sourceMode: mode),

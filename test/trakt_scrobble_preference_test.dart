@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -20,12 +21,12 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     SecretVault.debugReset(deviceIdOverride: 'trakt-scrobble-test');
     service.resetProfileScope();
-    await StorageService.setTraktSession(
+    await TraktStorage.setTraktSession(
       accessToken: 'test-access',
       refreshToken: 'test-refresh',
       expiryMs: 9000000000000,
     );
-    await StorageService.setTrackingScrobbleTargets({
+    await TrackingSourceStorage.setTrackingScrobbleTargets({
       TrackingSource.local,
       TrackingSource.trakt,
     });
@@ -62,7 +63,7 @@ void main() {
       test('disabled Trakt blocks ${action.key} (episode=$episode)', () async {
         // A connected account and another enabled tracker must not override
         // the user's Trakt switch, even if a caller has a stale enabled flag.
-        await StorageService.setTrackingScrobbleTargets({
+        await TrackingSourceStorage.setTrackingScrobbleTargets({
           TrackingSource.local,
           TrackingSource.simkl,
         });
@@ -92,7 +93,7 @@ void main() {
           await service.scrobbleStart('tt1234567', 5, season: 1, episode: 2),
           isTrue,
         );
-        await StorageService.setTrackingScrobbleTargets({TrackingSource.local});
+        await TrackingSourceStorage.setTrackingScrobbleTargets({TrackingSource.local});
 
         expect(
           await service.scrobbleStart('tt1234567', 35, season: 1, episode: 2),
@@ -109,7 +110,7 @@ void main() {
         expect(paths, ['/scrobble/start']);
 
         // A deliberate re-enable admits subsequent playback updates again.
-        await StorageService.setTrackingScrobbleTargets({
+        await TrackingSourceStorage.setTrackingScrobbleTargets({
           TrackingSource.local,
           TrackingSource.trakt,
         });
@@ -131,7 +132,7 @@ void main() {
         requests.add(request);
         if (request.url.path == '/oauth/token') {
           if (disableDuringRefresh) {
-            await StorageService.setTrackingScrobbleTargets({
+            await TrackingSourceStorage.setTrackingScrobbleTargets({
               TrackingSource.local,
             });
           }
@@ -175,7 +176,7 @@ void main() {
   test(
     'explicit Trakt history actions still work with scrobbling off',
     () async {
-      await StorageService.setTrackingScrobbleTargets({TrackingSource.local});
+      await TrackingSourceStorage.setTrackingScrobbleTargets({TrackingSource.local});
       final paths = <String>[];
       final client = MockClient((request) async {
         paths.add(request.url.path);

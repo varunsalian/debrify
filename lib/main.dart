@@ -1,5 +1,6 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
@@ -625,7 +626,7 @@ Future<void> _continueApplicationStartup() async {
   await _initOrientation();
   // Warms playerStartPortraitCached: the player picks its orientation while
   // building, and the IPTV startup channel can open one on the first frame.
-  await StorageService.getPlayerStartPortrait();
+  await PlayerSettingsStorage.getPlayerStartPortrait();
   // Update-aware defaults: one-time adoption of the current flagship look
   // for every pref the user never wrote (see migrateDefaultsGeneration).
   // MUST precede the brightness/theme warms below — they read migrated keys

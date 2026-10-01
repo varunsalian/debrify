@@ -1,39 +1,31 @@
 import 'dart:convert';
 import 'package:debrify/models/ambient_trailer_surface.dart';
-import 'package:debrify/models/android_video_renderer_mode.dart';
-import 'package:debrify/models/content_display_match_mode.dart';
-import 'package:debrify/models/custom_series_identity.dart';
 import 'package:debrify/models/detail_page_section_visibility.dart';
 import 'package:debrify/models/home_collection.dart';
 import 'package:debrify/models/home_preferences.dart';
-import 'package:debrify/models/indexer_manager_config.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/media_identity.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
-import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/sidebar_configuration.dart';
 import 'package:debrify/models/stremio_addon.dart';
-import 'package:debrify/models/subtitle_source_priority.dart';
-import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/models/tv_hero_artwork_quality.dart';
 import 'package:debrify/models/tv_render_quality.dart';
-import 'package:debrify/services/hide_watched_prefs.dart';
 import 'package:debrify/services/iptv_channel_order.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/playback_recovery_intent.dart';
 import 'package:debrify/services/playlist_dedupe_key.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/profile_collection_resource_facade.dart';
-import 'package:debrify/services/profiles/profile_credential_facade.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/tvos_recovery_limits.dart';
 import 'package:debrify/services/secret_vault.dart';
+import 'package:debrify/services/storage/mdblist_storage.dart';
+import 'package:debrify/services/storage/playback_identity_storage.dart';
+import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/profile_policy_storage.dart';
-import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
-import 'package:debrify/services/tracking_scrobble_preferences.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_tombstones.dart';
@@ -41,7 +33,6 @@ import 'package:debrify/utils/json_isolate.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
 
 export '../models/home_preferences.dart';
@@ -49,13 +40,6 @@ export '../models/home_preferences.dart';
 class StorageService {
   static const String _explicitlyWatchedSeriesKey =
       'explicitly_watched_series_v1';
-  static const String trackingScrobbleTargetsKey =
-      TrackingScrobblePreferences.key;
-  static const String watchProgressSourceKey = 'watch_progress_source';
-  static const String homeTickSourcesKey = 'home_tick_sources';
-
-  /// Invalidates policy consumers that keep an in-memory snapshot.
-  static final ValueNotifier<int> trackingSourceRevision = ValueNotifier(0);
 
   /// Tracker/account watched-title invalidation. Kept separate from local
   /// playback so finishing an episode never reloads entire remote histories.
@@ -185,7 +169,6 @@ class StorageService {
     await prefs.setInt(_defaultsGenerationKey, _currentDefaultsGeneration);
   } // granted|denied|never|unknown
   static const String _videoResumeKey = 'video_resume_v1';
-  static const String _playbackStateKey = 'playback_state_v1';
   static const String _continueWatchingKey = 'continue_watching_v1';
   static const String localSeriesCompletionStateKey =
       'local_series_completion_v1';
@@ -260,47 +243,6 @@ class StorageService {
       'startup_trakt_continue_watching_movie_id';
   static const String _startupTraktContinueWatchingShowIdKey =
       'startup_trakt_continue_watching_show_id';
-  // Network tuning (Debrify player). 'standard' = leave the player's own
-  // defaults completely untouched — see NetworkTuning.
-  static const String _networkConnectPatienceKey = 'network_connect_patience';
-  static const String _iptvDecoderModeKey = 'iptv_decoder_mode';
-  static const String _networkBufferSizeKey = 'network_buffer_size';
-  static const String _contentDisplayMatchModeKey =
-      'content_display_match_mode';
-
-  // External Player settings
-  // Default player mode: 'debrify' (app player), 'external' (external player), 'deovr' (DeoVR on Android)
-  static const String _defaultPlayerModeKey = 'default_player_mode';
-  static const String _externalPlayerPreferredKey = 'external_player_preferred';
-  static const String _externalPlayerCustomPathKey =
-      'external_player_custom_path';
-  static const String _externalPlayerCustomNameKey =
-      'external_player_custom_name';
-  static const String _externalPlayerCustomCommandKey =
-      'external_player_custom_command';
-  // iOS External Player settings
-  static const String _iosExternalPlayerPreferredKey =
-      'ios_external_player_preferred';
-  static const String _iosCustomSchemeTemplateKey =
-      'ios_custom_scheme_template';
-  // Linux External Player settings
-  static const String _linuxExternalPlayerPreferredKey =
-      'linux_external_player_preferred';
-  static const String _linuxCustomCommandKey = 'linux_custom_command';
-  // Windows External Player settings
-  static const String _windowsExternalPlayerPreferredKey =
-      'windows_external_player_preferred';
-  static const String _windowsCustomCommandKey = 'windows_custom_command';
-
-  // Debrify Player default settings
-  static const String _playerDefaultAspectIndexKey =
-      'player_default_aspect_index';
-  static const String _playerDefaultAspectIndexTvKey =
-      'player_default_aspect_index_tv';
-  static const String _playerNightModeIndexKey = 'player_night_mode_index';
-  static const String _playerSystemAudioEffectsKey =
-      'player_system_audio_effects';
-  static const String _playerStartPortraitKey = 'player_start_portrait';
   static const String _movieCompletionThresholdKey =
       'movie_completion_threshold';
   static const String _episodeCompletionThresholdKey =
@@ -311,26 +253,8 @@ class StorageService {
   static const String _resumeGhostPurgeGenerationKey =
       'resume_ghost_purge_generation';
   static const int _currentResumeGhostPurgeGeneration = 1;
-  static const String _androidVideoRendererModeKey =
-      'android_video_renderer_mode';
-  static const String _androidVideoRendererGpuMigrationKey =
-      'android_video_renderer_gpu_migration_v1';
-  static const String _tvosForceSoftwareDecodeKey =
-      'tvos_force_software_decode';
-  static const String _audioPassthroughKey = 'player_audio_passthrough';
-  static const String _appleMultichannelAudioKey =
-      'player_apple_multichannel_audio';
-  static const String _tvosForceStereoAudioKey = 'tvos_force_stereo_audio_v1';
-  static const String _tvosLegacyAudioOutputKey = 'tvos_legacy_audio_output_v1';
   static const String _uiSoundsKey = 'ui_sounds';
   static const String _uiHapticsKey = 'ui_haptics';
-  static const String _subtitleAutoSyncKey = 'subtitle_auto_sync_enabled';
-  static const String _playerDefaultSubtitleLanguageKey =
-      'player_default_subtitle_language';
-  static const String _playerDefaultAudioLanguageKey =
-      'player_default_audio_language';
-  static const String _skipSegmentsEnabledKey = 'skip_segments_enabled';
-  static const String _skipSegmentProviderKey = 'skip_segment_provider';
 
   /// Completion thresholds selectable in Settings → Playback. A lower bound
   /// avoids treating a brief accidental play as watched; 100% lets users
@@ -347,20 +271,6 @@ class StorageService {
     100,
   ];
   static const int defaultLocalCompletionThreshold = 80;
-
-  /// Stable provider identifier persisted by the Playback settings page.
-  /// Kept here rather than using a display label so future provider names can
-  /// change without migrating preferences.
-  static const String skipSegmentProviderAuto = 'auto';
-  static const String skipSegmentProviderSkipDb = 'skipdb';
-  static const String skipSegmentProviderIntroDb = 'introdb';
-  static const String skipSegmentProviderTheIntroDb = 'theintrodb';
-  static const Set<String> _supportedSkipSegmentProviders = <String>{
-    skipSegmentProviderAuto,
-    skipSegmentProviderSkipDb,
-    skipSegmentProviderIntroDb,
-    skipSegmentProviderTheIntroDb,
-  };
 
   // IPTV settings
   static const String _iptvPlaylistsKey = 'iptv_playlists';
@@ -406,85 +316,6 @@ class StorageService {
   static const String _playlistFavoritesKey = 'playlist_favorites_v1';
   static const String _myWatchlistKey =
       TvOsRecoveryLimits.myWatchlistPreferenceKey;
-
-  // Torrent Search History
-  static const String _torrentSearchHistoryKey = 'torrent_search_history_v1';
-  static const String _torrentSearchHistoryEnabledKey =
-      'torrent_search_history_enabled';
-
-  // Default Torrent Filter Settings
-  static const String _defaultFilterQualitiesKey =
-      'default_filter_qualities_v1';
-  static const String _defaultFilterRipSourcesKey =
-      'default_filter_rip_sources_v1';
-  static const String _defaultFilterLanguagesKey =
-      'default_filter_languages_v1';
-  static const String _defaultFilterSizesKey = 'default_filter_sizes_v1';
-  static const String _defaultFilterDynamicRangesKey =
-      'default_filter_dynamic_ranges_v1';
-  static const String _quickPlayHonorsFiltersKey =
-      'quick_play_honors_filters_v1';
-
-  // Default Torrent Provider Settings
-  // Values: 'none' (ask every time), 'torbox', 'debrid', 'pikpak'
-  static const String _defaultTorrentProviderKey =
-      'default_torrent_provider_v1';
-  static const String _indexerManagerConfigsKey = 'indexer_manager_configs_v1';
-
-  // Quick Play VR Settings
-  // VR Player Mode: 'disabled' (always regular player), 'auto' (detect VR content), 'always' (always use DeoVR)
-  static const String _quickPlayVrModeKey = 'quick_play_vr_mode';
-  static const String _quickPlayVrDefaultScreenTypeKey =
-      'quick_play_vr_default_screen_type';
-  static const String _quickPlayVrDefaultStereoModeKey =
-      'quick_play_vr_default_stereo_mode';
-  static const String _quickPlayVrAutoDetectFormatKey =
-      'quick_play_vr_auto_detect_format';
-  static const String _quickPlayVrShowDialogKey = 'quick_play_vr_show_dialog';
-
-  // Quick Play Cache Fallback Settings
-  // When enabled, if first torrent is not cached, try next torrents until one works
-  static const String _quickPlayTryMultipleTorrentsKey =
-      'quick_play_try_multiple_torrents';
-  static const String _quickPlayMaxRetriesKey = 'quick_play_max_retries';
-  static const String _quickPlayMovieRulesKey = 'quick_play_movie_rules_v2';
-  static const String _quickPlaySeriesRulesKey = 'quick_play_series_rules_v2';
-  static const String _playButtonModeKey = 'play_button_mode';
-
-  // Series auto-pin: on a series play with no pinned source, search packs
-  // first (complete series → season pack), and pin whatever source plays so
-  // subsequent episode plays go straight through the bound path.
-  /// LEGACY MIRROR ONLY. Written by [setQuickPlayRules] to carry
-  /// `preferSeriesPacks` for downgrade builds, and read once by
-  /// [_quickPlayRulesFromPrefs] to migrate pre-v2 profiles. Nothing on the live
-  /// playback path may read it — see [_seriesAutoPinOnPlayKey].
-  static const String _autoBindSeriesPacksKey =
-      'auto_bind_series_packs_on_play';
-
-  /// Whether a series play pins the source that played. Split out of
-  /// [_autoBindSeriesPacksKey] because that key doubles as the legacy mirror of
-  /// `preferSeriesPacks`: turning OFF "Prefer season packs" in Quick Play also
-  /// silently disabled all series auto-pinning, so Smart mode never found a pin
-  /// and Quick Play lost its fast path. Deliberately does NOT inherit the old
-  /// key's value — a `false` there was the packs toggle bleeding through, never
-  /// an auto-pin choice (no UI ever wrote it directly).
-  static const String _seriesAutoPinOnPlayKey = 'series_auto_pin_on_play';
-
-  // Trakt settings
-  static const String _traktAccessTokenKey = 'trakt_access_token';
-  static const String _traktRefreshTokenKey = 'trakt_refresh_token';
-  static const String _traktUsernameKey = 'trakt_username';
-  static const String _traktTokenExpiryKey = 'trakt_token_expiry';
-
-  // Simkl settings. No refresh-token/expiry keys — PIN-issued Simkl tokens
-  // don't expire (see SimklService).
-  static const String _simklAccessTokenKey = 'simkl_access_token';
-  static const String _simklUsernameKey = 'simkl_username';
-
-  // MDBList settings. Auth is a single API key (from mdblist.com/preferences),
-  // so there's no token/expiry — just the key and a cached display username.
-  static const String _mdblistApiKeyKey = 'mdblist_api_key';
-  static const String _mdblistUsernameKey = 'mdblist_username';
 
   static const int _debrifyTvRandomStartPercentDefault = 20;
   static const int _debrifyTvRandomStartPercentMin = 10;
@@ -665,20 +496,6 @@ class StorageService {
   ) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(_tvHeroArtworkQualityKey, quality.storageValue);
-  }
-
-  /// Show the new Stremio-styled Addons hub (single list + source/type filters,
-  /// purple Discover theme, 1-click marketplace) instead of the classic two-tab
-  /// Addons screen. On by default; can be turned off per-device via
-  /// [setStremioAddonHubEnabled].
-  static Future<bool> getStremioAddonHubEnabled() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('stremio_addon_hub_enabled') ?? true;
-  }
-
-  static Future<void> setStremioAddonHubEnabled(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool('stremio_addon_hub_enabled', enabled);
   }
 
   /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
@@ -1924,143 +1741,6 @@ class StorageService {
     ]);
   }
 
-  // MDBList API key + cached username helpers
-  static Future<String?> getMdblistApiKey({
-    bool forRemoteTransfer = false,
-    bool Function()? canContinue,
-  }) async {
-    if (canContinue?.call() == false) return null;
-    if (forRemoteTransfer) {
-      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
-        _mdblistApiKeyKey,
-      );
-      if (canContinue?.call() == false) return null;
-      if (credential.handled) return credential.value;
-    }
-    final prefs = await ProfilePreferences.instance();
-    if (canContinue?.call() == false) return null;
-    return SecretVault.getString(
-      prefs,
-      _mdblistApiKeyKey,
-      canContinue: canContinue,
-    );
-  }
-
-  static Future<bool> hasMdblistCredential({bool Function()? canContinue}) =>
-      ProviderCredentialStorage.credentialConfigured(
-        _mdblistApiKeyKey,
-        () => getMdblistApiKey(),
-        canContinue: canContinue,
-      );
-
-  static Future<void> saveMdblistApiKey(String apiKey) async {
-    final prefs = await ProfilePreferences.instance();
-    await SecretVault.setString(prefs, _mdblistApiKeyKey, apiKey);
-  }
-
-  static Future<String?> getMdblistUsername() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_mdblistUsernameKey);
-  }
-
-  static Future<void> setMdblistUsername(String? username) async {
-    final prefs = await ProfilePreferences.instance();
-    if (username == null || username.isEmpty) {
-      await prefs.remove(_mdblistUsernameKey);
-    } else {
-      await prefs.setString(_mdblistUsernameKey, username);
-    }
-  }
-
-  /// Clears all stored MDBList auth (key + cached username).
-  static Future<void> clearMdblistAuth() async {
-    final prefs = await ProfilePreferences.instance();
-    if (!await ProfileCredentialFacade.disconnect(_mdblistApiKeyKey)) {
-      await prefs.remove(_mdblistApiKeyKey);
-    }
-    await prefs.remove(_mdblistUsernameKey);
-    await prefs.remove(_mdblistSavedClonesKey);
-    await prefs.remove(_mdblistSyncCheckpointKey);
-    await fallbackDisconnectedProgressSource(TrackingSource.mdblist);
-  }
-
-  // Maps a source MDBList list id -> the id of the static list we CLONED it
-  // into on the user's account (the "Save" action). Lets the Save button know a
-  // list is already saved and which clone to delete on un-save. JSON object of
-  // {"<sourceId>": clonedId}.
-  static const String _mdblistSavedClonesKey = 'mdblist_saved_clones';
-
-  static Future<Map<int, int>> getMdblistSavedClones() async {
-    final prefs = await ProfilePreferences.instance();
-    final raw = prefs.getString(_mdblistSavedClonesKey);
-    if (raw == null || raw.isEmpty) return {};
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) return {};
-      final out = <int, int>{};
-      decoded.forEach((k, v) {
-        final sid = int.tryParse(k.toString());
-        final cid = v is int ? v : (v is num ? v.toInt() : null);
-        if (sid != null && cid != null) out[sid] = cid;
-      });
-      return out;
-    } catch (_) {
-      return {};
-    }
-  }
-
-  static Future<void> setMdblistSavedClone(int sourceId, int clonedId) async {
-    final prefs = await ProfilePreferences.instance();
-    final map = await getMdblistSavedClones();
-    map[sourceId] = clonedId;
-    await prefs.setString(
-      _mdblistSavedClonesKey,
-      jsonEncode(map.map((k, v) => MapEntry(k.toString(), v))),
-    );
-  }
-
-  static Future<void> removeMdblistSavedClone(int sourceId) async {
-    final prefs = await ProfilePreferences.instance();
-    final map = await getMdblistSavedClones();
-    map.remove(sourceId);
-    await prefs.setString(
-      _mdblistSavedClonesKey,
-      jsonEncode(map.map((k, v) => MapEntry(k.toString(), v))),
-    );
-  }
-
-  /// Retire the old clone-as-like UI bookkeeping. Remote lists are deliberately
-  /// untouched: an old clone is now simply a normal user-owned list.
-  static Future<void> retireMdblistSavedCloneMarkers() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_mdblistSavedClonesKey);
-  }
-
-  static const String _mdblistSyncCheckpointKey = 'mdblist_sync_checkpoint_v1';
-
-  static Future<Map<String, dynamic>?> getMdblistSyncCheckpoint() async {
-    final prefs = await ProfilePreferences.instance();
-    final raw = prefs.getString(_mdblistSyncCheckpointKey);
-    if (raw == null || raw.isEmpty) return null;
-    try {
-      final value = jsonDecode(raw);
-      return value is Map<String, dynamic> ? value : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static Future<void> setMdblistSyncCheckpoint(
-    Map<String, dynamic>? value,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    if (value == null) {
-      await prefs.remove(_mdblistSyncCheckpointKey);
-    } else {
-      await prefs.setString(_mdblistSyncCheckpointKey, jsonEncode(value));
-    }
-  }
-
   // ── Continue Watching (recently watched items for home screen) ──────────
 
   /// Get all continue watching items, sorted by most recent first.
@@ -2304,25 +1984,11 @@ class StorageService {
     localCompletionRevision.value++;
   }
 
-  // Enhanced Playback State methods
-  static Future<Map<String, dynamic>> _getPlaybackStateMap() async {
-    final prefs = await ProfilePreferences.instance();
-    final raw = prefs.getString(_playbackStateKey);
-    if (raw == null || raw.isEmpty) return {};
-    try {
-      final decoded = await decodeJsonAsync(raw);
-      if (decoded is Map<String, dynamic>) return decoded;
-      return {};
-    } catch (_) {
-      return {};
-    }
-  }
-
   /// Remove all playback state entries (series progress, video progress) for an IMDB ID.
   static Future<void> clearPlaybackStateByImdbId(String imdbId) async {
     final normalized = imdbId.trim().toLowerCase();
     if (normalized.isEmpty) return;
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     final keysToRemove = <String>[];
     for (final entry in map.entries) {
       if (entry.value is Map<String, dynamic> &&
@@ -2335,7 +2001,7 @@ class StorageService {
     for (final key in keysToRemove) {
       map.remove(key);
     }
-    await _savePlaybackStateMap(map, recordDeletions: true);
+    await PlaybackStateStore.savePlaybackStateMap(map, recordDeletions: true);
     // Series finished-episode markers share this map, so clearing a Continue
     // Watching item must also invalidate derived series completion.
     localCompletionRevision.value++;
@@ -2351,57 +2017,23 @@ class StorageService {
   ) async {
     final id = imdbId.trim().toLowerCase();
     if (id.isEmpty) throw ArgumentError.value(imdbId, 'imdbId');
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     map.removeWhere((key, raw) {
       if (raw is! Map) return false;
       final storedId = raw['imdbId']?.toString().trim().toLowerCase();
       return storedId == id ||
-          (!_requiresExactProgressIdentity(id) && (storedId == null || storedId.isEmpty) &&
+          (!PlaybackIdentityStorage.requiresExactProgressIdentity(id) && (storedId == null || storedId.isEmpty) &&
               raw['type'] == 'series' &&
               raw['title']?.toString().trim().toLowerCase() ==
                   title.trim().toLowerCase());
     });
-    await _savePlaybackStateMap(map, recordDeletions: true);
+    await PlaybackStateStore.savePlaybackStateMap(map, recordDeletions: true);
     await setSeriesExplicitlyWatched(id, watched: false);
     await saveEpisodeTraktProgress(imdbId: id, percents: {});
     await saveEpisodeSimklProgress(imdbId: id, percents: {});
     await saveEpisodeMdblistProgress(imdbId: id, percents: {});
     localCompletionRevision.value++;
   }
-
-  static Future<void> _savePlaybackStateMap(
-    Map<String, dynamic> map, {
-    bool recordDeletions = false,
-  }) async {
-    final prefs = await ProfilePreferences.instance();
-    if (recordDeletions &&
-        (PlaybackRecoveryIntent.isSupported ||
-            await WebDavSyncTombstoneRecorder.shouldRecordForCurrentProfile())) {
-      final previous = await _getPlaybackStateMap();
-      if (PlaybackRecoveryIntent.isSupported) {
-        await PlaybackRecoveryIntent.record(
-          _playbackRecoveryRecordKeys(
-            previous,
-          ).difference(_playbackRecoveryRecordKeys(map)),
-        );
-      }
-      final retained = _webDavPlaybackRecordKeys(map);
-      await WebDavSyncTombstoneRecorder.recordForCurrentProfile(
-        _webDavPlaybackRecordKeys(previous).difference(retained),
-      );
-    }
-    await prefs.setString(_playbackStateKey, jsonEncode(map));
-  }
-
-  static Set<String> _playbackRecoveryRecordKeys(Map<String, dynamic> map) => {
-    ..._webDavPlaybackRecordKeys(map),
-    for (final entry in map.entries)
-      if (entry.value is Map && entry.value['imdbId'] is String)
-        ..._webDavPlaybackRecordKeys({
-          'imdb:${(entry.value['imdbId'] as String).trim().toLowerCase()}':
-              entry.value,
-        }),
-  };
 
   /// Deletions and sync intent fence every replay. Cold recovery also checks
   /// local position timestamps; a proven return can finish an interrupted
@@ -2420,7 +2052,7 @@ class StorageService {
   }) async {
     String alias(String type, String title) =>
         '${type}_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     final stableId = imdbId?.trim().toLowerCase();
     final keys = <String>{};
     final ownRecoveryKeys = <String>{};
@@ -2436,10 +2068,10 @@ class StorageService {
     }
 
     final seriesAliases = <String>{
-      if (seriesTitle != null) _seriesProgressKey(seriesTitle, stableId),
+      if (seriesTitle != null) PlaybackIdentityStorage.seriesProgressKey(seriesTitle, stableId),
     };
     final videoAliases = <String>{
-      if (resumeId != null) _requiresExactProgressIdentity(stableId)
+      if (resumeId != null) PlaybackIdentityStorage.requiresExactProgressIdentity(stableId)
           ? 'video_${stableId}_${resumeId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}'
           : alias('video', resumeId),
     };
@@ -2507,66 +2139,6 @@ class StorageService {
         );
   }
 
-  static Set<String> _webDavPlaybackRecordKeys(Map<String, dynamic> map) {
-    final keys = <String>{};
-    for (final entry in map.entries) {
-      final value = entry.value;
-      if (value is! Map) continue;
-      final record = Map<String, dynamic>.from(value);
-      final seasons = record['seasons'];
-      final finished = record['finishedEpisodes'];
-      if (seasons is Map || finished is Map || record['type'] == 'series') {
-        keys.add(WebDavSyncRecordKey.playbackMeta(entry.key));
-        void addEpisodes(Object? source, {required bool completion}) {
-          if (source is! Map) return;
-          for (final seasonEntry in source.entries) {
-            final season = int.tryParse(seasonEntry.key.toString());
-            if (season == null || season < 0 || seasonEntry.value is! Map) {
-              continue;
-            }
-            for (final episodeEntry in (seasonEntry.value as Map).entries) {
-              final episode = int.tryParse(episodeEntry.key.toString());
-              if (episode == null ||
-                  episode < 0 ||
-                  episodeEntry.value is! Map) {
-                continue;
-              }
-              keys.add(
-                completion
-                    ? WebDavSyncRecordKey.playbackFinished(
-                        entry.key,
-                        season,
-                        episode,
-                      )
-                    : WebDavSyncRecordKey.playbackEpisode(
-                        entry.key,
-                        season,
-                        episode,
-                      ),
-              );
-            }
-          }
-        }
-
-        addEpisodes(seasons, completion: false);
-        addEpisodes(finished, completion: true);
-      } else {
-        keys.add(WebDavSyncRecordKey.playback(entry.key));
-      }
-    }
-    return keys;
-  }
-
-  /// Save playback state for series content
-  static bool _requiresExactProgressIdentity(String? id) =>
-      CustomSeriesIdentity.isCustom(id) || MediaIdentity.isNative(id);
-
-  static String _seriesProgressKey(String title, String? id) =>
-      (_requiresExactProgressIdentity(id) ||
-              (id?.startsWith('medialibrary:') ?? false))
-          ? 'series_$id'
-          : 'series_${title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-
   static Future<void> saveSeriesPlaybackState({
     required String seriesTitle,
     required int season,
@@ -2579,8 +2151,8 @@ class StorageService {
     String? recoveryCheckpointId,
     int? recoveryUpdatedAtMs,
   }) async {
-    final map = await _getPlaybackStateMap();
-    final key = _seriesProgressKey(seriesTitle, imdbId);
+    final map = await PlaybackStateStore.getPlaybackStateMap();
+    final key = PlaybackIdentityStorage.seriesProgressKey(seriesTitle, imdbId);
 
     if (!map.containsKey(key)) {
       map[key] = {'type': 'series', 'title': seriesTitle, 'seasons': {}};
@@ -2610,7 +2182,7 @@ class StorageService {
       'StorageService: saveSeriesPlaybackState title="$seriesTitle" S${season}E$episode position=${positionMs}ms duration=${durationMs}ms',
     );
 
-    await _savePlaybackStateMap(map);
+    await PlaybackStateStore.savePlaybackStateMap(map);
   }
 
   /// Mark an episode as finished (watched completely)
@@ -2625,8 +2197,8 @@ class StorageService {
     // records must keep its original time so the latest episode remains last.
     final completedAtMs =
         recoveryUpdatedAtMs ?? DateTime.now().millisecondsSinceEpoch;
-    final map = await _getPlaybackStateMap();
-    final key = _seriesProgressKey(seriesTitle, imdbId);
+    final map = await PlaybackStateStore.getPlaybackStateMap();
+    final key = PlaybackIdentityStorage.seriesProgressKey(seriesTitle, imdbId);
 
     if (!map.containsKey(key)) {
       map[key] = {
@@ -2699,7 +2271,7 @@ class StorageService {
       'StorageService: markEpisodeAsFinished title="$seriesTitle" S${season}E$episode',
     );
 
-    await _savePlaybackStateMap(map);
+    await PlaybackStateStore.savePlaybackStateMap(map);
     localCompletionRevision.value++;
   }
 
@@ -2710,8 +2282,8 @@ class StorageService {
     required int episode,
     String? imdbId,
   }) async {
-    final map = await _getPlaybackStateMap();
-    final currentTitleKey = _seriesProgressKey(seriesTitle, imdbId);
+    final map = await PlaybackStateStore.getPlaybackStateMap();
+    final currentTitleKey = PlaybackIdentityStorage.seriesProgressKey(seriesTitle, imdbId);
     final normalizedImdbId = imdbId?.trim().toLowerCase();
     final stableImdbId = normalizedImdbId == null || normalizedImdbId.isEmpty
         ? null
@@ -2751,7 +2323,7 @@ class StorageService {
       'S${season}E$episode aliases=$aliasesChanged',
     );
 
-    await _savePlaybackStateMap(map, recordDeletions: true);
+    await PlaybackStateStore.savePlaybackStateMap(map, recordDeletions: true);
     localCompletionRevision.value++;
   }
 
@@ -2767,7 +2339,7 @@ class StorageService {
     final normalized = imdbId.trim().toLowerCase();
     if (normalized.isEmpty) return;
     final normalizedTitle = seriesTitle?.trim().toLowerCase();
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     var changed = false;
 
     for (final raw in map.values) {
@@ -2776,8 +2348,8 @@ class StorageService {
       final storedTitle = raw['title']?.toString().trim().toLowerCase();
       final matchesStableId = storedId == normalized;
       final matchesLegacyTitle =
-          !_requiresExactProgressIdentity(normalized) &&
-          !_requiresExactProgressIdentity(storedId) &&
+          !PlaybackIdentityStorage.requiresExactProgressIdentity(normalized) &&
+          !PlaybackIdentityStorage.requiresExactProgressIdentity(storedId) &&
           normalizedTitle != null &&
           normalizedTitle.isNotEmpty &&
           storedTitle == normalizedTitle;
@@ -2813,7 +2385,7 @@ class StorageService {
     }
 
     if (!changed) return;
-    await _savePlaybackStateMap(map, recordDeletions: true);
+    await PlaybackStateStore.savePlaybackStateMap(map, recordDeletions: true);
     localCompletionRevision.value++;
     debugPrint('StorageService: unmarkSeriesAsFinished imdbId="$normalized"');
   }
@@ -2876,8 +2448,8 @@ class StorageService {
     required int episode,
     String? imdbId,
   }) async {
-    final map = await _getPlaybackStateMap();
-    final currentTitleKey = _seriesProgressKey(seriesTitle, imdbId);
+    final map = await PlaybackStateStore.getPlaybackStateMap();
+    final currentTitleKey = PlaybackIdentityStorage.seriesProgressKey(seriesTitle, imdbId);
     final normalizedImdbId = imdbId?.trim().toLowerCase();
     final stableImdbId = normalizedImdbId == null || normalizedImdbId.isEmpty
         ? null
@@ -2912,7 +2484,7 @@ class StorageService {
   static Future<Map<String, Set<int>>> getFinishedEpisodes({
     required String seriesTitle,
   }) async {
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     final key =
         'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
@@ -2941,7 +2513,7 @@ class StorageService {
     String? seriesTitle,
   }) async {
     final normalized = imdbId.trim().toLowerCase();
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     final result = <String, Set<int>>{};
     for (final raw in map.values) {
       if (raw is! Map<String, dynamic> || raw['type'] != 'series') continue;
@@ -2959,7 +2531,7 @@ class StorageService {
       }
     }
     if (result.isNotEmpty) return result;
-    if (!_requiresExactProgressIdentity(imdbId) && seriesTitle != null && seriesTitle.isNotEmpty) {
+    if (!PlaybackIdentityStorage.requiresExactProgressIdentity(imdbId) && seriesTitle != null && seriesTitle.isNotEmpty) {
       // Only ID-less legacy records may provide title fallback. A matching
       // display title does not make another IMDb series the same show.
       final index = await getFinishedSeriesEpisodeIndex();
@@ -2972,7 +2544,7 @@ class StorageService {
   /// title keys preserve older playback records that predate stable IDs.
   static Future<Map<String, Map<String, Set<int>>>>
   getFinishedSeriesEpisodeIndex() async {
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     final result = <String, Map<String, Set<int>>>{};
     for (final raw in map.values) {
       if (raw is! Map<String, dynamic> || raw['type'] != 'series') continue;
@@ -3008,7 +2580,7 @@ class StorageService {
   static Future<Map<String, Map<String, dynamic>>> getEpisodeProgress({
     required String seriesTitle,
   }) async {
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     final key =
         'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
@@ -3159,7 +2731,7 @@ class StorageService {
   static Future<Map<String, double>> getConnectedEpisodeMdblistProgress({
     required String imdbId,
   }) async {
-    if (!await hasMdblistCredential()) return {};
+    if (!await MdblistStorage.hasMdblistCredential()) return {};
     return getEpisodeMdblistProgress(imdbId: imdbId);
   }
 
@@ -3213,7 +2785,7 @@ class StorageService {
   static Future<Map<String, Map<String, dynamic>>> getEpisodeProgressByImdbId(
     String imdbId,
   ) async {
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     final normalizedImdbId = imdbId.trim().toLowerCase();
 
     // Merge every legacy title-keyed series entry with this IMDb id. Older
@@ -3288,7 +2860,7 @@ class StorageService {
     required String seriesTitle,
     String? imdbId,
   }) async {
-    if (_requiresExactProgressIdentity(imdbId) ||
+    if (PlaybackIdentityStorage.requiresExactProgressIdentity(imdbId) ||
         (imdbId?.startsWith('medialibrary:') ?? false)) {
       return getEpisodeProgressByImdbId(imdbId!);
     }
@@ -3325,7 +2897,7 @@ class StorageService {
     required String seriesTitle,
     String? imdbId,
   }) async {
-    if (_requiresExactProgressIdentity(imdbId) ||
+    if (PlaybackIdentityStorage.requiresExactProgressIdentity(imdbId) ||
         (imdbId?.startsWith('medialibrary:') ?? false)) {
       return getFinishedEpisodesByImdbId(imdbId: imdbId!);
     }
@@ -3364,8 +2936,8 @@ class StorageService {
     required int episode,
     String? imdbId,
   }) async {
-    final map = await _getPlaybackStateMap();
-    final key = _seriesProgressKey(seriesTitle, imdbId);
+    final map = await PlaybackStateStore.getPlaybackStateMap();
+    final key = PlaybackIdentityStorage.seriesProgressKey(seriesTitle, imdbId);
 
     final seriesData = map[key];
     if (seriesData == null || seriesData['type'] != 'series') return null;
@@ -3391,8 +2963,8 @@ class StorageService {
     String? recoveryCheckpointId,
     int? recoveryUpdatedAtMs,
   }) async {
-    final map = await _getPlaybackStateMap();
-    final key = (_requiresExactProgressIdentity(imdbId) ||
+    final map = await PlaybackStateStore.getPlaybackStateMap();
+    final key = (PlaybackIdentityStorage.requiresExactProgressIdentity(imdbId) ||
             (imdbId?.startsWith('medialibrary:') ?? false))
         ? 'video_${imdbId}_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}'
         : 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
@@ -3411,7 +2983,7 @@ class StorageService {
       if (imdbId != null) 'imdbId': imdbId,
     };
 
-    await _savePlaybackStateMap(map);
+    await PlaybackStateStore.savePlaybackStateMap(map);
   }
 
   /// Get playback state for non-series content
@@ -3420,8 +2992,8 @@ class StorageService {
     bool includeFinished = false,
     String? contentIdentity,
   }) async {
-    final map = await _getPlaybackStateMap();
-    final key = (_requiresExactProgressIdentity(contentIdentity) ||
+    final map = await PlaybackStateStore.getPlaybackStateMap();
+    final key = (PlaybackIdentityStorage.requiresExactProgressIdentity(contentIdentity) ||
             (contentIdentity?.startsWith('medialibrary:') ?? false))
         ? 'video_${contentIdentity}_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}'
         : 'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
@@ -3454,7 +3026,7 @@ class StorageService {
     // tick. The finished marker is authoritative for movies, so never expose
     // a stale resume record that slipped back in during that tiny window.
     if (await isMovieFinished(wanted)) return null;
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     Map<String, dynamic>? best;
     int bestUpdatedAt = -1;
     for (final entry in map.values) {
@@ -3477,7 +3049,7 @@ class StorageService {
   static Future<Map<String, dynamic>?> getLastPlayedEpisode({
     required String seriesTitle,
   }) async {
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     final key =
         'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
@@ -3532,7 +3104,7 @@ class StorageService {
   static Future<Map<String, double>> getEpisodeWatchProgressByImdbId(
     String imdbId,
   ) async {
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     final result = <String, double>{};
 
     // Find ALL series entries with matching imdbId (different season packs may
@@ -3619,7 +3191,7 @@ class StorageService {
   static Future<Map<String, dynamic>?> getLastPlayedEpisodeByImdbId(
     String imdbId,
   ) async {
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
 
     // Find ALL series entries with matching imdbId (different season packs may
     // have different title keys, e.g. "young sheldon (2017)" vs "young sheldon").
@@ -3717,7 +3289,7 @@ class StorageService {
 
   /// Clean up old playback state data (older than 30 days)
   static Future<void> cleanupOldPlaybackState() async {
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
     final now = DateTime.now().millisecondsSinceEpoch;
     final thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
 
@@ -3737,7 +3309,7 @@ class StorageService {
     }
 
     if (keysToRemove.isNotEmpty) {
-      await _savePlaybackStateMap(map, recordDeletions: true);
+      await PlaybackStateStore.savePlaybackStateMap(map, recordDeletions: true);
     }
   }
 
@@ -3752,7 +3324,7 @@ class StorageService {
     // Device-local clears must invalidate native recovery too, without
     // publishing a deletion to the user's other devices.
     await PlaybackRecoveryIntent.recordClearAll();
-    await _savePlaybackStateMap(
+    await PlaybackStateStore.savePlaybackStateMap(
       <String, dynamic>{},
       recordDeletions: recordSyncDeletions,
     );
@@ -3782,7 +3354,7 @@ class StorageService {
 
   /// Clear all progress data for a specific playlist/series
   static Future<void> clearPlaylistProgress({required String title}) async {
-    final map = await _getPlaybackStateMap();
+    final map = await PlaybackStateStore.getPlaybackStateMap();
 
     debugPrint('StorageService: clearPlaylistProgress called for "$title"');
 
@@ -3885,7 +3457,7 @@ class StorageService {
 
     // Save the updated map if anything was removed
     if (keysToRemove.isNotEmpty) {
-      await _savePlaybackStateMap(map, recordDeletions: true);
+      await PlaybackStateStore.savePlaybackStateMap(map, recordDeletions: true);
       // Finished episodes live in this same map. Re-derive local series
       // completion so watched badges and Continue Watching update immediately.
       localCompletionRevision.value++;
@@ -3926,101 +3498,6 @@ class StorageService {
       origin: origin,
       playbackCheckpoint: playbackCheckpoint,
     );
-  }
-
-  /// Save audio and subtitle preferences for series content
-  static Future<void> saveSeriesTrackPreferences({
-    required String seriesTitle,
-    required String audioTrackId,
-    required String subtitleTrackId,
-  }) async {
-    final map = await _getPlaybackStateMap();
-    final key =
-        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-
-    if (!map.containsKey(key)) {
-      map[key] = {
-        'type': 'series',
-        'title': seriesTitle,
-        'seasons': {},
-        'trackPreferences': {},
-      };
-    }
-
-    final seriesData = map[key] as Map<String, dynamic>;
-    if (!seriesData.containsKey('trackPreferences')) {
-      seriesData['trackPreferences'] = {};
-    }
-
-    seriesData['trackPreferences'] = {
-      'audioTrackId': audioTrackId,
-      'subtitleTrackId': subtitleTrackId,
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
-    };
-
-    await _savePlaybackStateMap(map);
-  }
-
-  /// Get audio and subtitle preferences for series content
-  static Future<Map<String, dynamic>?> getSeriesTrackPreferences({
-    required String seriesTitle,
-  }) async {
-    final map = await _getPlaybackStateMap();
-    final key =
-        'series_${seriesTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-
-    final seriesData = map[key];
-    if (seriesData == null || seriesData['type'] != 'series') return null;
-
-    final trackPreferences = seriesData['trackPreferences'];
-    if (trackPreferences == null) return null;
-
-    return trackPreferences as Map<String, dynamic>;
-  }
-
-  /// Save audio and subtitle preferences for non-series content
-  static Future<void> saveVideoTrackPreferences({
-    required String videoTitle,
-    required String audioTrackId,
-    required String subtitleTrackId,
-  }) async {
-    final map = await _getPlaybackStateMap();
-    final key =
-        'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-
-    if (!map.containsKey(key)) {
-      map[key] = {'type': 'video', 'title': videoTitle, 'trackPreferences': {}};
-    }
-
-    final videoData = map[key] as Map<String, dynamic>;
-    if (!videoData.containsKey('trackPreferences')) {
-      videoData['trackPreferences'] = {};
-    }
-
-    videoData['trackPreferences'] = {
-      'audioTrackId': audioTrackId,
-      'subtitleTrackId': subtitleTrackId,
-      'updatedAt': DateTime.now().millisecondsSinceEpoch,
-    };
-
-    await _savePlaybackStateMap(map);
-  }
-
-  /// Get audio and subtitle preferences for non-series content
-  static Future<Map<String, dynamic>?> getVideoTrackPreferences({
-    required String videoTitle,
-  }) async {
-    final map = await _getPlaybackStateMap();
-    final key =
-        'video_${videoTitle.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
-
-    final videoData = map[key];
-    if (videoData == null || videoData['type'] != 'video') return null;
-
-    final trackPreferences = videoData['trackPreferences'];
-    if (trackPreferences == null) return null;
-
-    return trackPreferences as Map<String, dynamic>;
   }
 
   // Debrify TV settings methods
@@ -4407,31 +3884,6 @@ class StorageService {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_debrifyTvProviderKey);
     await prefs.remove(_debrifyTvChannelsKey);
-  }
-
-  /// Clear filter settings (qualities, rip sources, languages)
-  static Future<void> clearAllFilterSettings() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_defaultFilterQualitiesKey);
-    await prefs.remove(_defaultFilterRipSourcesKey);
-    await prefs.remove(_defaultFilterLanguagesKey);
-    await prefs.remove(_defaultFilterSizesKey);
-    await prefs.remove(_defaultFilterDynamicRangesKey);
-    await prefs.remove(_defaultTorrentProviderKey);
-  }
-
-  /// Clear torrent engine toggles and limits
-  static Future<void> clearAllTorrentEngineSettings() async {
-    final prefs = await ProfilePreferences.instance();
-    final keys = prefs.getKeys().where(
-      (key) =>
-          (key.startsWith('engine_') && !key.startsWith('engine_tv_')) ||
-          (key.startsWith('default_') && key.endsWith('_enabled')) ||
-          (key.startsWith('max_') && key.endsWith('_results')),
-    );
-    for (final key in keys.toList()) {
-      await prefs.remove(key);
-    }
   }
 
   /// Clear all Debrify TV display and engine settings
@@ -5595,7 +5047,7 @@ class StorageService {
     List<Map<String, dynamic>> playlistItems,
   ) async {
     final progressMap = <String, Map<String, dynamic>>{};
-    final playbackStateMap = await _getPlaybackStateMap();
+    final playbackStateMap = await PlaybackStateStore.getPlaybackStateMap();
 
     for (final item in playlistItems) {
       final dedupeKey = computePlaylistDedupeKey(item);
@@ -5984,26 +5436,6 @@ class StorageService {
     await prefs.setBool(_homeHideCatalogAddonNamesKey, value);
   }
 
-  static Future<bool> getShowAddonLogos() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('sources_show_addon_logos') ?? true;
-  }
-
-  static Future<void> setShowAddonLogos(bool value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool('sources_show_addon_logos', value);
-  }
-
-  static Future<bool> getUseAddonTextFormatting() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('sources_use_addon_text') ?? true;
-  }
-
-  static Future<void> setUseAddonTextFormatting(bool value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool('sources_use_addon_text', value);
-  }
-
   /// Suppresses collection row headings on Home without changing catalog
   /// titles or their add-on provenance labels.
   static Future<bool> getHomeHideCollectionNames() async {
@@ -6080,435 +5512,6 @@ class StorageService {
     await prefs.remove('spotlight_focus_details');
   }
 
-  // Tracking source policy -------------------------------------------------
-
-  static const Set<TrackingSource> _allTrackingSources = <TrackingSource>{
-    TrackingSource.local,
-    TrackingSource.trakt,
-    TrackingSource.simkl,
-    TrackingSource.mdblist,
-  };
-
-  /// Reads the new master scrobble switches. On first read, adopt the retired
-  /// per-tracker catalog switches once. An absent legacy value means ON: that
-  /// matches interactive connection and old Trakt/Simkl restore behavior.
-  static Future<Set<TrackingSource>> getTrackingScrobbleTargets({
-    bool Function()? canContinue,
-  }) => TrackingScrobblePreferences.readCurrent(canContinue: canContinue);
-
-  static Future<void> setTrackingScrobbleTargets(
-    Set<TrackingSource> value,
-  ) async {
-    await TrackingScrobblePreferences.writeCurrent(value);
-    trackingSourceRevision.value++;
-  }
-
-  /// Turns on scrobbling for a newly connected tracker without disturbing the
-  /// user's choices for any other tracker. Connection flows call this after
-  /// authentication succeeds so reconnecting restores the provider's default
-  /// ON state even when it had previously been unticked.
-  static Future<void> enableTrackingScrobbleTarget(
-    TrackingSource source,
-  ) async {
-    final changed = await TrackingScrobblePreferences.enableCurrent(source);
-    if (changed) trackingSourceRevision.value++;
-  }
-
-  static Future<WatchProgressSource> getWatchProgressSource() async {
-    final prefs = await ProfilePreferences.instance();
-    final stored = prefs.getString(watchProgressSourceKey);
-    return WatchProgressSource.values.firstWhere(
-      (source) => source.name == stored,
-      orElse: () => WatchProgressSource.smart,
-    );
-  }
-
-  static Future<void> setWatchProgressSource(WatchProgressSource value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(watchProgressSourceKey, value.name);
-    trackingSourceRevision.value++;
-  }
-
-  static Future<bool> fallbackDisconnectedProgressSource(
-    TrackingSource disconnected, {
-    bool Function()? canContinue,
-  }) async {
-    if (!(canContinue?.call() ?? true)) return false;
-    final current = await getWatchProgressSource();
-    if (!(canContinue?.call() ?? true)) return false;
-    final owns = switch (current) {
-      WatchProgressSource.trakt => disconnected == TrackingSource.trakt,
-      WatchProgressSource.simkl => disconnected == TrackingSource.simkl,
-      WatchProgressSource.mdblist => disconnected == TrackingSource.mdblist,
-      _ => false,
-    };
-    if (!owns) return false;
-    if (canContinue != null) {
-      final prefs = await ProfilePreferences.instance();
-      if (!canContinue()) return false;
-      await prefs.setString(
-        watchProgressSourceKey,
-        WatchProgressSource.smart.name,
-        canCommit: canContinue,
-      );
-      if (!canContinue()) return false;
-      trackingSourceRevision.value++;
-      if (!canContinue()) return false;
-      await prefs.setBool(
-        'tracking_progress_fallback_notice',
-        true,
-        canCommit: canContinue,
-      );
-      return canContinue();
-    }
-    await setWatchProgressSource(WatchProgressSource.smart);
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool('tracking_progress_fallback_notice', true);
-    return true;
-  }
-
-  static Future<bool> takeTrackingProgressFallbackNotice() async {
-    final prefs = await ProfilePreferences.instance();
-    final pending = prefs.getBool('tracking_progress_fallback_notice') ?? false;
-    if (pending) await prefs.remove('tracking_progress_fallback_notice');
-    return pending;
-  }
-
-  static Future<Set<TrackingSource>> getHomeTickSources() async {
-    final prefs = await ProfilePreferences.instance();
-    final stored = prefs.getStringList(homeTickSourcesKey);
-    if (stored == null) return Set<TrackingSource>.of(_allTrackingSources);
-    return <TrackingSource>{
-      for (final value in stored)
-        if (TrackingSourceStorageName.parse(value) case final source?) source,
-    };
-  }
-
-  static Future<void> setHomeTickSources(Set<TrackingSource> value) async {
-    final prefs = await ProfilePreferences.instance();
-    final normalized = value.where(_allTrackingSources.contains).toSet();
-    await prefs.setStringList(
-      homeTickSourcesKey,
-      normalized.map((source) => source.storageName).toList(growable: false),
-    );
-    trackingSourceRevision.value++;
-  }
-
-  static Future<Map<String, dynamic>> buildTrackingPreferencesPayload() async {
-    final scrobble = await getTrackingScrobbleTargets();
-    final progress = await getWatchProgressSource();
-    final ticks = await getHomeTickSources();
-    return <String, dynamic>{
-      'scrobble_targets': scrobble
-          .map((source) => source.storageName)
-          .toList(growable: false),
-      'progress_source': progress.name,
-      'home_tick_sources': ticks
-          .map((source) => source.storageName)
-          .toList(growable: false),
-      'hide_watched': await HideWatchedPrefs.read(),
-    };
-  }
-
-  /// Re-adopts the legacy per-tracker switches after restoring an OLD backup
-  /// with no tracking payload. The masters were already seeded on first policy
-  /// read at app start, so without this the restored legacy values — notably an
-  /// MDBList sync-catalog OFF — would be silently ignored.
-  static Future<void> reseedTrackingScrobbleTargetsFromLegacy() async {
-    await TrackingScrobblePreferences.reseedCurrentFromLegacy();
-    trackingSourceRevision.value++;
-  }
-
-  /// Applies only explicitly present new-format preferences. Old backups omit
-  /// this object; [reseedTrackingScrobbleTargetsFromLegacy] runs on that
-  /// restore path instead so the restored legacy switches are re-adopted by
-  /// [getTrackingScrobbleTargets], preserving the absent-key migration rule.
-  static Future<void> applyTrackingPreferencesPayload(
-    Map<dynamic, dynamic> payload,
-  ) async {
-    final scrobble = payload['scrobble_targets'];
-    if (scrobble is List) {
-      await setTrackingScrobbleTargets(<TrackingSource>{
-        for (final value in scrobble.whereType<String>())
-          if (TrackingSourceStorageName.parse(value) case final source?) source,
-      });
-    }
-    final progress = payload['progress_source'];
-    if (progress is String) {
-      final parsed = WatchProgressSource.values
-          .where((source) => source.name == progress)
-          .firstOrNull;
-      if (parsed != null) await setWatchProgressSource(parsed);
-    }
-    final ticks = payload['home_tick_sources'];
-    if (ticks is List) {
-      await setHomeTickSources(<TrackingSource>{
-        for (final value in ticks.whereType<String>())
-          if (TrackingSourceStorageName.parse(value) case final source?) source,
-      });
-    }
-    final hideWatched = payload['hide_watched'];
-    if (hideWatched is bool) await HideWatchedPrefs.setEnabled(hideWatched);
-  }
-
-  // Trakt Settings
-  static Future<bool> getTraktSyncCatalogItems() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('trakt_sync_catalog_items') ?? false;
-  }
-
-  static Future<void> setTraktSyncCatalogItems(bool value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool('trakt_sync_catalog_items', value);
-  }
-
-  static Future<String?> getTraktAccessToken({
-    bool forRemoteTransfer = false,
-    bool Function()? canContinue,
-  }) async {
-    if (canContinue?.call() == false) return null;
-    if (forRemoteTransfer) {
-      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
-        _traktAccessTokenKey,
-      );
-      if (credential.handled) return credential.value;
-    }
-    final prefs = await ProfilePreferences.instance();
-    return SecretVault.getString(
-      prefs,
-      _traktAccessTokenKey,
-      canContinue: canContinue,
-    );
-  }
-
-  static Future<bool> hasTraktCredential({bool Function()? canContinue}) =>
-      ProviderCredentialStorage.credentialConfigured(
-        _traktAccessTokenKey,
-        () => getTraktAccessToken(),
-        canContinue: canContinue,
-      );
-
-  static Future<void> setTraktAccessToken(String token) async {
-    final prefs = await ProfilePreferences.instance();
-    await SecretVault.setString(prefs, _traktAccessTokenKey, token);
-  }
-
-  static Future<String?> getTraktRefreshToken({
-    bool forRemoteTransfer = false,
-  }) async {
-    if (forRemoteTransfer) {
-      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
-        _traktRefreshTokenKey,
-      );
-      if (credential.handled) return credential.value;
-    }
-    final prefs = await ProfilePreferences.instance();
-    return SecretVault.getString(prefs, _traktRefreshTokenKey);
-  }
-
-  static Future<void> setTraktRefreshToken(String token) async {
-    final prefs = await ProfilePreferences.instance();
-    await SecretVault.setString(prefs, _traktRefreshTokenKey, token);
-  }
-
-  static Future<String?> getTraktUsername() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_traktUsernameKey);
-  }
-
-  static Future<void> setTraktUsername(String username) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_traktUsernameKey, username);
-  }
-
-  /// Replace the token pair and its expiry as one shared session write.
-  static Future<void> setTraktSession({
-    required String accessToken,
-    required String refreshToken,
-    required int? expiryMs,
-  }) async {
-    if (await ProfileCredentialFacade.storeTraktSession(
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-      expiryMs: expiryMs,
-    )) {
-      return;
-    }
-    await setTraktAccessToken(accessToken);
-    await setTraktRefreshToken(refreshToken);
-    final prefs = await ProfilePreferences.instance();
-    if (expiryMs == null) {
-      await prefs.remove(_traktTokenExpiryKey);
-    } else {
-      await prefs.setInt(_traktTokenExpiryKey, expiryMs);
-    }
-  }
-
-  static Future<int?> getTraktTokenExpiry() async {
-    final shared = await ProfileCredentialFacade.traktSessionExpiry();
-    if (shared.handled) return shared.value;
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getInt(_traktTokenExpiryKey);
-  }
-
-  static Future<void> setTraktTokenExpiry(int expiryMs) async {
-    if (await ProfileCredentialFacade.setTraktSessionExpiry(expiryMs)) return;
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setInt(_traktTokenExpiryKey, expiryMs);
-  }
-
-  /// Clears the local Trakt connection first and reports whether this profile
-  /// was its unshared owner. Only that disposition may revoke the upstream
-  /// token; a borrower must never invalidate the account for other profiles.
-  static Future<bool> clearTraktAuth() async {
-    final prefs = await ProfilePreferences.instance();
-    final disposition = await ProfileCredentialFacade.disconnectWithDisposition(
-      _traktAccessTokenKey,
-    );
-    if (!disposition.handled) {
-      await prefs.remove(_traktAccessTokenKey);
-      await prefs.remove(_traktRefreshTokenKey);
-    }
-    await prefs.remove(_traktUsernameKey);
-    await prefs.remove(_traktTokenExpiryKey);
-    await fallbackDisconnectedProgressSource(TrackingSource.trakt);
-    return !disposition.handled || disposition.shouldRevokeRemote;
-  }
-
-  static Future<void> setSimklSyncCatalogItems(bool value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool('simkl_sync_catalog_items', value);
-  }
-
-  static Future<bool> getSimklSyncCatalogItems() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('simkl_sync_catalog_items') ?? false;
-  }
-
-  static Future<void> setMdblistSyncCatalogItems(bool value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool('mdblist_sync_catalog_items', value);
-  }
-
-  static Future<bool> getMdblistSyncCatalogItems() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('mdblist_sync_catalog_items') ?? false;
-  }
-
-  static Future<String?> getSimklAccessToken({
-    bool forRemoteTransfer = false,
-    bool Function()? canContinue,
-  }) async {
-    if (canContinue?.call() == false) return null;
-    if (forRemoteTransfer) {
-      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
-        _simklAccessTokenKey,
-      );
-      if (credential.handled) return credential.value;
-    }
-    final prefs = await ProfilePreferences.instance();
-    return SecretVault.getString(
-      prefs,
-      _simklAccessTokenKey,
-      canContinue: canContinue,
-    );
-  }
-
-  static Future<bool> hasSimklCredential({bool Function()? canContinue}) =>
-      ProviderCredentialStorage.credentialConfigured(
-        _simklAccessTokenKey,
-        () => getSimklAccessToken(),
-        canContinue: canContinue,
-      );
-
-  static Future<void> setSimklAccessToken(String token) async {
-    final prefs = await ProfilePreferences.instance();
-    await SecretVault.setString(prefs, _simklAccessTokenKey, token);
-  }
-
-  static Future<String?> getSimklUsername() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_simklUsernameKey);
-  }
-
-  static Future<void> setSimklUsername(String username) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_simklUsernameKey, username);
-  }
-
-  static Future<void> clearSimklAuth() async {
-    final prefs = await ProfilePreferences.instance();
-    if (!await ProfileCredentialFacade.disconnect(_simklAccessTokenKey)) {
-      await prefs.remove(_simklAccessTokenKey);
-    }
-    await prefs.remove(_simklUsernameKey);
-    await fallbackDisconnectedProgressSource(TrackingSource.simkl);
-  }
-
-  /// Android TV IPTV video decoder: 'auto' | 'hardware' | 'software'.
-  ///
-  /// Some TV boxes (MediaTek/Amlogic especially) freeze the picture while
-  /// audio keeps playing when their hardware decoder is handed a live stream
-  /// it mishandles — a device defect no app can work around reliably, which
-  /// is why every IPTV player ships this switch. 'software' puts Android's
-  /// own software codecs (c2.android.* / OMX.google.*) first; 'auto' leaves
-  /// the platform's decoder order untouched.
-  static const List<String> iptvDecoderModes = ['auto', 'hardware', 'software'];
-
-  static Future<String> getIptvDecoderMode() async {
-    final prefs = await ProfilePreferences.instance();
-    final value = prefs.getString(_iptvDecoderModeKey) ?? 'auto';
-    return iptvDecoderModes.contains(value) ? value : 'auto';
-  }
-
-  static Future<void> setIptvDecoderMode(String value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(
-      _iptvDecoderModeKey,
-      iptvDecoderModes.contains(value) ? value : 'auto',
-    );
-  }
-
-  // Network tuning (Debrify player)
-  /// 'standard' | 'extended' | 'patient'. Standard = player defaults untouched.
-  static Future<String> getNetworkConnectPatience() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_networkConnectPatienceKey) ?? 'standard';
-  }
-
-  static Future<void> setNetworkConnectPatience(String value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_networkConnectPatienceKey, value);
-  }
-
-  /// 'standard' | 'large' | 'huge'. Standard = player defaults untouched.
-  static Future<String> getNetworkBufferSize() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_networkBufferSizeKey) ?? 'standard';
-  }
-
-  static Future<void> setNetworkBufferSize(String value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_networkBufferSizeKey, value);
-  }
-
-  /// Television output matching. The default deliberately preserves the
-  /// behavior from before this setting existed instead of silently changing
-  /// display modes for existing profiles.
-  static Future<ContentDisplayMatchMode> getContentDisplayMatchMode() async {
-    final prefs = await ProfilePreferences.instance();
-    return ContentDisplayMatchMode.fromStorage(
-      prefs.getString(_contentDisplayMatchModeKey),
-    );
-  }
-
-  static Future<void> setContentDisplayMatchMode(
-    ContentDisplayMatchMode mode,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_contentDisplayMatchModeKey, mode.storageKey);
-  }
-
   static int _normalizeLocalCompletionThreshold(int value) {
     return localCompletionThresholdOptions.contains(value)
         ? value
@@ -6568,7 +5571,7 @@ class StorageService {
   static void rearmGhostPurgeForImportedPlayback(
     Map<String, Object?> preferences,
   ) {
-    if (!preferences.containsKey(_playbackStateKey)) return;
+    if (!preferences.containsKey(PlaybackStateStore.playbackStateKey)) return;
     if (preferences.containsKey(_resumeGhostPurgeGenerationKey)) return;
     preferences[_resumeGhostPurgeGenerationKey] = 0;
   }
@@ -6599,7 +5602,7 @@ class StorageService {
     final generation = prefs.getInt(_resumeGhostPurgeGenerationKey) ?? 0;
     if (generation >= _currentResumeGhostPurgeGeneration) return;
 
-    final playback = await _getPlaybackStateMap();
+    final playback = await PlaybackStateStore.getPlaybackStateMap();
     var purged = 0;
 
     for (final stateEntry in playback.values) {
@@ -6638,7 +5641,7 @@ class StorageService {
     }
 
     if (purged > 0) {
-      await _savePlaybackStateMap(playback, recordDeletions: true);
+      await PlaybackStateStore.savePlaybackStateMap(playback, recordDeletions: true);
       localCompletionRevision.value++;
       debugPrint(
         'StorageService: purged $purged unwatched resume ghost(s) from playback state',
@@ -6666,7 +5669,7 @@ class StorageService {
 
     final movieThreshold = await getMovieCompletionThreshold();
     final episodeThreshold = await getEpisodeCompletionThreshold();
-    final playback = await _getPlaybackStateMap();
+    final playback = await PlaybackStateStore.getPlaybackStateMap();
     final completedMovieIds = await _getFinishedMovieIds();
     final newlyCompletedMovieIds = <String>{};
     final completedMovieStateKeys = <String>{};
@@ -6804,7 +5807,7 @@ class StorageService {
       );
     }
     if (playbackChanged) {
-      await _savePlaybackStateMap(playback, recordDeletions: true);
+      await PlaybackStateStore.savePlaybackStateMap(playback, recordDeletions: true);
     }
     await prefs.setInt(
       _playbackCompletionMigrationGenerationKey,
@@ -7060,154 +6063,6 @@ class StorageService {
     debugPrint('✅ Cleared all playlist poster overrides');
   }
 
-  // ============================================================================
-  // Torrent Search History Methods
-  // ============================================================================
-
-  /// Get torrent search history
-  /// Returns list of maps containing torrent JSON + service + timestamp
-  static Future<List<Map<String, dynamic>>> getTorrentSearchHistory() async {
-    final prefs = await ProfilePreferences.instance();
-    final raw = prefs.getString(_torrentSearchHistoryKey);
-    if (raw == null || raw.isEmpty) return [];
-    try {
-      final list = jsonDecode(raw) as List<dynamic>;
-      return list.whereType<Map<String, dynamic>>().toList();
-    } catch (e) {
-      debugPrint('Error loading torrent search history: $e');
-      return [];
-    }
-  }
-
-  /// Add torrent to search history with deduplication
-  /// Deduplicates by infohash, keeps max 5 items (FIFO)
-  static Future<void> addTorrentToHistory(
-    Map<String, dynamic> torrentJson,
-    String service,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    final history = await getTorrentSearchHistory();
-
-    final infohash = torrentJson['infohash'] as String?;
-    if (infohash == null || infohash.isEmpty) return;
-
-    // Remove existing entry with same infohash (deduplicate)
-    history.removeWhere((entry) {
-      final entryTorrent = entry['torrent'] as Map<String, dynamic>?;
-      return entryTorrent?['infohash'] == infohash;
-    });
-
-    // Add new entry at start
-    history.insert(0, {
-      'torrent': torrentJson,
-      'service': service,
-      'clickedAt': DateTime.now().millisecondsSinceEpoch,
-    });
-
-    // Keep only last 5
-    if (history.length > 5) {
-      history.removeRange(5, history.length);
-    }
-
-    await prefs.setString(_torrentSearchHistoryKey, jsonEncode(history));
-  }
-
-  /// Clear all search history
-  static Future<void> clearTorrentSearchHistory() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_torrentSearchHistoryKey);
-  }
-
-  /// Get whether search history tracking is enabled
-  static Future<bool> getTorrentSearchHistoryEnabled() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_torrentSearchHistoryEnabledKey) ?? true;
-  }
-
-  /// Set whether search history tracking is enabled
-  static Future<void> setTorrentSearchHistoryEnabled(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_torrentSearchHistoryEnabledKey, enabled);
-  }
-
-  /// Whether quick-play ranks candidates by the default filters (the
-  /// FilterLadder). ON by default — the ladder only reorders, never drops.
-  static Future<bool> getQuickPlayHonorsFilters() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_quickPlayHonorsFiltersKey) ?? true;
-  }
-
-  /// Legacy global preference retained for migration and profile-less callers.
-  /// The Quick Play page owns the independent Movie and Series `useFilters`
-  /// values; a global write must never silently rewrite either profile.
-  static Future<void> setQuickPlayHonorsFilters(bool value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_quickPlayHonorsFiltersKey, value);
-  }
-
-  // Default Torrent Filter Settings
-  static Future<List<String>> getDefaultFilterQualities() async {
-    final prefs = await ProfilePreferences.instance();
-    final json = prefs.getString(_defaultFilterQualitiesKey);
-    if (json == null) return [];
-    return List<String>.from(jsonDecode(json));
-  }
-
-  static Future<void> setDefaultFilterQualities(List<String> qualities) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultFilterQualitiesKey, jsonEncode(qualities));
-  }
-
-  static Future<List<String>> getDefaultFilterRipSources() async {
-    final prefs = await ProfilePreferences.instance();
-    final json = prefs.getString(_defaultFilterRipSourcesKey);
-    if (json == null) return [];
-    return List<String>.from(jsonDecode(json));
-  }
-
-  static Future<void> setDefaultFilterRipSources(
-    List<String> ripSources,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultFilterRipSourcesKey, jsonEncode(ripSources));
-  }
-
-  static Future<List<String>> getDefaultFilterLanguages() async {
-    final prefs = await ProfilePreferences.instance();
-    final json = prefs.getString(_defaultFilterLanguagesKey);
-    if (json == null) return [];
-    return List<String>.from(jsonDecode(json));
-  }
-
-  static Future<void> setDefaultFilterLanguages(List<String> languages) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultFilterLanguagesKey, jsonEncode(languages));
-  }
-
-  static Future<List<String>> getDefaultFilterSizes() async {
-    final prefs = await ProfilePreferences.instance();
-    final json = prefs.getString(_defaultFilterSizesKey);
-    if (json == null) return [];
-    return List<String>.from(jsonDecode(json));
-  }
-
-  static Future<void> setDefaultFilterSizes(List<String> sizes) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultFilterSizesKey, jsonEncode(sizes));
-  }
-
-  static Future<List<String>> getDefaultFilterDynamicRanges() async {
-    final prefs = await ProfilePreferences.instance();
-    final json = prefs.getString(_defaultFilterDynamicRangesKey);
-    if (json == null) return [];
-    return List<String>.from(jsonDecode(json));
-  }
-
-  static Future<void> setDefaultFilterDynamicRanges(List<String> ranges) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultFilterDynamicRangesKey, jsonEncode(ranges));
-  }
-
   // Debrify TV Filter Settings — scoped to Debrify TV only, deliberately
   // separate from the Search tab's default filters above so tuning a channel
   // feed never changes search behaviour (and vice versa).
@@ -7246,803 +6101,6 @@ class StorageService {
   static Future<void> setDebrifyTvExternalNoticeDismissed(bool value) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_debrifyTvExternalNoticeDismissedKey, value);
-  }
-
-  // Default Torrent Provider methods
-  // Returns: 'none' (ask every time), 'torbox', 'debrid', or 'pikpak'
-  static Future<String> getDefaultTorrentProvider() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_defaultTorrentProviderKey) ?? 'none';
-  }
-
-  static Future<void> setDefaultTorrentProvider(
-    String provider, {
-    bool Function()? canContinue,
-  }) async {
-    if (canContinue == null) {
-      final prefs = await ProfilePreferences.instance();
-      await prefs.setString(_defaultTorrentProviderKey, provider);
-      return;
-    }
-    await ProfileRuntime.withoutCapturedScope(() async {
-      if (!canContinue()) return;
-      final prefs = await ProfilePreferences.instance();
-      if (!canContinue()) return;
-      await ProfilePreferences.synchronizeExternalMutation(() async {
-        // Waiting for a profile snapshot may retire the picker. Check here,
-        // with no intervening await before the nested preference setter.
-        if (!canContinue()) return;
-        await prefs.setString(_defaultTorrentProviderKey, provider);
-      }, marksMutation: false);
-    });
-  }
-
-  static Future<void> clearDefaultTorrentProvider() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_defaultTorrentProviderKey);
-  }
-
-  static Future<List<IndexerManagerConfig>> getIndexerManagerConfigs({
-    bool forSettings = true,
-    bool forRemoteTransfer = false,
-  }) async {
-    if (ProfileCollectionResourceFacade.active) {
-      final rows = await ProfileCollectionResourceFacade.read(
-        types: const <ConnectionResourceType>{
-          ConnectionResourceType.jackett,
-          ConnectionResourceType.prowlarr,
-        },
-        feature: ProfileFeature.torrentSearch,
-        forSettings: forSettings,
-        forRemoteTransfer: forRemoteTransfer,
-      );
-      return rows.map(IndexerManagerConfig.fromJson).toList(growable: false);
-    }
-    final prefs = await ProfilePreferences.instance();
-    final rawList = await SecretVault.getStringList(
-      prefs,
-      _indexerManagerConfigsKey,
-    );
-    return rawList
-        .map((raw) {
-          try {
-            return IndexerManagerConfig.fromJson(
-              Map<String, dynamic>.from(jsonDecode(raw) as Map),
-            );
-          } catch (e) {
-            debugPrint('Error loading indexer manager config: $e');
-            return null;
-          }
-        })
-        .whereType<IndexerManagerConfig>()
-        .toList();
-  }
-
-  static Future<List<IndexerManagerConfig>> setIndexerManagerConfigs(
-    List<IndexerManagerConfig> configs,
-  ) async {
-    if (ProfileCollectionResourceFacade.active) {
-      final rows = await ProfileCollectionResourceFacade.replaceAndRead(
-        types: const <ConnectionResourceType>{
-          ConnectionResourceType.jackett,
-          ConnectionResourceType.prowlarr,
-        },
-        feature: ProfileFeature.torrentSearch,
-        items: <ResourceCollectionItem>[
-          for (final config in configs)
-            ResourceCollectionItem(
-              type: config.type == IndexerManagerType.prowlarr
-                  ? ConnectionResourceType.prowlarr
-                  : ConnectionResourceType.jackett,
-              label: config.displayName,
-              publicConfig: <String, dynamic>{
-                'managerName': config.displayName,
-              },
-              secretConfig: config.toJson(),
-              sourceResourceId: config.connectionResourceId,
-            ),
-        ],
-        forSettings: true,
-      );
-      return rows.map(IndexerManagerConfig.fromJson).toList(growable: false);
-    }
-    final prefs = await ProfilePreferences.instance();
-    final rawList = configs
-        .map((config) => jsonEncode(config.toJson()))
-        .toList();
-    await SecretVault.setStringList(prefs, _indexerManagerConfigsKey, rawList);
-    return List<IndexerManagerConfig>.unmodifiable(configs);
-  }
-
-  // Quick Play VR Settings methods
-
-  /// Get VR player mode: 'disabled', 'auto', or 'always'
-  static Future<String> getQuickPlayVrMode() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_quickPlayVrModeKey) ?? 'disabled';
-  }
-
-  static Future<void> setQuickPlayVrMode(String mode) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_quickPlayVrModeKey, mode);
-  }
-
-  /// Get default VR screen type (dome, sphere, flat, fisheye, mkx200, rf52)
-  static Future<String> getQuickPlayVrDefaultScreenType() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_quickPlayVrDefaultScreenTypeKey) ?? 'dome';
-  }
-
-  static Future<void> setQuickPlayVrDefaultScreenType(String screenType) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_quickPlayVrDefaultScreenTypeKey, screenType);
-  }
-
-  /// Get default VR stereo mode (sbs, tb, off)
-  static Future<String> getQuickPlayVrDefaultStereoMode() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_quickPlayVrDefaultStereoModeKey) ?? 'sbs';
-  }
-
-  static Future<void> setQuickPlayVrDefaultStereoMode(String stereoMode) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_quickPlayVrDefaultStereoModeKey, stereoMode);
-  }
-
-  /// Get whether to auto-detect VR format from filename
-  static Future<bool> getQuickPlayVrAutoDetectFormat() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_quickPlayVrAutoDetectFormatKey) ?? true;
-  }
-
-  static Future<void> setQuickPlayVrAutoDetectFormat(bool autoDetect) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_quickPlayVrAutoDetectFormatKey, autoDetect);
-  }
-
-  /// Get whether to show VR format selection dialog before launching DeoVR
-  static Future<bool> getQuickPlayVrShowDialog() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_quickPlayVrShowDialogKey) ?? true;
-  }
-
-  static Future<void> setQuickPlayVrShowDialog(bool showDialog) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_quickPlayVrShowDialogKey, showDialog);
-  }
-
-  /// Clear all Quick Play VR settings
-  static Future<void> clearQuickPlayVrSettings() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_quickPlayVrModeKey);
-    await prefs.remove(_quickPlayVrDefaultScreenTypeKey);
-    await prefs.remove(_quickPlayVrDefaultStereoModeKey);
-    await prefs.remove(_quickPlayVrAutoDetectFormatKey);
-    await prefs.remove(_quickPlayVrShowDialogKey);
-  }
-
-  // Quick Play Cache Fallback Settings methods
-
-  /// What the Play button does — NOT what it looks like. The button keeps its
-  /// label, icon and position in every mode; only the behavior behind the press
-  /// changes:
-  ///
-  ///  * `quick`  — the shipped contract: reuse a pinned source, else search and
-  ///               auto-play the best match.
-  ///  * `smart`  — reuse a pinned source; when none is usable, hand the user the
-  ///               source list instead of auto-picking.
-  ///  * `always` — skip pinned sources entirely and always hand over the list.
-  ///
-  /// Absent key means `quick`, so existing installs are untouched. Only the
-  /// user's own Play press honors this ([TorrentPlaybackService.playFromSelection]
-  /// applies it solely when a picker opener is supplied) — binge auto-advance and
-  /// post-failure recovery keep auto-selecting, since re-prompting mid-chain is
-  /// exactly what those paths exist to avoid.
-  static Future<String> getPlayButtonMode() async {
-    final prefs = await ProfilePreferences.instance();
-    final raw = prefs.getString(_playButtonModeKey);
-    return (raw == 'smart' || raw == 'always') ? raw! : 'quick';
-  }
-
-  static Future<void> setPlayButtonMode(String value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_playButtonModeKey, value);
-  }
-
-  /// Loads the per-content Quick Play profile. When no v2 profile exists,
-  /// legacy filter/retry/series-pack preferences are folded into one without
-  /// changing what the next play will do. Non-default legacy values are
-  /// labelled Custom; an untouched install is Debrify default.
-  static Future<QuickPlayRules> getQuickPlayRules({
-    required bool isMovie,
-  }) async {
-    final prefs = await ProfilePreferences.instance();
-    return _quickPlayRulesFromPrefs(prefs, isMovie: isMovie);
-  }
-
-  static QuickPlayRules _quickPlayRulesFromPrefs(
-    SharedPreferences prefs, {
-    required bool isMovie,
-  }) {
-    final key = isMovie ? _quickPlayMovieRulesKey : _quickPlaySeriesRulesKey;
-    final stored = prefs.getString(key);
-    if (stored != null) {
-      try {
-        final decoded = jsonDecode(stored);
-        if (decoded is Map<String, dynamic>) {
-          return QuickPlayRules.fromJson(decoded, isMovie: isMovie);
-        }
-        if (decoded is Map) {
-          return QuickPlayRules.fromJson(
-            decoded.map((key, value) => MapEntry(key.toString(), value)),
-            isMovie: isMovie,
-          );
-        }
-      } catch (e) {
-        debugPrint('Invalid Quick Play profile, using legacy values: $e');
-      }
-    }
-
-    final defaults = QuickPlayRules.debrifyDefault(isMovie: isMovie);
-    final migrated = defaults.copyWith(
-      preset: QuickPlayPreset.debrifyDefault,
-      useFilters: prefs.getBool(_quickPlayHonorsFiltersKey) ?? true,
-      tryNextOnFailure: prefs.getBool(_quickPlayTryMultipleTorrentsKey) ?? true,
-      maxAttempts: prefs.getInt(_quickPlayMaxRetriesKey) ?? 5,
-      preferSeriesPacks:
-          !isMovie && (prefs.getBool(_autoBindSeriesPacksKey) ?? true),
-    );
-    return migrated == defaults
-        ? migrated
-        : migrated.copyWith(preset: QuickPlayPreset.custom);
-  }
-
-  static Future<void> setQuickPlayRules(
-    QuickPlayRules rules, {
-    required bool isMovie,
-  }) async {
-    final prefs = await ProfilePreferences.instance();
-    final siblingIsMovie = !isMovie;
-    final siblingKey = siblingIsMovie
-        ? _quickPlayMovieRulesKey
-        : _quickPlaySeriesRulesKey;
-    // Snapshot an as-yet-unpersisted sibling BEFORE updating the legacy global
-    // mirrors below. Otherwise saving Movies first could make a later Series
-    // migration inherit the movie retry count (and vice versa).
-    final sibling = prefs.containsKey(siblingKey)
-        ? null
-        : _quickPlayRulesFromPrefs(prefs, isMovie: siblingIsMovie);
-    await prefs.setString(
-      isMovie ? _quickPlayMovieRulesKey : _quickPlaySeriesRulesKey,
-      jsonEncode(rules.toJson()),
-    );
-    if (sibling != null) {
-      await prefs.setString(siblingKey, jsonEncode(sibling.toJson()));
-    }
-
-    // Keep old readers and downgrade builds safe. Media-specific values can't
-    // be represented perfectly by the legacy global keys, so the active v2
-    // playback path never reads these; they are compatibility mirrors only.
-    //
-    // That invariant was violated once: series auto-pinning read
-    // _autoBindSeriesPacksKey, so writing this mirror turned pinning off
-    // whenever the user turned off "Prefer season packs". Auto-pin now owns
-    // _seriesAutoPinOnPlayKey. Before adding a reader for any key below, check
-    // it is genuinely write-only on this path.
-    await prefs.setBool(
-      _quickPlayTryMultipleTorrentsKey,
-      rules.tryNextOnFailure,
-    );
-    await prefs.setInt(_quickPlayMaxRetriesKey, rules.maxAttempts);
-    if (!isMovie) {
-      await prefs.setBool(_autoBindSeriesPacksKey, rules.preferSeriesPacks);
-    }
-  }
-
-  static Future<void> restoreQuickPlayDefaults() async {
-    await setQuickPlayRules(
-      QuickPlayRules.debrifyDefault(isMovie: true),
-      isMovie: true,
-    );
-    await setQuickPlayRules(
-      QuickPlayRules.debrifyDefault(isMovie: false),
-      isMovie: false,
-    );
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_quickPlayHonorsFiltersKey, true);
-    // The page's reset button reads as "reset this page", and this function
-    // already resets a non-per-tab key above, so the Play button mode goes back
-    // to the shipped Quick Play too. Leaving it would restore defaults while
-    // Play kept behaving differently.
-    await prefs.remove(_playButtonModeKey);
-  }
-
-  /// Get whether to try multiple torrents if first is not cached
-  /// Default: true (try next torrent on failure)
-  static Future<bool> getQuickPlayTryMultipleTorrents() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_quickPlayTryMultipleTorrentsKey) ?? true;
-  }
-
-  static Future<void> setQuickPlayTryMultipleTorrents(bool tryMultiple) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_quickPlayTryMultipleTorrentsKey, tryMultiple);
-  }
-
-  /// Whether a series play pins the source that played, so later episodes go
-  /// straight through the bound path. Defaults ON.
-  ///
-  /// Independent of "Prefer season packs" — the two shared a key until this
-  /// split, which meant turning packs off silently killed pinning. See
-  /// [_seriesAutoPinOnPlayKey].
-  static Future<bool> getSeriesAutoPinOnPlay() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_seriesAutoPinOnPlayKey) ?? true;
-  }
-
-  static Future<void> setSeriesAutoPinOnPlay(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_seriesAutoPinOnPlayKey, enabled);
-  }
-
-  /// Get max number of torrents to try before giving up
-  /// Default: 5, Range: 2-10
-  static Future<int> getQuickPlayMaxRetries() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getInt(_quickPlayMaxRetriesKey) ?? 5;
-  }
-
-  static Future<void> setQuickPlayMaxRetries(int maxRetries) async {
-    final prefs = await ProfilePreferences.instance();
-    // Clamp between 2 and 10
-    await prefs.setInt(_quickPlayMaxRetriesKey, maxRetries.clamp(2, 10));
-  }
-
-  static const String _quickPlaySearchTimeoutKey = 'quick_play_search_timeout';
-
-  static Future<int> getQuickPlaySearchTimeout() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getInt(_quickPlaySearchTimeoutKey) ?? 5;
-  }
-
-  static Future<void> setQuickPlaySearchTimeout(int seconds) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setInt(_quickPlaySearchTimeoutKey, seconds);
-  }
-
-  static const String _stremioSourcesTimeoutKey = 'stremio_sources_timeout';
-
-  static Future<int> getStremioSourcesTimeout() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getInt(_stremioSourcesTimeoutKey) ?? 15;
-  }
-
-  static Future<void> setStremioSourcesTimeout(int seconds) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setInt(_stremioSourcesTimeoutKey, seconds);
-  }
-
-  /// Clear all Quick Play Cache Fallback settings
-  static Future<void> clearQuickPlayCacheFallbackSettings() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_quickPlayTryMultipleTorrentsKey);
-    await prefs.remove(_quickPlayMaxRetriesKey);
-    await prefs.remove(_quickPlayMovieRulesKey);
-    await prefs.remove(_quickPlaySeriesRulesKey);
-  }
-
-  // External Player Settings methods
-
-  /// Get default player mode
-  /// Returns 'debrify' (built-in player) by default
-  /// Valid values: 'debrify', 'external', 'deovr'
-  static Future<String> getDefaultPlayerMode() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_defaultPlayerModeKey) ?? 'debrify';
-  }
-
-  /// Set default player mode
-  /// Valid values: 'debrify', 'external', 'deovr'
-  static Future<void> setDefaultPlayerMode(String mode) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_defaultPlayerModeKey, mode);
-  }
-
-  /// Get preferred external player key
-  /// Returns 'system_default' if not set
-  static Future<String> getPreferredExternalPlayer() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_externalPlayerPreferredKey) ?? 'system_default';
-  }
-
-  /// Set preferred external player key
-  static Future<void> setPreferredExternalPlayer(String playerKey) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_externalPlayerPreferredKey, playerKey);
-  }
-
-  /// Get custom external player path (for custom player option)
-  static Future<String?> getCustomExternalPlayerPath() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_externalPlayerCustomPathKey);
-  }
-
-  /// Set custom external player path
-  static Future<void> setCustomExternalPlayerPath(String? path) async {
-    final prefs = await ProfilePreferences.instance();
-    if (path == null || path.isEmpty) {
-      await prefs.remove(_externalPlayerCustomPathKey);
-    } else {
-      await prefs.setString(_externalPlayerCustomPathKey, path);
-    }
-  }
-
-  /// Get custom external player display name
-  static Future<String?> getCustomExternalPlayerName() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_externalPlayerCustomNameKey);
-  }
-
-  /// Set custom external player display name
-  static Future<void> setCustomExternalPlayerName(String? name) async {
-    final prefs = await ProfilePreferences.instance();
-    if (name == null || name.isEmpty) {
-      await prefs.remove(_externalPlayerCustomNameKey);
-    } else {
-      await prefs.setString(_externalPlayerCustomNameKey, name);
-    }
-  }
-
-  /// Get custom external player command template
-  /// Should contain {url} placeholder, optionally {title}
-  static Future<String?> getCustomExternalPlayerCommand() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_externalPlayerCustomCommandKey);
-  }
-
-  /// Set custom external player command template
-  static Future<void> setCustomExternalPlayerCommand(String? command) async {
-    final prefs = await ProfilePreferences.instance();
-    if (command == null || command.isEmpty) {
-      await prefs.remove(_externalPlayerCustomCommandKey);
-    } else {
-      await prefs.setString(_externalPlayerCustomCommandKey, command);
-    }
-  }
-
-  // ============================================================
-  // iOS External Player Settings
-  // ============================================================
-
-  /// Get preferred iOS external player key
-  static Future<String> getPreferredIOSExternalPlayer() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_iosExternalPlayerPreferredKey) ?? 'vlc';
-  }
-
-  /// Set preferred iOS external player key
-  static Future<void> setPreferredIOSExternalPlayer(String playerKey) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_iosExternalPlayerPreferredKey, playerKey);
-  }
-
-  /// Get iOS custom URL scheme template
-  /// Should contain {url} placeholder, e.g., "myplayer://play?url={url}"
-  static Future<String?> getIOSCustomSchemeTemplate() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_iosCustomSchemeTemplateKey);
-  }
-
-  /// Set iOS custom URL scheme template
-  static Future<void> setIOSCustomSchemeTemplate(String? template) async {
-    final prefs = await ProfilePreferences.instance();
-    if (template == null || template.isEmpty) {
-      await prefs.remove(_iosCustomSchemeTemplateKey);
-    } else {
-      await prefs.setString(_iosCustomSchemeTemplateKey, template);
-    }
-  }
-
-  // ============================================================
-  // Linux External Player Settings
-  // ============================================================
-
-  /// Get preferred Linux external player key
-  static Future<String> getPreferredLinuxExternalPlayer() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_linuxExternalPlayerPreferredKey) ??
-        'system_default';
-  }
-
-  /// Set preferred Linux external player key
-  static Future<void> setPreferredLinuxExternalPlayer(String playerKey) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_linuxExternalPlayerPreferredKey, playerKey);
-  }
-
-  /// Get Linux custom command template
-  /// Should contain {url} placeholder, e.g., "vlc --fullscreen {url}"
-  static Future<String?> getLinuxCustomCommand() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_linuxCustomCommandKey);
-  }
-
-  /// Set Linux custom command template
-  static Future<void> setLinuxCustomCommand(String? command) async {
-    final prefs = await ProfilePreferences.instance();
-    if (command == null || command.isEmpty) {
-      await prefs.remove(_linuxCustomCommandKey);
-    } else {
-      await prefs.setString(_linuxCustomCommandKey, command);
-    }
-  }
-
-  // ============================================================
-  // Windows External Player Settings
-  // ============================================================
-
-  /// Get preferred Windows external player key
-  static Future<String> getPreferredWindowsExternalPlayer() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_windowsExternalPlayerPreferredKey) ??
-        'system_default';
-  }
-
-  /// Set preferred Windows external player key
-  static Future<void> setPreferredWindowsExternalPlayer(
-    String playerKey,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_windowsExternalPlayerPreferredKey, playerKey);
-  }
-
-  /// Get Windows custom command template
-  /// Should contain {url} placeholder, e.g., "vlc --fullscreen {url}"
-  static Future<String?> getWindowsCustomCommand() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_windowsCustomCommandKey);
-  }
-
-  /// Set Windows custom command template
-  static Future<void> setWindowsCustomCommand(String? command) async {
-    final prefs = await ProfilePreferences.instance();
-    if (command == null || command.isEmpty) {
-      await prefs.remove(_windowsCustomCommandKey);
-    } else {
-      await prefs.setString(_windowsCustomCommandKey, command);
-    }
-  }
-
-  /// Clear all external player settings
-  static Future<void> clearExternalPlayerSettings() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_defaultPlayerModeKey);
-    await prefs.remove(_externalPlayerPreferredKey);
-    await prefs.remove(_externalPlayerCustomPathKey);
-    await prefs.remove(_externalPlayerCustomNameKey);
-    await prefs.remove(_externalPlayerCustomCommandKey);
-  }
-
-  // Debrify Player Default Settings
-
-  /// Get default aspect ratio index for Flutter/mobile player
-  /// 0=Contain, 1=Cover, 2=FitWidth, 3=FitHeight, 4=16:9, 5=4:3, 6=21:9, 7=1:1, 8=3:2, 9=5:4, 10=CinemaZoom
-  /// Default: 2 (Fit Width)
-  static Future<int> getPlayerDefaultAspectIndex() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getInt(_playerDefaultAspectIndexKey) ?? 2;
-  }
-
-  /// Set default aspect ratio index for Flutter/mobile player
-  static Future<void> setPlayerDefaultAspectIndex(int index) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setInt(_playerDefaultAspectIndexKey, index);
-  }
-
-  /// Get default aspect ratio index for Android TV player
-  /// 0=Fit, 1=Fill, 2=Zoom, 3=CinemaZoom
-  /// Default: 0 (Fit)
-  static Future<int> getPlayerDefaultAspectIndexTv() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getInt(_playerDefaultAspectIndexTvKey) ?? 0;
-  }
-
-  /// Set default aspect ratio index for Android TV player
-  static Future<void> setPlayerDefaultAspectIndexTv(int index) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setInt(_playerDefaultAspectIndexTvKey, index);
-  }
-
-  /// Get night mode index (Android TV only)
-  /// 0=Off, 1=Low, 2=Medium, 3=High, 4=Higher, 5=Extreme, 6=Max, 7=Sleeping Baby
-  /// Default: 0 (Off)
-  static Future<int> getPlayerNightModeIndex() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getInt(_playerNightModeIndexKey) ?? 0;
-  }
-
-  /// Set night mode index (Android TV only)
-  static Future<void> setPlayerNightModeIndex(int index) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setInt(_playerNightModeIndexKey, index);
-  }
-
-  /// Whether to route playback through Android's effects-capable audio output
-  /// and announce the session to system equalizer apps (Wavelet, OEM effects).
-  /// Android only. Default: false — off changes nothing about how audio is
-  /// output today, since enabling it switches the phone player's audio backend.
-  static Future<bool> getPlayerSystemAudioEffects() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_playerSystemAudioEffectsKey) ?? false;
-  }
-
-  /// Set whether system audio effect apps may process our playback.
-  static Future<void> setPlayerSystemAudioEffects(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
-  }
-
-  /// Android Dart player only: bitstream AC3/EAC3/DTS-core to the audio
-  /// device instead of decoding to PCM (AUDIO_FIDELITY_PLAN.md). Default
-  /// false — passthrough is fail-loud on routes that misreport support,
-  /// so only the user can turn it on.
-  static Future<bool> getAudioPassthroughEnabled() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_audioPassthroughKey) ?? false;
-  }
-
-  static Future<void> setAudioPassthroughEnabled(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_audioPassthroughKey, enabled);
-  }
-
-  /// Apple (tvOS/iOS) Dart player: request the track's real channel layout
-  /// (`audio-channels=auto`) so an HDMI/eARC AVR route gets full
-  /// multichannel LPCM. Default false until route-safety is field-proven
-  /// (AUDIO_FIDELITY_PLAN.md rev 2).
-  static Future<bool> getAppleMultichannelAudio() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_appleMultichannelAudioKey) ?? false;
-  }
-
-  static Future<void> setAppleMultichannelAudio(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_appleMultichannelAudioKey, enabled);
-  }
-
-  /// Apple TV diagnostics. The player picks `ao=avfoundation,audiounit` and
-  /// caps `audio-channels` to stereo on a route that reports two channels;
-  /// these two override that automatic choice from either direction, so a
-  /// reporter can narrow an audio problem without a custom build.
-  ///
-  /// Force stereo: cap regardless of what the route claims. Use when a
-  /// multichannel route folds badly.
-  static Future<bool> getTvosForceStereoAudio() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_tvosForceStereoAudioKey) ?? false;
-  }
-
-  static Future<void> setTvosForceStereoAudio(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_tvosForceStereoAudioKey, enabled);
-  }
-
-  /// Legacy output: go back to `ao=audiounit`, the pre-2026-08 behaviour.
-  /// It is silent on Dolby Atmos routes — which is why avfoundation is now
-  /// the default — but it is the escape hatch if the new output misbehaves.
-  static Future<bool> getTvosLegacyAudioOutput() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_tvosLegacyAudioOutputKey) ?? false;
-  }
-
-  static Future<void> setTvosLegacyAudioOutput(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_tvosLegacyAudioOutputKey, enabled);
-  }
-
-  /// Apple TV only: force the media-kit player to software video decoding.
-  /// The escape hatch behind the automatic 10-bit remedy ladder (see
-  /// PLAYER_TVOS_10BIT_PLAN.md) — for files whose formats read clean but
-  /// render wrong. Default false: hardware decoding, today's behavior.
-  static Future<bool> getTvosForceSoftwareDecode() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_tvosForceSoftwareDecodeKey) ?? false;
-  }
-
-  static Future<void> setTvosForceSoftwareDecode(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_tvosForceSoftwareDecodeKey, enabled);
-  }
-
-  /// Renderer used by the Flutter media-kit player on Android phones/tablets.
-  /// Android TV ignores this and keeps its native Media3 SurfaceView backend.
-  static Future<AndroidVideoRendererMode> getAndroidVideoRendererMode() async {
-    final prefs = await ProfilePreferences.instance();
-    final migrated =
-        prefs.getBool(_androidVideoRendererGpuMigrationKey) ?? false;
-    final stored = prefs.getString(_androidVideoRendererModeKey);
-    if (!migrated) {
-      // Direct Surface used to be the default, but mediacodec_embed cannot
-      // composite bitmap subtitles. Migrate existing installs once; users may
-      // still explicitly choose the performance renderer afterwards.
-      if (stored == null ||
-          stored == AndroidVideoRendererMode.directSurface.storageKey) {
-        await prefs.setString(
-          _androidVideoRendererModeKey,
-          AndroidVideoRendererMode.directMediaCodec.storageKey,
-        );
-      }
-      await prefs.setBool(_androidVideoRendererGpuMigrationKey, true);
-    }
-    return AndroidVideoRendererMode.fromStorage(
-      prefs.getString(_androidVideoRendererModeKey),
-    );
-  }
-
-  static Future<void> setAndroidVideoRendererMode(
-    AndroidVideoRendererMode mode,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_androidVideoRendererModeKey, mode.storageKey);
-    await prefs.setBool(_androidVideoRendererGpuMigrationKey, true);
-  }
-
-  /// Whether the Debrify Player should request community timestamps and show
-  /// manual skip buttons. Manual buttons are enabled by default; this setting
-  /// never authorizes automatic seeking.
-  static Future<bool> getSkipSegmentsEnabled() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_skipSegmentsEnabledKey) ?? true;
-  }
-
-  static Future<void> setSkipSegmentsEnabled(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_skipSegmentsEnabledKey, enabled);
-  }
-
-  /// Timestamp source used by the Debrify Player. Unknown stored values fall
-  /// back safely so removing a provider cannot strand the feature.
-  static Future<String> getSkipSegmentProvider() async {
-    final prefs = await ProfilePreferences.instance();
-    final provider = prefs.getString(_skipSegmentProviderKey);
-    return _supportedSkipSegmentProviders.contains(provider)
-        ? provider!
-        : skipSegmentProviderAuto;
-  }
-
-  static Future<void> setSkipSegmentProvider(String provider) async {
-    final prefs = await ProfilePreferences.instance();
-    final supported = _supportedSkipSegmentProviders.contains(provider)
-        ? provider
-        : skipSegmentProviderAuto;
-    await prefs.setString(_skipSegmentProviderKey, supported);
-  }
-
-  /// Whether the phone player OPENS upright instead of turning the handset
-  /// landscape for you. Off by default — a video wants the long edge, and that
-  /// is what the player has always done. On, it opens portrait and the
-  /// player's own Portrait/Landscape button is how the user turns it.
-  /// Phone-only: a TV has no portrait and a desktop window ignores this
-  /// entirely.
-  ///
-  /// [playerStartPortraitCached] mirrors it for SYNCHRONOUS reads. The player
-  /// commits its orientation while building, so an async read there would set
-  /// landscape and correct it a frame later — performing the exact flip this
-  /// setting exists to prevent. Warmed in main() before runApp (the IPTV
-  /// startup channel can open a player on the first frame) and kept in sync by
-  /// the setter.
-  static bool playerStartPortraitCached = false;
-
-  static Future<bool> getPlayerStartPortrait() async {
-    final prefs = await ProfilePreferences.instance();
-    playerStartPortraitCached = prefs.getBool(_playerStartPortraitKey) ?? false;
-    return playerStartPortraitCached;
-  }
-
-  static Future<void> setPlayerStartPortrait(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_playerStartPortraitKey, enabled);
-    playerStartPortraitCached = enabled;
   }
 
   /// Whether interface sound and haptics are allowed at all.
@@ -8084,97 +6142,6 @@ class StorageService {
     uiHapticsCached = enabled;
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_uiHapticsKey, enabled);
-  }
-
-  /// Whether native players silently align addon subtitles to the audio as
-  /// playback runs. Android TV reads the same profile preference natively;
-  /// MediaKit reads it in Dart (Android, macOS, Linux, tvOS — platforms whose
-  /// bundled libmpv carries the analysis filters) and attaches its passive
-  /// filter only while an addon subtitle is active. OFF by default on both
-  /// engines — experimental opt-in. The default must stay in lock-step with
-  /// the native read in AndroidTvTorrentPlayerActivity.isAutoSyncPrefEnabled.
-  static Future<bool> getSubtitleAutoSyncEnabled() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_subtitleAutoSyncKey) ?? false;
-  }
-
-  static Future<void> setSubtitleAutoSyncEnabled(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_subtitleAutoSyncKey, enabled);
-  }
-
-  /// Automatically select only explicitly forced embedded subtitle tracks.
-  static Future<bool> getSubtitleForcedOnly() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('subtitle_forced_only') ?? false;
-  }
-
-  static Future<void> setSubtitleForcedOnly(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool('subtitle_forced_only', enabled);
-  }
-
-  /// Opt-in: automatically show subtitles only for a known audio language
-  /// different from the profile's preferred audio language.
-  static Future<bool> getSubtitleOnlyForeignAudio() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('subtitle_only_foreign_audio') ?? false;
-  }
-
-  static Future<void> setSubtitleOnlyForeignAudio(bool enabled) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool('subtitle_only_foreign_audio', enabled);
-  }
-
-  /// Ordered, portable subtitle sources for automatic selection.
-  static Future<List<String>> getSubtitleSourcePriority() async {
-    final prefs = await ProfilePreferences.instance();
-    return SubtitleSourcePriority.decode(
-      prefs.getString(SubtitleSourcePriority.preferenceKey),
-    );
-  }
-
-  static Future<void> setSubtitleSourcePriority(List<String> order) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(
-      SubtitleSourcePriority.preferenceKey,
-      jsonEncode(SubtitleSourcePriority.normalize(order)),
-    );
-  }
-
-  /// Returns a language code, 'off', or null for no preference.
-  static Future<String?> getDefaultSubtitleLanguage() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_playerDefaultSubtitleLanguageKey);
-  }
-
-  /// Set default subtitle language code
-  /// Pass language code (e.g., 'en', 'es'), 'off' for disabled, or null to clear preference
-  static Future<void> setDefaultSubtitleLanguage(String? languageCode) async {
-    final prefs = await ProfilePreferences.instance();
-    if (languageCode == null) {
-      await prefs.remove(_playerDefaultSubtitleLanguageKey);
-    } else {
-      await prefs.setString(_playerDefaultSubtitleLanguageKey, languageCode);
-    }
-  }
-
-  /// Get default audio language code
-  /// Returns language code (e.g., 'en', 'es') or null for no preference
-  static Future<String?> getDefaultAudioLanguage() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_playerDefaultAudioLanguageKey);
-  }
-
-  /// Set default audio language code
-  /// Pass language code (e.g., 'en', 'es') or null to clear preference
-  static Future<void> setDefaultAudioLanguage(String? languageCode) async {
-    final prefs = await ProfilePreferences.instance();
-    if (languageCode == null) {
-      await prefs.remove(_playerDefaultAudioLanguageKey);
-    } else {
-      await prefs.setString(_playerDefaultAudioLanguageKey, languageCode);
-    }
   }
 
   static const String _iptvSeriesAudioLangKey = 'iptv_series_audio_lang';
@@ -9003,39 +6970,6 @@ class StorageService {
     }
   }
 
-  static const String _catalogSearchDisabledAddonsKey =
-      'catalog_search_disabled_addons_v1';
-
-  /// Get the set of addon IDs the user has DISABLED for catalog search on the
-  /// Search tab (empty = every searchable addon is queried).
-  static Future<Set<String>> getCatalogSearchDisabledAddons() async {
-    final prefs = await ProfilePreferences.instance();
-    final json = prefs.getString(_catalogSearchDisabledAddonsKey);
-    if (json == null) return {};
-    try {
-      final list = jsonDecode(json) as List<dynamic>;
-      return list.cast<String>().toSet();
-    } catch (e) {
-      debugPrint('Error reading catalog search disabled addons: $e');
-      return {};
-    }
-  }
-
-  /// Save the set of addon IDs disabled for catalog search.
-  static Future<void> setCatalogSearchDisabledAddons(
-    Set<String> disabled,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    if (disabled.isEmpty) {
-      await prefs.remove(_catalogSearchDisabledAddonsKey);
-    } else {
-      await prefs.setString(
-        _catalogSearchDisabledAddonsKey,
-        jsonEncode(disabled.toList()),
-      );
-    }
-  }
-
   static const String _homeDisabledSectionsKey = 'home_disabled_sections_v1';
 
   /// Get the set of Home-row IDs the user has hidden via the Home Page manager
@@ -9243,7 +7177,6 @@ class StorageService {
     tvSidebarStyleCached = 'ghost';
     desktopSidebarStyleCached = 'rail';
     sidebarConfigurationCached = SidebarConfiguration.defaults();
-    playerStartPortraitCached = false;
     uiSoundsCached = true;
     uiHapticsCached = true;
     _startupIptvChannelCached = null;

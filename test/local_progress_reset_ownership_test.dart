@@ -1,10 +1,10 @@
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/watched_action_coordinator.dart';
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/services/local_history_removal.dart';
@@ -211,7 +211,7 @@ void main() {
         SharedPreferences.setMockInitialValues({
           'simkl_access_token': 'test-token',
         });
-        await StorageService.setTraktSession(
+        await TraktStorage.setTraktSession(
           accessToken: 'test-access',
           refreshToken: 'test-refresh',
           expiryMs: 9000000000000,

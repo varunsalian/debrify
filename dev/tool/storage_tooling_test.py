@@ -99,11 +99,13 @@ void f() {
   @visibleForTesting
   static bool helper({bool option = false}) => option;
   static int get cached => 1;
+  static Set<String> recordKeys() => {'one', 'two'};
 }'''
         found = members(source)
-        self.assertEqual(['inferred','_iptvResumeStates','helper','cached'],[m.name for m in found])
-        self.assertEqual(['const','method','method','getter'],[m.kind for m in found])
+        self.assertEqual(['inferred','_iptvResumeStates','helper','cached','recordKeys'],[m.name for m in found])
+        self.assertEqual(['const','method','method','getter','method'],[m.kind for m in found])
         self.assertIn('@visibleForTesting',found[2].declaration)
+        self.assertTrue(found[4].declaration.endswith('};'))
     def test_literal_whitespace_is_preserved(self):
         source = '''"${'x  ${StorageService.getApiKey()}  y'}"'''
         literals = [t.text for t in tokens(source) if t.kind=='literal']

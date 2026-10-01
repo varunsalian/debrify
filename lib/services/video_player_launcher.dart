@@ -1,7 +1,10 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/external_player_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'profiles/profile_playback_preparation.dart';
 import 'profiles/profile_session_memory.dart';
 import '../models/source_playlist_resolver.dart';
@@ -927,7 +930,7 @@ class VideoPlayerLauncher {
       args.contentImdbId,
     );
     if (!active()) return;
-    final defaultPlayerMode = await StorageService.getDefaultPlayerMode();
+    final defaultPlayerMode = await ExternalPlayerStorage.getDefaultPlayerMode();
     if (!context.mounted || !active()) return;
     if (shouldExplainExternalPlayerFallback(args, defaultPlayerMode)) {
       final useDebrifyPlayer = await showAuthenticatedWebDavPlayerNotice(
@@ -1531,7 +1534,7 @@ class VideoPlayerLauncher {
   /// player setting. Screens that build their own player route ask this before
   /// spending work on in-app-only setup.
   static Future<bool> isExternalPlayerDefault() async {
-    final mode = await StorageService.getDefaultPlayerMode();
+    final mode = await ExternalPlayerStorage.getDefaultPlayerMode();
     return mode == 'external' || (mode == 'deovr' && Platform.isAndroid);
   }
 
@@ -1554,7 +1557,7 @@ class VideoPlayerLauncher {
   }) async {
     if (videoUrl.isEmpty) return false;
 
-    final mode = await StorageService.getDefaultPlayerMode();
+    final mode = await ExternalPlayerStorage.getDefaultPlayerMode();
     final bool wantsDeoVR = mode == 'deovr' && Platform.isAndroid;
     if (mode != 'external' && !wantsDeoVR) return false;
     if (!context.mounted) return false;
@@ -1932,15 +1935,15 @@ class VideoPlayerLauncher {
     try {
       // Load VR settings
       final vrAutoDetectFormat =
-          await StorageService.getQuickPlayVrAutoDetectFormat();
+          await QuickPlayStorage.getQuickPlayVrAutoDetectFormat();
       if (!context.mounted || !active()) return false;
-      final vrShowDialog = await StorageService.getQuickPlayVrShowDialog();
+      final vrShowDialog = await QuickPlayStorage.getQuickPlayVrShowDialog();
       if (!context.mounted || !active()) return false;
       final vrDefaultScreenType =
-          await StorageService.getQuickPlayVrDefaultScreenType();
+          await QuickPlayStorage.getQuickPlayVrDefaultScreenType();
       if (!context.mounted || !active()) return false;
       final vrDefaultStereoMode =
-          await StorageService.getQuickPlayVrDefaultStereoMode();
+          await QuickPlayStorage.getQuickPlayVrDefaultStereoMode();
 
       if (!context.mounted || !active()) return false;
       // Detect or use default format
@@ -2862,7 +2865,7 @@ class VideoPlayerLauncher {
               var fetchMode = mode;
               String? recoveryNextMode;
               final recoveryRules = automaticRecovery
-                  ? await StorageService.getQuickPlayRules(
+                  ? await QuickPlayStorage.getQuickPlayRules(
                       isMovie: seriesFetcher.isMovie,
                     )
                   : null;
@@ -3424,8 +3427,8 @@ class VideoPlayerLauncher {
       payloadMap['startupHasRemainingSavedSources'] =
           args.startupHasRemainingSavedSources;
       payloadMap['useAddonTextFormatting'] =
-          await StorageService.getUseAddonTextFormatting();
-      payloadMap['showAddonLogos'] = await StorageService.getShowAddonLogos();
+          await TorrentSearchStorage.getUseAddonTextFormatting();
+      payloadMap['showAddonLogos'] = await TorrentSearchStorage.getShowAddonLogos();
       payloadMap['initialContinuousShuffle'] = args.initialContinuousShuffle;
       final customInventory = seriesFetcher?.loadCustomEpisodeInventory;
       if (customInventory != null) {
@@ -5637,7 +5640,7 @@ class _AndroidTvPlaybackPayloadBuilder {
     final contentType = _determineContentType(seriesPlaylist, playlistEntries);
     final startupRules =
         args.startupFailoverEnabled && args.stremioSources?.isNotEmpty == true
-        ? await StorageService.getQuickPlayRules(
+        ? await QuickPlayStorage.getQuickPlayRules(
             isMovie: contentType != _PlaybackContentType.series,
           )
         : null;

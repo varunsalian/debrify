@@ -1,6 +1,6 @@
+import 'package:debrify/services/storage/torrent_search_storage.dart';
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
-import '../services/storage_service.dart';
 import 'torrent_quality.dart' show qualityTierForName;
 import 'torrent_filter_matcher.dart';
 
@@ -27,11 +27,11 @@ class FilterLadder {
   /// persisted values the Search tab seeds its toolbar from.
   static Future<FilterLadder> fromSavedDefaults() async {
     final results = await Future.wait([
-      StorageService.getDefaultFilterQualities(),
-      StorageService.getDefaultFilterRipSources(),
-      StorageService.getDefaultFilterLanguages(),
-      StorageService.getDefaultFilterSizes(),
-      StorageService.getDefaultFilterDynamicRanges(),
+      TorrentSearchStorage.getDefaultFilterQualities(),
+      TorrentSearchStorage.getDefaultFilterRipSources(),
+      TorrentSearchStorage.getDefaultFilterLanguages(),
+      TorrentSearchStorage.getDefaultFilterSizes(),
+      TorrentSearchStorage.getDefaultFilterDynamicRanges(),
     ]);
     final qualities = <QualityTier>{
       for (final q in results[0])

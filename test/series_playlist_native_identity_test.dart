@@ -6,7 +6,7 @@ import 'package:debrify/services/native_series_metadata_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
 import 'package:debrify/services/tmdb_metadata_repository.dart';
 import 'package:debrify/utils/series_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,7 +22,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     SecretVault.debugReset(deviceIdOverride: 'playlist-identity-test');
     SimklService.instance.resetProfileScope();
-    await StorageService.setSimklAccessToken('synthetic');
+    await SimklStorage.setSimklAccessToken('synthetic');
   });
   tearDown(() {
     SimklService.instance.resetProfileScope();

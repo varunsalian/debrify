@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:debrify/services/external_player_service.dart';
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/external_player_storage.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -69,7 +69,7 @@ void main() {
     test(
       'preferred Infuse uses the scheme without an app-directory check',
       () async {
-        await StorageService.setPreferredExternalPlayer('infuse');
+        await ExternalPlayerStorage.setPreferredExternalPlayer('infuse');
         final result = await ExternalPlayerService.launchWithPreferredPlayer(
           videoUrl,
         );
@@ -85,7 +85,7 @@ void main() {
         () async {
           opened = false;
           throws = throwOnLaunch;
-          await StorageService.setPreferredExternalPlayer('infuse');
+          await ExternalPlayerStorage.setPreferredExternalPlayer('infuse');
           final result = await ExternalPlayerService.launchWithPreferredPlayer(
             videoUrl,
           );

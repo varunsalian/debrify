@@ -2,7 +2,8 @@ import 'package:debrify/screens/settings/external_player_settings_page.dart';
 import 'package:debrify/screens/settings/playback_settings_page.dart';
 import 'package:debrify/screens/settings/playback_settings_section.dart';
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/external_player_storage.dart';
+import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -128,7 +129,7 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(find.text('English').last);
           await tester.pumpAndSettle();
-          expect(await StorageService.getDefaultAudioLanguage(), 'en');
+          expect(await SubtitleSettingsStorage.getDefaultAudioLanguage(), 'en');
         }
       }
     },
@@ -193,7 +194,7 @@ void main() {
   testWidgets(
     'external mode explains ownership and changing player refreshes the category',
     (tester) async {
-      await StorageService.setDefaultPlayerMode('external');
+      await ExternalPlayerStorage.setDefaultPlayerMode('external');
       await tester.runAsync(
         () => tester.pumpWidget(
           const MaterialApp(
@@ -213,7 +214,7 @@ void main() {
       await tester.pageBack();
       await settleSettings(tester);
       expect(find.text('Default Audio'), findsOneWidget);
-      expect(await StorageService.getDefaultPlayerMode(), 'debrify');
+      expect(await ExternalPlayerStorage.getDefaultPlayerMode(), 'debrify');
     },
   );
 

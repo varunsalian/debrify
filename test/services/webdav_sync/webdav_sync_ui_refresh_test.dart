@@ -2,7 +2,7 @@ import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/iptv_channel_order.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_ui_refresh.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -135,19 +135,22 @@ void main() {
   });
 
   test('tracking policy bumps its revision and Home once per dispatch', () {
-    final revisionBefore = StorageService.trackingSourceRevision.value;
+    final revisionBefore = TrackingSourceStorage.trackingSourceRevision.value;
     var homeCalls = 0;
     void homeListener() => homeCalls++;
     MainPageBridge.addHomeSettingsListener(homeListener);
     addTearDown(() => MainPageBridge.removeHomeSettingsListener(homeListener));
 
     WebDavSyncUiRefresh.dispatch(const <String>{
-      StorageService.trackingScrobbleTargetsKey,
-      StorageService.homeTickSourcesKey,
-      StorageService.watchProgressSourceKey,
+      TrackingSourceStorage.trackingScrobbleTargetsKey,
+      TrackingSourceStorage.homeTickSourcesKey,
+      TrackingSourceStorage.watchProgressSourceKey,
     });
 
-    expect(StorageService.trackingSourceRevision.value, revisionBefore + 1);
+    expect(
+      TrackingSourceStorage.trackingSourceRevision.value,
+      revisionBefore + 1,
+    );
     expect(homeCalls, 1);
   });
 
@@ -166,7 +169,7 @@ void main() {
       'home_card_orientation',
       'tv_home_style',
       'discover_layout',
-      StorageService.watchProgressSourceKey,
+      TrackingSourceStorage.watchProgressSourceKey,
     });
 
     expect(localChangeSignals, 0);

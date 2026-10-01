@@ -5,11 +5,16 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
@@ -32,7 +37,6 @@ import 'udp_command_service.dart';
 import '../../widgets/remote/remote_pairing_dialog.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/stream_badges_service.dart';
 import '../../services/tracking_source_policy.dart';
 import '../../services/account_service.dart';
@@ -3586,7 +3590,7 @@ class RemoteCommandRouter {
     try {
       final decoded = jsonDecode(data);
       if (decoded is! Map) throw const FormatException();
-      await StorageService.applyTrackingPreferencesPayload(decoded);
+      await TrackingSourceStorage.applyTrackingPreferencesPayload(decoded);
       MainPageBridge.notifyHomeSettingsChanged();
       final requested = decoded['progress_source']?.toString();
       final effective = await TrackingSourcePolicy.load();
@@ -3595,7 +3599,7 @@ class RemoteCommandRouter {
           requested != WatchProgressSource.smart.name &&
           effective.progressSource == WatchProgressSource.smart;
       if (fellBack) {
-        await StorageService.takeTrackingProgressFallbackNotice();
+        await TrackingSourceStorage.takeTrackingProgressFallbackNotice();
       }
       _showSnackBar(
         fellBack
@@ -3758,18 +3762,20 @@ class RemoteCommandRouter {
         return;
       }
 
-      await StorageService.setTraktSession(
+      await TraktStorage.setTraktSession(
         accessToken: accessToken,
         refreshToken: refreshToken,
         expiryMs: expiry,
       );
       if (username != null && username.isNotEmpty) {
-        await StorageService.setTraktUsername(username);
+        await TraktStorage.setTraktUsername(username);
       }
       // Match interactive connect: a freshly imported Trakt session starts
       // with catalog scrobbling on.
-      await StorageService.setTraktSyncCatalogItems(true);
-      await StorageService.enableTrackingScrobbleTarget(TrackingSource.trakt);
+      await TraktStorage.setTraktSyncCatalogItems(true);
+      await TrackingSourceStorage.enableTrackingScrobbleTarget(
+        TrackingSource.trakt,
+      );
 
       debugPrint('RemoteCommandRouter: Trakt session configured successfully');
       _showSnackBar('Trakt connected successfully');
@@ -3795,14 +3801,16 @@ class RemoteCommandRouter {
         return;
       }
 
-      await StorageService.setSimklAccessToken(accessToken);
+      await SimklStorage.setSimklAccessToken(accessToken);
       if (username != null && username.isNotEmpty) {
-        await StorageService.setSimklUsername(username);
+        await SimklStorage.setSimklUsername(username);
       }
       // Match interactive connect: a freshly imported Simkl session starts
       // with catalog scrobbling on.
-      await StorageService.setSimklSyncCatalogItems(true);
-      await StorageService.enableTrackingScrobbleTarget(TrackingSource.simkl);
+      await SimklStorage.setSimklSyncCatalogItems(true);
+      await TrackingSourceStorage.enableTrackingScrobbleTarget(
+        TrackingSource.simkl,
+      );
 
       debugPrint('RemoteCommandRouter: Simkl session configured successfully');
       _showSnackBar('Simkl connected successfully');
@@ -3828,7 +3836,7 @@ class RemoteCommandRouter {
         _showSnackBar('MDBList: API key validation failed', isError: true);
         return;
       }
-      await StorageService.setMdblistSyncCatalogItems(true);
+      await MdblistStorage.setMdblistSyncCatalogItems(true);
       MainPageBridge.notifyIntegrationChanged();
       _showSnackBar('MDBList connected successfully');
     } catch (_) {
@@ -4114,7 +4122,7 @@ class RemoteCommandRouter {
       String fingerprint(IndexerManagerConfig c) =>
           '${c.type.value}|${normalize(c.baseUrl)}';
 
-      final existing = await StorageService.getIndexerManagerConfigs();
+      final existing = await TorrentProviderStorage.getIndexerManagerConfigs();
       final existingKeys = <String>{for (final c in existing) fingerprint(c)};
       final merged = List<IndexerManagerConfig>.from(existing);
       int imported = 0;
@@ -4147,7 +4155,7 @@ class RemoteCommandRouter {
       }
 
       if (imported > 0) {
-        await StorageService.setIndexerManagerConfigs(merged);
+        await TorrentProviderStorage.setIndexerManagerConfigs(merged);
       }
 
       if (imported > 0 && skipped == 0) {

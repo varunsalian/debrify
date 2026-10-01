@@ -1,3 +1,7 @@
+import 'package:debrify/services/storage/mdblist_storage.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/mdblist/mdblist_service.dart';
 import '../../../services/native_series_metadata_service.dart';
@@ -5,7 +9,6 @@ import '../../../services/profile_tracker_title_actions.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../../../services/simkl/simkl_service.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/stremio_service.dart';
 import '../../../services/tracker_title_actions.dart';
 import '../../../services/tracking_source_policy.dart';
@@ -163,31 +166,33 @@ final homeTrackingPolicyRepositoryProvider = Provider.autoDispose
         return HomeTrackingPolicyRepository(
           isOwnerCurrent: () => owner == ProfileSessionMemory.captureOwner(),
           readTargets: (current) => scoped(
-            () =>
-                StorageService.getTrackingScrobbleTargets(canContinue: current),
+            () => TrackingSourceStorage.getTrackingScrobbleTargets(
+              canContinue: current,
+            ),
           ),
-          readProgress: () => scoped(StorageService.getWatchProgressSource),
+          readProgress: () =>
+              scoped(TrackingSourceStorage.getWatchProgressSource),
           hasCredential: (source, current) => scoped(
             () => switch (source) {
-              TrackingSource.trakt => StorageService.hasTraktCredential(
+              TrackingSource.trakt => TraktStorage.hasTraktCredential(
                 canContinue: current,
               ),
-              TrackingSource.simkl => StorageService.hasSimklCredential(
+              TrackingSource.simkl => SimklStorage.hasSimklCredential(
                 canContinue: current,
               ),
-              TrackingSource.mdblist => StorageService.hasMdblistCredential(
+              TrackingSource.mdblist => MdblistStorage.hasMdblistCredential(
                 canContinue: current,
               ),
               TrackingSource.local => Future.value(true),
             },
           ),
           fallbackDisconnected: (source, current) => scoped(
-            () => StorageService.fallbackDisconnectedProgressSource(
+            () => TrackingSourceStorage.fallbackDisconnectedProgressSource(
               source,
               canContinue: current,
             ),
           ),
-          readTicks: () => scoped(StorageService.getHomeTickSources),
+          readTicks: () => scoped(TrackingSourceStorage.getHomeTickSources),
         );
       },
       retry: (count, error) => null,

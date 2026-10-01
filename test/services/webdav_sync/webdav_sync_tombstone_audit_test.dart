@@ -18,13 +18,13 @@ void main() {
         'clearContinueWatching': '_saveContinueWatchingItems',
         'unmarkMovieAsFinished': 'WebDavSyncTombstoneRecorder',
         'setSeriesExplicitlyWatched': 'WebDavSyncTombstoneRecorder',
-        'clearPlaybackStateByImdbId': '_savePlaybackStateMap',
-        'unmarkEpisodeAsFinished': '_savePlaybackStateMap',
-        'unmarkSeriesAsFinished': '_savePlaybackStateMap',
-        'cleanupOldPlaybackState': '_savePlaybackStateMap',
-        'clearAllPlaybackData': '_savePlaybackStateMap',
-        'clearPlaylistProgress': '_savePlaybackStateMap',
-        'purgeUnwatchedResumeGhosts': '_savePlaybackStateMap',
+        'clearPlaybackStateByImdbId': 'PlaybackStateStore.savePlaybackStateMap',
+        'unmarkEpisodeAsFinished': 'PlaybackStateStore.savePlaybackStateMap',
+        'unmarkSeriesAsFinished': 'PlaybackStateStore.savePlaybackStateMap',
+        'cleanupOldPlaybackState': 'PlaybackStateStore.savePlaybackStateMap',
+        'clearAllPlaybackData': 'PlaybackStateStore.savePlaybackStateMap',
+        'clearPlaylistProgress': 'PlaybackStateStore.savePlaybackStateMap',
+        'purgeUnwatchedResumeGhosts': 'PlaybackStateStore.savePlaybackStateMap',
         'savePlaylistItemsRaw': 'WebDavSyncTombstoneRecorder',
         'removePlaylistItemByKey': 'savePlaylistItemsRaw',
         'clearPlaylist': 'savePlaylistItemsRaw',
@@ -53,9 +53,12 @@ void main() {
         );
       }
 
-      expect(storage, isNot(contains('prefs.remove(_playbackStateKey)')));
-      expect(storage, isNot(contains('prefs.remove(_continueWatchingKey)')));
-      expect(storage, isNot(contains('prefs.remove(_playlistKey)')));
+      final forbiddenRemoval = RegExp(
+        r'\bprefs\.remove\(\s*'
+        r'(?:(?:PlaybackStateStore|ContinueWatchingStorage|PlaylistStorage)\.)?'
+        r'(?:_?playbackStateKey|_?continueWatchingKey|_?playlistKey)\s*\)',
+      );
+      expect(forbiddenRemoval.hasMatch(storage), isFalse);
     },
   );
 }

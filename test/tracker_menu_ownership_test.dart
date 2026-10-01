@@ -7,7 +7,9 @@ import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/simkl/simkl_menu_helpers.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/mdblist_storage.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/widgets/trakt/trakt_menu_helpers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,9 +25,9 @@ void main() {
     ProfileRuntime.initializeLegacy();
     SecretVault.debugReset(deviceIdOverride: 'tracker-menu-fixture');
     SharedPreferences.setMockInitialValues({});
-    await StorageService.setTraktAccessToken('fixture');
-    await StorageService.setSimklAccessToken('fixture');
-    await StorageService.saveMdblistApiKey('fixture');
+    await TraktStorage.setTraktAccessToken('fixture');
+    await SimklStorage.setSimklAccessToken('fixture');
+    await MdblistStorage.saveMdblistApiKey('fixture');
   });
   tearDown(() {
     ProfileRuntime.debugReset();

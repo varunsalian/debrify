@@ -22,7 +22,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_priority.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/stream_url_validator.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/torrent_service.dart';
@@ -249,7 +249,7 @@ final class SourceSeriesFetcher {
         final validationKey = SourceCandidateChecks.directValidationKey(source);
         final cached = directValidationCache[validationKey];
         if (cached != null) return cached;
-        final rules = await StorageService.getQuickPlayRules(isMovie: false);
+        final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
         if (!rules.validateDirectLinks) return true;
         if (!SourceCandidateRanking.shouldPreflightDirectStream(source)) {
           return true;
@@ -274,7 +274,7 @@ final class SourceSeriesFetcher {
         }
         final prov = await effectiveProvider();
         if (prov == null) return null;
-        final rules = await StorageService.getQuickPlayRules(isMovie: false);
+        final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
         if (rules.sourcePriority.isNotEmpty) {
           await SourceCandidateRanking.warmSourceAliases();
         }
@@ -308,7 +308,7 @@ final class SourceSeriesFetcher {
               ? results
               : null;
         }
-        final rules = await StorageService.getQuickPlayRules(isMovie: false);
+        final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
         if (rules.sourcePriority.isNotEmpty) {
           await SourceCandidateRanking.warmSourceAliases();
         }

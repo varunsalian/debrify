@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:debrify/features/sources/data/deovr_json_upload.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/utils/deovr_utils.dart' as deovr;
 import 'package:debrify/utils/dialog_tap_guard.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +15,7 @@ final class DeovrLaunch {
   /// VR-mode setting. Android-only. Ported from the old search screen.
   static Future<bool> shouldUseDeoVR(String filename) async {
     if (!Platform.isAndroid) return false;
-    final vrMode = await StorageService.getQuickPlayVrMode();
+    final vrMode = await QuickPlayStorage.getQuickPlayVrMode();
     switch (vrMode) {
       case 'always':
         return true;
@@ -43,8 +43,8 @@ final class DeovrLaunch {
     final rootNav = Navigator.of(context, rootNavigator: true);
 
     final autoDetectFormat =
-        await StorageService.getQuickPlayVrAutoDetectFormat();
-    final showFormatDialog = await StorageService.getQuickPlayVrShowDialog();
+        await QuickPlayStorage.getQuickPlayVrAutoDetectFormat();
+    final showFormatDialog = await QuickPlayStorage.getQuickPlayVrShowDialog();
 
     String screenType;
     String stereoMode;
@@ -53,8 +53,8 @@ final class DeovrLaunch {
       screenType = detected.screenType;
       stereoMode = detected.stereoMode;
     } else {
-      screenType = await StorageService.getQuickPlayVrDefaultScreenType();
-      stereoMode = await StorageService.getQuickPlayVrDefaultStereoMode();
+      screenType = await QuickPlayStorage.getQuickPlayVrDefaultScreenType();
+      stereoMode = await QuickPlayStorage.getQuickPlayVrDefaultStereoMode();
     }
 
     if (showFormatDialog && context.mounted) {

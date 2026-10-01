@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/player_settings_storage.dart';
 import '../../theme/app_theme_controller.dart';
 import '../discover_prefs.dart';
 import '../hide_watched_prefs.dart';
@@ -76,7 +77,7 @@ final class DefaultWebDavSyncActiveProfileRefresher
     );
     await warmIf(
       'player_start_portrait',
-      StorageService.getPlayerStartPortrait,
+      PlayerSettingsStorage.getPlayerStartPortrait,
     );
     await warmIf('ui_sounds', StorageService.getUiSounds);
     await warmIf('ui_haptics', StorageService.getUiHaptics);

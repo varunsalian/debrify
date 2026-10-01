@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:crypto/crypto.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
@@ -12,7 +13,6 @@ import '../models/profiles/connection_resource.dart';
 import '../models/profiles/profile_policy.dart';
 import '../models/torrent.dart';
 import 'profiles/profile_collection_resource_facade.dart';
-import 'storage_service.dart';
 
 class IndexerManagerTestResult {
   final bool success;
@@ -40,7 +40,7 @@ class IndexerManagerService {
       {};
 
   static Future<List<IndexerManagerConfig>> getConfigs() {
-    return StorageService.getIndexerManagerConfigs(forSettings: false);
+    return TorrentProviderStorage.getIndexerManagerConfigs(forSettings: false);
   }
 
   static Future<List<IndexerManagerConfig>> getEnabledConfigs() async {

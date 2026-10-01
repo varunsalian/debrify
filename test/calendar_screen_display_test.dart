@@ -1,11 +1,11 @@
 import 'dart:convert';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/widgets/trakt_calendar_day_sheet.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/screens/trakt_calendar_screen.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/trakt/trakt_calendar_service.dart';
 import 'package:debrify/widgets/calendar_display_preferences.dart';
 import 'package:flutter/material.dart';
@@ -33,7 +33,7 @@ void main() {
           TraktCalendarService.instance.invalidate();
         });
         await tester.runAsync(
-          () => StorageService.setTraktSession(
+          () => TraktStorage.setTraktSession(
             accessToken: 'test',
             refreshToken: 'test',
             expiryMs: 9000000000000,

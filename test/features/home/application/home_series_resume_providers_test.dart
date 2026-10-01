@@ -12,7 +12,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -171,7 +171,7 @@ void main() {
 
   for (final outcome in ['active', 'profile', 'view']) {
     test('actual Trakt cached-selection transport: $outcome', () async {
-      await StorageService.setTraktAccessToken('fixture-token');
+      await TraktStorage.setTraktAccessToken('fixture-token');
       final container = ProviderContainer.test();
       final repository = container.read(
         homeSeriesResumeRepositoryProvider(ProfileSessionMemory.captureOwner()),

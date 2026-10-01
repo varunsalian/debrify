@@ -1,5 +1,5 @@
 import 'package:debrify/models/torrent.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:debrify/screens/video_player/widgets/source_sheet.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
@@ -310,7 +310,7 @@ void main() {
           description: 'Movie name\n💾 12 GB\nEnglish',
         ));
         await tester.runAsync(
-          () => StorageService.setUseAddonTextFormatting(true),
+          () => TorrentSearchStorage.setUseAddonTextFormatting(true),
         );
         try {
           await tester.pumpWidget(
@@ -339,7 +339,7 @@ void main() {
           expect(tester.takeException(), isNull);
         } finally {
           await tester.runAsync(
-            () => StorageService.setUseAddonTextFormatting(false),
+            () => TorrentSearchStorage.setUseAddonTextFormatting(false),
           );
         }
       },

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,7 +31,7 @@ void main() {
   }) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     if (!preferSeriesPacks) {
-      await StorageService.setQuickPlayRules(
+      await QuickPlayStorage.setQuickPlayRules(
         QuickPlayRules.debrifyDefault(
           isMovie: false,
         ).copyWith(preferSeriesPacks: false),

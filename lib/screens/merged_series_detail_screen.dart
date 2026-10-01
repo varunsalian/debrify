@@ -1,3 +1,5 @@
+import 'package:debrify/services/storage/quick_play_storage.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import '../widgets/metadata_franchise_rail.dart';
 import '../widgets/metadata_title_navigation.dart';
 import '../services/metadata_provider_service.dart';
@@ -518,7 +520,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   @override
   void initState() {
     super.initState();
-    StorageService.trackingSourceRevision.addListener(_onMovieProgressPolicyChanged);
+    TrackingSourceStorage.trackingSourceRevision.addListener(_onMovieProgressPolicyChanged);
     StorageService.movieFinishedRevision.addListener(_loadLocalMovieFinished);
     MdblistService.instance.watchedRevision.addListener(_loadLocalMovieFinished);
     AnalyticsService.screenView('series_detail');
@@ -648,7 +650,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     final openEpisode = widget.onBrowsePrimaryEpisodeSources;
     if (openEpisode == null) return;
 
-    final rules = await StorageService.getQuickPlayRules(isMovie: false);
+    final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
     if (!mounted) return;
 
     final canBrowsePacks =
@@ -1108,7 +1110,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   @override
   void dispose() {
-    StorageService.trackingSourceRevision.removeListener(_onMovieProgressPolicyChanged);
+    TrackingSourceStorage.trackingSourceRevision.removeListener(_onMovieProgressPolicyChanged);
     StorageService.movieFinishedRevision.removeListener(_loadLocalMovieFinished);
     MdblistService.instance.watchedRevision.removeListener(_loadLocalMovieFinished);
     appRouteObserver.unsubscribe(this);

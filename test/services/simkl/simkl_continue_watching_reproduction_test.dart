@@ -5,7 +5,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/simkl/simkl_continue_watching_service.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -24,7 +24,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     SecretVault.debugReset(deviceIdOverride: 'simkl-cw-reproduction');
     simkl.resetProfileScope();
-    await StorageService.setSimklAccessToken('synthetic-test-token');
+    await SimklStorage.setSimklAccessToken('synthetic-test-token');
   });
 
   tearDown(() {

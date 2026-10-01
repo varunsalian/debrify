@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 
 final class SourceFilterLadder {
@@ -17,7 +17,7 @@ final class SourceFilterLadder {
     QuickPlayRules? rules,
   }) async {
     final useFilters =
-        rules?.useFilters ?? await StorageService.getQuickPlayHonorsFilters();
+        rules?.useFilters ?? await QuickPlayStorage.getQuickPlayHonorsFilters();
     if (!useFilters) {
       return FilterLadder(const TorrentFilterState.empty());
     }

@@ -1,6 +1,6 @@
 import 'package:debrify/screens/video_player/utils/subtitle_audio_policy.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/sanitized_profile_preferences.dart';
+import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -100,9 +100,9 @@ void main() {
     'forced-only setting defaults off and round-trips as a profile boolean',
     () async {
       SharedPreferences.setMockInitialValues({});
-      expect(await StorageService.getSubtitleForcedOnly(), isFalse);
-      await StorageService.setSubtitleForcedOnly(true);
-      expect(await StorageService.getSubtitleForcedOnly(), isTrue);
+      expect(await SubtitleSettingsStorage.getSubtitleForcedOnly(), isFalse);
+      await SubtitleSettingsStorage.setSubtitleForcedOnly(true);
+      expect(await SubtitleSettingsStorage.getSubtitleForcedOnly(), isTrue);
       expect(
         SanitizedProfilePreferences.allowsEntry('subtitle_forced_only', true),
         isTrue,

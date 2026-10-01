@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:debrify/services/skip_segment_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/screens/video_player/widgets/skip_segment_button.dart';
+import 'package:debrify/services/storage/skip_segments_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -491,37 +491,37 @@ void main() {
     setUp(() => SharedPreferences.setMockInitialValues({}));
 
     test('manual skip buttons default on with Auto selected', () async {
-      expect(await StorageService.getSkipSegmentsEnabled(), isTrue);
+      expect(await SkipSegmentsStorage.getSkipSegmentsEnabled(), isTrue);
       expect(
-        await StorageService.getSkipSegmentProvider(),
-        StorageService.skipSegmentProviderAuto,
+        await SkipSegmentsStorage.getSkipSegmentProvider(),
+        SkipSegmentsStorage.skipSegmentProviderAuto,
       );
     });
 
     test('persists enablement and normalizes unsupported providers', () async {
-      await StorageService.setSkipSegmentsEnabled(false);
-      await StorageService.setSkipSegmentProvider(
-        StorageService.skipSegmentProviderIntroDb,
+      await SkipSegmentsStorage.setSkipSegmentsEnabled(false);
+      await SkipSegmentsStorage.setSkipSegmentProvider(
+        SkipSegmentsStorage.skipSegmentProviderIntroDb,
       );
 
-      expect(await StorageService.getSkipSegmentsEnabled(), isFalse);
+      expect(await SkipSegmentsStorage.getSkipSegmentsEnabled(), isFalse);
       expect(
-        await StorageService.getSkipSegmentProvider(),
-        StorageService.skipSegmentProviderIntroDb,
+        await SkipSegmentsStorage.getSkipSegmentProvider(),
+        SkipSegmentsStorage.skipSegmentProviderIntroDb,
       );
 
-      await StorageService.setSkipSegmentProvider(
-        StorageService.skipSegmentProviderTheIntroDb,
+      await SkipSegmentsStorage.setSkipSegmentProvider(
+        SkipSegmentsStorage.skipSegmentProviderTheIntroDb,
       );
       expect(
-        await StorageService.getSkipSegmentProvider(),
-        StorageService.skipSegmentProviderTheIntroDb,
+        await SkipSegmentsStorage.getSkipSegmentProvider(),
+        SkipSegmentsStorage.skipSegmentProviderTheIntroDb,
       );
 
-      await StorageService.setSkipSegmentProvider('removed-provider');
+      await SkipSegmentsStorage.setSkipSegmentProvider('removed-provider');
       expect(
-        await StorageService.getSkipSegmentProvider(),
-        StorageService.skipSegmentProviderAuto,
+        await SkipSegmentsStorage.getSkipSegmentProvider(),
+        SkipSegmentsStorage.skipSegmentProviderAuto,
       );
     });
   });

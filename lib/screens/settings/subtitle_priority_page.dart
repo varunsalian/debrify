@@ -1,8 +1,8 @@
+import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/subtitle_source_priority.dart';
-import '../../services/storage_service.dart';
 import '../../services/stremio_subtitle_service.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/platform_util.dart';
@@ -34,7 +34,7 @@ class _SubtitlePriorityPageState extends State<SubtitlePriorityPage> {
 
   Future<void> _load() async {
     try {
-      final order = await StorageService.getSubtitleSourcePriority();
+      final order = await SubtitleSettingsStorage.getSubtitleSourcePriority();
       final addons = await StremioSubtitleService.instance.getSubtitleAddons();
       if (!mounted) return;
       for (final a in addons) {
@@ -76,7 +76,7 @@ class _SubtitlePriorityPageState extends State<SubtitlePriorityPage> {
     try {
       // Keep dormant addon IDs so temporary disablement does not erase them.
       final saved = [..._order, ..._saved.where((s) => !_order.contains(s))];
-      await StorageService.setSubtitleSourcePriority(saved);
+      await SubtitleSettingsStorage.setSubtitleSourcePriority(saved);
       if (!mounted) return;
       setState(() {
         _saved = saved;

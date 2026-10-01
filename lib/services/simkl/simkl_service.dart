@@ -1,3 +1,5 @@
+import 'package:debrify/services/storage/simkl_storage.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import '../../models/media_identity.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -172,7 +174,7 @@ class SimklService {
   /// completion.
   Future<({Set<String> movies, Set<String> series})?>
   fetchCompletedTitleIds() async {
-    final token = await StorageService.getSimklAccessToken();
+    final token = await SimklStorage.getSimklAccessToken();
     // Disconnected is a successful empty snapshot, not a transient failure.
     // This lets consumers clear badges belonging to the previous account while
     // still preserving their last snapshot when an authenticated request fails.
@@ -347,7 +349,7 @@ class SimklService {
   /// Simkl tokens don't expire, so unlike Trakt there's no refresh check.
   Future<bool> isAuthenticated({bool Function()? canContinue}) async {
     if (canContinue?.call() == false) return false;
-    final token = await StorageService.getSimklAccessToken(
+    final token = await SimklStorage.getSimklAccessToken(
       canContinue: canContinue,
     );
     return token != null && token.isNotEmpty && canContinue?.call() != false;
@@ -356,7 +358,7 @@ class SimklService {
   /// Revoke local auth state. Simkl has no documented revoke endpoint for
   /// PIN-issued tokens, so this only clears local storage.
   Future<void> logout() async {
-    await StorageService.clearSimklAuth();
+    await SimklStorage.clearSimklAuth();
     // Drop cached library state so a later sign-in (possibly a different
     // account) never reads the previous user's watchlist/ratings — including
     // the derived calendar (mirrors TraktService clearing TraktCalendarService).
@@ -367,7 +369,7 @@ class SimklService {
 
   /// Get the stored username, if known.
   Future<String?> getUsername() async {
-    return StorageService.getSimklUsername();
+    return SimklStorage.getSimklUsername();
   }
 
   // ============================================================================
@@ -435,8 +437,8 @@ class SimklService {
           if (accessToken == null || accessToken.isEmpty) return 'error';
           _pinAuthorizations.remove(userCode);
           Future<void> commit() async {
-            await StorageService.setSimklAccessToken(accessToken);
-            await StorageService.enableTrackingScrobbleTarget(
+            await SimklStorage.setSimklAccessToken(accessToken);
+            await TrackingSourceStorage.enableTrackingScrobbleTarget(
               TrackingSource.simkl,
             );
             await _fetchAndStoreUsername(accessToken);
@@ -495,7 +497,7 @@ class SimklService {
       final account = data['account'] as Map<String, dynamic>?;
       final name = (user?['name'] as String?) ?? (account?['name'] as String?);
       if (name != null && name.isNotEmpty) {
-        await StorageService.setSimklUsername(name);
+        await SimklStorage.setSimklUsername(name);
       }
     } catch (error) {
       debugPrint('Simkl: username lookup failed (${error.runtimeType})');
@@ -554,7 +556,7 @@ class SimklService {
     bool Function()? canContinue,
   }) async {
     if (canContinue?.call() == false) return null;
-    final token = await StorageService.getSimklAccessToken(
+    final token = await SimklStorage.getSimklAccessToken(
       canContinue: canContinue,
     );
     if (token == null || token.isEmpty || canContinue?.call() == false) {
@@ -581,7 +583,7 @@ class SimklService {
     bool Function()? canContinue,
   }) async {
     if (canContinue?.call() == false) return null;
-    final token = await StorageService.getSimklAccessToken(
+    final token = await SimklStorage.getSimklAccessToken(
       canContinue: canContinue,
     );
     if (canContinue?.call() == false || token == null || token.isEmpty) {
@@ -606,7 +608,7 @@ class SimklService {
   /// `GET /sync/ratings/{type}/{rating}`. Sends the explicit 1–10 comma list
   /// (documented to work) rather than an unconfirmed range shorthand.
   Future<Map<String, dynamic>?> fetchRatingsOrNull(String type) async {
-    final token = await StorageService.getSimklAccessToken();
+    final token = await SimklStorage.getSimklAccessToken();
     if (token == null || token.isEmpty) return null;
     final uri = _apiUri('/sync/ratings/$type/1,2,3,4,5,6,7,8,9,10', {
       'extended': 'full',
@@ -689,7 +691,7 @@ class SimklService {
     final owner = canContinue == null
         ? null
         : ProfileSessionMemory.captureOwner();
-    final token = await StorageService.getSimklAccessToken(
+    final token = await SimklStorage.getSimklAccessToken(
       canContinue: canContinue,
     );
     if (token == null || token.isEmpty || canContinue?.call() == false) {
@@ -732,7 +734,7 @@ class SimklService {
     final owner = canContinue == null
         ? null
         : ProfileSessionMemory.captureOwner();
-    final token = await StorageService.getSimklAccessToken(
+    final token = await SimklStorage.getSimklAccessToken(
       canContinue: canContinue,
     );
     if (token == null || token.isEmpty || canContinue?.call() == false) {
@@ -767,7 +769,7 @@ class SimklService {
     final owner = canContinue == null
         ? null
         : ProfileSessionMemory.captureOwner();
-    final token = await StorageService.getSimklAccessToken(
+    final token = await SimklStorage.getSimklAccessToken(
       canContinue: canContinue,
     );
     if (token == null || token.isEmpty || canContinue?.call() == false) {
@@ -803,7 +805,7 @@ class SimklService {
     final owner = canContinue == null
         ? null
         : ProfileSessionMemory.captureOwner();
-    final token = await StorageService.getSimklAccessToken(
+    final token = await SimklStorage.getSimklAccessToken(
       canContinue: canContinue,
     );
     if (token == null || token.isEmpty || canContinue?.call() == false) {
@@ -845,7 +847,7 @@ class SimklService {
     final owner = canContinue == null
         ? null
         : ProfileSessionMemory.captureOwner();
-    final token = await StorageService.getSimklAccessToken(
+    final token = await SimklStorage.getSimklAccessToken(
       canContinue: canContinue,
     );
     if (token == null || token.isEmpty || canContinue?.call() == false) {
@@ -911,7 +913,7 @@ class SimklService {
     int season,
     int episode,
   ) async {
-    final token = await StorageService.getSimklAccessToken();
+    final token = await SimklStorage.getSimklAccessToken();
     if (token == null || token.isEmpty) return false;
     final result = await _postOrNull(
       '/sync/history',
@@ -935,7 +937,7 @@ class SimklService {
     int season,
     int episode,
   ) async {
-    final token = await StorageService.getSimklAccessToken();
+    final token = await SimklStorage.getSimklAccessToken();
     if (token == null || token.isEmpty) return false;
     final result = await _postOrNull(
       '/sync/history/remove',
@@ -959,7 +961,7 @@ class SimklService {
   }) async {
     if (canContinue?.call() == false) return false;
     final owner = ProfileSessionMemory.captureOwner();
-    final token = await StorageService.getSimklAccessToken(
+    final token = await SimklStorage.getSimklAccessToken(
       canContinue: canContinue,
     );
     if (token == null || token.isEmpty || canContinue?.call() == false) {
@@ -1096,7 +1098,7 @@ class SimklService {
     int? season,
     int? episode,
   }) async {
-    final token = await StorageService.getSimklAccessToken();
+    final token = await SimklStorage.getSimklAccessToken();
     if (token == null || token.isEmpty) return false;
     final s = (season != null && season <= 0) ? null : season;
     final e = (episode != null && episode <= 0) ? null : episode;
@@ -1191,7 +1193,7 @@ class SimklService {
       // These writes belong to the account that 409'd — if the profile or
       // Simkl account changed during the wait, never replay them against a
       // different one.
-      final token = await StorageService.getSimklAccessToken();
+      final token = await SimklStorage.getSimklAccessToken();
       if (token == null || token.isEmpty || token != originalToken) return;
       // Same account, NEWER intent: any Simkl write for this title since the
       // 409 (mark unwatched, a replay's scrobble, another device syncing in)
@@ -1294,7 +1296,7 @@ class SimklService {
     int generation,
     bool Function() ownerCurrent,
   ) async {
-    final token = await StorageService.getSimklAccessToken(
+    final token = await SimklStorage.getSimklAccessToken(
       canContinue: ownerCurrent,
     );
     if (!ownerCurrent() || token == null || token.isEmpty) return null;
@@ -1505,7 +1507,7 @@ class SimklService {
   }
 
   Future<List<dynamic>?> _loadMoviePlaybackSessions() async {
-    final token = await StorageService.getSimklAccessToken();
+    final token = await SimklStorage.getSimklAccessToken();
     if (token == null || token.isEmpty) return null;
     final generation = _playbackCacheGeneration;
     final data = await _getOrNull(
@@ -1574,7 +1576,7 @@ class SimklService {
       return false;
     }
     if (canContinue?.call() == false) return false;
-    final token = await StorageService.getSimklAccessToken(
+    final token = await SimklStorage.getSimklAccessToken(
       canContinue: canContinue,
     );
     if (token == null || token.isEmpty || canContinue?.call() == false) {
@@ -1655,7 +1657,7 @@ class SimklService {
     Duration? olderThan,
   }) async {
     if (MediaIdentity.isNative(imdbId)) await _cachedLibAllAll();
-    final token = await StorageService.getSimklAccessToken();
+    final token = await SimklStorage.getSimklAccessToken();
     if (token == null || token.isEmpty) return false;
     final episodes = await _fetchEpisodePlaybackSessions();
     final ids = <int>{};
@@ -1778,7 +1780,7 @@ class SimklService {
   Future<Map<String, dynamic>?> _fetchWatchedShowEpisodeItem(
     String showImdbId,
   ) async {
-    final token = await StorageService.getSimklAccessToken();
+    final token = await SimklStorage.getSimklAccessToken();
     if (token == null || token.isEmpty) return null;
     final result = await _postOrNull(
       '/sync/watched',

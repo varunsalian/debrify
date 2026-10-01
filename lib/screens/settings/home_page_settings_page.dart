@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:flutter/material.dart';
 import '../../utils/spotlight_interaction_policy.dart';
 import '../../models/stremio_addon.dart';
@@ -217,7 +218,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         }
       }
 
-      final traktConnected = await probe(StorageService.hasTraktCredential);
+      final traktConnected = await probe(TraktStorage.hasTraktCredential);
       final simklConnected = await probe(
         () => SimklService.instance.isAuthenticated(),
       );

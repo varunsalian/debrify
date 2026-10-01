@@ -1,7 +1,10 @@
+import 'package:debrify/services/storage/mdblist_storage.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import '../models/media_identity.dart';
 import '../models/tracking_source.dart';
 import '../models/custom_series_identity.dart';
-import 'storage_service.dart';
 
 export '../models/tracking_source.dart';
 
@@ -56,11 +59,12 @@ class TrackingSourcePolicy {
     }
 
     checkCurrent();
-    final scrobbleTargets = await StorageService.getTrackingScrobbleTargets(
-      canContinue: canContinue,
-    );
+    final scrobbleTargets =
+        await TrackingSourceStorage.getTrackingScrobbleTargets(
+          canContinue: canContinue,
+        );
     checkCurrent();
-    var progressSource = await StorageService.getWatchProgressSource();
+    var progressSource = await TrackingSourceStorage.getWatchProgressSource();
     checkCurrent();
     final dedicated = switch (progressSource) {
       WatchProgressSource.trakt => TrackingSource.trakt,
@@ -70,13 +74,13 @@ class TrackingSourcePolicy {
     };
     if (dedicated != null) {
       final connected = switch (dedicated) {
-        TrackingSource.trakt => StorageService.hasTraktCredential(
+        TrackingSource.trakt => TraktStorage.hasTraktCredential(
           canContinue: canContinue,
         ),
-        TrackingSource.simkl => StorageService.hasSimklCredential(
+        TrackingSource.simkl => SimklStorage.hasSimklCredential(
           canContinue: canContinue,
         ),
-        TrackingSource.mdblist => StorageService.hasMdblistCredential(
+        TrackingSource.mdblist => MdblistStorage.hasMdblistCredential(
           canContinue: canContinue,
         ),
         TrackingSource.local => Future<bool>.value(true),
@@ -84,7 +88,7 @@ class TrackingSourcePolicy {
       final hasCredential = await connected;
       checkCurrent();
       if (!hasCredential) {
-        await StorageService.fallbackDisconnectedProgressSource(
+        await TrackingSourceStorage.fallbackDisconnectedProgressSource(
           dedicated,
           canContinue: canContinue,
         );
@@ -92,7 +96,7 @@ class TrackingSourcePolicy {
         progressSource = WatchProgressSource.smart;
       }
     }
-    final ticks = await StorageService.getHomeTickSources();
+    final ticks = await TrackingSourceStorage.getHomeTickSources();
     checkCurrent();
     return TrackingSourcePolicy(
       scrobbleTargets: scrobbleTargets,

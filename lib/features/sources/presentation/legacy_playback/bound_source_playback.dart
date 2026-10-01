@@ -27,7 +27,7 @@ import 'package:debrify/services/media_server_service.dart';
 import 'package:debrify/services/resolved_playback_link_cache.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/stream_url_validator.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/widgets/pipeline_loading_overlay.dart';
@@ -121,7 +121,7 @@ final class BoundSourcePlayback {
           if (cancel.cancelled) return true;
           final freshUrl = fresh?.directUrl;
           if (fresh != null && freshUrl != null && freshUrl.isNotEmpty) {
-            final rules = await StorageService.getQuickPlayRules(
+            final rules = await QuickPlayStorage.getQuickPlayRules(
               isMovie: meta.contentType == 'movie',
             );
             if (cancel.cancelled) return true;
@@ -300,7 +300,7 @@ final class BoundSourcePlayback {
           if (cancel.cancelled) return true;
           var freshUrl = fresh?.directUrl;
           if (fresh != null && freshUrl != null && freshUrl.isNotEmpty) {
-            final rules = await StorageService.getQuickPlayRules(
+            final rules = await QuickPlayStorage.getQuickPlayRules(
               isMovie: meta.contentType == 'movie',
             );
             if (cancel.cancelled) return true;

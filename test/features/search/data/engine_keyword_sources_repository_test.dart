@@ -8,13 +8,13 @@ import 'package:debrify/models/indexer_manager_config.dart';
 import 'package:debrify/services/engine/dynamic_engine.dart';
 import 'package:debrify/services/engine/engine_registry.dart';
 import 'package:debrify/services/engine/local_engine_storage.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:debrify/services/engine/settings_manager.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/torrent_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -118,7 +118,7 @@ void main() {
         apiKey: 'test-only',
         enabled: false,
       );
-      await StorageService.setIndexerManagerConfigs([indexer]);
+      await TorrentProviderStorage.setIndexerManagerConfigs([indexer]);
       final repo = repository(TorrentService.getKeywordSearchEngines);
       final choices = await repo.load();
       expect(choices.map((s) => s.id), ['installed', indexer.engineId]);

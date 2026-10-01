@@ -26,7 +26,7 @@ import 'package:debrify/services/direct_source_authorization.dart';
 import 'package:debrify/services/iptv_source_search.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/stream_url_validator.dart';
 import 'package:debrify/widgets/pipeline_loading_overlay.dart';
 import 'package:flutter/material.dart';
@@ -149,9 +149,9 @@ final class AutomaticPlaySelection {
     // is unchanged.
     var playMode = 'quick';
     try {
-      rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
+      rules = await QuickPlayStorage.getQuickPlayRules(isMovie: isMovie);
       if (openSourcePicker != null) {
-        playMode = await StorageService.getPlayButtonMode();
+        playMode = await QuickPlayStorage.getPlayButtonMode();
       }
       if (rules.sourcePriority.isNotEmpty) {
         await SourceCandidateRanking.warmSourceAliases();

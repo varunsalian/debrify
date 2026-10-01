@@ -1,9 +1,15 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/torrent_history_storage.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
+import 'package:debrify/services/storage/torrent_search_storage.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/storage/webdav_storage.dart';
 import 'settings/tv_collection_list_style_page.dart';
@@ -458,9 +464,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         () => WebdavServerStorage.getWebDavServers(forSettings: true),
         <WebDavConfig>[],
       ),
-      summaries.read('Trakt', () => StorageService.hasTraktCredential(), false),
-      summaries.read('Trakt', () => StorageService.getTraktTokenExpiry(), null),
-      summaries.read('Trakt', () => StorageService.getTraktUsername(), null),
+      summaries.read('Trakt', () => TraktStorage.hasTraktCredential(), false),
+      summaries.read('Trakt', () => TraktStorage.getTraktTokenExpiry(), null),
+      summaries.read('Trakt', () => TraktStorage.getTraktUsername(), null),
       summaries.read(
         'App version',
         () => AppVersionInfo.get(),
@@ -483,7 +489,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'Indexer managers',
-        () => StorageService.getIndexerManagerConfigs(forSettings: true),
+        () => TorrentProviderStorage.getIndexerManagerConfigs(forSettings: true),
         [],
       ),
       summaries.read(
@@ -496,16 +502,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         () => AllDebridStorage.hasAllDebridCredential(),
         false,
       ),
-      summaries.read('Simkl', () => StorageService.hasSimklCredential(), false),
-      summaries.read('Simkl', () => StorageService.getSimklUsername(), null),
+      summaries.read('Simkl', () => SimklStorage.hasSimklCredential(), false),
+      summaries.read('Simkl', () => SimklStorage.getSimklUsername(), null),
       summaries.read(
         'MDBList',
-        () => StorageService.hasMdblistCredential(),
+        () => MdblistStorage.hasMdblistCredential(),
         false,
       ),
       summaries.read(
         'MDBList',
-        () => StorageService.getMdblistUsername(),
+        () => MdblistStorage.getMdblistUsername(),
         null,
       ),
       summaries.read(
@@ -4959,7 +4965,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await pushSettingsPage(context, const IndexerManagersSettingsPage());
     if (!mounted) return;
 
-    final configs = await StorageService.getIndexerManagerConfigs(
+    final configs = await TorrentProviderStorage.getIndexerManagerConfigs(
       forSettings: true,
     );
     if (!mounted) return;
@@ -6666,7 +6672,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     AllDebridAccountService.clearUserInfo();
     await PikpakStorage.clearPikPakAuth();
     await WebdavStorage.clearWebDav();
-    await StorageService.clearTraktAuth();
+    await TraktStorage.clearTraktAuth();
     // Clears the token + username AND the in-memory library cache.
     await SimklService.instance.logout();
     // Clears the key + username AND the in-memory list/items cache.
@@ -6679,13 +6685,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearPlaylist(recordSyncDeletions: false);
     await StorageService.clearAllPlaylistMetadata(recordSyncDeletions: false);
     await StorageService.clearMyWatchlist();
-    await StorageService.clearTorrentSearchHistory();
+    await TorrentHistoryStorage.clearTorrentSearchHistory();
     await StorageService.clearAllStartupSettings();
     await StorageService.clearAllHomePageSettings();
     await ProviderCredentialStorage.clearAllIntegrationStates();
     await StorageService.clearDebrifyTvProviderAndLegacy();
-    await StorageService.clearAllFilterSettings();
-    await StorageService.clearAllTorrentEngineSettings();
+    await TorrentSearchStorage.clearAllFilterSettings();
+    await TorrentProviderStorage.clearAllTorrentEngineSettings();
     await ProviderCredentialStorage.clearAllPostTorrentActions();
     await StorageService.clearAllDebrifyTvSettings();
     // A device-local reset must never mint circle-wide channel deletions:

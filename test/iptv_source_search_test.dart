@@ -21,6 +21,8 @@ import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_priority.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/subtitle_settings_storage.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:flutter/material.dart';
@@ -228,7 +230,7 @@ void main() {
   test(
     'catalog respects the Playback audio language with safe fallbacks',
     () async {
-      await StorageService.setDefaultAudioLanguage('de');
+      await SubtitleSettingsStorage.setDefaultAudioLanguage('de');
       ingest('vod', [
         IptvChannel(
           name: 'FR - Dune (2021)',
@@ -1135,7 +1137,7 @@ void main() {
         movie,
       )).single.torrents.single;
       await RealDebridStorage.saveApiKey('rd-key');
-      await StorageService.setDefaultTorrentProvider('debrid');
+      await TorrentProviderStorage.setDefaultTorrentProvider('debrid');
       final commit = SourcePlayerLaunch.validatedSourceCommitterForTesting(
         SeriesSource.iptvDirectService,
         const PlaybackMeta(imdbId: 'tt1', contentType: 'movie', title: 'Dune'),

@@ -1,6 +1,6 @@
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -17,7 +17,7 @@ void main() {
     ProfileRuntime.initializeLegacy();
     SecretVault.debugReset(deviceIdOverride: 'simkl-dialog-fixture');
     SharedPreferences.setMockInitialValues({});
-    await StorageService.setSimklAccessToken('fixture');
+    await SimklStorage.setSimklAccessToken('fixture');
   });
   tearDown(() {
     ProfileRuntime.debugReset();

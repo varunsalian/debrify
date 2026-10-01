@@ -2,13 +2,14 @@ import 'package:debrify/features/home/data/home_return_repository.dart';
 import 'package:debrify/features/home/models/home_return_snapshot.dart';
 import 'package:debrify/features/home/models/home_board_configuration.dart';
 import 'package:debrify/features/home/models/home_catalog_state.dart';
+import 'package:debrify/models/home_preferences.dart';
 import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/services/hide_watched_prefs.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -115,11 +116,11 @@ void main() {
       repo.observeInvalidation();
       await Future<void>.delayed(Duration.zero);
       final before = repo.revision;
-      await StorageService.setHomeTickSources({});
+      await TrackingSourceStorage.setHomeTickSources({});
       await Future<void>.delayed(Duration.zero);
       expect(repo.revision, before);
       await HideWatchedPrefs.setEnabled(true);
-      await StorageService.setHomeTickSources({TrackingSource.local});
+      await TrackingSourceStorage.setHomeTickSources({TrackingSource.local});
       await Future<void>.delayed(Duration.zero);
       expect(repo.revision, before + 1);
     },

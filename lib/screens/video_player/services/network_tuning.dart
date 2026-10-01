@@ -1,4 +1,4 @@
-import '../../../services/storage_service.dart';
+import 'package:debrify/services/storage/player_network_storage.dart';
 
 /// User-selected network presets for the Debrify (mpv) player — the escape
 /// hatch for slow/unstable stream origins (Plex-backed addons, remote
@@ -57,8 +57,8 @@ class NetworkTuning {
   bool get isStandard => patience == standard && buffer == standard;
 
   static Future<NetworkTuning> load() async => NetworkTuning(
-        patience: await StorageService.getNetworkConnectPatience(),
-        buffer: await StorageService.getNetworkBufferSize(),
+        patience: await PlayerNetworkStorage.getNetworkConnectPatience(),
+        buffer: await PlayerNetworkStorage.getNetworkBufferSize(),
       );
 
   /// mpv properties for a (non-live) open. Empty at Standard — the caller

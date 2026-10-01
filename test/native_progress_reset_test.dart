@@ -6,6 +6,8 @@ import 'package:debrify/services/local_series_completion_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/series_progress_reset_service.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,13 +39,13 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     SecretVault.debugReset(deviceIdOverride: 'native-reset-test');
     TraktService.instance.resetProfileScope();
-    await StorageService.setTraktSession(
+    await TraktStorage.setTraktSession(
       accessToken: 'test-access',
       refreshToken: 'test-refresh',
       expiryMs: 9000000000000,
     );
     // An explicit reset must still run with scrobbling disabled.
-    await StorageService.setTrackingScrobbleTargets({TrackingSource.local});
+    await TrackingSourceStorage.setTrackingScrobbleTargets({TrackingSource.local});
   });
   tearDown(() {
     TraktService.instance.resetProfileScope();

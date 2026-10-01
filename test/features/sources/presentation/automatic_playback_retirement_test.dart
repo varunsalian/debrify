@@ -6,7 +6,7 @@ import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/external_player_storage.dart';
 import 'package:debrify/services/video_player_launcher.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
@@ -155,8 +155,8 @@ void main() {
         ProfileRuntime.initializeLegacy();
         SharedPreferences.setMockInitialValues({});
         addTearDown(ProfileRuntime.debugReset);
-        await StorageService.setDefaultPlayerMode('external');
-        await StorageService.setPreferredExternalPlayer('infuse');
+        await ExternalPlayerStorage.setDefaultPlayerMode('external');
+        await ExternalPlayerStorage.setPreferredExternalPlayer('infuse');
         const channel = MethodChannel('plugins.flutter.io/url_launcher');
         var launches = 0;
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

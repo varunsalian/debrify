@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/episode_artwork_service.dart';
 import '../../../services/iptv_cw_history.dart';
@@ -36,7 +37,7 @@ final homeContinuationLayoutRepositoryProvider =
 final homeLocalContinuationRepositoryProvider =
     Provider<HomeLocalContinuationRepository>(
       (ref) => HomeLocalContinuationRepository(
-        readProgressSource: StorageService.getWatchProgressSource,
+        readProgressSource: TrackingSourceStorage.getWatchProgressSource,
         readEnabled: StorageService.getHomeContinueWatchingEnabled,
         readItems: StorageService.getContinueWatchingItems,
         readAddons: StremioService.instance.getEnabledAddons,

@@ -8,7 +8,7 @@ import 'package:debrify/features/sources/presentation/legacy_playback/bound_sour
 import 'package:debrify/models/playback_meta.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:flutter/material.dart';
 
 final class SourceNextEpisode {
@@ -143,7 +143,7 @@ final class SourceNextEpisode {
       if (played) return;
       if (!context.mounted || !sourceBindings.isCurrent) return;
     }
-    final rules = await StorageService.getQuickPlayRules(isMovie: false);
+    final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
     if (!context.mounted || !sourceBindings.isCurrent) return;
     await AddonStreamPlayback.playAddonStream(
       context,

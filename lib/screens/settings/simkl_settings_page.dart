@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'widgets/settings_load_error.dart';
 import 'dart:async';
 
@@ -8,7 +9,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/simkl/simkl_service.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
@@ -249,7 +249,8 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
       _username = null;
     });
     MainPageBridge.notifyIntegrationChanged();
-    final fellBack = await StorageService.takeTrackingProgressFallbackNotice();
+    final fellBack =
+        await TrackingSourceStorage.takeTrackingProgressFallbackNotice();
     if (!mounted) return;
     _showSnackBar(
       fellBack

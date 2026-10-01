@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -458,7 +460,7 @@ class TraktService {
   /// Check if the user is authenticated (has a non-expired access token).
   Future<bool> isAuthenticated({bool Function()? canContinue}) async {
     if (canContinue?.call() == false) return false;
-    final token = await StorageService.getTraktAccessToken(
+    final token = await TraktStorage.getTraktAccessToken(
       canContinue: canContinue,
     );
     if (canContinue?.call() == false || token == null || token.isEmpty) {
@@ -466,7 +468,7 @@ class TraktService {
     }
 
     // Check if token is expired
-    final expiryMs = await StorageService.getTraktTokenExpiry();
+    final expiryMs = await TraktStorage.getTraktTokenExpiry();
     if (canContinue?.call() == false) return false;
     if (expiryMs != null && DateTime.now().millisecondsSinceEpoch >= expiryMs) {
       // Try to refresh
@@ -532,7 +534,7 @@ class TraktService {
         }
         return shared;
       }
-      final refreshToken = await StorageService.getTraktRefreshToken();
+      final refreshToken = await TraktStorage.getTraktRefreshToken();
       if (refreshToken == null || refreshToken.isEmpty) return false;
       final data = await exchange(refreshToken);
       if (data == null) return false;
@@ -546,11 +548,11 @@ class TraktService {
 
   /// Revoke the current token and clear stored auth data.
   Future<void> logout() async {
-    final accessToken = await StorageService.getTraktAccessToken();
+    final accessToken = await TraktStorage.getTraktAccessToken();
     // Local disposition happens before the upstream side effect. A shared
     // owner fails closed here, while a borrower detaches without revoking the
     // account used by its owner and other grantees.
-    final shouldRevokeRemote = await StorageService.clearTraktAuth();
+    final shouldRevokeRemote = await TraktStorage.clearTraktAuth();
     try {
       if (shouldRevokeRemote && accessToken != null) {
         await http.post(
@@ -575,7 +577,7 @@ class TraktService {
 
   /// Get the stored username.
   Future<String?> getUsername() async {
-    return StorageService.getTraktUsername();
+    return TraktStorage.getTraktUsername();
   }
 
   /// Store tokens and expiry from a token response.
@@ -591,7 +593,7 @@ class TraktService {
         : DateTime.now()
               .add(Duration(seconds: expiresIn))
               .millisecondsSinceEpoch;
-    await StorageService.setTraktSession(
+    await TraktStorage.setTraktSession(
       accessToken: data['access_token'] as String,
       refreshToken: data['refresh_token'] as String,
       expiryMs: expiryMs,
@@ -670,7 +672,7 @@ class TraktService {
         _deviceAuthorizations.remove(deviceCode);
         Future<void> commit() async {
           await _storeTokens(data);
-          await StorageService.enableTrackingScrobbleTarget(
+          await TrackingSourceStorage.enableTrackingScrobbleTarget(
             TrackingSource.trakt,
           );
           final accessToken = data['access_token'] as String;
@@ -734,7 +736,7 @@ class TraktService {
     bool Function()? canContinue,
   }) async {
     if (canContinue?.call() == false) return null;
-    var accessToken = await StorageService.getTraktAccessToken(
+    var accessToken = await TraktStorage.getTraktAccessToken(
       canContinue: canContinue,
     );
     if (accessToken == null || canContinue?.call() == false) return null;
@@ -745,7 +747,7 @@ class TraktService {
       // after scrobbling is disabled. Explicit history/rating actions use
       // this helper too, but remain independent of automatic scrobbling.
       if (requireScrobbleEnabled &&
-          !(await StorageService.getTrackingScrobbleTargets()).contains(
+          !(await TrackingSourceStorage.getTrackingScrobbleTargets()).contains(
             TrackingSource.trakt,
           )) {
         return null;
@@ -765,14 +767,14 @@ class TraktService {
         final refreshed = await refreshAccessToken();
         if (!refreshed || canContinue?.call() == false) return null;
 
-        accessToken = await StorageService.getTraktAccessToken(
+        accessToken = await TraktStorage.getTraktAccessToken(
           canContinue: canContinue,
         );
         if (accessToken == null || canContinue?.call() == false) return null;
 
         // The preference may have changed while the refresh was in flight.
         if (requireScrobbleEnabled &&
-            !(await StorageService.getTrackingScrobbleTargets()).contains(
+            !(await TrackingSourceStorage.getTrackingScrobbleTargets()).contains(
               TrackingSource.trakt,
             )) {
           return null;
@@ -872,7 +874,7 @@ class TraktService {
   }) async {
     final scope = ProfileRuntime.scope.value;
     if (MediaIdentity.isNative(imdbId) &&
-        (!(await StorageService.getTrackingScrobbleTargets()).contains(
+        (!(await TrackingSourceStorage.getTrackingScrobbleTargets()).contains(
               TrackingSource.trakt,
             ) ||
             !await isAuthenticated())) {
@@ -1181,7 +1183,7 @@ class TraktService {
     bool Function()? canContinue,
   }) async {
     if (canContinue?.call() == false) return null;
-    var accessToken = await StorageService.getTraktAccessToken(
+    var accessToken = await TraktStorage.getTraktAccessToken(
       canContinue: canContinue,
     );
     if (accessToken == null || canContinue?.call() == false) return null;
@@ -1200,7 +1202,7 @@ class TraktService {
         final refreshed = await refreshAccessToken();
         if (!refreshed || canContinue?.call() == false) return null;
 
-        accessToken = await StorageService.getTraktAccessToken(
+        accessToken = await TraktStorage.getTraktAccessToken(
           canContinue: canContinue,
         );
         if (accessToken == null || canContinue?.call() == false) return null;
@@ -1225,7 +1227,7 @@ class TraktService {
     bool Function()? canContinue,
   }) async {
     if (canContinue?.call() == false) return null;
-    var accessToken = await StorageService.getTraktAccessToken(
+    var accessToken = await TraktStorage.getTraktAccessToken(
       canContinue: canContinue,
     );
     if (accessToken == null || canContinue?.call() == false) return null;
@@ -1243,7 +1245,7 @@ class TraktService {
         final refreshed = await refreshAccessToken();
         if (!refreshed || canContinue?.call() == false) return null;
 
-        accessToken = await StorageService.getTraktAccessToken(
+        accessToken = await TraktStorage.getTraktAccessToken(
           canContinue: canContinue,
         );
         if (accessToken == null || canContinue?.call() == false) return null;
@@ -1606,7 +1608,7 @@ class TraktService {
         final user = data['user'] as Map<String, dynamic>?;
         final username = user?['username'] as String?;
         if (username != null) {
-          await StorageService.setTraktUsername(username);
+          await TraktStorage.setTraktUsername(username);
         }
         return true;
       }

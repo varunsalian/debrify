@@ -1,9 +1,9 @@
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/indexer_manager_config.dart';
 import '../../services/indexer_manager_service.dart';
 import '../../services/profiles/profile_async_authorization.dart';
-import '../../services/storage_service.dart';
 import '../../services/torrent_service.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
@@ -57,7 +57,7 @@ class _IndexerManagersSettingsPageState
   }
 
   Future<void> _loadConfigs() async {
-    final configs = await StorageService.getIndexerManagerConfigs(
+    final configs = await TorrentProviderStorage.getIndexerManagerConfigs(
       forSettings: true,
     );
     if (!mounted) return;
@@ -85,7 +85,7 @@ class _IndexerManagersSettingsPageState
     ProfileAsyncAuthorization? authorization,
   }) async {
     Future<List<IndexerManagerConfig>> save() =>
-        StorageService.setIndexerManagerConfigs(configs);
+        TorrentProviderStorage.setIndexerManagerConfigs(configs);
     final List<IndexerManagerConfig> saved;
     if (authorization == null) {
       saved = await save();

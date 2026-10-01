@@ -1,9 +1,9 @@
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import '../home_row_refresh.dart';
 import '../hide_watched_prefs.dart';
 import '../iptv_channel_order.dart';
 import '../iptv_media_store.dart';
 import '../main_page_bridge.dart';
-import '../storage_service.dart';
 
 enum _WebDavSyncUiRefreshTarget {
   trackingSourceRevision,
@@ -80,15 +80,15 @@ abstract final class WebDavSyncUiRefresh {
     // TrackingSettingsPage setters bump this revision; progress and tick
     // changes also refresh Home. Synced tracking policy treats the three keys
     // as one policy group so every consumer observes one coherent revision.
-    StorageService.trackingScrobbleTargetsKey: {
+    TrackingSourceStorage.trackingScrobbleTargetsKey: {
       _WebDavSyncUiRefreshTarget.trackingSourceRevision,
       _WebDavSyncUiRefreshTarget.homeSettings,
     },
-    StorageService.homeTickSourcesKey: {
+    TrackingSourceStorage.homeTickSourcesKey: {
       _WebDavSyncUiRefreshTarget.trackingSourceRevision,
       _WebDavSyncUiRefreshTarget.homeSettings,
     },
-    StorageService.watchProgressSourceKey: {
+    TrackingSourceStorage.watchProgressSourceKey: {
       _WebDavSyncUiRefreshTarget.trackingSourceRevision,
       _WebDavSyncUiRefreshTarget.homeSettings,
     },
@@ -131,7 +131,7 @@ abstract final class WebDavSyncUiRefresh {
       try {
         switch (target) {
           case _WebDavSyncUiRefreshTarget.trackingSourceRevision:
-            StorageService.trackingSourceRevision.value++;
+            TrackingSourceStorage.trackingSourceRevision.value++;
           case _WebDavSyncUiRefreshTarget.homeSettings:
             MainPageBridge.notifyHomeSettingsChanged();
           case _WebDavSyncUiRefreshTarget.navPreferences:

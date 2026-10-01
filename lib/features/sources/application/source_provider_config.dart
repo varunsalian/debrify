@@ -8,7 +8,7 @@ import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
 
 final class SourceProviderConfig {
   const SourceProviderConfig._();
@@ -68,7 +68,7 @@ final class SourceProviderConfig {
   }) => loadSourceProviderConfiguration(
     isConfigured: (provider) =>
         _isConfigured(provider, canContinue: canContinue),
-    readDefault: StorageService.getDefaultTorrentProvider,
+    readDefault: TorrentProviderStorage.getDefaultTorrentProvider,
     canContinue: canContinue,
   );
 

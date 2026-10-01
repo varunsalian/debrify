@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:debrify/models/stremio_subtitle.dart';
 import 'package:debrify/screens/video_player/utils/subtitle_audio_policy.dart';
 import 'package:debrify/screens/video_player/utils/subtitle_priority_selection.dart';
+import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_preference_portability.dart';
 import 'package:debrify/services/profiles/sanitized_profile_preferences.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,9 +19,12 @@ void main() {
 
   test('opt-in defaults off and survives profile preference storage', () async {
     SharedPreferences.setMockInitialValues({});
-    expect(await StorageService.getSubtitleOnlyForeignAudio(), isFalse);
-    await StorageService.setSubtitleOnlyForeignAudio(true);
-    expect(await StorageService.getSubtitleOnlyForeignAudio(), isTrue);
+    expect(
+      await SubtitleSettingsStorage.getSubtitleOnlyForeignAudio(),
+      isFalse,
+    );
+    await SubtitleSettingsStorage.setSubtitleOnlyForeignAudio(true);
+    expect(await SubtitleSettingsStorage.getSubtitleOnlyForeignAudio(), isTrue);
     const key = 'subtitle_only_foreign_audio';
     expect(ProfilePreferencePortability.prepareValue(key, true), (
       include: true,
@@ -29,8 +32,11 @@ void main() {
     ));
     expect(SanitizedProfilePreferences.allowsEntry(key, true), isTrue);
     expect(SanitizedProfilePreferences.allowsEntry(key, 'true'), isFalse);
-    await StorageService.setSubtitleOnlyForeignAudio(false);
-    expect(await StorageService.getSubtitleOnlyForeignAudio(), isFalse);
+    await SubtitleSettingsStorage.setSubtitleOnlyForeignAudio(false);
+    expect(
+      await SubtitleSettingsStorage.getSubtitleOnlyForeignAudio(),
+      isFalse,
+    );
   });
 
   test('disabled option preserves existing automatic selection', () {

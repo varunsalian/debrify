@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/player_network_storage.dart';
 import 'adjacent_episode_resolver.dart';
 import 'stream_badges_service.dart';
 import 'stream_badge_matcher.dart';
@@ -1969,9 +1970,9 @@ class AndroidTvPlayerBridge {
       // 'standard' = stock configuration untouched. A prefs failure must not
       // block a launch — tuning is strictly optional.
       try {
-        final patience = await StorageService.getNetworkConnectPatience();
+        final patience = await PlayerNetworkStorage.getNetworkConnectPatience();
         checkCurrent();
-        final buffer = await StorageService.getNetworkBufferSize();
+        final buffer = await PlayerNetworkStorage.getNetworkBufferSize();
         checkCurrent();
         if (patience != 'standard') {
           payloadWithFont['networkPatience'] = patience;
@@ -1981,7 +1982,7 @@ class AndroidTvPlayerBridge {
         }
         // Android TV IPTV decoder preference ('auto' = platform order
         // untouched, so it is only sent when the user picked otherwise).
-        final iptvDecoder = await StorageService.getIptvDecoderMode();
+        final iptvDecoder = await PlayerNetworkStorage.getIptvDecoderMode();
         checkCurrent();
         if (iptvDecoder != 'auto') {
           payloadWithFont['iptvDecoder'] = iptvDecoder;

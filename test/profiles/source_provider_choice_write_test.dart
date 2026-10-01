@@ -4,7 +4,7 @@ import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -31,10 +31,10 @@ void main() {
   test(
     'legacy caller and current guarded choice retain the same scalar key',
     () async {
-      await StorageService.setDefaultTorrentProvider('debrid');
+      await TorrentProviderStorage.setDefaultTorrentProvider('debrid');
       final raw = await SharedPreferences.getInstance();
       expect(raw.getString(first.preferenceKey(key)), 'debrid');
-      await StorageService.setDefaultTorrentProvider(
+      await TorrentProviderStorage.setDefaultTorrentProvider(
         'torbox',
         canContinue: () => true,
       );
@@ -44,7 +44,7 @@ void main() {
   );
 
   test('retired action does not write a choice', () async {
-    await StorageService.setDefaultTorrentProvider(
+    await TorrentProviderStorage.setDefaultTorrentProvider(
       'torbox',
       canContinue: () => false,
     );
@@ -55,7 +55,7 @@ void main() {
     final owner = ProfileSessionMemory.captureOwner();
     await ProfileRuntime.withCapturedScope(
       second,
-      () => StorageService.setDefaultTorrentProvider(
+      () => TorrentProviderStorage.setDefaultTorrentProvider(
         'torbox',
         canContinue: () => owner == ProfileSessionMemory.captureOwner(),
       ),
@@ -70,7 +70,7 @@ void main() {
     () async {
       await expectLater(
         ProfilePreferences.captureMutationSnapshot(
-          (_) => StorageService.setDefaultTorrentProvider(
+          (_) => TorrentProviderStorage.setDefaultTorrentProvider(
             'torbox',
             canContinue: () => true,
           ),
@@ -79,7 +79,7 @@ void main() {
       );
       final raw = await SharedPreferences.getInstance();
       expect(raw.getString(first.preferenceKey(key)), isNull);
-      await StorageService.setDefaultTorrentProvider(
+      await TorrentProviderStorage.setDefaultTorrentProvider(
         'torbox',
         canContinue: () => true,
       );
@@ -104,7 +104,7 @@ void main() {
       });
       await entered.future;
       var finished = false;
-      final write = StorageService.setDefaultTorrentProvider(
+      final write = TorrentProviderStorage.setDefaultTorrentProvider(
         'torbox',
         canContinue: () =>
             viewActive && owner == ProfileSessionMemory.captureOwner(),

@@ -1,10 +1,11 @@
+import 'package:debrify/services/storage/quick_play_storage.dart';
+import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/screens/settings/quick_play_settings_page.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 
@@ -31,11 +32,11 @@ void main() {
   testWidgets('add-on formatting defaults on and saves its toggle', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await pumpPage(tester);
-    expect(await StorageService.getUseAddonTextFormatting(), isTrue);
+    expect(await TorrentSearchStorage.getUseAddonTextFormatting(), isTrue);
     await tester.ensureVisible(find.text('Use add-on text formatting'));
     await tester.tap(find.text('Use add-on text formatting'));
     await tester.pumpAndSettle();
-    expect(await StorageService.getUseAddonTextFormatting(), isFalse);
+    expect(await TorrentSearchStorage.getUseAddonTextFormatting(), isFalse);
   });
 
   testWidgets('shows tabs, the torrent switch, and the priority section', (
@@ -65,7 +66,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Prefer season packs'), findsOneWidget);
 
-    final rules = await StorageService.getQuickPlayRules(isMovie: false);
+    final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
     expect(rules.preferSeriesPacks, isTrue);
   });
 
@@ -79,17 +80,17 @@ void main() {
     await tester.tap(find.text('Prefer torrents'));
     await tester.pumpAndSettle();
 
-    final movie = await StorageService.getQuickPlayRules(isMovie: true);
+    final movie = await QuickPlayStorage.getQuickPlayRules(isMovie: true);
     expect(movie.sourceMode, QuickPlaySourceMode.addonsThenTorrents);
     // Series tab untouched.
-    final show = await StorageService.getQuickPlayRules(isMovie: false);
+    final show = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
     expect(show.sourceMode, QuickPlaySourceMode.torrentsThenAddons);
 
     // Toggling back restores the exact shipped default (not a custom copy).
     await tester.ensureVisible(find.text('Prefer torrents'));
     await tester.tap(find.text('Prefer torrents'));
     await tester.pumpAndSettle();
-    final restored = await StorageService.getQuickPlayRules(isMovie: true);
+    final restored = await QuickPlayStorage.getQuickPlayRules(isMovie: true);
     expect(restored.matchesDebrifyDefault(isMovie: true), isTrue);
   });
 
@@ -98,7 +99,7 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     // A legacy profile stuck on exactEpisodeOnly must not defeat the switch.
-    await StorageService.setQuickPlayRules(
+    await QuickPlayStorage.setQuickPlayRules(
       QuickPlayRules.debrifyDefault(isMovie: false).copyWith(
         preset: QuickPlayPreset.custom,
         preferSeriesPacks: false,
@@ -114,7 +115,7 @@ void main() {
     await tester.tap(find.text('Prefer season packs'));
     await tester.pumpAndSettle();
 
-    final rules = await StorageService.getQuickPlayRules(isMovie: false);
+    final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
     expect(rules.preferSeriesPacks, isTrue);
     expect(
       rules.packPreference,
@@ -126,7 +127,7 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
-    await StorageService.setQuickPlayRules(
+    await QuickPlayStorage.setQuickPlayRules(
       QuickPlayRules.debrifyDefault(isMovie: true).copyWith(
         preset: QuickPlayPreset.custom,
         maxAttempts: 2,
@@ -145,7 +146,7 @@ void main() {
     await tester.ensureVisible(find.text('Prefer torrents'));
     await tester.tap(find.text('Prefer torrents'));
     await tester.pumpAndSettle();
-    final rules = await StorageService.getQuickPlayRules(isMovie: true);
+    final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: true);
     expect(rules.maxAttempts, 2);
     expect(rules.ranking, QuickPlayRanking.smallest);
     expect(rules.sourceMode, QuickPlaySourceMode.addonsThenTorrents);
@@ -157,7 +158,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     // A device carrying the OLD slider's pref: the page must show 10, not the
     // 5 default — this is the desktop-vs-Apple-TV mismatch users reported.
-    await StorageService.setQuickPlayMaxRetries(10);
+    await QuickPlayStorage.setQuickPlayMaxRetries(10);
     await pumpPage(tester);
 
     expect(find.text('Streams to try'), findsOneWidget);
@@ -170,11 +171,11 @@ void main() {
     await tester.tap(find.text('3 streams').last);
     await tester.pumpAndSettle();
 
-    final movie = await StorageService.getQuickPlayRules(isMovie: true);
+    final movie = await QuickPlayStorage.getQuickPlayRules(isMovie: true);
     expect(movie.maxAttempts, 3);
     expect(movie.tryNextOnFailure, isTrue);
     // Per-content: the Series tab keeps its own count.
-    final show = await StorageService.getQuickPlayRules(isMovie: false);
+    final show = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
     expect(show.maxAttempts, 10);
   });
 
@@ -188,7 +189,7 @@ void main() {
     await tester.tap(find.text('1 stream').last);
     await tester.pumpAndSettle();
 
-    final movie = await StorageService.getQuickPlayRules(isMovie: true);
+    final movie = await QuickPlayStorage.getQuickPlayRules(isMovie: true);
     expect(movie.maxAttempts, 1);
     // The players compute `tryNext ? maxAttempts : 1` — both fields must agree
     // or a later "back to 5" would silently stay at one attempt.
@@ -197,7 +198,7 @@ void main() {
 
   testWidgets('restore defaults resets both tabs', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    await StorageService.setQuickPlayRules(
+    await QuickPlayStorage.setQuickPlayRules(
       QuickPlayRules.debrifyDefault(isMovie: true).copyWith(
         preset: QuickPlayPreset.custom,
         sourceMode: QuickPlaySourceMode.addonsThenTorrents,
@@ -214,7 +215,7 @@ void main() {
     await tester.tap(find.text('Restore defaults'));
     await tester.pumpAndSettle();
 
-    final movie = await StorageService.getQuickPlayRules(isMovie: true);
+    final movie = await QuickPlayStorage.getQuickPlayRules(isMovie: true);
     expect(movie.matchesDebrifyDefault(isMovie: true), isTrue);
     expect(movie.sourcePriority, isEmpty);
   });

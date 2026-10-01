@@ -491,7 +491,8 @@ identity is present with the same outcome.
 | --- | --- | --- | --- |
 | 0 | `dfdf2d4a` | 10,952 | Baseline, complete map, resolved report, inventories and self-checked tooling; no Dart moves. |
 | 1 | `0438a77d` | 10,473 | Small subjects, enums, validator and reset entry wired; analyzer and 245 affected suites PASS against baseline. |
-| 2 | This step commit (hash recorded by step 3) | 9,251 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 2 | `a18aff4a` | 9,251 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 3 | This step commit (hash recorded by step 4) | 7,184 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 
 ### Step 0 evidence and retained source
 
@@ -610,6 +611,24 @@ each step. Unrelated whole-file extractions remain outside this plan.
 | 2 | `lib/widgets/remote/remote_config_export.dart` | 1584 | 1592 |
 | 2 | `lib/widgets/remote/remote_transfer_all.dart` | 1557 | 1565 |
 | 2 | `lib/widgets/trakt/trakt_results_view.dart` | 3071 | 3076 |
+| 3 | `lib/main.dart` | 4169 | 4170 |
+| 3 | `lib/screens/catalog_item_detail_screen.dart` | 3497 | 3499 |
+| 3 | `lib/screens/merged_series_detail_screen.dart` | 5527 | 5529 |
+| 3 | `lib/screens/settings/external_player_settings_page.dart` | 4283 | 4289 |
+| 3 | `lib/screens/settings/home_page_settings_page.dart` | 1066 | 1067 |
+| 3 | `lib/screens/settings/quick_play_settings_page.dart` | 951 | 953 |
+| 3 | `lib/screens/settings_screen.dart` | 8735 | 8741 |
+| 3 | `lib/screens/video_player_screen.dart` | 18085 | 18091 |
+| 3 | `lib/services/android_tv_player_bridge.dart` | 2149 | 2150 |
+| 3 | `lib/services/backup_restore_service.dart` | 1281 | 1286 |
+| 3 | `lib/services/iptv_source_search.dart` | 1169 | 1171 |
+| 3 | `lib/services/mdblist/mdblist_service.dart` | 2398 | 2399 |
+| 3 | `lib/services/remote_control/remote_command_router.dart` | 5467 | 5475 |
+| 3 | `lib/services/simkl/simkl_service.dart` | 1797 | 1799 |
+| 3 | `lib/services/trakt/trakt_service.dart` | 2292 | 2294 |
+| 3 | `lib/services/video_player_launcher.dart` | 6575 | 6578 |
+| 3 | `lib/widgets/remote/remote_config_export.dart` | 1592 | 1599 |
+| 3 | `lib/widgets/remote/remote_transfer_all.dart` | 1565 | 1571 |
 <!-- storage-caller-size-rows -->
 
 Step 1: `ss/step1.jsonl` records 3,449 success, 18 error, 1 failure,
@@ -646,3 +665,20 @@ comparison to `ss/base.jsonl` PASS (no new failures, missing tests or skips).
 prescribed old-file relocation. Map/dependency, constant, declaration/reset,
 size/import and diff checks pass. Caller review confirms only authorized
 expressions, imports and whitespace changed.
+
+Step 3 tooling correction: the declaration lexer now includes the semicolon of
+an arrow method returning a set/map literal (the playback recovery record-key
+helper). A fixture covers that shape. Coverage and dependency ownership remain
+unchanged; regeneration and the strict declaration check retain the entire
+original declaration. This was caught by formatting before affected tests.
+
+Step 3: `ss/step3.jsonl` records {'success': 3787, 'error': 20, 'skipped': 10, 'failure': 1};
+comparison to `ss/base.jsonl` PASS (no new failures, missing tests or skips).
+`ss/analyze-step3.txt` vs the previous step adds no diagnostics after the
+prescribed old-file relocation. Map/dependency, constant, declaration/reset,
+size/import and diff checks pass. Caller review confirms only authorized
+expressions, imports and whitespace changed.
+Step 3 reset mutations: deleting the moved `playerStartPortraitCached` reset
+assignment and deleting its owner's call from the entry point each fails the
+isolation guard. Both were restored; `ss/step3-reset.jsonl` passes all five
+original test identities against `ss/base.jsonl`.

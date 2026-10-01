@@ -1,7 +1,7 @@
+import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/torrent_filter_state.dart';
-import '../../services/storage_service.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
@@ -96,11 +96,11 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
 
   Future<void> _loadSettings() async {
     try {
-      final qualities = await StorageService.getDefaultFilterQualities();
-      final sources = await StorageService.getDefaultFilterRipSources();
-      final languages = await StorageService.getDefaultFilterLanguages();
-      final sizes = await StorageService.getDefaultFilterSizes();
-      final ranges = await StorageService.getDefaultFilterDynamicRanges();
+      final qualities = await TorrentSearchStorage.getDefaultFilterQualities();
+      final sources = await TorrentSearchStorage.getDefaultFilterRipSources();
+      final languages = await TorrentSearchStorage.getDefaultFilterLanguages();
+      final sizes = await TorrentSearchStorage.getDefaultFilterSizes();
+      final ranges = await TorrentSearchStorage.getDefaultFilterDynamicRanges();
 
       setState(() {
         // Convert stored strings back to enums
@@ -196,31 +196,31 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
   }
 
   Future<void> _saveQualities() async {
-    await StorageService.setDefaultFilterQualities(
+    await TorrentSearchStorage.setDefaultFilterQualities(
       _selectedQualities.map((e) => e.name).toList(),
     );
   }
 
   Future<void> _saveSources() async {
-    await StorageService.setDefaultFilterRipSources(
+    await TorrentSearchStorage.setDefaultFilterRipSources(
       _selectedSources.map((e) => e.name).toList(),
     );
   }
 
   Future<void> _saveLanguages() async {
-    await StorageService.setDefaultFilterLanguages(
+    await TorrentSearchStorage.setDefaultFilterLanguages(
       _selectedLanguages.map((e) => e.name).toList(),
     );
   }
 
   Future<void> _saveSizes() async {
-    await StorageService.setDefaultFilterSizes(
+    await TorrentSearchStorage.setDefaultFilterSizes(
       _selectedSizes.map((e) => e.name).toList(),
     );
   }
 
   Future<void> _saveRanges() async {
-    await StorageService.setDefaultFilterDynamicRanges(
+    await TorrentSearchStorage.setDefaultFilterDynamicRanges(
       _selectedRanges.map((e) => e.name).toList(),
     );
   }

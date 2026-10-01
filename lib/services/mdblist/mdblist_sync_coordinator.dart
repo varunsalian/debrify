@@ -1,5 +1,5 @@
+import 'package:debrify/services/storage/mdblist_storage.dart';
 import '../profiles/profile_credential_facade.dart';
-import '../storage_service.dart';
 import 'mdblist_calendar_service.dart';
 import 'mdblist_continue_watching_service.dart';
 import 'mdblist_models.dart';
@@ -48,9 +48,9 @@ class MdblistSyncCoordinator {
     MdblistSyncInvalidator? invalidate,
   }) : _service = service ?? MdblistService.instance,
        _readCheckpoint =
-           readCheckpoint ?? StorageService.getMdblistSyncCheckpoint,
+           readCheckpoint ?? MdblistStorage.getMdblistSyncCheckpoint,
        _writeCheckpoint =
-           writeCheckpoint ?? StorageService.setMdblistSyncCheckpoint,
+           writeCheckpoint ?? MdblistStorage.setMdblistSyncCheckpoint,
        _readAuthority =
            readAuthority ??
            (() => ProfileCredentialFacade.boundAuthority('mdblist_api_key')),

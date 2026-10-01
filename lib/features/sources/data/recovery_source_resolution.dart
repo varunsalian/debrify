@@ -19,7 +19,7 @@ import 'package:debrify/services/iptv_source_search.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/torrent_service.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 
@@ -35,7 +35,7 @@ final class RecoverySourceResolution {
     final contentId = meta.imdbId ?? meta.stremioCatalogId;
     if (contentId == null || contentId.isEmpty) return null;
     final isMovie = meta.contentType == 'movie';
-    final rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
+    final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: isMovie);
     final prov = await SourceProviderConfig.effectiveFetchProvider(provider);
     if (rules.sourcePriority.isNotEmpty) {
       await SourceCandidateRanking.warmSourceAliases();

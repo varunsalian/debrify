@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:debrify/features/home/application/home_detail_providers.dart';
@@ -11,7 +12,6 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,8 +36,8 @@ void main() {
         () async {
           SharedPreferences.setMockInitialValues({
             if (write != 'seed')
-              StorageService.trackingScrobbleTargetsKey: ['local'],
-            StorageService.watchProgressSourceKey: 'trakt',
+              TrackingSourceStorage.trackingScrobbleTargetsKey: ['local'],
+            TrackingSourceStorage.watchProgressSourceKey: 'trakt',
             if (write == 'credential') 'trakt_access_token': 'fixture-token',
           });
           final container = ProviderContainer.test();
@@ -54,7 +54,7 @@ void main() {
             await release.future;
           });
           await entered.future;
-          final revision = StorageService.trackingSourceRevision.value;
+          final revision = TrackingSourceStorage.trackingSourceRevision.value;
           final owner = ProfileSessionMemory.captureOwner();
           Future<TrackingSourcePolicy?> directLoad() async {
             try {
@@ -78,14 +78,14 @@ void main() {
           expect(await operation, isNull);
           final prefs = await SharedPreferences.getInstance();
           expect(
-            prefs.getString(StorageService.watchProgressSourceKey),
+            prefs.getString(TrackingSourceStorage.watchProgressSourceKey),
             'trakt',
           );
           expect(prefs.getBool('tracking_progress_fallback_notice'), isNull);
-          expect(StorageService.trackingSourceRevision.value, revision);
+          expect(TrackingSourceStorage.trackingSourceRevision.value, revision);
           if (write == 'seed') {
             expect(
-              prefs.getStringList(StorageService.trackingScrobbleTargetsKey),
+              prefs.getStringList(TrackingSourceStorage.trackingScrobbleTargetsKey),
               isNull,
             );
           }
@@ -128,7 +128,7 @@ void main() {
       );
       ProfileRuntime.initializeCommitted(scope);
       SharedPreferences.setMockInitialValues({
-        scope.preferenceKey(StorageService.watchProgressSourceKey): 'trakt',
+        scope.preferenceKey(TrackingSourceStorage.watchProgressSourceKey): 'trakt',
       });
       final container = ProviderContainer.test();
       final repository = container.read(
@@ -137,7 +137,7 @@ void main() {
         ),
       );
       await container.pump();
-      final revision = StorageService.trackingSourceRevision.value;
+      final revision = TrackingSourceStorage.trackingSourceRevision.value;
       final policy = await repository.loadForContent(
         'tt123',
         isCurrent: () => true,
@@ -146,7 +146,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(
         prefs.getString(
-          scope.preferenceKey(StorageService.watchProgressSourceKey),
+          scope.preferenceKey(TrackingSourceStorage.watchProgressSourceKey),
         ),
         'smart',
       );
@@ -154,13 +154,13 @@ void main() {
         prefs.getBool(scope.preferenceKey('tracking_progress_fallback_notice')),
         isTrue,
       );
-      expect(prefs.getString(StorageService.watchProgressSourceKey), isNull);
+      expect(prefs.getString(TrackingSourceStorage.watchProgressSourceKey), isNull);
       expect(
-        prefs.getStringList(StorageService.trackingScrobbleTargetsKey),
+        prefs.getStringList(TrackingSourceStorage.trackingScrobbleTargetsKey),
         isNull,
       );
-      expect(StorageService.trackingSourceRevision.value, revision + 1);
-      await StorageService.setWatchProgressSource(WatchProgressSource.local);
+      expect(TrackingSourceStorage.trackingSourceRevision.value, revision + 1);
+      await TrackingSourceStorage.setWatchProgressSource(WatchProgressSource.local);
       expect(
         (await repository.loadForContent(
           'tt123',
@@ -180,8 +180,8 @@ void main() {
     'snapshot between fallback writes settles and guards the notice commit',
     () async {
       SharedPreferences.setMockInitialValues({
-        StorageService.trackingScrobbleTargetsKey: ['local'],
-        StorageService.watchProgressSourceKey: 'trakt',
+        TrackingSourceStorage.trackingScrobbleTargetsKey: ['local'],
+        TrackingSourceStorage.watchProgressSourceKey: 'trakt',
       });
       final container = ProviderContainer.test();
       final repository = container.read(
@@ -198,9 +198,9 @@ void main() {
         });
       }
 
-      StorageService.trackingSourceRevision.addListener(onRevision);
+      TrackingSourceStorage.trackingSourceRevision.addListener(onRevision);
       addTearDown(
-        () => StorageService.trackingSourceRevision.removeListener(onRevision),
+        () => TrackingSourceStorage.trackingSourceRevision.removeListener(onRevision),
       );
       var current = true;
       final operation = repository.loadForContent(
@@ -214,7 +214,7 @@ void main() {
       await snapshot;
       expect(await operation.timeout(const Duration(seconds: 2)), isNull);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(StorageService.watchProgressSourceKey), 'smart');
+      expect(prefs.getString(TrackingSourceStorage.watchProgressSourceKey), 'smart');
       expect(prefs.getBool('tracking_progress_fallback_notice'), isNull);
     },
   );
@@ -227,7 +227,7 @@ void main() {
             ? 'mdblist_api_key'
             : '${source}_access_token';
         SharedPreferences.setMockInitialValues({
-          StorageService.watchProgressSourceKey: source,
+          TrackingSourceStorage.watchProgressSourceKey: source,
           key: 'fixture-token',
         });
         final container = ProviderContainer.test();

@@ -1,10 +1,11 @@
+import 'package:debrify/services/storage/mdblist_storage.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_service.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
@@ -56,7 +57,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   }
 
   Future<void> _load() async {
-    final configured = await StorageService.hasMdblistCredential();
+    final configured = await MdblistStorage.hasMdblistCredential();
     if (!mounted) return;
     setState(() {
       _savedApiKey = configured ? '' : null;
@@ -152,7 +153,8 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
       _isEditing = false;
       _apiKeyController.clear();
     });
-    final fellBack = await StorageService.takeTrackingProgressFallbackNotice();
+    final fellBack =
+        await TrackingSourceStorage.takeTrackingProgressFallbackNotice();
     if (!mounted) return;
     _snack(
       fellBack

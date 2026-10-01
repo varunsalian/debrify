@@ -7,7 +7,7 @@ import 'package:debrify/features/sources/data/source_engine_fetchers.dart';
 import 'package:debrify/models/playback_meta.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/services/source_priority.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
 
 final class SourceMovieFetcher {
@@ -41,7 +41,7 @@ final class SourceMovieFetcher {
         );
         if (prov == null) return null;
         // Size buckets are movie-meaningful — keep them (unlike series).
-        final rules = await StorageService.getQuickPlayRules(isMovie: true);
+        final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: true);
         if (rules.sourcePriority.isNotEmpty) {
           await SourceCandidateRanking.warmSourceAliases();
         }

@@ -156,6 +156,7 @@ def members(source, class_name='StorageService'):
         assert header_end is not None
         paren = square = curly = 0
         field = ts[header_end].text != '('
+        expression_body = False
         end = None
         for i in range(header_end, close):
             t = ts[i]
@@ -163,13 +164,15 @@ def members(source, class_name='StorageService'):
                 continue
             v = t.text
             if not (paren or square or curly):
+                if v == '=' and i+1 < len(ts) and ts[i+1].text == '>':
+                    expression_body = True
                 if v == ';':
                     end = i
                     break
             paren += (v == '(') - (v == ')')
             square += (v == '[') - (v == ']')
             curly += (v == '{') - (v == '}')
-            if v == '}' and not (paren or square or curly) and not field:
+            if v == '}' and not (paren or square or curly) and not field and not expression_body:
                 end = i
                 break
         assert end is not None, ts[si].start

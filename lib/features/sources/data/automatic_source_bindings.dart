@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import '../../../models/playback_meta.dart';
 import '../../../models/torrent.dart';
 import '../../../services/durable_source_binding.dart';
@@ -8,7 +9,6 @@ import '../../../services/profiles/profile_session_memory.dart';
 import '../../../services/resolved_playback_link_cache.dart';
 import '../../../services/series_source_service.dart';
 import '../../../services/source_selection_diagnostics.dart';
-import '../../../services/storage_service.dart';
 import 'source_single_episode.dart';
 
 /// Durable automatic-binding policy for the profile that initiated playback.
@@ -168,7 +168,7 @@ class AutomaticSourceBindings {
     if (source == null) return;
     final isIptv = IptvSourceSearch.owns(winner);
     try {
-      final enabled = await StorageService.getSeriesAutoPinOnPlay();
+      final enabled = await QuickPlayStorage.getSeriesAutoPinOnPlay();
       if (!canContinue()) return;
       if (!enabled) {
         if (isIptv && canContinue()) {
@@ -382,7 +382,8 @@ class AutomaticSourceBindings {
       // existing series auto-pin preference still owns that opt-in boundary;
       // once a list exists, a successful switch keeps it in sync regardless.
       final enabled =
-          existing.isNotEmpty || await StorageService.getSeriesAutoPinOnPlay();
+          existing.isNotEmpty ||
+          await QuickPlayStorage.getSeriesAutoPinOnPlay();
       if (!canContinue()) return;
       if (!enabled) {
         if (isIptv && canContinue()) {

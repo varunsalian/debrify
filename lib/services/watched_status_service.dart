@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import '../models/media_identity.dart';
 import 'dart:async';
 import '../models/custom_series_identity.dart';
@@ -23,7 +24,7 @@ class WatchedStatusService extends ChangeNotifier {
     StorageService.movieFinishedRevision.addListener(refresh);
     StorageService.localCompletionRevision.addListener(_refreshLocal);
     MdblistService.instance.watchedRevision.addListener(_markMdblistDirty);
-    StorageService.trackingSourceRevision.addListener(_refreshTickPolicy);
+    TrackingSourceStorage.trackingSourceRevision.addListener(_refreshTickPolicy);
     _refreshTickPolicy();
   }
 
@@ -109,7 +110,7 @@ class WatchedStatusService extends ChangeNotifier {
 
   void _refreshTickPolicy() {
     unawaited(() async {
-      final next = await StorageService.getHomeTickSources();
+      final next = await TrackingSourceStorage.getHomeTickSources();
       if (setEquals(next, _tickSources)) return;
       _tickSources = next;
       notifyListeners();

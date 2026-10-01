@@ -5,7 +5,7 @@ import 'package:debrify/features/sources/application/source_filter_ladder.dart';
 import 'package:debrify/features/sources/application/source_probing.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 import 'package:debrify/utils/torrent_curation.dart';
 import 'package:debrify/utils/torrent_filter_matcher.dart';
@@ -741,7 +741,7 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'default_filter_qualities_v1': jsonEncode(['fullHd']),
       });
-      expect(await StorageService.getQuickPlayHonorsFilters(), isTrue);
+      expect(await QuickPlayStorage.getQuickPlayHonorsFilters(), isTrue);
       final ladder = await SourceFilterLadder.loadLadder();
       expect(ladder.isActive, isTrue);
     });

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/profiles/profile_policy.dart';
@@ -285,7 +286,7 @@ class EpisodeTrackerSnapshotService {
       final storeWriteKey = _storeWriteKey('trakt', authorization);
       final accessToken = await _runBound(
         authorization,
-        StorageService.getTraktAccessToken,
+        TraktStorage.getTraktAccessToken,
       );
       if (accessToken == null || accessToken.isEmpty) {
         // No credential is an authoritative disconnect, not a transient API

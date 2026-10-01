@@ -1,12 +1,14 @@
 import 'dart:async';
 
+import 'package:debrify/services/storage/quick_play_storage.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
+import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/quick_play_rules.dart';
 import '../../services/analytics_service.dart';
 import '../../services/source_priority.dart';
-import '../../services/storage_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/platform_util.dart';
@@ -94,12 +96,12 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   }
 
   Future<void> _load() async {
-    final movie = await StorageService.getQuickPlayRules(isMovie: true);
-    final show = await StorageService.getQuickPlayRules(isMovie: false);
-    final provider = await StorageService.getDefaultTorrentProvider();
-    final playMode = await StorageService.getPlayButtonMode();
-    final addonText = await StorageService.getUseAddonTextFormatting();
-    final addonLogos = await StorageService.getShowAddonLogos();
+    final movie = await QuickPlayStorage.getQuickPlayRules(isMovie: true);
+    final show = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
+    final provider = await TorrentProviderStorage.getDefaultTorrentProvider();
+    final playMode = await QuickPlayStorage.getPlayButtonMode();
+    final addonText = await TorrentSearchStorage.getUseAddonTextFormatting();
+    final addonLogos = await TorrentSearchStorage.getShowAddonLogos();
     if (!mounted) return;
     setState(() {
       _movie = movie;
@@ -142,7 +144,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
         _show = rules;
       }
     });
-    await StorageService.setQuickPlayRules(rules, isMovie: isMovie);
+    await QuickPlayStorage.setQuickPlayRules(rules, isMovie: isMovie);
   }
 
   QuickPlayRules _custom(QuickPlayRules candidate) {
@@ -273,7 +275,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   );
 
   void _restore() async {
-    await StorageService.restoreQuickPlayDefaults();
+    await QuickPlayStorage.restoreQuickPlayDefaults();
     if (!mounted) return;
     setState(() {
       _movie = QuickPlayRules.debrifyDefault(isMovie: true);
@@ -335,7 +337,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                     subtitle: 'Show the provider logo and name beside each source',
                     value: _addonLogos,
                     onChanged: (value) async {
-                      await StorageService.setShowAddonLogos(value);
+                      await TorrentSearchStorage.setShowAddonLogos(value);
                       MainPageBridge.notifyHomeSettingsChanged();
                       if (mounted) setState(() => _addonLogos = value);
                     },
@@ -346,7 +348,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                     subtitle: 'Show original stream names, line breaks and emojis from add-ons such as AIOStreams',
                     value: _addonText,
                     onChanged: (value) async {
-                      await StorageService.setUseAddonTextFormatting(value);
+                      await TorrentSearchStorage.setUseAddonTextFormatting(value);
                       MainPageBridge.notifyHomeSettingsChanged();
                       if (mounted) setState(() => _addonText = value);
                     },
@@ -451,7 +453,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
 
   Future<void> _setPlayMode(String value) async {
     setState(() => _playMode = value);
-    await StorageService.setPlayButtonMode(value);
+    await QuickPlayStorage.setPlayButtonMode(value);
   }
 
   Widget _tabs() => ConstrainedBox(

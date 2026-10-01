@@ -11,6 +11,8 @@ import 'dart:io';
 import 'package:debrify/models/indexer_manager_config.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/webdav_item.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_collection_resource_facade.dart';
@@ -228,7 +230,7 @@ void main() {
     )];
     await prefs.setString('series_source_tt123', jsonEncode(original.map((pin) => pin.toJson()).toList()));
     for (final movie in [true, false]) {
-      await StorageService.setQuickPlayRules(
+      await QuickPlayStorage.setQuickPlayRules(
         QuickPlayRules.debrifyDefault(isMovie: movie).copyWith(sourcePriority: [
           'mediaserver:${resource.id}'.toLowerCase(), 'stremio:backup',
         ]), isMovie: movie);
@@ -247,7 +249,7 @@ void main() {
             value.ownerProfileId == report.importedProfileIds.single);
     expect(restoredResource.id, isNot(resource.id));
     for (final movie in [true, false]) {
-      expect((await StorageService.getQuickPlayRules(isMovie: movie)).sourcePriority,
+      expect((await QuickPlayStorage.getQuickPlayRules(isMovie: movie)).sourcePriority,
         ['mediaserver:${restoredResource.id}'.toLowerCase(), 'stremio:backup']);
     }
     final restoredPrefs = await ProfilePreferences.instance();
@@ -924,7 +926,7 @@ void main() {
       );
       expect(servers, hasLength(1));
       final List<IndexerManagerConfig> managers =
-          await StorageService.getIndexerManagerConfigs(forSettings: false);
+          await TorrentProviderStorage.getIndexerManagerConfigs(forSettings: false);
       expect(managers, hasLength(2));
       StremioService.instance.invalidateCache();
       // A retired display read must fail soft, without caching an empty result

@@ -13,7 +13,7 @@ import 'package:debrify/services/debrid_service.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 import 'package:debrify/utils/torrent_curation.dart';
 import 'package:flutter/foundation.dart';
@@ -139,9 +139,9 @@ final class SourceProbing {
       if (cancelled()) return (null, null);
       final tryMultiple =
           rules?.tryNextOnFailure ??
-          await StorageService.getQuickPlayTryMultipleTorrents();
+          await QuickPlayStorage.getQuickPlayTryMultipleTorrents();
       final maxRetries =
-          rules?.maxAttempts ?? await StorageService.getQuickPlayMaxRetries();
+          rules?.maxAttempts ?? await QuickPlayStorage.getQuickPlayMaxRetries();
       final maxAttempts = probeAttemptCount(
         prov,
         tryMultiple: tryMultiple,

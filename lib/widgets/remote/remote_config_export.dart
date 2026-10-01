@@ -2,15 +2,19 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../services/storage_service.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import '../../services/iptv_transfer_payload.dart';
 import '../../services/stream_badges_service.dart';
@@ -196,13 +200,13 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
       final hasPp = pikpakEmail != null && pikpakEmail.isNotEmpty && ppEnabled;
 
       // Load Trakt session
-      final traktAccessToken = await StorageService.getTraktAccessToken(
+      final traktAccessToken = await TraktStorage.getTraktAccessToken(
         forRemoteTransfer: true,
       );
-      final traktRefreshToken = await StorageService.getTraktRefreshToken(
+      final traktRefreshToken = await TraktStorage.getTraktRefreshToken(
         forRemoteTransfer: true,
       );
-      _traktUsername = await StorageService.getTraktUsername();
+      _traktUsername = await TraktStorage.getTraktUsername();
       final hasTrakt =
           traktAccessToken != null &&
           traktAccessToken.isNotEmpty &&
@@ -210,16 +214,16 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
           traktRefreshToken.isNotEmpty;
 
       // Load Simkl session
-      final simklAccessToken = await StorageService.getSimklAccessToken(
+      final simklAccessToken = await SimklStorage.getSimklAccessToken(
         forRemoteTransfer: true,
       );
-      _simklUsername = await StorageService.getSimklUsername();
+      _simklUsername = await SimklStorage.getSimklUsername();
       final hasSimkl = simklAccessToken != null && simklAccessToken.isNotEmpty;
 
       final mdblistApiKey = kMdblistEnabled
-          ? await StorageService.getMdblistApiKey(forRemoteTransfer: true)
+          ? await MdblistStorage.getMdblistApiKey(forRemoteTransfer: true)
           : null;
-      _mdblistUsername = await StorageService.getMdblistUsername();
+      _mdblistUsername = await MdblistStorage.getMdblistUsername();
       final hasMdblist = mdblistApiKey?.isNotEmpty ?? false;
 
       // Load Search Engines
@@ -249,7 +253,7 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
         // Sync account credentials are available only to an authorized Admin.
       }
       try {
-        final managers = await StorageService.getIndexerManagerConfigs(
+        final managers = await TorrentProviderStorage.getIndexerManagerConfigs(
           forSettings: false,
           forRemoteTransfer: true,
         );
@@ -636,10 +640,10 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
         'Trakt',
         ConfigCommand.trakt,
         () async {
-          final access = await StorageService.getTraktAccessToken(
+          final access = await TraktStorage.getTraktAccessToken(
             forRemoteTransfer: true,
           );
-          final refresh = await StorageService.getTraktRefreshToken(
+          final refresh = await TraktStorage.getTraktRefreshToken(
             forRemoteTransfer: true,
           );
           if (access == null ||
@@ -648,8 +652,8 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
               refresh.isEmpty) {
             return false;
           }
-          final expiry = await StorageService.getTraktTokenExpiry();
-          final username = await StorageService.getTraktUsername();
+          final expiry = await TraktStorage.getTraktTokenExpiry();
+          final username = await TraktStorage.getTraktUsername();
           return state.sendConfigCommandToDevice(
             ConfigCommand.trakt,
             targetIp,
@@ -669,11 +673,11 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
         'Simkl',
         ConfigCommand.simkl,
         () async {
-          final access = await StorageService.getSimklAccessToken(
+          final access = await SimklStorage.getSimklAccessToken(
             forRemoteTransfer: true,
           );
           if (access == null || access.isEmpty) return false;
-          final username = await StorageService.getSimklUsername();
+          final username = await SimklStorage.getSimklUsername();
           return state.sendConfigCommandToDevice(
             ConfigCommand.simkl,
             targetIp,
@@ -691,11 +695,11 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
         'MDBList',
         ConfigCommand.mdblist,
         () async {
-          final apiKey = await StorageService.getMdblistApiKey(
+          final apiKey = await MdblistStorage.getMdblistApiKey(
             forRemoteTransfer: true,
           );
           if (apiKey == null || apiKey.isEmpty) return false;
-          final username = await StorageService.getMdblistUsername();
+          final username = await MdblistStorage.getMdblistUsername();
           return state.sendConfigCommandToDevice(
             ConfigCommand.mdblist,
             targetIp,
@@ -716,7 +720,9 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
           ConfigCommand.trackingPreferences,
           targetIp,
           configData: transferData(
-            jsonEncode(await StorageService.buildTrackingPreferencesPayload()),
+            jsonEncode(
+              await TrackingSourceStorage.buildTrackingPreferencesPayload(),
+            ),
           ),
         ),
       );
@@ -772,10 +778,11 @@ class RemoteConfigExportState extends State<RemoteConfigExport> {
         'Jackett/Prowlarr',
         ConfigCommand.indexerManagers,
         () async {
-          final managers = await StorageService.getIndexerManagerConfigs(
-            forSettings: false,
-            forRemoteTransfer: true,
-          );
+          final managers =
+              await TorrentProviderStorage.getIndexerManagerConfigs(
+                forSettings: false,
+                forRemoteTransfer: true,
+              );
           if (managers.isEmpty) return false;
           return state.sendConfigCommandToDevice(
             ConfigCommand.indexerManagers,

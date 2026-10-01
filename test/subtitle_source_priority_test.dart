@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'package:debrify/models/stremio_subtitle.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/subtitle_source_priority.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_preference_portability.dart';
 import 'package:debrify/services/profiles/profile_appearance_preferences.dart';
 import 'package:debrify/services/profiles/legacy_backup_adapter.dart';
+import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -103,13 +103,13 @@ void main() {
     'preference persists as portable native-projected profile data and is not excluded from sync',
     () async {
       SharedPreferences.setMockInitialValues({});
-      expect(await StorageService.getSubtitleSourcePriority(), ['embedded']);
-      await StorageService.setSubtitleSourcePriority([
+      expect(await SubtitleSettingsStorage.getSubtitleSourcePriority(), ['embedded']);
+      await SubtitleSettingsStorage.setSubtitleSourcePriority([
         'addon:b',
         'embedded',
         'addon:a',
       ]);
-      expect(await StorageService.getSubtitleSourcePriority(), [
+      expect(await SubtitleSettingsStorage.getSubtitleSourcePriority(), [
         'addon:b',
         'embedded',
         'addon:a',
@@ -119,7 +119,7 @@ void main() {
       expect(ProfileAppearancePreferences.keys, isNot(contains(key)));
       expect(ProfilePreferencePortability.allowsKey(key), isTrue);
       final encoded = jsonEncode(
-        await StorageService.getSubtitleSourcePriority(),
+        await SubtitleSettingsStorage.getSubtitleSourcePriority(),
       );
       expect(ProfilePreferencePortability.prepareValue(key, encoded), (
         include: true,

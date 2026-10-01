@@ -11,7 +11,7 @@ import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -293,7 +293,7 @@ void main() {
   });
 
   test('new shared tracker bindings enable only the target profile', () async {
-    await StorageService.setTrackingScrobbleTargets(<TrackingSource>{
+    await TrackingSourceStorage.setTrackingScrobbleTargets(<TrackingSource>{
       TrackingSource.local,
     });
     final trackerResources = <ConnectionResourceType, ConnectionResource>{};
@@ -312,7 +312,7 @@ void main() {
     }
 
     await activate(memberId, 2);
-    await StorageService.setTrackingScrobbleTargets(<TrackingSource>{
+    await TrackingSourceStorage.setTrackingScrobbleTargets(<TrackingSource>{
       TrackingSource.local,
     });
     await activate(adminId, 3);
@@ -326,12 +326,12 @@ void main() {
       );
     }
 
-    expect(await StorageService.getTrackingScrobbleTargets(), <TrackingSource>{
+    expect(await TrackingSourceStorage.getTrackingScrobbleTargets(), <TrackingSource>{
       TrackingSource.local,
     });
     await activate(memberId, 4);
     expect(
-      await StorageService.getTrackingScrobbleTargets(),
+      await TrackingSourceStorage.getTrackingScrobbleTargets(),
       Set<TrackingSource>.of(TrackingSource.values),
     );
   });
@@ -355,7 +355,7 @@ void main() {
       );
 
       await activate(memberId, 2);
-      await StorageService.setTrackingScrobbleTargets(<TrackingSource>{
+      await TrackingSourceStorage.setTrackingScrobbleTargets(<TrackingSource>{
         TrackingSource.local,
       });
       await activate(adminId, 3);
@@ -368,7 +368,7 @@ void main() {
       );
       await activate(memberId, 4);
       expect(
-        await StorageService.getTrackingScrobbleTargets(),
+        await TrackingSourceStorage.getTrackingScrobbleTargets(),
         <TrackingSource>{TrackingSource.local},
       );
 
@@ -389,7 +389,7 @@ void main() {
 
       await activate(memberId, 6);
       expect(
-        await StorageService.getTrackingScrobbleTargets(),
+        await TrackingSourceStorage.getTrackingScrobbleTargets(),
         <TrackingSource>{TrackingSource.local, TrackingSource.trakt},
       );
     },

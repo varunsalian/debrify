@@ -1,12 +1,12 @@
 import 'dart:async';
 
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
-import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
@@ -242,7 +242,8 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
       _username = null;
     });
     MainPageBridge.notifyIntegrationChanged();
-    final fellBack = await StorageService.takeTrackingProgressFallbackNotice();
+    final fellBack =
+        await TrackingSourceStorage.takeTrackingProgressFallbackNotice();
     if (!mounted) return;
     _showSnackBar(
       fellBack

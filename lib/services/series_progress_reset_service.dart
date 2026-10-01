@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/trakt_storage.dart';
 import '../models/media_identity.dart';
 import 'episode_tracker_snapshot_revision.dart';
 import '../models/custom_series_identity.dart';
@@ -115,7 +116,7 @@ class SeriesProgressResetService {
     if (provider == null || provider == TrackingSource.trakt)
       await attempt('Trakt', () async {
         final service = TraktService.instance;
-        final token = await StorageService.getTraktAccessToken(
+        final token = await TraktStorage.getTraktAccessToken(
           canContinue: current,
         );
         if (!current()) return false;

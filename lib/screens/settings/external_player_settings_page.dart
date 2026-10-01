@@ -1,4 +1,10 @@
 import 'dart:io';
+import 'package:debrify/services/storage/external_player_storage.dart';
+import 'package:debrify/services/storage/player_network_storage.dart';
+import 'package:debrify/services/storage/player_settings_storage.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
+import 'package:debrify/services/storage/skip_segments_storage.dart';
+import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -495,7 +501,7 @@ class _ExternalPlayerSettingsPageState
 
     try {
       // Load default player mode
-      final mode = await StorageService.getDefaultPlayerMode();
+      final mode = await ExternalPlayerStorage.getDefaultPlayerMode();
 
       // Only Player needs external application discovery. The other categories
       // can load without waiting for native app detection.
@@ -511,10 +517,10 @@ class _ExternalPlayerSettingsPageState
 
       if (needsExternalPlayers && (Platform.isMacOS)) {
         installed = await ExternalPlayerService.detectInstalledPlayers();
-        preferredKey = await StorageService.getPreferredExternalPlayer();
-        customAppPath = await StorageService.getCustomExternalPlayerPath();
-        customAppName = await StorageService.getCustomExternalPlayerName();
-        customCommand = await StorageService.getCustomExternalPlayerCommand();
+        preferredKey = await ExternalPlayerStorage.getPreferredExternalPlayer();
+        customAppPath = await ExternalPlayerStorage.getCustomExternalPlayerPath();
+        customAppName = await ExternalPlayerStorage.getCustomExternalPlayerName();
+        customCommand = await ExternalPlayerStorage.getCustomExternalPlayerCommand();
         if (!mounted) return;
         _commandController.text = customCommand ?? '';
       }
@@ -527,8 +533,8 @@ class _ExternalPlayerSettingsPageState
       if (needsExternalPlayers &&
           (PlatformUtil.isIosMobile || PlatformUtil.isTvOS)) {
         installedIOS = await ExternalPlayerService.detectInstalledIOSPlayers();
-        iosPreferredKey = await StorageService.getPreferredIOSExternalPlayer();
-        iosCustomScheme = await StorageService.getIOSCustomSchemeTemplate();
+        iosPreferredKey = await ExternalPlayerStorage.getPreferredIOSExternalPlayer();
+        iosCustomScheme = await ExternalPlayerStorage.getIOSCustomSchemeTemplate();
         if (!mounted) return;
         _iosSchemeController.text = iosCustomScheme ?? '';
       }
@@ -542,8 +548,8 @@ class _ExternalPlayerSettingsPageState
         installedLinux =
             await LinuxExternalPlayerServiceExtension.detectInstalledLinuxPlayers();
         linuxPreferredKey =
-            await StorageService.getPreferredLinuxExternalPlayer();
-        linuxCustomCommand = await StorageService.getLinuxCustomCommand();
+            await ExternalPlayerStorage.getPreferredLinuxExternalPlayer();
+        linuxCustomCommand = await ExternalPlayerStorage.getLinuxCustomCommand();
         if (!mounted) return;
         _linuxCommandController.text = linuxCustomCommand ?? '';
       }
@@ -557,8 +563,8 @@ class _ExternalPlayerSettingsPageState
         installedWindows =
             await WindowsExternalPlayerServiceExtension.detectInstalledWindowsPlayers();
         windowsPreferredKey =
-            await StorageService.getPreferredWindowsExternalPlayer();
-        windowsCustomCommand = await StorageService.getWindowsCustomCommand();
+            await ExternalPlayerStorage.getPreferredWindowsExternalPlayer();
+        windowsCustomCommand = await ExternalPlayerStorage.getWindowsCustomCommand();
         if (!mounted) return;
         _windowsCommandController.text = windowsCustomCommand ?? '';
       }
@@ -570,10 +576,10 @@ class _ExternalPlayerSettingsPageState
       bool vrShowDialog = true;
 
       if (Platform.isAndroid) {
-        vrScreenType = await StorageService.getQuickPlayVrDefaultScreenType();
-        vrStereoMode = await StorageService.getQuickPlayVrDefaultStereoMode();
-        vrAutoDetect = await StorageService.getQuickPlayVrAutoDetectFormat();
-        vrShowDialog = await StorageService.getQuickPlayVrShowDialog();
+        vrScreenType = await QuickPlayStorage.getQuickPlayVrDefaultScreenType();
+        vrStereoMode = await QuickPlayStorage.getQuickPlayVrDefaultStereoMode();
+        vrAutoDetect = await QuickPlayStorage.getQuickPlayVrAutoDetectFormat();
+        vrShowDialog = await QuickPlayStorage.getQuickPlayVrShowDialog();
       }
 
       // Check if running on Android TV
@@ -588,55 +594,55 @@ class _ExternalPlayerSettingsPageState
 
       // Load Debrify Player default settings (use platform-specific aspect setting)
       final defaultAspectIndex = isAndroidTv
-          ? await StorageService.getPlayerDefaultAspectIndexTv()
-          : await StorageService.getPlayerDefaultAspectIndex();
-      final nightModeIndex = await StorageService.getPlayerNightModeIndex();
+          ? await PlayerSettingsStorage.getPlayerDefaultAspectIndexTv()
+          : await PlayerSettingsStorage.getPlayerDefaultAspectIndex();
+      final nightModeIndex = await PlayerSettingsStorage.getPlayerNightModeIndex();
       final systemAudioEffects =
-          await StorageService.getPlayerSystemAudioEffects();
+          await PlayerSettingsStorage.getPlayerSystemAudioEffects();
       final tvosForceSoftwareDecode = PlatformUtil.isTvOS
-          ? await StorageService.getTvosForceSoftwareDecode()
+          ? await PlayerSettingsStorage.getTvosForceSoftwareDecode()
           : false;
       final tvosForceStereo = PlatformUtil.isTvOS
-          ? await StorageService.getTvosForceStereoAudio()
+          ? await PlayerSettingsStorage.getTvosForceStereoAudio()
           : false;
       final tvosLegacyAudioOutput = PlatformUtil.isTvOS
-          ? await StorageService.getTvosLegacyAudioOutput()
+          ? await PlayerSettingsStorage.getTvosLegacyAudioOutput()
           : false;
       final audioPassthrough = Platform.isAndroid
-          ? await StorageService.getAudioPassthroughEnabled()
+          ? await PlayerSettingsStorage.getAudioPassthroughEnabled()
           : false;
       final appleMultichannel =
           (PlatformUtil.isTvOS || PlatformUtil.isIosMobile)
-          ? await StorageService.getAppleMultichannelAudio()
+          ? await PlayerSettingsStorage.getAppleMultichannelAudio()
           : false;
       final androidVideoRendererMode =
-          await StorageService.getAndroidVideoRendererMode();
+          await PlayerSettingsStorage.getAndroidVideoRendererMode();
       final contentDisplayMatchMode =
-          await StorageService.getContentDisplayMatchMode();
-      final startPortrait = await StorageService.getPlayerStartPortrait();
-      final subtitleForcedOnly = await StorageService.getSubtitleForcedOnly();
+          await PlayerNetworkStorage.getContentDisplayMatchMode();
+      final startPortrait = await PlayerSettingsStorage.getPlayerStartPortrait();
+      final subtitleForcedOnly = await SubtitleSettingsStorage.getSubtitleForcedOnly();
       final subtitleOnlyForeignAudio =
-          await StorageService.getSubtitleOnlyForeignAudio();
+          await SubtitleSettingsStorage.getSubtitleOnlyForeignAudio();
       final subtitleAutoSync =
-          await StorageService.getSubtitleAutoSyncEnabled();
+          await SubtitleSettingsStorage.getSubtitleAutoSyncEnabled();
       final movieCompletionThreshold =
           await StorageService.getMovieCompletionThreshold();
       final episodeCompletionThreshold =
           await StorageService.getEpisodeCompletionThreshold();
-      final skipSegmentsEnabled = await StorageService.getSkipSegmentsEnabled();
+      final skipSegmentsEnabled = await SkipSegmentsStorage.getSkipSegmentsEnabled();
       final storedSkipSegmentProvider =
-          await StorageService.getSkipSegmentProvider();
+          await SkipSegmentsStorage.getSkipSegmentProvider();
       final skipSegmentProvider =
           SkipSegmentProviders.isAvailable(storedSkipSegmentProvider)
           ? storedSkipSegmentProvider
           : SkipSegmentProviders.auto;
       final defaultSubtitleLanguage =
-          await StorageService.getDefaultSubtitleLanguage();
+          await SubtitleSettingsStorage.getDefaultSubtitleLanguage();
       final defaultAudioLanguage =
-          await StorageService.getDefaultAudioLanguage();
-      final netPatience = await StorageService.getNetworkConnectPatience();
-      final iptvDecoderMode = await StorageService.getIptvDecoderMode();
-      final netBuffer = await StorageService.getNetworkBufferSize();
+          await SubtitleSettingsStorage.getDefaultAudioLanguage();
+      final netPatience = await PlayerNetworkStorage.getNetworkConnectPatience();
+      final iptvDecoderMode = await PlayerNetworkStorage.getIptvDecoderMode();
+      final netBuffer = await PlayerNetworkStorage.getNetworkBufferSize();
 
       // Load subtitle settings
       final subtitleSettings = await SubtitleSettingsService.instance.loadAll();
@@ -738,7 +744,7 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _setDefaultPlayerMode(String mode) async {
     try {
-      await StorageService.setDefaultPlayerMode(mode);
+      await ExternalPlayerStorage.setDefaultPlayerMode(mode);
       setState(() {
         _defaultPlayerMode = mode;
       });
@@ -753,7 +759,7 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _selectPlayer(ExternalPlayer player) async {
     try {
-      await StorageService.setPreferredExternalPlayer(player.storageKey);
+      await ExternalPlayerStorage.setPreferredExternalPlayer(player.storageKey);
       setState(() {
         _selectedPlayer = player;
       });
@@ -779,9 +785,9 @@ class _ExternalPlayerSettingsPageState
         if (path != null) {
           final appName = path.split('/').last.replaceAll('.app', '');
 
-          await StorageService.setCustomExternalPlayerPath(path);
-          await StorageService.setCustomExternalPlayerName(appName);
-          await StorageService.setPreferredExternalPlayer('custom_app');
+          await ExternalPlayerStorage.setCustomExternalPlayerPath(path);
+          await ExternalPlayerStorage.setCustomExternalPlayerName(appName);
+          await ExternalPlayerStorage.setPreferredExternalPlayer('custom_app');
 
           setState(() {
             _customAppPath = path;
@@ -801,11 +807,11 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _clearCustomApp() async {
     try {
-      await StorageService.setCustomExternalPlayerPath(null);
-      await StorageService.setCustomExternalPlayerName(null);
+      await ExternalPlayerStorage.setCustomExternalPlayerPath(null);
+      await ExternalPlayerStorage.setCustomExternalPlayerName(null);
 
       if (_selectedPlayer == ExternalPlayer.customApp) {
-        await StorageService.setPreferredExternalPlayer('system_default');
+        await ExternalPlayerStorage.setPreferredExternalPlayer('system_default');
         setState(() {
           _selectedPlayer = ExternalPlayer.systemDefault;
         });
@@ -836,8 +842,8 @@ class _ExternalPlayerSettingsPageState
     }
 
     try {
-      await StorageService.setCustomExternalPlayerCommand(command);
-      await StorageService.setPreferredExternalPlayer('custom_command');
+      await ExternalPlayerStorage.setCustomExternalPlayerCommand(command);
+      await ExternalPlayerStorage.setPreferredExternalPlayer('custom_command');
 
       setState(() {
         _customCommand = command;
@@ -861,10 +867,10 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _clearCustomCommand() async {
     try {
-      await StorageService.setCustomExternalPlayerCommand(null);
+      await ExternalPlayerStorage.setCustomExternalPlayerCommand(null);
 
       if (_selectedPlayer == ExternalPlayer.customCommand) {
-        await StorageService.setPreferredExternalPlayer('system_default');
+        await ExternalPlayerStorage.setPreferredExternalPlayer('system_default');
         setState(() {
           _selectedPlayer = ExternalPlayer.systemDefault;
         });
@@ -887,7 +893,7 @@ class _ExternalPlayerSettingsPageState
   // iOS external player settings methods
   Future<void> _selectIOSPlayer(iOSExternalPlayer player) async {
     try {
-      await StorageService.setPreferredIOSExternalPlayer(player.storageKey);
+      await ExternalPlayerStorage.setPreferredIOSExternalPlayer(player.storageKey);
       setState(() {
         _selectedIOSPlayer = player;
       });
@@ -912,8 +918,8 @@ class _ExternalPlayerSettingsPageState
     }
 
     try {
-      await StorageService.setIOSCustomSchemeTemplate(scheme);
-      await StorageService.setPreferredIOSExternalPlayer('custom_scheme');
+      await ExternalPlayerStorage.setIOSCustomSchemeTemplate(scheme);
+      await ExternalPlayerStorage.setPreferredIOSExternalPlayer('custom_scheme');
 
       setState(() {
         _iosCustomScheme = scheme;
@@ -937,10 +943,10 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _clearIOSCustomScheme() async {
     try {
-      await StorageService.setIOSCustomSchemeTemplate(null);
+      await ExternalPlayerStorage.setIOSCustomSchemeTemplate(null);
 
       if (_selectedIOSPlayer == iOSExternalPlayer.customScheme) {
-        await StorageService.setPreferredIOSExternalPlayer('vlc');
+        await ExternalPlayerStorage.setPreferredIOSExternalPlayer('vlc');
         setState(() {
           _selectedIOSPlayer = iOSExternalPlayer.vlc;
         });
@@ -963,7 +969,7 @@ class _ExternalPlayerSettingsPageState
   // Linux external player settings methods
   Future<void> _selectLinuxPlayer(LinuxExternalPlayer player) async {
     try {
-      await StorageService.setPreferredLinuxExternalPlayer(player.storageKey);
+      await ExternalPlayerStorage.setPreferredLinuxExternalPlayer(player.storageKey);
       setState(() {
         _selectedLinuxPlayer = player;
       });
@@ -988,8 +994,8 @@ class _ExternalPlayerSettingsPageState
     }
 
     try {
-      await StorageService.setLinuxCustomCommand(command);
-      await StorageService.setPreferredLinuxExternalPlayer('custom_command');
+      await ExternalPlayerStorage.setLinuxCustomCommand(command);
+      await ExternalPlayerStorage.setPreferredLinuxExternalPlayer('custom_command');
 
       setState(() {
         _linuxCustomCommand = command;
@@ -1013,10 +1019,10 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _clearLinuxCustomCommand() async {
     try {
-      await StorageService.setLinuxCustomCommand(null);
+      await ExternalPlayerStorage.setLinuxCustomCommand(null);
 
       if (_selectedLinuxPlayer == LinuxExternalPlayer.customCommand) {
-        await StorageService.setPreferredLinuxExternalPlayer('system_default');
+        await ExternalPlayerStorage.setPreferredLinuxExternalPlayer('system_default');
         setState(() {
           _selectedLinuxPlayer = LinuxExternalPlayer.systemDefault;
         });
@@ -1039,7 +1045,7 @@ class _ExternalPlayerSettingsPageState
   // Windows external player settings methods
   Future<void> _selectWindowsPlayer(WindowsExternalPlayer player) async {
     try {
-      await StorageService.setPreferredWindowsExternalPlayer(player.storageKey);
+      await ExternalPlayerStorage.setPreferredWindowsExternalPlayer(player.storageKey);
       setState(() {
         _selectedWindowsPlayer = player;
       });
@@ -1064,8 +1070,8 @@ class _ExternalPlayerSettingsPageState
     }
 
     try {
-      await StorageService.setWindowsCustomCommand(command);
-      await StorageService.setPreferredWindowsExternalPlayer('custom_command');
+      await ExternalPlayerStorage.setWindowsCustomCommand(command);
+      await ExternalPlayerStorage.setPreferredWindowsExternalPlayer('custom_command');
 
       setState(() {
         _windowsCustomCommand = command;
@@ -1089,10 +1095,10 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _clearWindowsCustomCommand() async {
     try {
-      await StorageService.setWindowsCustomCommand(null);
+      await ExternalPlayerStorage.setWindowsCustomCommand(null);
 
       if (_selectedWindowsPlayer == WindowsExternalPlayer.customCommand) {
-        await StorageService.setPreferredWindowsExternalPlayer(
+        await ExternalPlayerStorage.setPreferredWindowsExternalPlayer(
           'system_default',
         );
         setState(() {
@@ -1117,22 +1123,22 @@ class _ExternalPlayerSettingsPageState
   // DeoVR settings setters
   Future<void> _setVrDefaultScreenType(String screenType) async {
     setState(() => _vrDefaultScreenType = screenType);
-    await StorageService.setQuickPlayVrDefaultScreenType(screenType);
+    await QuickPlayStorage.setQuickPlayVrDefaultScreenType(screenType);
   }
 
   Future<void> _setVrDefaultStereoMode(String stereoMode) async {
     setState(() => _vrDefaultStereoMode = stereoMode);
-    await StorageService.setQuickPlayVrDefaultStereoMode(stereoMode);
+    await QuickPlayStorage.setQuickPlayVrDefaultStereoMode(stereoMode);
   }
 
   Future<void> _setVrAutoDetectFormat(bool autoDetect) async {
     setState(() => _vrAutoDetectFormat = autoDetect);
-    await StorageService.setQuickPlayVrAutoDetectFormat(autoDetect);
+    await QuickPlayStorage.setQuickPlayVrAutoDetectFormat(autoDetect);
   }
 
   Future<void> _setVrShowDialog(bool showDialog) async {
     setState(() => _vrShowDialog = showDialog);
-    await StorageService.setQuickPlayVrShowDialog(showDialog);
+    await QuickPlayStorage.setQuickPlayVrShowDialog(showDialog);
   }
 
   // Debrify Player settings setters
@@ -1140,82 +1146,82 @@ class _ExternalPlayerSettingsPageState
     setState(() => _defaultAspectIndex = index);
     // Use platform-specific storage key
     if (_isAndroidTv) {
-      await StorageService.setPlayerDefaultAspectIndexTv(index);
+      await PlayerSettingsStorage.setPlayerDefaultAspectIndexTv(index);
     } else {
-      await StorageService.setPlayerDefaultAspectIndex(index);
+      await PlayerSettingsStorage.setPlayerDefaultAspectIndex(index);
     }
   }
 
   Future<void> _setNightModeIndex(int index) async {
     setState(() => _nightModeIndex = index);
-    await StorageService.setPlayerNightModeIndex(index);
+    await PlayerSettingsStorage.setPlayerNightModeIndex(index);
   }
 
   Future<void> _setSystemAudioEffects(bool enabled) async {
     setState(() => _systemAudioEffects = enabled);
-    await StorageService.setPlayerSystemAudioEffects(enabled);
+    await PlayerSettingsStorage.setPlayerSystemAudioEffects(enabled);
   }
 
   Future<void> _setTvosForceSoftwareDecode(bool enabled) async {
     setState(() => _tvosForceSoftwareDecode = enabled);
-    await StorageService.setTvosForceSoftwareDecode(enabled);
+    await PlayerSettingsStorage.setTvosForceSoftwareDecode(enabled);
   }
 
   Future<void> _setTvosForceStereo(bool enabled) async {
     setState(() => _tvosForceStereo = enabled);
-    await StorageService.setTvosForceStereoAudio(enabled);
+    await PlayerSettingsStorage.setTvosForceStereoAudio(enabled);
   }
 
   Future<void> _setTvosLegacyAudioOutput(bool enabled) async {
     setState(() => _tvosLegacyAudioOutput = enabled);
-    await StorageService.setTvosLegacyAudioOutput(enabled);
+    await PlayerSettingsStorage.setTvosLegacyAudioOutput(enabled);
   }
 
   Future<void> _setAudioPassthrough(bool enabled) async {
     setState(() => _audioPassthrough = enabled);
-    await StorageService.setAudioPassthroughEnabled(enabled);
+    await PlayerSettingsStorage.setAudioPassthroughEnabled(enabled);
   }
 
   Future<void> _setAppleMultichannel(bool enabled) async {
     setState(() => _appleMultichannel = enabled);
-    await StorageService.setAppleMultichannelAudio(enabled);
+    await PlayerSettingsStorage.setAppleMultichannelAudio(enabled);
   }
 
   Future<void> _setAndroidVideoRendererMode(String storageKey) async {
     final mode = AndroidVideoRendererMode.fromStorage(storageKey);
     setState(() => _androidVideoRendererMode = mode);
-    await StorageService.setAndroidVideoRendererMode(mode);
+    await PlayerSettingsStorage.setAndroidVideoRendererMode(mode);
   }
 
   Future<void> _setContentDisplayMatchMode(String storageKey) async {
     final mode = ContentDisplayMatchMode.fromStorage(storageKey);
     setState(() => _contentDisplayMatchMode = mode);
-    await StorageService.setContentDisplayMatchMode(mode);
+    await PlayerNetworkStorage.setContentDisplayMatchMode(mode);
   }
 
   Future<void> _setIptvDecoderMode(String value) async {
     setState(() => _iptvDecoderMode = value);
-    await StorageService.setIptvDecoderMode(value);
+    await PlayerNetworkStorage.setIptvDecoderMode(value);
   }
 
   Future<void> _setStartPortrait(bool enabled) async {
     setState(() => _startPortrait = enabled);
-    await StorageService.setPlayerStartPortrait(enabled);
+    await PlayerSettingsStorage.setPlayerStartPortrait(enabled);
   }
 
   Future<void> _setSubtitleOnlyForeignAudio(bool enabled) async {
     setState(() => _subtitleOnlyForeignAudio = enabled);
-    await StorageService.setSubtitleOnlyForeignAudio(enabled);
+    await SubtitleSettingsStorage.setSubtitleOnlyForeignAudio(enabled);
   }
 
   Future<void> _setSubtitleForcedOnly(bool enabled) async {
     setState(() => _subtitleForcedOnly = enabled);
-    await StorageService.setSubtitleForcedOnly(enabled);
+    await SubtitleSettingsStorage.setSubtitleForcedOnly(enabled);
   }
 
   Future<void> _setSubtitleAutoSync(bool enabled) async {
     setState(() => _subtitleAutoSync = enabled);
-    await StorageService.setSubtitleAutoSyncEnabled(enabled);
+    await SubtitleSettingsStorage.setSubtitleAutoSyncEnabled(enabled);
   }
 
   List<int> get _completionThresholdOptions =>
@@ -1244,32 +1250,32 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _setSkipSegmentsEnabled(bool enabled) async {
     setState(() => _skipSegmentsEnabled = enabled);
-    await StorageService.setSkipSegmentsEnabled(enabled);
+    await SkipSegmentsStorage.setSkipSegmentsEnabled(enabled);
   }
 
   Future<void> _setSkipSegmentProvider(String provider) async {
     setState(() => _skipSegmentProvider = provider);
-    await StorageService.setSkipSegmentProvider(provider);
+    await SkipSegmentsStorage.setSkipSegmentProvider(provider);
   }
 
   Future<void> _setNetPatience(String value) async {
     setState(() => _netPatience = value);
-    await StorageService.setNetworkConnectPatience(value);
+    await PlayerNetworkStorage.setNetworkConnectPatience(value);
   }
 
   Future<void> _setNetBuffer(String value) async {
     setState(() => _netBuffer = value);
-    await StorageService.setNetworkBufferSize(value);
+    await PlayerNetworkStorage.setNetworkBufferSize(value);
   }
 
   Future<void> _setDefaultSubtitleLanguage(String? languageCode) async {
     setState(() => _defaultSubtitleLanguage = languageCode);
-    await StorageService.setDefaultSubtitleLanguage(languageCode);
+    await SubtitleSettingsStorage.setDefaultSubtitleLanguage(languageCode);
   }
 
   Future<void> _setDefaultAudioLanguage(String? languageCode) async {
     setState(() => _defaultAudioLanguage = languageCode);
-    await StorageService.setDefaultAudioLanguage(languageCode);
+    await SubtitleSettingsStorage.setDefaultAudioLanguage(languageCode);
   }
 
   Future<void> _setSubtitleSizeIndex(int index) async {

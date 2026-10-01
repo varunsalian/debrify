@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:debrify/services/storage/external_player_storage.dart';
 import '../utils/platform_util.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +12,6 @@ export '../models/external_player.dart';
 export '../models/ios_external_player.dart';
 export '../models/linux_external_player.dart';
 export '../models/windows_external_player.dart';
-import 'storage_service.dart';
 
 /// Result of launching an external player
 class ExternalPlayerLaunchResult {
@@ -189,7 +189,7 @@ class ExternalPlayerService {
 
     // Get user's preferred player
     final preferredPlayerKey =
-        await StorageService.getPreferredExternalPlayer();
+        await ExternalPlayerStorage.getPreferredExternalPlayer();
     if (canContinue?.call() == false) {
       return ExternalPlayerLaunchResult.failed('Playback launch retired');
     }
@@ -416,7 +416,7 @@ class ExternalPlayerService {
     if (canContinue?.call() == false) {
       return ExternalPlayerLaunchResult.failed('Playback launch retired');
     }
-    final customPath = await StorageService.getCustomExternalPlayerPath();
+    final customPath = await ExternalPlayerStorage.getCustomExternalPlayerPath();
     if (canContinue?.call() == false) {
       return ExternalPlayerLaunchResult.failed('Playback launch retired');
     }
@@ -462,7 +462,7 @@ class ExternalPlayerService {
       return ExternalPlayerLaunchResult.failed('Playback launch retired');
     }
     final commandTemplate =
-        await StorageService.getCustomExternalPlayerCommand();
+        await ExternalPlayerStorage.getCustomExternalPlayerCommand();
     if (canContinue?.call() == false) {
       return ExternalPlayerLaunchResult.failed('Playback launch retired');
     }
@@ -650,7 +650,7 @@ class ExternalPlayerService {
 
     // Get user's preferred iOS player
     final preferredPlayerKey =
-        await StorageService.getPreferredIOSExternalPlayer();
+        await ExternalPlayerStorage.getPreferredIOSExternalPlayer();
     if (canContinue?.call() == false) {
       return iOSExternalPlayerLaunchResult.failed('Playback launch retired');
     }
@@ -691,7 +691,7 @@ class ExternalPlayerService {
       if (player == iOSExternalPlayer.customScheme) {
         // Use custom URL scheme template
         final customTemplate =
-            await StorageService.getIOSCustomSchemeTemplate();
+            await ExternalPlayerStorage.getIOSCustomSchemeTemplate();
         if (canContinue?.call() == false) {
           return iOSExternalPlayerLaunchResult.failed(
             'Playback launch retired',
@@ -889,7 +889,7 @@ extension LinuxExternalPlayerServiceExtension on ExternalPlayerService {
 
     // Get user's preferred Linux player
     final preferredPlayerKey =
-        await StorageService.getPreferredLinuxExternalPlayer();
+        await ExternalPlayerStorage.getPreferredLinuxExternalPlayer();
     if (canContinue?.call() == false) {
       return LinuxExternalPlayerLaunchResult.failed('Playback launch retired');
     }
@@ -944,7 +944,7 @@ extension LinuxExternalPlayerServiceExtension on ExternalPlayerService {
 
       if (player == LinuxExternalPlayer.customCommand) {
         // Use custom command template
-        final customTemplate = await StorageService.getLinuxCustomCommand();
+        final customTemplate = await ExternalPlayerStorage.getLinuxCustomCommand();
         if (canContinue?.call() == false) {
           return LinuxExternalPlayerLaunchResult.failed(
             'Playback launch retired',
@@ -1162,7 +1162,7 @@ extension WindowsExternalPlayerServiceExtension on ExternalPlayerService {
 
     // Get user's preferred Windows player
     final preferredPlayerKey =
-        await StorageService.getPreferredWindowsExternalPlayer();
+        await ExternalPlayerStorage.getPreferredWindowsExternalPlayer();
     if (canContinue?.call() == false) {
       return WindowsExternalPlayerLaunchResult.failed(
         'Playback launch retired',
@@ -1222,7 +1222,7 @@ extension WindowsExternalPlayerServiceExtension on ExternalPlayerService {
 
       if (player == WindowsExternalPlayer.customCommand) {
         // Use custom command template
-        final customTemplate = await StorageService.getWindowsCustomCommand();
+        final customTemplate = await ExternalPlayerStorage.getWindowsCustomCommand();
         if (canContinue?.call() == false) {
           return WindowsExternalPlayerLaunchResult.failed(
             'Playback launch retired',

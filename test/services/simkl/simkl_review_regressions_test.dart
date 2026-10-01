@@ -6,6 +6,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/series_progress_reset_service.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,7 +34,7 @@ void main() {
     test(
       'remove $type clears sparse playback before its library alias disappears',
       () async {
-        await StorageService.setSimklAccessToken('synthetic');
+        await SimklStorage.setSimklAccessToken('synthetic');
         var inLibrary = true;
         var paused = true;
         final writes = <String>[];
@@ -117,7 +118,7 @@ void main() {
 
   for (final failure in ['library', 'playback', 'delete']) {
     test('$failure failure retains the library entry for retry', () async {
-      await StorageService.setSimklAccessToken('synthetic');
+      await SimklStorage.setSimklAccessToken('synthetic');
       var removed = false;
       await http.runWithClient(
         () async {
@@ -278,7 +279,7 @@ void main() {
   test(
     'movie progress keys use ordinary IDs at Simkl and addon boundaries',
     () async {
-      await StorageService.setSimklAccessToken('synthetic');
+      await SimklStorage.setSimklAccessToken('synthetic');
       expect(MediaIdentity.apiIds(movie.progressId!), {'tmdb': 42});
       await http.runWithClient(
         () async {

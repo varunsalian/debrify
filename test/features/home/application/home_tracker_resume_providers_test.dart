@@ -6,7 +6,7 @@ import 'package:debrify/features/home/models/home_catalog_session.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,7 +38,7 @@ void main() {
     ProfileRuntime.initializeLegacy();
     SharedPreferences.setMockInitialValues({});
     SecretVault.debugReset(deviceIdOverride: 'tracker-resume-fixture');
-    await StorageService.setTraktAccessToken('fixture-token');
+    await TraktStorage.setTraktAccessToken('fixture-token');
     TraktService.instance.resetProfileScope();
   });
   tearDown(() {

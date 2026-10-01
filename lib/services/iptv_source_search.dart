@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../models/advanced_search_selection.dart';
@@ -487,7 +488,8 @@ class IptvSourceSearch {
     final stopwatch = Stopwatch()..start();
     final scope = ProfileRuntime.scope.value;
     try {
-      final savedAudioLanguage = await StorageService.getDefaultAudioLanguage();
+      final savedAudioLanguage =
+          await SubtitleSettingsStorage.getDefaultAudioLanguage();
       final preferredAudioLanguage =
           savedAudioLanguage?.trim().toLowerCase().isNotEmpty == true
           ? savedAudioLanguage!.trim().toLowerCase()

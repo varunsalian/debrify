@@ -1,7 +1,7 @@
+import 'package:debrify/services/storage/torrent_search_storage.dart';
 import '../../../models/torrent_filter_state.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 import 'keyword_defaults_repository.dart';
 
 /// Reads the existing five preference lists without changing their keys,
@@ -17,11 +17,11 @@ class StoredKeywordDefaultsRepository implements KeywordDefaultsRepository {
   Future<TorrentFilterState> load() async {
     if (!isCurrent) return const TorrentFilterState.empty();
     Future<TorrentFilterState> read() async {
-      final qualities = await StorageService.getDefaultFilterQualities();
-      final sources = await StorageService.getDefaultFilterRipSources();
-      final languages = await StorageService.getDefaultFilterLanguages();
-      final sizes = await StorageService.getDefaultFilterSizes();
-      final ranges = await StorageService.getDefaultFilterDynamicRanges();
+      final qualities = await TorrentSearchStorage.getDefaultFilterQualities();
+      final sources = await TorrentSearchStorage.getDefaultFilterRipSources();
+      final languages = await TorrentSearchStorage.getDefaultFilterLanguages();
+      final sizes = await TorrentSearchStorage.getDefaultFilterSizes();
+      final ranges = await TorrentSearchStorage.getDefaultFilterDynamicRanges();
       if (!isCurrent) return const TorrentFilterState.empty();
       return TorrentFilterState(
         qualities: _parse(qualities, QualityTier.values),

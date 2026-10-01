@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
@@ -16,7 +17,6 @@ import 'package:debrify/services/profiles/profile_credential_facade.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/backup_restore_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -129,21 +129,21 @@ void main() {
         }),
         isTrue,
       );
-      expect(await StorageService.getTraktAccessToken(), tokens.accessToken);
-      expect(await StorageService.getTraktRefreshToken(), tokens.refreshToken);
-      expect(await StorageService.getTraktTokenExpiry(), tokens.expiryMs);
+      expect(await TraktStorage.getTraktAccessToken(), tokens.accessToken);
+      expect(await TraktStorage.getTraktRefreshToken(), tokens.refreshToken);
+      expect(await TraktStorage.getTraktTokenExpiry(), tokens.expiryMs);
       await context.validate(registry);
       await expectLater(
-        StorageService.setTraktAccessToken('other-account'),
+        TraktStorage.setTraktAccessToken('other-account'),
         throwsA(isA<ResourceAuthorizationException>()),
       );
       await registry.setActiveProfile(adminId);
       ProfileRuntime.publish(
         ProfileScope(profileId: adminId, dataGeneration: 1, sessionEpoch: 3),
       );
-      expect(await StorageService.getTraktAccessToken(), tokens.accessToken);
-      expect(await StorageService.getTraktRefreshToken(), tokens.refreshToken);
-      expect(await StorageService.getTraktTokenExpiry(), tokens.expiryMs);
+      expect(await TraktStorage.getTraktAccessToken(), tokens.accessToken);
+      expect(await TraktStorage.getTraktRefreshToken(), tokens.refreshToken);
+      expect(await TraktStorage.getTraktTokenExpiry(), tokens.expiryMs);
       expect(
         (await registry.getResource(resource.id))!.ownerProfileId,
         adminId,
@@ -178,7 +178,7 @@ void main() {
   test('disconnect during exchange cannot publish rotated tokens', () async {
     final resource = await shareTrakt();
     final future = ProfileCredentialFacade.refreshTraktSession((token) async {
-      await StorageService.clearTraktAuth();
+      await TraktStorage.clearTraktAuth();
       return tokens;
     });
     await expectLater(
@@ -189,8 +189,8 @@ void main() {
     ProfileRuntime.publish(
       ProfileScope(profileId: adminId, dataGeneration: 1, sessionEpoch: 3),
     );
-    expect(await StorageService.getTraktAccessToken(), 'access');
-    expect(await StorageService.getTraktRefreshToken(), 'refresh');
+    expect(await TraktStorage.getTraktAccessToken(), 'access');
+    expect(await TraktStorage.getTraktRefreshToken(), 'refresh');
     expect(await registry.getGrant(memberId, resource.id), isNull);
   });
 
@@ -216,8 +216,8 @@ void main() {
       expect(await TraktService.instance.isAuthenticated(), isTrue);
     }, () => client);
     expect(calls, 1);
-    expect(await StorageService.getTraktAccessToken(), 'http-access');
-    expect(await StorageService.getTraktRefreshToken(), 'http-refresh');
+    expect(await TraktStorage.getTraktAccessToken(), 'http-access');
+    expect(await TraktStorage.getTraktRefreshToken(), 'http-refresh');
   });
 
   test('binding removed at commit boundary rejects token write', () async {
@@ -234,8 +234,8 @@ void main() {
     ProfileRuntime.publish(
       ProfileScope(profileId: adminId, dataGeneration: 1, sessionEpoch: 3),
     );
-    expect(await StorageService.getTraktAccessToken(), 'access');
-    expect(await StorageService.getTraktRefreshToken(), 'refresh');
+    expect(await TraktStorage.getTraktAccessToken(), 'access');
+    expect(await TraktStorage.getTraktRefreshToken(), 'refresh');
   });
 
   test('failed exchange keeps the complete previous session', () async {
@@ -244,29 +244,26 @@ void main() {
       await ProfileCredentialFacade.refreshTraktSession((_) async => null),
       isFalse,
     );
-    expect(await StorageService.getTraktAccessToken(), 'access');
-    expect(await StorageService.getTraktRefreshToken(), 'refresh');
+    expect(await TraktStorage.getTraktAccessToken(), 'access');
+    expect(await TraktStorage.getTraktRefreshToken(), 'refresh');
   });
 
   test(
     'scalar expiry replacement updates sealed expiry and preserves tokens',
     () async {
       await createTrakt();
-      await StorageService.setTraktAccessToken('replacement-access');
-      await StorageService.setTraktRefreshToken('replacement-refresh');
-      await StorageService.setTraktTokenExpiry(tokens.expiryMs);
-      expect(await StorageService.getTraktTokenExpiry(), tokens.expiryMs);
-      expect(await StorageService.getTraktAccessToken(), 'replacement-access');
-      expect(
-        await StorageService.getTraktRefreshToken(),
-        'replacement-refresh',
-      );
+      await TraktStorage.setTraktAccessToken('replacement-access');
+      await TraktStorage.setTraktRefreshToken('replacement-refresh');
+      await TraktStorage.setTraktTokenExpiry(tokens.expiryMs);
+      expect(await TraktStorage.getTraktTokenExpiry(), tokens.expiryMs);
+      expect(await TraktStorage.getTraktAccessToken(), 'replacement-access');
+      expect(await TraktStorage.getTraktRefreshToken(), 'replacement-refresh');
     },
   );
 
   for (final expiry in <int?>[9000000000000, 1, null]) {
     test('backup replaces an existing sealed expiry with $expiry', () async {
-      await StorageService.setTraktSession(
+      await TraktStorage.setTraktSession(
         accessToken: 'old-access',
         refreshToken: 'old-refresh',
         expiryMs: 5000000000000,
@@ -282,36 +279,36 @@ void main() {
       }, refreshEngineRuntime: false);
       expect(report.errors, isEmpty);
       expect(report.trakt, isTrue);
-      expect(await StorageService.getTraktAccessToken(), 'import-access');
-      expect(await StorageService.getTraktRefreshToken(), 'import-refresh');
-      expect(await StorageService.getTraktTokenExpiry(), expiry);
+      expect(await TraktStorage.getTraktAccessToken(), 'import-access');
+      expect(await TraktStorage.getTraktRefreshToken(), 'import-refresh');
+      expect(await TraktStorage.getTraktTokenExpiry(), expiry);
     });
   }
 
   test('use-only borrower cannot edit shared expiry', () async {
     await shareTrakt();
     await expectLater(
-      StorageService.setTraktTokenExpiry(tokens.expiryMs),
+      TraktStorage.setTraktTokenExpiry(tokens.expiryMs),
       throwsA(isA<ResourceAuthorizationException>()),
     );
-    expect(await StorageService.getTraktTokenExpiry(), 1);
+    expect(await TraktStorage.getTraktTokenExpiry(), 1);
   });
 
   test('legacy session replacement clears omitted expiry', () async {
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeLegacy();
-    await StorageService.setTraktSession(
+    await TraktStorage.setTraktSession(
       accessToken: 'old',
       refreshToken: 'old-refresh',
       expiryMs: tokens.expiryMs,
     );
-    await StorageService.setTraktSession(
+    await TraktStorage.setTraktSession(
       accessToken: 'replacement',
       refreshToken: 'replacement-refresh',
       expiryMs: null,
     );
-    expect(await StorageService.getTraktTokenExpiry(), isNull);
-    expect(await StorageService.getTraktAccessToken(), 'replacement');
+    expect(await TraktStorage.getTraktTokenExpiry(), isNull);
+    expect(await TraktStorage.getTraktAccessToken(), 'replacement');
   });
 
   test('sign-in stores one owner session with shared expiry', () async {
@@ -323,8 +320,8 @@ void main() {
       ),
       isTrue,
     );
-    expect(await StorageService.getTraktTokenExpiry(), tokens.expiryMs);
-    expect(await StorageService.getTraktRefreshToken(), tokens.refreshToken);
+    expect(await TraktStorage.getTraktTokenExpiry(), tokens.expiryMs);
+    expect(await TraktStorage.getTraktRefreshToken(), tokens.refreshToken);
     expect(
       await ProfileCredentialFacade.storeTraktSession(
         accessToken: 'replacement',
@@ -333,7 +330,7 @@ void main() {
       ),
       isTrue,
     );
-    expect(await StorageService.getTraktAccessToken(), 'replacement');
-    expect(await StorageService.getTraktTokenExpiry(), 12345);
+    expect(await TraktStorage.getTraktAccessToken(), 'replacement');
+    expect(await TraktStorage.getTraktTokenExpiry(), 12345);
   });
 }

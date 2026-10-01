@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/screens/catalog_item_detail_screen.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/widgets/trakt/trakt_menu_helpers.dart';
@@ -79,7 +79,7 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    await StorageService.setQuickPlayRules(
+    await QuickPlayStorage.setQuickPlayRules(
       QuickPlayRules.debrifyDefault(
         isMovie: false,
       ).copyWith(preferSeriesPacks: false),

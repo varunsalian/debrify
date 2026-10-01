@@ -1,4 +1,8 @@
 import 'package:debrify/services/profiles/profile_preferences.dart';
+import 'package:debrify/services/storage/mdblist_storage.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/watched_action_coordinator.dart';
 import 'package:debrify/models/custom_series_identity.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -10,7 +14,6 @@ import 'package:debrify/services/profile_tracker_title_actions.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/tracker_title_actions.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
@@ -52,15 +55,15 @@ void main() {
     ProfileRuntime.initializeLegacy();
     SecretVault.debugReset(deviceIdOverride: 'title-actions');
     SharedPreferences.setMockInitialValues({});
-    await StorageService.setTraktSession(
+    await TraktStorage.setTraktSession(
       accessToken: 'fixture',
       refreshToken: 'refresh',
       expiryMs: 9000000000000,
     );
-    await StorageService.setSimklAccessToken('fixture');
-    await StorageService.saveMdblistApiKey('fixture');
-    await StorageService.setTrackingScrobbleTargets({TrackingSource.local});
-    await StorageService.setHomeTickSources({TrackingSource.local});
+    await SimklStorage.setSimklAccessToken('fixture');
+    await MdblistStorage.saveMdblistApiKey('fixture');
+    await TrackingSourceStorage.setTrackingScrobbleTargets({TrackingSource.local});
+    await TrackingSourceStorage.setHomeTickSources({TrackingSource.local});
     TraktService.instance.resetProfileScope();
     SimklService.instance.resetProfileScope();
     MdblistService.instance.resetProfileScope();

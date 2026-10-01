@@ -1,10 +1,10 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/torrent_search_storage.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../services/profiles/profile_preferences.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/stremio_service.dart';
 import '../../../services/watched_filter.dart';
 import '../models/catalog_search_row.dart';
@@ -38,7 +38,7 @@ class StremioCatalogSearchRepository implements CatalogSearchRepository {
 
   @override
   Future<Set<String>> readDisabledAddons() => isCurrent
-      ? _inScope(StorageService.getCatalogSearchDisabledAddons)
+      ? _inScope(TorrentSearchStorage.getCatalogSearchDisabledAddons)
       : Future.value(const {});
 
   @override

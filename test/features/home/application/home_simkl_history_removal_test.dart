@@ -2,6 +2,7 @@ import 'package:debrify/features/home/application/home_playback_providers.dart';
 import 'package:debrify/features/home/data/home_catalog_playback_readers.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
+import 'package:debrify/services/storage/simkl_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
@@ -503,7 +504,7 @@ void main() {
       ProfileRuntime.debugReset();
       ProfileRuntime.initializeLegacy();
       SharedPreferences.setMockInitialValues({});
-      await StorageService.setSimklAccessToken('legacy-token');
+      await SimklStorage.setSimklAccessToken('legacy-token');
       final readers = HomeCatalogPlaybackReaders(
         ProfileSessionMemory.captureOwner(),
       );

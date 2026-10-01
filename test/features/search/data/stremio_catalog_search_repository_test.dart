@@ -5,12 +5,12 @@ import 'package:debrify/features/search/data/stremio_catalog_search_repository.d
 import 'package:debrify/features/search/presentation/catalog_search_projection.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/hide_watched_prefs.dart';
+import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:debrify/services/watched_status_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -152,7 +152,7 @@ void main() {
       final saving = repository.writeDisabledAddons(disabled);
       disabled.add('two');
       await saving;
-      expect(await StorageService.getCatalogSearchDisabledAddons(), {'one'});
+      expect(await TorrentSearchStorage.getCatalogSearchDisabledAddons(), {'one'});
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString(key), '["one"]');
       await repository.writeDisabledAddons({});

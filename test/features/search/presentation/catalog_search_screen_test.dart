@@ -5,6 +5,7 @@ import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -226,7 +227,7 @@ void main() {
       await complete(tester, 'fast', 'Result');
       await complete(tester, 'slow', 'Result');
       await drive(tester, () => tester.tap(find.text('Disable all')));
-      expect(await StorageService.getCatalogSearchDisabledAddons(), {
+      expect(await TorrentSearchStorage.getCatalogSearchDisabledAddons(), {
         'search-test',
       });
       await drive(tester, () => tester.tap(find.text('Done')));

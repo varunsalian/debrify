@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/player_network_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -5,7 +6,6 @@ import 'package:debrify/models/content_display_match_mode.dart';
 import 'package:debrify/services/profiles/profile_creation_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/sanitized_profile_preferences.dart';
-import 'package:debrify/services/storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +16,7 @@ void main() {
 
   test('unset and unknown values preserve system-managed behavior', () async {
     expect(
-      await StorageService.getContentDisplayMatchMode(),
+      await PlayerNetworkStorage.getContentDisplayMatchMode(),
       ContentDisplayMatchMode.systemDefault,
     );
 
@@ -24,15 +24,15 @@ void main() {
       'content_display_match_mode': 'future_mode',
     });
     expect(
-      await StorageService.getContentDisplayMatchMode(),
+      await PlayerNetworkStorage.getContentDisplayMatchMode(),
       ContentDisplayMatchMode.systemDefault,
     );
   });
 
   test('every mode round-trips through profile storage', () async {
     for (final mode in ContentDisplayMatchMode.values) {
-      await StorageService.setContentDisplayMatchMode(mode);
-      expect(await StorageService.getContentDisplayMatchMode(), mode);
+      await PlayerNetworkStorage.setContentDisplayMatchMode(mode);
+      expect(await PlayerNetworkStorage.getContentDisplayMatchMode(), mode);
     }
   });
 

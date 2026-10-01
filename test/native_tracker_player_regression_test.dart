@@ -8,7 +8,10 @@ import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
+import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
@@ -28,12 +31,12 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     SecretVault.debugReset(deviceIdOverride: 'native-player-review-test');
     TraktService.instance.resetProfileScope();
-    await StorageService.setTraktSession(
+    await TraktStorage.setTraktSession(
       accessToken: 'test-access',
       refreshToken: 'test-refresh',
       expiryMs: 9000000000000,
     );
-    await StorageService.setTrackingScrobbleTargets({
+    await TrackingSourceStorage.setTrackingScrobbleTargets({
       TrackingSource.local,
       TrackingSource.trakt,
       TrackingSource.mdblist,
@@ -65,7 +68,7 @@ void main() {
           await StorageService.setMovieCompletionThreshold(threshold);
           // Local mode also covers the existing IMDb local + remote combination.
           if (id.startsWith('tt')) {
-            await StorageService.setWatchProgressSource(
+            await TrackingSourceStorage.setWatchProgressSource(
               WatchProgressSource.local,
             );
           }
@@ -366,9 +369,9 @@ void main() {
       test(
         '$id $mode keeps S4E6 and local position without borrowing US history',
         () async {
-          await StorageService.setWatchProgressSource(mode);
+          await TrackingSourceStorage.setWatchProgressSource(mode);
           if (mode == WatchProgressSource.mdblist) {
-            await StorageService.saveMdblistApiKey('test-key');
+            await MdblistStorage.saveMdblistApiKey('test-key');
           }
           await StorageService.saveSeriesPlaybackState(
             seriesTitle: 'Big Brother',

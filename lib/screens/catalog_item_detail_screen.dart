@@ -1,3 +1,5 @@
+import 'package:debrify/services/storage/quick_play_storage.dart';
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import '../services/metadata_provider_service.dart';
 import '../widgets/metadata_franchise_rail.dart';
 import '../widgets/metadata_title_navigation.dart';
@@ -231,7 +233,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   @override
   void initState() {
     super.initState();
-    StorageService.trackingSourceRevision.addListener(_onMovieProgressPolicyChanged);
+    TrackingSourceStorage.trackingSourceRevision.addListener(_onMovieProgressPolicyChanged);
     StorageService.movieFinishedRevision.addListener(_loadLocalMovieFinished);
     MdblistService.instance.watchedRevision.addListener(_loadLocalMovieFinished);
     AnalyticsService.screenView('catalog_detail');
@@ -634,7 +636,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   @override
   void dispose() {
-    StorageService.trackingSourceRevision.removeListener(_onMovieProgressPolicyChanged);
+    TrackingSourceStorage.trackingSourceRevision.removeListener(_onMovieProgressPolicyChanged);
     StorageService.movieFinishedRevision.removeListener(_loadLocalMovieFinished);
     MdblistService.instance.watchedRevision.removeListener(_loadLocalMovieFinished);
     appRouteObserver.unsubscribe(this);
@@ -1834,7 +1836,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final openEpisode = widget.onBrowsePrimaryEpisodeSources;
     if (openEpisode == null) return;
 
-    final rules = await StorageService.getQuickPlayRules(isMovie: false);
+    final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
     if (!mounted) return;
 
     final canBrowsePacks =

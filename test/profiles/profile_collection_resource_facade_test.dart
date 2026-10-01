@@ -18,6 +18,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/pikpak_api_service.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/screens/settings/provider_settings_page.dart';
@@ -1048,14 +1049,14 @@ void main() {
       baseUrl: 'https://prowlarr.invalid',
       apiKey: 'sentinel-key',
     );
-    final created = (await StorageService.setIndexerManagerConfigs(
+    final created = (await TorrentProviderStorage.setIndexerManagerConfigs(
       const <IndexerManagerConfig>[input],
     )).single;
     expect(created.id, created.connectionResourceId);
     expect(created.connectionResourceRevision, isNotNull);
 
     final updated = created.copyWith(maxResults: 100);
-    final canonical = (await StorageService.setIndexerManagerConfigs(
+    final canonical = (await TorrentProviderStorage.setIndexerManagerConfigs(
       <IndexerManagerConfig>[updated],
     )).single;
     expect(canonical.connectionResourceId, created.connectionResourceId);

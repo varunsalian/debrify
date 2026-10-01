@@ -1,5 +1,5 @@
 import 'package:debrify/models/android_video_renderer_mode.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,15 +35,15 @@ void main() {
     'storage defaults to GPU MediaCodec and round-trips a selected mode',
     () async {
       expect(
-        await StorageService.getAndroidVideoRendererMode(),
+        await PlayerSettingsStorage.getAndroidVideoRendererMode(),
         AndroidVideoRendererMode.directMediaCodec,
       );
 
-      await StorageService.setAndroidVideoRendererMode(
+      await PlayerSettingsStorage.setAndroidVideoRendererMode(
         AndroidVideoRendererMode.directMediaCodec,
       );
       expect(
-        await StorageService.getAndroidVideoRendererMode(),
+        await PlayerSettingsStorage.getAndroidVideoRendererMode(),
         AndroidVideoRendererMode.directMediaCodec,
       );
     },
@@ -55,15 +55,15 @@ void main() {
     });
 
     expect(
-      await StorageService.getAndroidVideoRendererMode(),
+      await PlayerSettingsStorage.getAndroidVideoRendererMode(),
       AndroidVideoRendererMode.directMediaCodec,
     );
 
-    await StorageService.setAndroidVideoRendererMode(
+    await PlayerSettingsStorage.setAndroidVideoRendererMode(
       AndroidVideoRendererMode.directSurface,
     );
     expect(
-      await StorageService.getAndroidVideoRendererMode(),
+      await PlayerSettingsStorage.getAndroidVideoRendererMode(),
       AndroidVideoRendererMode.directSurface,
     );
   });
@@ -74,7 +74,7 @@ void main() {
     });
 
     expect(
-      await StorageService.getAndroidVideoRendererMode(),
+      await PlayerSettingsStorage.getAndroidVideoRendererMode(),
       AndroidVideoRendererMode.automatic,
     );
   });

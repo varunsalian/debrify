@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/simkl/simkl_item_transformer.dart';
@@ -56,7 +57,7 @@ void main() {
     tester,
   ) async {
     await StorageService.markMovieAsFinished('tt-home-mask');
-    await StorageService.setHomeTickSources(<TrackingSource>{});
+    await TrackingSourceStorage.setHomeTickSources(<TrackingSource>{});
 
     await tester.pumpWidget(
       const MaterialApp(
@@ -75,7 +76,7 @@ void main() {
     // Detail/search consumers remain merged; only the Home instance is masked.
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
 
-    await StorageService.setHomeTickSources(<TrackingSource>{
+    await TrackingSourceStorage.setHomeTickSources(<TrackingSource>{
       TrackingSource.local,
     });
     await tester.pumpAndSettle();

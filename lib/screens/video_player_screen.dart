@@ -1,7 +1,13 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/player_network_storage.dart';
+import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/skip_segments_storage.dart';
+import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/track_preferences_storage.dart';
 import '../models/source_playlist_resolver.dart';
 import '../widgets/playback_startup_view.dart';
 import '../utils/episode_playback_request.dart';
@@ -1538,7 +1544,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// pref there would still flip the rotate button's label to "Landscape" over
   /// a window that is already wide, describing a rotation that can't happen.
   bool get _startsInPortrait =>
-      PlatformUtil.isPhone && StorageService.playerStartPortraitCached;
+      PlatformUtil.isPhone && PlayerSettingsStorage.playerStartPortraitCached;
 
   // Rainbow next animation
   late AnimationController _rainbowController;
@@ -1775,8 +1781,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _loadSkipSegmentSettings() async {
     final values = await Future.wait<Object>([
-      StorageService.getSkipSegmentsEnabled(),
-      StorageService.getSkipSegmentProvider(),
+      SkipSegmentsStorage.getSkipSegmentsEnabled(),
+      SkipSegmentsStorage.getSkipSegmentProvider(),
     ]);
     if (!mounted) return;
 
@@ -3102,7 +3108,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _applyPassthroughFlip(bool enabled) async {
     _audioPassthroughEnabled = enabled;
     try {
-      await StorageService.setAudioPassthroughEnabled(enabled);
+      await PlayerSettingsStorage.setAudioPassthroughEnabled(enabled);
       // An audio filter would force compressed passthrough formats through a
       // PCM decoder. Remove the passive analysis chain before the aid cycle;
       // when passthrough is disabled, re-arm only after PCM output is restored.
@@ -3163,7 +3169,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // at stream selection, and its matcher also weighs the default/forced
     // dispositions. Users with no preference set send nothing.
     try {
-      final lang = await StorageService.getDefaultAudioLanguage();
+      final lang = await SubtitleSettingsStorage.getDefaultAudioLanguage();
       if (lang != null && lang.isNotEmpty) {
         final alang = LanguageMapper.alangForCode(lang);
         if (alang.isNotEmpty) await platform.setProperty('alang', alang);
@@ -3246,7 +3252,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     unawaited(_loadDockPrefs());
     if (Platform.isAndroid && !PlatformUtil.isAndroidTvCached) {
       _androidVideoRendererMode =
-          await StorageService.getAndroidVideoRendererMode();
+          await PlayerSettingsStorage.getAndroidVideoRendererMode();
     }
 
     // Determine the initial URL and index
@@ -4387,7 +4393,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Automatic, and choosing an explicit renderer again retries it.
       _androidVideoRendererMode = AndroidVideoRendererMode.automatic;
       try {
-        await StorageService.setAndroidVideoRendererMode(
+        await PlayerSettingsStorage.setAndroidVideoRendererMode(
           AndroidVideoRendererMode.automatic,
         );
       } catch (_) {
@@ -6429,16 +6435,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _loadPlayerDefaults() async {
-    _subtitleOnlyForeignAudio = await StorageService.getSubtitleOnlyForeignAudio();
-    _subtitleForcedOnly = await StorageService.getSubtitleForcedOnly();
-    _subtitlePreferredAudio = await StorageService.getDefaultAudioLanguage();
+    _subtitleOnlyForeignAudio = await SubtitleSettingsStorage.getSubtitleOnlyForeignAudio();
+    _subtitleForcedOnly = await SubtitleSettingsStorage.getSubtitleForcedOnly();
+    _subtitlePreferredAudio = await SubtitleSettingsStorage.getDefaultAudioLanguage();
     _subtitleAutoSyncEnabled =
-        await StorageService.getSubtitleAutoSyncEnabled();
+        await SubtitleSettingsStorage.getSubtitleAutoSyncEnabled();
     debugPrint(
       'SubtitleAutoSync: pref loaded, enabled=$_subtitleAutoSyncEnabled',
     );
     // Load default aspect index
-    final aspectIndex = await StorageService.getPlayerDefaultAspectIndex();
+    final aspectIndex = await PlayerSettingsStorage.getPlayerDefaultAspectIndex();
     const aspects = AspectMode.values;
     _aspectMode = aspects[aspectIndex.clamp(0, aspects.length - 1)];
 
@@ -6452,9 +6458,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (PlatformUtil.isTvOS) {
       _tvosForceSoftwareDecode =
-          await StorageService.getTvosForceSoftwareDecode();
+          await PlayerSettingsStorage.getTvosForceSoftwareDecode();
       _contentDisplayMatchMode =
-          await StorageService.getContentDisplayMatchMode();
+          await PlayerNetworkStorage.getContentDisplayMatchMode();
       if (!_contentDisplayMatchMode.requestsMatching) {
         try {
           await TvosDisplayMatchService.clear();
@@ -6469,16 +6475,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // (AUDIO_FIDELITY_PLAN.md).
     if (!kIsWeb && Platform.isAndroid) {
       _audioPassthroughEnabled =
-          await StorageService.getAudioPassthroughEnabled();
+          await PlayerSettingsStorage.getAudioPassthroughEnabled();
       _systemAudioEffectsEnabled =
-          await StorageService.getPlayerSystemAudioEffects();
+          await PlayerSettingsStorage.getPlayerSystemAudioEffects();
     } else if (PlatformUtil.isTvOS || PlatformUtil.isIosMobile) {
       _appleMultichannelEnabled =
-          await StorageService.getAppleMultichannelAudio();
+          await PlayerSettingsStorage.getAppleMultichannelAudio();
     }
     if (PlatformUtil.isTvOS) {
-      _tvosForceStereoAudio = await StorageService.getTvosForceStereoAudio();
-      _tvosLegacyAudioOutput = await StorageService.getTvosLegacyAudioOutput();
+      _tvosForceStereoAudio = await PlayerSettingsStorage.getTvosForceStereoAudio();
+      _tvosLegacyAudioOutput = await PlayerSettingsStorage.getTvosLegacyAudioOutput();
       // What the CURRENT output route can take. ao_avfoundation passes the
       // file's native layout through, so a 5.1 track on a two-channel route
       // (AirPods, Bluetooth, stereo TV) folds badly; PlayerAudioConfig caps
@@ -7650,7 +7656,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           lang = await StorageService.getIptvSeriesAudioLanguage(key);
         }
       }
-      lang ??= await StorageService.getDefaultAudioLanguage();
+      lang ??= await SubtitleSettingsStorage.getDefaultAudioLanguage();
       if (lang == null || !mounted || ticket != _iptvSwitchTicket) return;
 
       mk.AudioTrack? match;
@@ -8892,7 +8898,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     final rules = widget.startupFailoverEnabled
-        ? await StorageService.getQuickPlayRules(
+        ? await QuickPlayStorage.getQuickPlayRules(
             isMovie: contentType == 'movie',
           )
         : null;
@@ -17193,7 +17199,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       if (seriesPlaylist != null && seriesPlaylist.isSeries) {
         // For series content, get preferences for the entire series
-        trackPreferences = await StorageService.getSeriesTrackPreferences(
+        trackPreferences = await TrackPreferencesStorage.getSeriesTrackPreferences(
           seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
         );
       } else {
@@ -17201,7 +17207,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final videoTitle = widget.title.isNotEmpty
             ? widget.title
             : 'Unknown Video';
-        trackPreferences = await StorageService.getVideoTrackPreferences(
+        trackPreferences = await TrackPreferencesStorage.getVideoTrackPreferences(
           videoTitle: videoTitle,
         );
       }
@@ -17286,7 +17292,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             // embedded match first, else addon auto-select. Stored 'no'
             // (explicit off for this series) is always honored.
             final defaultLang =
-                await StorageService.getDefaultSubtitleLanguage();
+                await SubtitleSettingsStorage.getDefaultSubtitleLanguage();
             final conflictsWithDefault =
                 subtitleTrackId != 'no' &&
                 defaultLang != null &&
@@ -17369,7 +17375,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Apply default audio language from settings (when no stored preference exists)
   Future<void> _applyDefaultAudioLanguage() async {
     try {
-      final defaultLang = await StorageService.getDefaultAudioLanguage();
+      final defaultLang = await SubtitleSettingsStorage.getDefaultAudioLanguage();
       if (defaultLang == null) {
         // No preference set - do nothing, let player use its default
         return;
@@ -17499,7 +17505,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         );
         return false;
       }
-      final defaultLang = await StorageService.getDefaultSubtitleLanguage();
+      final defaultLang = await SubtitleSettingsStorage.getDefaultSubtitleLanguage();
       debugPrint('SubAuto: defaultSubtitleLanguage setting = $defaultLang');
       if (!current()) {
         return false;
@@ -17508,7 +17514,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return _applyForcedSubtitle(defaultLang, current);
       }
       if (!ignoreSourcePriority && defaultLang != 'off') {
-        final order = await StorageService.getSubtitleSourcePriority();
+        final order = await SubtitleSettingsStorage.getSubtitleSourcePriority();
         if (!current()) {
           return false;
         }
@@ -17901,12 +17907,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _selectedStremioSubtitleId == null;
     if (!valid()) return;
     try {
-      final language = await StorageService.getDefaultSubtitleLanguage();
+      final language = await SubtitleSettingsStorage.getDefaultSubtitleLanguage();
       if (_subtitleForcedOnly) {
         if (valid()) await _applyForcedSubtitle(language, valid);
         return;
       }
-      final saved = await StorageService.getSubtitleSourcePriority();
+      final saved = await SubtitleSettingsStorage.getSubtitleSourcePriority();
       String? selectedPath;
       final result = await selectSubtitleBySourcePriority(
         saved: saved,
@@ -17976,7 +17982,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final seriesPlaylist = _seriesPlaylist;
       if (seriesPlaylist != null && seriesPlaylist.isSeries) {
         // For series content, save preferences for the entire series
-        await StorageService.saveSeriesTrackPreferences(
+        await TrackPreferencesStorage.saveSeriesTrackPreferences(
           seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
           audioTrackId: audio,
           subtitleTrackId: subtitle,
@@ -17986,7 +17992,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final videoTitle = widget.title.isNotEmpty
             ? widget.title
             : 'Unknown Video';
-        await StorageService.saveVideoTrackPreferences(
+        await TrackPreferencesStorage.saveVideoTrackPreferences(
           videoTitle: videoTitle,
           audioTrackId: audio,
           subtitleTrackId: subtitle,

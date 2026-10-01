@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8,8 +9,8 @@ void main() {
 
   test('source presentation defaults on for new installs', () async {
     SharedPreferences.setMockInitialValues({});
-    expect(await StorageService.getShowAddonLogos(), isTrue);
-    expect(await StorageService.getUseAddonTextFormatting(), isTrue);
+    expect(await TorrentSearchStorage.getShowAddonLogos(), isTrue);
+    expect(await TorrentSearchStorage.getUseAddonTextFormatting(), isTrue);
   });
 
   test('update enables both source settings once and preserves later opt-outs', () async {
@@ -19,13 +20,13 @@ void main() {
       'sources_use_addon_text': false,
     });
     await StorageService.migrateDefaultsGeneration();
-    expect(await StorageService.getShowAddonLogos(), isTrue);
-    expect(await StorageService.getUseAddonTextFormatting(), isTrue);
-    await StorageService.setShowAddonLogos(false);
-    await StorageService.setUseAddonTextFormatting(false);
+    expect(await TorrentSearchStorage.getShowAddonLogos(), isTrue);
+    expect(await TorrentSearchStorage.getUseAddonTextFormatting(), isTrue);
+    await TorrentSearchStorage.setShowAddonLogos(false);
+    await TorrentSearchStorage.setUseAddonTextFormatting(false);
     await StorageService.migrateDefaultsGeneration();
-    expect(await StorageService.getShowAddonLogos(), isFalse);
-    expect(await StorageService.getUseAddonTextFormatting(), isFalse);
+    expect(await TorrentSearchStorage.getShowAddonLogos(), isFalse);
+    expect(await TorrentSearchStorage.getUseAddonTextFormatting(), isFalse);
   });
 
   group('defaults generation (update-aware flagship look)', () {
