@@ -37,9 +37,9 @@ final class RecoverySourceResolution {
     final isMovie = meta.contentType == 'movie';
     final rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
     final prov = await SourceProviderConfig.effectiveFetchProvider(provider);
-    if (rules.sourcePriority.isNotEmpty)
-      // ignore: curly_braces_in_flow_control_structures
+    if (rules.sourcePriority.isNotEmpty) {
       await SourceCandidateRanking.warmSourceAliases();
+    }
     if (mode == SeriesSourceFetcher.modePacks) {
       if (!contentId.startsWith('tt') || meta.hasStremioEpisodeIdentity) {
         return const <Torrent>[];
@@ -71,7 +71,6 @@ final class RecoverySourceResolution {
         originMeta: meta,
       );
     }
-    // ignore: invalid_use_of_visible_for_testing_member
     if ((!SourceSearchPlans.allowsAddonSearch(rules) &&
             !meta.hasStremioEpisodeIdentity) ||
         !rules.allowDirectLinks) {
@@ -105,7 +104,6 @@ final class RecoverySourceResolution {
         .toList();
     if (!meta.hasStremioEpisodeIdentity) {
       list.addAll(
-        // ignore: invalid_use_of_visible_for_testing_member
         await IptvQuickPlaySearch.searchIptvForQuickPlay(
           contentId,
           meta.title ?? '',
@@ -147,13 +145,11 @@ final class RecoverySourceResolution {
       provider!,
       torrents,
     );
-    // ignore: invalid_use_of_visible_for_testing_member
     torrents = SourceCandidateRanking.orderCacheCheckedCandidatesForRules(
       torrents,
       rules: rules,
       ladder: ladder,
     );
-    // ignore: invalid_use_of_visible_for_testing_member
     return SourceCandidateRanking.mergePreparedTorrentOrder(ordered, torrents);
   }
 

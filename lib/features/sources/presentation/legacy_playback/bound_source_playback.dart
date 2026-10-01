@@ -657,9 +657,9 @@ final class BoundSourcePlayback {
     closeLoading();
     // Mirror Home: say why bound playback failed before the caller falls back
     // to a normal search.
-    if (fallbackHint != null && context.mounted)
-      // ignore: curly_braces_in_flow_control_structures
+    if (fallbackHint != null && context.mounted) {
       SourceLoadingOverlays.snack(context, fallbackHint);
+    }
     return false;
   }
 }

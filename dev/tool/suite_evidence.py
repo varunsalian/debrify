@@ -4,10 +4,13 @@
   run NAME [PATHS...]          flutter test --reporter json (whole suite or
                                PATHS) -> <evidence>/NAME.jsonl, plus
                                NAME.env.json (Flutter SDK, HEAD, paths)
-  compare [--against FILE] RUN...
+  compare [--against FILE] [--moved] RUN...
                                .jsonl runs: no new failures, missing tests or
                                newly skipped tests versus FILE. .txt files:
-                               `flutter analyze` output, no added diagnostics.
+                               `flutter analyze` output, no added diagnostics
+                               (by file, rule and message; with --moved, by
+                               rule and message only, for move-only batches
+                               whose diagnostics change file).
   check KNOWN PATHS...         CI: run PATHS (`@file` = one path per line); fail on any failure not listed in
                                KNOWN (one suite::name per line) and on any
                                listed identity that no longer exists.
@@ -85,6 +88,13 @@ def diagnostics(path):
     return found
 
 
+def without_location(found):
+    merged = Counter()
+    for (severity, _, message, rule), count in found.items():
+        merged[(severity, message, rule)] += count
+    return merged
+
+
 def flutter_env(paths):
     version = subprocess.run(
         ['flutter', '--version', '--machine'], cwd=ROOT, capture_output=True, text=True,
@@ -131,6 +141,9 @@ def cmd_compare(args):
         i = args.index('--against')
         against = Path(args[i + 1])
         del args[i:i + 2]
+    moved = '--moved' in args
+    if moved:
+        args.remove('--moved')
     if against is None:
         print('compare needs --against <baseline>')
         return 2
@@ -169,8 +182,10 @@ def cmd_compare(args):
             print('fixed', fixed, 'added identities', len(added))
             ok = ok and not new_failures and not missing and not newly_skipped
         else:
-            added = diagnostics(run) - diagnostics(against)
-            removed = diagnostics(against) - diagnostics(run)
+            after, before = diagnostics(run), diagnostics(against)
+            if moved:
+                after, before = without_location(after), without_location(before)
+            added, removed = after - before, before - after
             print(run.name, 'added', list(added.elements()), 'removed', list(removed.elements()))
             ok = ok and not added
     print('PASS' if ok else 'FAIL')

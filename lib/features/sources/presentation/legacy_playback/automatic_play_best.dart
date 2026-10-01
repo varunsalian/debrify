@@ -416,9 +416,7 @@ final class AutomaticPlayBest {
               strictProvider,
               preparedTorrents,
             );
-            // ignore: invalid_use_of_visible_for_testing_member
             preparedTorrents =
-                // ignore: invalid_use_of_visible_for_testing_member
                 SourceCandidateRanking.orderCacheCheckedCandidatesForRules(
                   preparedTorrents,
                   rules: rules,
@@ -431,7 +429,6 @@ final class AutomaticPlayBest {
             if (cancelled()) return;
           }
           if (tiered) {
-            // ignore: invalid_use_of_visible_for_testing_member
             final (safeTorrents, safeAttempts) = SourceProbing.packTopSafety(
               preparedTorrents,
               provider: strictProvider,
@@ -442,7 +439,6 @@ final class AutomaticPlayBest {
             preparedTorrents = safeTorrents;
             if (safeAttempts > limit) limit = safeAttempts;
           }
-          // ignore: invalid_use_of_visible_for_testing_member
           exactSources = SourceCandidateRanking.mergePreparedTorrentOrder(
             exactSources,
             preparedTorrents,
@@ -528,10 +524,8 @@ final class AutomaticPlayBest {
     // that fails validation is dropped and the selection re-runs: the next
     // pick may be another direct (instant play again) or a torrent now
     // holding the best playable tier (falls through to the probe path).
-    // ignore: invalid_use_of_visible_for_testing_member
     if (SourceCandidateRanking.shouldTryDirectBeforeTorrent(rules)) {
       var selectable = torrents;
-      // ignore: invalid_use_of_visible_for_testing_member
       var direct = SourceProbing.selectDirect(selectable, ladder).$1;
       while (direct != null) {
         if (cancelled()) return; // e.g. Cancel during a caller's await
@@ -543,7 +537,6 @@ final class AutomaticPlayBest {
         }
         final dead = direct;
         selectable = selectable.where((t) => !identical(t, dead)).toList();
-        // ignore: invalid_use_of_visible_for_testing_member
         direct = SourceProbing.selectDirect(selectable, ladder).$1;
       }
     }
@@ -638,7 +631,6 @@ final class AutomaticPlayBest {
       // filters dominate cachedness, cached-first survives WITHIN each tier
       // (plan §3.4, "cache-first demoted to within-tier").
       if (rules != null) {
-        // ignore: invalid_use_of_visible_for_testing_member
         candidates = SourceCandidateRanking.orderCacheCheckedCandidatesForRules(
           candidates,
           rules: rules,
@@ -666,7 +658,6 @@ final class AutomaticPlayBest {
     // exact-episode single, guarantee the best single still gets probed.
     var minAttempts = 1;
     if (tiered) {
-      // ignore: invalid_use_of_visible_for_testing_member
       final (safeList, safeAttempts) = SourceProbing.packTopSafety(
         candidates,
         provider: prov,

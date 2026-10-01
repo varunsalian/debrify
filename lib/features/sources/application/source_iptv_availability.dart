@@ -4,7 +4,6 @@ import 'package:debrify/features/sources/application/source_candidate_ranking.da
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/iptv_source_search.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
-import 'package:flutter/foundation.dart';
 
 final class SourceIptvAvailability {
   const SourceIptvAvailability._();
@@ -15,7 +14,6 @@ final class SourceIptvAvailability {
   /// Failed rows are removed so their placeholder identity cannot suppress an
   /// existing torrent/pack fallback. Ordinary playable candidates keep the
   /// fully lazy path unchanged.
-  @visibleForTesting
   static Future<List<Torrent>> confirmDeferredIptvAvailability(
     List<Torrent> sources, {
     int? season,
@@ -31,7 +29,6 @@ final class SourceIptvAvailability {
   }) async {
     if (sources.any(
       (source) =>
-          // ignore: invalid_use_of_visible_for_testing_member
           SourceCandidateRanking.isAutoPlayableCandidate(source) &&
           !IptvSourceSearch.isDeferredXtreamSeries(source),
     )) {

@@ -21,7 +21,6 @@ import 'package:flutter/foundation.dart';
 final class SourceProbing {
   const SourceProbing._();
 
-  @visibleForTesting
   static (Torrent?, Torrent?) selectDirect(
     List<Torrent> torrents,
     FilterLadder? ladder,
@@ -79,7 +78,6 @@ final class SourceProbing {
   /// names lack S/E tokens) is NOT treated as a pack, and a cam-floored
   /// single is never hoisted (it would defeat §3.3c). Returns the (possibly
   /// copied) list and the minimum probe attempts.
-  @visibleForTesting
   static (List<Torrent>, int) packTopSafety(
     List<Torrent> candidates, {
     required String provider,

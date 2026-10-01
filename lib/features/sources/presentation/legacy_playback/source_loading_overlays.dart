@@ -17,7 +17,6 @@ final class SourceLoadingOverlays {
     FilterLadder ladder,
     List<Torrent> ordered,
   ) {
-    // ignore: invalid_use_of_visible_for_testing_member
     final note = SourceFilterLadder.ladderNote(ladder, ordered);
     if (note != null) overlay.setNote(note);
   }

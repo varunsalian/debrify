@@ -11,7 +11,6 @@ import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 import 'package:debrify/utils/rd_blocked_filter.dart';
 import 'package:debrify/utils/torrent_curation.dart';
-import 'package:flutter/foundation.dart';
 
 final class SourceCuration {
   const SourceCuration._();
@@ -141,7 +140,6 @@ final class SourceCuration {
 
   /// Select within a completed highest-priority addon batch only. Callers
   /// must establish that no pending provider can outrank this batch.
-  @visibleForTesting
   static Torrent? earlyDirectCandidate(
     List<Torrent> batch, {
     required QuickPlayRules rules,
@@ -151,7 +149,6 @@ final class SourceCuration {
         !rules.tryNextOnFailure ||
         rules.maxAttempts < 2 ||
         rules.ranking != QuickPlayRanking.exactOrder ||
-        // ignore: invalid_use_of_visible_for_testing_member
         SourceCandidateRanking.prefersTorrentCandidates(rules)) {
       return null;
     }
@@ -162,7 +159,6 @@ final class SourceCuration {
           ladder: ladder,
         ).where(
           (source) =>
-              // ignore: invalid_use_of_visible_for_testing_member
               SourceCandidateRanking.isAutoPlayableCandidate(source) &&
               !IptvSourceSearch.isDeferredXtreamSeries(source),
         );
@@ -176,7 +172,6 @@ final class SourceCuration {
   /// A failed early direct launch consumes no debrid acquisition attempt.
   /// Leave candidate skipping and acquisition limits to [playBest]; slicing
   /// this list can hide a working direct link behind unusable torrent rows.
-  @visibleForTesting
   static ({List<Torrent> sources, QuickPlayRules rules}) earlyDirectRecovery(
     List<Torrent> sources, {
     required Torrent failed,
@@ -196,7 +191,6 @@ final class SourceCuration {
   /// before the rest of an exact-order addon search. A legacy name priority
   /// cannot distinguish duplicate configurations, so retain the old behavior
   /// of waiting for the full search until the user saves an explicit order.
-  @visibleForTesting
   static String? leadingDirectAddonKey(
     List<StremioAddon> addons,
     List<String> priority,
@@ -236,7 +230,6 @@ final class SourceCuration {
 
   /// Search transports use either error map. Only direct-provider failures
   /// should trigger this path's retry/connection feedback, not torrent engines.
-  @visibleForTesting
   static Map<String, String> directSearchErrors(Map<String, dynamic> result) {
     final errors = <String, String>{
       ...?(result['engineErrors'] as Map?)?.cast<String, String>(),

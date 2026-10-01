@@ -5,7 +5,6 @@ import 'package:debrify/models/torrent.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/filter_ladder.dart';
-import 'package:flutter/foundation.dart';
 
 final class SourceFilterLadder {
   const SourceFilterLadder._();
@@ -33,7 +32,6 @@ final class SourceFilterLadder {
   /// The loader narration line for what the ladder found (plan §3.5), or
   /// null when there is nothing to say (inactive ladder / empty list) — so
   /// filterless plays look exactly as before. Pure; public only for tests.
-  @visibleForTesting
   static String? ladderNote(FilterLadder ladder, List<Torrent> ordered) {
     if (!ladder.isActive || ordered.isEmpty) return null;
     final summary = ladder.filterSummary();

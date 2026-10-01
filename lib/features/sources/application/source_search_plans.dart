@@ -1,5 +1,4 @@
 import 'package:debrify/models/quick_play_rules.dart';
-import 'package:flutter/foundation.dart';
 
 final class SourceSearchPlans {
   const SourceSearchPlans._();
@@ -7,7 +6,6 @@ final class SourceSearchPlans {
   /// An explicit addon-only profile can search before opening the provider
   /// picker. Mixed modes must include engines and addons before applying the
   /// shared Addon Priority, so they stay on the provider-backed route.
-  @visibleForTesting
   static bool shouldSearchAddonsBeforeProvider(
     QuickPlayRules rules, {
     required bool isMovie,
@@ -25,14 +23,12 @@ final class SourceSearchPlans {
   /// Whether the selected source profile permits any Stremio/addon request.
   /// Fast paths must consult this before using a direct addon stream; otherwise
   /// `torrentsOnly` silently behaves like an addon-enabled profile.
-  @visibleForTesting
   static bool allowsAddonSearch(QuickPlayRules rules) =>
       rules.sourceMode != QuickPlaySourceMode.torrentsOnly;
 
   /// Search stages used by the direct-stream/auto-advance flow. Forced and
   /// provider-free calls stay addon-only. Mixed modes query both families at
   /// once; Addon Priority, not network completion or family, chooses first.
-  @visibleForTesting
   static List<QuickPlaySourceMode> addonStreamSearchPlan(
     QuickPlayRules rules, {
     bool noProvider = false,
@@ -56,7 +52,6 @@ final class SourceSearchPlans {
   /// Search services report per-engine/addon failures in-band. An empty pack
   /// result with one of these errors is inconclusive and must not be written to
   /// the multi-hour no-pack cache.
-  @visibleForTesting
   static bool packSearchReportedErrors(
     Map<String, dynamic> result,
     QuickPlaySourceMode stage,
@@ -70,7 +65,6 @@ final class SourceSearchPlans {
   /// Mixed source modes keep the whole-series bare-ID and season-probing
   /// search combined. Pack curation remains torrent-only; Addon Priority is
   /// applied after probing to choose between engine and addon packs.
-  @visibleForTesting
   static List<QuickPlaySourceMode> seriesPackSearchPlan(QuickPlayRules rules) {
     return switch (rules.sourceMode) {
       QuickPlaySourceMode.torrentsThenAddons ||

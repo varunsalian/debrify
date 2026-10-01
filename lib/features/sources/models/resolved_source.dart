@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import 'acquired_source.dart';
 
+/// Resolved add result carrying what each post-action branch needs.
+/// Presentation adds provider-tab navigation to the acquired playback data.
 class ResolvedSource extends AcquiredSource {
   final VoidCallback? openInTab;
   const ResolvedSource({

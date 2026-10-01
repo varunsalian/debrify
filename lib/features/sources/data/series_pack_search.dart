@@ -84,7 +84,6 @@ final class SeriesPackSearch {
     var anySearchSucceeded = false;
     var allSearchesSucceeded = true;
     var packs = <Torrent>[];
-    // ignore: invalid_use_of_visible_for_testing_member
     for (final stage in SourceSearchPlans.seriesPackSearchPlan(activeRules)) {
       if (isCancelled?.call() ?? false) return packs;
       late final List<Torrent> raw;
@@ -94,7 +93,6 @@ final class SeriesPackSearch {
         // Both engine and addon services report failures in-band instead of
         // throwing. A timed-out empty response is unknown, not proof that no
         // pack exists, so it must not poison the negative cache.
-        // ignore: invalid_use_of_visible_for_testing_member
         final stageHadErrors = SourceSearchPlans.packSearchReportedErrors(
           packRes,
           stage,
@@ -146,7 +144,6 @@ final class SeriesPackSearch {
       packs = await SourceCacheOrdering.cacheFirst(provider, packs);
       // Exact/provider-order profiles keep cached hits globally first. Other
       // rankings retain their existing post-cache rule/filter behavior.
-      // ignore: invalid_use_of_visible_for_testing_member
       packs = SourceCandidateRanking.orderCacheCheckedCandidatesForRules(
         packs,
         rules: activeRules,

@@ -178,9 +178,9 @@ final class SourceSeriesFetcher {
               candidateAddonKey: source.stremioAddonKey,
               candidateStreamKey: source.stremioStreamKey,
               candidateBingeGroup: source.stremioBingeGroup,
-            ))
-          // ignore: curly_braces_in_flow_control_structures
+            )) {
           return;
+        }
         final ({int season, int episode})? next;
         if (meta.hasStremioEpisodeIdentity) {
           final target = await StremioService.instance
@@ -251,9 +251,9 @@ final class SourceSeriesFetcher {
         if (cached != null) return cached;
         final rules = await StorageService.getQuickPlayRules(isMovie: false);
         if (!rules.validateDirectLinks) return true;
-        if (!SourceCandidateRanking.shouldPreflightDirectStream(source))
-          // ignore: curly_braces_in_flow_control_structures
+        if (!SourceCandidateRanking.shouldPreflightDirectStream(source)) {
           return true;
+        }
         // Match initial series Quick Play: lenient HEAD validation rejects
         // positive evidence of death without penalising HEAD-hostile CDNs.
         final alive = await StreamUrlValidator.isPlayableVideoUrl(
@@ -275,9 +275,9 @@ final class SourceSeriesFetcher {
         final prov = await effectiveProvider();
         if (prov == null) return null;
         final rules = await StorageService.getQuickPlayRules(isMovie: false);
-        if (rules.sourcePriority.isNotEmpty)
-          // ignore: curly_braces_in_flow_control_structures
+        if (rules.sourcePriority.isNotEmpty) {
           await SourceCandidateRanking.warmSourceAliases();
+        }
         final ladder = await SourceFilterLadder.loadLadder(
           includeSize: false,
           rules: rules,
@@ -309,9 +309,9 @@ final class SourceSeriesFetcher {
               : null;
         }
         final rules = await StorageService.getQuickPlayRules(isMovie: false);
-        if (rules.sourcePriority.isNotEmpty)
-          // ignore: curly_braces_in_flow_control_structures
+        if (rules.sourcePriority.isNotEmpty) {
           await SourceCandidateRanking.warmSourceAliases();
+        }
         final ladder = await SourceFilterLadder.loadLadder(
           includeSize: false,
           rules: rules,
@@ -324,7 +324,6 @@ final class SourceSeriesFetcher {
             // provider. Keep that contract when Next crosses a one-entry
             // playlist: query the episode-scoped addon endpoints and retain
             // only links this provider-free resolver can actually open.
-            // ignore: invalid_use_of_visible_for_testing_member
             if ((!SourceSearchPlans.allowsAddonSearch(rules) &&
                     !meta.hasStremioEpisodeIdentity) ||
                 !rules.allowDirectLinks) {
@@ -354,7 +353,6 @@ final class SourceSeriesFetcher {
             }).toList();
             if (!meta.hasStremioEpisodeIdentity) {
               list.addAll(
-                // ignore: invalid_use_of_visible_for_testing_member
                 await IptvQuickPlaySearch.searchIptvForQuickPlay(
                   imdbId,
                   label,

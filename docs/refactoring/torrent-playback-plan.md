@@ -471,6 +471,28 @@ Pipeline commits: `80c44f2c` (best), `ba6a3709` (selection), `ccc56861`
 - Review range: `e0d3e932..HEAD`. No merge or push to `origin` is performed.
   The pre-existing untracked `output/` directory is preserved.
 
+### Review tidy-up
+
+After review of `e0d3e932..cc2c0683`, behaviour-neutral:
+- 19 members still marked `@visibleForTesting` but called by production code
+  in other files lost the marking, which removed the 43 call-site ignores.
+  Members used only by their own file and by tests keep it.
+- 11 single-statement `if`s that formatting split across lines got braces in
+  place of their `curly_braces_in_flow_control_structures` ignores.
+- The `ResolvedSource` doc comment from `_Resolved` is restored.
+- `suite_evidence.py compare --moved` compares analyzer output by rule and
+  message only, for move-only batches.
+
+Checks: whole-repo analyzer identical to `tps/analyze-gate2.txt`; both guards,
+the CI format scope and the CI behaviour-test check pass. A first behaviour
+run hit one error in `iptv_source_search_test.dart::multiple movie streams
+survive source deduplication`. It passed alone, in its file, in every
+recorded run and on a full rerun, so it is listed below as a flake.
+
 ## Found, not fixed
 
 - `test/profiles/profiles_hub_test.dart`, `settle` / disable-profile test: under full-suite load the disabled badge can miss the six 50 ms real-I/O windows. Gate-1 first attempt failed this unchanged test; isolated run passed all 5 and the same-SDK/configuration full rerun passed the baseline comparison. No allowlist or application change. Evidence: `<E>/tps/gate1-first.jsonl`, `gate1-profile-check.jsonl`, `gate1.jsonl`.
+- `test/iptv_source_search_test.dart::multiple movie streams survive source
+  deduplication` errored once in a local CI behaviour run during the review
+  tidy-up, and passed on every other run. It is unrelated to the change
+  (annotations, braces and a doc only). Watch for repeats in CI.

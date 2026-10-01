@@ -101,7 +101,6 @@ final class AddonStreamPlayback {
         rules.allowDirectLinks &&
         rules.tryNextOnFailure &&
         exactAddonOrder &&
-        // ignore: invalid_use_of_visible_for_testing_member
         !SourceCandidateRanking.prefersTorrentCandidates(rules) &&
         (noProvider ||
             forceAddonOnly ||
@@ -111,7 +110,6 @@ final class AddonStreamPlayback {
           type: 'series',
           contentId: id,
         );
-        // ignore: invalid_use_of_visible_for_testing_member
         leadingAddon = SourceCuration.leadingDirectAddonKey(
           addons,
           rules.sourcePriority,
@@ -128,7 +126,6 @@ final class AddonStreamPlayback {
       if (source != leadingAddon || early.isCompleted || cancel.cancelled)
         return;
       if (ProfileRuntime.scope.value != earlyScope) return;
-      // ignore: invalid_use_of_visible_for_testing_member
       final selected = SourceCuration.earlyDirectCandidate(
         batch,
         rules: rules,
@@ -187,7 +184,6 @@ final class AddonStreamPlayback {
     Future<Map<String, dynamic>> search() async {
       final iptv = meta.hasStremioEpisodeIdentity
           ? Future.value(const <Torrent>[])
-          // ignore: invalid_use_of_visible_for_testing_member
           : IptvQuickPlaySearch.searchIptvForQuickPlay(
               id,
               meta.title ?? label,
@@ -204,7 +200,6 @@ final class AddonStreamPlayback {
       final addonStatuses = <AddonSearchStatus>[];
       final stages = meta.hasStremioEpisodeIdentity
           ? const [QuickPlaySourceMode.addonsOnly]
-          // ignore: invalid_use_of_visible_for_testing_member
           : SourceSearchPlans.addonStreamSearchPlan(
               rules,
               noProvider: noProvider,
@@ -231,7 +226,6 @@ final class AddonStreamPlayback {
           (torrent) =>
               (rules.allowDirectLinks ||
                   torrent.streamType != StreamType.directUrl) &&
-              // ignore: invalid_use_of_visible_for_testing_member
               SourceCandidateRanking.isAutoPlayableCandidate(torrent),
         );
         if (foundUsable) break;
@@ -252,9 +246,9 @@ final class AddonStreamPlayback {
       if (cancel.cancelled) return true;
       closeLoading();
       if (fallbackWhenEmpty) return false;
-      if (context.mounted)
-        // ignore: curly_braces_in_flow_control_structures
+      if (context.mounted) {
         SourceLoadingOverlays.snack(context, 'Search failed: $e');
+      }
       return true;
     }
     if (res['earlyDirect'] == true) {
@@ -303,7 +297,6 @@ final class AddonStreamPlayback {
           overlay: overlay,
           startupFailoverEnabled: true,
           onStartupSourcesExhausted: () async {
-            // ignore: invalid_use_of_visible_for_testing_member
             final recovery = SourceCuration.earlyDirectRecovery(
               await remaining,
               failed: selected,
@@ -375,7 +368,6 @@ final class AddonStreamPlayback {
     }
 
     var torrents = (res['torrents'] as List).cast<Torrent>();
-    // ignore: invalid_use_of_visible_for_testing_member
     var errors = SourceCuration.directSearchErrors(res);
     // Empty ONLY because an addon errored is usually a transient upstream
     // blip — retry once before giving up.
@@ -383,7 +375,6 @@ final class AddonStreamPlayback {
       try {
         res = await search();
         torrents = (res['torrents'] as List).cast<Torrent>();
-        // ignore: invalid_use_of_visible_for_testing_member
         errors = SourceCuration.directSearchErrors(res);
       } catch (_) {
         // Keep the first attempt's (empty) result — reported below.
@@ -438,7 +429,6 @@ final class AddonStreamPlayback {
       ladder: ladder,
     );
     if (fallbackWhenEmpty) {
-      // ignore: invalid_use_of_visible_for_testing_member
       torrents = await SourceIptvAvailability.confirmDeferredIptvAvailability(
         torrents,
         season: season,
@@ -450,7 +440,6 @@ final class AddonStreamPlayback {
         closeLoading();
         return true;
       }
-      // ignore: invalid_use_of_visible_for_testing_member
       if (!torrents.any(SourceCandidateRanking.isAutoPlayableCandidate)) {
         closeLoading();
         return false;

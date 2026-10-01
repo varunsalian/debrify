@@ -132,7 +132,6 @@ final class CuratedSourceSearch {
         final found = <Torrent>[
           ...(addonRes['torrents'] as List).cast<Torrent>(),
           if (originMeta?.hasStremioEpisodeIdentity != true)
-            // ignore: invalid_use_of_visible_for_testing_member
             ...await IptvQuickPlaySearch.searchIptvForQuickPlay(
               imdbId,
               label,

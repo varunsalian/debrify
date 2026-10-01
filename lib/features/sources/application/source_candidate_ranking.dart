@@ -8,7 +8,6 @@ import 'package:debrify/services/media_server_service.dart';
 import 'package:debrify/services/source_priority.dart';
 import 'package:debrify/services/startup_stream_policy.dart';
 import 'package:debrify/utils/filter_ladder.dart';
-import 'package:flutter/foundation.dart';
 
 final class SourceCandidateRanking {
   const SourceCandidateRanking._();
@@ -128,7 +127,6 @@ final class SourceCandidateRanking {
   /// and external rows retain their exact positions. This lets cache checks
   /// and episode-pack safety reorder the torrent walk without silently
   /// changing the user's transport order when "Prefer torrents" is off.
-  @visibleForTesting
   static List<Torrent> mergePreparedTorrentOrder(
     List<Torrent> sources,
     List<Torrent> preparedTorrents,
@@ -181,7 +179,6 @@ final class SourceCandidateRanking {
   /// cached hits ahead of misses. `readyFirst` treats that partition as the
   /// primary readiness signal, so only the filter ladder may group it further;
   /// sorting by seeders again would incorrectly promote an uncached torrent.
-  @visibleForTesting
   static List<Torrent> orderCacheCheckedCandidatesForRules(
     List<Torrent> torrents, {
     required QuickPlayRules rules,
@@ -231,14 +228,12 @@ final class SourceCandidateRanking {
   /// Whether direct-addon rows should be attempted before torrent acquisition.
   /// A torrent-first source plan tries the torrent twin first and retains the
   /// direct row as the existing no-provider/dead-end rescue.
-  @visibleForTesting
   static bool shouldTryDirectBeforeTorrent(QuickPlayRules? rules) =>
       rules?.sourceMode != QuickPlaySourceMode.torrentsThenAddons &&
       rules?.sourceMode != QuickPlaySourceMode.torrentsOnly;
 
   /// Whether Quick Play should exhaust provider-ordered torrent candidates
   /// before falling back to direct links.
-  @visibleForTesting
   static bool prefersTorrentCandidates(QuickPlayRules rules) =>
       rules.sourceMode != QuickPlaySourceMode.addonsThenTorrents &&
       rules.sourceMode != QuickPlaySourceMode.addonsOnly;
@@ -246,7 +241,6 @@ final class SourceCandidateRanking {
   /// Whether a Quick Play result can be attempted automatically. External
   /// links are useful in a manual source list but cannot satisfy an addon-first
   /// auto-play search, so they must not suppress the engine fallback.
-  @visibleForTesting
   static bool isAutoPlayableCandidate(Torrent torrent) =>
       SourceCandidateChecks.isDirectCandidate(torrent) ||
       (torrent.streamType != StreamType.externalUrl &&

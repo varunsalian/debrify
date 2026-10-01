@@ -42,9 +42,9 @@ final class SourceMovieFetcher {
         if (prov == null) return null;
         // Size buckets are movie-meaningful — keep them (unlike series).
         final rules = await StorageService.getQuickPlayRules(isMovie: true);
-        if (rules.sourcePriority.isNotEmpty)
-          // ignore: curly_braces_in_flow_control_structures
+        if (rules.sourcePriority.isNotEmpty) {
           await SourceCandidateRanking.warmSourceAliases();
+        }
         final ladder = await SourceFilterLadder.loadLadder(rules: rules);
         try {
           final list = await CuratedSourceSearch.searchCuratedSources(

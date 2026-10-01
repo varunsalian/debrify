@@ -16,7 +16,6 @@ final class IptvQuickPlaySearch {
 
   /// Cached IPTV candidates for automatic playback and episode advancement.
   /// Direct-link and source-mode restrictions apply before any catalog lookup.
-  @visibleForTesting
   static Future<List<Torrent>> searchIptvForQuickPlay(
     String id,
     String title,
@@ -31,7 +30,6 @@ final class IptvQuickPlaySearch {
         SourceIptvAvailability.iptvQuickPlaySearchTimeout,
   }) async {
     if (!rules.allowDirectLinks ||
-        // ignore: invalid_use_of_visible_for_testing_member
         !SourceSearchPlans.allowsAddonSearch(rules) ||
         (!id.startsWith('tt') && !MediaIdentity.isNative(id))) {
       logIptvSourceEvent(
@@ -41,7 +39,6 @@ final class IptvQuickPlaySearch {
         episode: episode,
         outcome: !rules.allowDirectLinks
             ? 'direct_links_disabled'
-            // ignore: invalid_use_of_visible_for_testing_member
             : (!SourceSearchPlans.allowsAddonSearch(rules)
                   ? 'source_mode_excluded'
                   : 'unsupported_identity'),

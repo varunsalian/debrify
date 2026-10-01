@@ -153,9 +153,9 @@ final class AutomaticPlaySelection {
       if (openSourcePicker != null) {
         playMode = await StorageService.getPlayButtonMode();
       }
-      if (rules.sourcePriority.isNotEmpty)
-        // ignore: curly_braces_in_flow_control_structures
+      if (rules.sourcePriority.isNotEmpty) {
         await SourceCandidateRanking.warmSourceAliases();
+      }
     } catch (_) {
       resolving.dismiss();
       rethrow;
@@ -200,7 +200,6 @@ final class AutomaticPlaySelection {
     // search below so the on-device engines still run. (imdbId.isEmpty is
     // already handled above.)
     if (!imdbId.startsWith('tt')) {
-      // ignore: invalid_use_of_visible_for_testing_member
       if (!SourceSearchPlans.allowsAddonSearch(rules)) {
         resolving.dismiss();
         SourceLoadingOverlays.snack(
@@ -317,7 +316,6 @@ final class AutomaticPlaySelection {
     // pack-first routes keep their existing provider-first contract because a
     // reusable torrent pack must be cache-probed before an episode fallback.
     var addonFallbackAlreadySearched = false;
-    // ignore: invalid_use_of_visible_for_testing_member
     if (SourceSearchPlans.shouldSearchAddonsBeforeProvider(
       rules,
       isMovie: isMovie,
@@ -367,7 +365,6 @@ final class AutomaticPlaySelection {
         );
         return;
       }
-      // ignore: invalid_use_of_visible_for_testing_member
       if (!SourceSearchPlans.allowsAddonSearch(activeRules)) {
         SourceLoadingOverlays.snack(
           context,
@@ -535,7 +532,6 @@ final class AutomaticPlaySelection {
 
     final iptvFirst =
         activeRules.allowDirectLinks &&
-        // ignore: invalid_use_of_visible_for_testing_member
         SourceSearchPlans.allowsAddonSearch(activeRules) &&
         activeRules.sourcePriority.isNotEmpty &&
         activeRules.sourcePriority.first.startsWith('iptv:');
@@ -550,7 +546,6 @@ final class AutomaticPlaySelection {
           season: season,
           episode: episode,
         );
-        // ignore: invalid_use_of_visible_for_testing_member
         final matches = await IptvQuickPlaySearch.searchIptvForQuickPlay(
           imdbId,
           meta.title ?? label,
@@ -700,9 +695,9 @@ final class AutomaticPlaySelection {
     } catch (e) {
       if (cancel.cancelled) return; // overlay already dismissed by Cancel
       closeLoading();
-      if (context.mounted)
-        // ignore: curly_braces_in_flow_control_structures
+      if (context.mounted) {
         SourceLoadingOverlays.snack(context, 'Search failed: $e');
+      }
       return;
     }
     if (cancel.cancelled) return;
@@ -722,7 +717,6 @@ final class AutomaticPlaySelection {
     if (packRouteAllowed &&
         !activeRules.preferSeriesPacks &&
         torrents.any(IptvSourceSearch.isDeferredXtreamSeries)) {
-      // ignore: invalid_use_of_visible_for_testing_member
       torrents = await SourceIptvAvailability.confirmDeferredIptvAvailability(
         torrents,
         season: season,
@@ -736,7 +730,6 @@ final class AutomaticPlaySelection {
         return;
       }
     }
-    // ignore: invalid_use_of_visible_for_testing_member
     if (!torrents.any(SourceCandidateRanking.isAutoPlayableCandidate)) {
       // Episode-first route (Prefer season packs off): packs are the
       // FALLBACK when the episode search comes up dry, so a show that only

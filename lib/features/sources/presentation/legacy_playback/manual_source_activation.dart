@@ -208,9 +208,9 @@ final class ManualSourceActivation {
       canContinue: () => context.mounted && bindingOwner.isCurrent,
     );
     if (!context.mounted || !bindingOwner.isCurrent) return;
-    if (provider == SourceProviderConfig.cancelled)
-      // ignore: curly_braces_in_flow_control_structures
+    if (provider == SourceProviderConfig.cancelled) {
       return; // user dismissed the picker
+    }
     if (provider == null) {
       SourceLoadingOverlays.snack(
         context,
