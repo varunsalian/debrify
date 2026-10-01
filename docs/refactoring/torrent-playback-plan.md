@@ -5,8 +5,8 @@ Written 2026-10-01 on `refactor/search-screen` at `1d6fa710`. Follow
 executing agent needs; the search-screen plans are history and need not be
 read.
 
-Work on a new branch `refactor/torrent-playback` created from
-`refactor/search-screen`. Commit after every step (more often is fine). Never
+Work on the existing `refactor/search-screen` branch; don't create a new
+one. Commit after every step (more often is fine). Never
 push to `origin`; push to `private` only if the goal you were given says so.
 
 ## Goal
