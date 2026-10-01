@@ -185,8 +185,18 @@ caller resets everything at every step.
   - In step 1 it calls only `StorageService.resetProfileCaches()`.
   - From step 1 on, every caller uses it: the participant's
     `_warmed('StorageService', scope, resetStorageProfileCaches)`, with the
-    same label and the same single ledger stamp, plus every test. The map
-    sends `resetProfileCaches` to it, `ref_kind` `top_level`.
+    same label and the same single ledger stamp, plus every test.
+  - **Map row:** `resetProfileCaches` has `ref_kind` `static` (how it is
+    referenced today), `target` `resetStorageProfileCaches` (a top-level
+    function), `step` 1, and `kind` `reset_entry`. It is checked by the reset
+    partition check, not by declaration equality.
+  - **Script exemption:** `repoint_storage.py` must never rewrite the
+    forwarding call `StorageService.resetProfileCaches()` inside
+    `storage_profile_caches.dart`, nor drop that file's import of the old
+    file. Rewriting it would make the entry point call itself. The exemption
+    ends when step 8 deletes the legacy reset. A fixture runs the script twice
+    with the entry-point file tracked: external callers are redirected, and
+    the forwarding call survives unchanged.
 - **Per-class resets:** each storage class that owns `*Cached` mirrors, or
   the generation or session state reset in the handoff, gets
   `static void resetProfileCaches()`. It contains those lines from the
@@ -218,7 +228,7 @@ The order keeps members that share private helpers or keys in the same step.
 | 0 | Baseline, member map, dependency report, tooling | See below. Nothing moves, and no guard or CI registration yet (nothing to register). |
 | 1 | Create `lib/services/storage/`, the reset entry point and the enum files; register them in the guard and CI in the same commit. Move content sources (Reddit, Lemmy, YouTube), remote control, device, profile policy, the two enums and `ApiKeyValidator`. | Proves the tooling on small subjects. Ports `stale_runtime_guard_test` to the entry point. |
 | 2 | Provider credentials and actions, WebDAV, `clearAllIntegrationStates` | |
-| 3 | First `playback_state_store.dart` (the two map helpers and their keys, shared), then trackers, search and Quick Play, player, external players | The store moves first because playlist progress (step 6) and per-content audio/subtitle preferences use the map helpers. Per-content audio/subtitle preferences may move here or in step 7; the map decides. |
+| 3 | First `playback_state_store.dart`: the two map helpers with their private dependencies `_playbackStateKey`, `_playbackRecoveryRecordKeys` and `_webDavPlaybackRecordKeys` (moved or shared, as the dependency report decides). Then trackers, search and Quick Play, player, external players. | The store moves first because playlist progress (step 6) and per-content audio/subtitle preferences use the map helpers. Per-content audio/subtitle preferences may move here or in step 7; the map decides. Sharing `_savePlaybackStateMap` renames it, so update the tombstone audit's **expected helper names** in this step (see Source-text tests). |
 | 4 | Appearance, home, `migrateDefaultsGeneration` | Most `*Cached` mirrors move here, so the handoff-reset wiring is exercised. **Full-suite gate 1** after this step. |
 | 5 | IPTV, startup settings (`clearAllStartupSettings`), Debrify TV, Stremio TV | `warmStartupIptv` and `_startupIptvChannelCached` move together. |
 | 6 | Watchlist, playlists, poster overrides, TVMaze mappings, `_getPlaylistItemUniqueKey`, `clearAllPlaylistMetadata` | Ports the playlist entries of the tombstone audit. |
@@ -395,18 +405,34 @@ identity is present with the same outcome.
   - **Mirror test:** it scans the remaining `storage_service.dart` **and**
     every file under `lib/services/storage/`. Each `*Cached` mirror a file
     declares must be reset in that file's `resetProfileCaches()`.
-  - **Wiring test:** for files under `lib/services/storage/`, require the
-    chain: each file with a reset-shaped method is called from
-    `storage_profile_caches.dart`, whose basename the participant names, and
-    whose function the participant passes to `_warmed('StorageService', ...)`.
-    Every other file in `lib/` keeps today's rule unchanged.
+  - **Wiring test:** verify the whole chain:
+    - the participant passes `resetStorageProfileCaches` to
+      `_warmed('StorageService', ...)`;
+    - `storage_profile_caches.dart` calls each storage file's reset-shaped
+      method **exactly once**;
+    - while `storage_service.dart` exists, it also calls
+      `StorageService.resetProfileCaches()` exactly once, as a verified leaf
+      of the chain. A participant import of `storage_service.dart` does not
+      count.
+
+    Files under `lib/services/storage/` and `storage_service.dart` are checked
+    through the chain. Every other file in `lib/` keeps today's basename rule
+    unchanged.
   - **Handoff extras:** also assert that the generation bump and the
     startup-channel clear are still present in some per-class reset.
   - **Mutation check:** temporarily remove one reset line, then one class's
-    call from the entry point. Confirm each fails, then restore.
+    call from the entry point, then (in step 1) the legacy forwarding call.
+    Confirm each fails, then restore.
 - **`test/services/webdav_sync/webdav_sync_tombstone_audit_test.dart`.**
-  - Port each audited API in the **same step** that moves it: playlist
-    entries in step 6, playback entries in step 7.
+  - **Helper names, in step 3.** Seven entries (line 21 on) expect the
+    literal `_savePlaybackStateMap`. Sharing it in step 3 changes how the
+    still-unmoved APIs call it (for example `clearPlaybackStateByImdbId` at
+    3032). So step 3 updates those expected callee names, and the
+    qualified-key negative guards, to the shared spelling, while the APIs
+    still live in the old file. The audit must pass at the end of step 3.
+  - **Owner locations, later.** Port each audited API's file location in
+    the **same step** that moves it: playlist entries in step 6, playback
+    entries in step 7.
   - Update expected helper names from the member map (for example a shared
     `_savePlaybackStateMap`).
   - Keep every audited pair, and keep the forbidden-removal assertions
