@@ -2,19 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:debrify/features/sources/application/source_candidate_ranking.dart';
 import 'package:debrify/models/media_server.dart';
 import 'package:debrify/models/media_server_library.dart';
-import 'package:debrify/services/media_server_library_playback.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
-import 'package:debrify/models/quick_play_rules.dart';
-import 'package:debrify/utils/filter_ladder.dart';
-import 'package:debrify/utils/torrent_filter_matcher.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/direct_source_authorization.dart';
 import 'package:debrify/services/media_server_client.dart';
+import 'package:debrify/services/media_server_library_playback.dart';
 import 'package:debrify/services/media_server_service.dart';
 import 'package:debrify/services/media_server_watch_sync.dart';
 import 'package:debrify/services/native_playback_progress_session.dart';
@@ -27,11 +25,14 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/series_source_service.dart';
-import 'package:debrify/services/torrent_service.dart';
+import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
+import 'package:debrify/services/torrent_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:debrify/utils/filter_ladder.dart';
+import 'package:debrify/utils/torrent_filter_matcher.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1109,7 +1110,7 @@ void main() {
         expect(sources.every((s) => s.name.contains(sample.$4)), isTrue);
         expect(TorrentFilterMatcher.apply(sources, filter), sources);
         expect(
-          TorrentPlaybackService.orderCandidatesForRules(
+          SourceCandidateRanking.orderCandidatesForRules(
             sources,
             rules: QuickPlayRules.debrifyDefault(
               isMovie: true,
@@ -1147,7 +1148,7 @@ void main() {
           reason: '$metadata',
         );
         expect(
-          TorrentPlaybackService.orderCandidatesForRules(
+          SourceCandidateRanking.orderCandidatesForRules(
             sources,
             rules: QuickPlayRules.debrifyDefault(
               isMovie: true,
@@ -1270,7 +1271,7 @@ void main() {
     () async {
       await connect();
       List<Torrent> strict(List<Torrent> sources, AudioLanguage language) =>
-          TorrentPlaybackService.orderCandidatesForRules(
+          SourceCandidateRanking.orderCandidatesForRules(
             sources,
             rules: QuickPlayRules.debrifyDefault(
               isMovie: true,
@@ -1501,7 +1502,7 @@ void main() {
           reason: '${sample.$1}',
         );
         expect(
-          TorrentPlaybackService.orderCandidatesForRules(
+          SourceCandidateRanking.orderCandidatesForRules(
             sources,
             rules: QuickPlayRules.debrifyDefault(
               isMovie: true,

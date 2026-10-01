@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:debrify/features/sources/application/source_candidate_ranking.dart';
+import 'package:debrify/features/sources/application/source_iptv_availability.dart';
+import 'package:debrify/features/sources/application/source_probing.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/iptv_playlist.dart';
-import 'package:debrify/models/torrent.dart';
 import 'package:debrify/models/quick_play_rules.dart';
+import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_catalog_key.dart';
 import 'package:debrify/services/iptv_source_search.dart';
@@ -17,9 +20,9 @@ import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -66,7 +69,7 @@ void main() {
 
   test('automatic IPTV discovery defers all Xtream episode lookups', () async {
     expect(
-      TorrentPlaybackService.iptvQuickPlaySearchTimeout,
+      SourceIptvAvailability.iptvQuickPlaySearchTimeout,
       const Duration(minutes: 1),
     );
     ingest('series', [
@@ -98,13 +101,10 @@ void main() {
         expect(result, hasLength(2));
         expect(result.every(IptvSourceSearch.isDeferredXtreamSeries), isTrue);
         expect(
-          result.every(TorrentPlaybackService.isAutoPlayableCandidate),
+          result.every(SourceCandidateRanking.isAutoPlayableCandidate),
           isTrue,
         );
-        expect(
-          TorrentPlaybackService.selectDirect(result, null).$1,
-          same(result.first),
-        );
+        expect(SourceProbing.selectDirect(result, null).$1, same(result.first));
         expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
         expect(requests, 0);
       },
@@ -386,7 +386,7 @@ void main() {
         'infohash': 'addon-test',
       });
       expect(
-        TorrentPlaybackService.orderCandidatesForRules(
+        SourceCandidateRanking.orderCandidatesForRules(
           [addon, ...sources],
           rules: rules.copyWith(
             sourcePriority: ['iptv:playlist-a', 'stremio:test'],
@@ -395,7 +395,7 @@ void main() {
         'iptv:playlist-a',
       );
       expect(
-        TorrentPlaybackService.orderCandidatesForRules(
+        SourceCandidateRanking.orderCandidatesForRules(
           [addon, ...sources],
           rules: rules.copyWith(
             sourcePriority: ['stremio:test', 'iptv:playlist-a'],
@@ -404,7 +404,7 @@ void main() {
         'stremio:test',
       );
       expect(
-        TorrentPlaybackService.orderCandidatesForRules([
+        SourceCandidateRanking.orderCandidatesForRules([
           ...sources.reversed,
           ...sources,
         ], rules: rules.copyWith(sourcePriority: ['iptv:playlist-a'])),
@@ -699,7 +699,7 @@ void main() {
     )).single.torrents;
     var attempts = 0;
     final available =
-        await TorrentPlaybackService.confirmDeferredIptvAvailability(
+        await SourceIptvAvailability.confirmDeferredIptvAvailability(
           descriptors,
           season: 1,
           episode: 2,
@@ -714,7 +714,7 @@ void main() {
     expect(attempts, 2);
     expect(available, isEmpty);
     expect(
-      available.any(TorrentPlaybackService.isAutoPlayableCandidate),
+      available.any(SourceCandidateRanking.isAutoPlayableCandidate),
       isFalse,
     );
   });
@@ -741,7 +741,7 @@ void main() {
     )).single.torrents;
     final attempted = <String>[];
     final available =
-        await TorrentPlaybackService.confirmDeferredIptvAvailability(
+        await SourceIptvAvailability.confirmDeferredIptvAvailability(
           descriptors,
           season: 1,
           episode: 2,

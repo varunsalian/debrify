@@ -1,15 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
-
+import 'package:debrify/features/sources/application/source_filter_ladder.dart';
+import 'package:debrify/features/sources/application/source_probing.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/models/torrent_filter_state.dart';
 import 'package:debrify/services/storage_service.dart';
-import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 import 'package:debrify/utils/torrent_curation.dart';
 import 'package:debrify/utils/torrent_filter_matcher.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:debrify/widgets/torrent_result_row.dart'
     show TorrentQualityExtension;
@@ -112,8 +112,7 @@ void main() {
       );
     });
 
-    test(
-        'bare-web is checked LAST: a title word "Web" never steals a real '
+    test('bare-web is checked LAST: a title word "Web" never steals a real '
         'rip token (synthetic names)', () {
       expect(
         TorrentFilterMatcher.detectRipSource('Charlottes.Web.2006.DVDRip.x264'),
@@ -152,20 +151,23 @@ void main() {
     test('pixel token beats UHD source tag', () {
       // "UHD BluRay 1080p" is a 1080p encode of a UHD source.
       expect(
-        t('Oppenheimer 2023 IMAX UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737')
-            .qualityTier,
+        t(
+          'Oppenheimer 2023 IMAX UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737',
+        ).qualityTier,
         QualityTier.fullHd,
       );
       expect(
-        t('Interstellar 2014 IMAX Hybrid 1080p UHD BluRay DD+5.1 DV HDR x265-HiDt')
-            .qualityTier,
+        t(
+          'Interstellar 2014 IMAX Hybrid 1080p UHD BluRay DD+5.1 DV HDR x265-HiDt',
+        ).qualityTier,
         QualityTier.fullHd,
       );
     });
     test('2160p and untagged', () {
       expect(
-        t('The.Penguin.S01E01.2160p.WEB-DL.DV.HDR.ENG.LATINO.HINDI.Atmos.H265.MP4-BTM')
-            .qualityTier,
+        t(
+          'The.Penguin.S01E01.2160p.WEB-DL.DV.HDR.ENG.LATINO.HINDI.Atmos.H265.MP4-BTM',
+        ).qualityTier,
         QualityTier.ultraHd,
       );
       // No quality token at all → sd (documented default).
@@ -189,10 +191,10 @@ void main() {
         isFalse,
       );
       expect(
-        FilterLadder.langMatches(
-          untagged,
-          {AudioLanguage.english, AudioLanguage.hindi},
-        ),
+        FilterLadder.langMatches(untagged, {
+          AudioLanguage.english,
+          AudioLanguage.hindi,
+        }),
         isTrue,
       );
     });
@@ -274,7 +276,9 @@ void main() {
     test('tier 2: right quality, wrong rip source', () {
       // 1080p HDTV — quality matches, rip family doesn't.
       expect(
-        ladder.tierOfName('Game of Thrones S02E05 1080i HDTV DD5.1 MPEG2 [PublicHD]'),
+        ladder.tierOfName(
+          'Game of Thrones S02E05 1080i HDTV DD5.1 MPEG2 [PublicHD]',
+        ),
         2,
       );
     });
@@ -310,14 +314,10 @@ void main() {
       final camOk = FilterLadder(
         TorrentFilterState(ripSources: {RipSourceCategory.cam}),
       );
-      expect(
-        camOk.tierOfName('Oppenheimer.2023.720p.HDCAM-C1NEM4'),
-        0,
-      );
+      expect(camOk.tierOfName('Oppenheimer.2023.720p.HDCAM-C1NEM4'), 0);
     });
 
-    test(
-        'cam floor exempts non-torrent streams — an IPTV ".ts" label is a '
+    test('cam floor exempts non-torrent streams — an IPTV ".ts" label is a '
         'transport stream, not a telesync', () {
       // \b(ts)\b false-positives on stream labels; via tierOf a direct
       // stream never sinks to the floor (it relaxes normally instead).
@@ -345,10 +345,7 @@ void main() {
         ),
         0,
       );
-      expect(
-        l.tierOfName('Dune Part Two (2024) [1080p] [WEBRip] 88'),
-        1,
-      );
+      expect(l.tierOfName('Dune Part Two (2024) [1080p] [WEBRip] 88'), 1);
     });
 
     test('language-only filter → 2 tiers', () {
@@ -362,10 +359,7 @@ void main() {
         ),
         0,
       );
-      expect(
-        l.tierOfName('John Wick Chapter 2 (2017) [1080p] [BluRay] '),
-        1,
-      );
+      expect(l.tierOfName('John Wick Chapter 2 (2017) [1080p] [BluRay] '), 1);
     });
 
     test('empty filters → inactive single tier, order() is identity', () {
@@ -373,7 +367,9 @@ void main() {
       expect(l.isActive, isFalse);
       final list = [
         t('Oppenheimer.2023.720p.HDCAM-C1NEM4'),
-        t('The Penguin S01E01 After Hours 1080p AMZN WEB-DL DDP5 1 Atmos H 264-FLUX'),
+        t(
+          'The Penguin S01E01 After Hours 1080p AMZN WEB-DL DDP5 1 Atmos H 264-FLUX',
+        ),
       ];
       // No reordering AT ALL when no filters are set — including no cam
       // demotion (byte-identical to today's behavior).
@@ -385,11 +381,21 @@ void main() {
   group('FilterLadder.order', () {
     test('stable tier sort with cam floor, real names', () {
       final ladder = FilterLadder(p1);
-      final a = t('Oppenheimer.2023.1080p.NEW.V3.TELESYNC.H.264.AAC-HushRips'); // cam
-      final b = t('To.End.All.War.Oppenheimer.and.the.Atomic.Bomb.2023.720p.WEB'); // t3
-      final c = t('Game of Thrones S02E05 1080i HDTV DD5.1 MPEG2 [PublicHD]'); // t2
-      final d = t('Oppenheimer (2023) BluRay 1080p.H264 Ita Eng AC3 5.1 Sub Ita Eng ...'); // t0
-      final e = t('The Penguin S01E01 After Hours 1080p AMZN WEB-DL DDP5 1 Atmos H 264-FLUX'); // t0
+      final a = t(
+        'Oppenheimer.2023.1080p.NEW.V3.TELESYNC.H.264.AAC-HushRips',
+      ); // cam
+      final b = t(
+        'To.End.All.War.Oppenheimer.and.the.Atomic.Bomb.2023.720p.WEB',
+      ); // t3
+      final c = t(
+        'Game of Thrones S02E05 1080i HDTV DD5.1 MPEG2 [PublicHD]',
+      ); // t2
+      final d = t(
+        'Oppenheimer (2023) BluRay 1080p.H264 Ita Eng AC3 5.1 Sub Ita Eng ...',
+      ); // t0
+      final e = t(
+        'The Penguin S01E01 After Hours 1080p AMZN WEB-DL DDP5 1 Atmos H 264-FLUX',
+      ); // t0
       final ordered = ladder.order([a, b, c, d, e]);
       expect(ordered, [d, e, c, b, a]);
       // Stability: d before e (input order preserved within tier 0).
@@ -398,7 +404,9 @@ void main() {
     test('counts() reports per-tier totals for the overlay note', () {
       final ladder = FilterLadder(p1);
       final counts = ladder.counts([
-        t('The Penguin S01E01 After Hours 1080p AMZN WEB-DL DDP5 1 Atmos H 264-FLUX'),
+        t(
+          'The Penguin S01E01 After Hours 1080p AMZN WEB-DL DDP5 1 Atmos H 264-FLUX',
+        ),
         t('Game of Thrones S02E05 1080i HDTV DD5.1 MPEG2 [PublicHD]'),
         t('Oppenheimer.2023.720p.HDCAM-C1NEM4'),
       ]);
@@ -422,7 +430,7 @@ void main() {
     final single = t('Breaking.Bad.S01E01.720p.HDTV.x264');
 
     test('standard provider: single moves to index 1, two probes floor', () {
-      final (list, attempts) = TorrentPlaybackService.packTopSafety(
+      final (list, attempts) = SourceProbing.packTopSafety(
         [pack, pack2, single],
         provider: 'debrid',
         ladder: ladder,
@@ -434,7 +442,7 @@ void main() {
     });
 
     test('pikpak: single takes index 0 — the ONE probe is never a pack', () {
-      final (list, attempts) = TorrentPlaybackService.packTopSafety(
+      final (list, attempts) = SourceProbing.packTopSafety(
         [pack, pack2, single],
         provider: 'pikpak',
         ladder: ladder,
@@ -446,7 +454,7 @@ void main() {
     });
 
     test('no-ops: single already on top / no single / movie', () {
-      final (l1, a1) = TorrentPlaybackService.packTopSafety(
+      final (l1, a1) = SourceProbing.packTopSafety(
         [single, pack],
         provider: 'debrid',
         ladder: ladder,
@@ -456,7 +464,7 @@ void main() {
       expect(l1, [single, pack]);
       expect(a1, 1);
 
-      final (l2, a2) = TorrentPlaybackService.packTopSafety(
+      final (l2, a2) = SourceProbing.packTopSafety(
         [pack, pack2],
         provider: 'debrid',
         ladder: ladder,
@@ -466,7 +474,7 @@ void main() {
       expect(l2, [pack, pack2]);
       expect(a2, 1);
 
-      final (l3, a3) = TorrentPlaybackService.packTopSafety(
+      final (l3, a3) = SourceProbing.packTopSafety(
         [pack, single],
         provider: 'debrid',
         ladder: ladder,
@@ -477,14 +485,13 @@ void main() {
       expect(a3, 1);
     });
 
-    test(
-        'a top WITHOUT pack coverage is not a pack — episode-scoped addon '
+    test('a top WITHOUT pack coverage is not a pack — episode-scoped addon '
         'streams and token-less singles are left alone (round-2 guard)', () {
       // Anime-style episode-scoped names carry no S/E token; treating them
       // as packs would redirect PikPak\'s only probe.
       final animeTop = t('[SubsPlease] Show - 05 (1080p) [WEB]');
       final tokenSingle = t('Show S01E05 1080p WEB x264');
-      final (l1, a1) = TorrentPlaybackService.packTopSafety(
+      final (l1, a1) = SourceProbing.packTopSafety(
         [animeTop, tokenSingle],
         provider: 'pikpak',
         ladder: ladder,
@@ -495,7 +502,7 @@ void main() {
       expect(a1, 1);
 
       final directTop = t('1080p WEB-DL', type: StreamType.directUrl);
-      final (l2, a2) = TorrentPlaybackService.packTopSafety(
+      final (l2, a2) = SourceProbing.packTopSafety(
         [directTop, tokenSingle],
         provider: 'pikpak',
         ladder: ladder,
@@ -508,7 +515,7 @@ void main() {
 
     test('a cam-floored single is never hoisted (would defeat §3.3c)', () {
       final camSingle = t('Show S01E05 1080p HDCAM x264');
-      final (list, attempts) = TorrentPlaybackService.packTopSafety(
+      final (list, attempts) = SourceProbing.packTopSafety(
         [pack, camSingle],
         provider: 'pikpak',
         ladder: ladder,
@@ -525,34 +532,35 @@ void main() {
     final ladder = FilterLadder(p1);
     // Tier 0 torrent, tier-3 direct (720p fails the 1080p filter).
     final t0torrent = t('Movie 2024 1080p WEB-DL x264');
-    final relaxedDirect =
-        t('Movie 720p WEB stream', type: StreamType.directUrl);
-    final t0direct =
-        t('Movie 1080p WEB stream', type: StreamType.directUrl);
-    final external =
-        t('Movie 1080p WEB external', type: StreamType.externalUrl);
+    final relaxedDirect = t(
+      'Movie 720p WEB stream',
+      type: StreamType.directUrl,
+    );
+    final t0direct = t('Movie 1080p WEB stream', type: StreamType.directUrl);
+    final external = t(
+      'Movie 1080p WEB external',
+      type: StreamType.externalUrl,
+    );
 
     test('legacy (no ladder): first direct wins regardless of position', () {
-      final (direct, fallback) = TorrentPlaybackService.selectDirect(
-        [t0torrent, relaxedDirect],
-        null,
-      );
+      final (direct, fallback) = SourceProbing.selectDirect([
+        t0torrent,
+        relaxedDirect,
+      ], null);
       expect(direct, relaxedDirect);
       expect(fallback, relaxedDirect);
     });
 
     test('active ladder: best-tier direct plays now', () {
       final ordered = ladder.order([t0direct, t0torrent, relaxedDirect]);
-      final (direct, _) = TorrentPlaybackService.selectDirect(ordered, ladder);
+      final (direct, _) = SourceProbing.selectDirect(ordered, ladder);
       expect(direct, t0direct);
     });
 
-    test(
-        'active ladder: relaxed-tier direct behind a tier-0 torrent is only '
+    test('active ladder: relaxed-tier direct behind a tier-0 torrent is only '
         'the fallback', () {
       final ordered = ladder.order([t0torrent, relaxedDirect]);
-      final (direct, fallback) =
-          TorrentPlaybackService.selectDirect(ordered, ladder);
+      final (direct, fallback) = SourceProbing.selectDirect(ordered, ladder);
       expect(direct, isNull);
       expect(fallback, relaxedDirect);
     });
@@ -561,15 +569,15 @@ void main() {
       // externalUrl streams are not probeable and not direct-playable —
       // they must not define the best tier.
       final ordered = ladder.order([external, relaxedDirect]);
-      final (direct, fallback) =
-          TorrentPlaybackService.selectDirect(ordered, ladder);
+      final (direct, fallback) = SourceProbing.selectDirect(ordered, ladder);
       expect(direct, relaxedDirect);
       expect(fallback, relaxedDirect);
     });
 
     test('no direct at all → (null, null)', () {
-      final (direct, fallback) =
-          TorrentPlaybackService.selectDirect([t0torrent], ladder);
+      final (direct, fallback) = SourceProbing.selectDirect([
+        t0torrent,
+      ], ladder);
       expect(direct, isNull);
       expect(fallback, isNull);
     });
@@ -579,32 +587,50 @@ void main() {
   group('TorrentPlaybackService.probeAttemptCount', () {
     test('pikpak is 1 no matter what', () {
       expect(
-        TorrentPlaybackService.probeAttemptCount('pikpak',
-            tryMultiple: true, maxRetries: 10, minAttempts: 2),
+        SourceProbing.probeAttemptCount(
+          'pikpak',
+          tryMultiple: true,
+          maxRetries: 10,
+          minAttempts: 2,
+        ),
         1,
       );
     });
     test('minAttempts floors the single-attempt default', () {
       expect(
-        TorrentPlaybackService.probeAttemptCount('debrid',
-            tryMultiple: false, maxRetries: 5, minAttempts: 2),
+        SourceProbing.probeAttemptCount(
+          'debrid',
+          tryMultiple: false,
+          maxRetries: 5,
+          minAttempts: 2,
+        ),
         2,
       );
     });
     test('try-multiple wins when higher; corrupted pref clamps to 1..10', () {
       expect(
-        TorrentPlaybackService.probeAttemptCount('torbox',
-            tryMultiple: true, maxRetries: 5, minAttempts: 2),
+        SourceProbing.probeAttemptCount(
+          'torbox',
+          tryMultiple: true,
+          maxRetries: 5,
+          minAttempts: 2,
+        ),
         5,
       );
       expect(
-        TorrentPlaybackService.probeAttemptCount('torbox',
-            tryMultiple: true, maxRetries: 0),
+        SourceProbing.probeAttemptCount(
+          'torbox',
+          tryMultiple: true,
+          maxRetries: 0,
+        ),
         1,
       );
       expect(
-        TorrentPlaybackService.probeAttemptCount('torbox',
-            tryMultiple: true, maxRetries: 99),
+        SourceProbing.probeAttemptCount(
+          'torbox',
+          tryMultiple: true,
+          maxRetries: 99,
+        ),
         10,
       );
     });
@@ -614,20 +640,21 @@ void main() {
   group('TorrentPlaybackService.ladderNote', () {
     test('inactive or empty → null (filterless plays stay silent)', () {
       final inactive = FilterLadder(const TorrentFilterState.empty());
-      expect(TorrentPlaybackService.ladderNote(inactive, [t('x')]), isNull);
-      expect(TorrentPlaybackService.ladderNote(FilterLadder(p1), []), isNull);
+      expect(SourceFilterLadder.ladderNote(inactive, [t('x')]), isNull);
+      expect(SourceFilterLadder.ladderNote(FilterLadder(p1), []), isNull);
     });
 
     test('tier 0: summary + singular/plural counts', () {
       final ladder = FilterLadder(p1);
-      final match =
-          t('The Penguin S01E01 After Hours 1080p AMZN WEB-DL H 264-FLUX');
+      final match = t(
+        'The Penguin S01E01 After Hours 1080p AMZN WEB-DL H 264-FLUX',
+      );
       expect(
-        TorrentPlaybackService.ladderNote(ladder, [match]),
+        SourceFilterLadder.ladderNote(ladder, [match]),
         'Matching your filters (1080p · WEB · Blu-ray · English) · 1 source',
       );
       expect(
-        TorrentPlaybackService.ladderNote(ladder, [match, match]),
+        SourceFilterLadder.ladderNote(ladder, [match, match]),
         'Matching your filters (1080p · WEB · Blu-ray · English) · 2 sources',
       );
     });
@@ -638,23 +665,24 @@ void main() {
         'Dune.Part.Two.2024.FRENCH.FANSUB.1080p.WEBRip.x265.10bit.AAC-NBDY.mkv',
       );
       expect(
-        TorrentPlaybackService.ladderNote(ladder, [french]),
+        SourceFilterLadder.ladderNote(ladder, [french]),
         'No full filter match — trying without language match · 1 source',
       );
     });
 
     test('unrestricted tier and cam floor copy', () {
       final ladder = FilterLadder(p1);
-      final wrongQuality =
-          t('To.End.All.War.Oppenheimer.and.the.Atomic.Bomb.2023.720p.WEB');
+      final wrongQuality = t(
+        'To.End.All.War.Oppenheimer.and.the.Atomic.Bomb.2023.720p.WEB',
+      );
       expect(
-        TorrentPlaybackService.ladderNote(ladder, [wrongQuality]),
+        SourceFilterLadder.ladderNote(ladder, [wrongQuality]),
         'Nothing matches your filters (1080p · WEB · Blu-ray · English) — '
         'playing best available',
       );
       final cam = t('Oppenheimer.2023.720p.HDCAM-C1NEM4');
       expect(
-        TorrentPlaybackService.ladderNote(ladder, [cam]),
+        SourceFilterLadder.ladderNote(ladder, [cam]),
         'Only cam-quality sources found — playing best available',
       );
     });
@@ -700,13 +728,12 @@ void main() {
       expect(ladder.isActive, isFalse);
     });
 
-    test('kill switch off → inactive ladder even with filters saved',
-        () async {
+    test('kill switch off → inactive ladder even with filters saved', () async {
       SharedPreferences.setMockInitialValues({
         'default_filter_qualities_v1': jsonEncode(['fullHd']),
         'quick_play_honors_filters_v1': false,
       });
-      final ladder = await TorrentPlaybackService.loadLadder();
+      final ladder = await SourceFilterLadder.loadLadder();
       expect(ladder.isActive, isFalse);
     });
 
@@ -715,7 +742,7 @@ void main() {
         'default_filter_qualities_v1': jsonEncode(['fullHd']),
       });
       expect(await StorageService.getQuickPlayHonorsFilters(), isTrue);
-      final ladder = await TorrentPlaybackService.loadLadder();
+      final ladder = await SourceFilterLadder.loadLadder();
       expect(ladder.isActive, isTrue);
     });
   });
@@ -738,21 +765,22 @@ void main() {
 
     test('P1 preset finds a healthy tier-0 pool', () {
       final ladder = FilterLadder(p1);
-      final tier0 =
-          corpus.where((n) => ladder.tierOfName(n) == 0).length;
+      final tier0 = corpus.where((n) => ladder.tierOfName(n) == 0).length;
       // Measured 240/689 pre-fix on the movie corpus; the web fix and the
       // series names push it higher. Floor keeps the test robust to
       // future fixture additions.
       expect(tier0, greaterThanOrEqualTo(200));
     });
 
-    test('every corpus name lands in SOME bucket (nothing is unplayable)',
-        () {
+    test('every corpus name lands in SOME bucket (nothing is unplayable)', () {
       final ladder = FilterLadder(p1);
       for (final n in corpus) {
         final tier = ladder.tierOfName(n);
-        expect(tier >= 0 && tier <= ladder.tierCount, isTrue,
-            reason: 'out-of-range tier $tier for "$n"');
+        expect(
+          tier >= 0 && tier <= ladder.tierCount,
+          isTrue,
+          reason: 'out-of-range tier $tier for "$n"',
+        );
       }
     });
 

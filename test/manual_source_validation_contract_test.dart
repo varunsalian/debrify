@@ -95,14 +95,17 @@ void main() {
       'static bool _isSeriesPlaylist(',
     );
     expect(launch, contains('final resolverProvider ='));
-    expect(launch, contains('await _defaultConfiguredProvider('));
+    expect(
+      launch,
+      contains('await SourceProviderConfig.defaultConfiguredProvider('),
+    );
     expect(launch, contains('_resolverFor(resolverProvider, committer)'));
     expect(launch, contains('startupResolverProvider: resolverProvider'));
     expect(
       launch,
       matches(
         RegExp(
-          r'recoveryProvider\s*\?\?\s*await _defaultConfiguredProvider\(\s*canContinue:',
+          r'recoveryProvider\s*\?\?\s*await SourceProviderConfig\.defaultConfiguredProvider\(\s*canContinue:',
         ),
       ),
     );

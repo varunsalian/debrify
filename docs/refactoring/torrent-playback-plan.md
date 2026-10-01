@@ -297,7 +297,8 @@ this file's source text.
 
 | Step | Commit | Service lines | Result |
 | --- | --- | --- | --- |
-| 0 | step-0 commit (this entry) | 7,103 | Reused `finish/bugfixes.jsonl` at `1d6fa710`; SDK matches. Whole-repo `flutter analyze`: 836 existing diagnostics in `<E>/tps/analyze-gate0.txt`. |
+| 0 | `e0d3e932` | 7,103 | Reused `finish/bugfixes.jsonl` at `1d6fa710`; SDK matches. Whole-repo `flutter analyze`: 836 existing diagnostics in `<E>/tps/analyze-gate0.txt`. |
+| 1 | step-1 commit (this entry) | 5,893 | Moved no-UI dependencies and models. Focused suite: 1,101 pass / 4 observed baseline failures; comparison PASS. Size/import guards pass. |
 
 ## Found, not fixed
 
@@ -314,3 +315,26 @@ this file's source text.
   text through the app localization infrastructure.
 - The final service facade is temporary: repoint its production callers to the
   Sources bridges and delete it in the subsequent playback migration.
+
+### Step 1 evidence and ownership
+
+- New owners: `application/source_candidate_ranking.dart`,
+  `source_search_plans.dart`, `source_iptv_availability.dart`,
+  `source_filter_ladder.dart`, `source_probing.dart`,
+  `source_candidate_checks.dart`, `source_provider_config.dart`,
+  `source_curation.dart`, `source_cache_ordering.dart`;
+  `models/resolved_source.dart` and `models/playback_cancel_token.dart`.
+- The provider configuration dependency closure (`_configuredProviders`,
+  `_isConfigured`, `_effectiveFetchProvider`) moved in step 1 with the default
+  provider selector, avoiding application-to-presentation/facade calls.
+- Alias cache and single-flight warm-up remain process-wide statics owned by
+  `SourceCandidateRanking`; the no-pack memory stays with the retained
+  selection pipeline until step 4. Captured profile owners and guards remain
+  unchanged. The cancellation flag remains action-owned.
+- Original `@visibleForTesting` annotations move intact. Existing production
+  calls that crossed a library boundary receive a call-site-only
+  `invalid_use_of_visible_for_testing_member` ignore; this preserves the
+  annotation without adding warnings for previously internal calls.
+- Evidence: `<E>/tps/step1.jsonl`, `analyze-step1.txt`, `mapping.json`, and
+  syntax-token comparison against the untouched `original.dart`. Test names
+  remain unchanged. No runtime behavior changes or new dependency versions.

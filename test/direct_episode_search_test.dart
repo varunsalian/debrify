@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:debrify/features/sources/application/source_curation.dart';
+import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/torrent.dart';
-import 'package:debrify/models/quick_play_rules.dart';
-import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/services/stremio_service.dart';
+import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/services/torrent_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -89,7 +90,7 @@ void main() {
           QuickPlayPreset.addonOrder,
           isMovie: false,
         ).copyWith(maxAttempts: attempts);
-        final recovery = TorrentPlaybackService.earlyDirectRecovery(
+        final recovery = SourceCuration.earlyDirectRecovery(
           [failed, torrent, dead, working],
           failed: failed,
           rules: rules,
@@ -105,7 +106,7 @@ void main() {
     final failed = candidate(headers: {'Authorization': 'old'});
     final replacement = candidate(headers: {'Authorization': 'new'});
     final duplicate = candidate(headers: {'Authorization': 'old'});
-    final recovery = TorrentPlaybackService.earlyDirectRecovery(
+    final recovery = SourceCuration.earlyDirectRecovery(
       [failed, replacement, duplicate],
       failed: failed,
       rules: QuickPlayRules.debrifyDefault(isMovie: false),
@@ -122,17 +123,11 @@ void main() {
       final direct = candidate();
       final torrent = candidate(direct: false);
       expect(
-        TorrentPlaybackService.earlyDirectCandidate([
-          direct,
-          torrent,
-        ], rules: rules),
+        SourceCuration.earlyDirectCandidate([direct, torrent], rules: rules),
         same(direct),
       );
       expect(
-        TorrentPlaybackService.earlyDirectCandidate([
-          torrent,
-          direct,
-        ], rules: rules),
+        SourceCuration.earlyDirectCandidate([torrent, direct], rules: rules),
         isNull,
       );
       for (final other in [
@@ -143,7 +138,7 @@ void main() {
         QuickPlayRules.debrifyDefault(isMovie: false),
       ]) {
         expect(
-          TorrentPlaybackService.earlyDirectCandidate([direct], rules: other),
+          SourceCuration.earlyDirectCandidate([direct], rules: other),
           isNull,
         );
       }
@@ -179,7 +174,7 @@ void main() {
       final stremio = addon('backup');
       for (final native in ['mediaserver:primary', 'iptv:primary']) {
         expect(
-          TorrentPlaybackService.leadingDirectAddonKey(
+          SourceCuration.leadingDirectAddonKey(
             [stremio],
             [native, stremio.sourceKey],
           ),
@@ -187,10 +182,7 @@ void main() {
         );
       }
       expect(
-        TorrentPlaybackService.leadingDirectAddonKey(
-          [stremio],
-          [stremio.sourceKey],
-        ),
+        SourceCuration.leadingDirectAddonKey([stremio], [stremio.sourceKey]),
         stremio.sourceKey,
       );
     },
@@ -201,7 +193,7 @@ void main() {
     () {
       for (final field in ['engineErrors', 'addonErrors']) {
         expect(
-          TorrentPlaybackService.directSearchErrors({
+          SourceCuration.directSearchErrors({
             field: {
               'mediaserver:home': 'Reconnect this server.',
               'stremio:backup': 'Timed out',
@@ -236,14 +228,14 @@ void main() {
     );
 
     expect(
-      TorrentPlaybackService.leadingDirectAddonKey(
+      SourceCuration.leadingDirectAddonKey(
         [primary, backup],
         [backup.sourceKey, primary.sourceKey],
       ),
       backup.sourceKey,
     );
     expect(
-      TorrentPlaybackService.leadingDirectAddonKey(
+      SourceCuration.leadingDirectAddonKey(
         [primary, backup],
         [primary.legacySourceKey],
       ),
@@ -337,34 +329,35 @@ void main() {
     expect(await resolve(), isNull);
   });
 
-  test('targeted retry selects the exact same-manifest configuration', () async {
-    final main = addon('main').copyWith(
-      id: 'org.example.aio',
-      name: 'AIOStreams',
-    ).withUserAlias('AIOStreams Main');
-    final backup = addon('backup').copyWith(
-      id: 'org.example.aio',
-      name: 'AIOStreams',
-    ).withUserAlias('AIOStreams Backup');
-    install([main, backup]);
-    final hosts = <String>[];
-    service.debugStreamHttpClientFactory = () => MockClient((request) async {
-      hosts.add(request.url.host);
-      return response('https://cdn.test/backup');
-    });
+  test(
+    'targeted retry selects the exact same-manifest configuration',
+    () async {
+      final main = addon('main')
+          .copyWith(id: 'org.example.aio', name: 'AIOStreams')
+          .withUserAlias('AIOStreams Main');
+      final backup = addon('backup')
+          .copyWith(id: 'org.example.aio', name: 'AIOStreams')
+          .withUserAlias('AIOStreams Backup');
+      install([main, backup]);
+      final hosts = <String>[];
+      service.debugStreamHttpClientFactory = () => MockClient((request) async {
+        hosts.add(request.url.host);
+        return response('https://cdn.test/backup');
+      });
 
-    final results = await service.retryAddonStreams(
-      addonId: backup.sourceBindingKey,
-      type: 'series',
-      imdbId: 'tt123',
-      season: 1,
-      episode: 2,
-    );
+      final results = await service.retryAddonStreams(
+        addonId: backup.sourceBindingKey,
+        type: 'series',
+        imdbId: 'tt123',
+        season: 1,
+        episode: 2,
+      );
 
-    expect(hosts, ['backup.test']);
-    expect(results.single.source, backup.sourceKey);
-    expect(results.single.addonDisplayName, 'AIOStreams Backup');
-  });
+      expect(hosts, ['backup.test']);
+      expect(results.single.source, backup.sourceKey);
+      expect(results.single.addonDisplayName, 'AIOStreams Backup');
+    },
+  );
 
   test(
     'search UI receives fast addon before slow one; final order is unchanged',
