@@ -298,7 +298,8 @@ this file's source text.
 | Step | Commit | Service lines | Result |
 | --- | --- | --- | --- |
 | 0 | `e0d3e932` | 7,103 | Reused `finish/bugfixes.jsonl` at `1d6fa710`; SDK matches. Whole-repo `flutter analyze`: 836 existing diagnostics in `<E>/tps/analyze-gate0.txt`. |
-| 1 | step-1 commit (this entry) | 5,893 | Moved no-UI dependencies and models. Focused suite: 1,101 pass / 4 observed baseline failures; comparison PASS. Size/import guards pass. |
+| 1 | `1e47f83a` | 5,893 | Moved no-UI dependencies and models. Focused suite: 1,101 pass / 4 observed baseline failures; comparison PASS. Size/import guards pass. |
+| 2 | step-2 commit (this entry) | 4,749 | Search/fetcher owners wired; focused suite 1,101 pass / same 4 failures; comparison PASS. Analyzer and size/import guards unchanged/pass. |
 
 ## Found, not fixed
 
@@ -338,3 +339,22 @@ this file's source text.
 - Evidence: `<E>/tps/step1.jsonl`, `analyze-step1.txt`, `mapping.json`, and
   syntax-token comparison against the untouched `original.dart`. Test names
   remain unchanged. No runtime behavior changes or new dependency versions.
+
+### Step 2 evidence
+
+- Search owners: `data/series_pack_search.dart`, `iptv_quick_play_search.dart`,
+  `curated_source_search.dart`, `recovery_source_resolution.dart`. Fetcher
+  owners: `source_series_fetcher.dart`, `source_movie_fetcher.dart`,
+  `source_engine_fetchers.dart`. Each is under 500 lines after formatting.
+- Production fetch/recovery callers retain forwarding APIs. Repointed tests
+  keep their original identities; the recovery source guard now reads its
+  actual data owner and checks the same one-attempt probe contract.
+- Evidence: `<E>/tps/step2.jsonl`, `analyze-step2.txt`, and verbatim syntax-token
+  comparison for all 119 original static members. No new diagnostics or test
+  failures; the four historical source-contract failures remain.
+
+- Formatting longer qualified calls exposes six new curly-brace lint reports
+  on unchanged single-statement guards in the recovery and fetcher owners.
+  Line-specific ignores preserve their original tokens. Review and add braces
+  in the subsequent control-flow refactor; the existing baseline curly-brace
+  diagnostics remain measured.

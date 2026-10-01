@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/features/sources/application/source_curation.dart';
+import 'package:debrify/features/sources/data/source_series_fetcher.dart';
 import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/torrent.dart';
@@ -147,7 +148,7 @@ void main() {
 
   test('early launch source menu joins the original episode search', () async {
     final gate = Completer<List<Torrent>>();
-    final fetcher = TorrentPlaybackService.seriesFetcherFor(
+    final fetcher = SourceSeriesFetcher.seriesFetcherFor(
       meta: const PlaybackMeta(
         imdbId: 'tt123',
         contentType: 'series',

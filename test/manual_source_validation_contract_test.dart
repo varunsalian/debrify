@@ -23,6 +23,9 @@ void main() {
   final playbackService = File(
     'lib/services/torrent_playback_service.dart',
   ).readAsStringSync();
+  final recoveryResolution = File(
+    'lib/features/sources/data/recovery_source_resolution.dart',
+  ).readAsStringSync();
   final launcher = File(
     'lib/services/video_player_launcher.dart',
   ).readAsStringSync();
@@ -76,11 +79,16 @@ void main() {
       );
       expect(launcher, contains(': await resolveSourceToPlaylist(torrent)'));
       final automaticProbe = _between(
-        playbackService,
+        recoveryResolution,
         'static Future<List<PlaylistEntry>?> resolveRecoverySource(',
-        '/// Builds the [SeriesSourceFetcher]',
+        '\n}',
       );
-      expect(automaticProbe, contains('_probeCandidates(provider, [source]'));
+      expect(
+        automaticProbe,
+        matches(
+          RegExp(r'SourceProbing\.probeCandidates\(\s*provider,\s*\[source\]'),
+        ),
+      );
       expect(
         automaticProbe,
         contains('tryNextOnFailure: false, maxAttempts: 1'),

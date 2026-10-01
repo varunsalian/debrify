@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:debrify/features/sources/data/source_series_fetcher.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/native_series_metadata_service.dart';
@@ -87,14 +88,14 @@ void main() {
             addonId: NativeSeriesMetadataService.addon.id,
           );
           expect(
-            TorrentPlaybackService.seriesFetcherFor(
+            SourceSeriesFetcher.seriesFetcherFor(
               meta: meta,
             )?.resolveAdjacentEpisode,
             isNotNull,
           );
           // Exercise the callback shared by Flutter and the Android TV bridge,
           // not merely its presence: a forward-only resolver breaks Previous.
-          final resolve = TorrentPlaybackService.seriesFetcherFor(
+          final resolve = SourceSeriesFetcher.seriesFetcherFor(
             meta: meta,
           )!.resolveAdjacentEpisode!;
           expect(await tester.runAsync(() => resolve(2, 3, -1)), (
@@ -107,7 +108,7 @@ void main() {
             episode: 3,
           ));
           expect(
-            TorrentPlaybackService.seriesFetcherFor(
+            SourceSeriesFetcher.seriesFetcherFor(
               meta: const PlaybackMeta.catalog(
                 imdbId: 'tt0118360',
                 contentType: 'series',

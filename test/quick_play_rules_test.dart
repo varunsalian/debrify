@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:debrify/features/sources/application/source_candidate_ranking.dart';
 import 'package:debrify/features/sources/application/source_search_plans.dart';
+import 'package:debrify/features/sources/data/source_series_fetcher.dart';
 import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/torrent.dart';
@@ -103,7 +104,7 @@ void main() {
           isMovie: false,
         );
 
-        final fetcher = TorrentPlaybackService.seriesFetcherFor(
+        final fetcher = SourceSeriesFetcher.seriesFetcherFor(
           meta: const PlaybackMeta(
             imdbId: 'tt1234567',
             contentType: 'series',
@@ -159,7 +160,7 @@ void main() {
           isMovie: false,
         );
 
-        final fetcher = TorrentPlaybackService.seriesFetcherFor(
+        final fetcher = SourceSeriesFetcher.seriesFetcherFor(
           meta: const PlaybackMeta(
             imdbId: 'tt1234567',
             contentType: 'series',
@@ -185,7 +186,7 @@ void main() {
       addTearDown(() => StreamUrlValidator.clientFactory = realFactory);
       StreamUrlValidator.clientFactory = () =>
           MockClient((_) async => http.Response('gone', 404));
-      final fetcher = TorrentPlaybackService.seriesFetcherFor(
+      final fetcher = SourceSeriesFetcher.seriesFetcherFor(
         meta: const PlaybackMeta(
           imdbId: 'tt1234567',
           contentType: 'series',
@@ -213,7 +214,7 @@ void main() {
         StreamUrlValidator.clientFactory = () => MockClient(
           (_) async => throw StateError('torrent candidate must not make HTTP'),
         );
-        final fetcher = TorrentPlaybackService.seriesFetcherFor(
+        final fetcher = SourceSeriesFetcher.seriesFetcherFor(
           meta: const PlaybackMeta(
             imdbId: 'tt1234567',
             contentType: 'series',

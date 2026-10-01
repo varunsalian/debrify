@@ -1,14 +1,15 @@
 import 'dart:convert';
 
-import 'package:debrify/models/torrent.dart';
+import 'package:debrify/features/sources/data/source_series_fetcher.dart';
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/models/torrent.dart';
+import 'package:debrify/services/profiles/profile_preference_portability.dart';
 import 'package:debrify/services/resolved_playback_link_cache.dart';
-import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/secret_vault.dart';
+import 'package:debrify/services/series_source_service.dart';
+import 'package:debrify/services/stream_url_validator.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
-import 'package:debrify/services/stream_url_validator.dart';
-import 'package:debrify/services/profiles/profile_preference_portability.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -175,7 +176,7 @@ void main() {
         season: 1,
         episode: 1,
       );
-      final fetcher = TorrentPlaybackService.seriesFetcherFor(meta: launch)!;
+      final fetcher = SourceSeriesFetcher.seriesFetcherFor(meta: launch)!;
       final candidate = await fetcher.pinnedDirectCandidates!(1, 2).first;
       expect(requested, ['/stream/series/tt123:1:2.json']);
       expect(candidate.directUrl, 'https://cdn.test/episode2');
@@ -368,7 +369,7 @@ void main() {
       expect(request.headers['referer'], 'https://addon.test/');
       return http.Response('', 200, headers: {'content-length': '100000000'});
     });
-    final fetcher = TorrentPlaybackService.seriesFetcherFor(
+    final fetcher = SourceSeriesFetcher.seriesFetcherFor(
       meta: const PlaybackMeta(
         imdbId: 'tt123',
         contentType: 'series',

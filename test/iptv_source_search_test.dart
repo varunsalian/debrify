@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:debrify/features/sources/application/source_candidate_ranking.dart';
 import 'package:debrify/features/sources/application/source_iptv_availability.dart';
 import 'package:debrify/features/sources/application/source_probing.dart';
+import 'package:debrify/features/sources/data/iptv_quick_play_search.dart';
+import 'package:debrify/features/sources/data/recovery_source_resolution.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/quick_play_rules.dart';
@@ -85,7 +87,7 @@ void main() {
     await http.runWithClient(
       () async {
         final watch = Stopwatch()..start();
-        final result = await TorrentPlaybackService.searchIptvForQuickPlay(
+        final result = await IptvQuickPlaySearch.searchIptvForQuickPlay(
           'tt2',
           'Show',
           '2011',
@@ -361,7 +363,7 @@ void main() {
       ]);
       final rules = QuickPlayRules.debrifyDefault(isMovie: true);
       Future<List<Torrent>> search(QuickPlayRules r) =>
-          TorrentPlaybackService.searchIptvForQuickPlay(
+          IptvQuickPlaySearch.searchIptvForQuickPlay(
             'tt1',
             'Dune',
             '2021',
@@ -419,7 +421,7 @@ void main() {
     expect(iptv.name, 'My TV');
     expect(iptv.key, 'iptv:playlist-a');
     expect(
-      await TorrentPlaybackService.searchIptvForQuickPlay(
+      await IptvQuickPlaySearch.searchIptvForQuickPlay(
         'tt1',
         'Dune',
         '2021',
@@ -447,7 +449,7 @@ void main() {
       () async {
         final rules = QuickPlayRules.debrifyDefault(isMovie: false);
         for (final episode in [1, 2]) {
-          final sources = await TorrentPlaybackService.searchIptvForQuickPlay(
+          final sources = await IptvQuickPlaySearch.searchIptvForQuickPlay(
             'tt2',
             'Show',
             '2011',
@@ -508,7 +510,7 @@ void main() {
         Future<List<Torrent>> search(
           QuickPlayRules value, {
           String? identity,
-        }) => TorrentPlaybackService.searchIptvForQuickPlay(
+        }) => IptvQuickPlaySearch.searchIptvForQuickPlay(
           identity ?? id,
           'Big Brother',
           '2023',
@@ -590,7 +592,7 @@ void main() {
       for (final id in ['tmdb:438631', 'tmdb:movie:438631', 'simkl:100']) {
         final rules = QuickPlayRules.debrifyDefault(isMovie: true);
         Future<List<Torrent>> search(QuickPlayRules value) =>
-            TorrentPlaybackService.searchIptvForQuickPlay(
+            IptvQuickPlaySearch.searchIptvForQuickPlay(
               id,
               'Dune',
               '2021',
@@ -1316,7 +1318,7 @@ void main() {
       await prefs.setStringList('iptv_playlists', []);
       await expectLater(IptvSourceSearch.authorize(source), throwsStateError);
       expect(
-        await TorrentPlaybackService.resolveRecoverySource(
+        await RecoverySourceResolution.resolveRecoverySource(
           source,
           provider: null,
         ),

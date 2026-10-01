@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/features/sources/application/source_candidate_ranking.dart';
+import 'package:debrify/features/sources/data/source_movie_fetcher.dart';
+import 'package:debrify/features/sources/data/source_series_fetcher.dart';
 import 'package:debrify/models/media_server.dart';
 import 'package:debrify/models/media_server_library.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
@@ -965,12 +967,12 @@ void main() {
     () async {
       final resource = await connect();
       final key = 'mediaserver:${resource.id}';
-      final movie = TorrentPlaybackService.movieFetcherFor(
+      final movie = SourceMovieFetcher.movieFetcherFor(
         meta: const PlaybackMeta(imdbId: 'tt123', contentType: 'movie'),
       )!;
       expect((await movie.listAddons!()).map((ref) => ref.id), contains(key));
       expect(await movie.fetchAddonEpisodes!(key, 0, 0), hasLength(2));
-      final series = TorrentPlaybackService.seriesFetcherFor(
+      final series = SourceSeriesFetcher.seriesFetcherFor(
         meta: const PlaybackMeta(
           imdbId: 'tt123',
           contentType: 'series',
@@ -1028,7 +1030,7 @@ void main() {
       final before = requestCount;
       // Missing custom metadata must not fall back to the canonical episode.
       for (final videoId in ['RO_1', null]) {
-        final series = TorrentPlaybackService.seriesFetcherFor(
+        final series = SourceSeriesFetcher.seriesFetcherFor(
           meta: PlaybackMeta(
             imdbId: 'tt123',
             contentType: 'series',

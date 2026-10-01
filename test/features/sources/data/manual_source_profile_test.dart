@@ -1,27 +1,28 @@
-import 'package:debrify/features/sources/data/provider_cloud_source.dart';
-import 'provider_cloud_source_test.dart' show CloudFixture;
-import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
-import 'package:debrify/services/torrent_playback_service.dart';
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:debrify/services/pikpak_api_service.dart';
-import 'package:debrify/services/profiles/profile_session_memory.dart';
+import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
 import 'package:debrify/features/sources/data/manual_source_preparation.dart';
+import 'package:debrify/features/sources/data/provider_cloud_source.dart';
+import 'package:debrify/features/sources/data/recovery_source_resolution.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/services/pikpak_api_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'provider_cloud_source_test.dart' show CloudFixture;
 import 'source_acquisition_test.dart' as fixture;
 
 void main() {
@@ -115,7 +116,7 @@ void main() {
           final result = await http.runWithClient(
             () => ProfileRuntime.withCapturedScope(incoming, () async {
               if (automatic) {
-                return await TorrentPlaybackService.resolveRecoverySource(
+                return await RecoverySourceResolution.resolveRecoverySource(
                       fixture.torrent,
                       provider: 'debrid',
                       owner: owner.owner,
