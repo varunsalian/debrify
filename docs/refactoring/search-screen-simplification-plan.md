@@ -65,12 +65,25 @@ Declined, with rationale:
 - `search-screen-plan.md` is frozen history and still names files that no
   longer exist; its header points to the current plans.
 
-**Iteration 2** (`1d16efc2`): no bugs. Removed now-dead dependency fields
-(rendering `navigation`/`badges`, stages `badges`) and the unused
-`rendering.classic`, so `board().geometry` is the only path to Classic
-sizing. The picker's `ValueKey('create')` is back on the `AnimatedSwitcher`
-child, and one import was reordered. The mixed-context row extent stays a
-recorded pre-existing issue.
+**Iteration 1 fixes:** `1d16efc2`. Checks: scoped analyze unchanged, 2,738
+affected tests with no new failures, guard and format clean.
+
+**Iteration 2** (reviewed `1d16efc2`, fixed in `1cc97a28`): no bugs. Removed
+now-dead dependency fields (rendering `navigation`/`badges`, stages
+`badges`) and the unused `rendering.classic`. The picker's
+`ValueKey('create')` is back on the `AnimatedSwitcher` child (no runtime
+change; the two children already differed in type). One import was moved
+below the package import; the files' relative imports were never sorted, and
+this pass does not sort them. Checks: scoped analyze unchanged, 1,613
+affected Home/Stremio TV/screen tests with no new failures, guard and format
+clean. The mixed-context row extent stays a recorded pre-existing issue.
+
+**Iteration 3** (reviewed `1cc97a28`, fixed in this commit): no bugs.
+`createHomeRendering` returns `HomeBoardRendering` directly (no one-field
+record, no `rendering.rendering`), with plain finals instead of needless
+`late` fields. `HomeClassicSection`'s geometry and row/footer/status builders
+are private now that nothing outside reaches it, and its doc no longer
+claims row geometry.
 
 ## Found, not fixed
 

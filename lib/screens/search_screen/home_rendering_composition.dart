@@ -27,10 +27,8 @@ typedef HomeRenderingCompositionDeps = ({
   int Function() heroIdentity,
 });
 
-typedef HomeRenderingComposition = ({HomeBoardRendering rendering});
-
 /// Wires the classic rows and layout selector to their existing borrowed owners.
-HomeRenderingComposition createHomeRendering(
+HomeBoardRendering createHomeRendering(
   HomeRenderingCompositionDeps deps, {
   required HomeBoardWorkflow board,
   required CatalogSearchSection catalog,
@@ -45,9 +43,7 @@ HomeRenderingComposition createHomeRendering(
   required HomeCatalogItemActions items,
   required HomeClassicGeometry geometry,
 }) {
-  late final HomeClassicSection classic;
-  late final HomeBoardRendering rendering;
-  classic = HomeClassicSection(
+  final classic = HomeClassicSection(
     (
       context: deps.context,
       isTelevision: deps.isTelevision,
@@ -77,7 +73,7 @@ HomeRenderingComposition createHomeRendering(
     hero.heroPreview,
     hero.heroLive,
   );
-  rendering = HomeBoardRendering(
+  return HomeBoardRendering(
     (
       mounted: deps.mounted,
       context: deps.context,
@@ -108,5 +104,4 @@ HomeRenderingComposition createHomeRendering(
     saved,
     continuationProjection,
   );
-  return (rendering: rendering);
 }

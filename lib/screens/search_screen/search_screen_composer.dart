@@ -296,7 +296,7 @@ class SearchScreenComposer {
     dedicatedSearch: widget.searchMode,
     spotlightActive: () => hero.spotlightShell.spotlightShellActive,
     discover: discover.section.buildDiscover,
-    board: board.rendering.rendering.buildBoard,
+    board: board.rendering.buildBoard,
     spotlight: hero.spotlightShell.buildSpotlightShell,
     header: search.input.inputSection.buildHeader,
     sourcesBar: search.input.inputSection.buildUnifiedCatalogSourcesBar,

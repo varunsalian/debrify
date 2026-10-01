@@ -38,11 +38,12 @@ typedef HomeClassicSectionDeps = ({
   HomeCatalogItemActions items,
 });
 
-/// Classic board composition, row geometry and catalog-cell interaction wiring.
+/// Classic board composition and catalog-cell interaction wiring. Sizing
+/// comes from [HomeClassicGeometry].
 class HomeClassicSection {
   HomeClassicSection(
     this._deps,
-    this.geometry,
+    this._geometry,
     this._boardSection,
     this._boardFocus,
     this._boardDeferred,
@@ -61,9 +62,7 @@ class HomeClassicSection {
     this._heroLive,
   );
   final HomeClassicSectionDeps _deps;
-
-  /// Classic sizing, shared with the composition's other rails.
-  final HomeClassicGeometry geometry;
+  final HomeClassicGeometry _geometry;
   final HomeBoardSection _boardSection;
   final HomeBoardFocus _boardFocus;
   final HomeBoardDeferred _boardDeferred;
@@ -87,7 +86,7 @@ class HomeClassicSection {
     return buildHomeClassicBoard(
       context: context,
       isTelevision: tv,
-      tvHeroBudget: geometry.tvHeroBudget,
+      tvHeroBudget: _geometry.tvHeroBudget,
       media: () => _deps.media(),
       trailerActive: () => _heroPreview.heroTrailerActive,
       heroActive: () => _heroSection.heroActive,
@@ -113,12 +112,12 @@ class HomeClassicSection {
           _catalogSection.catalogQuery.isNotEmpty &&
           (_catalogSection.catalogSearching ||
               _catalogSection.catalogFailures > 0),
-      searchStatus: buildSearchStatusStrip,
-      rowsBuilder: (_) => buildClassicRows(),
+      searchStatus: _buildSearchStatusStrip,
+      rowsBuilder: (_) => _buildClassicRows(),
     );
   }
 
-  Widget buildClassicRows() {
+  Widget _buildClassicRows() {
     // Home uses one globally ordered descriptor list across
     // every row family. Catalog search results never read
     // that Home order.
@@ -132,13 +131,13 @@ class HomeClassicSection {
       catalogRowCount: _boardSection.sections.length,
       rails: orderedHome ? homeRails : null,
       rowIdOf: _stageRailsSection.canvasRailRowId,
-      catalog: buildRow,
+      catalog: _buildRow,
       skeleton: _continuationRows.buildTraktSkeletonRow,
       continuation: _continuationRows.buildContinueWatchingRow,
       favorite: _savedRows.buildFavRow,
       showFooter: _boardSection.boardLoadingMore,
       tailPadding: _boardSection.classicAnchorTailPadding,
-      footerBuilder: (_) => buildBoardFooter(),
+      footerBuilder: (_) => _buildBoardFooter(),
       isFresh: () =>
           DateTime.now().difference(_boardSection.boardAppliedAt) <
           const Duration(milliseconds: 1800),
@@ -148,13 +147,13 @@ class HomeClassicSection {
   /// Status strip for a streaming catalog search (see the call site in
   /// [_buildBoard]). Fixed height so the swap from "searching" bar to the
   /// failure note doesn't reflow the rows under DPAD focus.
-  Widget buildSearchStatusStrip() => buildCatalogSearchStatus(
+  Widget _buildSearchStatusStrip() => buildCatalogSearchStatus(
     _deps.context(),
     searching: _catalogSection.catalogSearching,
     failures: _catalogSection.catalogFailures,
   );
 
-  Widget buildRow(int rowIndex, {String? homeRowId}) {
+  Widget _buildRow(int rowIndex, {String? homeRowId}) {
     final context = _deps.context();
     final section = _boardSection.sections[rowIndex];
     final nodes = _boardSection.rowNodes[rowIndex];
@@ -166,11 +165,11 @@ class HomeClassicSection {
     // wide even when Home cards are portrait) at the same height as every
     // other rail, so the row grammar stays intact.
     final collection = section is HomeCollectionSection ? section : null;
-    final cellH = geometry.railTitleCardH(context);
+    final cellH = _geometry.railTitleCardH(context);
     final cellAspect =
         collection?.tileAspectRatio ?? _stageGeometry.titleCardAspect;
     final posterW = collection == null
-        ? geometry.railTitleCardW(context)
+        ? _geometry.railTitleCardW(context)
         : cellH * cellAspect;
     // Rows start straight on the first poster (Stremio-style, no
     // leading See-All tile). DPAD-up from row 0 leaves the board;
@@ -205,7 +204,7 @@ class HomeClassicSection {
       nodes: nodes,
       tv: tv,
       header: collection == null || !_displaySection.hideHomeCollectionNames
-          ? geometry.railHeader(
+          ? _geometry.railHeader(
               title: section.title,
               tag: _deps.items.sourceTag(section),
               onSeeAll: () => _deps.items.openSeeAll(section),
@@ -234,7 +233,7 @@ class HomeClassicSection {
   }
 
   /// Bottom-of-board loading indicator shown while more catalog rows stream in.
-  Widget buildBoardFooter() {
+  Widget _buildBoardFooter() {
     return const Padding(
       padding: EdgeInsets.symmetric(vertical: 28),
       child: Center(

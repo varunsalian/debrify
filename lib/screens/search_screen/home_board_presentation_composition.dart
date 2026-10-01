@@ -19,6 +19,7 @@ import 'home_saved_composition.dart';
 import 'home_item_composition.dart';
 import '../../features/home/presentation/home_classic_geometry.dart';
 import 'home_catalog_item_actions_adapter.dart';
+import '../../features/home/presentation/home_board_rendering.dart';
 
 typedef HomeBoardPresentationDeps = ({
   bool Function() mounted,
@@ -39,7 +40,7 @@ typedef HomeBoardPresentationDeps = ({
 typedef HomeBoardPresentation = ({
   HomeStages stages,
   HomeBoardWorkflow workflow,
-  HomeRenderingComposition rendering,
+  HomeBoardRendering rendering,
   HomeClassicGeometry geometry,
 });
 
@@ -64,7 +65,7 @@ HomeBoardPresentation createHomeBoardPresentation(
 }) {
   late final HomeStages stages;
   late final HomeBoardWorkflow workflow;
-  late final HomeRenderingComposition rendering;
+  late final HomeBoardRendering rendering;
   // One catalog-item role and one Classic geometry for every board consumer.
   final items = HomeCatalogItemActionsAdapter(
     badges: () => deps.catalog().badges,
