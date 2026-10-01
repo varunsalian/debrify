@@ -1,8 +1,8 @@
+import '../../features/home/presentation/home_classic_geometry.dart';
 import 'package:flutter/material.dart';
 import '../../utils/tv_search_focus_handoff.dart';
 import 'home_board_composition.dart';
 import '../../features/home/presentation/home_board_rendering.dart';
-import '../../features/home/presentation/home_classic_section.dart';
 import '../../features/home/presentation/home_spotlight_section.dart';
 import '../../features/home/presentation/home_hero_shell_bridge.dart';
 import '../../features/discover/presentation/discover_section.dart';
@@ -28,7 +28,7 @@ typedef SearchInputCompositionDeps = ({
   bool Function() keywordAllowed,
   HomeBoardWorkflow Function() board,
   HomeSpotlightSection Function() spotlight,
-  HomeClassicSection Function() classic,
+  HomeClassicGeometry Function() geometry,
   HomeBoardRendering Function() rendering,
 });
 
@@ -122,8 +122,8 @@ SearchInputComposition createSearchInput(
     state: () => listsSection.listsState,
     nodes: () => listsSection.listsNodes,
     isTelevision: () => deps.isTelevision(),
-    posterWidth: (context) => deps.classic().geometry.railPosterW(context),
-    header: (onSeeAll) => deps.classic().geometry.railHeader(
+    posterWidth: (context) => deps.geometry().railPosterW(context),
+    header: (onSeeAll) => deps.geometry().railHeader(
       title: 'MDBList Lists',
       tag: 'LISTS',
       onSeeAll: onSeeAll,

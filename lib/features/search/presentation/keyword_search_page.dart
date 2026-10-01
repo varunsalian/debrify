@@ -9,7 +9,7 @@ import '../../../theme/app_theme_scope.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../widgets/search_loading_animation.dart';
 import '../models/keyword_search_state.dart';
-import '../application/keyword_providers.dart';
+import '../application/keyword_provider_selection.dart';
 
 /// Keyword page states. Builders keep inactive result/navigation surfaces lazy.
 class KeywordSearchPage extends StatelessWidget {

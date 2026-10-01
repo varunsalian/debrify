@@ -17,6 +17,8 @@ import 'home_continuation_content_composition.dart';
 import 'home_continuation_presentation_composition.dart';
 import 'home_saved_composition.dart';
 import 'home_item_composition.dart';
+import '../../features/home/presentation/home_classic_geometry.dart';
+import 'home_catalog_item_actions_adapter.dart';
 
 typedef HomeBoardPresentationDeps = ({
   bool Function() mounted,
@@ -38,6 +40,7 @@ typedef HomeBoardPresentation = ({
   HomeStages stages,
   HomeBoardWorkflow workflow,
   HomeRenderingComposition rendering,
+  HomeClassicGeometry geometry,
 });
 
 /// Constructs the board's stage layouts, workflow and rendering in that order.
@@ -62,6 +65,16 @@ HomeBoardPresentation createHomeBoardPresentation(
   late final HomeStages stages;
   late final HomeBoardWorkflow workflow;
   late final HomeRenderingComposition rendering;
+  // One catalog-item role and one Classic geometry for every board consumer.
+  final items = HomeCatalogItemActionsAdapter(
+    badges: () => deps.catalog().badges,
+    navigation: () => deps.catalog().navigation,
+  );
+  final geometry = HomeClassicGeometry((
+    context: deps.context,
+    isTelevision: deps.isTelevision,
+    searchMode: deps.searchMode,
+  ), hero.displaySection);
   stages = createHomeStages(
     (
       mounted: deps.mounted,
@@ -93,6 +106,7 @@ HomeBoardPresentation createHomeBoardPresentation(
     catalogSection: search.catalog,
     ambientArt: ambientArt,
     heroTint: heroTint,
+    items: items,
   );
   workflow = createHomeBoardWorkflow(
     ref,
@@ -106,7 +120,7 @@ HomeBoardPresentation createHomeBoardPresentation(
       bindings: deps.bindings,
       scope: deps.scope,
       badges: () => deps.catalog().badges,
-      classic: () => rendering.classic,
+      geometry: geometry,
       tabIndex: deps.tabIndex,
     ),
     catalogSection: search.catalog,
@@ -149,6 +163,13 @@ HomeBoardPresentation createHomeBoardPresentation(
     continuationMenu: continuationView.menu,
     continuationRows: continuationView.rows,
     spotlight: spotlight,
+    items: items,
+    geometry: geometry,
   );
-  return (stages: stages, workflow: workflow, rendering: rendering);
+  return (
+    stages: stages,
+    workflow: workflow,
+    rendering: rendering,
+    geometry: geometry,
+  );
 }

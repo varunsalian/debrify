@@ -10,7 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'home_series_resume_dependencies_test.dart' show history;
+import 'home_series_resume_providers_test.dart' show history;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

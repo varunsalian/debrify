@@ -178,6 +178,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/home/presentation/home_hero_spotlight.dart': 0,
   // Moved out of the hero spotlight and the Stremio TV picker with their radii.
   'lib/features/home/presentation/home_hero_identity.dart': 1,
+  'lib/features/home/presentation/home_catalog_card_layers.dart': 0,
+  'lib/features/home/presentation/home_poster_flight.dart': 0,
   'lib/features/stremio_tv/presentation/stremio_tv_catalog_picker_views.dart': 2,
   'lib/features/home/presentation/home_hero_transitions.dart': 0,
   'lib/features/home/presentation/home_hero_tint_surface.dart': 0,

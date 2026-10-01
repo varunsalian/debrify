@@ -15,9 +15,9 @@ import 'home_view_bindings.dart';
 import 'home_board_composition.dart';
 import '../../features/home/presentation/home_rows_navigation.dart';
 import '../../features/home/presentation/home_continuation_return.dart';
-import '../../features/home/presentation/home_classic_section.dart';
 import 'home_hero_composition.dart';
 import '../../features/home/presentation/home_hero_shell_bridge.dart';
+import '../../features/home/presentation/home_classic_geometry.dart';
 
 typedef HomeSavedCompositionDeps = ({
   bool Function() mounted,
@@ -28,7 +28,7 @@ typedef HomeSavedCompositionDeps = ({
   HomeBoardWorkflow Function() board,
   HomeRowsNavigation Function() navigation,
   HomeContinuationReturn Function() returning,
-  HomeClassicSection Function() classic,
+  HomeClassicGeometry Function() geometry,
   HomeHeroComposition Function() hero,
   bool Function(ProfileFeature) allowed,
   bool Function() profileCurrent,
@@ -115,7 +115,7 @@ HomeSavedComposition createHomeSavedContent(
       classicRows: (rowId, nodes) => HomeClassicFavoriteRows(
         context: deps.context(),
         isTelevision: deps.isTelevision(),
-        posterWidth: deps.classic().geometry.railPosterW(deps.context()),
+        posterWidth: deps.geometry().railPosterW(deps.context()),
         captionBand: deps.hero().displaySection.homeArtPosterCaptionBand,
         showTitle: () =>
             !deps.hero().displaySection.hideHomeCardTitlesAndRatings,

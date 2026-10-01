@@ -16,7 +16,8 @@ import '../../../widgets/recoverable_network_image.dart';
 import '../models/home_card_metadata.dart';
 import 'home_card_metadata_view.dart';
 import 'home_card_style.dart';
-import 'home_catalog_card_parts.dart';
+import 'home_catalog_card_layers.dart';
+import 'home_poster_flight.dart';
 
 class HomeCatalogCard extends StatefulWidget {
   final StremioMeta item;
@@ -190,9 +191,8 @@ class _HomeCatalogCardState extends State<HomeCatalogCard>
           // level; memory-cached loads still land settled with no fade.
           fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
           fadeOutDuration: HomeTheme.imageFadeOut(widget.isTelevision),
-          placeholder: (_, __) => buildHomeCardPlaceholder(
-            context,
-            item,
+          placeholder: (_, __) => HomeCardPlaceholder(
+            item: item,
             showTitle: widget.showTitleOverlay,
           ),
           // A derived wide still (MetaHub) can 404 where the poster exists —
@@ -207,29 +207,22 @@ class _HomeCatalogCardState extends State<HomeCatalogCard>
                   memCacheWidth: widget.isTelevision ? 320 : 480,
                   fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
                   fadeOutDuration: HomeTheme.imageFadeOut(widget.isTelevision),
-                  placeholder: (_, __) => buildHomeCardPlaceholder(
-                    context,
-                    item,
+                  placeholder: (_, __) => HomeCardPlaceholder(
+                    item: item,
                     showTitle: widget.showTitleOverlay,
                   ),
-                  errorWidget: (_, __, ___) => buildHomeCardPlaceholder(
-                    context,
-                    item,
+                  errorWidget: (_, __, ___) => HomeCardPlaceholder(
+                    item: item,
                     showTitle: widget.showTitleOverlay,
                   ),
                 )
-              : buildHomeCardPlaceholder(
-                  context,
-                  item,
+              : HomeCardPlaceholder(
+                  item: item,
                   showTitle: widget.showTitleOverlay,
                 ),
         )
       else
-        buildHomeCardPlaceholder(
-          context,
-          item,
-          showTitle: widget.showTitleOverlay,
-        ),
+        HomeCardPlaceholder(item: item, showTitle: widget.showTitleOverlay),
       if (widget.focusArtUrl != null || widget.focusVideoUrl != null)
         Positioned.fill(
           child: CollectionFocusArt(
@@ -352,7 +345,7 @@ class _HomeCatalogCardState extends State<HomeCatalogCard>
         ),
       // Hold-OK feedback: a dim scrim with a filling ring, shown only
       // while OK is actually held down (so it costs nothing at rest).
-      if (_holding) buildHomeCardHoldLayer(_holdController),
+      if (_holding) HomeCardHoldLayer(progress: _holdController),
     ];
 
     final artCard = CollectionFocusGlow(

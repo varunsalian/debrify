@@ -13,13 +13,13 @@ import '../../features/home/presentation/home_continuation_removal.dart';
 import '../../features/home/presentation/home_saved_content_section.dart';
 import 'home_board_composition.dart';
 import '../../features/home/presentation/home_catalog_badges.dart';
-import '../../features/home/presentation/home_classic_section.dart';
 import '../../features/home/presentation/home_rows_navigation.dart';
 import '../../features/home/presentation/home_integration_section.dart';
 import 'home_stage_composition.dart';
 import 'home_hero_composition.dart';
 import '../../features/home/presentation/home_hero_shell_bridge.dart';
 import 'home_view_bindings.dart';
+import '../../features/home/presentation/home_classic_geometry.dart';
 
 typedef HomeContinuationPresentationDeps = ({
   bool Function() mounted,
@@ -31,7 +31,7 @@ typedef HomeContinuationPresentationDeps = ({
   HomeCatalogBadges Function() badges,
   HomeRowsNavigation Function() navigation,
   HomeIntegrationSection Function() integrations,
-  HomeClassicSection Function() classic,
+  HomeClassicGeometry Function() geometry,
   HomeStages Function() stages,
   HomeHeroComposition Function() hero,
   HomeViewBindings Function() view,
@@ -92,13 +92,14 @@ HomeContinuationPresentation createHomeContinuationPresentation(
   );
   rows = HomeContinuationRows(
     (
-      header: ({required title, tag, onSeeAll}) => deps
-          .classic()
-          .geometry
-          .railHeader(title: title, tag: tag, onSeeAll: onSeeAll),
+      header: ({required title, tag, onSeeAll}) => deps.geometry().railHeader(
+        title: title,
+        tag: tag,
+        onSeeAll: onSeeAll,
+      ),
       isTelevision: deps.isTelevision,
-      posterWidth: () => deps.classic().geometry.railTitleCardW(deps.context()),
-      cellHeight: () => deps.classic().geometry.railTitleCardH(deps.context()),
+      posterWidth: () => deps.geometry().railTitleCardW(deps.context()),
+      cellHeight: () => deps.geometry().railTitleCardH(deps.context()),
       aspectRatio: () => deps.stages().stageGeometry.titleCardAspect,
       showTitleOverlay: () =>
           !deps.hero().displaySection.hideHomeCardTitlesAndRatings,

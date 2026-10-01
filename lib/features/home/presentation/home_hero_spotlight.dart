@@ -621,8 +621,7 @@ class _HomeHeroSpotlightState extends State<HomeHeroSpotlight>
                             ),
                             child: ConstrainedBox(
                               constraints: BoxConstraints(maxWidth: maxTextW),
-                              child: buildHomeHeroIdentity(
-                                context,
+                              child: HomeHeroIdentity(
                                 titleArt: _buildTitleArt(metadata),
                                 metaParts: metaParts,
                                 rating: rating,

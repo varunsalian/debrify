@@ -11,7 +11,7 @@ import 'keyword_cache_controller.dart';
 import 'keyword_filter.dart';
 import 'keyword_sort.dart';
 import 'search_session_provider.dart';
-import 'keyword_providers.dart';
+import 'keyword_provider_selection.dart';
 
 final keywordResultsProvider = NotifierProvider.autoDispose
     .family<KeywordResultsController, KeywordResultsState, SearchSession>(

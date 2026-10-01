@@ -370,9 +370,8 @@ class _StremioTvCatalogPickerDialogState
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
               child: _showCreateView
-                  ? buildStremioTvCatalogCreateView(
-                      context,
-                      theme,
+                  ? StremioTvCatalogCreateView(
+                      theme: theme,
                       itemName: widget.item.name,
                       saving: _saving,
                       nameController: _nameController,
@@ -435,8 +434,8 @@ class _StremioTvCatalogPickerDialogState
                     : _cancelSelectionFocusNode,
                 onActivate: _saving ? null : _openCreateView,
               ),
-              child: buildStremioTvCatalogActionTile(
-                theme,
+              child: StremioTvCatalogActionTile(
+                theme: theme,
                 focusNode: _newChannelFocusNode,
                 icon: Icons.add_circle_outline_rounded,
                 title: 'New Channel',
@@ -550,8 +549,8 @@ class _StremioTvCatalogPickerDialogState
                               ? null
                               : () => _appendToCatalog(catalog),
                         ),
-                        child: buildStremioTvCatalogActionTile(
-                          theme,
+                        child: StremioTvCatalogActionTile(
+                          theme: theme,
                           focusNode: focusNode,
                           icon: widget.item.type == 'series'
                               ? Icons.tv_rounded

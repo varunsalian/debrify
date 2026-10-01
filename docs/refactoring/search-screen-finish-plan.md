@@ -443,7 +443,8 @@ plus the two gate comparisons.
 > **Update 2026-09-30:** the design cleanup, the three older bugs, the two
 > P2s, the two flaky tests, the 300-line facade and a host-side performance
 > comparison are done in
-> [search-screen-followups-plan.md](search-screen-followups-plan.md). Still
+> [search-screen-followups-plan.md](search-screen-followups-plan.md), followed by a
+> structural [simplification pass](search-screen-simplification-plan.md). Still
 > pending: on-device playback/performance checks and the legacy service audits
 > listed below.
 

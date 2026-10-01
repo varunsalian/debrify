@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/home/data/home_board_services.dart';
 import '../../features/home/presentation/home_board_bindings.dart';
 import '../../features/home/presentation/home_catalog_badges.dart';
-import '../../features/home/presentation/home_classic_section.dart';
 import 'home_stage_composition.dart';
 import '../../features/home/presentation/home_hero_shell_bridge.dart';
 import '../../models/stremio_addon.dart';
@@ -31,6 +30,7 @@ import '../../features/home/presentation/home_hero_section.dart';
 import '../../features/home/presentation/home_hero_live.dart';
 import '../../features/home/presentation/home_screen_controls.dart';
 import 'home_screen_controls_adapter.dart';
+import '../../features/home/presentation/home_classic_geometry.dart';
 
 /// Live readers needed only while wiring the board workflow; later owners remain deferred.
 typedef HomeBoardCompositionDeps = ({
@@ -43,7 +43,7 @@ typedef HomeBoardCompositionDeps = ({
   HomeBoardBindings Function() bindings,
   Object? Function() scope,
   HomeCatalogBadges Function() badges,
-  HomeClassicSection Function() classic,
+  HomeClassicGeometry geometry,
   int Function() tabIndex,
 });
 
@@ -244,10 +244,8 @@ HomeBoardWorkflow createHomeBoardWorkflow(
       setState: deps.setState,
       context: deps.context,
       rowId: HomeBoardServices.rowId,
-      classicRowExtent: (context, {CatalogSection? section}) => deps
-          .classic()
-          .geometry
-          .classicCatalogRowExtent(context, section: section),
+      classicRowExtent: (context, {CatalogSection? section}) =>
+          deps.geometry.classicCatalogRowExtent(context, section: section),
       refreshBoundSources: () => deps.badges().refreshBoundSources(),
     ),
     boardSection,

@@ -1,5 +1,5 @@
 import '../../../models/torrent.dart';
-import '../application/keyword_providers.dart';
+import '../application/keyword_provider_selection.dart';
 
 /// Prefer a provider's display name from the fullest available result set.
 String keywordSourceLabel(List<Torrent> full, String source) {

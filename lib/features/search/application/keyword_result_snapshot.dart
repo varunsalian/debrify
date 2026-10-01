@@ -1,5 +1,5 @@
 import '../models/keyword_results_state.dart';
-import 'keyword_providers.dart';
+import 'keyword_provider_selection.dart';
 
 /// Fold authoritative pending raw rows and provider choices for tab return,
 /// retaining the legacy displayed filtered rows. Pure: callable during widget

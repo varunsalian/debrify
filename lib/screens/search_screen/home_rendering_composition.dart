@@ -16,7 +16,7 @@ import '../../features/home/presentation/home_saved_content_rows.dart';
 import '../../features/home/presentation/home_spotlight_section.dart';
 import 'home_stage_composition.dart';
 import '../../features/home/presentation/home_classic_geometry.dart';
-import 'home_catalog_item_actions_adapter.dart';
+import '../../features/home/presentation/home_catalog_item_actions.dart';
 
 typedef HomeRenderingCompositionDeps = ({
   bool Function() mounted,
@@ -49,6 +49,8 @@ HomeRenderingComposition createHomeRendering(
   required HomeContinuationMenu continuationMenu,
   required HomeContinuationRows continuationRows,
   required HomeSpotlightSection spotlight,
+  required HomeCatalogItemActions items,
+  required HomeClassicGeometry geometry,
 }) {
   late final HomeClassicSection classic;
   late final HomeBoardRendering rendering;
@@ -62,16 +64,9 @@ HomeRenderingComposition createHomeRendering(
       artworkHeight: () => deps.media().artworkCacheHeight,
       heroIdentity: deps.heroIdentity,
       sidebar: HomeHeroShellBridge.focusTvSidebar,
-      items: HomeCatalogItemActionsAdapter(
-        badges: () => deps.badges(),
-        navigation: () => deps.navigation(),
-      ),
+      items: items,
     ),
-    HomeClassicGeometry((
-      context: deps.context,
-      isTelevision: deps.isTelevision,
-      searchMode: deps.searchMode,
-    ), hero.displaySection),
+    geometry,
     board.boardSection,
     board.boardFocus,
     board.boardDeferred,

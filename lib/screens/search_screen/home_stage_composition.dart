@@ -33,7 +33,7 @@ import '../../features/home/presentation/home_continuation_menu.dart';
 import '../../features/home/presentation/home_item_actions.dart';
 import '../../features/home/presentation/home_catalog_actions.dart';
 import '../../features/search/presentation/catalog_search_section.dart';
-import 'home_catalog_item_actions_adapter.dart';
+import '../../features/home/presentation/home_catalog_item_actions.dart';
 
 typedef HomeStageCompositionDeps = ({
   bool Function() mounted,
@@ -82,11 +82,8 @@ HomeStages createHomeStages(
   required CatalogSearchSection catalogSection,
   required ValueNotifier<String?> ambientArt,
   required ValueNotifier<Color?> heroTint,
+  required HomeCatalogItemActions items,
 }) {
-  final items = HomeCatalogItemActionsAdapter(
-    badges: () => deps.badges(),
-    navigation: () => deps.navigation(),
-  );
   late final HomeStageRails stageRailsSection;
   late final HomeStageSection stageSection;
   late final HomeStageFavorites stageFavorites;

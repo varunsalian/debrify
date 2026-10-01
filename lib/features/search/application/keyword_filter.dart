@@ -1,7 +1,7 @@
 import '../../../models/torrent.dart';
 import '../../../models/torrent_filter_state.dart';
 import '../../../utils/torrent_filter_matcher.dart';
-import 'keyword_providers.dart';
+import 'keyword_provider_selection.dart';
 
 /// Match the cache badge's key exactly: lowercase, without trimming. Hashless
 /// torrent download links are retained because they cannot be cache-checked.

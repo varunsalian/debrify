@@ -133,7 +133,7 @@ SearchPresentation createSearchPresentation(
       keywordAllowed: deps.keywordAllowed,
       board: () => deps.board().workflow,
       spotlight: () => deps.hero().spotlightSection,
-      classic: () => deps.board().rendering.classic,
+      geometry: () => deps.board().geometry,
       rendering: () => deps.board().rendering.rendering,
     ),
     searchController: searchController,
