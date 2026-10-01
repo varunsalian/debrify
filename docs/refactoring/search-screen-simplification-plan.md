@@ -86,14 +86,23 @@ are private now that nothing outside reaches it, and its doc no longer
 claims row geometry. Checks: scoped analyze unchanged, 1,594 Home and
 screen tests with no new failures, guard and format clean.
 
-**Iteration 4** (reviewed `b66866b2`, fixed in the final commit of this
-pass): no bugs. `stages` and `rendering` are plain finals (only `workflow` is
+**Iteration 4** (reviewed `b66866b2`, fixed in `f5e97cfd`): no bugs. `stages` and `rendering` are plain finals (only `workflow` is
 read before it is assigned), and a stale doc reference was corrected.
 Declined: the per-build layouts map and Classic's positional wiring predate
 this pass (behaviour-neutral polish for a later change); the constant footer
 and import grouping are cosmetic, and this pass does not sort imports.
 Four rounds found no correctness issues and shrinking findings, so review
 stopped here.
+
+## Final gate
+
+`finish/simplify-final.jsonl` at `f5e97cfd`: 10,286 pass / 22 fail / 29 err /
+20 skip, the same failure set as `simplify-gate.jsonl`, no new failures or
+skips. The 98 "missing" identities are exactly the renamed provider test
+files (`*_dependencies_test.dart` → `*_providers_test.dart`,
+`keyword_providers_test.dart` → `keyword_provider_selection_test.dart`); each
+one is present under its new path with an identical outcome. Scoped analyze
+unchanged, guard passes (617 files), formatting clean.
 
 ## Found, not fixed
 
