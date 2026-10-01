@@ -4,7 +4,6 @@ import '../../models/stremio_subtitle.dart';
 import '../../models/torrent.dart';
 import '../browse/browse_results_focus.dart';
 import '../../services/youtube_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/download_service.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
@@ -12,6 +11,7 @@ import '../../theme/app_theme_scope.dart';
 import 'youtube_filters.dart';
 import 'youtube_video_card.dart';
 import 'youtube_empty_state.dart';
+import 'package:debrify/services/storage/youtube_storage.dart';
 
 /// Main view for YouTube video results, embedded in TorrentSearchScreen.
 ///
@@ -70,13 +70,13 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
   }
 
   Future<void> _loadQuality() async {
-    final h = await StorageService.getYoutubeMaxHeight();
+    final h = await YoutubeStorage.getYoutubeMaxHeight();
     if (mounted) setState(() => _maxHeight = h);
   }
 
   void _onQualityChanged(int height) {
     setState(() => _maxHeight = height);
-    StorageService.setYoutubeMaxHeight(height);
+    YoutubeStorage.setYoutubeMaxHeight(height);
     // Applies to the next video resolved; current playback is unaffected.
   }
 

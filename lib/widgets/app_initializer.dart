@@ -15,6 +15,7 @@ import '../services/remote_control/remote_command_router.dart';
 import '../utils/platform_util.dart';
 import '../widgets/initial_setup_flow.dart';
 import '../main.dart';
+import 'package:debrify/services/storage/remote_control_storage.dart';
 
 /// How long the corner spinner takes to fade out on TV. Shared so the widget's
 /// fade and _finishSplash's wait for it can never drift apart.
@@ -429,10 +430,11 @@ class _AppInitializerState extends State<AppInitializer>
 
   Future<void> _startTvListenerEarly() async {
     try {
-      final remoteEnabled = await StorageService.getRemoteControlEnabled();
+      final remoteEnabled =
+          await RemoteControlStorage.getRemoteControlEnabled();
       if (!remoteEnabled) return;
 
-      var deviceName = await StorageService.getRemoteTvDeviceName();
+      var deviceName = await RemoteControlStorage.getRemoteTvDeviceName();
       deviceName ??= await PlatformUtil.getDeviceName();
       deviceName ??= 'Debrify TV';
 

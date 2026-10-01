@@ -17,6 +17,7 @@ import 'home_sections_filter_page.dart';
 import 'spotlight_hero_source_page.dart';
 import 'tv_home_style_page.dart';
 import 'widgets/settings_widgets.dart';
+import 'package:debrify/models/ambient_trailer_surface.dart';
 
 class HomePageSettingsPage extends StatefulWidget {
   const HomePageSettingsPage({super.key});

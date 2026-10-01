@@ -3,7 +3,6 @@ import '../../models/playlist_view_mode.dart';
 import '../../services/lemmy_service.dart';
 import '../../services/youtube_service.dart';
 import '../../services/reddit_embed_resolver_service.dart';
-import '../../services/storage_service.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../services/profiles/profile_policy_guard.dart';
 import '../../services/video_player_launcher.dart';
@@ -12,6 +11,7 @@ import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import 'lemmy_filters.dart';
 import 'lemmy_video_card.dart';
 import 'lemmy_empty_state.dart';
+import 'package:debrify/services/storage/lemmy_storage.dart';
 
 /// Main view for Lemmy video results, to be embedded in TorrentSearchScreen
 class LemmyResultsView extends StatefulWidget {
@@ -65,11 +65,11 @@ class LemmyResultsViewState extends State<LemmyResultsView> {
 
   Future<void> _loadSettings() async {
     final allowNsfw =
-        await StorageService.getLemmyAllowNsfw() &&
+        await LemmyStorage.getLemmyAllowNsfw() &&
         // Viewer-scoped rail: role-locked off for child profiles.
         ProfilePolicyGuard.allowsSync(ProfileFeature.allowAdultContent);
-    final instance = await StorageService.getLemmyInstance();
-    final defaultCommunity = await StorageService.getLemmyDefaultCommunity();
+    final instance = await LemmyStorage.getLemmyInstance();
+    final defaultCommunity = await LemmyStorage.getLemmyDefaultCommunity();
 
     LemmyService.instanceBaseUrl = instance;
 

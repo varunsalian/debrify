@@ -8,6 +8,7 @@ import 'package:debrify/services/webdav_sync/webdav_sync_active_profile_refresh.
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/services/stremio_service.dart';
+import 'package:debrify/services/storage/storage_profile_caches.dart';
 
 void main() {
   const refresher = DefaultWebDavSyncActiveProfileRefresher();
@@ -30,7 +31,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'detail_show_where_to_watch': false,
     });
-    StorageService.resetProfileCaches();
+    resetStorageProfileCaches();
     expect(
       StorageService.detailPageSectionVisibilityCached.whereToWatch,
       isTrue,

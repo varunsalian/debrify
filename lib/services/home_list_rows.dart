@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import '../models/stremio_addon.dart';
-import 'storage_service.dart';
 import 'trakt/trakt_list_source.dart';
 import 'watched_filter.dart';
 import 'simkl/simkl_list_source.dart';
 import 'mdblist/mdblist_list_source.dart';
+import 'package:debrify/models/home_preferences.dart';
 
 /// ID grammar for the opt-in extra Home rows (see
 /// [StorageService.getHomeExtraRows]). Kept together so the board, the

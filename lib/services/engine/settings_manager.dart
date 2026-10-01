@@ -1,6 +1,6 @@
 import '../../models/engine_config/engine_config.dart';
 import '../profiles/profile_preferences.dart';
-import '../storage_service.dart';
+import 'package:debrify/services/storage/profile_policy_storage.dart';
 
 /// Manages dynamic storage keys for engine settings.
 ///
@@ -279,7 +279,7 @@ class SettingsManager {
 
   /// Get global avoid NSFW setting for TV mode
   Future<bool> getGlobalAvoidNsfw(bool defaultValue) async {
-    if (!await StorageService.profileAllowsAdultContent()) return true;
+    if (!await ProfilePolicyStorage.profileAllowsAdultContent()) return true;
     final key = generateGlobalTvKey('avoid_nsfw');
     final prefs = await ProfilePreferences.instance();
     return prefs.getBool(key) ?? defaultValue;
@@ -291,7 +291,7 @@ class SettingsManager {
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool(
       key,
-      await StorageService.profileAllowsAdultContent() ? value : true,
+      await ProfilePolicyStorage.profileAllowsAdultContent() ? value : true,
     );
   }
 

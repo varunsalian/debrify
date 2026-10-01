@@ -24,6 +24,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:debrify/services/storage/storage_profile_caches.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -58,7 +59,7 @@ void main() {
         );
     IptvCatalogDb.debugDirectoryOverride = catalogDirectory.path;
     await IptvCatalogDb.open();
-    StorageService.resetProfileCaches();
+    resetStorageProfileCaches();
     await StorageService.setIptvChannelPreviewEnabled(false);
     await StorageService.setIptvPlaylists([
       IptvPlaylist(

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/data/home_display_preferences_repository.dart';
 import 'package:debrify/services/main_page_bridge.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/widgets.dart';
@@ -10,6 +9,7 @@ import 'data/home_display_preferences_repository_test.dart'
     show displayRepository;
 import 'package:flutter_test/flutter_test.dart';
 import '../../home_progressive_pagination_test.dart' show HomeFixture, page;
+import 'package:debrify/models/home_preferences.dart';
 
 void main() {
   testWidgets(

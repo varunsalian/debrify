@@ -489,7 +489,8 @@ identity is present with the same outcome.
 
 | Step | Commit | `storage_service.dart` lines | Result |
 | --- | --- | --- | --- |
-| 0 | This tooling commit (hash recorded by step 1) | 10,952 | Baseline, complete map, resolved report, inventories and self-checked tooling; no Dart moves. |
+| 0 | `dfdf2d4a` | 10,952 | Baseline, complete map, resolved report, inventories and self-checked tooling; no Dart moves. |
+| 1 | This step commit (hash recorded by step 2) | 10,473 | Small subjects, enums, validator and reset entry wired; analyzer and 245 affected suites PASS against baseline. |
 
 ### Step 0 evidence and retained source
 
@@ -559,3 +560,35 @@ and comments are intentionally preserved for review.
 ## Found, not fixed
 
 (none yet)
+
+### Mechanical caller size exceptions
+
+Existing oversized callers need extra imports and formatter wrapping for the
+new static qualifiers. Their non-import executable declarations are checked
+against the preceding commit with only map-authorized qualifier normalization;
+no responsibilities are added. The existing file-size tool explicitly supports
+review-visible, hand-recorded exceptions for small changes. Each count below
+is the exact permitted cap; ordinary shrink-only ratcheting continues after
+each step. Unrelated whole-file extractions remain outside this plan.
+
+| Step | Retained caller | Previous cap | Exact new cap |
+| --- | --- | --- | --- |
+| 1 | `lib/main.dart` | 4158 | 4161 |
+| 1 | `lib/screens/collections/collection_folder_screen.dart` | 1859 | 1860 |
+| 1 | `lib/screens/merged_series_detail_screen.dart` | 5526 | 5527 |
+| 1 | `lib/screens/settings/home_page_settings_page.dart` | 1065 | 1066 |
+| 1 | `lib/screens/settings_screen.dart` | 8725 | 8727 |
+| 1 | `lib/services/download_service.dart` | 4683 | 4684 |
+| 1 | `lib/widgets/onboarding/onboarding_flow.dart` | 1206 | 1207 |
+| 1 | `lib/widgets/see_all/discover_detail_rail.dart` | 1166 | 1167 |
+
+Step 1: `ss/step1.jsonl` records 3,449 success, 18 error, 1 failure,
+10 skipped; comparison to `ss/base.jsonl` is PASS, with identical identities
+and outcomes for the affected tests. `ss/analyze-step1.txt` adds no diagnostics
+versus the analyzer baseline. Keys, bodies, size/import guards and diff checks
+pass. Repointing is idempotent. The omitted-mirror and omitted-legacy-leaf
+mutations both fail the isolation guard and were restored. There is no moved
+cache owner in step 1; the omitted-class-call mutation is exercised when the
+first such owner moves in step 3. An initial concurrent analyzer/test run
+caused a 30-second large-import test timeout; the complete affected run was
+repeated with the analyzer idle and passed. Both logs are retained.

@@ -18,10 +18,10 @@ import 'remote_transfer_all.dart';
 import 'remote_transfer_progress.dart';
 import 'remote_send_workspace.dart';
 import 'remote_receive_screen.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../services/profiles/profile_runtime.dart';
+import 'package:debrify/services/storage/remote_control_storage.dart';
 
 /// Full remote control UI modal
 class RemoteControlScreen extends StatefulWidget {
@@ -60,7 +60,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     final state = RemoteControlState();
     try {
       final name =
-          await StorageService.getRemoteTvDeviceName() ??
+          await RemoteControlStorage.getRemoteTvDeviceName() ??
           await PlatformUtil.getDeviceName() ??
           'This device';
       if (!mounted) return;

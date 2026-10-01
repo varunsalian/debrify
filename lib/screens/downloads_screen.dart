@@ -11,11 +11,11 @@ import 'package:flutter/services.dart';
 import '../services/analytics_service.dart';
 import '../services/download_service.dart';
 import '../theme/app_theme_scope.dart';
-import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/tv_text_field.dart';
+import 'package:debrify/services/storage/device_storage.dart';
 
 class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({super.key});
@@ -399,7 +399,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       String? customDir;
       if (Platform.isWindows || Platform.isLinux) {
         try {
-          customDir = await StorageService.getDownloadDirPath();
+          customDir = await DeviceStorage.getDownloadDirPath();
         } catch (_) {}
       }
       if (customDir != null && customDir.isNotEmpty) {
@@ -408,7 +408,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       } else if (Platform.isAndroid) {
         String? treeName;
         try {
-          treeName = await StorageService.getDownloadTreeDisplayName();
+          treeName = await DeviceStorage.getDownloadTreeDisplayName();
         } catch (_) {}
         destPath = treeName != null
             ? '$treeName/$filename'

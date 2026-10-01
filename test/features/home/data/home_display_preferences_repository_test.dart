@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:debrify/features/home/data/home_display_preferences_repository.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:debrify/models/home_preferences.dart';
 
 HomeDisplayPreferencesRepository displayRepository({
   Future<bool> Function()? focus,

@@ -6,6 +6,7 @@ import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:debrify/services/storage/storage_profile_caches.dart';
 
 /// Enumerate-then-assert over the whole preference store.
 ///
@@ -92,7 +93,7 @@ void main() {
     ProfileRuntime.publish(
       ProfileScope(profileId: 'other', dataGeneration: 1, sessionEpoch: 2),
     );
-    StorageService.resetProfileCaches();
+    resetStorageProfileCaches();
 
     expect(
       await StorageService.getTvHomeStyle(),

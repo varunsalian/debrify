@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/reddit_service.dart';
-import '../../services/storage_service.dart';
 import '../../utils/tv_keys.dart';
 import '../tv_text_field.dart';
+import 'package:debrify/services/storage/reddit_storage.dart';
 
 /// Popular subreddits for suggestions
 const List<String> kPopularSubreddits = [
@@ -482,7 +482,7 @@ class _SubredditPickerSheetState extends State<_SubredditPickerSheet> {
   }
 
   Future<void> _loadFavorites() async {
-    final favorites = await StorageService.getRedditFavoriteSubreddits();
+    final favorites = await RedditStorage.getRedditFavoriteSubreddits();
     if (!mounted) return;
     setState(() {
       _favoriteSubreddits = favorites;

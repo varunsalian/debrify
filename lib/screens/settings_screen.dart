@@ -137,6 +137,8 @@ import '../widgets/remote/remote_role_picker_screen.dart';
 import '../theme/app_looks.dart';
 import '../theme/app_theme_scope.dart';
 import '../models/tv_hero_artwork_quality.dart';
+import 'package:debrify/models/tv_render_quality.dart';
+import 'package:debrify/services/storage/device_storage.dart';
 
 @visibleForTesting
 bool shouldApplyPendingCredentialOverride({
@@ -468,7 +470,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'Update checks',
-        () => StorageService.getUpdateAutoCheckEnabled(),
+        () => DeviceStorage.getUpdateAutoCheckEnabled(),
         false,
       ),
       summaries.read(
@@ -630,7 +632,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'Alpha updates',
-        () => StorageService.getUpdateIncludeAlphaEnabled(),
+        () => DeviceStorage.getUpdateIncludeAlphaEnabled(),
         false,
       ),
       summaries.read('Media servers', () async => (await MediaServerService.connections()).length, 0),
@@ -6265,8 +6267,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadDownloadLocation() async {
     if (!_downloadLocationSupported) return;
     final String? name = _downloadLocationUsesSaf
-        ? await StorageService.getDownloadTreeDisplayName()
-        : await StorageService.getDownloadDirPath();
+        ? await DeviceStorage.getDownloadTreeDisplayName()
+        : await DeviceStorage.getDownloadDirPath();
     if (!mounted) return;
     setState(() {
       _downloadLocationSubtitle = name == null
@@ -6277,8 +6279,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _openDownloadLocationSettings() async {
     final String? currentTree = _downloadLocationUsesSaf
-        ? await StorageService.getDownloadTreeUri()
-        : await StorageService.getDownloadDirPath();
+        ? await DeviceStorage.getDownloadTreeUri()
+        : await DeviceStorage.getDownloadDirPath();
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
@@ -6352,12 +6354,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final newTree = (res['treeUri'] ?? '').toString();
     final name = (res['displayName'] ?? 'Custom folder').toString();
     if (newTree.isEmpty) return;
-    final old = await StorageService.getDownloadTreeUri();
+    final old = await DeviceStorage.getDownloadTreeUri();
     if (old != null && old.isNotEmpty && old != newTree) {
       // Release the previous grant — persisted-permission slots are limited.
       await AndroidNativeDownloader.releaseDownloadDirectory(old);
     }
-    await StorageService.setDownloadTreeUri(newTree, name);
+    await DeviceStorage.setDownloadTreeUri(newTree, name);
     await _loadDownloadLocation();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -6430,7 +6432,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       return;
     }
-    await StorageService.setDownloadDirPath(dir);
+    await DeviceStorage.setDownloadDirPath(dir);
     await _loadDownloadLocation();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -6440,13 +6442,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _resetDownloadFolder() async {
     if (_downloadLocationUsesSaf) {
-      final old = await StorageService.getDownloadTreeUri();
+      final old = await DeviceStorage.getDownloadTreeUri();
       if (old != null && old.isNotEmpty) {
         await AndroidNativeDownloader.releaseDownloadDirectory(old);
       }
-      await StorageService.clearDownloadTreeUri();
+      await DeviceStorage.clearDownloadTreeUri();
     } else {
-      await StorageService.clearDownloadDirPath();
+      await DeviceStorage.clearDownloadDirPath();
     }
     await _loadDownloadLocation();
     if (!mounted) return;
@@ -6701,7 +6703,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     if (_checkingUpdates) return;
     if (_currentVersionName.isEmpty) return;
-    await StorageService.setIgnoredUpdateVersion(null);
+    await DeviceStorage.setIgnoredUpdateVersion(null);
 
     setState(() {
       _checkingUpdates = true;
@@ -6907,7 +6909,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _autoUpdateChecksEnabled = enabled;
     });
-    await StorageService.setUpdateAutoCheckEnabled(enabled);
+    await DeviceStorage.setUpdateAutoCheckEnabled(enabled);
   }
 
   Future<void> _toggleIncludeAlphaUpdates(bool enabled) async {
@@ -6919,7 +6921,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? 'Check for alpha and beta builds'
           : 'Check for beta updates';
     });
-    await StorageService.setUpdateIncludeAlphaEnabled(enabled);
+    await DeviceStorage.setUpdateIncludeAlphaEnabled(enabled);
   }
 
   Future<void> _toggleTvKeyboard(bool enabled) async {

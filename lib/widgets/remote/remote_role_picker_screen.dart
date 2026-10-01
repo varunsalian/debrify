@@ -3,11 +3,11 @@ import 'package:flutter/services.dart';
 
 import '../../services/android_native_downloader.dart';
 import '../../services/remote_control/remote_control_state.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'remote_control_screen.dart';
 import 'remote_pairing_dialog.dart';
 import 'remote_receive_screen.dart';
+import 'package:debrify/services/storage/remote_control_storage.dart';
 
 /// Entry point for the Remote feature. Lets the user pick whether this
 /// device should act as the **Sender** (controls another device, exports
@@ -56,7 +56,7 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
       final isTv = await AndroidNativeDownloader.isTelevision();
       final state = RemoteControlState();
       if (isTv) {
-        var name = await StorageService.getRemoteTvDeviceName();
+        var name = await RemoteControlStorage.getRemoteTvDeviceName();
         name ??= await PlatformUtil.getDeviceName();
         name ??= 'Debrify TV';
         await state.switchToReceiverMode(name);
@@ -88,7 +88,7 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
 
   Future<void> _openReceiver() async {
     HapticFeedback.mediumImpact();
-    var name = await StorageService.getRemoteTvDeviceName();
+    var name = await RemoteControlStorage.getRemoteTvDeviceName();
     name ??= await PlatformUtil.getDeviceName();
     name ??= 'This device';
     final state = RemoteControlState();

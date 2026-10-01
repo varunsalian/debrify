@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/models/ambient_trailer_surface.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/imdb_trailer_service.dart';
 import '../../../services/metadata_preferences_service.dart';

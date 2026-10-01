@@ -12,6 +12,7 @@ import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:debrify/services/storage/storage_profile_caches.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -22,7 +23,7 @@ void main() {
     ProfileRuntime.initializeLegacy();
     PlatformUtil.debugSetAndroidTvCached(false);
     PlatformUtil.debugSetTvOS(null);
-    StorageService.resetProfileCaches();
+    resetStorageProfileCaches();
   });
 
   tearDown(() {
@@ -42,7 +43,7 @@ void main() {
       );
       for (final style in ['command', 'edition', 'console', 'spotlight']) {
         await StorageService.setIptvStyle(style);
-        StorageService.resetProfileCaches();
+        resetStorageProfileCaches();
         expect(StorageService.iptvStyleCached, 'spotlight');
         expect(await StorageService.getIptvStyle(), style);
       }
@@ -63,7 +64,7 @@ void main() {
       SharedPreferences.setMockInitialValues(const <String, Object>{
         'iptv_style': 'future-style',
       });
-      StorageService.resetProfileCaches();
+      resetStorageProfileCaches();
       expect(await StorageService.getIptvStyle(), 'spotlight');
     },
   );

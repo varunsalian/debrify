@@ -10,6 +10,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/app_route_observer.dart';
 import '../../utils/platform_util.dart';
 import '../home/spotlight_card_trailer.dart';
+import 'package:debrify/models/ambient_trailer_surface.dart';
 
 /// Large-screen presentations of a collection's titles. The parent owns
 /// paging, sorting and title actions; focus remains here while details push.

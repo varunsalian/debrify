@@ -7,7 +7,7 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt_explode;
-import 'storage_service.dart';
+import 'package:debrify/services/storage/youtube_storage.dart';
 
 /// A YouTube video surfaced from a search.
 class YoutubeVideo {
@@ -367,7 +367,7 @@ class YoutubeService {
     // a platform channel and isn't available in the background isolate below.
     // An explicit override (ambient trailers) skips the pref entirely.
     final maxHeight =
-        maxHeightOverride ?? await StorageService.getYoutubeMaxHeight();
+        maxHeightOverride ?? await YoutubeStorage.getYoutubeMaxHeight();
     try {
       // youtube_explode fetches the watch page, deciphers the signature cipher
       // and parses a large player-response JSON — all synchronous CPU that would

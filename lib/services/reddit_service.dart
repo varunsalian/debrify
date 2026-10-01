@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'storage_service.dart';
+import 'package:debrify/services/storage/reddit_storage.dart';
 
 /// Sort options for Reddit listings
 enum RedditSort { hot, new_, top, rising, relevance }
@@ -862,12 +862,12 @@ class RedditService {
 
   /// Check if user is authenticated
   static Future<bool> isAuthenticated() async {
-    final token = await StorageService.getRedditAccessToken();
+    final token = await RedditStorage.getRedditAccessToken();
     return token != null && token.isNotEmpty;
   }
 
   /// Clear authentication
   static Future<void> logout() async {
-    await StorageService.clearRedditAuth();
+    await RedditStorage.clearRedditAuth();
   }
 }

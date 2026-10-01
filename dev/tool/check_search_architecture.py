@@ -15,6 +15,8 @@ FEATURES = ("search", "home", "discover", "sources", "stremio_tv")
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
 FACADE = "lib/screens/search_screen.dart"
+STORAGE_SOURCE_DIR = 'lib/services/storage'
+STORAGE_ENUM_FILES = ('lib/models/ambient_trailer_surface.dart', 'lib/models/tv_render_quality.dart')
 PLAYBACK_FACADE = "lib/services/torrent_playback_service.dart"
 # Verbatim playback extraction source set; exceptions and exit milestones are
 # recorded in docs/refactoring/torrent-playback-plan.md.
@@ -270,6 +272,9 @@ def violations(path: Path) -> list[str]:
     if relative in TORRENT_PLAYBACK_SOURCE_FILES or relative == PLAYBACK_FACADE:
         if "TEMP(tps)" in source:
             problems.append("temporary TorrentPlaybackService cross-call remains")
+    if relative.startswith(STORAGE_SOURCE_DIR + '/') or relative in STORAGE_ENUM_FILES:
+        if lines > 500:
+            problems.append(f'{lines} lines exceeds the 500-line storage limit')
     if lines > 800:
         problems.append(f"{lines} lines exceeds the 800-line ceiling")
     if re.search(r"^\s*part\s+of\b", source, re.MULTILINE):
@@ -347,11 +352,15 @@ def main() -> int:
     paths.update(ROOT / p for p in TORRENT_PLAYBACK_SOURCE_FILES)
     paths.update((ROOT / COMPOSITION).rglob("*.dart"))
     paths.add(ROOT / FACADE)
+    paths.update(ROOT / p for p in STORAGE_ENUM_FILES)
+    paths.update((ROOT / STORAGE_SOURCE_DIR).rglob('*.dart'))
     problems = [
         f"Composition root is missing (update COMPOSITION_ROOTS): {root}"
         for root in sorted(COMPOSITION_ROOTS)
         if not (ROOT / root).is_file()
     ]
+    if not (ROOT / STORAGE_SOURCE_DIR).is_dir():
+        problems.append(f'Registered storage directory is missing: {STORAGE_SOURCE_DIR}')
     if not paths:
         problems.append("No migrated sources found; check the measured source set.")
     for path in sorted(paths):

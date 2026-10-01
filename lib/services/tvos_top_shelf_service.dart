@@ -18,6 +18,7 @@ import 'profiles/profile_lock_controller.dart';
 import 'profiles/profile_runtime.dart';
 import 'profiles/profile_preferences.dart';
 import '../models/profiles/profile_policy.dart';
+import 'package:debrify/models/ambient_trailer_surface.dart';
 
 /// Publishes the Apple TV Home Screen's Top Shelf reel.
 ///

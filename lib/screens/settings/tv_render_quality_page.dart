@@ -5,6 +5,7 @@ import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
+import 'package:debrify/models/tv_render_quality.dart';
 
 /// Android TV "Rendering" picker — whether the UI is drawn at the panel's own
 /// resolution or at a ~720p buffer the TV's scaler blows back up.

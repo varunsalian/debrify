@@ -110,9 +110,13 @@ def rewrite(source, path, rows, through):
     source = replacements(source, edits)
     additions = sorted(required-imported)
     if additions:
-        existing = list(IMPORT.finditer(source))
-        point = existing[-1].end() if existing else 0
-        source = source[:point]+''.join(f"import '{uri}';\n" for uri in additions)+source[point:]
+        def order(uri):
+            return (0 if uri.startswith('dart:') else 1 if uri.startswith('package:') else 2, uri)
+        for uri in additions:
+            existing = list(IMPORT.finditer(source))
+            later = next((m for m in existing if order(m.group(2)) > order(uri)), None)
+            point = later.start() if later else existing[-1].end() if existing else 0
+            source = source[:point]+f"import '{uri}';\n"+source[point:]
     return source
 
 

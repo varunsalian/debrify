@@ -54,6 +54,7 @@ def check():
     rows = read_map()
     before = {m.name: m for m in members(original())}
     found, resets = defaultdict(list), {}
+    errors = []
     for p in source_paths():
         path, source = p.relative_to(ROOT).as_posix(), p.read_text()
         if path in (RESET, *[r['file'] for r in rows if r['ref_kind'] == 'type']):
@@ -64,13 +65,16 @@ def check():
             if m.name == 'resetProfileCaches':
                 resets[path] = m
                 continue
+            matched = False
             for r in rows:
                 if r['ref_kind'] != 'static' or r['kind'] == 'reset_entry':
                     continue
                 if ((path == LEGACY and m.name == r['member']) or
                     (path == r['file'] and m.name == r['target'].split('.')[-1])):
                     found[r['member']].append((path, m))
-    errors = []
+                    matched = True
+            if not matched:
+                errors.append(f'{path}: unmapped static declaration {m.name}')
     for r in rows:
         name = r['member']
         if r['kind'] == 'reset_entry':

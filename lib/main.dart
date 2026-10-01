@@ -118,6 +118,8 @@ import 'services/desktop_recording_service.dart';
 import 'services/desktop_schedule_service.dart';
 import 'services/update_service.dart';
 import 'services/webdav_sync/webdav_sync_runtime.dart';
+import 'package:debrify/services/storage/device_storage.dart';
+import 'package:debrify/services/storage/remote_control_storage.dart';
 
 /// Flutter's default image cache (1000 images / 100 MB) is far too large for a
 /// 2 GB Android TV box — a screenful of full-res posters plus offscreen ones
@@ -2032,7 +2034,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   Future<void> _initializeRemoteControl(bool isTv) async {
     if (!_allowsProfileFeature(ProfileFeature.remoteControl)) return;
     // Check if remote control is enabled
-    _remoteControlEnabled = await StorageService.getRemoteControlEnabled();
+    _remoteControlEnabled =
+        await RemoteControlStorage.getRemoteControlEnabled();
     if (!_remoteControlEnabled) return;
 
     if (isTv) {
@@ -2041,7 +2044,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       // RemoteControlState.startTvListener so phones/desktops that switch
       // to receive mode mid-session via the Remote picker also work.
       // Priority: 1. User-set custom name, 2. Actual device name, 3. Fallback
-      var deviceName = await StorageService.getRemoteTvDeviceName();
+      var deviceName = await RemoteControlStorage.getRemoteTvDeviceName();
       deviceName ??= await PlatformUtil.getDeviceName();
       deviceName ??= 'Debrify TV';
       await RemoteControlState().startTvListener(deviceName);
@@ -2360,7 +2363,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       return true;
     }
 
-    final dismissedIds = await StorageService.getDismissedDonationCampaignIds();
+    final dismissedIds = await DeviceStorage.getDismissedDonationCampaignIds();
     if (dismissedIds.contains(campaign.id)) return true;
     if (!mounted) return false;
 
@@ -2371,7 +2374,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         builder: (dialogContext) => _SupportCampaignDialog(
           campaign: campaign,
           onDismissForever: () async {
-            await StorageService.dismissDonationCampaign(campaign.id);
+            await DeviceStorage.dismissDonationCampaign(campaign.id);
           },
         ),
       );
@@ -2392,9 +2395,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   Future<bool> _performAutoUpdateCheck() async {
     try {
       if (!_allowsProfileFeature(ProfileFeature.appUpdates)) return true;
-      final autoEnabled = await StorageService.getUpdateAutoCheckEnabled();
+      final autoEnabled = await DeviceStorage.getUpdateAutoCheckEnabled();
       if (!autoEnabled) return true;
-      final includeAlpha = await StorageService.getUpdateIncludeAlphaEnabled();
+      final includeAlpha = await DeviceStorage.getUpdateIncludeAlphaEnabled();
       final packageInfo = await AppVersionInfo.get();
       UpdateSummary summary;
       try {
@@ -2406,7 +2409,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return true;
       }
       if (!summary.updateAvailable) return true;
-      final ignored = await StorageService.getIgnoredUpdateVersion();
+      final ignored = await DeviceStorage.getIgnoredUpdateVersion();
       final releaseVersion = summary.release.versionLabel;
       if (ignored != null &&
           releaseVersion.isNotEmpty &&
@@ -2540,7 +2543,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                     TextButton(
                       onPressed: () async {
                         final navigator = Navigator.of(dialogContext);
-                        await StorageService.setIgnoredUpdateVersion(
+                        await DeviceStorage.setIgnoredUpdateVersion(
                           release.versionLabel,
                         );
                         navigator.pop();

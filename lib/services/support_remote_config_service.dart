@@ -3,8 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-
-import 'storage_service.dart';
+import 'package:debrify/services/storage/device_storage.dart';
 
 class SupportRemoteConfig {
   final SupportDonationConfig donation;
@@ -226,7 +225,7 @@ class SupportRemoteConfigService {
       }
 
       final config = _decode(response.body);
-      await StorageService.setSupportRemoteConfigCache(
+      await DeviceStorage.setSupportRemoteConfigCache(
         jsonEncode(config.toJson()),
       );
       return config;
@@ -237,7 +236,7 @@ class SupportRemoteConfigService {
   }
 
   Future<SupportRemoteConfig?> _loadCached() async {
-    final raw = await StorageService.getSupportRemoteConfigCache();
+    final raw = await DeviceStorage.getSupportRemoteConfigCache();
     if (raw == null || raw.trim().isEmpty) return null;
     try {
       return _decode(raw);

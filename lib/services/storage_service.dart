@@ -1,72 +1,51 @@
-import '../models/home_preferences.dart';
-import '../models/media_identity.dart';
-import '../models/subtitle_source_priority.dart';
-import '../models/custom_series_identity.dart';
-import '../models/home_collection.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart';
-import 'package:synchronized/synchronized.dart';
 import 'dart:convert';
-import 'debrid_service.dart';
-import 'hide_watched_prefs.dart';
-import 'iptv_channel_order.dart';
-import 'iptv_media_store.dart';
-import 'profiles/profile_preferences.dart';
-import 'profiles/profile_credential_facade.dart';
-import 'profiles/profile_collection_resource_facade.dart';
-import 'profiles/connection_resource_service.dart';
-import 'profiles/profile_authorization.dart';
-import 'profiles/profile_bootstrap.dart';
-import 'profiles/profile_runtime.dart';
-import 'profiles/tvos_recovery_limits.dart';
-import '../models/profiles/connection_resource.dart';
-import '../models/profiles/profile_policy.dart';
-import 'secret_vault.dart';
-import '../models/iptv_playlist.dart';
-import '../models/indexer_manager_config.dart';
-import '../models/quick_play_rules.dart';
-import '../models/sidebar_configuration.dart';
-import '../models/stremio_addon.dart';
-import '../models/webdav_item.dart';
-import '../models/android_video_renderer_mode.dart';
-import '../models/content_display_match_mode.dart';
-import '../models/detail_page_section_visibility.dart';
-import '../models/tv_hero_artwork_quality.dart';
-import '../models/tracking_source.dart';
-import '../utils/json_isolate.dart';
-import '../utils/platform_util.dart';
-import 'tracking_scrobble_preferences.dart';
-import 'playlist_dedupe_key.dart';
-import 'playback_recovery_intent.dart';
-import 'webdav_sync/webdav_sync_hot_merge.dart';
-import 'webdav_sync/webdav_sync_library_models.dart';
-import 'webdav_sync/webdav_sync_tombstones.dart';
+import 'package:debrify/models/ambient_trailer_surface.dart';
+import 'package:debrify/models/android_video_renderer_mode.dart';
+import 'package:debrify/models/content_display_match_mode.dart';
+import 'package:debrify/models/custom_series_identity.dart';
+import 'package:debrify/models/detail_page_section_visibility.dart';
+import 'package:debrify/models/home_collection.dart';
+import 'package:debrify/models/home_preferences.dart';
+import 'package:debrify/models/indexer_manager_config.dart';
+import 'package:debrify/models/iptv_playlist.dart';
+import 'package:debrify/models/media_identity.dart';
+import 'package:debrify/models/profiles/connection_resource.dart';
+import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/quick_play_rules.dart';
+import 'package:debrify/models/sidebar_configuration.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/models/subtitle_source_priority.dart';
+import 'package:debrify/models/tracking_source.dart';
+import 'package:debrify/models/tv_hero_artwork_quality.dart';
+import 'package:debrify/models/tv_render_quality.dart';
+import 'package:debrify/models/webdav_item.dart';
+import 'package:debrify/services/hide_watched_prefs.dart';
+import 'package:debrify/services/iptv_channel_order.dart';
+import 'package:debrify/services/iptv_media_store.dart';
+import 'package:debrify/services/playback_recovery_intent.dart';
+import 'package:debrify/services/playlist_dedupe_key.dart';
+import 'package:debrify/services/profiles/connection_resource_service.dart';
+import 'package:debrify/services/profiles/profile_authorization.dart';
+import 'package:debrify/services/profiles/profile_bootstrap.dart';
+import 'package:debrify/services/profiles/profile_collection_resource_facade.dart';
+import 'package:debrify/services/profiles/profile_credential_facade.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/tvos_recovery_limits.dart';
+import 'package:debrify/services/secret_vault.dart';
+import 'package:debrify/services/storage/profile_policy_storage.dart';
+import 'package:debrify/services/tracking_scrobble_preferences.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
+import 'package:debrify/services/webdav_sync/webdav_sync_tombstones.dart';
+import 'package:debrify/utils/json_isolate.dart';
+import 'package:debrify/utils/platform_util.dart';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:synchronized/synchronized.dart';
 
 export '../models/home_preferences.dart';
-
-/// Which ambient-trailer surface a sound/volume preference belongs to.
-///
-/// A television now has both: the Home board's hero and the Showcase detail
-/// page. They are separate preferences because they are separate experiences —
-/// a muted Home hero should not mute a detail page you opened deliberately.
-enum AmbientTrailerSurface { homeHero, detail }
-
-/// How the Android TV UI is rastered — see
-/// [StorageService.getTvRenderQuality]. Three states, not a switch: the
-/// automatic branch is the ABSENCE of the stored pref, because that absence is
-/// what lets MainActivity keep making the device-capability call.
-enum TvRenderQuality {
-  /// Let MainActivity decide (GLES2-class hardware gets the 720p buffer).
-  auto,
-
-  /// Always raster at the panel's own resolution.
-  sharp,
-
-  /// Always raster at ~720p and let the TV's scaler upscale.
-  fast,
-}
 
 class StorageService {
   static const String _explicitlyWatchedSeriesKey =
@@ -91,21 +70,6 @@ class StorageService {
   /// show refreshes from both reading the same old object and dropping whichever
   /// write finishes first.
   static final Lock _episodeTrackerSnapshotWriteLock = Lock();
-
-  static Future<bool> profileAllowsAdultContent() async {
-    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
-      return true;
-    }
-    try {
-      final scope = ProfileRuntime.capture();
-      final profile = await ProfileBootstrap.registry.getProfile(
-        scope.profileId,
-      );
-      return profile?.allows(ProfileFeature.allowAdultContent) == true;
-    } catch (_) {
-      return false;
-    }
-  }
 
   // ── Update-aware defaults ─────────────────────────────────────────────
   //
@@ -256,9 +220,7 @@ class StorageService {
   static const String _torboxPostTorrentActionKey =
       'torbox_post_torrent_action';
   static const String _pikpakPostTorrentActionKey =
-      'pikpak_post_torrent_action';
-  static const String _batteryOptStatusKey =
-      'battery_opt_status_v1'; // granted|denied|never|unknown
+      'pikpak_post_torrent_action'; // granted|denied|never|unknown
   static const String _videoResumeKey = 'video_resume_v1';
   static const String _playbackStateKey = 'playback_state_v1';
   static const String _continueWatchingKey = 'continue_watching_v1';
@@ -319,10 +281,6 @@ class StorageService {
       'home_hide_catalog_addon_names';
   static const String _homeHideCollectionNamesKey =
       'home_hide_collection_names';
-  static const String _supportRemoteConfigCacheKey =
-      'support_remote_config_cache_v1';
-  static const String _dismissedDonationCampaignIdsKey =
-      'dismissed_donation_campaign_ids_v1';
 
   // Startup settings
   static const String _startupAutoLaunchEnabledKey =
@@ -339,27 +297,6 @@ class StorageService {
       'startup_trakt_continue_watching_movie_id';
   static const String _startupTraktContinueWatchingShowIdKey =
       'startup_trakt_continue_watching_show_id';
-
-  // Reddit settings
-  static const String _redditAccessTokenKey = 'reddit_access_token';
-  static const String _redditRefreshTokenKey = 'reddit_refresh_token';
-  static const String _redditUsernameKey = 'reddit_username';
-  static const String _redditEnabledKey = 'reddit_enabled';
-  static const String _redditHiddenFromNavKey = 'reddit_hidden_from_nav';
-  static const String _redditLastSubredditKey = 'reddit_last_subreddit';
-  static const String _redditRecentSubredditsKey = 'reddit_recent_subreddits';
-  static const String _redditAllowNsfwKey = 'reddit_allow_nsfw';
-  static const String _redditFavoriteSubredditsKey =
-      'reddit_favorite_subreddits';
-  static const String _redditDefaultSubredditKey = 'reddit_default_subreddit';
-  // Lemmy settings
-  static const String _lemmyInstanceKey = 'lemmy_instance';
-  static const String _lemmyAllowNsfwKey = 'lemmy_allow_nsfw';
-  static const String _lemmyFavoriteCommunitiesKey =
-      'lemmy_favorite_communities';
-  static const String _lemmyDefaultCommunityKey = 'lemmy_default_community';
-  // YouTube settings
-  static const String _youtubeMaxHeightKey = 'youtube_max_height';
   // Network tuning (Debrify player). 'standard' = leave the player's own
   // defaults completely untouched — see NetworkTuning.
   static const String _networkConnectPatienceKey = 'network_connect_patience';
@@ -367,10 +304,6 @@ class StorageService {
   static const String _networkBufferSizeKey = 'network_buffer_size';
   static const String _contentDisplayMatchModeKey =
       'content_display_match_mode';
-  static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
-  static const String _updateIncludeAlphaEnabledKey =
-      'update_include_alpha_enabled';
-  static const String _updateIgnoredVersionKey = 'update_ignored_version';
 
   // External Player settings
   // Default player mode: 'debrify' (app player), 'external' (external player), 'deovr' (DeoVR on Android)
@@ -618,12 +551,6 @@ class StorageService {
   // so there's no token/expiry — just the key and a cached display username.
   static const String _mdblistApiKeyKey = 'mdblist_api_key';
   static const String _mdblistUsernameKey = 'mdblist_username';
-
-  // Remote Control Settings
-  static const String _remoteControlEnabledKey = 'remote_control_enabled';
-  static const String _remoteIntroShownKey = 'remote_intro_shown';
-  static const String _remoteTvDeviceNameKey = 'remote_tv_device_name';
-  static const String _remoteLastDeviceKey = 'remote_last_device';
 
   static const int _debrifyTvRandomStartPercentDefault = 20;
   static const int _debrifyTvRandomStartPercentMin = 10;
@@ -2676,83 +2603,6 @@ class StorageService {
   static Future<void> setPremiumizeCacheCheckEnabled(bool enabled) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_premiumizeCacheCheckPref, enabled);
-  }
-
-  // Battery optimization status
-  static Future<String> getBatteryOptimizationStatus() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_batteryOptStatusKey) ?? 'unknown';
-  }
-
-  static Future<void> setBatteryOptimizationStatus(String status) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_batteryOptStatusKey, status);
-  }
-
-  // Download settings - Fixed to 1 parallel download
-  static Future<int> getMaxParallelDownloads() async {
-    return 1; // Always return 1 for single download at a time
-  }
-
-  static Future<void> setMaxParallelDownloads(int value) async {
-    // No-op: parallel downloads are fixed to 1
-  }
-
-  // ── Custom download location (Android SAF tree) ─────────────────────────
-  static const String _downloadTreeUriKey = 'download_tree_uri_v1';
-  static const String _downloadTreeNameKey = 'download_tree_display_name_v1';
-
-  /// The persisted SAF tree URI for the user-chosen download folder, or null
-  /// when downloads go to the default location (Downloads/Debrify).
-  static Future<String?> getDownloadTreeUri() async {
-    final prefs = await ProfilePreferences.instance();
-    final v = prefs.getString(_downloadTreeUriKey);
-    return (v == null || v.isEmpty) ? null : v;
-  }
-
-  static Future<String?> getDownloadTreeDisplayName() async {
-    final prefs = await ProfilePreferences.instance();
-    final v = prefs.getString(_downloadTreeNameKey);
-    return (v == null || v.isEmpty) ? null : v;
-  }
-
-  static Future<void> setDownloadTreeUri(
-    String treeUri,
-    String displayName,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_downloadTreeUriKey, treeUri);
-    await prefs.setString(_downloadTreeNameKey, displayName);
-  }
-
-  static Future<void> clearDownloadTreeUri() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_downloadTreeUriKey);
-    await prefs.remove(_downloadTreeNameKey);
-  }
-
-  // ── Custom download location (desktop: plain filesystem path) ───────────
-  // Windows/Linux only. macOS is deliberately excluded: the app is sandboxed
-  // with a read-only user-selected-files entitlement, so a picked folder
-  // needs security-scoped bookmarks to survive relaunch — separate feature.
-  static const String _downloadDirPathKey = 'download_dir_path_v1';
-
-  /// The persisted absolute directory for the user-chosen download folder on
-  /// desktop, or null when downloads go to the platform default.
-  static Future<String?> getDownloadDirPath() async {
-    final prefs = await ProfilePreferences.instance();
-    final v = prefs.getString(_downloadDirPathKey);
-    return (v == null || v.isEmpty) ? null : v;
-  }
-
-  static Future<void> setDownloadDirPath(String dirPath) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_downloadDirPathKey, dirPath);
-  }
-
-  static Future<void> clearDownloadDirPath() async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.remove(_downloadDirPathKey);
   }
 
   // ── Continue Watching (recently watched items for home screen) ──────────
@@ -4817,7 +4667,7 @@ class StorageService {
   }
 
   static Future<bool> getDebrifyTvAvoidNsfw() async {
-    if (!await profileAllowsAdultContent()) return true;
+    if (!await ProfilePolicyStorage.profileAllowsAdultContent()) return true;
     final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_debrifyTvAvoidNsfwKey) ?? true; // Default enabled
   }
@@ -4826,7 +4676,7 @@ class StorageService {
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool(
       _debrifyTvAvoidNsfwKey,
-      await profileAllowsAdultContent() ? value : true,
+      await ProfilePolicyStorage.profileAllowsAdultContent() ? value : true,
     );
   }
 
@@ -6799,57 +6649,6 @@ class StorageService {
     await prefs.remove('spotlight_focus_details');
   }
 
-  // Reddit Settings
-  static Future<String?> getRedditAccessToken() async {
-    final prefs = await ProfilePreferences.instance();
-    return SecretVault.getString(prefs, _redditAccessTokenKey);
-  }
-
-  static Future<void> setRedditAccessToken(String token) async {
-    final prefs = await ProfilePreferences.instance();
-    await SecretVault.setString(prefs, _redditAccessTokenKey, token);
-  }
-
-  static Future<String?> getRedditRefreshToken() async {
-    final prefs = await ProfilePreferences.instance();
-    return SecretVault.getString(prefs, _redditRefreshTokenKey);
-  }
-
-  static Future<void> setRedditRefreshToken(String token) async {
-    final prefs = await ProfilePreferences.instance();
-    await SecretVault.setString(prefs, _redditRefreshTokenKey, token);
-  }
-
-  static Future<String?> getRedditUsername() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_redditUsernameKey);
-  }
-
-  static Future<void> setRedditUsername(String username) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_redditUsernameKey, username);
-  }
-
-  static Future<bool> getRedditEnabled() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_redditEnabledKey) ?? true; // Default enabled
-  }
-
-  static Future<void> setRedditEnabled(bool value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_redditEnabledKey, value);
-  }
-
-  static Future<bool> getRedditHiddenFromNav() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_redditHiddenFromNavKey) ?? false;
-  }
-
-  static Future<void> setRedditHiddenFromNav(bool value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_redditHiddenFromNavKey, value);
-  }
-
   // Tracking source policy -------------------------------------------------
 
   static const Set<TrackingSource> _allTrackingSources = <TrackingSource>{
@@ -7019,26 +6818,6 @@ class StorageService {
     }
     final hideWatched = payload['hide_watched'];
     if (hideWatched is bool) await HideWatchedPrefs.setEnabled(hideWatched);
-  }
-
-  static Future<String?> getRedditLastSubreddit() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_redditLastSubredditKey);
-  }
-
-  static Future<void> setRedditLastSubreddit(String subreddit) async {
-    final prefs = await ProfilePreferences.instance();
-    if (prefs.getString(_redditLastSubredditKey) == subreddit) return;
-    await prefs.setString(_redditLastSubredditKey, subreddit);
-  }
-
-  static Future<void> clearRedditAuth() async {
-    final prefs = await ProfilePreferences.instance();
-    if (!await ProfileCredentialFacade.disconnect(_redditAccessTokenKey)) {
-      await prefs.remove(_redditAccessTokenKey);
-      await prefs.remove(_redditRefreshTokenKey);
-    }
-    await prefs.remove(_redditUsernameKey);
   }
 
   // Trakt Settings
@@ -7233,121 +7012,6 @@ class StorageService {
     }
     await prefs.remove(_simklUsernameKey);
     await fallbackDisconnectedProgressSource(TrackingSource.simkl);
-  }
-
-  static Future<List<String>> getRedditRecentSubreddits() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getStringList(_redditRecentSubredditsKey) ?? [];
-  }
-
-  static Future<void> setRedditRecentSubreddits(List<String> subreddits) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setStringList(_redditRecentSubredditsKey, subreddits);
-  }
-
-  static Future<bool> getRedditAllowNsfw() async {
-    if (!await profileAllowsAdultContent()) return false;
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_redditAllowNsfwKey) ?? false;
-  }
-
-  static Future<void> setRedditAllowNsfw(bool value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(
-      _redditAllowNsfwKey,
-      await profileAllowsAdultContent() && value,
-    );
-  }
-
-  static Future<List<String>> getRedditFavoriteSubreddits() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getStringList(_redditFavoriteSubredditsKey) ?? [];
-  }
-
-  static Future<void> setRedditFavoriteSubreddits(
-    List<String> subreddits,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setStringList(_redditFavoriteSubredditsKey, subreddits);
-  }
-
-  static Future<String?> getRedditDefaultSubreddit() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_redditDefaultSubredditKey);
-  }
-
-  static Future<void> setRedditDefaultSubreddit(String? subreddit) async {
-    final prefs = await ProfilePreferences.instance();
-    if (subreddit == null || subreddit.isEmpty) {
-      await prefs.remove(_redditDefaultSubredditKey);
-    } else {
-      await prefs.setString(_redditDefaultSubredditKey, subreddit);
-    }
-  }
-
-  // Lemmy Settings
-  static Future<String> getLemmyInstance() async {
-    final prefs = await ProfilePreferences.instance();
-    final value = prefs.getString(_lemmyInstanceKey);
-    return (value != null && value.isNotEmpty) ? value : 'https://lemmy.world';
-  }
-
-  static Future<void> setLemmyInstance(String instance) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setString(_lemmyInstanceKey, instance);
-  }
-
-  static Future<bool> getLemmyAllowNsfw() async {
-    if (!await profileAllowsAdultContent()) return false;
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_lemmyAllowNsfwKey) ?? false;
-  }
-
-  static Future<void> setLemmyAllowNsfw(bool value) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(
-      _lemmyAllowNsfwKey,
-      await profileAllowsAdultContent() && value,
-    );
-  }
-
-  static Future<List<String>> getLemmyFavoriteCommunities() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getStringList(_lemmyFavoriteCommunitiesKey) ?? [];
-  }
-
-  static Future<void> setLemmyFavoriteCommunities(
-    List<String> communities,
-  ) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setStringList(_lemmyFavoriteCommunitiesKey, communities);
-  }
-
-  static Future<String?> getLemmyDefaultCommunity() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_lemmyDefaultCommunityKey);
-  }
-
-  static Future<void> setLemmyDefaultCommunity(String? community) async {
-    final prefs = await ProfilePreferences.instance();
-    if (community == null || community.isEmpty) {
-      await prefs.remove(_lemmyDefaultCommunityKey);
-    } else {
-      await prefs.setString(_lemmyDefaultCommunityKey, community);
-    }
-  }
-
-  // YouTube Settings
-  /// Preferred max playback height for YouTube (1080/720/480/360). Default 1080.
-  static Future<int> getYoutubeMaxHeight() async {
-    final prefs = await ProfilePreferences.instance();
-    final v = prefs.getInt(_youtubeMaxHeightKey);
-    return (v != null && v > 0) ? v : 1080;
-  }
-
-  static Future<void> setYoutubeMaxHeight(int height) async {
-    final prefs = await ProfilePreferences.instance();
-    await prefs.setInt(_youtubeMaxHeightKey, height);
   }
 
   /// Android TV IPTV video decoder: 'auto' | 'hardware' | 'software'.
@@ -8912,30 +8576,6 @@ class StorageService {
     return List<IndexerManagerConfig>.unmodifiable(configs);
   }
 
-  static Future<String?> getSupportRemoteConfigCache() async {
-    final prefs = await DevicePreferences.instance();
-    return prefs.getString(_supportRemoteConfigCacheKey);
-  }
-
-  static Future<void> setSupportRemoteConfigCache(String json) async {
-    final prefs = await DevicePreferences.instance();
-    await prefs.setString(_supportRemoteConfigCacheKey, json);
-  }
-
-  static Future<List<String>> getDismissedDonationCampaignIds() async {
-    final prefs = await DevicePreferences.instance();
-    return prefs.getStringList(_dismissedDonationCampaignIdsKey) ?? <String>[];
-  }
-
-  static Future<void> dismissDonationCampaign(String campaignId) async {
-    final prefs = await DevicePreferences.instance();
-    final ids =
-        prefs.getStringList(_dismissedDonationCampaignIdsKey) ?? <String>[];
-    if (ids.contains(campaignId)) return;
-    ids.add(campaignId);
-    await prefs.setStringList(_dismissedDonationCampaignIdsKey, ids);
-  }
-
   // Quick Play VR Settings methods
 
   /// Get VR player mode: 'disabled', 'auto', or 'always'
@@ -10250,106 +9890,6 @@ class StorageService {
     }
   }
 
-  // ============================================================================
-  // Remote Control Settings
-  // ============================================================================
-
-  /// Get whether remote control feature is enabled
-  static Future<bool> getRemoteControlEnabled() async {
-    final prefs = await DevicePreferences.instance();
-    return prefs.getBool(_remoteControlEnabledKey) ?? true;
-  }
-
-  static Future<bool> getUpdateAutoCheckEnabled() async {
-    final prefs = await DevicePreferences.instance();
-    return prefs.getBool(_updateAutoCheckEnabledKey) ?? true;
-  }
-
-  static Future<void> setUpdateAutoCheckEnabled(bool enabled) async {
-    final prefs = await DevicePreferences.instance();
-    await prefs.setBool(_updateAutoCheckEnabledKey, enabled);
-  }
-
-  static Future<bool> getUpdateIncludeAlphaEnabled() async {
-    final prefs = await DevicePreferences.instance();
-    return prefs.getBool(_updateIncludeAlphaEnabledKey) ?? false;
-  }
-
-  static Future<void> setUpdateIncludeAlphaEnabled(bool enabled) async {
-    final prefs = await DevicePreferences.instance();
-    await prefs.setBool(_updateIncludeAlphaEnabledKey, enabled);
-  }
-
-  static Future<String?> getIgnoredUpdateVersion() async {
-    final prefs = await DevicePreferences.instance();
-    final value = prefs.getString(_updateIgnoredVersionKey);
-    if (value == null || value.trim().isEmpty) return null;
-    return value;
-  }
-
-  static Future<void> setIgnoredUpdateVersion(String? version) async {
-    final prefs = await DevicePreferences.instance();
-    if (version == null || version.trim().isEmpty) {
-      await prefs.remove(_updateIgnoredVersionKey);
-    } else {
-      await prefs.setString(_updateIgnoredVersionKey, version);
-    }
-  }
-
-  /// Set whether remote control feature is enabled
-  static Future<void> setRemoteControlEnabled(bool enabled) async {
-    final prefs = await DevicePreferences.instance();
-    await prefs.setBool(_remoteControlEnabledKey, enabled);
-  }
-
-  /// Get whether remote intro dialog has been shown
-  static Future<bool> getRemoteIntroShown() async {
-    final prefs = await DevicePreferences.instance();
-    return prefs.getBool(_remoteIntroShownKey) ?? false;
-  }
-
-  /// Set whether remote intro dialog has been shown
-  static Future<void> setRemoteIntroShown(bool shown) async {
-    final prefs = await DevicePreferences.instance();
-    await prefs.setBool(_remoteIntroShownKey, shown);
-  }
-
-  /// Get TV device name for remote control (TV only)
-  static Future<String?> getRemoteTvDeviceName() async {
-    final prefs = await DevicePreferences.instance();
-    return prefs.getString(_remoteTvDeviceNameKey);
-  }
-
-  /// Set TV device name for remote control (TV only)
-  static Future<void> setRemoteTvDeviceName(String name) async {
-    final prefs = await DevicePreferences.instance();
-    await prefs.setString(_remoteTvDeviceNameKey, name);
-  }
-
-  /// Get last connected device info (Mobile only)
-  static Future<Map<String, dynamic>?> getRemoteLastDevice() async {
-    final prefs = await DevicePreferences.instance();
-    final raw = prefs.getString(_remoteLastDeviceKey);
-    if (raw == null) return null;
-    try {
-      return jsonDecode(raw) as Map<String, dynamic>;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Save last connected device info (Mobile only)
-  static Future<void> setRemoteLastDevice(Map<String, dynamic> device) async {
-    final prefs = await DevicePreferences.instance();
-    await prefs.setString(_remoteLastDeviceKey, jsonEncode(device));
-  }
-
-  /// Clear last connected device info
-  static Future<void> clearRemoteLastDevice() async {
-    final prefs = await DevicePreferences.instance();
-    await prefs.remove(_remoteLastDeviceKey);
-  }
-
   // ==========================================================================
   // Stremio TV Settings
   // ==========================================================================
@@ -10905,8 +10445,7 @@ class StorageService {
     }
   }
 
-  /// Clears synchronous mirrors before a profile activation is published.
-  /// The target bootstrap immediately warms them from its captured scope.
+  /// Clears this owner before the existing profile handoff ledger stamp.
   static void resetProfileCaches() {
     tvKeyboardEnabledCached = !PlatformUtil.isTvOS;
     tvHomeStyleCached = 'canvas';
@@ -10930,23 +10469,5 @@ class StorageService {
     uiSoundsCached = true;
     uiHapticsCached = true;
     _startupIptvChannelCached = null;
-  }
-}
-
-class ApiKeyValidator {
-  static bool isValidFormat(String apiKey) {
-    // Real Debrid API keys are typically 40 characters
-    return apiKey.length == 40 && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(apiKey);
-  }
-
-  static Future<bool> validateApiKey(String apiKey) async {
-    if (!isValidFormat(apiKey)) return false;
-
-    try {
-      await DebridService.getUserInfo(apiKey);
-      return true; // If we get here, the API key is valid
-    } catch (e) {
-      return false;
-    }
   }
 }

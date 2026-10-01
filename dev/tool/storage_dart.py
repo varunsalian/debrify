@@ -225,7 +225,7 @@ def tracked_dart():
 
 
 def source_paths():
-    paths = set((ROOT / 'lib/services/storage').glob('*.dart'))
+    paths = set((ROOT / 'lib/services/storage').rglob('*.dart'))
     paths.update(ROOT / p for p in ENUM_FILES if (ROOT / p).exists())
     if (ROOT / LEGACY).exists():
         paths.add(ROOT / LEGACY)

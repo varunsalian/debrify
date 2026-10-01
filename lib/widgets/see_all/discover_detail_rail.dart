@@ -16,6 +16,7 @@ import '../../services/stremio_service.dart';
 import '../../services/imdb_trailer_service.dart';
 import '../../services/youtube_service.dart';
 import '../../theme/app_theme_scope.dart';
+import 'package:debrify/models/ambient_trailer_surface.dart';
 
 /// How the reactive detail block is drawn.
 enum DiscoverDetailLayout {

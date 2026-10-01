@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../services/reddit_service.dart';
 import '../../services/reddit_embed_resolver_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/download_service.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import 'reddit_filters.dart';
 import 'reddit_video_card.dart';
 import 'reddit_empty_state.dart';
+import 'package:debrify/services/storage/reddit_storage.dart';
 
 /// Main view for Reddit video results, to be embedded in TorrentSearchScreen
 class RedditResultsView extends StatefulWidget {
@@ -62,8 +62,8 @@ class RedditResultsViewState extends State<RedditResultsView> {
   }
 
   Future<void> _loadSettings() async {
-    final allowNsfw = await StorageService.getRedditAllowNsfw();
-    final defaultSubreddit = await StorageService.getRedditDefaultSubreddit();
+    final allowNsfw = await RedditStorage.getRedditAllowNsfw();
+    final defaultSubreddit = await RedditStorage.getRedditDefaultSubreddit();
 
     if (!mounted) return;
 

@@ -25,6 +25,7 @@ import 'profiles/profile_bootstrap.dart';
 import 'profiles/profile_credential_facade.dart';
 import 'profiles/profile_runtime.dart';
 import 'package:synchronized/synchronized.dart';
+import 'package:debrify/services/storage/device_storage.dart';
 
 class DownloadEntry {
   final Task task;
@@ -1245,7 +1246,7 @@ class DownloadService {
   Future<bool> _ensureBatteryExemptions(BuildContext? context) async {
     if (!Platform.isAndroid) return true;
     // Respect saved preference first
-    final saved = await StorageService.getBatteryOptimizationStatus();
+    final saved = await DeviceStorage.getBatteryOptimizationStatus();
     if (saved == 'granted') return true;
     if (saved == 'never') return true; // user opted out
 
@@ -1451,7 +1452,7 @@ class DownloadService {
             false;
       }
       if (!proceed) {
-        await StorageService.setBatteryOptimizationStatus(choice);
+        await DeviceStorage.setBatteryOptimizationStatus(choice);
         return true; // do not block downloads
       }
 
@@ -1459,10 +1460,10 @@ class DownloadService {
       final ok =
           await AndroidNativeDownloader.requestIgnoreBatteryOptimizationsForApp();
       if (ok) {
-        await StorageService.setBatteryOptimizationStatus('granted');
+        await DeviceStorage.setBatteryOptimizationStatus('granted');
         return true;
       } else {
-        await StorageService.setBatteryOptimizationStatus('denied');
+        await DeviceStorage.setBatteryOptimizationStatus('denied');
         if (context != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -2228,7 +2229,7 @@ class DownloadService {
     String? treeUri;
     if (Platform.isAndroid) {
       try {
-        final saved = await StorageService.getDownloadTreeUri();
+        final saved = await DeviceStorage.getDownloadTreeUri();
         if (saved != null && saved.isNotEmpty) {
           if (await _validateTreeUriCached(saved)) {
             treeUri = saved;
@@ -2238,7 +2239,7 @@ class DownloadService {
             debugPrint(
               'DL: custom download folder grant lost; falling back to default',
             );
-            await StorageService.clearDownloadTreeUri();
+            await DeviceStorage.clearDownloadTreeUri();
           }
         }
       } catch (_) {}
@@ -2421,7 +2422,7 @@ class DownloadService {
     }
     _canceledDuringStart.remove(task.taskId);
     // Enforce concurrency: if at capacity, queue the resume
-    final int maxParallel = await StorageService.getMaxParallelDownloads();
+    final int maxParallel = await DeviceStorage.getMaxParallelDownloads();
     int runningCount;
     if (Platform.isAndroid) {
       final list = AndroidDownloadHistory.instance.all();
@@ -2836,13 +2837,13 @@ class DownloadService {
     String? treeUri;
     String? treeName;
     {
-      final savedTreeUri = await StorageService.getDownloadTreeUri();
+      final savedTreeUri = await DeviceStorage.getDownloadTreeUri();
       if (savedTreeUri != null && savedTreeUri.isNotEmpty) {
         if (await _validateTreeUriCached(savedTreeUri)) {
           treeUri = savedTreeUri;
-          treeName = await StorageService.getDownloadTreeDisplayName();
+          treeName = await DeviceStorage.getDownloadTreeDisplayName();
         } else {
-          await StorageService.clearDownloadTreeUri();
+          await DeviceStorage.clearDownloadTreeUri();
         }
       }
 
@@ -2962,7 +2963,7 @@ class DownloadService {
     // for when the folder comes back.
     if (Platform.isWindows || Platform.isLinux) {
       try {
-        final saved = await StorageService.getDownloadDirPath();
+        final saved = await DeviceStorage.getDownloadDirPath();
         if (saved != null && saved.isNotEmpty) {
           if (await _validateDownloadDirCached(saved)) {
             return saved;
@@ -3585,7 +3586,7 @@ class DownloadService {
     }
     _reevaluating = true;
     // Determine capacity
-    final int maxParallel = await StorageService.getMaxParallelDownloads();
+    final int maxParallel = await DeviceStorage.getMaxParallelDownloads();
 
     int runningCount = 0;
     if (Platform.isAndroid) {

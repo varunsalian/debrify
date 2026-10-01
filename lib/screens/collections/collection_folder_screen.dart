@@ -32,6 +32,7 @@ import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 import '../../widgets/skeleton_poster.dart';
+import 'package:debrify/models/ambient_trailer_surface.dart';
 
 /// Collection folders open as artwork galleries; each list opens a full grid.
 /// Existing tabbed and merged views retain their paging and filter semantics.

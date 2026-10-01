@@ -45,6 +45,7 @@ import 'steps/services_step.dart';
 import 'steps/trackers_step.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import 'tv_keyboard_slot.dart';
+import 'package:debrify/services/storage/remote_control_storage.dart';
 
 typedef OnboardingValidationOverride =
     Future<bool> Function(
@@ -838,7 +839,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     _transition(OnboardStep.importing);
     _attachImportListeners();
     try {
-      var name = await StorageService.getRemoteTvDeviceName();
+      var name = await RemoteControlStorage.getRemoteTvDeviceName();
       name ??= await PlatformUtil.getDeviceName();
       name ??= _isTelevision ? 'Debrify TV' : 'This device';
       if (!mounted ||

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/lemmy_service.dart';
-import '../../services/storage_service.dart';
 import '../../utils/tv_keys.dart';
 import '../tv_text_field.dart';
+import 'package:debrify/services/storage/lemmy_storage.dart';
 
 /// Popular Lemmy video communities for suggestions (handle@instance).
 /// Users can type any "community@instance" handle in the picker.
@@ -472,7 +472,7 @@ class _CommunityPickerSheetState extends State<_CommunityPickerSheet> {
   }
 
   Future<void> _loadFavorites() async {
-    final favorites = await StorageService.getLemmyFavoriteCommunities();
+    final favorites = await LemmyStorage.getLemmyFavoriteCommunities();
     if (!mounted) return;
     setState(() {
       _favoriteCommunities = favorites;

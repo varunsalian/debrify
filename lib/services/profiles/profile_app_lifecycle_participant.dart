@@ -42,6 +42,7 @@ import 'native_profile_projection.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
 import 'profile_session_memory.dart';
+import 'package:debrify/services/storage/storage_profile_caches.dart';
 
 /// Resets process-wide mirrors that otherwise retain profile A, then warms the
 /// target under its captured scope after authoritative publication.
@@ -120,7 +121,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
 
   Future<void> _warm(ProfileScope scope) {
     return ProfileRuntime.withCapturedScope(scope, () async {
-      _warmed('StorageService', scope, StorageService.resetProfileCaches);
+      _warmed('StorageService', scope, resetStorageProfileCaches);
       _warmed('Stremio', scope, StremioService.instance.invalidateCache);
       _warmed('Trakt', scope, TraktService.instance.resetProfileScope);
       _warmed('Simkl', scope, SimklService.instance.resetProfileScope);

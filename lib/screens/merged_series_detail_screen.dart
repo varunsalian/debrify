@@ -67,6 +67,7 @@ import '../theme/shipped_themes.dart' show effectiveDetailTheme;
 import '../utils/artwork_url.dart';
 import '../utils/episode_progress_merge.dart';
 import '../utils/tv_keys.dart';
+import 'package:debrify/models/ambient_trailer_surface.dart';
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
 /// episode drill-down fused into one Stremio-styled screen. Reached only from
