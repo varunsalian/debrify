@@ -104,10 +104,34 @@ files (`*_dependencies_test.dart` → `*_providers_test.dart`,
 one is present under its new path with an identical outcome. Scoped analyze
 unchanged, guard passes (617 files), formatting clean.
 
+## Bug fixes after the pass
+
+- **Sources provider actions dropped on leave.** Download, playlist add,
+  TorBox/Premiumize ZIP, Premiumize transfer and the not-cached keep used
+  `canContinue: () => context.mounted`, so leaving the screen mid-way silently
+  abandoned an accepted action. `main` finished these. They now continue once
+  accepted; a profile switch still rejects them through the captured owner,
+  and snackbars still check `context.mounted`. Playback and acquisition keep
+  their mounted/cancel guards. No new automated test: the helpers are private
+  and only reachable through the full debrid action menu. Verified by
+  comparison with `main`.
+- **Fresh Real-Debrid torrent left behind on retirement.**
+  `DebridService.addTorrentToDebrid` threw on a retired action after the add,
+  leaving the new torrent in the account, often still waiting for file
+  selection. It now deletes that torrent once, in the same captured profile
+  scope (origin endpoint and key), like its other failure paths. A completed
+  add (link unrestricted) is kept, as on `main`. TorBox, Premiumize, AllDebrid
+  and PikPak are unchanged because their entries can be shared or pre-existing.
+  New `test/services/debrid_acquisition_retirement_test.dart`; six retirement
+  tests that pinned "no request after retirement" now expect the single
+  delete.
+- **Row extent context: not a bug.** `classicCatalogRowExtent` measures the
+  title with the screen context, the same context `railHeader` renders it
+  with. Neither `lib/features/home` nor `lib/screens/search_screen` inserts a
+  `Theme` or `MediaQuery`, so both contexts resolve identical values. No
+  change.
+
 ## Found, not fixed
 
-- `HomeClassicGeometry.classicCatalogRowExtent` mixes the screen context
-  (title style) with the caller's context (card height). Behaviour is
-  unchanged from before the refactor.
 - `HomeCatalogPlaybackResolver.resolve()` is a single ~350-line method.
 

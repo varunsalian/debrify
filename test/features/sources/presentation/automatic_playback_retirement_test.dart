@@ -71,6 +71,7 @@ void main() {
         release = Completer<void>();
         final client = MockClient((_) async {
           requests++;
+          if (entered.isCompleted) return http.Response('', 204);
           entered.complete();
           await release.future;
           return http.Response('{"id":"retired"}', 201);
@@ -100,7 +101,8 @@ void main() {
         await playback;
       });
       await tester.pumpAndSettle();
-      expect(requests, 1);
+      // The add, then removal of the torrent the retired add abandoned.
+      expect(requests, 2);
       expect(routes.removed, contains(loader));
       expect(find.text('New route'), findsOneWidget);
       expect(routes.pushed.last.isCurrent, isTrue);

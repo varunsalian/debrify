@@ -260,7 +260,11 @@ void main() {
           () => client,
         );
         expect(result.ready, isFalse);
-        expect(f.paths, hasLength(1));
+        // Only a freshly added RD torrent is removed; shared entries stay.
+        expect(f.paths, hasLength(provider == 'debrid' ? 2 : 1));
+        if (provider == 'debrid') {
+          expect(f.paths.last, endsWith('/torrents/delete/owned'));
+        }
       },
     );
   }
@@ -282,11 +286,17 @@ void main() {
         () => client,
       );
       expect(result.ready, isFalse);
-      expect(f.paths.last, endsWith(path));
+      final deletes = f.paths.where((p) => p.contains('/delete')).toList();
       if (path == '/unrestrict/link') {
+        // The torrent is complete with a link; it stays in the account.
+        expect(f.paths.last, endsWith(path));
         expect(f.paths.where((p) => p.endsWith(path)), hasLength(1));
+        expect(deletes, isEmpty);
+      } else {
+        // Abandoned mid-add: the fresh torrent is removed, once.
+        expect(f.paths[f.paths.length - 2], endsWith(path));
+        expect(deletes, [endsWith('/torrents/delete/owned')]);
       }
-      expect(f.paths.where((p) => p.contains('/delete')), isEmpty);
     });
   }
 

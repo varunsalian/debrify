@@ -585,6 +585,7 @@ class DebridService {
     String? tempFileSelection,
     bool Function()? canContinue,
   }) async {
+    String? createdTorrentId;
     try {
       _checkAcquisition(canContinue);
       // Step 1: Add magnet or protected .torrent file URL
@@ -596,6 +597,7 @@ class DebridService {
             )
           : await addMagnet(apiKey, magnetLink, canContinue: canContinue);
       final torrentId = addResponse['id'];
+      createdTorrentId = torrentId?.toString();
 
       // Step 2: Get torrent info
       final torrentInfo = await getTorrentInfo(
@@ -606,6 +608,7 @@ class DebridService {
       final files = (torrentInfo['files'] as List<dynamic>? ?? const []);
 
       if (files.isEmpty) {
+        createdTorrentId = null;
         await deleteTorrent(apiKey, torrentId);
         throw Exception('No files found in torrent');
       }
@@ -822,6 +825,7 @@ class DebridService {
       final downloadLink = unrestrictResponse['download'] as String?;
 
       if (downloadLink == null) {
+        createdTorrentId = null;
         await deleteTorrent(apiKey, torrentId);
         throw Exception('Failed to get download link from Real Debrid');
       }
@@ -840,6 +844,14 @@ class DebridService {
     } on TorrentNotCachedException {
       rethrow;
     } catch (e) {
+      // A retired action abandons the torrent it just added (often before its
+      // files are selected), so remove it like the other failure paths do.
+      // Each add creates a new RD entry, so this never touches an older one.
+      if (createdTorrentId != null && canContinue?.call() == false) {
+        try {
+          await deleteTorrent(apiKey, createdTorrentId);
+        } catch (_) {}
+      }
       throw Exception('Failed to add torrent to Real Debrid: $e');
     }
   }

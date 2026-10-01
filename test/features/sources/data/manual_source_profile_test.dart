@@ -140,7 +140,11 @@ void main() {
             isTrue,
           );
           if (scenario == 'retiredAfterAdd') {
-            expect(f.paths, ['/torrents/addMagnet']);
+            // The abandoned fresh torrent is removed with origin credentials.
+            expect(f.paths, ['/torrents/addMagnet', '/torrents/delete/owned']);
+            final delete = f.requests.last;
+            expect(delete.url.host, 'origin.test');
+            expect(delete.headers['Authorization'], 'Bearer origin-key');
           } else if (scenario == 'rejectedCleanup') {
             expect(f.paths, [
               '/torrents/addMagnet',

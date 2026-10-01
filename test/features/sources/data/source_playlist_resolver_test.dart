@@ -53,7 +53,12 @@ void main() {
           );
           if (retired) {
             expect(result, isNull);
-            expect(f.requests, hasLength(1));
+            // A fresh RD torrent abandoned by the retired add is removed.
+            expect(f.requests, hasLength(provider == 'debrid' ? 2 : 1));
+            expect(
+              f.paths.where((p) => p.contains('/delete')),
+              provider == 'debrid' ? [endsWith('/torrents/delete/owned')] : [],
+            );
           } else {
             expect(result, hasLength(2));
             expect(
@@ -63,8 +68,8 @@ void main() {
                   : ['Fixture.S01E01.mkv', 'Fixture.S01E02.mkv'],
             );
             expect(result.any((e) => e.url == 'https://stream.test/1'), isTrue);
+            expect(f.paths.where((p) => p.contains('/delete')), isEmpty);
           }
-          expect(f.paths.where((p) => p.contains('/delete')), isEmpty);
         },
       );
     }
@@ -166,9 +171,12 @@ void main() {
         () => client,
       );
       expect(result, isNull);
-      expect(f.requests, hasLength(1));
+      // The superseded add removes only its own fresh torrent.
+      expect(f.requests, hasLength(2));
       expect(ProfileSessionMemory.captureOwner(), owner);
-      expect(f.paths.where((path) => path.contains('/delete')), isEmpty);
+      expect(f.paths.where((path) => path.contains('/delete')), [
+        endsWith('/torrents/delete/owned'),
+      ]);
     },
   );
 }
