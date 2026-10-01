@@ -3,7 +3,7 @@ import 'package:debrify/features/discover/models/discover_layout_session.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,11 +15,11 @@ void main() {
     ProfileRuntime.initializeLegacy();
     ProfileSessionMemory.clearAll();
     SharedPreferences.setMockInitialValues({'discover_layout': 'grid'});
-    StorageService.discoverLayoutCached = 'stage';
+    DiscoverStorage.discoverLayoutCached = 'stage';
   });
   tearDown(() {
     ProfileRuntime.debugReset();
-    StorageService.discoverLayoutCached = 'stage';
+    DiscoverStorage.discoverLayoutCached = 'stage';
   });
   DiscoverLayoutSession session() =>
       (owner: ProfileSessionMemory.captureOwner(), viewIdentity: Object());
@@ -40,7 +40,7 @@ void main() {
       expect(first.current, 'stage');
       await load(first);
       expect(first.current, 'grid');
-      expect(StorageService.discoverLayoutCached, 'grid');
+      expect(DiscoverStorage.discoverLayoutCached, 'grid');
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('discover_layout', 'stage');
       final second = controller(ProviderContainer.test());
@@ -88,7 +88,7 @@ void main() {
       expect(controller(ProviderContainer.test()).current, 'grid');
       ProfileSessionMemory.clearAll();
       expect(controller(ProviderContainer.test()).current, 'stage');
-      expect(StorageService.discoverLayoutCached, 'grid');
+      expect(DiscoverStorage.discoverLayoutCached, 'grid');
     },
   );
 
@@ -115,7 +115,7 @@ void main() {
       ProfileRuntime.publish(nextScope);
       await pending;
       expect(operation.current, 'stage');
-      expect(StorageService.discoverLayoutCached, 'stage');
+      expect(DiscoverStorage.discoverLayoutCached, 'stage');
       expect(controller(ProviderContainer.test()).current, 'stage');
     },
   );
@@ -124,14 +124,14 @@ void main() {
     'storage getter retains its return contract but guards shared cache publication',
     () async {
       var current = true;
-      final pending = StorageService.getDiscoverLayout(
+      final pending = DiscoverStorage.getDiscoverLayout(
         canContinue: () => current,
       );
       current = false;
       expect(await pending, 'grid');
-      expect(StorageService.discoverLayoutCached, 'stage');
-      expect(await StorageService.getDiscoverLayout(), 'grid');
-      expect(StorageService.discoverLayoutCached, 'grid');
+      expect(DiscoverStorage.discoverLayoutCached, 'stage');
+      expect(await DiscoverStorage.getDiscoverLayout(), 'grid');
+      expect(DiscoverStorage.discoverLayoutCached, 'grid');
     },
   );
 }

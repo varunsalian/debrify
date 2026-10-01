@@ -1,3 +1,5 @@
+import 'package:debrify/services/storage/ambient_trailer_storage.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -17,7 +19,6 @@ import 'package:debrify/widgets/text_field_suggestions.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 import 'package:debrify/widgets/home/spotlight_card_trailer.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -239,9 +240,9 @@ void main() {
         await tester.pumpAndSettle();
         expect(board().sections.first.nodes[1].hasFocus, isTrue);
         expect(find.byType(SpotlightCardTrailer), findsNothing);
-        await StorageService.setHomeHeroTrailerEnabled(false);
-        await StorageService.setSpotlightFocusDetails(false);
-        await StorageService.setHomeHideCardTitlesAndRatings(true);
+        await AmbientTrailerStorage.setHomeHeroTrailerEnabled(false);
+        await HomeAppearanceStorage.setSpotlightFocusDetails(false);
+        await HomeAppearanceStorage.setHomeHideCardTitlesAndRatings(true);
         MainPageBridge.notifyHomeSettingsChanged();
         await tester.pumpAndSettle();
         expect(board().trailersEnabled, isFalse);

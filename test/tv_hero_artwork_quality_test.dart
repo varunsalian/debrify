@@ -1,5 +1,5 @@
 import 'package:debrify/models/tv_hero_artwork_quality.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/services/tv_hero_artwork_quality_controller.dart';
 import 'package:debrify/utils/tvos_device.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,12 +49,12 @@ void main() {
     'storage defaults safely and round-trips every supported mode',
     () async {
       expect(
-        await StorageService.getTvHeroArtworkQuality(),
+        await TvDisplayStorage.getTvHeroArtworkQuality(),
         TvHeroArtworkQuality.automatic,
       );
       for (final quality in TvHeroArtworkQuality.values) {
-        await StorageService.setTvHeroArtworkQuality(quality);
-        expect(await StorageService.getTvHeroArtworkQuality(), quality);
+        await TvDisplayStorage.setTvHeroArtworkQuality(quality);
+        expect(await TvDisplayStorage.getTvHeroArtworkQuality(), quality);
       }
     },
   );
@@ -64,7 +64,7 @@ void main() {
       'tv_hero_artwork_quality': 'future_removed_mode',
     });
     expect(
-      await StorageService.getTvHeroArtworkQuality(),
+      await TvDisplayStorage.getTvHeroArtworkQuality(),
       TvHeroArtworkQuality.automatic,
     );
   });
@@ -119,7 +119,7 @@ void main() {
         TvHeroArtworkDecodeSize.performance,
       );
       expect(
-        await StorageService.getTvHeroArtworkQuality(),
+        await TvDisplayStorage.getTvHeroArtworkQuality(),
         TvHeroArtworkQuality.fullHd,
       );
 
@@ -143,7 +143,7 @@ void main() {
         TvHeroArtworkQuality.fullHd,
       );
       expect(
-        await StorageService.getTvHeroArtworkQuality(),
+        await TvDisplayStorage.getTvHeroArtworkQuality(),
         TvHeroArtworkQuality.fullHd,
       );
       expect(

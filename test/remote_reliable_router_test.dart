@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'launch_animation/launch_package_test.dart' show packageBytes, animation;
 import 'package:debrify/services/launch_animation/launch_animation_library.dart';
@@ -26,7 +27,6 @@ import 'package:debrify/services/remote_control/udp_command_service.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
@@ -201,8 +201,8 @@ void main() {
       final entry = (await LaunchAnimationLibrary.instance.list()).single;
       expect(entry.animationId, 'portrait');
       expect(entry.background, 0xff123456);
-      await StorageService.getLaunchAnimation();
-      expect(StorageService.importedLaunchAnimationCached, isNull);
+      await LaunchIdentStorage.getLaunchAnimation();
+      expect(LaunchIdentStorage.importedLaunchAnimationCached, isNull);
     },
   );
 

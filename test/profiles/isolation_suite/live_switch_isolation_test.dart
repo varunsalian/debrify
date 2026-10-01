@@ -9,7 +9,7 @@ import 'package:debrify/services/profiles/profile_lifecycle.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -89,8 +89,8 @@ void main() {
 
   test('a live switch leaves no cache stamped to the outgoing profile',
       () async {
-    await StorageService.setTvHomeStyle('atrium');
-    expect(StorageService.tvHomeStyleCached, 'atrium');
+    await HomeAppearanceStorage.setTvHomeStyle('atrium');
+    expect(HomeAppearanceStorage.tvHomeStyleCached, 'atrium');
 
     final lifecycle = ProfileLifecycleCoordinator(
       registry: registry,
@@ -123,7 +123,7 @@ void main() {
     );
 
     expect(
-      StorageService.tvHomeStyleCached,
+      HomeAppearanceStorage.tvHomeStyleCached,
       isNot('atrium'),
       reason: 'the synchronous mirror still holds profile A\'s choice',
     );
@@ -131,7 +131,7 @@ void main() {
 
   test('switching back does not resurrect the other profile\'s values',
       () async {
-    await StorageService.setTvHomeStyle('atrium');
+    await HomeAppearanceStorage.setTvHomeStyle('atrium');
 
     final lifecycle = ProfileLifecycleCoordinator(
       registry: registry,
@@ -142,16 +142,16 @@ void main() {
     addTearDown(lifecycle.dispose);
 
     await lifecycle.switchTo(profileB);
-    await StorageService.setTvHomeStyle('mosaic');
+    await HomeAppearanceStorage.setTvHomeStyle('mosaic');
     await lifecycle.switchTo(profileA);
 
     expect(
-      await StorageService.getTvHomeStyle(),
+      await HomeAppearanceStorage.getTvHomeStyle(),
       'atrium',
       reason: 'profile A must get its own choice back',
     );
     expect(
-      StorageService.tvHomeStyleCached,
+      HomeAppearanceStorage.tvHomeStyleCached,
       'atrium',
       reason: 'the mirror must be re-warmed from A, not left holding B',
     );

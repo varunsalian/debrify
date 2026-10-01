@@ -5,9 +5,10 @@ import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/home_rows_storage.dart';
 import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:flutter/material.dart';
@@ -279,7 +280,7 @@ void main() {
   ) async {
     serveHome = true;
     MainPageBridge.setActiveTab('home');
-    StorageService.tvHomeStyleCached = 'classic';
+    HomeAppearanceStorage.tvHomeStyleCached = 'classic';
     await mount(tester, false, searchMode: false);
     expect(find.text('Slow Movies'), findsOneWidget);
     expect(find.text('Fast Movies'), findsOneWidget);
@@ -288,7 +289,7 @@ void main() {
     await complete(tester, 'fast', 'Result');
     await complete(tester, 'slow', 'Result');
     await drive(tester, () async {
-      await StorageService.setHomeDisabledSections({'search-test:movie:fast'});
+      await HomeRowsStorage.setHomeDisabledSections({'search-test:movie:fast'});
       MainPageBridge.notifyHomeSettingsChanged();
     });
     expect(browseRequests.length, initialRequests);

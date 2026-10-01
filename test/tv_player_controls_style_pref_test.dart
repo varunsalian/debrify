@@ -1,9 +1,9 @@
+import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/sanitized_profile_preferences.dart';
-import 'package:debrify/services/storage_service.dart';
 
 /// `tv_player_controls_style` is read by the NATIVE Android TV player via the
 /// profile projection, so its registration is a cross-language contract: a
@@ -14,19 +14,19 @@ void main() {
 
   test('unset and invalid styles resolve to OTT', () async {
     SharedPreferences.setMockInitialValues({});
-    expect(await StorageService.getTvPlayerControlsStyle(), 'ott');
+    expect(await PlayerAppearanceStorage.getTvPlayerControlsStyle(), 'ott');
 
     SharedPreferences.setMockInitialValues({
       'tv_player_controls_style': 'unknown',
     });
-    expect(await StorageService.getTvPlayerControlsStyle(), 'ott');
+    expect(await PlayerAppearanceStorage.getTvPlayerControlsStyle(), 'ott');
   });
 
   test('an explicit existing style remains selected after upgrade', () async {
     SharedPreferences.setMockInitialValues({
       'tv_player_controls_style': 'marquee',
     });
-    expect(await StorageService.getTvPlayerControlsStyle(), 'marquee');
+    expect(await PlayerAppearanceStorage.getTvPlayerControlsStyle(), 'marquee');
   });
 
   test('tv_player_controls_style is projected to native', () {

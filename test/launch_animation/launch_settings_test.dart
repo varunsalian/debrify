@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -6,7 +7,6 @@ import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:debrify/services/launch_animation/launch_animation_library.dart';
 import 'package:debrify/screens/settings/imported_launch_animations.dart';
@@ -27,7 +27,7 @@ void main() {
         entry = await LaunchAnimationLibrary.instance.install(
           File('dev/launch_animations/samples/hello-landscape.lottie'),
         );
-        await StorageService.getLaunchAnimation();
+        await LaunchIdentStorage.getLaunchAnimation();
       });
       tester.view.physicalSize = const Size(360, 740);
       tester.view.devicePixelRatio = 1;
@@ -83,7 +83,7 @@ void main() {
       for (
         var attempt = 0;
         attempt < 40 &&
-            StorageService.importedLaunchAnimationCached != entry.id;
+            LaunchIdentStorage.importedLaunchAnimationCached != entry.id;
         attempt++
       ) {
         await tester.runAsync(() async {
@@ -92,7 +92,7 @@ void main() {
         await tester.pump();
       }
       expect(
-        StorageService.importedLaunchAnimationCached,
+        LaunchIdentStorage.importedLaunchAnimationCached,
         entry.id,
         reason: tester
             .widgetList<Text>(find.byType(Text))
@@ -133,7 +133,7 @@ void main() {
         root = await Directory.systemTemp.createTemp('launch-picker-test-');
         AppStorage.debugOverride(support: root);
         await LaunchAnimationLibrary.instance.list();
-        await StorageService.setImportedLaunchAnimation('a' * 32);
+        await LaunchIdentStorage.setImportedLaunchAnimation('a' * 32);
       });
       addTearDown(() async {
         tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -161,7 +161,7 @@ void main() {
         find.textContaining('No file picker is available on this TV.'),
         findsOneWidget,
       );
-      expect(StorageService.importedLaunchAnimationCached, 'a' * 32);
+      expect(LaunchIdentStorage.importedLaunchAnimationCached, 'a' * 32);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },

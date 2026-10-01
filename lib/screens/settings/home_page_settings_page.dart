@@ -1,3 +1,8 @@
+import 'package:debrify/services/storage/ambient_trailer_storage.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/home_hero_storage.dart';
+import 'package:debrify/services/storage/home_page_storage.dart';
+import 'package:debrify/services/storage/home_rows_storage.dart';
 import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:flutter/material.dart';
 import '../../utils/spotlight_interaction_policy.dart';
@@ -79,7 +84,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       ),
     );
     if (!mounted) return;
-    final heroSource = await StorageService.getHomeHeroSource();
+    final heroSource = await HomeHeroStorage.getHomeHeroSource();
     if (!mounted) return;
     setState(() => _heroSource = heroSource);
   }
@@ -91,7 +96,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const TvHomeStylePage()));
     if (!mounted) return;
-    final style = await StorageService.getTvHomeStyle();
+    final style = await HomeAppearanceStorage.getTvHomeStyle();
     if (!mounted) return;
     setState(() => _tvHomeStyle = style);
   }
@@ -121,22 +126,22 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   /// rather than the detail page silently inheriting the hero's preference,
   /// which is what a platform-keyed lookup would have done.
   Future<void> _setAmbientAudio(bool value) async {
-    await StorageService.setAmbientTrailerAudioEnabled(
+    await AmbientTrailerStorage.setAmbientTrailerAudioEnabled(
       AmbientTrailerSurface.detail,
       value,
     );
-    await StorageService.setAmbientTrailerAudioEnabled(
+    await AmbientTrailerStorage.setAmbientTrailerAudioEnabled(
       AmbientTrailerSurface.homeHero,
       value,
     );
   }
 
   Future<void> _setAmbientVolume(int value) async {
-    await StorageService.setAmbientTrailerVolume(
+    await AmbientTrailerStorage.setAmbientTrailerVolume(
       AmbientTrailerSurface.detail,
       value,
     );
-    await StorageService.setAmbientTrailerVolume(
+    await AmbientTrailerStorage.setAmbientTrailerVolume(
       AmbientTrailerSurface.homeHero,
       value,
     );
@@ -160,7 +165,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       value: value,
       onChanged: (v) async {
         try {
-          await StorageService.setHomeCwMergedRows(provider, v);
+          await HomePageStorage.setHomeCwMergedRows(provider, v);
           if (!mounted) return;
           setState(() => apply(v));
           MainPageBridge.notifyHomeSettingsChanged();
@@ -193,15 +198,15 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
 
     try {
       final addons = await StremioService.instance.getCatalogAddons();
-      final sourceType = await StorageService.getHomeDefaultSourceType();
-      final hideProviderCards = await StorageService.getHomeHideProviderCards();
+      final sourceType = await HomePageStorage.getHomeDefaultSourceType();
+      final hideProviderCards = await HomePageStorage.getHomeHideProviderCards();
       final continueWatchingEnabled =
-          await StorageService.getHomeContinueWatchingEnabled();
-      final holdToQuickPlay = await StorageService.getHomeCwHoldToQuickPlay();
-      final cwMergeLocal = await StorageService.getHomeCwMergedRows('local');
-      final cwMergeTrakt = await StorageService.getHomeCwMergedRows('trakt');
-      final cwMergeSimkl = await StorageService.getHomeCwMergedRows('simkl');
-      final cwMergeMdblist = await StorageService.getHomeCwMergedRows(
+          await HomePageStorage.getHomeContinueWatchingEnabled();
+      final holdToQuickPlay = await HomePageStorage.getHomeCwHoldToQuickPlay();
+      final cwMergeLocal = await HomePageStorage.getHomeCwMergedRows('local');
+      final cwMergeTrakt = await HomePageStorage.getHomeCwMergedRows('trakt');
+      final cwMergeSimkl = await HomePageStorage.getHomeCwMergedRows('simkl');
+      final cwMergeMdblist = await HomePageStorage.getHomeCwMergedRows(
         'mdblist',
       );
       // Connectivity gates the tracker merge toggles. A tracker probe failing
@@ -226,17 +231,17 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
           kMdblistEnabled &&
           await probe(() => MdblistService.instance.isAuthenticated());
       final trailerAutoplayEnabled =
-          await StorageService.getDetailTrailerAutoplayEnabled();
+          await AmbientTrailerStorage.getDetailTrailerAutoplayEnabled();
       final heroTrailerEnabled =
-          await StorageService.getHomeHeroTrailerEnabled();
+          await AmbientTrailerStorage.getHomeHeroTrailerEnabled();
       // One pair of controls governs every ambient surface this platform has,
       // so the two stored values must not be allowed to diverge — a TV that had
       // sound off for its hero would otherwise show "off" while the newly
       // enabled detail trailer played at its own default of on. Read the shown
       // surface, then write it through to the other.
       final ambientTrailerAudioEnabled =
-          await StorageService.getAmbientTrailerAudioEnabled(_ambientSurface);
-      final ambientTrailerVolume = await StorageService.getAmbientTrailerVolume(
+          await AmbientTrailerStorage.getAmbientTrailerAudioEnabled(_ambientSurface);
+      final ambientTrailerVolume = await AmbientTrailerStorage.getAmbientTrailerVolume(
         _ambientSurface,
       );
       if (PlatformUtil.isTelevision) {
@@ -244,18 +249,18 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         await _setAmbientVolume(ambientTrailerVolume);
       }
       final tvTrailerUnderlayEnabled =
-          await StorageService.getTvTrailerUnderlayEnabled();
-      final tvHomeStyle = await StorageService.getTvHomeStyle();
+          await AmbientTrailerStorage.getTvTrailerUnderlayEnabled();
+      final tvHomeStyle = await HomeAppearanceStorage.getTvHomeStyle();
       final spotlightCardOrientation =
-          await StorageService.getHomeCardOrientation();
+          await HomePageStorage.getHomeCardOrientation();
       final hideCardTitlesAndRatings =
-          await StorageService.getHomeHideCardTitlesAndRatings();
+          await HomeAppearanceStorage.getHomeHideCardTitlesAndRatings();
       final hideCatalogAddonNames =
-          await StorageService.getHomeHideCatalogAddonNames();
-      final heroSource = await StorageService.getHomeHeroSource();
-      final spotlightFocusDetails = await StorageService.getSpotlightFocusDetails();
-      final homeAnimationsEnabled = await StorageService.getHomeAnimationsEnabled();
-      final homeAnimationStyle = await StorageService.getHomeAnimationStyle();
+          await HomeAppearanceStorage.getHomeHideCatalogAddonNames();
+      final heroSource = await HomeHeroStorage.getHomeHeroSource();
+      final spotlightFocusDetails = await HomeAppearanceStorage.getSpotlightFocusDetails();
+      final homeAnimationsEnabled = await HomeAppearanceStorage.getHomeAnimationsEnabled();
+      final homeAnimationStyle = await HomeAppearanceStorage.getHomeAnimationStyle();
 
       // Only the two views that the current Home screen can render are valid.
       // Migrate the former All, Addon, Trakt, and other retired choices to
@@ -268,7 +273,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       // Only when there was an actual stale value — not for a fresh install
       // (null), which already defaults to Catalog without needing a write.
       if (sourceType != null && normalizedSourceType != sourceType) {
-        await StorageService.setHomeDefaultSourceType(normalizedSourceType);
+        await HomePageStorage.setHomeDefaultSourceType(normalizedSourceType);
       }
 
       if (!mounted) return;
@@ -326,7 +331,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
 
   Future<void> _selectSourceType(String type) async {
     try {
-      await StorageService.setHomeDefaultSourceType(type);
+      await HomePageStorage.setHomeDefaultSourceType(type);
       setState(() {
         _selectedSourceType = type;
       });
@@ -342,7 +347,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
 
   Future<void> _toggleHideProviderCards(bool value) async {
     try {
-      await StorageService.setHomeHideProviderCards(value);
+      await HomePageStorage.setHomeHideProviderCards(value);
       if (!mounted) return;
       setState(() {
         _hideProviderCards = value;
@@ -362,7 +367,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         ? HomeCardOrientation.landscape
         : HomeCardOrientation.portrait;
     try {
-      await StorageService.setHomeCardOrientation(orientation);
+      await HomePageStorage.setHomeCardOrientation(orientation);
       if (!mounted) return;
       setState(() => _homeCardOrientation = orientation);
       MainPageBridge.notifyHomeSettingsChanged();
@@ -376,7 +381,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
 
   Future<void> _setHideCardTitlesAndRatings(bool value) async {
     try {
-      await StorageService.setHomeHideCardTitlesAndRatings(value);
+      await HomeAppearanceStorage.setHomeHideCardTitlesAndRatings(value);
       if (!mounted) return;
       setState(() => _hideCardTitlesAndRatings = value);
       MainPageBridge.notifyHomeSettingsChanged();
@@ -390,8 +395,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
 
   Future<void> _setHomeAnimation({bool? enabled, String? style}) async {
     try {
-      if (style != null) await StorageService.setHomeAnimationStyle(style);
-      if (enabled != null) await StorageService.setHomeAnimationsEnabled(enabled);
+      if (style != null) await HomeAppearanceStorage.setHomeAnimationStyle(style);
+      if (enabled != null) await HomeAppearanceStorage.setHomeAnimationsEnabled(enabled);
       if (!mounted) return;
       setState(() {
         if (enabled != null) _homeAnimationsEnabled = enabled;
@@ -408,7 +413,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
 
   Future<void> _setSpotlightFocusDetails(bool value) async {
     try {
-      await StorageService.setSpotlightFocusDetails(value);
+      await HomeAppearanceStorage.setSpotlightFocusDetails(value);
       if (!mounted) return;
       setState(() => _spotlightFocusDetails = value);
       MainPageBridge.notifyHomeSettingsChanged();
@@ -422,7 +427,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
 
   Future<void> _setHideCatalogAddonNames(bool value) async {
     try {
-      await StorageService.setHomeHideCatalogAddonNames(value);
+      await HomeAppearanceStorage.setHomeHideCatalogAddonNames(value);
       if (!mounted) return;
       setState(() => _hideCatalogAddonNames = value);
       MainPageBridge.notifyHomeSettingsChanged();
@@ -453,9 +458,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         for (final a in _addons)
           (addon: a, catalogs: a.catalogs.where((c) => c.isBrowsable).toList()),
       ].where((e) => e.catalogs.isNotEmpty).toList();
-      final disabled = await StorageService.getHomeDisabledSections();
-      final extras = await StorageService.getHomeExtraRows();
-      final rowOrder = await StorageService.getHomeRowOrder();
+      final disabled = await HomeRowsStorage.getHomeDisabledSections();
+      final extras = await HomeRowsStorage.getHomeExtraRows();
+      final rowOrder = await HomeRowsStorage.getHomeRowOrder();
       final collections = await HomeCollectionsStore.instance
           .getEnabledCollections();
       var iptvLists = const <IptvListMeta>[];
@@ -756,7 +761,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                       value: _continueWatchingEnabled,
                       onChanged: (value) async {
                         try {
-                          await StorageService.setHomeContinueWatchingEnabled(
+                          await HomePageStorage.setHomeContinueWatchingEnabled(
                             value,
                           );
                           if (!mounted) return;
@@ -783,7 +788,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                       value: _holdToQuickPlay,
                       onChanged: (value) async {
                         try {
-                          await StorageService.setHomeCwHoldToQuickPlay(value);
+                          await HomePageStorage.setHomeCwHoldToQuickPlay(value);
                           if (!mounted) return;
                           setState(() => _holdToQuickPlay = value);
                         } catch (e) {
@@ -872,7 +877,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                       value: _heroTrailerEnabled,
                       onChanged: (value) async {
                         try {
-                          await StorageService.setHomeHeroTrailerEnabled(value);
+                          await AmbientTrailerStorage.setHomeHeroTrailerEnabled(value);
                           if (!mounted) return;
                           setState(() => _heroTrailerEnabled = value);
                           // Off-TV Home survives under this pushed route —
@@ -901,7 +906,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                       value: _trailerAutoplayEnabled,
                       onChanged: (value) async {
                         try {
-                          await StorageService.setDetailTrailerAutoplayEnabled(
+                          await AmbientTrailerStorage.setDetailTrailerAutoplayEnabled(
                             value,
                           );
                           if (!mounted) return;
@@ -999,7 +1004,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                         value: _tvTrailerUnderlayEnabled,
                         onChanged: (value) async {
                           try {
-                            await StorageService.setTvTrailerUnderlayEnabled(
+                            await AmbientTrailerStorage.setTvTrailerUnderlayEnabled(
                               value,
                             );
                             if (!mounted) return;

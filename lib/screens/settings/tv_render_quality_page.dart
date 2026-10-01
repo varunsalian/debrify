@@ -1,7 +1,7 @@
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
@@ -63,8 +63,8 @@ class _TvRenderQualityPageState extends State<TvRenderQualityPage> {
   }
 
   Future<void> _load() async {
-    final quality = await StorageService.getTvRenderQuality();
-    final active = await StorageService.getTvLowResRenderActive();
+    final quality = await TvDisplayStorage.getTvRenderQuality();
+    final active = await TvDisplayStorage.getTvLowResRenderActive();
     if (!mounted) return;
     setState(() {
       _quality = quality;
@@ -86,7 +86,7 @@ class _TvRenderQualityPageState extends State<TvRenderQualityPage> {
   Future<void> _select(TvRenderQuality quality) async {
     if (quality == _quality) return;
     setState(() => _quality = quality);
-    await StorageService.setTvRenderQuality(quality);
+    await TvDisplayStorage.setTvRenderQuality(quality);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(

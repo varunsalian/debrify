@@ -1,15 +1,24 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/detail_page_storage.dart';
+import 'package:debrify/services/storage/discover_storage.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/home_page_storage.dart';
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/sidebar_storage.dart';
 import 'package:debrify/services/storage/simkl_storage.dart';
+import 'package:debrify/services/storage/theme_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:debrify/services/storage/torrent_history_storage.dart';
 import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:debrify/services/storage/trakt_storage.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/storage/webdav_storage.dart';
 import 'settings/tv_collection_list_style_page.dart';
@@ -285,7 +294,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _diagnosticExportVisible = false;
   bool _exportingDiagnostics = false;
   bool _tvKeyboardEnabled = true;
-  int _tvUiScalePercent = StorageService.kTvUiScaleDefault;
+  int _tvUiScalePercent = TvDisplayStorage.kTvUiScaleDefault;
   TvRenderQuality _tvRenderQuality = TvRenderQuality.auto;
   TvHeroArtworkQuality _tvHeroArtworkQuality = TvHeroArtworkQuality.automatic;
   String _tvHomeStyle = 'canvas';
@@ -302,7 +311,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _playerDockSize = 'auto';
   // The placeholder the Appearance row shows for the one frame before the
   // async load lands; a literal here would flash the wrong label.
-  String _detailPageStyle = StorageService.kDetailPageStyleDefault;
+  String _detailPageStyle = DetailPageStorage.kDetailPageStyleDefault;
   String _detailTheme = 'signal';
   String _parentsGuideStyle = 'compass';
   String _phoneNavStyle = 'classic';
@@ -516,27 +525,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'TV keyboard',
-        () => StorageService.getTvKeyboardEnabled(),
+        () => TvDisplayStorage.getTvKeyboardEnabled(),
         _tvKeyboardEnabled,
       ),
       summaries.read(
         'TV scale',
-        () => StorageService.getTvUiScalePercent(),
+        () => TvDisplayStorage.getTvUiScalePercent(),
         _tvUiScalePercent,
       ),
       summaries.read(
         'TV home',
-        () => StorageService.getTvHomeStyle(),
+        () => HomeAppearanceStorage.getTvHomeStyle(),
         _tvHomeStyle,
       ),
       summaries.read(
         'TV sidebar',
-        () => StorageService.getTvSidebarStyle(),
+        () => SidebarStorage.getTvSidebarStyle(),
         _tvSidebarStyle,
       ),
       summaries.read(
         'Discover layout',
-        () => StorageService.getDiscoverLayout(),
+        () => DiscoverStorage.getDiscoverLayout(),
         _discoverLayout,
       ),
       summaries.read(
@@ -551,62 +560,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'Phone navigation',
-        () => StorageService.getPhoneNavStyle(),
+        () => SidebarStorage.getPhoneNavStyle(),
         _phoneNavStyle,
       ),
       summaries.read(
         'Text brightness',
-        () => StorageService.getTextBrightness(),
+        () => ThemeStorage.getTextBrightness(),
         _textBrightness,
       ),
       summaries.read(
         'Launch animation',
-        () => StorageService.getLaunchAnimation(),
+        () => LaunchIdentStorage.getLaunchAnimation(),
         _launchAnimation,
       ),
       summaries.read(
         'Detail page',
-        () => StorageService.getDetailPageStyle(),
+        () => DetailPageStorage.getDetailPageStyle(),
         _detailPageStyle,
       ),
       summaries.read(
         'Render quality',
-        () => StorageService.getTvRenderQuality(),
+        () => TvDisplayStorage.getTvRenderQuality(),
         _tvRenderQuality,
       ),
       summaries.read(
         'Detail theme',
-        () => StorageService.getDetailTheme(),
+        () => DetailPageStorage.getDetailTheme(),
         _detailTheme,
       ),
       summaries.read(
         'Parents guide',
-        () => StorageService.getParentsGuideStyle(),
+        () => DetailPageStorage.getParentsGuideStyle(),
         _parentsGuideStyle,
       ),
       summaries.read(
         'Artwork quality',
-        () => StorageService.getTvHeroArtworkQuality(),
+        () => TvDisplayStorage.getTvHeroArtworkQuality(),
         _tvHeroArtworkQuality,
       ),
       summaries.read(
         'Player dock',
-        () => StorageService.getPlayerDockStyle(),
+        () => PlayerAppearanceStorage.getPlayerDockStyle(),
         _playerDockStyle,
       ),
       summaries.read(
         'Dock palette',
-        () => StorageService.getPlayerDockPalette(),
+        () => PlayerAppearanceStorage.getPlayerDockPalette(),
         _playerDockPalette,
       ),
       summaries.read(
         'Dock size',
-        () => StorageService.getPlayerDockSize(),
+        () => PlayerAppearanceStorage.getPlayerDockSize(),
         _playerDockSize,
       ),
       summaries.read(
         'Desktop sidebar',
-        () => StorageService.getDesktopSidebarStyle(),
+        () => SidebarStorage.getDesktopSidebarStyle(),
         _desktopSidebarStyle,
       ),
       summaries.read(
@@ -616,7 +625,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'TV controls',
-        () => StorageService.getTvPlayerControlsStyle(),
+        () => PlayerAppearanceStorage.getTvPlayerControlsStyle(),
         _tvPlayerControlsStyle,
       ),
       summaries.read(
@@ -626,7 +635,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'Play loader',
-        () => StorageService.getPlayLoaderStyle(),
+        () => PlayerAppearanceStorage.getPlayLoaderStyle(),
         _playLoaderStyle,
       ),
       summaries.read(
@@ -5065,7 +5074,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Phone/small-window chrome choice: classic bottom bar (default) vs the
   /// floating glass button. Applies live — MainPageBridge tells the shell.
   Future<void> _openNavigationSettings() async {
-    final current = await StorageService.getPhoneNavStyle();
+    final current = await SidebarStorage.getPhoneNavStyle();
     if (!mounted) return;
 
     // The dialog RETURNS the choice; the write is awaited here before the
@@ -5126,7 +5135,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
     );
     if (chosen == null || chosen == current || !mounted) return;
-    await StorageService.setPhoneNavStyle(chosen);
+    await SidebarStorage.setPhoneNavStyle(chosen);
     if (!mounted) return;
     setState(() => _phoneNavStyle = chosen);
     MainPageBridge.navPrefsChanged?.call();
@@ -6687,7 +6696,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearMyWatchlist();
     await TorrentHistoryStorage.clearTorrentSearchHistory();
     await StorageService.clearAllStartupSettings();
-    await StorageService.clearAllHomePageSettings();
+    await HomePageStorage.clearAllHomePageSettings();
     await ProviderCredentialStorage.clearAllIntegrationStates();
     await StorageService.clearDebrifyTvProviderAndLegacy();
     await TorrentSearchStorage.clearAllFilterSettings();
@@ -6942,7 +6951,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _tvKeyboardEnabled = enabled;
     });
-    await StorageService.setTvKeyboardEnabled(enabled);
+    await TvDisplayStorage.setTvKeyboardEnabled(enabled);
   }
 
   /// The page writes the pref itself (and says a restart is needed — the
@@ -6951,7 +6960,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openTvScreenSize() async {
     await pushSettingsPage(context, const TvScreenSizePage());
     if (!mounted) return;
-    final percent = await StorageService.getTvUiScalePercent();
+    final percent = await TvDisplayStorage.getTvUiScalePercent();
     if (!mounted) return;
     setState(() {
       _tvUiScalePercent = percent;
@@ -6964,7 +6973,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openTvRenderQuality() async {
     await pushSettingsPage(context, const TvRenderQualityPage());
     if (!mounted) return;
-    final quality = await StorageService.getTvRenderQuality();
+    final quality = await TvDisplayStorage.getTvRenderQuality();
     if (!mounted) return;
     setState(() {
       _tvRenderQuality = quality;
@@ -6974,7 +6983,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openTvHeroArtworkQuality() async {
     await pushSettingsPage(context, const TvHeroArtworkQualityPage());
     if (!mounted) return;
-    final quality = await StorageService.getTvHeroArtworkQuality();
+    final quality = await TvDisplayStorage.getTvHeroArtworkQuality();
     if (!mounted) return;
     setState(() {
       _tvHeroArtworkQuality = quality;
@@ -6986,7 +6995,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openTvHomeStyle() async {
     await pushSettingsPage(context, const TvHomeStylePage());
     if (!mounted) return;
-    final style = await StorageService.getTvHomeStyle();
+    final style = await HomeAppearanceStorage.getTvHomeStyle();
     if (!mounted) return;
     setState(() {
       _tvHomeStyle = style;
@@ -7001,7 +7010,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openDiscoverLayout() async {
     await pushSettingsPage(context, const DiscoverLayoutPage());
     if (!mounted) return;
-    final layout = await StorageService.getDiscoverLayout();
+    final layout = await DiscoverStorage.getDiscoverLayout();
     if (!mounted) return;
     setState(() {
       _discoverLayout = layout;
@@ -7012,7 +7021,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openTvSidebarStyle() async {
     await pushSettingsPage(context, const TvSidebarStylePage());
     if (!mounted) return;
-    final style = await StorageService.getTvSidebarStyle();
+    final style = await SidebarStorage.getTvSidebarStyle();
     if (!mounted) return;
     setState(() {
       _tvSidebarStyle = style;
@@ -7023,7 +7032,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openDesktopSidebarStyle() async {
     await pushSettingsPage(context, const DesktopSidebarStylePage());
     if (!mounted) return;
-    final style = await StorageService.getDesktopSidebarStyle();
+    final style = await SidebarStorage.getDesktopSidebarStyle();
     if (!mounted) return;
     setState(() {
       _desktopSidebarStyle = style;
@@ -7092,7 +7101,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openTvPlayerControlsStylePage() async {
     await pushSettingsPage(context, const TvPlayerControlsStylePage());
     if (!mounted) return;
-    final style = await StorageService.getTvPlayerControlsStyle();
+    final style = await PlayerAppearanceStorage.getTvPlayerControlsStyle();
     if (!mounted) return;
     setState(() {
       _tvPlayerControlsStyle = style;
@@ -7114,9 +7123,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openPlayerDockPage() async {
     await pushSettingsPage(context, const PlayerDockPage());
     if (!mounted) return;
-    final style = await StorageService.getPlayerDockStyle();
-    final palette = await StorageService.getPlayerDockPalette();
-    final size = await StorageService.getPlayerDockSize();
+    final style = await PlayerAppearanceStorage.getPlayerDockStyle();
+    final palette = await PlayerAppearanceStorage.getPlayerDockPalette();
+    final size = await PlayerAppearanceStorage.getPlayerDockSize();
     if (!mounted) return;
     setState(() {
       _playerDockStyle = style;
@@ -7129,7 +7138,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openDetailPageStylePage() async {
     await pushSettingsPage(context, const DetailPageStylePage());
     if (!mounted) return;
-    final style = await StorageService.getDetailPageStyle();
+    final style = await DetailPageStorage.getDetailPageStyle();
     if (!mounted) return;
     setState(() {
       _detailPageStyle = style;
@@ -7140,7 +7149,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openDetailThemePage() async {
     await pushSettingsPage(context, const DetailThemePage());
     if (!mounted) return;
-    final theme = await StorageService.getDetailTheme();
+    final theme = await DetailPageStorage.getDetailTheme();
     if (!mounted) return;
     setState(() {
       _detailTheme = theme;
@@ -7185,7 +7194,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openAppThemePage() async {
     await pushSettingsPage(context, const AppThemePage());
     if (!mounted) return;
-    final theme = await StorageService.getDetailTheme();
+    final theme = await DetailPageStorage.getDetailTheme();
     if (!mounted) return;
     setState(() {
       _detailTheme = theme;
@@ -7195,7 +7204,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openParentsGuideStylePage() async {
     await pushSettingsPage(context, const ParentsGuideStylePage());
     if (!mounted) return;
-    final style = await StorageService.getParentsGuideStyle();
+    final style = await DetailPageStorage.getParentsGuideStyle();
     if (!mounted) return;
     setState(() {
       _parentsGuideStyle = style;
@@ -7206,7 +7215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openTextBrightnessPage() async {
     await pushSettingsPage(context, const TextBrightnessPage());
     if (!mounted) return;
-    final value = await StorageService.getTextBrightness();
+    final value = await ThemeStorage.getTextBrightness();
     if (!mounted) return;
     setState(() {
       _textBrightness = value;
@@ -7217,7 +7226,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openLaunchAnimationPage() async {
     await pushSettingsPage(context, const LaunchAnimationPage());
     if (!mounted) return;
-    final value = await StorageService.getLaunchAnimation();
+    final value = await LaunchIdentStorage.getLaunchAnimation();
     if (!mounted) return;
     setState(() {
       _launchAnimation = value;
@@ -7230,17 +7239,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// any route that can reach them, so the captions never go stale. Never
   /// the full [_loadSummaries] — these are local pref reads, no network.
   Future<void> _reloadAppearanceSummaries() async {
-    final tvHomeStyle = await StorageService.getTvHomeStyle();
+    final tvHomeStyle = await HomeAppearanceStorage.getTvHomeStyle();
     final iptvStyle = await StorageService.getIptvStyle();
     final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
-    final playLoaderStyle = await StorageService.getPlayLoaderStyle();
+    final playLoaderStyle = await PlayerAppearanceStorage.getPlayLoaderStyle();
     final tvPlayerControlsStyle =
-        await StorageService.getTvPlayerControlsStyle();
+        await PlayerAppearanceStorage.getTvPlayerControlsStyle();
     final debrifyTvStyle = await StorageService.getDebrifyTvStyle();
     final debrifyTvPlayerStyle = await StorageService.getDebrifyTvPlayerStyle();
-    final playerDockStyle = await StorageService.getPlayerDockStyle();
-    final playerDockPalette = await StorageService.getPlayerDockPalette();
-    final playerDockSize = await StorageService.getPlayerDockSize();
+    final playerDockStyle = await PlayerAppearanceStorage.getPlayerDockStyle();
+    final playerDockPalette = await PlayerAppearanceStorage.getPlayerDockPalette();
+    final playerDockSize = await PlayerAppearanceStorage.getPlayerDockSize();
     if (!mounted) return;
     setState(() {
       _tvHomeStyle = tvHomeStyle;

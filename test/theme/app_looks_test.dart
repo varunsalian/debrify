@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -93,7 +94,7 @@ void main() {
 
         // A manual change to ONE key the Look names — exactly what a user does
         // by opening a picker afterwards.
-        await StorageService.setDetailPageStyle('stage');
+        await DetailPageStorage.setDetailPageStyle('stage');
         expect(
           AppLooks.active()?.id,
           isNot('classic'),
@@ -114,7 +115,7 @@ void main() {
       );
 
       await LookApplier.apply(classic);
-      expect(StorageService.detailPageStyleCached, 'classic');
+      expect(DetailPageStorage.detailPageStyleCached, 'classic');
       expect(
         StorageService.iptvStyleCached,
         'edition',
@@ -167,7 +168,7 @@ void main() {
           reason: 'a deliberate choice made during the apply must survive it',
         );
         // …and the rest of the bundle still landed.
-        expect(StorageService.detailPageStyleCached, 'console');
+        expect(DetailPageStorage.detailPageStyleCached, 'console');
       },
     );
 

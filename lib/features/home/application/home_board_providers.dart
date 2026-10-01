@@ -1,4 +1,8 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/home_hero_storage.dart';
+import 'package:debrify/services/storage/home_page_storage.dart';
+import 'package:debrify/services/storage/home_rows_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
@@ -17,7 +21,6 @@ import '../../../services/profiles/profile_policy_guard.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../../../services/series_source_service.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/stremio_service.dart';
 import '../../../services/watched_filter.dart';
 import '../../../services/watched_status_service.dart';
@@ -152,10 +155,10 @@ final homeCatalogRepositoryProvider = Provider<HomeCatalogRepository>(
 final homeCatalogPreferencesRepositoryProvider =
     Provider<HomeCatalogPreferencesRepository>(
       (ref) => const HomeCatalogPreferencesRepository(
-        readDisabled: StorageService.getHomeDisabledSections,
-        readExtras: StorageService.getHomeExtraRows,
-        readRowOrder: StorageService.getHomeRowOrder,
-        readHeroSource: StorageService.getHomeHeroSource,
+        readDisabled: HomeRowsStorage.getHomeDisabledSections,
+        readExtras: HomeRowsStorage.getHomeExtraRows,
+        readRowOrder: HomeRowsStorage.getHomeRowOrder,
+        readHeroSource: HomeHeroStorage.getHomeHeroSource,
       ),
       dependencies: const [],
     );
@@ -171,7 +174,7 @@ final homeCollectionsRepositoryProvider = Provider<HomeCollectionsRepository>(
 );
 
 final homeDefaultViewReaderProvider = Provider<Future<String?> Function()>(
-  (ref) => StorageService.getHomeDefaultSourceType,
+  (ref) => HomePageStorage.getHomeDefaultSourceType,
   dependencies: const [],
 );
 
@@ -196,21 +199,22 @@ final homeDefaultViewProvider = Provider.autoDispose
 final homeDisplayPreferencesRepositoryProvider =
     Provider<HomeDisplayPreferencesRepository>(
       (ref) => const HomeDisplayPreferencesRepository(
-        readFocusDetails: StorageService.getSpotlightFocusDetails,
-        readAnimationsEnabled: StorageService.getHomeAnimationsEnabled,
-        readAnimationStyle: StorageService.getHomeAnimationStyle,
-        readOrientation: StorageService.getHomeCardOrientation,
-        readHideTitles: StorageService.getHomeHideCardTitlesAndRatings,
-        readHideAddonNames: StorageService.getHomeHideCatalogAddonNames,
-        readHideCollectionNames: StorageService.getHomeHideCollectionNames,
+        readFocusDetails: HomeAppearanceStorage.getSpotlightFocusDetails,
+        readAnimationsEnabled: HomeAppearanceStorage.getHomeAnimationsEnabled,
+        readAnimationStyle: HomeAppearanceStorage.getHomeAnimationStyle,
+        readOrientation: HomePageStorage.getHomeCardOrientation,
+        readHideTitles: HomeAppearanceStorage.getHomeHideCardTitlesAndRatings,
+        readHideAddonNames: HomeAppearanceStorage.getHomeHideCatalogAddonNames,
+        readHideCollectionNames:
+            HomeAppearanceStorage.getHomeHideCollectionNames,
       ),
       dependencies: const [],
     );
 
 final homeLayoutPreferencesProvider = Provider<HomeLayoutPreferences>(
   (ref) => HomeLayoutPreferences(
-    readCached: () => StorageService.tvHomeStyleCached,
-    readSaved: StorageService.getTvHomeStyle,
+    readCached: () => HomeAppearanceStorage.tvHomeStyleCached,
+    readSaved: HomeAppearanceStorage.getTvHomeStyle,
   ),
   dependencies: const [],
 );

@@ -1,4 +1,5 @@
 import 'package:debrify/services/local_playback_resume_resolver.dart';
+import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -136,8 +137,8 @@ void main() {
   );
   test('both servers are accepted as saved Discover defaults', () async {
     for (final value in ['jellyfin', 'emby']) {
-      await StorageService.setDiscoverLastSource(value);
-      expect(await StorageService.getDiscoverLastSource(), value);
+      await DiscoverStorage.setDiscoverLastSource(value);
+      expect(await DiscoverStorage.getDiscoverLastSource(), value);
     }
   });
 }

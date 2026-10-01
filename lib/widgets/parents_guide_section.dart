@@ -1,8 +1,8 @@
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/imdb_parents_guide_service.dart';
-import '../services/storage_service.dart';
 import '../utils/tv_keys.dart';
 import 'detail/theme/detail_theme.dart';
 import 'home/home_theme.dart';
@@ -45,7 +45,7 @@ class _ParentsGuideSectionState extends State<ParentsGuideSection> {
     final cats = widget.guide.categories;
     if (cats.isEmpty) return const SizedBox.shrink();
 
-    if (StorageService.parentsGuideStyleCached == 'compass') {
+    if (DetailPageStorage.parentsGuideStyleCached == 'compass') {
       final selected = cats.firstWhere(
         (cat) => cat.id == _selectedCategoryId,
         orElse: () => cats.first,

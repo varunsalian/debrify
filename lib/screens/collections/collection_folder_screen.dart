@@ -1,10 +1,12 @@
+import 'package:debrify/services/storage/ambient_trailer_storage.dart';
+import 'package:debrify/services/storage/collection_appearance_storage.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import '../../widgets/home/snowy_mountain_background.dart';
 import '../../widgets/home/midnight_rain_background.dart';
 import '../../widgets/home/moonlit_ocean_background.dart';
 import 'package:flutter/foundation.dart';
 import '../../widgets/collections/collection_category_tabs.dart';
 import '../../widgets/see_all/see_all_header.dart';
-import '../../services/storage_service.dart';
 import '../../widgets/collections/tv_collection_titles.dart';
 import '../../widgets/home/spotlight_board.dart';
 import 'dart:async';
@@ -315,15 +317,17 @@ class _CollectionFolderScreenState extends State<CollectionFolderScreen> {
     final generation = ++_configurationToken;
     final session = HomeCollectionsStore.captureSession();
     try {
-      final collectionStyle = await StorageService.getTvCollectionListStyle();
-      final details = await StorageService.getSpotlightFocusDetails();
-      final animations = await StorageService.getHomeAnimationsEnabled();
-      final animationStyle = await StorageService.getHomeAnimationStyle();
-      final trailers = await StorageService.getHomeHeroTrailerEnabled();
-      final audio = await StorageService.getAmbientTrailerAudioEnabled(
+      final collectionStyle =
+          await CollectionAppearanceStorage.getTvCollectionListStyle();
+      final details = await HomeAppearanceStorage.getSpotlightFocusDetails();
+      final animations = await HomeAppearanceStorage.getHomeAnimationsEnabled();
+      final animationStyle =
+          await HomeAppearanceStorage.getHomeAnimationStyle();
+      final trailers = await AmbientTrailerStorage.getHomeHeroTrailerEnabled();
+      final audio = await AmbientTrailerStorage.getAmbientTrailerAudioEnabled(
         AmbientTrailerSurface.homeHero,
       );
-      final volume = await StorageService.getAmbientTrailerVolume(
+      final volume = await AmbientTrailerStorage.getAmbientTrailerVolume(
         AmbientTrailerSurface.homeHero,
       );
       final addons = await _stremio.getAddons();

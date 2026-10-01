@@ -1,4 +1,7 @@
 import 'package:debrify/features/home/presentation/home_hero_trailer_layer.dart';
+import 'package:debrify/services/storage/ambient_trailer_storage.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/home_rows_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -10,7 +13,6 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_ui_refresh.dart';
 import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/theme/app_theme.dart';
@@ -162,7 +164,7 @@ class HomeFixture {
       }),
       ...initialPreferences,
     });
-    StorageService.tvHomeStyleCached = style;
+    HomeAppearanceStorage.tvHomeStyleCached = style;
     StremioService.instance.invalidateCache();
     await drive(() async {
       await StremioService.instance.getCatalogAddons();
@@ -403,7 +405,7 @@ void main() {
         tab.value = 8;
         await home.pump(Duration.zero);
         await home.drive(() async {
-          await StorageService.setHomeDisabledSections({'paging:movie:fast'});
+          await HomeRowsStorage.setHomeDisabledSections({'paging:movie:fast'});
           MainPageBridge.notifyHomeSettingsChanged();
         });
         tab.value = 15;
@@ -439,7 +441,7 @@ void main() {
       final state = tester.state(find.byType(SearchScreen));
       final requests = List<String>.of(home.requests);
       await home.drive(() async {
-        await StorageService.setAmbientTrailerVolume(
+        await AmbientTrailerStorage.setAmbientTrailerVolume(
           AmbientTrailerSurface.homeHero,
           20,
         );
@@ -450,11 +452,11 @@ void main() {
       expect(tester.state(find.byType(SearchScreen)), same(state));
       expect(home.requests, requests);
       await home.drive(() async {
-        await StorageService.setAmbientTrailerAudioEnabled(
+        await AmbientTrailerStorage.setAmbientTrailerAudioEnabled(
           AmbientTrailerSurface.homeHero,
           false,
         );
-        await StorageService.setAmbientTrailerVolume(
+        await AmbientTrailerStorage.setAmbientTrailerVolume(
           AmbientTrailerSurface.homeHero,
           30,
         );

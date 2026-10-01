@@ -492,7 +492,8 @@ identity is present with the same outcome.
 | 0 | `dfdf2d4a` | 10,952 | Baseline, complete map, resolved report, inventories and self-checked tooling; no Dart moves. |
 | 1 | `0438a77d` | 10,473 | Small subjects, enums, validator and reset entry wired; analyzer and 245 affected suites PASS against baseline. |
 | 2 | `a18aff4a` | 9,251 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
-| 3 | This step commit (hash recorded by step 4) | 7,184 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 3 | `93435156` | 7,184 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 4 | This step commit (hash recorded by step 5) | 5,273 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 
 ### Step 0 evidence and retained source
 
@@ -629,6 +630,15 @@ each step. Unrelated whole-file extractions remain outside this plan.
 | 3 | `lib/services/video_player_launcher.dart` | 6575 | 6578 |
 | 3 | `lib/widgets/remote/remote_config_export.dart` | 1592 | 1599 |
 | 3 | `lib/widgets/remote/remote_transfer_all.dart` | 1565 | 1571 |
+| 4 | `lib/main.dart` | 4170 | 4177 |
+| 4 | `lib/screens/collections/collection_folder_screen.dart` | 1860 | 1864 |
+| 4 | `lib/screens/merged_series_detail_screen.dart` | 5529 | 5531 |
+| 4 | `lib/screens/settings/home_page_settings_page.dart` | 1067 | 1072 |
+| 4 | `lib/screens/settings/home_sections_filter_page.dart` | 1581 | 1582 |
+| 4 | `lib/screens/settings_screen.dart` | 8741 | 8750 |
+| 4 | `lib/screens/video_player_screen.dart` | 18091 | 18092 |
+| 4 | `lib/services/profiles/profile_restore_coordinator.dart` | 1938 | 1939 |
+| 4 | `lib/widgets/series_browser.dart` | 2200 | 2201 |
 <!-- storage-caller-size-rows -->
 
 Step 1: `ss/step1.jsonl` records 3,449 success, 18 error, 1 failure,
@@ -682,3 +692,17 @@ Step 3 reset mutations: deleting the moved `playerStartPortraitCached` reset
 assignment and deleting its owner's call from the entry point each fails the
 isolation guard. Both were restored; `ss/step3-reset.jsonl` passes all five
 original test identities against `ss/base.jsonl`.
+
+Step 4: `ss/step4.jsonl` records {'success': 3733, 'error': 18, 'skipped': 10, 'failure': 1};
+comparison to `ss/base.jsonl` PASS (no new failures, missing tests or skips).
+`ss/analyze-step4.txt` vs the previous step adds no diagnostics after the
+prescribed old-file relocation. Map/dependency, constant, declaration/reset,
+size/import and diff checks pass. Caller review confirms only authorized
+expressions, imports and whitespace changed.
+Step 4: the complete CI formatting scope also passes (1,046 files). Two affected
+feature test call sites needed the formatter's optional literal/argument commas;
+their 18 original identities pass again in `ss/step4-format.jsonl`. No moved
+application declaration permits those punctuation changes. The smoke tool's
+step-3-only repointing was included in the unpushed step 3 commit before this
+checkpoint; the performance probe and remaining smoke-tool settings move in
+step 4 as their map rows require.

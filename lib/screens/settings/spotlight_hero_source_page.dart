@@ -1,9 +1,10 @@
+import 'package:debrify/models/home_preferences.dart';
+import 'package:debrify/services/storage/home_hero_storage.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import '../../theme/app_theme_scope.dart';
 import 'widgets/settings_widgets.dart';
@@ -94,7 +95,7 @@ class _SpotlightHeroSourcePageState extends State<SpotlightHeroSourcePage> {
   }
 
   Future<void> _load() async {
-    final source = await StorageService.getHomeHeroSource();
+    final source = await HomeHeroStorage.getHomeHeroSource();
     if (!mounted) return;
     setState(() {
       _mode = source.mode;
@@ -117,7 +118,7 @@ class _SpotlightHeroSourcePageState extends State<SpotlightHeroSourcePage> {
 
   /// Persist the current selection and live-apply it to the board.
   Future<void> _save() async {
-    await StorageService.setHomeHeroSource((
+    await HomeHeroStorage.setHomeHeroSource((
       mode: _mode,
       ids: List.of(_ids),
     ));

@@ -3,13 +3,13 @@ import 'dart:io' show Platform;
 import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/services/storage/ambient_trailer_storage.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/app_route_observer.dart';
 import '../services/main_page_bridge.dart';
-import '../services/storage_service.dart';
 import '../services/debrify_image_cache.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
@@ -301,7 +301,7 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
       // artificial trailer delay happened to hide this read; zero-delay starts
       // make the ordering explicit instead of racing a false default.
       final underlayAtLaunch =
-          await StorageService.getTvTrailerUnderlayEnabledAtLaunch();
+          await AmbientTrailerStorage.getTvTrailerUnderlayEnabledAtLaunch();
       return ExoTrailerEngine(
         maxHeight: widget.focusPreviewOwner != null ? 480 : _tvTrailerMaxHeight,
         underlay:

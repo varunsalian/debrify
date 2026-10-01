@@ -3,13 +3,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/widgets/launch/launch_ident.dart';
 
 import 'package:debrify/services/launch_animation/launch_animation_library.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/app_initializer.dart';
@@ -117,11 +117,11 @@ void main() {
             '${root.path}/source.lottie',
           ).writeAsBytes(await imagePairBytes(mode == 'lateInit' ? 30 : 150));
           final entry = await LaunchAnimationLibrary.instance.install(source);
-          await StorageService.setImportedLaunchAnimation(entry.id);
+          await LaunchIdentStorage.setImportedLaunchAnimation(entry.id);
           if (mode == 'builtIn') {
-            await StorageService.setLaunchAnimation('trace');
+            await LaunchIdentStorage.setLaunchAnimation('trace');
           }
-          await StorageService.getLaunchAnimation();
+          await LaunchIdentStorage.getLaunchAnimation();
         });
         addTearDown(() async {
           await root.delete(recursive: true);
@@ -183,7 +183,7 @@ void main() {
           if (mode == 'builtIn') {
             expect(find.byType(ImportedLaunchPlayer), findsNothing);
             final duration = launchIdentFor(
-              StorageService.launchAnimationCached,
+              LaunchIdentStorage.launchAnimationCached,
             ).revealDuration;
             await tester.pump(duration - const Duration(milliseconds: 100));
             expect(find.byKey(const Key('home')), findsNothing);

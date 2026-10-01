@@ -6,7 +6,7 @@ import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/screens/merged_series_detail_screen.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/theme/app_theme.dart';
@@ -58,13 +58,13 @@ void main() {
       PlatformUtil.debugSetAndroidTvCached(true);
       PlatformUtil.debugSetTvOS(false);
       final previousTab = MainPageBridge.activeTvTabIndex;
-      final previousStyle = StorageService.tvHomeStyleCached;
+      final previousStyle = HomeAppearanceStorage.tvHomeStyleCached;
       MainPageBridge.setActiveTvTab(15);
       addTearDown(() {
         PlatformUtil.debugSetAndroidTvCached(null);
         PlatformUtil.debugSetTvOS(null);
         MainPageBridge.setActiveTvTab(previousTab);
-        StorageService.tvHomeStyleCached = previousStyle;
+        HomeAppearanceStorage.tvHomeStyleCached = previousStyle;
       });
       final addon = StremioAddon(
         id: 'navigation',
@@ -85,7 +85,7 @@ void main() {
           'ids': ['navigation:movie:row0'],
         }),
       });
-      StorageService.tvHomeStyleCached = style;
+      HomeAppearanceStorage.tvHomeStyleCached = style;
       StremioService.instance.invalidateCache();
       final client = MockClient((request) async {
         if (request.url.host != 'home.invalid') return http.Response('', 404);

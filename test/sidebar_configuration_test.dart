@@ -4,7 +4,7 @@ import 'package:debrify/services/profiles/profile_creation_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/sanitized_profile_preferences.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/sidebar_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -117,13 +117,13 @@ void main() {
         order: const <String>['settings', 'home'],
         labels: const <String, String>{'home': 'Start'},
       );
-      expect(await StorageService.setSidebarConfiguration(first), isTrue);
+      expect(await SidebarStorage.setSidebarConfiguration(first), isTrue);
 
       ProfileRuntime.publish(
         ProfileScope(profileId: 'two', dataGeneration: 1, sessionEpoch: 2),
       );
       expect(
-        (await StorageService.getSidebarConfiguration()).isDefault,
+        (await SidebarStorage.getSidebarConfiguration()).isDefault,
         isTrue,
       );
 
@@ -131,12 +131,12 @@ void main() {
         ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 3),
       );
       expect(
-        (await StorageService.getSidebarConfiguration()).labelForId('home'),
+        (await SidebarStorage.getSidebarConfiguration()).labelForId('home'),
         'Start',
       );
-      expect(await StorageService.resetSidebarConfiguration(), isTrue);
+      expect(await SidebarStorage.resetSidebarConfiguration(), isTrue);
       expect(
-        (await StorageService.getSidebarConfiguration()).isDefault,
+        (await SidebarStorage.getSidebarConfiguration()).isDefault,
         isTrue,
       );
     },

@@ -1,7 +1,8 @@
 import 'package:debrify/screens/settings/tv_collection_list_style_page.dart';
 import 'package:debrify/models/stremio_addon.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/storage/ambient_trailer_storage.dart';
+import 'package:debrify/services/storage/collection_appearance_storage.dart';
 import 'package:debrify/widgets/home/spotlight_card_trailer.dart';
 import 'package:debrify/widgets/collections/tv_collection_titles.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +15,7 @@ void main() {
   for (final style in ['gallery', 'filmstrip', 'journal']) {
     testWidgets('$style gates trailers by dwell, focus and Home setting', (tester) async {
       SharedPreferences.setMockInitialValues({});
-      await StorageService.setHomeHeroTrailerEnabled(true);
+      await AmbientTrailerStorage.setHomeHeroTrailerEnabled(true);
       final key = GlobalKey<TvCollectionTitlesState>();
       await tester.pumpWidget(MaterialApp(home: Scaffold(body: TvCollectionTitles(
         key: key, style: style,
@@ -33,7 +34,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
       expect(find.byType(SpotlightCardTrailer), findsNothing);
-      await StorageService.setHomeHeroTrailerEnabled(false);
+      await AmbientTrailerStorage.setHomeHeroTrailerEnabled(false);
       MainPageBridge.notifyHomeSettingsChanged();
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 5));
@@ -45,30 +46,30 @@ void main() {
     'collection style defaults to Spotlight and preserves explicit selections',
     () async {
       SharedPreferences.setMockInitialValues({});
-      expect(await StorageService.getTvCollectionListStyle(), 'spotlight');
+      expect(await CollectionAppearanceStorage.getTvCollectionListStyle(), 'spotlight');
       for (final style in ['grid', 'gallery', 'filmstrip', 'journal', 'spotlight']) {
-        await StorageService.setTvCollectionListStyle(style);
-        expect(await StorageService.getTvCollectionListStyle(), style);
+        await CollectionAppearanceStorage.setTvCollectionListStyle(style);
+        expect(await CollectionAppearanceStorage.getTvCollectionListStyle(), style);
       }
-      await StorageService.setTvCollectionListStyle('unknown');
-      expect(await StorageService.getTvCollectionListStyle(), 'spotlight');
+      await CollectionAppearanceStorage.setTvCollectionListStyle('unknown');
+      expect(await CollectionAppearanceStorage.getTvCollectionListStyle(), 'spotlight');
     },
   );
   test('alpha migrates each existing collection layout only once', () async {
     for (final style in ['grid', 'gallery', 'filmstrip', 'journal']) {
       SharedPreferences.setMockInitialValues({'tv_collection_list_style': style});
-      expect(await StorageService.getTvCollectionListStyle(), 'spotlight');
+      expect(await CollectionAppearanceStorage.getTvCollectionListStyle(), 'spotlight');
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('tv_collection_list_style'), 'spotlight');
-      await StorageService.setTvCollectionListStyle(style);
-      expect(await StorageService.getTvCollectionListStyle(), style);
-      expect(await StorageService.getTvCollectionListStyle(), style);
+      await CollectionAppearanceStorage.setTvCollectionListStyle(style);
+      expect(await CollectionAppearanceStorage.getTvCollectionListStyle(), style);
+      expect(await CollectionAppearanceStorage.getTvCollectionListStyle(), style);
     }
   });
   test('explicit selection before first read is preserved', () async {
     SharedPreferences.setMockInitialValues({});
-    await StorageService.setTvCollectionListStyle('journal');
-    expect(await StorageService.getTvCollectionListStyle(), 'journal');
+    await CollectionAppearanceStorage.setTvCollectionListStyle('journal');
+    expect(await CollectionAppearanceStorage.getTvCollectionListStyle(), 'journal');
   });
   for (final layout in ['gallery', 'filmstrip', 'journal']) {
     for (final activate in [
@@ -150,7 +151,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
-      expect(await StorageService.getTvCollectionListStyle(), expected);
+      expect(await CollectionAppearanceStorage.getTvCollectionListStyle(), expected);
     }
   });
 

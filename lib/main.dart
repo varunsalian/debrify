@@ -1,9 +1,16 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/defaults_generation_storage.dart';
+import 'package:debrify/services/storage/detail_page_storage.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/sidebar_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
+import 'package:debrify/services/storage/ui_feedback_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/storage/webdav_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -161,7 +168,7 @@ Future<void> _capImageCache() async {
     // Warm the Debrify-keyboard opt-out alongside the TV flag — TvTextField
     // reads StorageService.tvKeyboardEnabledCached synchronously in build.
     try {
-      await StorageService.getTvKeyboardEnabled();
+      await TvDisplayStorage.getTvKeyboardEnabled();
     } catch (_) {}
   }
   final cache = PaintingBinding.instance.imageCache;
@@ -633,7 +640,7 @@ Future<void> _continueApplicationStartup() async {
   // for the very first frame.
   await _bestEffortStartupStep(
     'defaults-generation-migration',
-    StorageService.migrateDefaultsGeneration,
+    DefaultsGenerationStorage.migrateDefaultsGeneration,
   );
   // Adopt the configurable local watched thresholds for playback recorded by
   // older builds. The generation marker is profile-scoped, so every profile
@@ -657,10 +664,10 @@ Future<void> _continueApplicationStartup() async {
   // to the stored (possibly just-migrated) look. A warm that fails costs
   // that one snap; it must not cost the launch.
   await _bestEffortStartupStep('layout-pref-warms', () async {
-    await StorageService.getTvHomeStyle();
-    await StorageService.getTvSidebarStyle();
-    await StorageService.getDesktopSidebarStyle();
-    await StorageService.getSidebarConfiguration();
+    await HomeAppearanceStorage.getTvHomeStyle();
+    await SidebarStorage.getTvSidebarStyle();
+    await SidebarStorage.getDesktopSidebarStyle();
+    await SidebarStorage.getSidebarConfiguration();
     // Debrify TV reads its mirror synchronously on first build; warmed here,
     // AFTER the migration, so frame one draws what generation 3 just wrote.
     await StorageService.getDebrifyTvStyle();
@@ -693,8 +700,8 @@ Future<void> _continueApplicationStartup() async {
   // consulted from a focus listener that cannot await, so an unwarmed read
   // would use the default for the first few seconds of a session.
   try {
-    await StorageService.getUiSounds();
-    await StorageService.getUiHaptics();
+    await UiFeedbackStorage.getUiSounds();
+    await UiFeedbackStorage.getUiHaptics();
   } catch (_) {
     debugPrint('main: feedback preferences warm failed; using defaults');
   }
@@ -720,27 +727,27 @@ Future<void> _continueApplicationStartup() async {
   // initState, so an async-only read would flash the default ident's world
   // for a frame. A cosmetic pref must never block startup.
   try {
-    await StorageService.getLaunchAnimation();
-    await StorageService.getLaunchIdentPalette();
+    await LaunchIdentStorage.getLaunchAnimation();
+    await LaunchIdentStorage.getLaunchIdentPalette();
   } catch (_) {}
   // Warms the details-page layout choice: MergedDetailScreen picks its body in
   // the first build, so an async-only read would paint Classic for a frame and
   // then re-lay-out the entire page. Same rule — a cosmetic pref must never
   // block startup.
   try {
-    await StorageService.getDetailPageStyle();
-    await StorageService.getDetailPageSectionVisibility();
+    await DetailPageStorage.getDetailPageStyle();
+    await DetailPageStorage.getDetailPageSectionVisibility();
   } catch (_) {}
   // And the details THEME, for the same reason — the page resolves both in its
   // first build, so a stored choice must be readable before the first frame.
   try {
-    await StorageService.getDetailTheme();
+    await DetailPageStorage.getDetailTheme();
   } catch (_) {}
   // Parents Guide chooses its presentation synchronously when metadata lands.
   // Warm the cosmetic preference so a stored Classic choice never flashes
   // Compass for one frame.
   try {
-    await StorageService.getParentsGuideStyle();
+    await DetailPageStorage.getParentsGuideStyle();
   } catch (_) {}
   // Apple TV hardware generation, warmed FIRST because everything below keys
   // off it: the artwork decode bounds, the image-cache cap, the Home board's
@@ -1392,17 +1399,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// nav prefs; live-reloaded when the Settings picker fires the bridge.
   /// Ghost is the product default — matching it here avoids a one-frame
   /// classic flash before the pref read lands.
-  String _tvSidebarStyle = StorageService.tvSidebarStyleCached;
+  String _tvSidebarStyle = SidebarStorage.tvSidebarStyleCached;
 
   /// Desktop/tablet sidebar chrome: 'rail' (fixed, the default) or 'pill'
   /// (no rail — content full-bleed, a floating capsule opens the menu).
   /// Same load/reload path as the TV style above.
-  String _desktopSidebarStyle = StorageService.desktopSidebarStyleCached;
+  String _desktopSidebarStyle = SidebarStorage.desktopSidebarStyleCached;
 
   /// Shared order and label overrides for living-room and wide-window rails.
   /// Visibility remains owned by [_computeVisibleNavIndices].
   SidebarConfiguration _sidebarConfiguration =
-      StorageService.sidebarConfigurationCached;
+      SidebarStorage.sidebarConfigurationCached;
 
   /// The classic bar's stored middle-slot picks (real indices; may contain
   /// currently-hidden tabs — validated against visibility at build). Null =
@@ -2797,11 +2804,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   }
 
   Future<void> _loadPhoneNavPrefs() async {
-    final style = await StorageService.getPhoneNavStyle();
-    final picks = await StorageService.getPhoneNavBarIndices();
-    final tvSidebar = await StorageService.getTvSidebarStyle();
-    final desktopSidebar = await StorageService.getDesktopSidebarStyle();
-    final sidebarConfiguration = await StorageService.getSidebarConfiguration();
+    final style = await SidebarStorage.getPhoneNavStyle();
+    final picks = await SidebarStorage.getPhoneNavBarIndices();
+    final tvSidebar = await SidebarStorage.getTvSidebarStyle();
+    final desktopSidebar = await SidebarStorage.getDesktopSidebarStyle();
+    final sidebarConfiguration = await SidebarStorage.getSidebarConfiguration();
     if (!mounted) return;
     MainPageBridge.phoneNavStyleCached = style;
     setState(() {
@@ -3937,7 +3944,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           onBarEdited: (picks) {
                             setState(() => _phoneNavBarPicks = picks);
                             unawaited(
-                              StorageService.setPhoneNavBarIndices(picks),
+                              SidebarStorage.setPhoneNavBarIndices(picks),
                             );
                           },
                           onRemoteControlTap: () {

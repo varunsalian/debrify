@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:debrify/features/home/application/home_saved_content_providers.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'fixtures/iptv_lists_fixture.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -49,7 +49,7 @@ void main() {
         'home_extra_rows_v1': '[{"id":"iptvlist:a","title":"a"}]',
         'home_hero_source_v1': '{"mode":"auto","ids":[]}',
       });
-      StorageService.tvHomeStyleCached = 'classic';
+      HomeAppearanceStorage.tvHomeStyleCached = 'classic';
       StremioService.instance.invalidateCache();
       addTearDown(() {
         PlatformUtil.debugSetAndroidTvCached(null);

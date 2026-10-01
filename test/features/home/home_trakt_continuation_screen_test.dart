@@ -3,6 +3,7 @@ import 'package:debrify/features/home/application/home_continuation_providers.da
 import 'package:debrify/features/home/application/home_board_providers.dart';
 import 'package:debrify/features/home/data/home_bound_counts_repository.dart';
 import 'package:debrify/services/iptv_cw_history.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'fixtures/home_continuation_fixture.dart' show continuationRepository;
 import 'package:debrify/screens/see_all/trakt_see_all_screen.dart';
 import 'package:debrify/features/home/models/home_trakt_continuation_state.dart';
@@ -16,7 +17,6 @@ import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -58,7 +58,7 @@ void main() {
         if (mode == 'discover') 'discover_default_source': 'trakt',
         'home_hero_source_v1': '{"mode":"auto","ids":[]}',
       });
-      StorageService.tvHomeStyleCached = 'classic';
+      HomeAppearanceStorage.tvHomeStyleCached = 'classic';
       StremioService.instance.invalidateCache();
       addTearDown(() {
         PlatformUtil.debugSetAndroidTvCached(null);

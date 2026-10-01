@@ -1,10 +1,10 @@
+import 'package:debrify/services/storage/ui_feedback_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/theme/app_sound.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/theme/app_surfaces.dart';
 import 'package:debrify/theme/app_theme_controller.dart';
 import 'package:debrify/theme/ui_feedback.dart';
@@ -312,8 +312,8 @@ void main() {
       // they want it. Both default on, because every look but two is already
       // silent and a default cannot surprise someone who has not chosen one
       // of those two.
-      expect(StorageService.uiSoundsCached, isTrue);
-      expect(StorageService.uiHapticsCached, isTrue);
+      expect(UiFeedbackStorage.uiSoundsCached, isTrue);
+      expect(UiFeedbackStorage.uiHapticsCached, isTrue);
     });
 
     test('legacy is silent on both', () {

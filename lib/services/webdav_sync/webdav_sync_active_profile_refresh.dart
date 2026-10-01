@@ -1,4 +1,11 @@
+import 'package:debrify/services/storage/detail_page_storage.dart';
+import 'package:debrify/services/storage/discover_storage.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
+import 'package:debrify/services/storage/sidebar_storage.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
+import 'package:debrify/services/storage/ui_feedback_storage.dart';
 import '../../theme/app_theme_controller.dart';
 import '../discover_prefs.dart';
 import '../hide_watched_prefs.dart';
@@ -51,36 +58,39 @@ final class DefaultWebDavSyncActiveProfileRefresher
       });
     }
 
-    await warmIf('tv_keyboard_enabled', StorageService.getTvKeyboardEnabled);
-    await warmIf('tv_home_style', StorageService.getTvHomeStyle);
+    await warmIf('tv_keyboard_enabled', TvDisplayStorage.getTvKeyboardEnabled);
+    await warmIf('tv_home_style', HomeAppearanceStorage.getTvHomeStyle);
     await warmIf('debrify_tv_style', StorageService.getDebrifyTvStyle);
-    await warmIf('detail_page_style', StorageService.getDetailPageStyle);
+    await warmIf('detail_page_style', DetailPageStorage.getDetailPageStyle);
     if (changedKeys.any(
-      StorageService.detailPageSectionPreferenceKeys.contains,
+      DetailPageStorage.detailPageSectionPreferenceKeys.contains,
     )) {
-      await guarded(StorageService.getDetailPageSectionVisibility);
+      await guarded(DetailPageStorage.getDetailPageSectionVisibility);
     }
-    await warmIf('detail_theme', StorageService.getDetailTheme);
-    await warmIf('parents_guide_style', StorageService.getParentsGuideStyle);
+    await warmIf('detail_theme', DetailPageStorage.getDetailTheme);
+    await warmIf('parents_guide_style', DetailPageStorage.getParentsGuideStyle);
     await warmIf('iptv_style', StorageService.getIptvStyle);
-    await warmIf('discover_layout', StorageService.getDiscoverLayout);
-    await warmIf('launch_animation', StorageService.getLaunchAnimation);
-    await warmIf('launch_ident_palette', StorageService.getLaunchIdentPalette);
-    await warmIf('tv_sidebar_style', StorageService.getTvSidebarStyle);
+    await warmIf('discover_layout', DiscoverStorage.getDiscoverLayout);
+    await warmIf('launch_animation', LaunchIdentStorage.getLaunchAnimation);
+    await warmIf(
+      'launch_ident_palette',
+      LaunchIdentStorage.getLaunchIdentPalette,
+    );
+    await warmIf('tv_sidebar_style', SidebarStorage.getTvSidebarStyle);
     await warmIf(
       'desktop_sidebar_style',
-      StorageService.getDesktopSidebarStyle,
+      SidebarStorage.getDesktopSidebarStyle,
     );
     await warmIf(
       'sidebar_configuration_v1',
-      StorageService.getSidebarConfiguration,
+      SidebarStorage.getSidebarConfiguration,
     );
     await warmIf(
       'player_start_portrait',
       PlayerSettingsStorage.getPlayerStartPortrait,
     );
-    await warmIf('ui_sounds', StorageService.getUiSounds);
-    await warmIf('ui_haptics', StorageService.getUiHaptics);
+    await warmIf('ui_sounds', UiFeedbackStorage.getUiSounds);
+    await warmIf('ui_haptics', UiFeedbackStorage.getUiHaptics);
 
     if (changedKeys.contains('text_brightness')) {
       await guarded(TextBrightnessController.warm);

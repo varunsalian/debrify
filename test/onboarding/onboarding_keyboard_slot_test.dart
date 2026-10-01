@@ -1,4 +1,4 @@
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/onboarding/tv_keyboard_slot.dart';
 import 'package:debrify/widgets/tv_keyboard.dart';
@@ -12,7 +12,7 @@ void main() {
 
   setUp(() {
     PlatformUtil.debugSetAndroidTvCached(true);
-    StorageService.tvKeyboardEnabledCached = true;
+    TvDisplayStorage.tvKeyboardEnabledCached = true;
   });
 
   tearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
@@ -94,7 +94,7 @@ void main() {
     'terminal recovery can force the TV keyboard after probe failure',
     (tester) async {
       PlatformUtil.debugSetAndroidTvCached(false);
-      StorageService.tvKeyboardEnabledCached = false;
+      TvDisplayStorage.tvKeyboardEnabledCached = false;
       final text = TextEditingController();
       final fieldKey = GlobalKey<TvTextFieldState>();
       await tester.pumpWidget(

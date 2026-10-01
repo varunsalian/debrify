@@ -1,8 +1,8 @@
+import 'package:debrify/services/storage/home_page_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 
 /// Fresh read per gesture; no application state or competing preference cache.
 final homeCwHoldPreferenceProvider = Provider.autoDispose
@@ -10,10 +10,10 @@ final homeCwHoldPreferenceProvider = Provider.autoDispose
       return () {
         final scope = owner.scope;
         return scope == null
-            ? StorageService.getHomeCwHoldToQuickPlay()
+            ? HomePageStorage.getHomeCwHoldToQuickPlay()
             : ProfileRuntime.withCapturedScope(
                 scope,
-                StorageService.getHomeCwHoldToQuickPlay,
+                HomePageStorage.getHomeCwHoldToQuickPlay,
               );
       };
     }, dependencies: const []);

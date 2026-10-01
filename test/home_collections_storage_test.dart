@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:debrify/services/storage_service.dart';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:debrify/services/storage/home_rows_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:debrify/models/home_collection.dart';
@@ -37,7 +37,7 @@ void main() {
           'future:row',
         ]),
       );
-      expect(await StorageService.getHomeDisabledSections(), {
+      expect(await HomeRowsStorage.getHomeDisabledSections(), {
         'collection:c',
         'cw:movies',
         'future:row',
@@ -46,16 +46,16 @@ void main() {
         jsonDecode(prefs.getString('home_disabled_sections_v1')!),
         unorderedEquals(['collection:c', 'cw:movies', 'future:row']),
       );
-      await StorageService.setHomeDisabledSections({
+      await HomeRowsStorage.setHomeDisabledSections({
         'collectionlist:c:f:old',
         'cw:series',
       });
-      expect(await StorageService.getHomeDisabledSections(), {'cw:series'});
+      expect(await HomeRowsStorage.getHomeDisabledSections(), {'cw:series'});
       await prefs.setString(
         'home_disabled_sections_v1',
         jsonEncode(['collectionlist:c:f:old']),
       );
-      expect(await StorageService.getHomeDisabledSections(), isEmpty);
+      expect(await HomeRowsStorage.getHomeDisabledSections(), isEmpty);
       expect(prefs.containsKey('home_disabled_sections_v1'), isFalse);
     },
   );

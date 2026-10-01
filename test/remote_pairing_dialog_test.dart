@@ -1,10 +1,10 @@
 import 'dart:async';
 
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/remote_control/remote_session.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/remote/remote_pairing_dialog.dart';
@@ -132,12 +132,12 @@ void main() {
   testWidgets('TV keyboard input is digit-only, bounded, and auto-confirms', (
     tester,
   ) async {
-    final oldKeyboardSetting = StorageService.tvKeyboardEnabledCached;
+    final oldKeyboardSetting = TvDisplayStorage.tvKeyboardEnabledCached;
     PlatformUtil.debugSetAndroidTvCached(true);
-    StorageService.tvKeyboardEnabledCached = true;
+    TvDisplayStorage.tvKeyboardEnabledCached = true;
     addTearDown(() {
       PlatformUtil.debugSetAndroidTvCached(null);
-      StorageService.tvKeyboardEnabledCached = oldKeyboardSetting;
+      TvDisplayStorage.tvKeyboardEnabledCached = oldKeyboardSetting;
     });
 
     final result = await openDialog(tester);

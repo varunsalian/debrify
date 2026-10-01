@@ -1,4 +1,5 @@
 import 'package:debrify/services/metadata_preferences_service.dart';
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:debrify/services/hide_watched_prefs.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_ui_refresh.dart';
@@ -33,7 +34,7 @@ void main() {
     });
     resetStorageProfileCaches();
     expect(
-      StorageService.detailPageSectionVisibilityCached.whereToWatch,
+      DetailPageStorage.detailPageSectionVisibilityCached.whereToWatch,
       isTrue,
     );
 
@@ -42,7 +43,7 @@ void main() {
     }, authorizationBarrier: () {});
 
     expect(
-      StorageService.detailPageSectionVisibilityCached.whereToWatch,
+      DetailPageStorage.detailPageSectionVisibilityCached.whereToWatch,
       isFalse,
     );
   });

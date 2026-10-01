@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/screens/browse_screen.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/platform_util.dart';
@@ -691,11 +692,11 @@ https://example.com/live/two.ts
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       PlatformUtil.debugSetAndroidTvCached(true);
-      final previousKeyboard = StorageService.tvKeyboardEnabledCached;
-      StorageService.tvKeyboardEnabledCached = true;
+      final previousKeyboard = TvDisplayStorage.tvKeyboardEnabledCached;
+      TvDisplayStorage.tvKeyboardEnabledCached = true;
       addTearDown(() {
         PlatformUtil.debugSetAndroidTvCached(null);
-        StorageService.tvKeyboardEnabledCached = previousKeyboard;
+        TvDisplayStorage.tvKeyboardEnabledCached = previousKeyboard;
       });
       await tester.pumpWidget(
         MaterialApp(

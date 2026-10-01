@@ -4,8 +4,8 @@ import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/home_row_refresh.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -76,7 +76,7 @@ void main() {
               'home_hero_source_v1': '{"mode":"auto","ids":[]}',
               'debrify_tv_favorite_channels_v1': '{"fixture":true}',
             });
-            StorageService.tvHomeStyleCached = 'classic';
+            HomeAppearanceStorage.tvHomeStyleCached = 'classic';
             StremioService.instance.invalidateCache();
             addTearDown(() {
               DebrifyTvDatabase.debugDatabaseOverride = null;

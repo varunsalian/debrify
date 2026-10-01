@@ -152,7 +152,9 @@ void main() {
       final saving = repository.writeDisabledAddons(disabled);
       disabled.add('two');
       await saving;
-      expect(await TorrentSearchStorage.getCatalogSearchDisabledAddons(), {'one'});
+      expect(await TorrentSearchStorage.getCatalogSearchDisabledAddons(), {
+        'one',
+      });
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString(key), '["one"]');
       await repository.writeDisabledAddons({});

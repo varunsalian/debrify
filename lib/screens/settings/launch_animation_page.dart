@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import '../../theme/app_looks.dart';
 import 'imported_launch_animations.dart';
 import '../../services/launch_animation/launch_animation_library.dart';
@@ -6,7 +7,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/launch/launch_ident.dart';
 import 'widgets/settings_widgets.dart';
@@ -27,8 +27,10 @@ class LaunchAnimationPage extends StatefulWidget {
 
 class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
   // Sync-cached (warmed in main), so no loading state.
-  LaunchIdent _choice = launchIdentFor(StorageService.launchAnimationCached);
-  String _palette = StorageService.launchIdentPaletteCached;
+  LaunchIdent _choice = launchIdentFor(
+    LaunchIdentStorage.launchAnimationCached,
+  );
+  String _palette = LaunchIdentStorage.launchIdentPaletteCached;
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).
@@ -62,7 +64,7 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
 
   Future<void> _select(LaunchIdent choice) async {
     if (choice.id == _choice.id &&
-        StorageService.importedLaunchAnimationCached == null) {
+        LaunchIdentStorage.importedLaunchAnimationCached == null) {
       return;
     }
     setState(() => _choice = choice);
@@ -70,7 +72,7 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
     // does not stamp over the choice. See theme/app_looks.dart.
     LookApplier.noteExternalWrite('launch_animation');
     try {
-      await StorageService.setLaunchAnimation(choice.id);
+      await LaunchIdentStorage.setLaunchAnimation(choice.id);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -80,7 +82,8 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
     }
     if (mounted) {
       setState(
-        () => _choice = launchIdentFor(StorageService.launchAnimationCached),
+        () =>
+            _choice = launchIdentFor(LaunchIdentStorage.launchAnimationCached),
       );
     }
   }
@@ -92,7 +95,7 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
     // in-flight apply would stamp over a choice made here. Same reason every
     // other Appearance picker announces itself.
     LookApplier.noteExternalWrite('launch_ident_palette');
-    await StorageService.setLaunchIdentPalette(value);
+    await LaunchIdentStorage.setLaunchIdentPalette(value);
   }
 
   @override
@@ -186,14 +189,16 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
     onSelectionChanged: () {
       if (mounted) {
         setState(
-          () => _choice = launchIdentFor(StorageService.launchAnimationCached),
+          () => _choice = launchIdentFor(
+            LaunchIdentStorage.launchAnimationCached,
+          ),
         );
       }
     },
   );
 
   Widget _preview() {
-    final id = StorageService.importedLaunchAnimationCached;
+    final id = LaunchIdentStorage.importedLaunchAnimationCached;
     return id == null
         ? _LaunchPreview(ident: _choice, palette: _palette)
         : AspectRatio(
@@ -266,7 +271,7 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
   Widget _optionRow(LaunchIdent ident) {
     final t = AppThemeScope.of(context).settings;
     final bool active =
-        StorageService.importedLaunchAnimationCached == null &&
+        LaunchIdentStorage.importedLaunchAnimationCached == null &&
         _choice.id == ident.id;
     return SettingsTile(
       icon: active

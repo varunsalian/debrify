@@ -1,6 +1,8 @@
 import 'package:debrify/features/home/application/home_board_providers.dart';
+import 'package:debrify/models/home_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/home_page_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,13 +27,15 @@ void main() {
         animationsEnabled: false,
         animationStyle: 'snowy_mountain',
       ));
-      await StorageService.setHomeCardOrientation(HomeCardOrientation.portrait);
-      await StorageService.setHomeHideCardTitlesAndRatings(true);
-      await StorageService.setHomeHideCatalogAddonNames(true);
-      await StorageService.setHomeHideCollectionNames(true);
-      await StorageService.setSpotlightFocusDetails(true);
-      await StorageService.setHomeAnimationsEnabled(true);
-      await StorageService.setHomeAnimationStyle('midnight_rain');
+      await HomePageStorage.setHomeCardOrientation(
+        HomeCardOrientation.portrait,
+      );
+      await HomeAppearanceStorage.setHomeHideCardTitlesAndRatings(true);
+      await HomeAppearanceStorage.setHomeHideCatalogAddonNames(true);
+      await HomeAppearanceStorage.setHomeHideCollectionNames(true);
+      await HomeAppearanceStorage.setSpotlightFocusDetails(true);
+      await HomeAppearanceStorage.setHomeAnimationsEnabled(true);
+      await HomeAppearanceStorage.setHomeAnimationStyle('midnight_rain');
       final saved = (await repo.read(isCurrent: () => true))!;
       expect(saved, (
         orientation: HomeCardOrientation.portrait,

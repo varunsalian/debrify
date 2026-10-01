@@ -1,5 +1,12 @@
+import 'package:debrify/services/storage/defaults_generation_storage.dart';
+import 'package:debrify/services/storage/detail_page_storage.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
+import 'package:debrify/services/storage/sidebar_storage.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
+import 'package:debrify/services/storage/ui_feedback_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../screens/video_player/services/subtitle_settings_service.dart';
@@ -157,7 +164,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
         EngineRegistry.instance.loadedScopeKey,
       );
 
-      await StorageService.migrateDefaultsGeneration();
+      await DefaultsGenerationStorage.migrateDefaultsGeneration();
       // Also run here, not just at cold start: the startup pass in main.dart
       // executes BEFORE the profile gate resolves, so it only ever reaches
       // whichever profile happened to be active then. The generation marker is
@@ -171,19 +178,19 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
       }
       await Future.wait(<Future<Object?>>[
         PlayerSettingsStorage.getPlayerStartPortrait(),
-        StorageService.getTvKeyboardEnabled(),
-        StorageService.getTvHomeStyle(),
-        StorageService.getTvSidebarStyle(),
-        StorageService.getDesktopSidebarStyle(),
+        TvDisplayStorage.getTvKeyboardEnabled(),
+        HomeAppearanceStorage.getTvHomeStyle(),
+        SidebarStorage.getTvSidebarStyle(),
+        SidebarStorage.getDesktopSidebarStyle(),
         StorageService.getDebrifyTvStyle(),
-        StorageService.getUiSounds(),
-        StorageService.getUiHaptics(),
-        StorageService.getLaunchAnimation(),
-        StorageService.getLaunchIdentPalette(),
-        StorageService.getDetailPageStyle(),
-        StorageService.getDetailPageSectionVisibility(),
-        StorageService.getDetailTheme(),
-        StorageService.getParentsGuideStyle(),
+        UiFeedbackStorage.getUiSounds(),
+        UiFeedbackStorage.getUiHaptics(),
+        LaunchIdentStorage.getLaunchAnimation(),
+        LaunchIdentStorage.getLaunchIdentPalette(),
+        DetailPageStorage.getDetailPageStyle(),
+        DetailPageStorage.getDetailPageSectionVisibility(),
+        DetailPageStorage.getDetailTheme(),
+        DetailPageStorage.getParentsGuideStyle(),
       ]);
       await TextBrightnessController.warm();
       await PlayLoaderStyleController.warm();

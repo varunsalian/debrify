@@ -1,12 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:debrify/models/ambient_trailer_surface.dart';
+import 'package:debrify/services/storage/ambient_trailer_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/imdb_trailer_service.dart';
 import '../../../services/metadata_preferences_service.dart';
 import '../../../services/metadata_provider_service.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/stremio_iptv_service.dart';
 import '../../../services/stremio_service.dart';
 import '../../../services/youtube_service.dart';
@@ -153,11 +153,11 @@ final homeTrailerPreferencesRepositoryProvider =
           ? AmbientTrailerSurface.homeHero
           : AmbientTrailerSurface.detail;
       return HomeTrailerPreferencesRepository(
-        readEnabled: StorageService.getHomeHeroTrailerEnabled,
+        readEnabled: AmbientTrailerStorage.getHomeHeroTrailerEnabled,
         readAudioEnabled: (home) =>
-            StorageService.getAmbientTrailerAudioEnabled(surface(home)),
+            AmbientTrailerStorage.getAmbientTrailerAudioEnabled(surface(home)),
         readVolume: (home) =>
-            StorageService.getAmbientTrailerVolume(surface(home)),
+            AmbientTrailerStorage.getAmbientTrailerVolume(surface(home)),
       );
     }, dependencies: const []);
 

@@ -1,3 +1,5 @@
+import 'package:debrify/services/storage/ambient_trailer_storage.dart';
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import '../widgets/metadata_franchise_rail.dart';
@@ -361,7 +363,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// arrangements there would risk a shipped feature for nothing.
   late final String _style = widget.seasonsLoader != null
       ? 'classic'
-      : effectiveDetailPageStyle(StorageService.detailPageStyleCached);
+      : effectiveDetailPageStyle(DetailPageStorage.detailPageStyleCached);
 
   /// The look the alternate layouts are drawn in. Read synchronously from the
   /// warmed cache for the same reason as [_style] — the page resolves both in
@@ -381,7 +383,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// overrides are applied there, and a page that fetched its own core would be
   /// the one surface in the app still showing the unedited theme.
   DetailTheme get _theme => ThemeCoreResolver.resolve(
-    effectiveDetailTheme(StorageService.detailThemeCached),
+    effectiveDetailTheme(DetailPageStorage.detailThemeCached),
     // Classic is deliberately unthemed, and the controller's own fast path says
     // so. Applying overrides here anyway would make this the one surface that
     // disagreed with it.
@@ -1224,15 +1226,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
       // OTT autoplay: honour the setting, then pre-resolve the stream (also reused
       // by the Trailer button). Silent on failure — the poster simply stays.
-      final autoplay = await StorageService.getDetailTrailerAutoplayEnabled();
+      final autoplay = await AmbientTrailerStorage.getDetailTrailerAutoplayEnabled();
       // The ambient sound pair is shared with the TV hero (one live surface per
       // platform), so off-TV it governs this backdrop. Read unconditionally so
       // all three land in the one setState below — [autoplay] is false on TV
       // anyway, and these are two prefs reads.
-      final soundOn = await StorageService.getAmbientTrailerAudioEnabled(
+      final soundOn = await AmbientTrailerStorage.getAmbientTrailerAudioEnabled(
         AmbientTrailerSurface.detail,
       );
-      final volume = await StorageService.getAmbientTrailerVolume(
+      final volume = await AmbientTrailerStorage.getAmbientTrailerVolume(
         AmbientTrailerSurface.detail,
       );
       if (!mounted || !current()) return;

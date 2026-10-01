@@ -1,11 +1,11 @@
 import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/debrify_image_cache.dart';
 import '../../services/imdb_enrichment_service.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import '../episodes_panel.dart';
 import '../parents_guide_section.dart';
@@ -781,7 +781,7 @@ class _DetailConsoleState extends State<DetailConsole> {
   List<Widget> _guideSection(DetailModel m) {
     final guide = m.parentsGuide;
     if (guide == null || guide.isEmpty) return const [];
-    if (StorageService.parentsGuideStyleCached == 'compass') {
+    if (DetailPageStorage.parentsGuideStyleCached == 'compass') {
       return [
         ParentsGuideSection(
           guide: guide,

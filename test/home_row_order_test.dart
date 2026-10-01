@@ -1,10 +1,10 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/home_rows_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/services/home_row_order.dart';
-import 'package:debrify/services/storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -54,18 +54,18 @@ void main() {
   });
 
   test('saved order round-trips, deduplicates, and clears', () async {
-    await StorageService.setHomeRowOrder([
+    await HomeRowsStorage.setHomeRowOrder([
       'fav:playlist',
       'cw:movies',
       'fav:playlist',
       '',
     ]);
-    expect(await StorageService.getHomeRowOrder(), [
+    expect(await HomeRowsStorage.getHomeRowOrder(), [
       'fav:playlist',
       'cw:movies',
     ]);
 
-    await StorageService.setHomeRowOrder(const []);
+    await HomeRowsStorage.setHomeRowOrder(const []);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('home_row_order_v1'), isNull);
   });
@@ -82,7 +82,7 @@ void main() {
           'fav:iptv',
         ]),
       });
-      expect(await StorageService.getHomeRowOrder(), ['cw:series', 'fav:iptv']);
+      expect(await HomeRowsStorage.getHomeRowOrder(), ['cw:series', 'fav:iptv']);
     },
   );
 

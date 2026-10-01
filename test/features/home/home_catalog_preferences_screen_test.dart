@@ -6,8 +6,8 @@ import 'package:debrify/models/home_preferences.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart' show StorageService;
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,7 +29,7 @@ void main() {
           'stremio_addons_v1': '[]',
           'tv_home_style': 'classic',
         });
-        StorageService.tvHomeStyleCached = 'classic';
+        HomeAppearanceStorage.tvHomeStyleCached = 'classic';
         StremioService.instance.invalidateCache();
         addTearDown(() {
           PlatformUtil.debugSetAndroidTvCached(null);

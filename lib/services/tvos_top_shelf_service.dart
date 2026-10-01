@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:debrify/services/storage/ambient_trailer_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -10,7 +11,6 @@ import '../models/profiles/user_profile.dart';
 import '../utils/platform_util.dart';
 import '../utils/tvos_device.dart';
 import 'main_page_bridge.dart';
-import 'storage_service.dart';
 import 'stremio_service.dart';
 import 'youtube_service.dart';
 import 'profiles/profile_bootstrap.dart';
@@ -218,8 +218,8 @@ class TvosTopShelfService {
     bool includeAudio;
     try {
       final preferences = await Future.wait<Object>([
-        StorageService.getHomeHeroTrailerEnabled(),
-        StorageService.getAmbientTrailerAudioEnabled(
+        AmbientTrailerStorage.getHomeHeroTrailerEnabled(),
+        AmbientTrailerStorage.getAmbientTrailerAudioEnabled(
           AmbientTrailerSurface.homeHero,
         ),
       ]);

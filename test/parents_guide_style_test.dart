@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/screens/settings/parents_guide_style_page.dart';
 import 'package:debrify/services/imdb_parents_guide_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/widgets/detail/theme/detail_theme.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/parents_guide_section.dart';
@@ -62,26 +62,26 @@ void main() {
   group('parents guide style preference', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({});
-      StorageService.parentsGuideStyleCached = 'compass';
+      DetailPageStorage.parentsGuideStyleCached = 'compass';
     });
 
     test('Compass is the default and invalid values normalize to it', () async {
-      expect(await StorageService.getParentsGuideStyle(), 'compass');
-      await StorageService.setParentsGuideStyle('unknown');
-      expect(await StorageService.getParentsGuideStyle(), 'compass');
+      expect(await DetailPageStorage.getParentsGuideStyle(), 'compass');
+      await DetailPageStorage.setParentsGuideStyle('unknown');
+      expect(await DetailPageStorage.getParentsGuideStyle(), 'compass');
       expect(parentsGuideStyleLabel('unknown'), 'Compass');
     });
 
     test('Classic round-trips and updates the synchronous cache', () async {
-      await StorageService.setParentsGuideStyle('classic');
-      expect(StorageService.parentsGuideStyleCached, 'classic');
-      expect(await StorageService.getParentsGuideStyle(), 'classic');
+      await DetailPageStorage.setParentsGuideStyle('classic');
+      expect(DetailPageStorage.parentsGuideStyleCached, 'classic');
+      expect(await DetailPageStorage.getParentsGuideStyle(), 'classic');
       expect(parentsGuideStyleLabel('classic'), 'Classic');
     });
   });
 
   group('Compass Parents Guide', () {
-    setUp(() => StorageService.parentsGuideStyleCached = 'compass');
+    setUp(() => DetailPageStorage.parentsGuideStyleCached = 'compass');
 
     for (final size in const [
       Size(390, 844),
@@ -276,7 +276,7 @@ void main() {
     });
 
     testWidgets('Classic remains available', (tester) async {
-      StorageService.parentsGuideStyleCached = 'classic';
+      DetailPageStorage.parentsGuideStyleCached = 'classic';
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(body: ParentsGuideSection(guide: _guide)),

@@ -1,5 +1,5 @@
 import 'package:debrify/services/engine/remote_engine_manager.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/initial_setup_flow.dart';
 import 'package:debrify/widgets/onboarding/onboarding_models.dart';
@@ -16,7 +16,7 @@ void main() {
 
   setUp(() {
     PlatformUtil.debugSetAndroidTvCached(true);
-    StorageService.tvKeyboardEnabledCached = true;
+    TvDisplayStorage.tvKeyboardEnabledCached = true;
   });
 
   tearDown(() => PlatformUtil.debugSetAndroidTvCached(null));

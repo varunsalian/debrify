@@ -1,11 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/debrify_image_cache.dart';
 import '../../services/imdb_parents_guide_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_episode_model.dart';
 import '../episodes_panel.dart';
 import '../horizontal_mouse_wheel.dart';
@@ -734,7 +734,7 @@ class _DetailPremiumState extends State<DetailPremium> {
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: StorageService.parentsGuideStyleCached == 'compass'
+              maxWidth: DetailPageStorage.parentsGuideStyleCached == 'compass'
                   ? 900
                   : 620,
               maxHeight: 680,

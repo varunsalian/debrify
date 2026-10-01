@@ -1,11 +1,11 @@
 import 'dart:async';
+import 'package:debrify/services/storage/ambient_trailer_storage.dart';
 import '../../utils/tv_keys.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/debrify_image_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
-import '../../services/storage_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/app_route_observer.dart';
 import '../../utils/platform_util.dart';
@@ -75,9 +75,9 @@ class TvCollectionTitlesState extends State<TvCollectionTitles>
         ? AmbientTrailerSurface.homeHero
         : AmbientTrailerSurface.detail;
     final values = await Future.wait([
-      StorageService.getHomeHeroTrailerEnabled(),
-      StorageService.getAmbientTrailerAudioEnabled(surface),
-      StorageService.getAmbientTrailerVolume(surface),
+      AmbientTrailerStorage.getHomeHeroTrailerEnabled(),
+      AmbientTrailerStorage.getAmbientTrailerAudioEnabled(surface),
+      AmbientTrailerStorage.getAmbientTrailerVolume(surface),
     ]);
     if (!mounted || request != _prefsRequest) return;
     final enabled = values[0] as bool;

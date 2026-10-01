@@ -1,8 +1,8 @@
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
-import '../../services/storage_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_controller.dart';
 import '../../theme/app_theme_scope.dart';
@@ -146,7 +146,7 @@ class _AppThemePageState extends State<AppThemePage> {
                   // by. Said HERE rather than only on the Details Page picker,
                   // because this is the screen where the expectation is set.
                   if (effectiveDetailPageStyle(
-                        StorageService.detailPageStyleCached,
+                        DetailPageStorage.detailPageStyleCached,
                       ) ==
                       'classic') ...[
                     const SizedBox(height: 18),

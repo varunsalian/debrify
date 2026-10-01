@@ -1,5 +1,6 @@
 import 'package:debrify/features/discover/application/discover_providers.dart';
 import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:debrify/widgets/see_all/discover_card_settings_scope.dart';
 import 'package:debrify/widgets/see_all/discover_browsing_input.dart';
 import 'dart:async';
@@ -8,7 +9,6 @@ import 'package:debrify/features/discover/presentation/discover_stage_veils.dart
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/widgets/see_all/discover_detail_rail.dart';
 import 'package:debrify/widgets/see_all/discover_trailer_stage.dart';
 import 'package:debrify/widgets/see_all/stremio_dropdown.dart';
@@ -32,14 +32,14 @@ void main() {
           'discover_layout': layout,
           'stremio_addons_v1': '[]',
         });
-        StorageService.discoverLayoutCached = layout;
+        DiscoverStorage.discoverLayoutCached = layout;
         StremioService.instance.invalidateCache();
         tester.view.physicalSize = const Size(1200, 700);
         tester.view.devicePixelRatio = 1;
         addTearDown(() {
           tester.view.reset();
           ProfileRuntime.debugReset();
-          StorageService.discoverLayoutCached = 'stage';
+          DiscoverStorage.discoverLayoutCached = 'stage';
         });
         var cardSettings = (
           showTypeTags: false,

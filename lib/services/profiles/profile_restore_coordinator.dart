@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import '../local_validation_diagnostics.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -704,7 +705,7 @@ class ProfileRestoreCoordinator {
     // Imported launch packages are device-local and never travel in backups.
     // Even merge restores must clear the old override instead of retaining it.
     final restoredPreferenceCount = values.length;
-    values[StorageService.importedLaunchAnimationKey] = null;
+    values[LaunchIdentStorage.importedLaunchAnimationKey] = null;
     final importedSetupComplete = _optionalBool(profileRecord, 'setupComplete');
     final importedLockOnResume = _optionalBool(profileRecord, 'lockOnResume');
     final updateInactivityTimeout = profileRecord.containsKey(

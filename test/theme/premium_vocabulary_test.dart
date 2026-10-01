@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,7 +12,6 @@ import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/premium_looks.dart';
 import 'package:debrify/screens/settings/detail_theme_page.dart'
     show kDetailThemesShipped;
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 
 /// Phase four's vocabulary: the legacy no-ops, the geometry caps that make
@@ -499,7 +499,7 @@ void main() {
   group('the five looks can be selected, stored and resolved', () {
     test('every id is an accepted stored value', () {
       for (final s in PremiumLooks.all) {
-        expect(StorageService.kDetailThemes, contains(s.id),
+        expect(DetailPageStorage.kDetailThemes, contains(s.id),
             reason: '${s.id} would normalize to legacy on select');
         expect(kDetailThemesShipped, contains(s.id),
             reason: '${s.id} would be withheld from every picker');

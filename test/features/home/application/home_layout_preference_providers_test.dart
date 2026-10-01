@@ -5,7 +5,7 @@ import 'package:debrify/features/home/models/home_catalog_session.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -93,7 +93,7 @@ void main() {
         scope.preferenceKey('tv_home_style'): 'spotlight',
         'tv_home_style': 'mosaic',
       });
-      StorageService.tvHomeStyleCached = 'classic';
+      HomeAppearanceStorage.tvHomeStyleCached = 'classic';
       final container = ProviderContainer.test();
       final first = container
           .listen(homeLayoutPreferenceProvider(session()), (_, _) {})
@@ -106,7 +106,7 @@ void main() {
         transition: transitions.add,
       );
       expect(transitions, ['spotlight']);
-      expect(StorageService.tvHomeStyleCached, 'spotlight');
+      expect(HomeAppearanceStorage.tvHomeStyleCached, 'spotlight');
       final second = container
           .listen(homeLayoutPreferenceProvider(session()), (_, _) {})
           .read();

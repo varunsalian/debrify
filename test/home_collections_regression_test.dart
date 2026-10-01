@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:debrify/services/storage/home_rows_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,7 +20,6 @@ import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/screens/collections/collection_folder_screen.dart';
 import 'package:debrify/screens/settings/home_sections_filter_page.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_ui_refresh.dart';
@@ -590,7 +590,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final a = addon();
-      await StorageService.setHomeDisabledSections({'addon:movie:popular'});
+      await HomeRowsStorage.setHomeDisabledSections({'addon:movie:popular'});
       await tester.pumpWidget(
         MaterialApp(
           home: HomeSectionsFilterPage(
@@ -607,7 +607,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.arrow_back_rounded));
       await tester.pumpAndSettle();
       expect(
-        await StorageService.getHomeDisabledSections(),
+        await HomeRowsStorage.getHomeDisabledSections(),
         contains('addon:movie:popular'),
       );
     },

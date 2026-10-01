@@ -1,10 +1,10 @@
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import '../../features/home/application/home_layout_policy.dart';
 import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
@@ -117,7 +117,7 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
   }
 
   Future<void> _load() async {
-    final style = await StorageService.getTvHomeStyle();
+    final style = await HomeAppearanceStorage.getTvHomeStyle();
     if (!mounted) return;
     setState(() {
       _style = style;
@@ -147,7 +147,7 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
     // Tell an in-flight Look apply that a human just chose this key, so it
     // does not stamp over the choice. See theme/app_looks.dart.
     LookApplier.noteExternalWrite('tv_home_style');
-    await StorageService.setTvHomeStyle(value);
+    await HomeAppearanceStorage.setTvHomeStyle(value);
     // Live-apply: the Home board re-reads the pref and rebuilds.
     MainPageBridge.tvHomeStyleChanged?.call();
   }

@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/home_page_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/episode_artwork_service.dart';
@@ -29,7 +30,7 @@ import '../models/home_tracker_authentication.dart';
 final homeContinuationLayoutRepositoryProvider =
     Provider<HomeContinuationLayoutRepository>(
       (ref) => const HomeContinuationLayoutRepository(
-        readMerged: StorageService.getHomeCwMergedRows,
+        readMerged: HomePageStorage.getHomeCwMergedRows,
       ),
       dependencies: const [],
     );
@@ -38,7 +39,7 @@ final homeLocalContinuationRepositoryProvider =
     Provider<HomeLocalContinuationRepository>(
       (ref) => HomeLocalContinuationRepository(
         readProgressSource: TrackingSourceStorage.getWatchProgressSource,
-        readEnabled: StorageService.getHomeContinueWatchingEnabled,
+        readEnabled: HomePageStorage.getHomeContinueWatchingEnabled,
         readItems: StorageService.getContinueWatchingItems,
         readAddons: StremioService.instance.getEnabledAddons,
         readEpisode: StorageService.getLastPlayedEpisodeByImdbId,

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:debrify/services/storage/detail_navigation_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/series_playlist.dart';
@@ -254,7 +255,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   }
 
   Future<void> _loadViewMode() async {
-    final dense = await StorageService.getSeriesBrowserDenseView();
+    final dense = await DetailNavigationStorage.getSeriesBrowserDenseView();
     if (mounted && dense != _denseView) {
       setState(() {
         _denseView = dense;
@@ -853,7 +854,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       // re-center below lands correctly.
       _expandedDense.clear();
     });
-    StorageService.setSeriesBrowserDenseView(dense);
+    DetailNavigationStorage.setSeriesBrowserDenseView(dense);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _recenterCurrentEpisode();
     });

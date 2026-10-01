@@ -11,6 +11,8 @@ import 'dart:io';
 import 'package:debrify/models/indexer_manager_config.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/webdav_item.dart';
+import 'package:debrify/services/storage/home_rows_storage.dart';
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
@@ -764,11 +766,11 @@ void main() {
           secretConfig: secret,
         );
         if (type == ConnectionResourceType.stremioAddon) {
-          await StorageService.setHomeDisabledSections({
+          await HomeRowsStorage.setHomeDisabledSections({
             '${created.id}:movie:top',
             'cw:movies',
           });
-          await StorageService.setHomeRowOrder([
+          await HomeRowsStorage.setHomeRowOrder([
             'cw:movies',
             '${created.id}:movie:top',
           ]);
@@ -805,11 +807,11 @@ void main() {
       await operations.pruneProfile(profileId);
       StremioService.instance.invalidateCache();
       final backupAddon = (await StremioService.instance.getAddons()).single;
-      expect(await StorageService.getHomeDisabledSections(), {
+      expect(await HomeRowsStorage.getHomeDisabledSections(), {
         '${backupAddon.id}:movie:top',
         'cw:movies',
       });
-      expect(await StorageService.getHomeRowOrder(), [
+      expect(await HomeRowsStorage.getHomeRowOrder(), [
         'cw:movies',
         '${backupAddon.id}:movie:top',
       ]);
@@ -941,11 +943,11 @@ void main() {
       final addons = await StremioService.instance.getAddons();
       expect(addons, hasLength(1));
       expect(addons.single.id, isNot(backupAddon.id));
-      expect(await StorageService.getHomeDisabledSections(), {
+      expect(await HomeRowsStorage.getHomeDisabledSections(), {
         '${addons.single.id}:movie:top',
         'cw:movies',
       });
-      expect(await StorageService.getHomeRowOrder(), [
+      expect(await HomeRowsStorage.getHomeRowOrder(), [
         'cw:movies',
         '${addons.single.id}:movie:top',
       ]);
@@ -1359,7 +1361,7 @@ void main() {
       'correct horse',
     );
     expect(package.sourceVersion, 3);
-    await StorageService.setImportedLaunchAnimation('a' * 32);
+    await LaunchIdentStorage.setImportedLaunchAnimation('a' * 32);
 
     final report =
         await ProfileRestoreCoordinator(
@@ -1376,11 +1378,11 @@ void main() {
     final prefix = 'p.$profileId.g.${report.publishedGeneration}.';
     expect(raw.getString('${prefix}theme_mode'), 'restored');
     expect(
-      raw.containsKey('${prefix}${StorageService.importedLaunchAnimationKey}'),
+      raw.containsKey('${prefix}${LaunchIdentStorage.importedLaunchAnimationKey}'),
       isFalse,
     );
-    await StorageService.getLaunchAnimation();
-    expect(StorageService.importedLaunchAnimationCached, isNull);
+    await LaunchIdentStorage.getLaunchAnimation();
+    expect(LaunchIdentStorage.importedLaunchAnimationCached, isNull);
     expect(raw.containsKey('${prefix}tvmaze_cache_episodes_1139'), isFalse);
     expect(raw.containsKey('${prefix}webdav_username'), isFalse);
   });

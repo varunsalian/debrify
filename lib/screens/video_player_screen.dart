@@ -1,4 +1,5 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:debrify/services/storage/player_network_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
@@ -6414,9 +6415,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _loadDockPrefs() async {
-    final style = await StorageService.getPlayerDockStyle();
-    final palette = await StorageService.getPlayerDockPalette();
-    final size = await StorageService.getPlayerDockSize();
+    final style = await PlayerAppearanceStorage.getPlayerDockStyle();
+    final palette = await PlayerAppearanceStorage.getPlayerDockPalette();
+    final size = await PlayerAppearanceStorage.getPlayerDockSize();
     if (!mounted) return;
     setState(() {
       _dockStyle = PlayerDockStyle.fromPref(style);

@@ -16,6 +16,7 @@ import 'package:debrify/services/profiles/profile_native_lock_bridge.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:debrify/services/storage_service.dart';
@@ -122,7 +123,7 @@ Future<void> _run() async {
     return;
   }
   await _play('defaults-movie');
-  await StorageService.setTvPlayerControlsStyle('frost');
+  await PlayerAppearanceStorage.setTvPlayerControlsStyle('frost');
   await StorageService.setDebrifyTvPlayerStyle('network');
   await SubtitleSettingsStorage.setDefaultSubtitleLanguage('off');
   await PlayerSettingsStorage.setPlayerNightModeIndex(3);
@@ -140,7 +141,7 @@ Future<void> _run() async {
   }
   await activate(second);
   await _play('profile-b-defaults');
-  await StorageService.setTvPlayerControlsStyle('classic');
+  await PlayerAppearanceStorage.setTvPlayerControlsStyle('classic');
   await SubtitleSettingsStorage.setDefaultSubtitleLanguage('spa');
   await PlayerSettingsStorage.setPlayerNightModeIndex(1);
   await _play('profile-b-custom');

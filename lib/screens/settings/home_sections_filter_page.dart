@@ -1,3 +1,5 @@
+import 'package:debrify/models/home_preferences.dart';
+import 'package:debrify/services/storage/home_rows_storage.dart';
 import 'package:flutter/material.dart';
 import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +13,6 @@ import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/simkl/simkl_list_source.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
-import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_list_source.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/tv_keys.dart';
@@ -519,9 +520,9 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     // A collection can temporarily own/hide an addon leaf. Preserve saved
     // choices which this screen could not edit, including disabled folders.
     out.addAll(widget.disabled.where((id) => !modelIds.contains(id)));
-    await StorageService.setHomeDisabledSections(out);
-    await StorageService.setHomeExtraRows(extras);
-    await StorageService.setHomeRowOrder(_orderIds);
+    await HomeRowsStorage.setHomeDisabledSections(out);
+    await HomeRowsStorage.setHomeExtraRows(extras);
+    await HomeRowsStorage.setHomeRowOrder(_orderIds);
   }
 
   // ── Mutations ──────────────────────────────────────────────────────────────

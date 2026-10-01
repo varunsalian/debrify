@@ -1,4 +1,5 @@
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/home_page_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -6,60 +7,60 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test('Spotlight focus details persist and reset with Home settings', () async {
-    expect(await StorageService.getSpotlightFocusDetails(), isTrue);
-    await StorageService.setSpotlightFocusDetails(true);
-    expect(await StorageService.getSpotlightFocusDetails(), isTrue);
-    await StorageService.setSpotlightFocusDetails(false);
-    expect(await StorageService.getSpotlightFocusDetails(), isFalse);
-    await StorageService.clearAllHomePageSettings();
-    expect(await StorageService.getSpotlightFocusDetails(), isTrue);
+    expect(await HomeAppearanceStorage.getSpotlightFocusDetails(), isTrue);
+    await HomeAppearanceStorage.setSpotlightFocusDetails(true);
+    expect(await HomeAppearanceStorage.getSpotlightFocusDetails(), isTrue);
+    await HomeAppearanceStorage.setSpotlightFocusDetails(false);
+    expect(await HomeAppearanceStorage.getSpotlightFocusDetails(), isFalse);
+    await HomePageStorage.clearAllHomePageSettings();
+    expect(await HomeAppearanceStorage.getSpotlightFocusDetails(), isTrue);
   });
 
   test('Hold to Quick Play defaults off and persists changes', () async {
-    expect(await StorageService.getHomeCwHoldToQuickPlay(), isFalse);
+    expect(await HomePageStorage.getHomeCwHoldToQuickPlay(), isFalse);
 
-    await StorageService.setHomeCwHoldToQuickPlay(true);
-    expect(await StorageService.getHomeCwHoldToQuickPlay(), isTrue);
+    await HomePageStorage.setHomeCwHoldToQuickPlay(true);
+    expect(await HomePageStorage.getHomeCwHoldToQuickPlay(), isTrue);
 
-    await StorageService.setHomeCwHoldToQuickPlay(false);
-    expect(await StorageService.getHomeCwHoldToQuickPlay(), isFalse);
+    await HomePageStorage.setHomeCwHoldToQuickPlay(false);
+    expect(await HomePageStorage.getHomeCwHoldToQuickPlay(), isFalse);
   });
 
   test('clearing Home settings resets Hold to Quick Play', () async {
-    await StorageService.setHomeCwHoldToQuickPlay(true);
+    await HomePageStorage.setHomeCwHoldToQuickPlay(true);
 
-    await StorageService.clearAllHomePageSettings();
+    await HomePageStorage.clearAllHomePageSettings();
 
-    expect(await StorageService.getHomeCwHoldToQuickPlay(), isFalse);
+    expect(await HomePageStorage.getHomeCwHoldToQuickPlay(), isFalse);
   });
 
   test('Hide Home card titles and ratings defaults off and persists', () async {
-    expect(await StorageService.getHomeHideCardTitlesAndRatings(), isFalse);
+    expect(await HomeAppearanceStorage.getHomeHideCardTitlesAndRatings(), isFalse);
 
-    await StorageService.setHomeHideCardTitlesAndRatings(true);
-    expect(await StorageService.getHomeHideCardTitlesAndRatings(), isTrue);
+    await HomeAppearanceStorage.setHomeHideCardTitlesAndRatings(true);
+    expect(await HomeAppearanceStorage.getHomeHideCardTitlesAndRatings(), isTrue);
 
-    await StorageService.clearAllHomePageSettings();
-    expect(await StorageService.getHomeHideCardTitlesAndRatings(), isFalse);
+    await HomePageStorage.clearAllHomePageSettings();
+    expect(await HomeAppearanceStorage.getHomeHideCardTitlesAndRatings(), isFalse);
   });
 
   test('Hide Home catalog add-on names defaults off and persists', () async {
-    expect(await StorageService.getHomeHideCatalogAddonNames(), isFalse);
+    expect(await HomeAppearanceStorage.getHomeHideCatalogAddonNames(), isFalse);
 
-    await StorageService.setHomeHideCatalogAddonNames(true);
-    expect(await StorageService.getHomeHideCatalogAddonNames(), isTrue);
+    await HomeAppearanceStorage.setHomeHideCatalogAddonNames(true);
+    expect(await HomeAppearanceStorage.getHomeHideCatalogAddonNames(), isTrue);
 
-    await StorageService.clearAllHomePageSettings();
-    expect(await StorageService.getHomeHideCatalogAddonNames(), isFalse);
+    await HomePageStorage.clearAllHomePageSettings();
+    expect(await HomeAppearanceStorage.getHomeHideCatalogAddonNames(), isFalse);
   });
 
   test('Hide Home collection names defaults off and persists', () async {
-    expect(await StorageService.getHomeHideCollectionNames(), isFalse);
+    expect(await HomeAppearanceStorage.getHomeHideCollectionNames(), isFalse);
 
-    await StorageService.setHomeHideCollectionNames(true);
-    expect(await StorageService.getHomeHideCollectionNames(), isTrue);
+    await HomeAppearanceStorage.setHomeHideCollectionNames(true);
+    expect(await HomeAppearanceStorage.getHomeHideCollectionNames(), isTrue);
 
-    await StorageService.clearAllHomePageSettings();
-    expect(await StorageService.getHomeHideCollectionNames(), isFalse);
+    await HomePageStorage.clearAllHomePageSettings();
+    expect(await HomeAppearanceStorage.getHomeHideCollectionNames(), isFalse);
   });
 }

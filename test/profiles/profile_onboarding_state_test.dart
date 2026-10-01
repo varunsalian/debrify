@@ -11,9 +11,9 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_reset_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage/defaults_generation_storage.dart';
 import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:debrify/services/storage/torrent_search_storage.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -125,7 +125,7 @@ void main() {
   );
 
   test('copied source opt-outs survive first activation migrations', () async {
-    await StorageService.migrateDefaultsGeneration();
+    await DefaultsGenerationStorage.migrateDefaultsGeneration();
     await TorrentSearchStorage.setShowAddonLogos(false);
     await TorrentSearchStorage.setUseAddonTextFormatting(false);
     final authorization = await ProfileAuthorizationContext.capture(registry);
@@ -146,7 +146,7 @@ void main() {
     ProfileRuntime.publish(scope(member, 2));
     final prefs = await ProfilePreferences.instance();
     expect(prefs.getInt('defaults_generation'), isNull);
-    await StorageService.migrateDefaultsGeneration();
+    await DefaultsGenerationStorage.migrateDefaultsGeneration();
     expect(await TorrentSearchStorage.getShowAddonLogos(), isFalse);
     expect(await TorrentSearchStorage.getUseAddonTextFormatting(), isFalse);
     expect(prefs.getInt('defaults_generation'), 5);

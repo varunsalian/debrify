@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -7,7 +8,6 @@ import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/theme/app_theme.dart';
@@ -50,7 +50,7 @@ void main() {
         'home_extra_rows_v1': jsonEncode([{'id': 'traktlist:custom:7', 'title': 'Late personal list'}]),
         'tv_home_style': 'classic',
       });
-      StorageService.tvHomeStyleCached = 'classic';
+      HomeAppearanceStorage.tvHomeStyleCached = 'classic';
       StremioService.instance.invalidateCache();
       final pending = Completer<http.Response>();
       var itemRequests = 0;
@@ -132,7 +132,7 @@ void main() {
           'home_collections_v1': jsonEncode([collection.toJson()]),
           'tv_home_style': style,
         });
-        StorageService.tvHomeStyleCached = style;
+        HomeAppearanceStorage.tvHomeStyleCached = style;
         StremioService.instance.invalidateCache();
         final slow = Completer<http.Response>();
         final client = MockClient(
@@ -261,7 +261,7 @@ void main() {
               'ids': ['progress:movie:fast'],
             }),
           });
-          StorageService.tvHomeStyleCached = style;
+          HomeAppearanceStorage.tvHomeStyleCached = style;
           StremioService.instance.invalidateCache();
           final slow = Completer<http.Response>();
           final navigator = GlobalKey<NavigatorState>();

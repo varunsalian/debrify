@@ -1,7 +1,8 @@
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/ambient_trailer_storage.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,11 +17,11 @@ void main() {
 
   setUp(() {
     ProfileRuntime.debugReset();
-    StorageService.debugResetTvTrailerUnderlaySession();
+    AmbientTrailerStorage.debugResetTvTrailerUnderlaySession();
   });
 
   tearDown(() {
-    StorageService.debugResetTvTrailerUnderlaySession();
+    AmbientTrailerStorage.debugResetTvTrailerUnderlaySession();
     ProfileRuntime.debugReset();
   });
 
@@ -37,7 +38,10 @@ void main() {
       scope.preferenceKey('tv_trailer_underlay_enabled'): true,
     });
 
-    expect(await StorageService.getTvTrailerUnderlayEnabledAtLaunch(), isFalse);
+    expect(
+      await AmbientTrailerStorage.getTvTrailerUnderlayEnabledAtLaunch(),
+      isFalse,
+    );
   });
 
   test(
@@ -50,7 +54,7 @@ void main() {
       });
 
       expect(
-        await StorageService.getTvTrailerUnderlayEnabledAtLaunch(),
+        await AmbientTrailerStorage.getTvTrailerUnderlayEnabledAtLaunch(),
         isFalse,
       );
     },
@@ -62,11 +66,11 @@ void main() {
       scope.preferenceKey(DevicePreferences.tvLowResRenderActiveKey): false,
     });
 
-    expect(await StorageService.getTvLowResRenderActive(), isTrue);
+    expect(await TvDisplayStorage.getTvLowResRenderActive(), isTrue);
 
     SharedPreferences.setMockInitialValues(<String, Object>{
       scope.preferenceKey(DevicePreferences.tvLowResRenderActiveKey): true,
     });
-    expect(await StorageService.getTvLowResRenderActive(), isNull);
+    expect(await TvDisplayStorage.getTvLowResRenderActive(), isNull);
   });
 }

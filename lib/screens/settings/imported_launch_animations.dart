@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +10,6 @@ import '../../services/cache_scratch_cleanup.dart';
 
 import '../../services/launch_animation/launch_animation_library.dart';
 import '../../services/launch_animation/launch_package.dart';
-import '../../services/storage_service.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../widgets/remote/remote_control_screen.dart';
 import '../../widgets/remote/remote_pairing_dialog.dart';
@@ -209,7 +209,7 @@ class _ImportedLaunchAnimationsState extends State<ImportedLaunchAnimations> {
         ),
       for (final entry in _entries)
         SettingsTile(
-          icon: StorageService.importedLaunchAnimationCached == entry.id
+          icon: LaunchIdentStorage.importedLaunchAnimationCached == entry.id
               ? Icons.check_circle
               : Icons.animation,
           title: entry.name,
@@ -423,7 +423,7 @@ class _ImportedLaunchDetailState extends State<ImportedLaunchDetail> {
       if (scope != ProfileRuntime.scope.value) {
         throw StateError('Profile changed. Select the animation again.');
       }
-      await StorageService.setImportedLaunchAnimation(widget.entry.id);
+      await LaunchIdentStorage.setImportedLaunchAnimation(widget.entry.id);
       if (mounted) {
         widget.onSelectionChanged();
         Navigator.pop(context);
@@ -463,7 +463,7 @@ class _ImportedLaunchDetailState extends State<ImportedLaunchDetail> {
     setState(() => _saving = true);
     try {
       await LaunchAnimationLibrary.instance.delete(widget.entry.id);
-      await StorageService.clearImportedLaunchAnimationIf(widget.entry.id);
+      await LaunchIdentStorage.clearImportedLaunchAnimationIf(widget.entry.id);
       if (mounted) {
         widget.onSelectionChanged();
         Navigator.pop(context);

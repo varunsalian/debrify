@@ -13,7 +13,7 @@ import 'package:debrify/services/profiles/profile_pin_service.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:debrify/utils/platform_util.dart';
@@ -371,12 +371,12 @@ void main() {
       PlatformUtil.debugSetAndroidTvCached(!tvos);
       PlatformUtil.debugSetTvOS(tvos);
       ProfileAvatarPolicy.debugSetUserImagesSupported(false);
-      final previousKeyboard = StorageService.tvKeyboardEnabledCached;
-      StorageService.tvKeyboardEnabledCached = !tvos;
+      final previousKeyboard = TvDisplayStorage.tvKeyboardEnabledCached;
+      TvDisplayStorage.tvKeyboardEnabledCached = !tvos;
       await tester.binding.setSurfaceSize(size);
       addTearDown(() async {
         PlatformUtil.debugSetTvOS(null);
-        StorageService.tvKeyboardEnabledCached = previousKeyboard;
+        TvDisplayStorage.tvKeyboardEnabledCached = previousKeyboard;
         await tester.binding.setSurfaceSize(null);
       });
     }

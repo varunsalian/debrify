@@ -3,6 +3,7 @@ import 'package:debrify/features/discover/data/discover_source_repository.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'dart:async';
 import 'package:debrify/features/discover/models/metadata_feature_policy.dart';
+import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/screens/metadata_explore_page.dart';
@@ -10,7 +11,6 @@ import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/screens/see_all/trakt_see_all_screen.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/widgets/see_all/stremio_dropdown.dart';
 import 'package:flutter/material.dart';
@@ -112,7 +112,7 @@ void main() {
       );
       expect(navigator.currentState!.canPop(), isFalse);
       expect(find.byType(Scaffold), findsOneWidget);
-      expect(await StorageService.getDiscoverLastSource(), 'tmdb');
+      expect(await DiscoverStorage.getDiscoverLastSource(), 'tmdb');
 
       await drive(tester, () async => source(tester).onSelected('trakt'));
       expect(find.byType(TraktSeeAllScreen), findsOneWidget);
@@ -132,8 +132,8 @@ void main() {
   testWidgets(
     'TMDB default is respected and disabling it leaves a usable source',
     (tester) async {
-      await StorageService.setDiscoverDefaultSource('tmdb');
-      await StorageService.setDiscoverLastSource('trakt');
+      await DiscoverStorage.setDiscoverDefaultSource('tmdb');
+      await DiscoverStorage.setDiscoverLastSource('trakt');
       final navigator = GlobalKey<NavigatorState>();
       await mount(tester, navigator);
       expect(source(tester).value, 'tmdb');

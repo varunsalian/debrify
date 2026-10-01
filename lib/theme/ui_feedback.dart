@@ -1,7 +1,7 @@
+import 'package:debrify/services/storage/ui_feedback_storage.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../services/storage_service.dart';
 import '../utils/platform_util.dart';
 import 'app_sound.dart';
 import 'app_surfaces.dart';
@@ -168,10 +168,10 @@ class UiFeedback {
     // The user's veto, applied last. The theme says what there is to play;
     // this says whether they want it. Read from the synchronous mirrors — a
     // focus listener and a key handler cannot await.
-    final sound = !StorageService.uiSoundsCached
+    final sound = !UiFeedbackStorage.uiSoundsCached
         ? SoundCharacter.silent
         : (activation ? tokens.activation : tokens.traversalFor(hasCursor));
-    final haptic = !StorageService.uiHapticsCached
+    final haptic = !UiFeedbackStorage.uiHapticsCached
         ? HapticCharacter.none
         : tokens.hapticFor(hasActuator, activation: activation);
     if (sound == SoundCharacter.silent && haptic == HapticCharacter.none) {

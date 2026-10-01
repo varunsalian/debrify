@@ -1,7 +1,7 @@
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/widgets/text_field_suggestions.dart';
 import 'package:debrify/widgets/tv_keyboard.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -33,7 +33,7 @@ void main() {
   tearDown(() {
     PlatformUtil.debugSetAndroidTvCached(null);
     PlatformUtil.debugSetTvOS(null);
-    StorageService.tvKeyboardEnabledCached = true;
+    TvDisplayStorage.tvKeyboardEnabledCached = true;
     text.dispose();
     suggestions.dispose();
   });
@@ -86,7 +86,7 @@ void main() {
     tester,
   ) async {
     PlatformUtil.debugSetAndroidTvCached(true);
-    StorageService.tvKeyboardEnabledCached = false;
+    TvDisplayStorage.tvKeyboardEnabledCached = false;
     await mount(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
@@ -99,7 +99,7 @@ void main() {
     'Apple TV keyboard dismissal reveals choices and preserves ordinary fields',
     (tester) async {
       PlatformUtil.debugSetTvOS(true);
-      StorageService.tvKeyboardEnabledCached = false;
+      TvDisplayStorage.tvKeyboardEnabledCached = false;
       await mount(tester);
       Future<void> endEditing() async {
         await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
@@ -132,7 +132,7 @@ void main() {
     'Apple TV Search action submits even while title suggestions exist',
     (tester) async {
       PlatformUtil.debugSetTvOS(true);
-      StorageService.tvKeyboardEnabledCached = false;
+      TvDisplayStorage.tvKeyboardEnabledCached = false;
       await mount(tester, submitOnTvosEndEditing: true);
 
       await tester.binding.defaultBinaryMessenger.handlePlatformMessage(

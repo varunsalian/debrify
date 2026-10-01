@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import '../../services/metadata_explore_service.dart';
 import '../../services/profiles/profile_runtime.dart';
 import 'showcase_availability.dart';
 import '../../models/metadata_preferences.dart';
 import '../../models/detail_page_section_visibility.dart';
-import '../../services/storage_service.dart';
 import '../../screens/metadata_explore_page.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -213,7 +213,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
 
   DetailPageSectionVisibility get _sectionVisibility =>
       widget.sectionVisibility ??
-      StorageService.detailPageSectionVisibilityCached;
+      DetailPageStorage.detailPageSectionVisibilityCached;
 
   List<ShowcaseAvailabilityRow> get _extraRows => showcaseAvailabilityRows(
     _explore, widget.model.metadataPreferences,
@@ -223,7 +223,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
 
   DetailPageSectionVisibility _visibilityFor(DetailShowcase showcase) =>
       showcase.sectionVisibility ??
-      StorageService.detailPageSectionVisibilityCached;
+      DetailPageStorage.detailPageSectionVisibilityCached;
 
   Object? _explorePolicy(
     MetadataPreferences? prefs,

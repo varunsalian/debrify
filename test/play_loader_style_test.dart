@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -6,7 +7,6 @@ import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/play_loader_style.dart';
 import 'package:debrify/services/profiles/profile_creation_service.dart';
 import 'package:debrify/services/profiles/sanitized_profile_preferences.dart';
-import 'package:debrify/services/storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +18,7 @@ void main() {
 
   group('play_loader_style preference', () {
     test('unset reads as Marquee — the shipped default', () async {
-      expect(await StorageService.getPlayLoaderStyle(), 'marquee');
+      expect(await PlayerAppearanceStorage.getPlayLoaderStyle(), 'marquee');
       expect(PlayLoaderStyleController.defaultStyle, 'marquee');
     });
 
@@ -26,12 +26,12 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'play_loader_style': 'some-future-look',
       });
-      expect(await StorageService.getPlayLoaderStyle(), 'marquee');
+      expect(await PlayerAppearanceStorage.getPlayLoaderStyle(), 'marquee');
     });
 
     test('an unknown value coerces on write too', () async {
-      await StorageService.setPlayLoaderStyle('nonsense');
-      expect(await StorageService.getPlayLoaderStyle(), 'marquee');
+      await PlayerAppearanceStorage.setPlayLoaderStyle('nonsense');
+      expect(await PlayerAppearanceStorage.getPlayLoaderStyle(), 'marquee');
     });
 
     test('select publishes to the synchronous mirror before persisting',
@@ -40,7 +40,7 @@ void main() {
       // The play path reads [cached] synchronously — it must already be right.
       expect(PlayLoaderStyleController.cached, 'classic');
       await future;
-      expect(await StorageService.getPlayLoaderStyle(), 'classic');
+      expect(await PlayerAppearanceStorage.getPlayLoaderStyle(), 'classic');
     });
 
     test('warm restores an explicit Classic choice', () async {

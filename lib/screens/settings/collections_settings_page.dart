@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +12,6 @@ import '../../services/analytics_service.dart';
 import '../../services/collection_gif_settings.dart';
 import '../../services/home_collections_store.dart';
 import '../../services/main_page_bridge.dart';
-import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../widgets/text_prompt_dialog.dart';
@@ -81,7 +81,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
       final collections = inventory.collections;
       final layout = await _store.getFolderLayout();
       final gifMode = await CollectionGifSettings.read();
-      final hideNamesOnHome = await StorageService.getHomeHideCollectionNames();
+      final hideNamesOnHome = await HomeAppearanceStorage.getHomeHideCollectionNames();
       List<StremioAddon> addons = const [];
       try {
         addons = await StremioService.instance.getAddons();
@@ -296,7 +296,7 @@ class _CollectionsSettingsPageState extends State<CollectionsSettingsPage> {
   });
 
   Future<void> _setHideNamesOnHome(bool value) => _guarded(() async {
-    await StorageService.setHomeHideCollectionNames(value);
+    await HomeAppearanceStorage.setHomeHideCollectionNames(value);
     if (!mounted) return;
     setState(() => _hideNamesOnHome = value);
     MainPageBridge.notifyHomeSettingsChanged();

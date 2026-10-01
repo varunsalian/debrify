@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/detail_navigation_storage.dart';
 import '../../features/home/application/home_board_providers.dart';
 import '../../features/home/application/home_continuation_providers.dart';
 import '../../features/home/application/home_detail_providers.dart';
@@ -249,7 +250,8 @@ void composeSearchScreenHome(SearchScreenComposer c) {
       discoverMode: () => c.widget.discoverMode,
       view: () => c.homeView,
       nativeAddon: () => NativeSeriesMetadataService.addon,
-      readMergedSeriesEnabled: StorageService.getMergedSeriesPageEnabled,
+      readMergedSeriesEnabled:
+          DetailNavigationStorage.getMergedSeriesPageEnabled,
       cardSettings: () => c.discoverLifecycle.bindings.cards,
       tabIndex: () => c.tabIndex,
       localCompletion: () => StorageService.localCompletionRevision,

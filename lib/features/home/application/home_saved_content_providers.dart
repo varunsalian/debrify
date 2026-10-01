@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/home_rows_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../services/debrify_tv_repository.dart';
@@ -42,7 +43,7 @@ final homeIptvFavoritesRepositoryProvider =
 
 final homeIptvListsRepositoryProvider = Provider<HomeIptvListsRepository>(
   (ref) => HomeIptvListsRepository(
-    extras: StorageService.getHomeExtraRows,
+    extras: HomeRowsStorage.getHomeExtraRows,
     lists: () async => [
       for (final meta in await StorageService.getIptvLists())
         (id: meta.id, title: meta.name, isFavorites: meta.isFavorites),

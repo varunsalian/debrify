@@ -1,8 +1,8 @@
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
-import '../../services/storage_service.dart';
 import '../../models/detail_page_section_visibility.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
@@ -43,7 +43,7 @@ const Set<String> kDetailPageStylesShipped = {
 String effectiveDetailPageStyle(String raw) =>
     kDetailPageStylesShipped.contains(raw)
         ? raw
-        : StorageService.kDetailPageStyleDefault;
+        : DetailPageStorage.kDetailPageStyleDefault;
 
 const List<DetailPageStyleChoice> kDetailPageStyleChoices = [
   DetailPageStyleChoice(
@@ -141,7 +141,7 @@ class DetailPageStylePage extends StatefulWidget {
 
 class _DetailPageStylePageState extends State<DetailPageStylePage> {
   bool _loading = true;
-  String _style = StorageService.kDetailPageStyleDefault;
+  String _style = DetailPageStorage.kDetailPageStyleDefault;
   DetailPageSectionVisibility _sections = DetailPageSectionVisibility.defaults;
 
   /// Non-focusable marker around the options card; used on TV to hand entry
@@ -172,8 +172,8 @@ class _DetailPageStylePageState extends State<DetailPageStylePage> {
 
   Future<void> _load() async {
     final values = await Future.wait<Object>([
-      StorageService.getDetailPageStyle(),
-      StorageService.getDetailPageSectionVisibility(),
+      DetailPageStorage.getDetailPageStyle(),
+      DetailPageStorage.getDetailPageSectionVisibility(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -200,12 +200,12 @@ class _DetailPageStylePageState extends State<DetailPageStylePage> {
     // Tell an in-flight Look apply that a human just chose this key, so it
     // does not stamp over the choice. See theme/app_looks.dart.
     LookApplier.noteExternalWrite('detail_page_style');
-    await StorageService.setDetailPageStyle(value);
+    await DetailPageStorage.setDetailPageStyle(value);
   }
 
   Future<void> _setSections(DetailPageSectionVisibility value) async {
     setState(() => _sections = value);
-    await StorageService.setDetailPageSectionVisibility(value);
+    await DetailPageStorage.setDetailPageSectionVisibility(value);
   }
 
   @override

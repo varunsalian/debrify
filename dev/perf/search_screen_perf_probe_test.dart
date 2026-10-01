@@ -22,7 +22,7 @@ import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/theme/app_theme_adapter.dart';
 import 'package:debrify/utils/platform_util.dart';
@@ -81,7 +81,7 @@ Future<void> _setUp({required bool tv}) async {
     'stremio_addons_v1': jsonEncode([_addon().toJson()]),
     'tv_home_style': 'classic',
   });
-  StorageService.tvHomeStyleCached = 'classic';
+  HomeAppearanceStorage.tvHomeStyleCached = 'classic';
   StremioService.instance.invalidateCache();
 }
 

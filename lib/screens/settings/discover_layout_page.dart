@@ -1,10 +1,10 @@
+import 'package:debrify/services/storage/discover_storage.dart';
 import 'widgets/settings_load_error.dart';
 import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
@@ -88,7 +88,7 @@ class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
       _loadFailed = false;
     });
     try {
-      final layout = await StorageService.getDiscoverLayout().timeout(
+      final layout = await DiscoverStorage.getDiscoverLayout().timeout(
         const Duration(seconds: 5),
       );
       if (!mounted || generation != _loadGeneration) return;
@@ -121,7 +121,7 @@ class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
     // Tell an in-flight Look apply that a human just chose this key, so it
     // does not stamp over the choice. See theme/app_looks.dart.
     LookApplier.noteExternalWrite('discover_layout');
-    await StorageService.setDiscoverLayout(value);
+    await DiscoverStorage.setDiscoverLayout(value);
     // Live-apply: the Discover tab re-reads the pref and rebuilds.
     MainPageBridge.discoverLayoutChanged?.call();
   }

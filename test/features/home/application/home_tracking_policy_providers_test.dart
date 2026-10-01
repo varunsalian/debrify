@@ -85,7 +85,9 @@ void main() {
           expect(TrackingSourceStorage.trackingSourceRevision.value, revision);
           if (write == 'seed') {
             expect(
-              prefs.getStringList(TrackingSourceStorage.trackingScrobbleTargetsKey),
+              prefs.getStringList(
+                TrackingSourceStorage.trackingScrobbleTargetsKey,
+              ),
               isNull,
             );
           }
@@ -128,7 +130,8 @@ void main() {
       );
       ProfileRuntime.initializeCommitted(scope);
       SharedPreferences.setMockInitialValues({
-        scope.preferenceKey(TrackingSourceStorage.watchProgressSourceKey): 'trakt',
+        scope.preferenceKey(TrackingSourceStorage.watchProgressSourceKey):
+            'trakt',
       });
       final container = ProviderContainer.test();
       final repository = container.read(
@@ -154,13 +157,18 @@ void main() {
         prefs.getBool(scope.preferenceKey('tracking_progress_fallback_notice')),
         isTrue,
       );
-      expect(prefs.getString(TrackingSourceStorage.watchProgressSourceKey), isNull);
+      expect(
+        prefs.getString(TrackingSourceStorage.watchProgressSourceKey),
+        isNull,
+      );
       expect(
         prefs.getStringList(TrackingSourceStorage.trackingScrobbleTargetsKey),
         isNull,
       );
       expect(TrackingSourceStorage.trackingSourceRevision.value, revision + 1);
-      await TrackingSourceStorage.setWatchProgressSource(WatchProgressSource.local);
+      await TrackingSourceStorage.setWatchProgressSource(
+        WatchProgressSource.local,
+      );
       expect(
         (await repository.loadForContent(
           'tt123',
@@ -200,7 +208,9 @@ void main() {
 
       TrackingSourceStorage.trackingSourceRevision.addListener(onRevision);
       addTearDown(
-        () => TrackingSourceStorage.trackingSourceRevision.removeListener(onRevision),
+        () => TrackingSourceStorage.trackingSourceRevision.removeListener(
+          onRevision,
+        ),
       );
       var current = true;
       final operation = repository.loadForContent(
@@ -214,7 +224,10 @@ void main() {
       await snapshot;
       expect(await operation.timeout(const Duration(seconds: 2)), isNull);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(TrackingSourceStorage.watchProgressSourceKey), 'smart');
+      expect(
+        prefs.getString(TrackingSourceStorage.watchProgressSourceKey),
+        'smart',
+      );
       expect(prefs.getBool('tracking_progress_fallback_notice'), isNull);
     },
   );

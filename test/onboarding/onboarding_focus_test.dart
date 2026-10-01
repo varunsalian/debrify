@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/widgets/onboarding/onboarding_focus.dart';
 import 'package:debrify/widgets/onboarding/onboarding_models.dart';
 import 'package:debrify/widgets/onboarding/onboarding_stage.dart';
@@ -9,7 +10,6 @@ import 'package:debrify/widgets/initial_setup_flow.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:debrify/services/engine/remote_engine_manager.dart';
 import 'package:debrify/services/remote_control/remote_control_state.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -212,7 +212,7 @@ void main() {
     tester,
   ) async {
     PlatformUtil.debugSetAndroidTvCached(true);
-    StorageService.tvKeyboardEnabledCached = true;
+    TvDisplayStorage.tvKeyboardEnabledCached = true;
     addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
     await tester.binding.setSurfaceSize(const Size(960, 540));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -250,7 +250,7 @@ void main() {
     tester,
   ) async {
     PlatformUtil.debugSetAndroidTvCached(true);
-    StorageService.tvKeyboardEnabledCached = true;
+    TvDisplayStorage.tvKeyboardEnabledCached = true;
     addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
     await tester.binding.setSurfaceSize(const Size(960, 540));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -336,7 +336,7 @@ void main() {
     tester,
   ) async {
     PlatformUtil.debugSetAndroidTvCached(true);
-    StorageService.tvKeyboardEnabledCached = true;
+    TvDisplayStorage.tvKeyboardEnabledCached = true;
     addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
     await tester.binding.setSurfaceSize(const Size(960, 540));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -398,7 +398,7 @@ void main() {
     tester,
   ) async {
     PlatformUtil.debugSetAndroidTvCached(true);
-    StorageService.tvKeyboardEnabledCached = true;
+    TvDisplayStorage.tvKeyboardEnabledCached = true;
     addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
     await tester.binding.setSurfaceSize(const Size(960, 540));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -462,7 +462,7 @@ void main() {
       tester,
     ) async {
       PlatformUtil.debugSetAndroidTvCached(true);
-      StorageService.tvKeyboardEnabledCached = true;
+      TvDisplayStorage.tvKeyboardEnabledCached = true;
       addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
       await tester.binding.setSurfaceSize(const Size(960, 540));
       addTearDown(() => tester.binding.setSurfaceSize(null));

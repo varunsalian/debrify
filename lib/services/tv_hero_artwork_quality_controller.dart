@@ -1,6 +1,6 @@
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import '../models/tv_hero_artwork_quality.dart';
 import '../utils/tvos_device.dart';
-import 'storage_service.dart';
 
 /// Process-scoped, synchronously readable TV artwork policy.
 ///
@@ -23,7 +23,7 @@ class TvHeroArtworkQualityController {
   /// first-gen Apple TV 4K the same 1920px decodes as a 2022 model, and
   /// jetsam killed it the moment the Home board scrolled.
   static Future<bool?> _lowResRenderActive() async {
-    final stored = await StorageService.getTvLowResRenderActive();
+    final stored = await TvDisplayStorage.getTvLowResRenderActive();
     if (TvosDevice.isLowMemoryCached) return true;
     return stored;
   }
@@ -38,7 +38,7 @@ class TvHeroArtworkQualityController {
 
   static Future<void> warm() async {
     final values = await Future.wait<Object?>([
-      StorageService.getTvHeroArtworkQuality(),
+      TvDisplayStorage.getTvHeroArtworkQuality(),
       _lowResRenderActive(),
     ]);
     _quality = values[0] as TvHeroArtworkQuality;
@@ -49,7 +49,7 @@ class TvHeroArtworkQualityController {
 
   static Future<void> setQuality(TvHeroArtworkQuality quality) async {
     final lowResRenderActive = await _lowResRenderActive();
-    await StorageService.setTvHeroArtworkQuality(quality);
+    await TvDisplayStorage.setTvHeroArtworkQuality(quality);
     _quality = quality;
     _decodeSize = _cap(
       quality.resolve(lowResRenderActive: lowResRenderActive),

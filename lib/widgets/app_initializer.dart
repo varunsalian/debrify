@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:flutter/material.dart';
-import '../services/storage_service.dart';
 import '../theme/app_theme_controller.dart';
 import '../theme/app_surfaces.dart';
 import '../theme/legacy_theme_boundary.dart';
@@ -81,8 +81,8 @@ class _AppInitializerState extends State<AppInitializer>
     // restart path pushes a fresh AppInitializer mid-session.
     AppSurfaceState.instance.publishBootstrap(true);
 
-    _loadingImported = StorageService.importedLaunchAnimationCached != null;
-    _ident = launchIdentFor(StorageService.launchAnimationCached);
+    _loadingImported = LaunchIdentStorage.importedLaunchAnimationCached != null;
+    _ident = launchIdentFor(LaunchIdentStorage.launchAnimationCached);
     // The ident's colours: its own by default, the app theme's when the user
     // opted in.
     //
@@ -92,7 +92,7 @@ class _AppInitializerState extends State<AppInitializer>
     // the feature would silently do nothing. The controller is a singleton
     // already warmed in `main()` before `runApp`, so it is both correct and
     // synchronous, which is what `initState` needs.
-    final themed = StorageService.launchIdentPaletteCached == 'theme';
+    final themed = LaunchIdentStorage.launchIdentPaletteCached == 'theme';
     _palette = themed
         ? IdentPalette.fromTheme(_ident, AppThemeController.instance.theme)
         : _ident.palette;
@@ -321,7 +321,7 @@ class _AppInitializerState extends State<AppInitializer>
   }
 
   Future<void> _startReveal() async {
-    final id = StorageService.importedLaunchAnimationCached;
+    final id = LaunchIdentStorage.importedLaunchAnimationCached;
     final generation = ++_launchLoadGeneration;
     if (id != null) {
       setState(() => _loadingImported = true);

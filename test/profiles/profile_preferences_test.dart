@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:debrify/models/home_preferences.dart';
+import 'package:debrify/services/storage/discover_storage.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/home_page_storage.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_save_feedback.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_scheduler.dart';
 
@@ -9,7 +13,6 @@ import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/sanitized_profile_preferences.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -58,8 +61,11 @@ void main() {
     'Midnight rain persists and validates as a portable animation choice',
     () async {
       ProfileRuntime.initializeLegacy();
-      await StorageService.setHomeAnimationStyle('moonlit_ocean');
-      expect(await StorageService.getHomeAnimationStyle(), 'moonlit_ocean');
+      await HomeAppearanceStorage.setHomeAnimationStyle('moonlit_ocean');
+      expect(
+        await HomeAppearanceStorage.getHomeAnimationStyle(),
+        'moonlit_ocean',
+      );
       expect(
         SanitizedProfilePreferences.allowsEntry(
           'home_animation_style',
@@ -67,8 +73,11 @@ void main() {
         ),
         isTrue,
       );
-      await StorageService.setHomeAnimationStyle('midnight_rain');
-      expect(await StorageService.getHomeAnimationStyle(), 'midnight_rain');
+      await HomeAppearanceStorage.setHomeAnimationStyle('midnight_rain');
+      expect(
+        await HomeAppearanceStorage.getHomeAnimationStyle(),
+        'midnight_rain',
+      );
       expect(
         SanitizedProfilePreferences.allowsEntry(
           'home_animation_style',
@@ -77,31 +86,43 @@ void main() {
         isTrue,
       );
       await expectLater(
-        StorageService.setHomeAnimationStyle('unknown'),
+        HomeAppearanceStorage.setHomeAnimationStyle('unknown'),
         throwsArgumentError,
       );
-      expect(await StorageService.getHomeAnimationStyle(), 'midnight_rain');
+      expect(
+        await HomeAppearanceStorage.getHomeAnimationStyle(),
+        'midnight_rain',
+      );
       final prefs = await ProfilePreferences.instance();
       await prefs.setString('home_animation_style', 'future-style');
-      expect(await StorageService.getHomeAnimationStyle(), 'snowy_mountain');
+      expect(
+        await HomeAppearanceStorage.getHomeAnimationStyle(),
+        'snowy_mountain',
+      );
     },
   );
 
   test('Home animations default off, persist per profile and reset', () async {
     ProfileRuntime.initializeLegacy();
-    expect(await StorageService.getHomeAnimationsEnabled(), isFalse);
-    expect(await StorageService.getHomeAnimationStyle(), 'snowy_mountain');
-    await StorageService.setHomeAnimationsEnabled(true);
-    await StorageService.setHomeAnimationStyle('snowy_mountain');
-    expect(await StorageService.getHomeAnimationsEnabled(), isTrue);
+    expect(await HomeAppearanceStorage.getHomeAnimationsEnabled(), isFalse);
+    expect(
+      await HomeAppearanceStorage.getHomeAnimationStyle(),
+      'snowy_mountain',
+    );
+    await HomeAppearanceStorage.setHomeAnimationsEnabled(true);
+    await HomeAppearanceStorage.setHomeAnimationStyle('snowy_mountain');
+    expect(await HomeAppearanceStorage.getHomeAnimationsEnabled(), isTrue);
     ProfileRuntime.initializeCommitted(
       ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 1),
     );
-    expect(await StorageService.getHomeAnimationsEnabled(), isFalse);
-    await StorageService.setHomeAnimationsEnabled(true);
-    await StorageService.clearAllHomePageSettings();
-    expect(await StorageService.getHomeAnimationsEnabled(), isFalse);
-    expect(await StorageService.getHomeAnimationStyle(), 'snowy_mountain');
+    expect(await HomeAppearanceStorage.getHomeAnimationsEnabled(), isFalse);
+    await HomeAppearanceStorage.setHomeAnimationsEnabled(true);
+    await HomePageStorage.clearAllHomePageSettings();
+    expect(await HomeAppearanceStorage.getHomeAnimationsEnabled(), isFalse);
+    expect(
+      await HomeAppearanceStorage.getHomeAnimationStyle(),
+      'snowy_mountain',
+    );
     expect(
       (await SharedPreferences.getInstance()).getBool(
         'home_animations_enabled',
@@ -306,16 +327,16 @@ void main() {
     // Landscape is the unset default; an explicit portrait choice is the
     // per-profile state that must not leak.
     expect(
-      await StorageService.getHomeCardOrientation(),
+      await HomePageStorage.getHomeCardOrientation(),
       HomeCardOrientation.landscape,
     );
-    await StorageService.setHomeCardOrientation(HomeCardOrientation.portrait);
+    await HomePageStorage.setHomeCardOrientation(HomeCardOrientation.portrait);
 
     ProfileRuntime.publish(
       ProfileScope(profileId: 'two', dataGeneration: 1, sessionEpoch: 2),
     );
     expect(
-      await StorageService.getHomeCardOrientation(),
+      await HomePageStorage.getHomeCardOrientation(),
       HomeCardOrientation.landscape,
     );
 
@@ -323,7 +344,7 @@ void main() {
       ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 3),
     );
     expect(
-      await StorageService.getHomeCardOrientation(),
+      await HomePageStorage.getHomeCardOrientation(),
       HomeCardOrientation.portrait,
     );
   });
@@ -336,30 +357,30 @@ void main() {
       );
 
       expect(
-        await StorageService.getDiscoverDefaultSource(),
-        StorageService.discoverDefaultRememberLast,
+        await DiscoverStorage.getDiscoverDefaultSource(),
+        DiscoverStorage.discoverDefaultRememberLast,
       );
-      expect(await StorageService.getDiscoverLastSource(), 'cw');
-      await StorageService.setDiscoverDefaultSource('a:catalog-addon');
-      await StorageService.setDiscoverLastSource('simkl');
+      expect(await DiscoverStorage.getDiscoverLastSource(), 'cw');
+      await DiscoverStorage.setDiscoverDefaultSource('a:catalog-addon');
+      await DiscoverStorage.setDiscoverLastSource('simkl');
 
       ProfileRuntime.publish(
         ProfileScope(profileId: 'two', dataGeneration: 1, sessionEpoch: 2),
       );
       expect(
-        await StorageService.getDiscoverDefaultSource(),
-        StorageService.discoverDefaultRememberLast,
+        await DiscoverStorage.getDiscoverDefaultSource(),
+        DiscoverStorage.discoverDefaultRememberLast,
       );
-      expect(await StorageService.getDiscoverLastSource(), 'cw');
+      expect(await DiscoverStorage.getDiscoverLastSource(), 'cw');
 
       ProfileRuntime.publish(
         ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 3),
       );
       expect(
-        await StorageService.getDiscoverDefaultSource(),
+        await DiscoverStorage.getDiscoverDefaultSource(),
         'a:catalog-addon',
       );
-      expect(await StorageService.getDiscoverLastSource(), 'simkl');
+      expect(await DiscoverStorage.getDiscoverLastSource(), 'simkl');
     },
   );
 

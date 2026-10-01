@@ -1,10 +1,10 @@
 import 'dart:async';
 
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/services.dart';
 
-import '../services/storage_service.dart';
 import '../services/tv_voice_input.dart';
 import '../theme/overlay_theme.dart';
 import '../services/tvos_keyboard_signal.dart';
@@ -551,7 +551,7 @@ class TvTextFieldState extends State<TvTextField> {
   bool get _tvShell =>
       (widget.forceTvKeyboard ||
           (PlatformUtil.isTelevision &&
-              StorageService.tvKeyboardEnabledCached)) &&
+              TvDisplayStorage.tvKeyboardEnabledCached)) &&
       widget.enabled;
 
   /// Cancels the Apple TV "editing finished" subscription.

@@ -3,7 +3,7 @@ import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/screens/catalog_item_detail_screen.dart';
 import 'package:debrify/screens/merged_series_detail_screen.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:flutter/material.dart';
@@ -17,7 +17,7 @@ void main() {
       'recommendation navigation retains original baseline merged=$merged',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
-        await StorageService.setDetailPageStyle('classic');
+        await DetailPageStorage.setDetailPageStyle('classic');
         await MetadataPreferencesService.save(
           MetadataPreferences(
             providers: {MetadataCategory.information: 'tmdb'},

@@ -1,9 +1,9 @@
+import 'package:debrify/services/storage/sidebar_storage.dart';
 import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 import 'sidebar_customization_page.dart';
@@ -93,7 +93,7 @@ class _TvSidebarStylePageState extends State<TvSidebarStylePage> {
   }
 
   Future<void> _load() async {
-    final style = await StorageService.getTvSidebarStyle();
+    final style = await SidebarStorage.getTvSidebarStyle();
     if (!mounted) return;
     setState(() {
       _style = style;
@@ -115,7 +115,7 @@ class _TvSidebarStylePageState extends State<TvSidebarStylePage> {
     // Tell an in-flight Look apply that a human just chose this key, so it
     // does not stamp over the choice. See theme/app_looks.dart.
     LookApplier.noteExternalWrite('tv_sidebar_style');
-    await StorageService.setTvSidebarStyle(value);
+    await SidebarStorage.setTvSidebarStyle(value);
     // Live-apply: the app shell re-reads the pref and reskins the rail.
     MainPageBridge.tvSidebarStyleChanged?.call();
   }

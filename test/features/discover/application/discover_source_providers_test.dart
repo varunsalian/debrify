@@ -4,7 +4,7 @@ import 'package:debrify/features/discover/data/discover_source_repository.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,14 +35,14 @@ void main() {
     () async {
       final repo = repository();
       expect(await repo.readLanding(), 'cw');
-      await StorageService.setDiscoverLastSource('simkl');
+      await DiscoverStorage.setDiscoverLastSource('simkl');
       expect(await repo.readLanding(), 'simkl');
-      await StorageService.setDiscoverDefaultSource('trakt');
+      await DiscoverStorage.setDiscoverDefaultSource('trakt');
       expect(await repo.readLanding(), 'trakt');
       await repo.writeLast('a:fixture', () => true);
-      expect(await StorageService.getDiscoverLastSource(), 'a:fixture');
+      expect(await DiscoverStorage.getDiscoverLastSource(), 'a:fixture');
       await repo.writeLast('invalid-source', () => true);
-      expect(await StorageService.getDiscoverLastSource(), 'a:fixture');
+      expect(await DiscoverStorage.getDiscoverLastSource(), 'a:fixture');
     },
   );
   for (final retirement in ['selection', 'profile']) {
@@ -75,7 +75,7 @@ void main() {
         release.complete();
         await snapshot;
         await pending;
-        expect(await StorageService.getDiscoverLastSource(), 'cw');
+        expect(await DiscoverStorage.getDiscoverLastSource(), 'cw');
       },
     );
   }
@@ -97,7 +97,7 @@ void main() {
       release.complete();
       await snapshot;
       await pending;
-      expect(await StorageService.getDiscoverLastSource(), 'simkl');
+      expect(await DiscoverStorage.getDiscoverLastSource(), 'simkl');
     },
   );
 }

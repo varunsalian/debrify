@@ -3,7 +3,7 @@ import 'package:debrify/models/debrify_tv/channel_stats.dart';
 import 'package:debrify/models/debrify_tv_cache.dart';
 import 'package:debrify/screens/debrify_tv/layouts/debrify_tv_view.dart';
 import 'package:debrify/screens/debrify_tv/layouts/spotlight_layout.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/services/text_brightness.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_adapter.dart';
@@ -80,8 +80,8 @@ void main() {
     // Passthrough text mode: this test exercises the filter and the DPAD
     // run around the field, not the in-app keyboard (which has its own
     // tests).
-    StorageService.tvKeyboardEnabledCached = false;
-    addTearDown(() => StorageService.tvKeyboardEnabledCached = true);
+    TvDisplayStorage.tvKeyboardEnabledCached = false;
+    addTearDown(() => TvDisplayStorage.tvKeyboardEnabledCached = true);
 
     final watched = <String>[];
     final entry = await _pumpTv(

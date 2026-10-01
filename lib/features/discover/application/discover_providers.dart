@@ -1,9 +1,9 @@
+import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/discover_prefs.dart';
 import '../../../services/metadata_preferences_service.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/stremio_service.dart';
 import '../data/discover_layout_preferences.dart';
 import '../data/discover_source_repository.dart';
@@ -64,7 +64,7 @@ final discoverLayoutPreferencesProvider = Provider.autoDispose
             bool current() => ownerCurrent() && isCurrent();
             if (!current()) throw StateError('Discover layout owner retired');
             Future<String> read() =>
-                StorageService.getDiscoverLayout(canContinue: current);
+                DiscoverStorage.getDiscoverLayout(canContinue: current);
             final scope = session.owner.scope;
             return scope == null
                 ? read()
@@ -90,15 +90,15 @@ final discoverSourceRepositoryProvider = Provider.autoDispose
 
         return DiscoverSourceRepository(
           readDefault: () => scoped(() async {
-            final value = await StorageService.getDiscoverDefaultSource();
-            return value == StorageService.discoverDefaultRememberLast
+            final value = await DiscoverStorage.getDiscoverDefaultSource();
+            return value == DiscoverStorage.discoverDefaultRememberLast
                 ? null
                 : value;
           }),
-          readLast: () => scoped(StorageService.getDiscoverLastSource),
+          readLast: () => scoped(DiscoverStorage.getDiscoverLastSource),
           readAddons: () => scoped(StremioService.instance.getCatalogAddons),
           writeLast: (source, isCurrent) =>
-              StorageService.setDiscoverLastSource(
+              DiscoverStorage.setDiscoverLastSource(
                 source,
                 canContinue: () => current() && isCurrent(),
               ),

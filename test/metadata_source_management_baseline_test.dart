@@ -2,7 +2,7 @@ import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/screens/merged_series_detail_screen.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/widgets/detail/detail_layout_showcase.dart';
@@ -16,7 +16,7 @@ void main() {
       tester,
     ) async {
       SharedPreferences.setMockInitialValues({});
-      await StorageService.setDetailPageStyle(style);
+      await DetailPageStorage.setDetailPageStyle(style);
       await MetadataPreferencesService.save(
         MetadataPreferences(
           providers: {MetadataCategory.information: 'tmdb'},

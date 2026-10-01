@@ -8,6 +8,8 @@ import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/screens/search_screen.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/home_page_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/platform_util.dart';
@@ -32,7 +34,7 @@ void main() {
         'tv_home_style': 'classic',
         'home_hero_source_v1': '{"mode":"auto","ids":[]}',
       });
-      StorageService.tvHomeStyleCached = 'classic';
+      HomeAppearanceStorage.tvHomeStyleCached = 'classic';
       StremioService.instance.invalidateCache();
       addTearDown(() {
         PlatformUtil.debugSetAndroidTvCached(null);
@@ -79,7 +81,7 @@ void main() {
                   HomeContinuationLayoutRepository(
                     readMerged: (provider) {
                       layoutReads.add(provider);
-                      return StorageService.getHomeCwMergedRows(provider);
+                      return HomePageStorage.getHomeCwMergedRows(provider);
                     },
                   ),
                 ),
@@ -166,7 +168,7 @@ void main() {
         final historyReads = List<String>.of(calls);
         for (final merged in [true, false]) {
           await tester.runAsync(() async {
-            await StorageService.setHomeCwMergedRows('local', merged);
+            await HomePageStorage.setHomeCwMergedRows('local', merged);
             MainPageBridge.notifyHomeSettingsChanged();
             await Future<void>.delayed(const Duration(milliseconds: 100));
           });

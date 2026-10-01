@@ -1,23 +1,23 @@
 # Files allowed over the size limit, with their maximum line count.
 # Maintained by dev/tool/check_file_sizes.py --update (shrink only).
 22221 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
-18091 lib/screens/video_player_screen.dart
+18092 lib/screens/video_player_screen.dart
 11268 lib/screens/magic_tv_screen.dart
 9080 lib/widgets/iptv/iptv_results_view.dart
-8741 lib/screens/settings_screen.dart
-7184 lib/services/storage_service.dart
+8750 lib/screens/settings_screen.dart
 7070 lib/screens/torbox/torbox_downloads_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6578 lib/services/video_player_launcher.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 6445 lib/screens/debrid_downloads_screen.dart
-5529 lib/screens/merged_series_detail_screen.dart
+5531 lib/screens/merged_series_detail_screen.dart
 5475 lib/services/remote_control/remote_command_router.dart
+5273 lib/services/storage_service.dart
 4700 lib/services/webdav_sync/webdav_sync_engine.dart
 4685 lib/services/download_service.dart
 4471 lib/screens/settings/iptv_settings_page.dart
 4289 lib/screens/settings/external_player_settings_page.dart
-4170 lib/main.dart
+4177 lib/main.dart
 4128 lib/screens/playlist_content_view_screen.dart
 4086 lib/services/iptv_catalog_db.dart
 3957 lib/screens/stremio_tv/stremio_tv_screen.dart
@@ -47,7 +47,7 @@
 2276 lib/screens/premiumize/premiumize_files_screen.dart
 2229 lib/screens/settings/iptv_settings_two_pane.dart
 2228 lib/widgets/tv_sidebar_nav.dart
-2200 lib/widgets/series_browser.dart
+2201 lib/widgets/series_browser.dart
 2197 lib/screens/video_player/widgets/tracks_sheet.dart
 2187 lib/theme/app_theme.dart
 2150 lib/services/android_tv_player_bridge.dart
@@ -58,10 +58,10 @@
 1996 lib/screens/alldebrid/alldebrid_files_screen.dart
 1991 lib/screens/trakt_calendar_screen.dart
 1967 lib/services/pikpak_api_service.dart
-1938 lib/services/profiles/profile_restore_coordinator.dart
+1939 lib/services/profiles/profile_restore_coordinator.dart
 1937 lib/services/remote_control/remote_control_state.dart
 1928 lib/screens/profiles/profile_gate_looks.dart
-1860 lib/screens/collections/collection_folder_screen.dart
+1864 lib/screens/collections/collection_folder_screen.dart
 1844 lib/screens/video_player/widgets/player_menu_panel.dart
 1829 lib/screens/settings/settings_tv_layout.dart
 1826 lib/utils/series_parser.dart
@@ -74,7 +74,7 @@
 1685 lib/widgets/detail/detail_layout_premium.dart
 1602 lib/widgets/iptv/iptv_channel_row.dart
 1599 lib/widgets/remote/remote_config_export.dart
-1581 lib/screens/settings/home_sections_filter_page.dart
+1582 lib/screens/settings/home_sections_filter_page.dart
 1573 lib/widgets/aggregated_search_results.dart
 1572 lib/widgets/deprecated/home_continue_watching_section.dart
 1571 lib/widgets/remote/remote_transfer_all.dart
@@ -119,8 +119,8 @@
 1114 lib/services/profiles/connection_resource_service.dart
 1110 lib/widgets/detail/detail_layout_console.dart
 1108 lib/screens/video_player/widgets/iptv_zap_banner.dart
+1072 lib/screens/settings/home_page_settings_page.dart
 1071 lib/screens/settings/pikpak_settings_page.dart
-1067 lib/screens/settings/home_page_settings_page.dart
 1059 lib/services/webdav_sync/webdav_sync_transport.dart
 1053 lib/services/torrent_service.dart
 1046 lib/widgets/provider_status_cards.dart

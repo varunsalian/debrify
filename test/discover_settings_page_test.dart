@@ -4,7 +4,7 @@ import 'package:debrify/services/discover_prefs.dart';
 import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:flutter/material.dart';
@@ -81,9 +81,9 @@ void main() {
     expect(dropdown.options.map((option) => option.value), contains('tmdb'));
     dropdown.onChanged('tmdb');
     await tester.pump();
-    expect(await StorageService.getDiscoverDefaultSource(), 'tmdb');
-    await StorageService.setDiscoverLastSource('tmdb');
-    expect(await StorageService.getDiscoverLastSource(), 'tmdb');
+    expect(await DiscoverStorage.getDiscoverDefaultSource(), 'tmdb');
+    await DiscoverStorage.setDiscoverLastSource('tmdb');
+    expect(await DiscoverStorage.getDiscoverLastSource(), 'tmdb');
   });
 
   testWidgets('disabled TMDB is hidden unless already the configured default', (
@@ -96,7 +96,7 @@ void main() {
       isNot(contains('tmdb')),
     );
     await tester.pumpWidget(const SizedBox());
-    await StorageService.setDiscoverDefaultSource('tmdb');
+    await DiscoverStorage.setDiscoverDefaultSource('tmdb');
     final restored = await pumpPage(tester, mdblistAuthenticated: false);
     expect(restored.value, 'tmdb');
     expect(restored.options.map((option) => option.value), contains('tmdb'));
@@ -129,7 +129,7 @@ void main() {
   testWidgets('keeps a restored MDBList default selectable when disconnected', (
     tester,
   ) async {
-    await StorageService.setDiscoverDefaultSource('mdblist');
+    await DiscoverStorage.setDiscoverDefaultSource('mdblist');
 
     final dropdown = await pumpPage(tester, mdblistAuthenticated: false);
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/home_page_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
@@ -20,7 +21,6 @@ import '../episode_tile.dart';
 import '../../services/tvmaze_service.dart';
 import '../../services/local_bound_source_service.dart';
 import '../../services/series_source_service.dart';
-import '../../services/storage_service.dart';
 import '../../screens/catalog_item_detail_screen.dart';
 import '../../screens/debrid_downloads_screen.dart';
 import '../../screens/alldebrid/alldebrid_files_screen.dart';
@@ -295,9 +295,9 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
   Future<void> _checkAuthAndLoad() async {
     // Load saved Trakt defaults (list type + content type)
-    final savedListType = await StorageService.getHomeDefaultTraktListType();
+    final savedListType = await HomePageStorage.getHomeDefaultTraktListType();
     final savedContentType =
-        await StorageService.getHomeDefaultTraktContentType();
+        await HomePageStorage.getHomeDefaultTraktContentType();
     if (!mounted) return;
     if (savedListType != null) {
       final listType = TraktListType.values

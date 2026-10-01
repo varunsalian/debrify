@@ -1,7 +1,7 @@
+import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
-import '../../services/storage_service.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
@@ -135,9 +135,9 @@ class _PlayerDockPageState extends State<PlayerDockPage> {
   }
 
   Future<void> _load() async {
-    final style = await StorageService.getPlayerDockStyle();
-    final palette = await StorageService.getPlayerDockPalette();
-    final size = await StorageService.getPlayerDockSize();
+    final style = await PlayerAppearanceStorage.getPlayerDockStyle();
+    final palette = await PlayerAppearanceStorage.getPlayerDockPalette();
+    final size = await PlayerAppearanceStorage.getPlayerDockSize();
     if (!mounted) return;
     setState(() {
       _style = style;
@@ -158,19 +158,19 @@ class _PlayerDockPageState extends State<PlayerDockPage> {
   Future<void> _selectStyle(String value) async {
     if (value == _style) return;
     setState(() => _style = value);
-    await StorageService.setPlayerDockStyle(value);
+    await PlayerAppearanceStorage.setPlayerDockStyle(value);
   }
 
   Future<void> _selectPalette(String value) async {
     if (value == _palette) return;
     setState(() => _palette = value);
-    await StorageService.setPlayerDockPalette(value);
+    await PlayerAppearanceStorage.setPlayerDockPalette(value);
   }
 
   Future<void> _selectSize(String value) async {
     if (value == _size) return;
     setState(() => _size = value);
-    await StorageService.setPlayerDockSize(value);
+    await PlayerAppearanceStorage.setPlayerDockSize(value);
   }
 
   bool get _styled => _style != 'classic';

@@ -1,3 +1,9 @@
+import 'package:debrify/services/storage/detail_page_storage.dart';
+import 'package:debrify/services/storage/discover_storage.dart';
+import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/launch_ident_storage.dart';
+import 'package:debrify/services/storage/sidebar_storage.dart';
+import 'package:debrify/services/storage/theme_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/main_page_bridge.dart';
@@ -51,7 +57,7 @@ abstract final class LookKeys {
   static final appTheme = LookKey(
     id: 'app_theme',
     label: 'App Theme',
-    read: () => StorageService.appThemeCached,
+    read: () => ThemeStorage.appThemeCached,
     // Through the CONTROLLER, not the setter: it owns the write-through
     // contract (`detail_theme` first, then `app_theme`, so a crash between
     // them leaves an older-build-consistent view) and its own sequence token.
@@ -62,31 +68,31 @@ abstract final class LookKeys {
   static final detailPageStyle = LookKey(
     id: 'detail_page_style',
     label: 'Details Page',
-    read: () => StorageService.detailPageStyleCached,
-    write: StorageService.setDetailPageStyle,
+    read: () => DetailPageStorage.detailPageStyleCached,
+    write: DetailPageStorage.setDetailPageStyle,
   );
 
   static final parentsGuideStyle = LookKey(
     id: 'parents_guide_style',
     label: 'Parents Guide',
-    read: () => StorageService.parentsGuideStyleCached,
-    write: StorageService.setParentsGuideStyle,
+    read: () => DetailPageStorage.parentsGuideStyleCached,
+    write: DetailPageStorage.setParentsGuideStyle,
   );
 
   static final launchAnimation = LookKey(
     id: 'launch_animation',
     label: 'Launch Animation',
-    read: () => StorageService.importedLaunchAnimationCached == null
-        ? StorageService.launchAnimationCached
-        : 'imported:${StorageService.importedLaunchAnimationCached}',
-    write: StorageService.setLaunchAnimation,
+    read: () => LaunchIdentStorage.importedLaunchAnimationCached == null
+        ? LaunchIdentStorage.launchAnimationCached
+        : 'imported:${LaunchIdentStorage.importedLaunchAnimationCached}',
+    write: LaunchIdentStorage.setLaunchAnimation,
   );
 
   static final launchIdentPalette = LookKey(
     id: 'launch_ident_palette',
     label: 'Ident Colour',
-    read: () => StorageService.launchIdentPaletteCached,
-    write: StorageService.setLaunchIdentPalette,
+    read: () => LaunchIdentStorage.launchIdentPaletteCached,
+    write: LaunchIdentStorage.setLaunchIdentPalette,
   );
 
   static final phoneNavStyle = LookKey(
@@ -98,38 +104,38 @@ abstract final class LookKeys {
       // shell reads it synchronously — so it is published before the await
       // for the same reason every other mirror here is.
       MainPageBridge.phoneNavStyleCached = v;
-      await StorageService.setPhoneNavStyle(v);
+      await SidebarStorage.setPhoneNavStyle(v);
     },
   );
 
   static final tvHomeStyle = LookKey(
     id: 'tv_home_style',
     label: 'TV Home Layout',
-    read: () => StorageService.tvHomeStyleCached,
-    write: StorageService.setTvHomeStyle,
+    read: () => HomeAppearanceStorage.tvHomeStyleCached,
+    write: HomeAppearanceStorage.setTvHomeStyle,
     notify: () => MainPageBridge.tvHomeStyleChanged?.call(),
   );
 
   static final tvSidebarStyle = LookKey(
     id: 'tv_sidebar_style',
     label: 'TV Sidebar',
-    read: () => StorageService.tvSidebarStyleCached,
-    write: StorageService.setTvSidebarStyle,
+    read: () => SidebarStorage.tvSidebarStyleCached,
+    write: SidebarStorage.setTvSidebarStyle,
     notify: () => MainPageBridge.tvSidebarStyleChanged?.call(),
   );
 
   static final desktopSidebarStyle = LookKey(
     id: 'desktop_sidebar_style',
     label: 'Desktop Sidebar',
-    read: () => StorageService.desktopSidebarStyleCached,
-    write: StorageService.setDesktopSidebarStyle,
+    read: () => SidebarStorage.desktopSidebarStyleCached,
+    write: SidebarStorage.setDesktopSidebarStyle,
   );
 
   static final discoverLayout = LookKey(
     id: 'discover_layout',
     label: 'Discover Layout',
-    read: () => StorageService.discoverLayoutCached,
-    write: StorageService.setDiscoverLayout,
+    read: () => DiscoverStorage.discoverLayoutCached,
+    write: DiscoverStorage.setDiscoverLayout,
     notify: () => MainPageBridge.discoverLayoutChanged?.call(),
   );
 
@@ -231,7 +237,7 @@ class AppLook {
     final theme = values['app_theme'];
     if (theme != null &&
         theme != AppThemes.legacyId &&
-        StorageService.detailThemeCached != theme) {
+        DetailPageStorage.detailThemeCached != theme) {
       return false;
     }
     return true;
