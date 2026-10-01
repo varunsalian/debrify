@@ -16,7 +16,9 @@
 worktree of a clone shares it; it is never committed. A fresh clone has no
 evidence: record a baseline at the plan's base revision first. Comparisons are
 only valid between runs with the same Flutter SDK, which `run` records and
-`compare` checks when both runs have an env file.
+`compare` checks when both runs have an env file. `run` also records the
+checkout root, so runs from different worktrees compare by the same
+repository-relative identities.
 """
 import json
 import re
@@ -36,7 +38,19 @@ def evidence_dir() -> Path:
     return (ROOT / common).resolve() / 'refactor-evidence'
 
 
+def run_root(path) -> str:
+    # Suite paths are absolute; strip the root of the checkout that recorded
+    # the run (another worktree, another machine), not this one.
+    env = Path(path).with_suffix('.env.json')
+    if env.exists():
+        recorded = json.loads(env.read_text()).get('root')
+        if recorded:
+            return recorded
+    return str(ROOT)
+
+
 def outcomes(path):
+    root = run_root(path)
     tests, suites, results, done = {}, {}, {}, False
     for line in Path(path).read_text().splitlines():
         try:
@@ -47,7 +61,7 @@ def outcomes(path):
             continue
         kind = event.get('type')
         if kind == 'suite':
-            suites[event['suite']['id']] = event['suite']['path'].replace(str(ROOT) + '/', '')
+            suites[event['suite']['id']] = event['suite']['path'].replace(root + '/', '')
         elif kind == 'testStart':
             tests[event['test']['id']] = event['test']
         elif kind == 'done':
@@ -83,7 +97,7 @@ def flutter_env(paths):
         sdk = {k: sdk.get(k) for k in ('frameworkVersion', 'frameworkRevision', 'dartSdkVersion')}
     except ValueError:
         sdk = {'raw': version.strip()}
-    return {'sdk': sdk, 'head': head, 'paths': list(paths)}
+    return {'sdk': sdk, 'head': head, 'root': str(ROOT), 'paths': list(paths)}
 
 
 def flutter_test_json(paths, out: Path) -> int:

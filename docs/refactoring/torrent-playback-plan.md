@@ -33,7 +33,7 @@ a small facade.
 | 4374–5267 | Bound-source playback | `_bindingMatchesMeta`, `_providerFromStored`, `storedProviderKey`, `_boundProviderSupported`, `_resolveLocalBound`, `_resolveProviderNativeBound`, `_seLabel`, `_resolvedHasEpisode`, `_torrentFromSource`, `_playViaBound` | yes, except the step 1 helpers under "Dependency order" | `presentation/legacy_playback/bound_source_playback.dart`, `presentation/legacy_playback/bound_source_resolution.dart` |
 | 5268–5470 | Binding | `_recoverAfterBoundStartupFailure`, `bindSource`, `bindDirectSource`, `bindIptvSource`, `bindLocalSource` | yes | `presentation/legacy_playback/source_binding_actions.dart` |
 | 5471–6031 | Acquire and launch | `_add`, `_play`, `_advanceToNextEpisode`, `_playerArgs`, `playerArgsForTesting`, `_configuredProviders`, `_defaultConfiguredProvider`, `_lazyProviderResolver`, `_launch` | `_add` and the provider helpers **no**; the rest yes | `_add` → `application/source_probing.dart`; provider helpers → `application/source_provider_config.dart`; the rest → `presentation/legacy_playback/source_player_launch.dart` |
-| 6032–7075 | Provider action menu | `_launchWithDeoVR`, `_directValidationKey`, `supportsDirectStreamDownload`, `downloadDirectStream` (calls the existing `downloadSource`), `_acceptedProviderAction`, `_download`, `_addToPlaylist`, `_showChooser`, TorBox/Premiumize ZIP and transfer, `_handleNotCached`, `_pickProvider`, `_isConfigured`, `_cacheFirst`, `_hasAcquisition`, `_label`, `_showPipeline`, `showResolvingOverlay`, `_showLoading`, `_snack` (the class's single `_snack`), `_resolverFor`, `_validatedLaunchCommitter`, `_lazySourceCommitter`, `_postAction` | yes, except the step 1 helpers under "Dependency order" | `presentation/legacy_playback/provider_action_menu.dart`, `presentation/legacy_playback/provider_zip_actions.dart`, `presentation/legacy_playback/source_loading_overlays.dart`, `presentation/legacy_playback/deovr_launch.dart` |
+| 6032–7075 | Provider action menu | `_launchWithDeoVR`, `_directValidationKey`, `supportsDirectStreamDownload`, `downloadDirectStream` (calls the existing `downloadSource`), `_acceptedProviderAction`, `_download`, `_addToPlaylist`, `_showChooser`, TorBox/Premiumize ZIP and transfer, `_handleNotCached`, `_pickProvider`, `_isConfigured`, `_cacheFirst`, `_hasAcquisition`, `_label`, `_showPipeline`, `showResolvingOverlay`, `_showLoading`, `_snack` (the class's single `_snack`), `_resolverFor`, `_validatedLaunchCommitter`, `_lazySourceCommitter`, `_postAction` | yes, except the step 1 helpers under "Dependency order" | `presentation/legacy_playback/provider_action_menu.dart`, `presentation/legacy_playback/provider_zip_actions.dart`, `presentation/legacy_playback/source_loading_overlays.dart`, `presentation/legacy_playback/deovr_launch.dart`, `data/deovr_json_upload.dart` (see Technique) |
 | 7076–7103 | Private types | `_Resolved`, `_PlaybackCancelToken` | no | `models/resolved_source.dart`, `models/playback_cancel_token.dart` |
 
 The file names are suggestions. Keep each new file under 500 lines (prefer
@@ -53,7 +53,7 @@ except in the named bridge folder `presentation/legacy_playback/`
   calls move behind Sources data contracts and the folder is dissolved, after
   this plan. Record it in Progress. Before moving
 anything into `application/`, `data/` or `models/`, confirm it uses no
-`BuildContext`, widget or dialog. If it does, it belongs in `presentation/legacy_playback/legacy_playback/`.
+`BuildContext`, widget or dialog. If it does, it belongs in `presentation/legacy_playback/`.
 
 **Production callers today:** 7 files (Home catalog play bridge and play
 action, the two Sources bridges, the search screen composition,
@@ -132,6 +132,17 @@ service.
   and the guard rejects `lib/screens/` imports from `application/`, `data/`
   and `models/`. The same layers may import Flutter only through
   `package:flutter/foundation.dart` (`debugPrint`, `@visibleForTesting`).
+- **One extraction is required, not just allowed.** `_launchWithDeoVR` posts
+  the DeoVR JSON with `http.post` (service line 6188), and the bridge folder
+  may not import `http`. Move exactly that block into
+  `data/deovr_json_upload.dart` as
+  `Future<String> uploadDeoVrJson(Map<String, dynamic> json)`. The block
+  posts to `https://jsonblob.com/api/jsonBlob`, throws unless the status is
+  201, throws if there is no `location` header, and returns
+  `'https://jsonblob.com$location'`. Keep the same request, the same exception
+  messages, the same order (it still throws before the loading dialog is
+  popped) and the same single `await`. `deovr_launch.dart` then calls it in
+  place of the inline block. No other `http` use exists in the service.
 - **Not allowed:**
   - reordering awaits or guards;
   - merging look-alike helpers into one;
@@ -149,8 +160,8 @@ service.
 | 0 | Baseline | See below. |
 | 1 | `models/`: the two private types. `application/`: ranking and search plans (2151–2555), probing (1179–1432), the pure curation helpers from 3739–3953, and every helper in the step 1 list under "Dependency order". | No UI. Heaviest test repointing (`orderCandidatesForRules` and friends). |
 | 2 | `data/`: searches and fetchers (2556–3740). | `series_source_fetcher.dart` and `video_player_launcher.dart` call into this area. Keep those calls working through the facade, or repoint them. |
-| 3 | `presentation/legacy_playback/legacy_playback/`: menu, overlays, DeoVR, launch and binding (5268–7075, minus anything moved in step 1). Several commits are fine. | Keep every `context.mounted`/`isCurrent` gate and `_acceptedProviderAction` exactly as they are. **Full-suite gate 1** after this step. |
-| 4 | `presentation/legacy_playback/legacy_playback/`: the pipelines. `playBest`, `playFromSelection`, `_playAddonStream`, `_playViaBound` with its helpers, `activateTorrent`, and the no-pack memory. | One pipeline per commit. |
+| 3 | `presentation/legacy_playback/`: menu, overlays, DeoVR, launch and binding (5268–7075, minus anything moved in step 1). Several commits are fine. | Keep every `context.mounted`/`isCurrent` gate and `_acceptedProviderAction` exactly as they are. **Full-suite gate 1** after this step. |
+| 4 | `presentation/legacy_playback/`: the pipelines. `playBest`, `playFromSelection`, `_playAddonStream`, `_playViaBound` with its helpers, `activateTorrent`, and the no-pack memory. | One pipeline per commit. |
 | 5 | Facade, guards, CI, then **full-suite gate 2**. | See "Definition of done". |
 
 ### Step 0 — baseline
@@ -174,7 +185,9 @@ one at the base revision before moving anything:
 `git worktree add ../tps-base 1d6fa710`, then in that worktree
 `python3 dev/tool/suite_evidence.py run tps/base`, using
 `<E>/tps/base.jsonl` as the baseline. The tool must be copied in or
-cherry-picked first, because it postdates `1d6fa710`.
+cherry-picked first, because it postdates `1d6fa710`. `run` records its
+checkout root in `base.env.json`, so identities recorded in that worktree
+compare cleanly with runs from this one.
 
 Then record the whole-repo analyzer:
 `flutter analyze > <E>/tps/analyze-gate0.txt`. That is all of step 0.
@@ -250,7 +263,7 @@ this file's source text.
 2. The guard measures the facade.
    - Register it in `dev/tool/check_search_architecture.py` with a 400-line
      cap and no import check, like `COMPOSITION_ROOTS`: it forwards into
-     `presentation/legacy_playback/legacy_playback/`.
+     `presentation/legacy_playback/`.
    - Record it in Progress as a temporary exception. AGENTS.md wants
      context-taking playback entry points behind named presentation bridges,
      not in `lib/services`. Exit milestone: repoint the 7 callers to the
