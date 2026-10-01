@@ -12,6 +12,7 @@ import 'home_hero_surface.dart';
 import 'home_hero_transitions.dart';
 import 'home_hero_tint_surface.dart';
 import 'home_hero_title_art.dart';
+import 'home_hero_identity.dart';
 import '../../../ui/core/trailer_indicators.dart';
 
 /// The Stremio-style spotlight. Reflects the currently focused board title —
@@ -620,75 +621,16 @@ class _HomeHeroSpotlightState extends State<HomeHeroSpotlight>
                             ),
                             child: ConstrainedBox(
                               constraints: BoxConstraints(maxWidth: maxTextW),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _cascade(
-                                    _buildTitleArt(metadata),
-                                    0.08,
-                                    0.72,
-                                  ),
-                                  SizedBox(height: compact ? 6 : 10),
-                                  // Meta chips + plot fade away while the ambient trailer
-                                  // plays (boxed mode) — the title art above holds the
-                                  // stage alone. Layout is opacity-only, so nothing
-                                  // reflows when they go.
-                                  transitions.fadeMetaForTrailer(
-                                    _cascade(
-                                      Row(
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              metaParts.join('  ·  '),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontSize: 12.5,
-                                                fontWeight: FontWeight.w600,
-                                                letterSpacing: 0.3,
-                                                color: app.fade(
-                                                  app.core.tx,
-                                                  0.82,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          if (rating != null) ...[
-                                            if (metaParts.isNotEmpty) _dot(),
-                                            _imdbChip(rating),
-                                          ],
-                                        ],
-                                      ),
-                                      0.2,
-                                      0.85,
-                                    ),
-                                  ),
-                                  if (description != null &&
-                                      description.isNotEmpty) ...[
-                                    SizedBox(height: compact ? 6 : 10),
-                                    transitions.fadeMetaForTrailer(
-                                      _cascade(
-                                        Text(
-                                          description,
-                                          maxLines: compact
-                                              ? 1
-                                              : (isTelevision ? 3 : 2),
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: compact
-                                                ? 12.5
-                                                : (isTelevision ? 14.5 : 13),
-                                            height: compact ? 1.3 : 1.45,
-                                            color: app.fade(app.core.tx, 0.72),
-                                          ),
-                                        ),
-                                        0.32,
-                                        1.0,
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                              child: buildHomeHeroIdentity(
+                                context,
+                                titleArt: _buildTitleArt(metadata),
+                                metaParts: metaParts,
+                                rating: rating,
+                                description: description,
+                                compact: compact,
+                                isTelevision: isTelevision,
+                                cascade: _cascade,
+                                fadeMeta: transitions.fadeMetaForTrailer,
                               ),
                             ),
                           );
@@ -719,21 +661,6 @@ class _HomeHeroSpotlightState extends State<HomeHeroSpotlight>
     );
   }
 
-  Widget _dot() {
-    final app = AppThemeScope.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 9),
-      child: Container(
-        width: 3,
-        height: 3,
-        decoration: BoxDecoration(
-          color: app.fade(app.core.tx, 0.4),
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
-  }
-
   /// The hero's title — see [HomeHeroTitleArt] for the image-first grammar.
   Widget _buildTitleArt(HomeCardMetadataState metadata) {
     return HomeHeroTitleArt(
@@ -745,32 +672,4 @@ class _HomeHeroSpotlightState extends State<HomeHeroSpotlight>
       isTelevision: widget.isTelevision,
     );
   }
-
-  /// The gold IMDb mark + rating — the meta line's one piece of colour.
-  Widget _imdbChip(double rating) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF5C518),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: const Text(
-          'IMDb',
-          style: TextStyle(
-            fontSize: 9.5,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.2,
-            color: Color(0xFF161616),
-          ),
-        ),
-      ),
-      const SizedBox(width: 5),
-      Text(
-        rating.toStringAsFixed(1),
-        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
-      ),
-    ],
-  );
 }

@@ -1,4 +1,5 @@
 import 'stremio_tv_focus_frame.dart';
+import 'stremio_tv_catalog_picker_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -369,7 +370,20 @@ class _StremioTvCatalogPickerDialogState
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
               child: _showCreateView
-                  ? _buildCreateView(theme)
+                  ? buildStremioTvCatalogCreateView(
+                      context,
+                      theme,
+                      itemName: widget.item.name,
+                      saving: _saving,
+                      nameController: _nameController,
+                      nameFocus: _nameFieldFocusNode,
+                      confirmFocus: _createConfirmFocusNode,
+                      cancelFocus: _createCancelFocusNode,
+                      onFieldKey: _handleCreateFieldBack,
+                      onButtonKey: _handleCreateButtonKey,
+                      onCreate: _createCatalog,
+                      onBack: _closeCreateView,
+                    )
                   : _buildSelectionView(theme),
             ),
           ),
@@ -421,7 +435,7 @@ class _StremioTvCatalogPickerDialogState
                     : _cancelSelectionFocusNode,
                 onActivate: _saving ? null : _openCreateView,
               ),
-              child: _buildActionTile(
+              child: buildStremioTvCatalogActionTile(
                 theme,
                 focusNode: _newChannelFocusNode,
                 icon: Icons.add_circle_outline_rounded,
@@ -536,7 +550,7 @@ class _StremioTvCatalogPickerDialogState
                               ? null
                               : () => _appendToCatalog(catalog),
                         ),
-                        child: _buildActionTile(
+                        child: buildStremioTvCatalogActionTile(
                           theme,
                           focusNode: focusNode,
                           icon: widget.item.type == 'series'
@@ -598,183 +612,6 @@ class _StremioTvCatalogPickerDialogState
           ],
         ],
       ),
-    );
-  }
-
-  Widget _buildCreateView(ThemeData theme) {
-    final app = AppThemeScope.of(context);
-    return Padding(
-      key: const ValueKey('create'),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'New Channel',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Create a local Stremio TV channel for "${widget.item.name}"',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          StremioTvFocusFrame(
-            focusNode: _nameFieldFocusNode,
-            child: Focus(
-              canRequestFocus: false,
-              skipTraversal: true,
-              onKeyEvent: _handleCreateFieldBack,
-              child: TvTextField(
-                controller: _nameController,
-                focusNode: _nameFieldFocusNode,
-                autofocus: true,
-                textInputAction: TextInputAction.done,
-                enabled: !_saving,
-                // Same chrome the rest of Stremio TV's fields already pass.
-                accent: app.youtube.focus,
-                keyboardGround: app.youtube.keyboardPanel,
-                keyboardInk: app.core.tx,
-                keyboardInkOnAccent: app.inkOn(app.youtube.focus),
-                onUpArrow: () => _createCancelFocusNode.requestFocus(),
-                onDownArrow: () => _createConfirmFocusNode.requestFocus(),
-                onSubmitted: (_) {
-                  if (_nameController.text.trim().isNotEmpty) {
-                    _createConfirmFocusNode.requestFocus();
-                  }
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Channel name',
-                  hintText: 'My Weekend Picks',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Focus(
-                  focusNode: _createConfirmFocusNode,
-                  onKeyEvent: _handleCreateButtonKey,
-                  child: StremioTvFocusFrame(
-                    focusNode: _createConfirmFocusNode,
-                    child: FilledButton.icon(
-                      onPressed: _saving ? null : _createCatalog,
-                      icon: _saving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.check_rounded),
-                      label: Text(_saving ? 'Creating...' : 'Create'),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Focus(
-                  focusNode: _createCancelFocusNode,
-                  onKeyEvent: _handleCreateButtonKey,
-                  child: StremioTvFocusFrame(
-                    focusNode: _createCancelFocusNode,
-                    child: OutlinedButton(
-                      onPressed: _saving ? null : _closeCreateView,
-                      child: const Text('Back'),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionTile(
-    ThemeData theme, {
-    required FocusNode focusNode,
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-    bool enabled = true,
-  }) {
-    return ListenableBuilder(
-      listenable: focusNode,
-      builder: (context, _) {
-        final isFocused = focusNode.hasFocus;
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: enabled ? onTap : null,
-            canRequestFocus: false,
-            borderRadius: BorderRadius.circular(16),
-            child: Ink(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isFocused
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.outlineVariant,
-                  width: isFocused ? 2 : 1,
-                ),
-                color: isFocused
-                    ? theme.colorScheme.primary.withValues(alpha: 0.08)
-                    : theme.colorScheme.surfaceContainerHighest.withValues(
-                        alpha: 0.35,
-                      ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    icon,
-                    color: enabled
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          subtitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }

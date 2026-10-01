@@ -16,6 +16,7 @@ import '../../../widgets/recoverable_network_image.dart';
 import '../models/home_card_metadata.dart';
 import 'home_card_metadata_view.dart';
 import 'home_card_style.dart';
+import 'home_catalog_card_parts.dart';
 
 class HomeCatalogCard extends StatefulWidget {
   final StremioMeta item;
@@ -189,7 +190,11 @@ class _HomeCatalogCardState extends State<HomeCatalogCard>
           // level; memory-cached loads still land settled with no fade.
           fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
           fadeOutDuration: HomeTheme.imageFadeOut(widget.isTelevision),
-          placeholder: (_, __) => _placeholder(item),
+          placeholder: (_, __) => buildHomeCardPlaceholder(
+            context,
+            item,
+            showTitle: widget.showTitleOverlay,
+          ),
           // A derived wide still (MetaHub) can 404 where the poster exists —
           // cover-crop the poster into the wide cell before giving up on art.
           errorWidget: (_, __, ___) =>
@@ -202,13 +207,29 @@ class _HomeCatalogCardState extends State<HomeCatalogCard>
                   memCacheWidth: widget.isTelevision ? 320 : 480,
                   fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
                   fadeOutDuration: HomeTheme.imageFadeOut(widget.isTelevision),
-                  placeholder: (_, __) => _placeholder(item),
-                  errorWidget: (_, __, ___) => _placeholder(item),
+                  placeholder: (_, __) => buildHomeCardPlaceholder(
+                    context,
+                    item,
+                    showTitle: widget.showTitleOverlay,
+                  ),
+                  errorWidget: (_, __, ___) => buildHomeCardPlaceholder(
+                    context,
+                    item,
+                    showTitle: widget.showTitleOverlay,
+                  ),
                 )
-              : _placeholder(item),
+              : buildHomeCardPlaceholder(
+                  context,
+                  item,
+                  showTitle: widget.showTitleOverlay,
+                ),
         )
       else
-        _placeholder(item),
+        buildHomeCardPlaceholder(
+          context,
+          item,
+          showTitle: widget.showTitleOverlay,
+        ),
       if (widget.focusArtUrl != null || widget.focusVideoUrl != null)
         Positioned.fill(
           child: CollectionFocusArt(
@@ -331,7 +352,7 @@ class _HomeCatalogCardState extends State<HomeCatalogCard>
         ),
       // Hold-OK feedback: a dim scrim with a filling ring, shown only
       // while OK is actually held down (so it costs nothing at rest).
-      if (_holding) _holdLayer(),
+      if (_holding) buildHomeCardHoldLayer(_holdController),
     ];
 
     final artCard = CollectionFocusGlow(
@@ -455,7 +476,7 @@ class _HomeCatalogCardState extends State<HomeCatalogCard>
                     // Card-side shuttle covers BOTH directions (the backdrop hero
                     // defines none): the flight always shows the poster, growing
                     // into the detail backdrop on push and shrinking home on pop.
-                    flightShuttleBuilder: _posterFlightShuttle,
+                    flightShuttleBuilder: homePosterFlightShuttle,
                     child: posterCard,
                   ),
           ),
@@ -463,96 +484,4 @@ class _HomeCatalogCardState extends State<HomeCatalogCard>
       ),
     );
   }
-
-  /// Hold-OK feedback layer — a dim scrim with a filling ring, shown only
-  /// while OK is actually held down (so it costs nothing at rest). Shared by
-  /// the poster and wide layer sets.
-  Widget _holdLayer() {
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: ColoredBox(
-          color: Colors.black.withValues(alpha: 0.42),
-          child: Center(
-            child: SizedBox(
-              width: 34,
-              height: 34,
-              child: AnimatedBuilder(
-                animation: _holdController,
-                builder: (_, __) => CircularProgressIndicator(
-                  value: _holdController.value,
-                  strokeWidth: 3,
-                  backgroundColor: Colors.white.withValues(alpha: 0.22),
-                  valueColor: const AlwaysStoppedAnimation(kCardFocusRing),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _placeholder(StremioMeta item) {
-    final app = AppThemeScope.of(context);
-    final title = item.name;
-    final emoji = item is CollectionFolderMeta ? item.folder.coverEmoji : null;
-    return Container(
-      // Subtle vertical gradient instead of a flat fill: while art loads the
-      // tile reads as a designed surface, not a dead rectangle. Static —
-      // no shimmer, so a board full of placeholders costs nothing per frame.
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF1D1B2E), Color(0xFF15141F), Color(0xFF100E18)],
-          stops: [0.0, 0.55, 1.0],
-        ),
-      ),
-      alignment: Alignment.center,
-      child: emoji != null
-          ? Padding(
-              padding: const EdgeInsets.all(16),
-              child: FittedBox(
-                child: Text(emoji, style: const TextStyle(fontSize: 64)),
-              ),
-            )
-          : widget.showTitleOverlay
-          ? Padding(
-              padding: const EdgeInsets.all(8),
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: app.fade(app.core.tx, 0.5),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            )
-          : null,
-    );
-  }
-}
-
-/// Hero flight for poster→detail-backdrop: always show the POSTER side of the
-/// pair (the `from` hero on push, the `to` hero on pop), so the artwork the
-/// user tapped is what grows into / shrinks out of the detail page — never a
-/// half-loaded backdrop.
-Widget _posterFlightShuttle(
-  BuildContext flightContext,
-  Animation<double> animation,
-  HeroFlightDirection direction,
-  BuildContext fromHeroContext,
-  BuildContext toHeroContext,
-) {
-  final Hero posterHero =
-      (direction == HeroFlightDirection.push
-              ? fromHeroContext.widget
-              : toHeroContext.widget)
-          as Hero;
-  // The shuttle renders in the root overlay, outside any Material — wrap so a
-  // text placeholder (missing poster art) can't render unstyled mid-flight.
-  return Material(type: MaterialType.transparency, child: posterHero.child);
 }
