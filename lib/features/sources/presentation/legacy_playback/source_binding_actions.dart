@@ -5,6 +5,7 @@ import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
 import 'package:debrify/features/sources/data/manual_source_preparation.dart';
 import 'package:debrify/features/sources/presentation/direct_source_binding.dart';
 import 'package:debrify/features/sources/presentation/iptv_source_binding.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/automatic_play_selection.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/source_loading_overlays.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/source_provider_choice.dart';
 import 'package:debrify/features/sources/presentation/local_source_binding.dart';
@@ -50,7 +51,7 @@ final class SourceBindingActions {
       );
       if (played || (!context.mounted || !sourceBindings.isCurrent)) return;
     }
-    await TorrentPlaybackService.playFromSelection(
+    await AutomaticPlaySelection.playFromSelection(
       context,
       imdbId: imdbId,
       isMovie: meta.contentType == 'movie',

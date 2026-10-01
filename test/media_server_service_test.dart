@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:debrify/features/sources/application/source_candidate_ranking.dart';
 import 'package:debrify/features/sources/data/source_movie_fetcher.dart';
 import 'package:debrify/features/sources/data/source_series_fetcher.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/automatic_play_selection.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/provider_accepted_actions.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/source_player_args.dart';
 import 'package:debrify/models/media_server.dart';
@@ -1208,7 +1209,7 @@ void main() {
         failureStatus = status;
         final before = requestCount;
         await tester.runAsync(
-          () => TorrentPlaybackService.playFromSelection(
+          () => AutomaticPlaySelection.playFromSelection(
             pageContext,
             imdbId: 'tt123',
             isMovie: true,

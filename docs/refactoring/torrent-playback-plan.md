@@ -387,3 +387,12 @@ this file's source text.
   Focused suite 1,106 pass / same 2 baseline failures; no new diagnostics;
   verbatim comparison and size/import guards pass. Evidence:
   `<E>/tps/step4-best.jsonl`, `analyze-step4-best.txt`.
+
+- `playFromSelection` and its no-pack memory →
+  `presentation/legacy_playback/automatic_play_selection.dart` (788 lines).
+  `_noPackUntil` remains process-wide static state with the original key and
+  TTL. Whole method retained; split the method in the subsequent playback
+  refactor. Two formatting-exposed single-statement guards receive the same
+  line-specific curly-brace exception as step 2. Focused suite 1,106 pass /
+  same 2 failures, no new diagnostics, verbatim and guard checks pass.
+  Evidence: `<E>/tps/step4-selection.jsonl`, `analyze-step4-selection.txt`.

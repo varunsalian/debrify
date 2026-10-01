@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:debrify/features/sources/application/source_candidate_checks.dart';
 import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/automatic_play_selection.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
 import 'package:debrify/services/storage_service.dart';
@@ -108,7 +109,7 @@ final class SourceNextEpisode {
     );
     final label = meta.title ?? '';
     if (provider != null) {
-      await TorrentPlaybackService.playFromSelection(
+      await AutomaticPlaySelection.playFromSelection(
         context,
         imdbId: imdbId,
         isMovie: false,

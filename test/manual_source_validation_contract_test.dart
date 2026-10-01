@@ -26,6 +26,9 @@ void main() {
   final recoveryResolution = File(
     'lib/features/sources/data/recovery_source_resolution.dart',
   ).readAsStringSync();
+  final automaticSelection = File(
+    'lib/features/sources/presentation/legacy_playback/automatic_play_selection.dart',
+  ).readAsStringSync();
   final playerLaunch = File(
     'lib/features/sources/presentation/legacy_playback/source_player_launch.dart',
   ).readAsStringSync();
@@ -398,9 +401,9 @@ void main() {
 
   test('bound startup recovery retains the preferred provider', () {
     final selection = _between(
-      playbackService,
+      automaticSelection,
       'static Future<void> playFromSelection(',
-      'static Future<FilterLadder> loadLadder(',
+      '\n  }\n',
     );
     final boundPlayback = _between(
       playbackService,
