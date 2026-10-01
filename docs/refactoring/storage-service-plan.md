@@ -497,7 +497,7 @@ identity is present with the same outcome.
 | 5 | `15704c1f` | 3,447 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 | 6 | `71e25130` | 2,022 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 | 7 | `72dcf3bf` | 8 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
-| 8 | This step commit (hash recorded at gate 2) | 0 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 8 | `a6444e31` | 0 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 
 ### Step 0 evidence and retained source
 
@@ -819,3 +819,21 @@ reference-guard fixtures). The exact CI format scope checks 1,079 files without
 changes; its analyzer command succeeds with the same 15 existing informational
 diagnostics. All step analyzer comparisons add no diagnostics. Gate 2 remains
 the final integration and private-CI check.
+
+Full-suite gate 2 at `a6444e31`: `ss/gate2.jsonl` records 10,294 success,
+20 failure, 29 error and 20 skipped. The runner completed. Comparisons against
+both `ss/base.jsonl` and `ss/gate1.jsonl` PASS; all 10,363 identities have
+exactly the same outcome at all three checkpoints. `ss/gate2-identities.txt`
+also confirms every identity from a changed test file is present and unchanged.
+The historical failure-list helper was reused on the completed run, with the
+same 40 already-observed failures absent from its older list; see
+`ss/historical-gate2.txt`. No failure list was recorded or loosened.
+
+Steps 0–8 are committed on `refactor/codebase`. The completed source set,
+state ownership, shared-member map, reset chain and every per-step analyzer
+comparison pass their checks. No application bug fixes or dependency/native
+changes were included. Full-suite evidence and CI results are kept in the
+clone's git common directory under `refactor-evidence/ss/`; the final private
+CI run is recorded as `ci-gate2.json` and linked in the review report. Both
+gates are pushed only to `private`. Review range: `dfdf2d4a..HEAD`. Stop here
+after private CI succeeds; the next action is the user's review.
