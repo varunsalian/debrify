@@ -493,7 +493,7 @@ identity is present with the same outcome.
 | 1 | `0438a77d` | 10,473 | Small subjects, enums, validator and reset entry wired; analyzer and 245 affected suites PASS against baseline. |
 | 2 | `a18aff4a` | 9,251 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 | 3 | `93435156` | 7,184 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
-| 4 | This step commit (hash recorded by step 5) | 5,273 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 4 | `e30794c2` | 5,273 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 
 ### Step 0 evidence and retained source
 
@@ -706,3 +706,14 @@ application declaration permits those punctuation changes. The smoke tool's
 step-3-only repointing was included in the unpushed step 3 commit before this
 checkpoint; the performance probe and remaining smoke-tool settings move in
 step 4 as their map rows require.
+
+Full-suite gate 1 at `e30794c2`: `ss/gate1.jsonl` has 10,294 success,
+20 failure, 29 error, 20 skipped. Comparison against `ss/base.jsonl` is PASS;
+all 10,363 original identities have exactly the same outcome, including every
+repointed test. The historical `test_baseline.py` comparison was reused on the
+completed run: its older list lacks 40 failures already observed at `ss/base`.
+That historical limitation is recorded in `ss/historical-gate1.txt`; the list
+was not rewritten and cannot mask any observed-baseline regression. Analyzer
+chain, constants, complete declarations/reset partitions, architecture/size,
+CI formatting scope and diff checks pass. This gate is pushed only to `private`;
+the exact CI result and duration are recorded with step 5 after verification.
