@@ -62,7 +62,7 @@ final sourceCacheRepositoryProvider = Provider.autoDispose
 
 /// App-scoped immutable dependencies only. Each copy gets its view/session guard.
 final sourceLinkCopierProvider = Provider<SourceLinkCopier>(
-  (ref) => SourceLinkCopier(
+  (ref) => const SourceLinkCopier(
     isDeferredEpisode: IptvSourceSearch.isDeferredXtreamSeries,
     resolveEpisode: IptvSourceSearch.resolveXtreamSeriesEpisode,
     writeText: writeSystemClipboardText,

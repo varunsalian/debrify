@@ -1,16 +1,18 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../models/stremio_addon.dart';
 import '../../../utils/platform_util.dart';
-import '../models/home_catalog_plan.dart';
 import '../application/home_board_load.dart';
 import '../application/home_board_providers.dart';
 import '../data/home_board_services.dart';
+import '../models/home_catalog_plan.dart';
 import '../models/home_catalog_search_status.dart';
-import 'home_board_section.dart';
 import 'home_board_publication.dart';
+import 'home_board_section.dart';
 import 'home_display_section.dart';
 import 'home_spotlight_section.dart';
 

@@ -1,17 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../application/home_continuation_layout_controller.dart';
-import '../application/home_local_continuation_controller.dart';
-import '../application/home_trakt_continuation_controller.dart';
-import '../application/home_simkl_continuation_controller.dart';
-import '../application/home_mdblist_continuation_controller.dart';
 import '../application/home_iptv_continuation_controller.dart';
+import '../application/home_local_continuation_controller.dart';
+import '../application/home_mdblist_continuation_controller.dart';
+import '../application/home_simkl_continuation_controller.dart';
+import '../application/home_trakt_continuation_controller.dart';
 import '../models/home_continuation_layout.dart';
-import '../models/home_local_continuation_state.dart';
-import '../models/home_trakt_continuation_state.dart';
-import '../models/home_simkl_continuation.dart';
-import '../models/home_mdblist_continuation.dart';
-import '../models/home_iptv_continuation_state.dart';
 import '../models/home_continuation_session.dart';
+import '../models/home_iptv_continuation_state.dart';
+import '../models/home_local_continuation_state.dart';
+import '../models/home_mdblist_continuation.dart';
+import '../models/home_simkl_continuation.dart';
+import '../models/home_trakt_continuation_state.dart';
 import 'home_progress_view.dart';
 
 /// Retains the five continuation families and their shared layout preferences.

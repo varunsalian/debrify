@@ -1,0 +1,8 @@
+# Migrated code (search screen refactor) adds stricter style rules on top of
+# the project defaults. Legacy code keeps the root configuration unchanged.
+include: ../../analysis_options.yaml
+
+linter:
+  rules:
+    - directives_ordering
+    - prefer_const_constructors

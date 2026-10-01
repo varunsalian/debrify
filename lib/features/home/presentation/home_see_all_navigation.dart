@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+
 import '../../../models/stremio_addon.dart';
-import '../../../services/home_list_rows.dart'
-    show HomeListSection, HomeExtraRowIds;
 import '../../../screens/see_all/catalog_see_all_screen.dart';
 import '../../../screens/see_all/continue_watching_see_all_screen.dart';
-import '../../../screens/see_all/trakt_see_all_screen.dart';
-import '../../../screens/see_all/simkl_see_all_screen.dart';
 import '../../../screens/see_all/mdblist_see_all_screen.dart';
+import '../../../screens/see_all/simkl_see_all_screen.dart';
+import '../../../screens/see_all/trakt_see_all_screen.dart';
+import '../../../services/home_list_rows.dart'
+    show HomeListSection, HomeExtraRowIds;
 
 /// Home's grid routes. Borrowed readers preserve each route's existing snapshot
 /// timing; playback and refresh actions stay with their application owners.

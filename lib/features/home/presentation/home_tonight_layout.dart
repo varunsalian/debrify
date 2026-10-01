@@ -234,13 +234,13 @@ Widget buildHomeTonightCardFrame({
           child: SizedBox.expand(),
         ),
       ),
-      IgnorePointer(
+      const IgnorePointer(
         child: CustomPaint(
-          painter: const HomeStageCornerPainter(
+          painter: HomeStageCornerPainter(
             radius: _kTonightCardRadius,
             color: Color(0xFF100D1F),
           ),
-          child: const SizedBox.expand(),
+          child: SizedBox.expand(),
         ),
       ),
       Positioned(

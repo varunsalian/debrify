@@ -1,11 +1,12 @@
 import 'package:flutter/widgets.dart';
+
+import '../application/keyword_result_snapshot.dart';
 import '../data/keyword_snapshot_repository.dart';
 import '../models/keyword_snapshot.dart';
 import '../models/search_mode.dart';
-import '../application/keyword_result_snapshot.dart';
-import 'search_result_bindings.dart';
 import 'keyword_focus_controller.dart';
 import 'keyword_viewport.dart';
+import 'search_result_bindings.dart';
 
 typedef KeywordReturnDeps = ({
   bool Function() isTelevision,

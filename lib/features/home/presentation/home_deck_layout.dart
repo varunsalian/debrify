@@ -1,6 +1,8 @@
 import 'dart:math' show max;
-import 'package:flutter/widgets.dart';
+
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/widgets.dart';
+
 import 'home_stage_corner_painter.dart';
 
 // DECK metrics.
@@ -116,13 +118,13 @@ Widget buildHomeDeckLayout({
             // Rounded corners WITHOUT a clip: four ink wedges painted
             // over the layers. A ClipRRect here would wrap the punch
             // hole in a saveLayer and break the blend.
-            IgnorePointer(
+            const IgnorePointer(
               child: CustomPaint(
-                painter: const HomeStageCornerPainter(
+                painter: HomeStageCornerPainter(
                   radius: homeDeckCardRadius,
                   color: Color(0xFF0C0A16),
                 ),
-                child: const SizedBox.expand(),
+                child: SizedBox.expand(),
               ),
             ),
             // A hairline inside the wedges reads as the card's edge.

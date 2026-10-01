@@ -1,25 +1,27 @@
-import '../application/home_configuration_changes.dart';
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../application/home_default_view.dart';
-import '../application/home_configuration_refresh.dart';
+
 import '../application/home_board_providers.dart';
+import '../application/home_configuration_changes.dart';
+import '../application/home_configuration_refresh.dart';
+import '../application/home_default_view.dart';
 import '../application/home_refresh_queue.dart';
-import '../models/home_row_refresh.dart';
 import '../models/home_catalog_search_status.dart';
+import '../models/home_row_refresh.dart';
 import 'home_board_bindings.dart';
-import 'home_board_section.dart';
-import 'home_board_loading.dart';
 import 'home_board_focus.dart';
+import 'home_board_loading.dart';
+import 'home_board_section.dart';
+import 'home_continuation_loading.dart';
+import 'home_continuation_section.dart';
 import 'home_display_section.dart';
 import 'home_hero_preview.dart';
-import 'home_continuation_section.dart';
-import 'home_continuation_loading.dart';
 import 'home_saved_content_section.dart';
+import 'home_screen_controls.dart';
 import 'home_spotlight_section.dart';
 import 'home_stage_rows.dart';
-import 'home_screen_controls.dart';
 
 typedef HomeBoardConfigurationDeps = ({
   bool Function() mounted,

@@ -1,21 +1,23 @@
-import '../../../models/source_appearance.dart';
-import '../application/keyword_appearance_controller.dart';
-import 'keyword_results_projection.dart';
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../models/source_appearance.dart';
 import '../../../models/torrent.dart';
 import '../../../widgets/cinema_sources_layout.dart';
-import '../application/keyword_search_controller.dart';
-import '../application/keyword_results_controller.dart';
+import '../application/keyword_appearance_controller.dart';
 import '../application/keyword_cache_controller.dart';
-import '../models/keyword_search_state.dart';
+import '../application/keyword_results_controller.dart';
+import '../application/keyword_search_controller.dart';
 import '../models/keyword_results_state.dart';
-import '../models/search_session.dart';
-import 'search_result_bindings.dart';
-import 'keyword_focus_controller.dart';
-import 'keyword_viewport.dart';
+import '../models/keyword_search_state.dart';
 import '../models/search_mode.dart';
+import '../models/search_session.dart';
+import 'keyword_focus_controller.dart';
+import 'keyword_results_projection.dart';
+import 'keyword_viewport.dart';
+import 'search_result_bindings.dart';
 
 typedef KeywordSearchSectionDeps = ({
   SearchSession Function() session,

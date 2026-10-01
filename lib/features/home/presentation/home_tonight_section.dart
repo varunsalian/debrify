@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../../../widgets/skeleton_poster.dart' show BrandLoadingStage;
-import 'home_stage_rows.dart';
-import 'home_stage_section.dart';
-import 'home_stage_rails.dart';
-import 'home_stage_geometry.dart';
+import 'home_board_media.dart';
+import 'home_catalog_item_actions.dart';
+import 'home_continuation_menu.dart';
+import 'home_hero_preview.dart';
+import 'home_hero_section.dart';
 import 'home_stage_cells.dart';
 import 'home_stage_favorites.dart';
-import 'home_hero_preview.dart';
-import 'home_board_media.dart';
-import 'package:flutter/services.dart';
+import 'home_stage_geometry.dart';
+import 'home_stage_rails.dart';
+import 'home_stage_row_label.dart';
+import 'home_stage_rows.dart';
+import 'home_stage_section.dart';
 import 'home_tonight_board.dart';
 import 'home_tonight_queue_list.dart';
 import 'home_tonight_queue_row.dart';
 import 'home_tonight_rail.dart';
-import 'home_stage_row_label.dart';
-import 'home_hero_section.dart';
-import 'home_continuation_menu.dart';
-import 'home_catalog_item_actions.dart';
 
 typedef HomeTonightSectionDeps = ({
   BuildContext Function() context,

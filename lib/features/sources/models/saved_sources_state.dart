@@ -1,5 +1,5 @@
-import '../../../models/torrent.dart';
 import '../../../models/series_source.dart';
+import '../../../models/torrent.dart';
 
 class SavedSourcesState {
   final List<SeriesSource> sources;

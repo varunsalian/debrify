@@ -1,17 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../models/addon_search_status.dart';
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
 import '../../../services/source_ordering.dart';
-import '../../../models/addon_search_status.dart';
 import '../../../services/torrent_result_merge.dart';
 import '../data/source_search_repository.dart';
 import '../models/source_search_request.dart';
 import '../models/source_search_state.dart';
 import '../models/sources_session.dart';
-import 'sources_providers.dart';
 import 'source_cache_controller.dart';
 import 'source_results_controller.dart';
 import 'source_retry_controller.dart';
+import 'sources_providers.dart';
 
 enum SourceRetryMode { ignore, restartSearch, addon }
 

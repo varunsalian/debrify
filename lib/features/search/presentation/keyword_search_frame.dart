@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+
 import '../../../widgets/cinema_sources_layout.dart';
-import '../models/keyword_search_state.dart';
 import '../models/keyword_results_state.dart';
-import 'search_result_bindings.dart';
+import '../models/keyword_search_state.dart';
 import 'keyword_focus_controller.dart';
-import 'keyword_viewport.dart';
 import 'keyword_results_projection.dart';
 import 'keyword_search_actions.dart';
-import 'keyword_selection.dart';
 import 'keyword_search_page.dart';
+import 'keyword_selection.dart';
 import 'keyword_selection_overlay.dart';
+import 'keyword_viewport.dart';
+import 'search_result_bindings.dart';
 
 typedef KeywordSearchFrameDeps = ({
   bool Function() isTelevision,

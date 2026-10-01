@@ -1,19 +1,20 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/hero_metadata_presentation.dart';
 import '../../../models/metadata_preferences.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../theme/app_theme_scope.dart';
+import '../../../ui/core/trailer_indicators.dart';
 import '../../../widgets/home/home_theme.dart';
 import '../models/home_card_metadata.dart';
 import 'home_card_metadata_view.dart';
+import 'home_hero_identity.dart';
 import 'home_hero_surface.dart';
-import 'home_hero_transitions.dart';
 import 'home_hero_tint_surface.dart';
 import 'home_hero_title_art.dart';
-import 'home_hero_identity.dart';
-import '../../../ui/core/trailer_indicators.dart';
+import 'home_hero_transitions.dart';
 
 /// The Stremio-style spotlight. Reflects the currently focused board title —
 /// backdrop bleeding in from the right behind a left/bottom scrim, with title,

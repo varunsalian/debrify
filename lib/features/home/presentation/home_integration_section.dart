@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import '../models/home_tracker_authentication.dart';
-import '../application/home_tracker_authentication_controller.dart';
+
 import '../../search/models/search_mode.dart';
+import '../application/home_tracker_authentication_controller.dart';
 import '../models/home_catalog_search_status.dart';
+import '../models/home_tracker_authentication.dart';
 import 'home_board_bindings.dart';
-import 'home_board_section.dart';
 import 'home_board_configuration_section.dart';
+import 'home_board_section.dart';
 import 'home_catalog_badges.dart';
 import 'home_continuation_loading.dart';
 import 'home_screen_controls.dart';

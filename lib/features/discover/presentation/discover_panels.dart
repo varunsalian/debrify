@@ -1,15 +1,16 @@
 import 'package:flutter/widgets.dart';
-import '../../../models/stremio_addon.dart';
+
+import '../../../models/mdblist_list_choice.dart';
 import '../../../models/media_server.dart';
 import '../../../models/metadata_preferences.dart';
-import '../../../models/mdblist_list_choice.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../screens/media_server_library_panel.dart';
 import '../../../screens/metadata_explore_page.dart';
 import '../../../screens/see_all/catalog_see_all_screen.dart';
 import '../../../screens/see_all/continue_watching_see_all_screen.dart';
-import '../../../screens/see_all/trakt_see_all_screen.dart';
-import '../../../screens/see_all/simkl_see_all_screen.dart';
 import '../../../screens/see_all/mdblist_see_all_screen.dart';
+import '../../../screens/see_all/simkl_see_all_screen.dart';
+import '../../../screens/see_all/trakt_see_all_screen.dart';
 import '../models/discover_source_state.dart';
 import 'discover_source_panel.dart';
 import 'discover_source_picker.dart';

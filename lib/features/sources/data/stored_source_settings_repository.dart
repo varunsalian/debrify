@@ -1,7 +1,7 @@
 import '../../../models/source_appearance.dart';
-import '../../../services/source_appearance_preferences.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
+import '../../../services/source_appearance_preferences.dart';
 import '../../../services/source_priority.dart';
 import '../../../services/storage_service.dart';
 import '../models/source_presentation_settings.dart';

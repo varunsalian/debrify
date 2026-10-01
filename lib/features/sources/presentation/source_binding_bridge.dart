@@ -1,5 +1,3 @@
-import '../application/sources_providers.dart';
-import '../data/manual_source_preparation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +5,8 @@ import '../../../models/torrent.dart';
 import '../../../services/iptv_source_search.dart';
 import '../../../services/torrent_playback_service.dart';
 import '../application/source_binding_controller.dart';
+import '../application/sources_providers.dart';
+import '../data/manual_source_preparation.dart';
 import 'local_source_binding.dart';
 import 'local_source_picker.dart';
 import 'local_source_picker_composition.dart';

@@ -1,16 +1,18 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/metadata_preferences.dart';
+
 import '../../features/discover/application/metadata_feature_controller.dart';
-import '../../features/discover/models/metadata_feature_policy.dart';
 import '../../features/discover/models/discover_source_state.dart';
+import '../../features/discover/models/metadata_feature_policy.dart';
 import '../../features/discover/presentation/discover_section.dart';
-import '../../features/search/presentation/search_title_section.dart';
 import '../../features/home/presentation/home_continuation_section.dart';
-import '../../features/home/presentation/home_hero_section.dart';
-import '../../features/home/presentation/home_hero_preview.dart';
 import '../../features/home/presentation/home_display_section.dart';
+import '../../features/home/presentation/home_hero_preview.dart';
+import '../../features/home/presentation/home_hero_section.dart';
+import '../../features/search/presentation/search_title_section.dart';
+import '../../models/metadata_preferences.dart';
 
 typedef HomeMetadataDeps = ({
   bool Function() mounted,

@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+
 import 'home_board_section.dart';
 import 'home_classic_navigation.dart';
 import 'home_continuation_focus.dart';
 import 'home_continuation_section.dart';
-import 'home_saved_content_section.dart';
 import 'home_display_section.dart';
-import 'home_stage_section.dart';
-import 'home_stage_rails.dart';
-import 'home_spotlight_section.dart';
 import 'home_hero_preview.dart';
+import 'home_saved_content_section.dart';
 import 'home_screen_controls.dart';
+import 'home_spotlight_section.dart';
+import 'home_stage_rails.dart';
+import 'home_stage_section.dart';
 
 typedef HomeBoardFocusDeps = ({
   bool Function() mounted,

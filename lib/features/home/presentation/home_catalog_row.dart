@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+
 import '../../../models/home_collection_rows.dart';
 import '../../../models/stremio_addon.dart';
 import 'home_board_cell.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 /// When a row's horizontal scroll gets within this many pixels of the end, the
 /// next page for that catalog is fetched (Stremio-style unlimited rows).

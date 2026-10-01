@@ -1,6 +1,6 @@
 import '../../../models/stremio_addon.dart';
-import '../../../services/home_catalog_refresh.dart';
 import '../../../services/filtered_catalog_pager.dart';
+import '../../../services/home_catalog_refresh.dart';
 import '../models/home_catalog_plan.dart';
 
 /// Catalog access and parallel row loading. The caller owns cursor reservation,

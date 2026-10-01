@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../theme/app_theme_scope.dart';
 import 'package:flutter/services.dart';
+
+import '../../../theme/app_theme_scope.dart';
 import '../../../utils/tv_keys.dart';
 
 /// A pill knob switch, purple when on. Purely visual — the parent row owns the

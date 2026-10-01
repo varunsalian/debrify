@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
-import '../../../widgets/skeleton_poster.dart' show BrandLoadingStage;
+
 import '../../../theme/app_theme_scope.dart';
-import 'home_stage_section.dart';
-import 'home_stage_rails.dart';
-import 'home_stage_geometry.dart';
-import 'home_stage_cells.dart';
-import 'home_stage_favorites.dart';
-import 'home_display_section.dart';
-import 'home_hero_preview.dart';
+import '../../../widgets/skeleton_poster.dart' show BrandLoadingStage;
 import 'home_board_media.dart';
 import 'home_canvas_board.dart';
-import 'home_promenade_board.dart';
-import 'home_mosaic_board.dart';
 import 'home_deck_board.dart';
+import 'home_display_section.dart';
+import 'home_hero_preview.dart';
+import 'home_mosaic_board.dart';
+import 'home_promenade_board.dart';
+import 'home_stage_cells.dart';
+import 'home_stage_favorites.dart';
+import 'home_stage_geometry.dart';
+import 'home_stage_rails.dart';
+import 'home_stage_section.dart';
 
 typedef HomeStageBoardsDeps = ({
   BuildContext Function() context,

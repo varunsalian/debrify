@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../../../models/stremio_addon.dart';
-import 'home_media_bindings.dart';
 import '../application/home_hero_metadata_policy.dart';
-import 'home_hero_swap.dart';
 import 'home_hero_preview.dart';
+import 'home_hero_swap.dart';
+import 'home_media_bindings.dart';
 
 typedef HomeHeroDeps = ({
   HomeMediaBindings Function() media,

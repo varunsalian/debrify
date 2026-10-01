@@ -5,9 +5,9 @@ import '../../../models/torrent.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../models/sources_session.dart';
 import 'saved_sources_controller.dart';
-import 'sources_providers.dart';
 import 'source_result_preparation.dart';
 import 'source_search_controller.dart';
+import 'sources_providers.dart';
 
 final sourceBatchPreparationProvider = Provider<SourceBatchPreparation>(
   SourceBatchPreparation.new,

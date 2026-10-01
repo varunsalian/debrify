@@ -1,11 +1,13 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../../../utils/platform_util.dart';
+
 import '../../../models/stremio_addon.dart';
+import '../../../utils/platform_util.dart';
 import '../models/home_catalog_search_status.dart';
-import 'home_board_section.dart';
 import 'home_board_loading.dart' show kBoardBatchSize;
 import 'home_board_publication.dart';
+import 'home_board_section.dart';
 import 'home_stage_section.dart';
 
 typedef HomeBoardPagingDeps = ({

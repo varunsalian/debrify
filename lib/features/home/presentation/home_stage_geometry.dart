@@ -1,12 +1,14 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/home_collection_rows.dart';
+import '../../../models/stremio_addon.dart';
 import '../application/home_stage_metadata.dart';
-import 'home_stage_rows.dart';
-import 'home_stage_row_label.dart';
 import 'home_classic_row_metrics.dart';
 import 'home_display_section.dart';
+import 'home_stage_row_label.dart';
+import 'home_stage_rows.dart';
 
 /// Smallest poster art a stage rail will draw before it is simply too small
 /// to recognise — the floor every derived rail box respects.

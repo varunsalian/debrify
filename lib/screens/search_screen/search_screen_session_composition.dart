@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 import '../../features/discover/presentation/discover_session_lifecycle.dart';
 import '../../services/hide_watched_prefs.dart';
 import '../../services/mdblist/mdblist_service.dart';
@@ -10,7 +12,6 @@ import 'discover_panel_composition.dart';
 import 'home_content_startup.dart';
 import 'home_media_composition.dart';
 import 'home_view_bindings.dart';
-import 'package:flutter/material.dart';
 import 'search_profile_handoff.dart';
 import 'search_screen_composer.dart';
 import 'search_session_lifecycle.dart';

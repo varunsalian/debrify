@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
 import '../../../theme/app_theme_scope.dart';
 import '../../../utils/platform_util.dart';
 

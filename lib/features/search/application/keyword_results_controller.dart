@@ -1,17 +1,17 @@
-import '../data/keyword_defaults_repository.dart';
-import 'search_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/torrent.dart';
 import '../../../models/torrent_filter_state.dart';
+import '../data/keyword_defaults_repository.dart';
 import '../data/keyword_search_repository.dart';
 import '../models/keyword_results_state.dart';
 import '../models/search_session.dart';
 import 'keyword_cache_controller.dart';
 import 'keyword_filter.dart';
-import 'keyword_sort.dart';
-import 'search_session_provider.dart';
 import 'keyword_provider_selection.dart';
+import 'keyword_sort.dart';
+import 'search_providers.dart';
+import 'search_session_provider.dart';
 
 final keywordResultsProvider = NotifierProvider.autoDispose
     .family<KeywordResultsController, KeywordResultsState, SearchSession>(

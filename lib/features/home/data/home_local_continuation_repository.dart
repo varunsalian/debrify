@@ -1,6 +1,6 @@
-import '../../../models/stremio_addon.dart';
 import '../../../models/custom_series_identity.dart';
 import '../../../models/media_identity.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../models/tracking_source.dart';
 import '../../../utils/continue_watching_presentation.dart';
 import '../models/home_local_continuation.dart';

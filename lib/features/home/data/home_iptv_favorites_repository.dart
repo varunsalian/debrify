@@ -1,6 +1,6 @@
+import '../../../models/iptv_playlist.dart';
 import '../../../services/storage_service.dart';
 import '../../../services/stremio_iptv_service.dart';
-import '../../../models/iptv_playlist.dart';
 
 /// Hydrates the existing live-only favourites projection in stored map order.
 /// Custom lists have a different media-type contract and do not use this mapping.

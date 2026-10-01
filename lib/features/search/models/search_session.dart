@@ -1,6 +1,6 @@
-import 'keyword_results_state.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import 'keyword_cache_state.dart';
+import 'keyword_results_state.dart';
 
 /// Mutable search state belongs to one screen in one profile session. Separate
 /// routes must not share it just because they happen to have the same query.

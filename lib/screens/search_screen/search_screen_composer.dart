@@ -1,3 +1,8 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../features/discover/presentation/discover_session_lifecycle.dart';
 import '../../features/home/models/home_board_configuration.dart';
 import '../../features/home/presentation/home_hero_shell_bridge.dart';
@@ -10,11 +15,12 @@ import '../../services/iptv_media_store.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/metadata_preferences_service.dart';
 import '../../services/profiles/profile_runtime.dart';
+import '../../services/profiles/profile_scope.dart';
+import '../../services/profiles/profile_session_memory.dart';
 import '../../services/stremio_service.dart';
 import '../../services/tmdb_title_search.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_search_focus_handoff.dart';
-import 'dart:async';
 import 'discover_composition.dart';
 import 'discover_panel_composition.dart';
 import 'home_board_presentation_composition.dart';
@@ -26,16 +32,12 @@ import 'home_leading_content_composition.dart';
 import 'home_media_composition.dart';
 import 'home_stage_composition.dart';
 import 'home_view_bindings.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'search_presentation_composition.dart';
 import 'search_profile_handoff.dart';
 import 'search_screen_home_composition.dart';
 import 'search_screen_search_composition.dart';
 import 'search_screen_session_composition.dart';
 import 'search_session_lifecycle.dart';
-import '../../services/profiles/profile_scope.dart';
-import '../../services/profiles/profile_session_memory.dart';
 
 /// The widget configuration the screen composition reads.
 abstract interface class SearchScreenConfig {

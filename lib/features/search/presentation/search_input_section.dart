@@ -1,13 +1,14 @@
-import '../../../utils/tv_search_focus_handoff.dart';
 import 'package:flutter/material.dart';
+
+import '../../../utils/tv_search_focus_handoff.dart';
 import '../../../widgets/text_field_suggestions.dart';
 import '../models/search_mode.dart';
-import 'search_mode_section.dart';
 import 'search_focus_controller.dart';
-import 'search_mode_toggle.dart';
 import 'search_header.dart';
-import 'search_query_field.dart';
+import 'search_mode_section.dart';
+import 'search_mode_toggle.dart';
 import 'search_page_shell.dart' as shell;
+import 'search_query_field.dart';
 
 typedef SearchInputSectionDeps = ({
   bool Function() mounted,

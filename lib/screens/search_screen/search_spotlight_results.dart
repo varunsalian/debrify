@@ -1,15 +1,17 @@
-import 'package:flutter/material.dart';
-import '../../models/stremio_addon.dart';
 import 'dart:async';
-import '../../features/search/presentation/catalog_search_section.dart';
-import '../../features/home/presentation/home_spotlight_search_board.dart'
-    as board;
-import '../../features/home/presentation/home_display_section.dart';
-import '../../features/home/presentation/home_hero_preview.dart';
-import '../../features/home/presentation/home_spotlight_section.dart';
-import '../../features/home/presentation/home_item_actions.dart';
+
+import 'package:flutter/material.dart';
+
 import '../../features/home/presentation/home_catalog_actions.dart';
 import '../../features/home/presentation/home_catalog_item_actions.dart';
+import '../../features/home/presentation/home_display_section.dart';
+import '../../features/home/presentation/home_hero_preview.dart';
+import '../../features/home/presentation/home_item_actions.dart';
+import '../../features/home/presentation/home_spotlight_search_board.dart'
+    as board;
+import '../../features/home/presentation/home_spotlight_section.dart';
+import '../../features/search/presentation/catalog_search_section.dart';
+import '../../models/stremio_addon.dart';
 
 typedef SearchSpotlightResultsDeps = ({
   BuildContext Function() context,

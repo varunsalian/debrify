@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../models/addon_search_status.dart';
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/torrent.dart';
-import '../../../models/addon_search_status.dart';
 import '../data/source_search_repository.dart';
 import '../models/sources_session.dart';
 import 'sources_providers.dart';

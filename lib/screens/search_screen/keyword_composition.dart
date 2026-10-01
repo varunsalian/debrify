@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../utils/tv_search_focus_handoff.dart';
+
 import '../../features/home/presentation/home_board_rendering.dart';
-import 'search_session_lifecycle.dart';
-import '../../features/search/presentation/search_mode_section.dart';
-import '../../features/search/presentation/search_input_section.dart';
-import '../../features/search/presentation/keyword_search_section.dart';
-import '../../features/search/presentation/keyword_search_dialogs.dart';
-import '../../features/search/presentation/keyword_selection.dart';
 import '../../features/search/presentation/keyword_search_actions.dart';
+import '../../features/search/presentation/keyword_search_dialogs.dart';
 import '../../features/search/presentation/keyword_search_frame.dart';
 import '../../features/search/presentation/keyword_search_rows.dart';
+import '../../features/search/presentation/keyword_search_section.dart';
+import '../../features/search/presentation/keyword_selection.dart';
+import '../../features/search/presentation/search_input_section.dart';
+import '../../features/search/presentation/search_mode_section.dart';
+import '../../utils/tv_search_focus_handoff.dart';
+import 'search_session_lifecycle.dart';
 
 typedef KeywordCompositionDeps = ({
   bool Function() mounted,

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../models/source_appearance.dart';
 import '../../../models/torrent.dart';
 import '../../../ui/core/source_metadata_labels.dart';
-import '../../../utils/format_tag_detector.dart';
 import '../../../ui/core/source_results_pane.dart';
+import '../../../utils/format_tag_detector.dart';
 import '../../../widgets/source_row.dart';
 import '../models/keyword_results_state.dart';
 

@@ -1,6 +1,6 @@
 import '../../../models/stremio_addon.dart';
-import 'home_board_configuration.dart';
 import '../../../services/profiles/profile_session_memory.dart';
+import 'home_board_configuration.dart';
 import 'home_catalog_state.dart';
 
 /// One mounted view in one profile epoch. Bootstrap data is consumed when the

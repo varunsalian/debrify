@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../../../services/stremio_tv_rotation.dart';
-import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../data/home_stremio_favorites_repository.dart';
 import '../models/home_favorites_session.dart';
 import '../models/home_stremio_favorites.dart';

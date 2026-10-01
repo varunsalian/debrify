@@ -62,7 +62,7 @@ final homeWatchlistReaderProvider =
     );
 
 final homePlaylistRepositoryProvider = Provider<HomePlaylistRepository>(
-  (ref) => HomePlaylistRepository(
+  (ref) => const HomePlaylistRepository(
     items: StorageService.getPlaylistItemsRaw,
     favorites: StorageService.getPlaylistFavoriteKeys,
     posters: StorageService.getAllPlaylistPosterOverrides,

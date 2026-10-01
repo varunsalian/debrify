@@ -1,16 +1,17 @@
 import 'package:flutter/widgets.dart';
-import '../../models/stremio_addon.dart';
-import '../../features/home/presentation/home_board_section.dart';
-import '../../features/home/presentation/home_catalog_badges.dart';
-import 'home_continuation_content_composition.dart';
-import '../../features/home/presentation/home_continuation_playback.dart';
-import '../../features/home/presentation/home_integration_section.dart';
-import 'home_item_composition.dart';
-import 'home_metadata_section.dart';
-import '../../features/home/presentation/home_rows_navigation.dart';
-import '../../features/home/presentation/home_stage_rows.dart';
+
 import '../../features/discover/presentation/discover_panels.dart';
 import '../../features/discover/presentation/discover_section.dart';
+import '../../features/home/presentation/home_board_section.dart';
+import '../../features/home/presentation/home_catalog_badges.dart';
+import '../../features/home/presentation/home_continuation_playback.dart';
+import '../../features/home/presentation/home_integration_section.dart';
+import '../../features/home/presentation/home_rows_navigation.dart';
+import '../../features/home/presentation/home_stage_rows.dart';
+import '../../models/stremio_addon.dart';
+import 'home_continuation_content_composition.dart';
+import 'home_item_composition.dart';
+import 'home_metadata_section.dart';
 
 typedef DiscoverPanelCompositionDeps = ({
   bool Function() mounted,

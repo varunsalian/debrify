@@ -1,6 +1,6 @@
 import '../../../models/stremio_addon.dart';
-import '../models/stremio_tv_catalog_picker_result.dart';
 import '../models/stremio_tv_catalog_option.dart';
+import '../models/stremio_tv_catalog_picker_result.dart';
 
 class StremioTvCatalogEditor {
   const StremioTvCatalogEditor({

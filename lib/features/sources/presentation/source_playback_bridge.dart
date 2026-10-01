@@ -1,14 +1,14 @@
-import '../data/source_download.dart';
-import 'source_download_action.dart';
-import '../application/sources_providers.dart';
-import '../data/automatic_source_bindings.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../models/torrent.dart';
 import '../../../models/playback_meta.dart';
+import '../../../models/torrent.dart';
 import '../../../services/torrent_playback_service.dart'
     show TorrentPlaybackService;
+import '../application/sources_providers.dart';
+import '../data/automatic_source_bindings.dart';
+import '../data/source_download.dart';
+import 'source_download_action.dart';
 
 /// Context-dependent legacy playback remains behind this presentation boundary.
 /// The caller supplies the rendered list and its matching selected-row index.

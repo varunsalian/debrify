@@ -1,5 +1,5 @@
-import '../../../models/iptv_source_result.dart';
 import '../../../models/addon_search_status.dart';
+import '../../../models/iptv_source_result.dart';
 
 /// Request state for one Sources view. Rendered/frozen rows have a separate
 /// presentation lifetime; a final response does not imply immediate adoption.

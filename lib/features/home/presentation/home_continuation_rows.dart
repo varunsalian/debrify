@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+
 import '../../../models/stremio_addon.dart';
-import 'home_continuation_row.dart';
-import 'home_trakt_skeleton_row.dart';
-import 'home_stage_rows.dart';
-import 'home_continuation_section.dart';
 import 'home_continuation_menu.dart';
+import 'home_continuation_row.dart';
+import 'home_continuation_section.dart';
+import 'home_stage_rows.dart';
+import 'home_trakt_skeleton_row.dart';
 
 typedef HomeContinuationRowsDeps = ({
   Widget Function({required String title, String? tag, VoidCallback? onSeeAll})

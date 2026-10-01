@@ -146,7 +146,7 @@ final homeCatalogRepositoryProvider = Provider<HomeCatalogRepository>(
 
 final homeCatalogPreferencesRepositoryProvider =
     Provider<HomeCatalogPreferencesRepository>(
-      (ref) => HomeCatalogPreferencesRepository(
+      (ref) => const HomeCatalogPreferencesRepository(
         readDisabled: StorageService.getHomeDisabledSections,
         readExtras: StorageService.getHomeExtraRows,
         readRowOrder: StorageService.getHomeRowOrder,
@@ -190,7 +190,7 @@ final homeDefaultViewProvider = Provider.autoDispose
 
 final homeDisplayPreferencesRepositoryProvider =
     Provider<HomeDisplayPreferencesRepository>(
-      (ref) => HomeDisplayPreferencesRepository(
+      (ref) => const HomeDisplayPreferencesRepository(
         readFocusDetails: StorageService.getSpotlightFocusDetails,
         readAnimationsEnabled: StorageService.getHomeAnimationsEnabled,
         readAnimationStyle: StorageService.getHomeAnimationStyle,

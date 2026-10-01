@@ -1,5 +1,5 @@
-import '../models/home_series_resume_signals.dart';
 import '../../../services/tracking_source_policy.dart';
+import '../models/home_series_resume_signals.dart';
 
 /// Fresh tracking preferences for one explicit catalog/resume action.
 class HomeTrackingPolicyRepository {

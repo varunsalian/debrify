@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:math';
+
 import 'package:flutter/material.dart';
-import '../../../models/stremio_addon.dart';
-import '../../../models/home_preferences.dart';
+
 import '../../../models/home_collection_rows.dart';
+import '../../../models/home_preferences.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../utils/platform_util.dart';
 import '../../../widgets/home/spotlight_board.dart';
-import '../models/home_catalog_search_status.dart';
 import '../data/home_catalog_repository.dart';
+import '../models/home_catalog_search_status.dart';
 
 typedef HomeSpotlightDeps = ({
   bool Function() mounted,

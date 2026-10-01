@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/mdblist/mdblist_list_source.dart';
 import '../../../services/mdblist/mdblist_models.dart';
 import '../data/lists_search_repository.dart';
-import '../models/search_session.dart';
 import '../models/lists_search_state.dart';
+import '../models/search_session.dart';
 import 'search_providers.dart';
 
 final listsSearchProvider = NotifierProvider.autoDispose

@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../models/torrent_filter_state.dart';
 import '../../../widgets/torrent_filters_sheet.dart';
 import '../application/keyword_results_controller.dart';
 import '../models/keyword_results_state.dart';
 import '../models/search_session.dart';
-import 'search_result_bindings.dart';
 import 'keyword_providers_dialog.dart';
 import 'keyword_sources_dialog.dart';
+import 'search_result_bindings.dart';
 
 typedef KeywordSearchDialogsDeps = ({
   BuildContext Function() context,

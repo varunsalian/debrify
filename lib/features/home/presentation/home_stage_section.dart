@@ -1,18 +1,20 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
+
 import '../models/home_tonight_card_info.dart';
-import 'home_stage_rows.dart';
-import 'home_stage_rails.dart';
-import 'home_stage_focus_requests.dart';
-import 'home_stage_deferred_advance.dart';
-import 'home_stage_deferred_right.dart';
-import 'home_stage_navigation.dart';
-import 'home_stage_theater.dart';
-import 'home_stage_hold_latch.dart';
-import 'home_tonight_focus.dart';
 import 'home_display_section.dart';
 import 'home_hero_preview.dart';
 import 'home_spotlight_section.dart';
+import 'home_stage_deferred_advance.dart';
+import 'home_stage_deferred_right.dart';
+import 'home_stage_focus_requests.dart';
+import 'home_stage_hold_latch.dart';
+import 'home_stage_navigation.dart';
+import 'home_stage_rails.dart';
+import 'home_stage_rows.dart';
+import 'home_stage_theater.dart';
+import 'home_tonight_focus.dart';
 
 typedef HomeStageDeps = ({
   bool Function() mounted,

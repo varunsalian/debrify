@@ -1,16 +1,18 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/home_return_snapshot.dart';
-import '../application/home_row_snapshot.dart';
+
 import '../application/home_board_providers.dart';
+import '../application/home_row_snapshot.dart';
 import '../data/home_board_services.dart';
-import 'home_board_section.dart';
-import 'home_board_rows.dart';
+import '../models/home_return_snapshot.dart';
+import 'home_board_configuration_section.dart';
 import 'home_board_focus.dart';
 import 'home_board_paging.dart';
 import 'home_board_publication.dart';
-import 'home_board_configuration_section.dart';
+import 'home_board_rows.dart';
+import 'home_board_section.dart';
 import 'home_display_section.dart';
 import 'home_spotlight_section.dart';
 

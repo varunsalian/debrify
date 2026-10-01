@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../models/stremio_addon.dart';
 import '../application/home_cw_hold_preference.dart';
 import '../models/home_catalog_session.dart';
-import 'home_continue_watching_actions.dart';
 import 'home_continuation_projection.dart';
+import 'home_continue_watching_actions.dart';
 import 'home_playback_navigation.dart';
 import 'home_stage_rows.dart';
 

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../models/torrent.dart';
 import '../../../theme/app_theme_scope.dart';
-import 'keyword_source_label.dart';
 import '../application/keyword_provider_selection.dart';
+import 'keyword_source_label.dart';
 
 /// Keeps every source tab mounted so remote focus can reach off-screen tabs.
 class KeywordSourceTabs extends StatelessWidget {

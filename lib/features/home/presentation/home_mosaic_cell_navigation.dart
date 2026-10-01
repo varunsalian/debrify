@@ -1,5 +1,6 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+
 import 'home_stage_hold_latch.dart';
 
 /// Navigation for one Mosaic cell. Nodes and the view's hold latch are borrowed;

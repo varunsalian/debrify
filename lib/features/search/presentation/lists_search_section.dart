@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../models/mdblist_list_choice.dart';
-import '../models/search_session.dart';
-import '../models/lists_search_state.dart';
 import '../application/lists_search_controller.dart';
-import 'search_result_bindings.dart';
+import '../models/lists_search_state.dart';
+import '../models/search_session.dart';
 import 'lists_focus.dart';
 import 'lists_navigation.dart';
+import 'search_result_bindings.dart';
 
 typedef ListsSearchSectionDeps = ({
   SearchSession Function() session,

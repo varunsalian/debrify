@@ -1,5 +1,6 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
 import 'home_trailer_transitions.dart';
 
 /// Classic board composition with fixed hero geometry and borrowed surfaces.

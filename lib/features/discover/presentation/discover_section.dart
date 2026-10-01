@@ -1,19 +1,21 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/mdblist_list_choice.dart';
-import '../../../widgets/see_all/discover_browsing_input.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../ui/core/trailer_indicators.dart';
-import '../application/discover_source_controller.dart';
-import '../application/discover_layout_controller.dart';
+import '../../../widgets/see_all/discover_browsing_input.dart';
 import '../application/discover_card_settings_controller.dart';
+import '../application/discover_layout_controller.dart';
+import '../application/discover_source_controller.dart';
 import '../models/discover_card_settings.dart';
 import '../models/discover_source_state.dart';
 import 'discover_bindings.dart';
+import 'discover_content.dart';
 import 'discover_focus.dart';
 import 'discover_preview.dart';
 import 'discover_shell_bridge.dart';
-import 'discover_content.dart';
 
 typedef DiscoverSectionDeps = ({
   DiscoverBindings Function() bindings,

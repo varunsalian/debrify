@@ -1,14 +1,16 @@
-import 'home_integration_section.dart';
-import 'home_continuation_return.dart';
-import 'home_board_configuration_section.dart';
 import 'dart:async';
-import 'home_display_section.dart';
-import 'home_hero_preview.dart';
-import 'home_stage_section.dart';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+
 import '../../../services/app_route_observer.dart';
 import '../../../services/main_page_bridge.dart';
+import 'home_board_configuration_section.dart';
+import 'home_continuation_return.dart';
+import 'home_display_section.dart';
+import 'home_hero_preview.dart';
+import 'home_integration_section.dart';
+import 'home_stage_section.dart';
 
 /// App-shell registrations for the Home, Search and Discover route variants.
 ///

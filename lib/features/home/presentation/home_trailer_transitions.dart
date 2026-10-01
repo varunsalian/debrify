@@ -1,5 +1,5 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 /// Settles the poster rows back while the ambient trailer plays, so the
 /// moving picture owns the frame (Nuvio/Netflix behavior) and any DPAD move

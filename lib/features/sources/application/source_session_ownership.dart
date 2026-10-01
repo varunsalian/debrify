@@ -15,5 +15,5 @@ class SourceSessionOwnership {
 }
 
 final sourceSessionOwnershipProvider = Provider<SourceSessionOwnership>(
-  (ref) => SourceSessionOwnership(ProfileSessionMemory.captureOwner),
+  (ref) => const SourceSessionOwnership(ProfileSessionMemory.captureOwner),
 );

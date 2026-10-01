@@ -1,15 +1,15 @@
-import '../models/home_board_configuration.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/stremio_addon.dart';
 import '../../../services/filtered_catalog_pager.dart';
 import '../../../services/home_load_progress.dart';
-import '../models/home_catalog_plan.dart';
 import '../data/home_catalog_repository.dart';
+import '../models/home_board_configuration.dart';
+import '../models/home_catalog_plan.dart';
+import '../models/home_catalog_session.dart';
+import '../models/home_catalog_state.dart';
 import 'home_board_providers.dart';
 import 'home_row_snapshot.dart';
-import '../models/home_catalog_state.dart';
-import '../models/home_catalog_session.dart';
 
 final homeCatalogProvider = NotifierProvider.autoDispose
     .family<HomeCatalogController, HomeCatalogState, HomeCatalogSession>(

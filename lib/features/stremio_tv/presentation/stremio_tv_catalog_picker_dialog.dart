@@ -1,18 +1,19 @@
-import 'stremio_tv_focus_frame.dart';
-import 'stremio_tv_catalog_picker_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-import '../../../utils/tv_keys.dart';
-import '../../../models/stremio_addon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../models/stremio_addon.dart';
+import '../../../theme/app_theme_scope.dart';
+import '../../../utils/tv_keys.dart';
+import '../../../widgets/tv_text_field.dart';
 import '../application/stremio_tv_providers.dart';
 import '../data/stremio_tv_catalog_editor.dart';
-import '../models/stremio_tv_catalog_picker_result.dart';
 import '../models/stremio_tv_catalog_option.dart';
+import '../models/stremio_tv_catalog_picker_result.dart';
+import 'stremio_tv_catalog_picker_views.dart';
+import 'stremio_tv_focus_frame.dart';
+
 export '../models/stremio_tv_catalog_picker_result.dart';
-import '../../../theme/app_theme_scope.dart';
-import '../../../widgets/tv_text_field.dart';
 
 class StremioTvCatalogPickerDialog extends StatefulWidget {
   final StremioMeta item;

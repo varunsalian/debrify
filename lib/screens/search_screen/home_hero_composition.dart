@@ -1,19 +1,20 @@
-import '../../models/stremio_addon.dart';
-import 'search_mode_composition.dart';
-import '../../features/search/presentation/search_input_section.dart';
-import '../../features/home/data/home_catalog_repository.dart';
-import 'home_board_composition.dart';
-import '../../features/search/presentation/search_spotlight_shell.dart';
 import 'package:flutter/material.dart';
-import '../../features/home/presentation/home_hero_section.dart';
-import '../../features/home/presentation/home_hero_preview.dart';
+
+import '../../features/home/application/home_layout_policy.dart';
+import '../../features/home/data/home_catalog_repository.dart';
+import '../../features/home/presentation/home_display_section.dart';
 import '../../features/home/presentation/home_hero_live.dart';
+import '../../features/home/presentation/home_hero_preview.dart';
+import '../../features/home/presentation/home_hero_section.dart';
 import '../../features/home/presentation/home_hero_shell.dart';
 import '../../features/home/presentation/home_media_bindings.dart';
-import '../../features/home/presentation/home_display_section.dart';
-import '../../features/home/presentation/home_stage_favorites.dart';
 import '../../features/home/presentation/home_spotlight_section.dart';
-import '../../features/home/application/home_layout_policy.dart';
+import '../../features/home/presentation/home_stage_favorites.dart';
+import '../../features/search/presentation/search_input_section.dart';
+import '../../features/search/presentation/search_spotlight_shell.dart';
+import '../../models/stremio_addon.dart';
+import 'home_board_composition.dart';
+import 'search_mode_composition.dart';
 
 typedef HomeHeroCompositionDeps = ({
   bool Function() mounted,

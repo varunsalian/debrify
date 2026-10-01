@@ -1,14 +1,16 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../models/advanced_search_selection.dart';
-import '../../../models/stremio_addon.dart';
 import '../../../models/playback_meta.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../screens/episodes_screen.dart';
 import '../data/home_catalog_playback_payload.dart';
 import 'home_catalog_playback_bridge.dart';
-import 'home_sources_navigation.dart';
 import 'home_playback_artwork.dart';
+import 'home_sources_navigation.dart';
 
 typedef HomePlaybackNavigationDeps = ({
   bool Function() mounted,

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'home_media_bindings.dart';
+
 import '../../../models/iptv_playlist.dart';
-import 'home_hero_section.dart';
 import 'home_hero_preview.dart';
+import 'home_hero_section.dart';
+import 'home_media_bindings.dart';
 
 typedef HomeHeroLiveDeps = ({
   HomeMediaBindings Function() media,

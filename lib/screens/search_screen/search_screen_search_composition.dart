@@ -1,3 +1,5 @@
+import 'package:flutter/services.dart';
+
 import '../../features/search/presentation/keyword_search_actions.dart';
 import '../../features/search/presentation/lists_navigation.dart';
 import '../../models/profiles/profile_policy.dart';
@@ -10,7 +12,6 @@ import '../../services/profiles/profile_runtime.dart';
 import '../../services/torrent_bulk_add_service.dart';
 import '../../services/torrent_playback_service.dart';
 import 'discover_composition.dart';
-import 'package:flutter/services.dart';
 import 'search_presentation_composition.dart';
 import 'search_screen_composer.dart';
 import 'search_title_composition.dart';

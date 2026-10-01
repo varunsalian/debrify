@@ -1,23 +1,24 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/mdblist_list_choice.dart';
-import '../../utils/tv_search_focus_handoff.dart';
+
 import '../../features/discover/presentation/discover_section.dart';
-import 'home_board_presentation_composition.dart';
-import 'home_catalog_presentation_composition.dart';
-import 'home_hero_composition.dart';
 import '../../features/home/presentation/home_hero_shell_bridge.dart';
-import 'keyword_composition.dart';
 import '../../features/search/presentation/keyword_return.dart';
 import '../../features/search/presentation/keyword_search_actions.dart';
 import '../../features/search/presentation/keyword_search_section.dart';
 import '../../features/search/presentation/keyword_selection.dart';
-import 'search_mode_composition.dart';
-import '../../features/search/presentation/search_mode_section.dart';
-import 'search_title_composition.dart';
-import 'search_input_composition.dart';
-import 'search_session_lifecycle.dart';
 import '../../features/search/presentation/lists_navigation.dart';
+import '../../features/search/presentation/search_mode_section.dart';
+import '../../models/mdblist_list_choice.dart';
+import '../../utils/tv_search_focus_handoff.dart';
+import 'home_board_presentation_composition.dart';
+import 'home_catalog_presentation_composition.dart';
+import 'home_hero_composition.dart';
+import 'keyword_composition.dart';
+import 'search_input_composition.dart';
+import 'search_mode_composition.dart';
+import 'search_session_lifecycle.dart';
+import 'search_title_composition.dart';
 
 typedef SearchPresentationDeps = ({
   bool Function() mounted,

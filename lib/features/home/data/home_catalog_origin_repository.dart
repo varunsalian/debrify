@@ -1,7 +1,7 @@
-import '../../../services/native_series_metadata_service.dart';
 import '../../../models/custom_series_identity.dart';
 import '../../../models/media_identity.dart';
 import '../../../models/stremio_addon.dart';
+import '../../../services/native_series_metadata_service.dart';
 import '../models/home_catalog_origin.dart';
 
 /// Shared identity preparation for detail opening and catalog playback. It owns

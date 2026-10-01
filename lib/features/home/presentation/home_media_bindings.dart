@@ -1,12 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../application/home_hero_tint_loader.dart';
-import '../application/home_hero_providers.dart';
+
 import '../application/home_hero_live_preview.dart';
+import '../application/home_hero_metadata_loader.dart';
+import '../application/home_hero_providers.dart';
+import '../application/home_hero_tint_loader.dart';
 import '../application/home_hero_trailer_loader.dart';
-import '../data/home_tracker_resume_repository.dart';
 import '../application/home_playback_providers.dart';
 import '../data/home_series_resume_resolver.dart';
-import '../application/home_hero_metadata_loader.dart';
+import '../data/home_tracker_resume_repository.dart';
 import '../models/home_catalog_session.dart';
 
 /// Retains route-scoped hero loaders and resume resolvers. Reads stay live so

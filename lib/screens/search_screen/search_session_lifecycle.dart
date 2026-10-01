@@ -1,19 +1,21 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../features/home/presentation/home_board_paging.dart';
+import '../../features/home/presentation/home_board_rows.dart';
+import '../../features/search/application/search_providers.dart';
+import '../../features/search/data/keyword_snapshot_repository.dart';
+import '../../features/search/models/keyword_cache_state.dart';
+import '../../features/search/models/keyword_snapshot.dart';
+import '../../features/search/models/search_session.dart';
+import '../../features/search/presentation/keyword_return.dart';
+import '../../features/search/presentation/keyword_search_section.dart';
+import '../../features/search/presentation/search_result_bindings.dart';
 import '../../services/profiles/profile_session_memory.dart'
     show ProfileSessionOwner;
 import '../../utils/tv_search_focus_handoff.dart';
-import '../../features/search/models/search_session.dart';
-import '../../features/search/application/search_providers.dart';
-import '../../features/search/data/keyword_snapshot_repository.dart';
-import '../../features/search/models/keyword_snapshot.dart';
-import '../../features/search/models/keyword_cache_state.dart';
-import '../../features/home/presentation/home_board_rows.dart';
-import '../../features/home/presentation/home_board_paging.dart';
-import '../../features/search/presentation/search_result_bindings.dart';
-import '../../features/search/presentation/keyword_search_section.dart';
-import '../../features/search/presentation/keyword_return.dart';
 
 typedef SearchSessionLifecycleDeps = ({
   bool Function() mounted,

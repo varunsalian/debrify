@@ -1,9 +1,9 @@
-import '../../../widgets/trakt/trakt_menu_helpers.dart'
-    show TraktItemMenuAction;
-import '../../../services/simkl/simkl_menu_helpers.dart'
-    show SimklItemMenuAction;
 import '../../../services/mdblist/mdblist_menu_helpers.dart'
     show MdblistItemMenuAction;
+import '../../../services/simkl/simkl_menu_helpers.dart'
+    show SimklItemMenuAction;
+import '../../../widgets/trakt/trakt_menu_helpers.dart'
+    show TraktItemMenuAction;
 
 /// Detail actions borrow the view's existing handlers and row controllers.
 /// This boundary owns dispatch/refresh ordering, not tracker transport or writes.

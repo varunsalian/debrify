@@ -1,23 +1,24 @@
 import 'package:flutter/widgets.dart';
-import '../../models/stremio_addon.dart';
-import '../../models/iptv_playlist.dart';
-import '../../models/profiles/profile_policy.dart';
-import '../../features/search/presentation/search_input_section.dart';
-import '../../features/search/presentation/catalog_search_section.dart';
+
+import '../../features/home/presentation/home_classic_favorite_rows.dart';
+import '../../features/home/presentation/home_classic_geometry.dart';
+import '../../features/home/presentation/home_continuation_return.dart';
+import '../../features/home/presentation/home_hero_shell_bridge.dart';
+import '../../features/home/presentation/home_item_actions.dart';
 import '../../features/home/presentation/home_playlist_actions.dart';
+import '../../features/home/presentation/home_rows_navigation.dart';
+import '../../features/home/presentation/home_saved_content_rows.dart';
 import '../../features/home/presentation/home_saved_content_section.dart';
 import '../../features/home/presentation/home_saved_iptv_actions.dart';
 import '../../features/home/presentation/home_watchlist_actions.dart';
-import '../../features/home/presentation/home_saved_content_rows.dart';
-import '../../features/home/presentation/home_classic_favorite_rows.dart';
-import '../../features/home/presentation/home_item_actions.dart';
-import 'home_view_bindings.dart';
+import '../../features/search/presentation/catalog_search_section.dart';
+import '../../features/search/presentation/search_input_section.dart';
+import '../../models/iptv_playlist.dart';
+import '../../models/profiles/profile_policy.dart';
+import '../../models/stremio_addon.dart';
 import 'home_board_composition.dart';
-import '../../features/home/presentation/home_rows_navigation.dart';
-import '../../features/home/presentation/home_continuation_return.dart';
 import 'home_hero_composition.dart';
-import '../../features/home/presentation/home_hero_shell_bridge.dart';
-import '../../features/home/presentation/home_classic_geometry.dart';
+import 'home_view_bindings.dart';
 
 typedef HomeSavedCompositionDeps = ({
   bool Function() mounted,

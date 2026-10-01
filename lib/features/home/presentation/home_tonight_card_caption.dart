@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../models/stremio_addon.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
 import '../../../models/hero_metadata_presentation.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../theme/app_theme_scope.dart';
 import '../application/home_stage_metadata.dart';
 import '../application/home_tonight_caption_policy.dart';
@@ -120,7 +121,7 @@ class HomeTonightCardCaption extends StatelessWidget {
     name,
     maxLines: 1,
     overflow: TextOverflow.ellipsis,
-    style: TextStyle(
+    style: const TextStyle(
       color: Colors.white,
       fontSize: 22,
       fontWeight: FontWeight.w900,

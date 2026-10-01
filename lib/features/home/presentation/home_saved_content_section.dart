@@ -1,20 +1,22 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../../models/debrify_tv/channel.dart';
 import '../../../models/iptv_playlist.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../models/stremio_tv/stremio_tv_now_playing.dart';
-import '../models/home_catalog_search_status.dart';
-import '../application/home_tv_favorites_controller.dart';
-import '../application/home_stremio_favorites_controller.dart';
 import '../application/home_iptv_favorites_controller.dart';
 import '../application/home_iptv_lists_controller.dart';
-import '../application/home_watchlist_controller.dart';
 import '../application/home_playlist_controller.dart';
+import '../application/home_stremio_favorites_controller.dart';
+import '../application/home_tv_favorites_controller.dart';
+import '../application/home_watchlist_controller.dart';
+import '../models/home_catalog_search_status.dart';
 import '../models/home_favorite_row_ref.dart';
-import '../models/home_stremio_favorites.dart';
 import '../models/home_iptv_list.dart';
 import '../models/home_playlist.dart';
+import '../models/home_stremio_favorites.dart';
 import 'home_favorite_bindings.dart';
 import 'home_favorite_nodes.dart';
 import 'home_iptv_list_focus.dart';

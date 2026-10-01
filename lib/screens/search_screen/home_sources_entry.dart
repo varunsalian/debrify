@@ -1,10 +1,11 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/series_source.dart';
+
 import '../../features/home/presentation/home_local_source_picker.dart';
 import '../../features/home/presentation/home_sources_navigation.dart';
 import '../../features/sources/presentation/local_source_picker.dart';
 import '../../features/sources/presentation/sources_screen.dart';
+import '../../models/series_source.dart';
 
 /// Home's Sources entry points, bound to the Sources feature at the screen
 /// composition. Home receives them through its dependencies.

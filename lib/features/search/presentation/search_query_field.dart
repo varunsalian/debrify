@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../theme/app_theme_scope.dart';
 import '../../../models/stremio_addon.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../../../widgets/text_field_suggestions.dart';
 import '../../../widgets/tv_text_field.dart';
 import '../models/search_mode.dart';

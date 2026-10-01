@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/metadata_preferences.dart';
+import '../../../models/stremio_addon.dart';
 import '../../discover/models/metadata_feature_policy.dart';
 import '../models/search_mode.dart';
 import 'title_suggestion_presentation.dart';

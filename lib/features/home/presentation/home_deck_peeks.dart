@@ -1,5 +1,6 @@
-import 'package:flutter/widgets.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/widgets.dart';
+
 import '../../../models/stremio_addon.dart';
 import '../application/home_stage_metadata.dart';
 import 'home_deck_layout.dart' show homeDeckCardRadius;

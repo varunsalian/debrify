@@ -1,9 +1,11 @@
-import 'keyword_selection.dart';
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../../models/torrent.dart';
 import '../../../theme/app_theme_scope.dart';
 import '../../../utils/dialog_tap_guard.dart';
+import 'keyword_selection.dart';
 import 'search_result_bindings.dart';
 
 typedef KeywordSearchActionsDeps = ({

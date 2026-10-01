@@ -1,8 +1,9 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/widgets.dart';
+
+import '../models/home_favorite_row_ref.dart';
 import 'home_row_entrance.dart';
 import 'home_stage_rows.dart';
-import '../models/home_favorite_row_ref.dart';
 
 /// Lazy Classic rows. Home uses stable row IDs; catalog search keeps index keys.
 class HomeClassicRows extends StatelessWidget {

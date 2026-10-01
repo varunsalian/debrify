@@ -1,23 +1,24 @@
-import '../../features/home/presentation/home_saved_content_section.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/stremio_addon.dart';
+
 import '../../features/discover/application/discover_card_settings_controller.dart';
 import '../../features/discover/presentation/discover_section.dart';
-import 'search_mode_composition.dart';
-import '../../features/search/presentation/search_input_section.dart';
 import '../../features/home/presentation/home_catalog_badges.dart';
-import '../../features/home/presentation/home_integration_section.dart';
-import 'home_metadata_section.dart';
-import '../../features/home/presentation/home_rows_navigation.dart';
-import 'home_view_bindings.dart';
-import 'home_board_composition.dart';
-import 'home_continuation_content_composition.dart';
 import '../../features/home/presentation/home_continuation_playback.dart';
 import '../../features/home/presentation/home_continuation_return.dart';
+import '../../features/home/presentation/home_integration_section.dart';
+import '../../features/home/presentation/home_rows_navigation.dart';
+import '../../features/home/presentation/home_saved_content_section.dart';
+import '../../features/search/presentation/search_input_section.dart';
+import '../../models/stremio_addon.dart';
+import 'home_board_composition.dart';
+import 'home_continuation_content_composition.dart';
 import 'home_hero_composition.dart';
 import 'home_item_composition.dart';
+import 'home_metadata_section.dart';
 import 'home_tab_shell_registration.dart';
+import 'home_view_bindings.dart';
+import 'search_mode_composition.dart';
 
 typedef HomeCatalogPresentationDeps = ({
   bool Function() mounted,

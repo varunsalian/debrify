@@ -1,15 +1,15 @@
-import '../../../models/torrent.dart';
-import '../../../widgets/cinema_sources_layout.dart';
-import '../models/keyword_results_state.dart';
-import 'keyword_source_label.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../models/torrent.dart';
 import '../../../theme/app_theme_scope.dart';
 import '../../../utils/tv_keys.dart';
+import '../../../widgets/cinema_sources_layout.dart';
 import '../../../widgets/search_loading_animation.dart';
-import '../models/keyword_search_state.dart';
 import '../application/keyword_provider_selection.dart';
+import '../models/keyword_results_state.dart';
+import '../models/keyword_search_state.dart';
+import 'keyword_source_label.dart';
 
 /// Keyword page states. Builders keep inactive result/navigation surfaces lazy.
 class KeywordSearchPage extends StatelessWidget {

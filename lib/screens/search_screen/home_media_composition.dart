@@ -1,6 +1,6 @@
 import '../../features/home/presentation/home_board_media.dart';
-import 'home_hero_composition.dart';
 import '../../features/home/presentation/home_stage_favorites.dart';
+import 'home_hero_composition.dart';
 
 typedef HomeMediaCompositionDeps = ({
   int Function() artworkWidth,

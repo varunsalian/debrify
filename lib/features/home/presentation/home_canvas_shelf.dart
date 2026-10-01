@@ -1,5 +1,5 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/widgets.dart';
 
 /// Canvas's lazy horizontal shelf. Return the ListView directly so the owning
 /// AnimatedSwitcher still sees its original rail key and widget type.

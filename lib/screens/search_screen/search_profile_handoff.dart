@@ -1,9 +1,10 @@
 import 'package:flutter/widgets.dart';
+
 import '../../features/home/presentation/home_board_rows.dart';
-import '../../features/search/presentation/search_title_section.dart';
+import '../../features/search/presentation/catalog_search_section.dart';
 import '../../features/search/presentation/keyword_search_section.dart';
 import '../../features/search/presentation/lists_search_section.dart';
-import '../../features/search/presentation/catalog_search_section.dart';
+import '../../features/search/presentation/search_title_section.dart';
 
 /// Clears this mounted view's private search state during the existing profile handoff.
 class SearchProfileHandoff {

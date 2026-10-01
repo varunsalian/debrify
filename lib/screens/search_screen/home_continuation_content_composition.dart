@@ -1,11 +1,12 @@
 import 'package:flutter/widgets.dart';
-import 'home_board_composition.dart';
+
 import '../../features/home/presentation/home_catalog_badges.dart';
-import '../../features/home/presentation/home_continuation_section.dart';
 import '../../features/home/presentation/home_continuation_announcements.dart';
 import '../../features/home/presentation/home_continuation_loading.dart';
+import '../../features/home/presentation/home_continuation_section.dart';
 import '../../features/home/presentation/home_hero_shell_bridge.dart';
 import '../../features/home/presentation/home_saved_content_section.dart';
+import 'home_board_composition.dart';
 import 'home_view_bindings.dart';
 
 typedef HomeContinuationContentDeps = ({

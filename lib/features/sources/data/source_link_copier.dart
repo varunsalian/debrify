@@ -1,5 +1,5 @@
-import '../../../models/torrent.dart';
 import '../../../models/iptv_source_result.dart';
+import '../../../models/torrent.dart';
 
 enum SourceLinkCopyResult {
   copied,

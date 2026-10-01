@@ -1,15 +1,17 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../models/home_preferences.dart';
-import 'home_card_style.dart';
-import '../application/home_layout_preference.dart';
-import '../application/home_layout_policy.dart';
 import '../application/home_display_preferences_controller.dart';
+import '../application/home_layout_policy.dart';
+import '../application/home_layout_preference.dart';
 import '../models/home_display_preferences.dart';
-import 'home_hero_section.dart';
-import 'home_hero_preview.dart';
+import 'home_card_style.dart';
 import 'home_hero_live.dart';
+import 'home_hero_preview.dart';
+import 'home_hero_section.dart';
 
 typedef HomeDisplayDeps = ({
   bool Function() mounted,

@@ -1,6 +1,6 @@
-import 'home_board_configuration.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../services/home_load_deadline.dart';
+import 'home_board_configuration.dart';
 import 'home_catalog_plan.dart';
 
 typedef HomeCatalogSnapshot =

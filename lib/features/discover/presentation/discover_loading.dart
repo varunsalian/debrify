@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/metadata_preferences.dart';
+import '../../../models/stremio_addon.dart';
 import '../application/discover_source_controller.dart';
 
 typedef DiscoverLoadingDeps = ({

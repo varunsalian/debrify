@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../../models/stremio_addon.dart';
 import '../../../theme/app_theme_scope.dart';
 
@@ -60,9 +61,9 @@ Widget buildHomeTakeoverInfo(
             );
           }
 
-          final kicker = Text(
+          final kicker = const Text(
             'NOW PLAYING  ·  OFFICIAL TRAILER',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w800,
               letterSpacing: 4,

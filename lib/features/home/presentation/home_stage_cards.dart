@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../../../models/home_collection_rows.dart';
 import '../../../models/stremio_addon.dart';
 import 'home_board_cell.dart';
-import 'home_stage_rows.dart';
 import 'home_catalog_item_actions.dart';
+import 'home_stage_rows.dart';
 
 /// Shared stage title-card composition and action dispatch. The host owns the
 /// current catalog, focus history and accepted actions; this object owns no

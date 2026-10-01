@@ -1,8 +1,8 @@
-import '../../../models/cinema_source_provider.dart';
-import '../../../models/torrent.dart';
-import '../../../models/iptv_source_result.dart';
-import '../../../services/source_ordering.dart';
 import '../../../models/addon_search_status.dart';
+import '../../../models/cinema_source_provider.dart';
+import '../../../models/iptv_source_result.dart';
+import '../../../models/torrent.dart';
+import '../../../services/source_ordering.dart';
 import '../models/source_provider_option.dart';
 
 class SourceProviderProjection {

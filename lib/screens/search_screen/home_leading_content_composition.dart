@@ -1,20 +1,21 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/stremio_addon.dart';
-import '../../models/iptv_playlist.dart';
-import '../../models/iptv_cw_entry.dart';
-import '../../models/profiles/profile_policy.dart';
-import 'search_presentation_composition.dart';
-import 'home_saved_composition.dart';
-import 'home_continuation_content_composition.dart';
+
 import '../../features/home/presentation/home_continuation_playback.dart';
 import '../../features/home/presentation/home_continuation_removal.dart';
-import 'home_continuation_presentation_composition.dart';
+import '../../models/iptv_cw_entry.dart';
+import '../../models/iptv_playlist.dart';
+import '../../models/profiles/profile_policy.dart';
+import '../../models/stremio_addon.dart';
 import 'home_board_presentation_composition.dart';
 import 'home_catalog_presentation_composition.dart';
+import 'home_continuation_content_composition.dart';
+import 'home_continuation_presentation_composition.dart';
 import 'home_hero_composition.dart';
-import 'home_view_bindings.dart';
 import 'home_item_composition.dart';
+import 'home_saved_composition.dart';
+import 'home_view_bindings.dart';
+import 'search_presentation_composition.dart';
 
 typedef HomeLeadingContentDeps = ({
   bool Function() mounted,

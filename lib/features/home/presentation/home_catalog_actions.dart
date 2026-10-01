@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../models/trakt_continue_watching_item.dart';
 import '../../../screens/stremio_tv/widgets/stremio_tv_catalog_picker_dialog.dart';
-import '../models/home_catalog_session.dart';
-import '../models/home_series_resume_signals.dart';
+import '../application/home_detail_providers.dart';
+import '../application/home_playback_providers.dart';
 import '../data/home_series_resume_repository.dart';
 import '../data/home_tracking_policy_repository.dart';
-import '../application/home_playback_providers.dart';
-import '../application/home_detail_providers.dart';
+import '../models/home_catalog_session.dart';
+import '../models/home_series_resume_signals.dart';
+import 'home_catalog_play_action.dart';
 import 'home_detail_route.dart';
 import 'home_playback_navigation.dart';
-import 'home_catalog_play_action.dart';
 import 'home_random_playback_action.dart';
 
 typedef HomeCatalogActionsDeps = ({

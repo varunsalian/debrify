@@ -1,8 +1,8 @@
 import '../../../models/advanced_search_selection.dart';
-import '../../../models/torrent.dart';
 import '../../../models/series_source.dart';
-import '../../../services/source_ordering.dart';
+import '../../../models/torrent.dart';
 import '../../../services/pinned_direct_stream_match.dart';
+import '../../../services/source_ordering.dart';
 import 'source_seasons.dart';
 
 /// Prepare a batch before it is displayed or parked as pending results.
@@ -24,7 +24,7 @@ import 'source_seasons.dart';
   // sorts are applied later and therefore still win.
   final sourceOrdered = SourceOrdering.directAddonLinksFirst(raw);
   // Series pack/bind post-processing — ported from the old Home
-  // (torrent_search_screen) so this list matches. For a specific episode
+  // (the retired TorrentSearchScreen) so this list matches. For a specific episode
   // (episode drill-down), show EVERYTHING the episode-scoped query returned
   // — engines + addon streams, torrents and direct links alike, in standard
   // merge order. No curateEpisodeCandidates here: that filter serves the

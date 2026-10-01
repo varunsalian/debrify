@@ -1,8 +1,9 @@
 import 'package:flutter/widgets.dart';
-import '../models/search_mode.dart';
-import 'search_result_bindings.dart';
-import 'lists_search_section.dart';
+
 import '../../../utils/tv_search_focus_handoff.dart';
+import '../models/search_mode.dart';
+import 'lists_search_section.dart';
+import 'search_result_bindings.dart';
 
 typedef SearchModeSectionDeps = ({
   bool Function() mounted,

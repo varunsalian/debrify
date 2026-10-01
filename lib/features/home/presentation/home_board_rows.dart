@@ -1,22 +1,24 @@
 import 'dart:async';
 import 'dart:math';
+
 import 'package:flutter/material.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/home_collection_rows.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../widgets/home/home_row_focus.dart'
     show homeRowHeight, preserveHomeInsertionAnchor;
 import '../models/home_catalog_search_status.dart';
-import 'home_board_section.dart';
 import 'home_board_loading.dart';
 import 'home_board_paging.dart';
+import 'home_board_section.dart';
 import 'home_display_section.dart';
-import 'home_stage_section.dart';
-import 'home_stage_rails.dart';
-import 'home_stage_favorites.dart';
-import 'home_spotlight_section.dart';
-import 'home_hero_section.dart';
-import 'home_hero_preview.dart';
 import 'home_hero_live.dart';
+import 'home_hero_preview.dart';
+import 'home_hero_section.dart';
+import 'home_spotlight_section.dart';
+import 'home_stage_favorites.dart';
+import 'home_stage_rails.dart';
+import 'home_stage_section.dart';
 
 typedef HomeBoardRowsDeps = ({
   void Function(VoidCallback) setState,

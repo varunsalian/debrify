@@ -27,7 +27,7 @@ Future<void> showLocalSeriesFolderHelp(
             _ExpectationRow(
               label: 'Good',
               value: 'TV Shows/$title/',
-              color: Color(0xFF34D399),
+              color: const Color(0xFF34D399),
             ),
             const SizedBox(height: 6),
             _ExpectationRow(
@@ -35,7 +35,7 @@ Future<void> showLocalSeriesFolderHelp(
               value: pickedFolderName.isEmpty
                   ? 'TV Shows/'
                   : '$pickedFolderName/',
-              color: Color(0xFFF87171),
+              color: const Color(0xFFF87171),
             ),
             const SizedBox(height: 12),
             const Text(

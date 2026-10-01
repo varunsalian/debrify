@@ -1,10 +1,11 @@
 import 'package:flutter/widgets.dart';
-import '../../models/stremio_addon.dart';
-import '../../utils/tv_search_focus_handoff.dart';
+
 import '../../features/discover/models/metadata_feature_policy.dart';
 import '../../features/search/presentation/search_mode_section.dart';
-import '../../features/search/presentation/search_title_section.dart';
 import '../../features/search/presentation/search_title_open.dart';
+import '../../features/search/presentation/search_title_section.dart';
+import '../../models/stremio_addon.dart';
+import '../../utils/tv_search_focus_handoff.dart';
 
 typedef SearchTitleCompositionDeps = ({
   bool Function() mounted,

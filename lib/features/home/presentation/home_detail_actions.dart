@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../models/stremio_addon.dart';
-import '../../../widgets/trakt/trakt_menu_helpers.dart';
-import '../../../services/simkl/simkl_menu_helpers.dart'
-    show SimklItemMenuAction;
 import '../../../services/mdblist/mdblist_menu_helpers.dart'
     show MdblistItemMenuAction;
+import '../../../services/simkl/simkl_menu_helpers.dart'
+    show SimklItemMenuAction;
+import '../../../widgets/trakt/trakt_menu_helpers.dart';
 import '../application/home_detail_providers.dart';
 import '../models/home_catalog_session.dart';
+import 'home_catalog_actions.dart';
 import 'home_detail_action_bridge.dart';
 import 'home_detail_route.dart';
-import 'home_catalog_actions.dart';
 import 'home_playback_navigation.dart';
 import 'home_source_actions.dart';
 

@@ -1,6 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../../models/stremio_addon.dart';
 import '../../../theme/app_theme_scope.dart';
 import '../../../utils/tv_keys.dart';

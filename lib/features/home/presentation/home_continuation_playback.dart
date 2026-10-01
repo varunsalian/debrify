@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/iptv_cw_entry.dart';
+import '../../../models/stremio_addon.dart';
 import '../data/home_catalog_origin_repository.dart';
-import 'home_continuation_section.dart';
-import 'home_playback_navigation.dart';
 import 'home_catalog_actions.dart';
+import 'home_continuation_section.dart';
 import 'home_item_actions.dart';
+import 'home_playback_navigation.dart';
 
 typedef HomeContinuationPlaybackDeps = ({
   BuildContext Function() context,

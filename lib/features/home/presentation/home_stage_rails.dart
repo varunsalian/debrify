@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/home_collection_rows.dart';
-import '../models/home_favorite_row_ref.dart';
+import '../../../models/stremio_addon.dart';
 import '../application/home_row_order.dart';
-import 'home_stage_rows.dart';
-import 'home_rail_composition.dart';
+import '../models/home_favorite_row_ref.dart';
 import 'home_continuation_projection.dart';
 import 'home_continuation_section.dart';
+import 'home_rail_composition.dart';
 import 'home_saved_content_section.dart';
+import 'home_stage_rows.dart';
 
 typedef HomeStageRailsDeps = ({
   List<CatalogSection> Function() sections,

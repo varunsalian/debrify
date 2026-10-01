@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+
 import '../../../models/stremio_addon.dart';
-import 'home_see_all_navigation.dart';
-import 'home_continuation_section.dart';
-import 'home_continuation_playback.dart';
 import 'home_continuation_loading.dart';
+import 'home_continuation_playback.dart';
 import 'home_continuation_return.dart';
+import 'home_continuation_section.dart';
+import 'home_see_all_navigation.dart';
 import 'home_stage_rows.dart';
 
 typedef HomeContinuationSeeAllDeps = ({

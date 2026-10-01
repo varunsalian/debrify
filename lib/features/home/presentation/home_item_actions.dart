@@ -1,16 +1,18 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/media_identity.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../screens/episodes_screen.dart';
-import '../models/home_catalog_session.dart';
 import '../application/home_detail_providers.dart';
+import '../models/home_catalog_session.dart';
+import 'home_catalog_actions.dart';
+import 'home_detail_actions.dart';
 import 'home_detail_menus.dart';
 import 'home_detail_navigation.dart';
 import 'home_detail_presentation.dart';
-import 'home_catalog_actions.dart';
-import 'home_detail_actions.dart';
 import 'home_playback_navigation.dart';
 import 'home_source_actions.dart';
 

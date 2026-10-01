@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/home_collection_rows.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../utils/continue_watching_presentation.dart';
 import '../../../widgets/home/spotlight_board.dart';
 import '../application/home_stage_metadata.dart';

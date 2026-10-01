@@ -1,10 +1,10 @@
-import '../../../models/home_collection_rows.dart';
-import '../../../services/home_load_progress.dart';
-import '../../../services/home_load_deadline.dart';
 import '../../../models/home_collection.dart';
+import '../../../models/home_collection_rows.dart';
 import '../../../models/home_preferences.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../services/home_list_rows.dart';
+import '../../../services/home_load_deadline.dart';
+import '../../../services/home_load_progress.dart';
 
 /// Borrowed tracker/watched/catalog policies used by a Home load. No resource,
 /// cache or retry ownership moves from the existing services into this adapter.

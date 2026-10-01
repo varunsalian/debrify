@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../models/stremio_addon.dart';
 import '../../home/models/home_catalog_search_status.dart';
-import '../models/search_session.dart';
-import '../models/catalog_search_state.dart';
 import '../application/catalog_search_controller.dart';
-import 'search_result_bindings.dart';
+import '../models/catalog_search_state.dart';
+import '../models/search_session.dart';
 import 'catalog_search_projection.dart';
 import 'catalog_search_prompt.dart';
 import 'catalog_sources_dialog.dart';
+import 'search_result_bindings.dart';
 
 typedef CatalogSearchSectionDeps = ({
   SearchSession Function() session,

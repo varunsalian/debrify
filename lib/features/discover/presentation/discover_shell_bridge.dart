@@ -1,6 +1,8 @@
-import '../../../models/mdblist_list_choice.dart';
 import 'dart:async';
+
 import 'package:flutter/widgets.dart';
+
+import '../../../models/mdblist_list_choice.dart';
 import '../../../services/main_page_bridge.dart';
 import 'discover_preview.dart';
 

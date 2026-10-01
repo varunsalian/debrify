@@ -1,11 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import '../../../models/youtube_resolved_streams.dart';
 import '../../../theme/app_theme_scope.dart';
+import '../../../ui/core/spotlight_search_button.dart';
+import '../../../ui/core/trailer_indicators.dart';
 import '../../../widgets/hero_trailer_backdrop.dart';
 import 'home_hero_surface.dart';
-import '../../../ui/core/trailer_indicators.dart';
-import '../../../ui/core/spotlight_search_button.dart';
 
 /// Full-board ambient trailer layer (TV Home board only). Sits ABOVE the hero +
 /// rows as an [IgnorePointer] overlay and paints the trailer into a right-

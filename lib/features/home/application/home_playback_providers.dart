@@ -41,7 +41,7 @@ final homeCatalogPlaybackResolverProvider = Provider.autoDispose
 
 /// Stateless selection uses the same identity rules as ordinary playback.
 final homeRandomEpisodeSelectorProvider = Provider<HomeRandomEpisodeSelector>(
-  (ref) => HomeRandomEpisodeSelector(
+  (ref) => const HomeRandomEpisodeSelector(
     videoIdFor: StremioService.randomEpisodeVideoId,
     isCanonicalEpisode: StremioService.isCanonicalEpisodeId,
   ),

@@ -1,30 +1,31 @@
 import 'package:flutter/material.dart';
+
 import '../../../models/home_collection_rows.dart';
 import '../../../widgets/home/home_theme.dart';
 import '../models/home_catalog_search_status.dart';
-import 'home_catalog_search_status_strip.dart';
-import 'home_board_section.dart';
-import 'home_board_focus.dart';
 import 'home_board_deferred.dart';
-import 'home_board_paging.dart';
+import 'home_board_focus.dart';
 import 'home_board_media.dart';
-import 'home_display_section.dart';
-import 'home_classic_board.dart';
-import 'home_classic_rows.dart';
-import 'home_catalog_row.dart';
-import 'home_stage_rows.dart';
-import 'home_stage_rails.dart';
-import 'home_stage_geometry.dart';
-import 'home_saved_content_section.dart';
-import 'home_saved_content_rows.dart';
-import 'home_continuation_projection.dart';
-import 'home_continuation_menu.dart';
-import 'home_continuation_rows.dart';
-import 'home_hero_section.dart';
-import 'home_hero_preview.dart';
-import 'home_hero_live.dart';
-import 'home_classic_geometry.dart';
+import 'home_board_paging.dart';
+import 'home_board_section.dart';
 import 'home_catalog_item_actions.dart';
+import 'home_catalog_row.dart';
+import 'home_catalog_search_status_strip.dart';
+import 'home_classic_board.dart';
+import 'home_classic_geometry.dart';
+import 'home_classic_rows.dart';
+import 'home_continuation_menu.dart';
+import 'home_continuation_projection.dart';
+import 'home_continuation_rows.dart';
+import 'home_display_section.dart';
+import 'home_hero_live.dart';
+import 'home_hero_preview.dart';
+import 'home_hero_section.dart';
+import 'home_saved_content_rows.dart';
+import 'home_saved_content_section.dart';
+import 'home_stage_geometry.dart';
+import 'home_stage_rails.dart';
+import 'home_stage_rows.dart';
 
 typedef HomeClassicSectionDeps = ({
   BuildContext Function() context,

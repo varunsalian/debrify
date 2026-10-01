@@ -1,6 +1,6 @@
-import '../../../models/torrent.dart';
-import '../../../models/iptv_source_result.dart';
 import '../../../models/addon_search_status.dart';
+import '../../../models/iptv_source_result.dart';
+import '../../../models/torrent.dart';
 
 class SourceSearchResult {
   final List<Torrent> torrents;

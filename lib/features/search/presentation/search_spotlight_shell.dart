@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../models/search_mode.dart';
-import 'search_page_shell.dart';
+import 'catalog_search_section.dart';
 import 'search_input_section.dart';
 import 'search_mode_section.dart';
-import 'catalog_search_section.dart';
+import 'search_page_shell.dart';
 
 typedef SearchSpotlightShellDeps = ({
   bool Function() mounted,

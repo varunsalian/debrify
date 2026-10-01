@@ -1,17 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../models/debrify_tv/channel.dart';
 import '../../../models/iptv_playlist.dart';
-import '../application/home_tv_favorites_controller.dart';
-import '../application/home_stremio_favorites_controller.dart';
 import '../application/home_iptv_favorites_controller.dart';
 import '../application/home_iptv_lists_controller.dart';
-import '../application/home_watchlist_controller.dart';
 import '../application/home_playlist_controller.dart';
+import '../application/home_stremio_favorites_controller.dart';
+import '../application/home_tv_favorites_controller.dart';
+import '../application/home_watchlist_controller.dart';
 import '../models/home_favorites_session.dart';
-import '../models/home_stremio_favorites.dart';
 import '../models/home_iptv_list.dart';
-import '../models/home_watchlist.dart';
 import '../models/home_playlist.dart';
+import '../models/home_stremio_favorites.dart';
+import '../models/home_watchlist.dart';
 
 /// Retains Home's saved-content providers for the route lifetime. Each provider
 /// receives its original fresh view identity; controllers own all application state.

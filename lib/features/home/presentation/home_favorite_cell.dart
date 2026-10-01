@@ -1,5 +1,5 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 /// Generic DPAD arrow-handling wrapper for a favourites-row card — the arrow
 /// counterpart to the catalog cell for IPTV / Debrify TV / Stremio TV rows.

@@ -1,4 +1,3 @@
-import 'home_detail_menus.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../models/advanced_search_selection.dart';
@@ -6,15 +5,16 @@ import '../../../models/play_loader_art.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../screens/catalog_item_detail_screen.dart';
 import '../../../screens/merged_series_detail_screen.dart';
-import '../../../services/trakt/trakt_service.dart' show TraktTitleStatus;
-import '../../../services/simkl/simkl_service.dart' show SimklTitleStatus;
+import '../../../services/mdblist/mdblist_menu_helpers.dart'
+    show MdblistItemMenuAction;
 import '../../../services/mdblist/mdblist_models.dart' show MdblistTitleStatus;
 import '../../../services/simkl/simkl_menu_helpers.dart'
     show SimklItemMenuAction;
-import '../../../services/mdblist/mdblist_menu_helpers.dart'
-    show MdblistItemMenuAction;
+import '../../../services/simkl/simkl_service.dart' show SimklTitleStatus;
+import '../../../services/trakt/trakt_service.dart' show TraktTitleStatus;
 import '../../../widgets/trakt/trakt_menu_helpers.dart'
     show TraktItemMenuAction;
+import 'home_detail_menus.dart';
 
 typedef HomeDetailPromise = ({bool started, int season, int episode});
 typedef HomeDetailPlay =

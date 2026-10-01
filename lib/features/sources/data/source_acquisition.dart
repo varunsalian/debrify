@@ -1,5 +1,3 @@
-import '../../../services/profiles/profile_runtime.dart';
-import '../../../services/profiles/profile_session_memory.dart';
 import '../../../models/alldebrid_file.dart';
 import '../../../models/playlist_entry.dart';
 import '../../../models/premiumize_file.dart';
@@ -9,6 +7,8 @@ import '../../../models/torrent.dart';
 import '../../../services/alldebrid_service.dart';
 import '../../../services/debrid_service.dart';
 import '../../../services/premiumize_service.dart';
+import '../../../services/profiles/profile_runtime.dart';
+import '../../../services/profiles/profile_session_memory.dart';
 import '../../../services/storage_service.dart';
 import '../../../services/torbox_service.dart';
 import '../../../utils/file_utils.dart';

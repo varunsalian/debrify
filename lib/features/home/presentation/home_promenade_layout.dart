@@ -1,5 +1,6 @@
-import 'package:flutter/widgets.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/widgets.dart';
+
 import 'home_stage_scrims.dart';
 
 /// Gap between the centred rail label and the strip below it.

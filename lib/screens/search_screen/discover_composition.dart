@@ -1,11 +1,12 @@
 import 'package:flutter/widgets.dart';
+
+import '../../features/discover/presentation/discover_bindings.dart';
+import '../../features/discover/presentation/discover_loading.dart';
+import '../../features/discover/presentation/discover_section.dart';
+import '../../features/home/presentation/home_board_section.dart';
 import '../../models/metadata_preferences.dart';
 import 'home_catalog_presentation_composition.dart';
 import 'home_continuation_content_composition.dart';
-import '../../features/home/presentation/home_board_section.dart';
-import '../../features/discover/presentation/discover_bindings.dart';
-import '../../features/discover/presentation/discover_section.dart';
-import '../../features/discover/presentation/discover_loading.dart';
 
 typedef DiscoverCompositionDeps = ({
   bool Function() mounted,

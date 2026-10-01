@@ -1,5 +1,5 @@
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 /// Shared scaffold for a favourites row: a header (title + tag pills) above a
 /// horizontal strip of poster-shaped cards, sized exactly like the catalog

@@ -1,7 +1,9 @@
 import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
 import '../../../models/stremio_addon.dart';
 import '../../../utils/platform_util.dart';
 import '../../../widgets/home/home_theme.dart';

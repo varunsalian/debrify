@@ -1,8 +1,8 @@
+import '../../../models/series_source.dart';
 import '../../../models/torrent.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../../../services/resolved_playback_link_cache.dart';
-import '../../../models/series_source.dart';
 import '../../../services/series_source_service.dart' show SeriesSourceService;
 import '../../../services/stremio_service.dart';
 import '../models/saved_sources_state.dart';

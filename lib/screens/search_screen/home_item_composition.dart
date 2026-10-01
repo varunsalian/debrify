@@ -1,23 +1,25 @@
 import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../theme/app_theme_scope.dart';
-import '../../features/home/presentation/home_playback_navigation.dart';
+
 import '../../features/home/presentation/home_catalog_actions.dart';
-import '../../features/home/presentation/home_source_actions.dart';
+import '../../features/home/presentation/home_catalog_badges.dart';
+import '../../features/home/presentation/home_continuation_removal.dart';
+import '../../features/home/presentation/home_continuation_return.dart';
 import '../../features/home/presentation/home_detail_actions.dart';
 import '../../features/home/presentation/home_detail_menus.dart';
-import '../../features/home/presentation/home_item_actions.dart';
-import 'home_view_bindings.dart';
-import '../../features/home/presentation/home_catalog_badges.dart';
-import '../../features/home/presentation/home_continuation_return.dart';
-import '../../features/home/presentation/home_continuation_removal.dart';
-import 'home_continuation_content_composition.dart';
-import '../../features/home/presentation/home_integration_section.dart';
-import '../../features/home/presentation/home_rows_navigation.dart';
 import '../../features/home/presentation/home_hero_shell_bridge.dart';
-import 'home_sources_entry.dart';
+import '../../features/home/presentation/home_integration_section.dart';
+import '../../features/home/presentation/home_item_actions.dart';
+import '../../features/home/presentation/home_playback_navigation.dart';
+import '../../features/home/presentation/home_rows_navigation.dart';
+import '../../features/home/presentation/home_source_actions.dart';
 import '../../features/sources/presentation/local_source_picker_composition.dart';
+import '../../theme/app_theme_scope.dart';
+import 'home_continuation_content_composition.dart';
+import 'home_sources_entry.dart';
+import 'home_view_bindings.dart';
 
 typedef HomeItemCompositionDeps = ({
   bool Function() mounted,

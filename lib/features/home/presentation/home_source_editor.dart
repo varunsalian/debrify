@@ -1,17 +1,17 @@
-import 'home_bound_source_tile.dart';
 import 'package:flutter/material.dart';
 
 import '../../../models/series_source.dart';
 import '../../../models/stremio_addon.dart';
-import '../../../theme/app_theme_scope.dart';
-import '../../../widgets/clear_pinned_sources_button.dart';
-import '../../../widgets/add_source_picker_dialog.dart';
-import '../../../screens/debrid_downloads_screen.dart';
-import '../../../screens/torbox/torbox_downloads_screen.dart';
-import '../../../screens/premiumize/premiumize_files_screen.dart';
 import '../../../screens/alldebrid/alldebrid_files_screen.dart';
+import '../../../screens/debrid_downloads_screen.dart';
 import '../../../screens/pikpak/pikpak_files_screen.dart';
+import '../../../screens/premiumize/premiumize_files_screen.dart';
+import '../../../screens/torbox/torbox_downloads_screen.dart';
+import '../../../theme/app_theme_scope.dart';
+import '../../../widgets/add_source_picker_dialog.dart';
+import '../../../widgets/clear_pinned_sources_button.dart';
 import '../data/home_source_editing_repository.dart';
+import 'home_bound_source_tile.dart';
 import 'home_local_source_picker.dart';
 
 /// One detail action's editor and add-source navigation. Persistence and native

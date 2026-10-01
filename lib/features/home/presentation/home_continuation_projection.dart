@@ -1,7 +1,7 @@
 import '../models/home_catalog_search_status.dart';
-import 'home_continuation_section.dart';
 import 'home_continuation_playback.dart';
 import 'home_continuation_removal.dart';
+import 'home_continuation_section.dart';
 import 'home_stage_rows.dart';
 
 typedef HomeContinuationProjectionDeps = ({

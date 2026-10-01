@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/home_collection.dart';
 import '../../../models/home_collection_rows.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../screens/collections/collection_folder_screen.dart';
 import '../../../widgets/see_all/discover_card_settings_scope.dart';
 import '../../discover/models/discover_card_settings.dart';
 import '../data/home_board_services.dart';
 import 'home_board_section.dart';
-import 'home_display_section.dart';
-import 'home_catalog_badges.dart';
-import 'home_item_actions.dart';
 import 'home_catalog_actions.dart';
-import 'home_integration_section.dart';
-import 'home_continuation_section.dart';
+import 'home_catalog_badges.dart';
 import 'home_continuation_playback.dart';
 import 'home_continuation_return.dart';
+import 'home_continuation_section.dart';
+import 'home_display_section.dart';
+import 'home_integration_section.dart';
+import 'home_item_actions.dart';
 import 'home_see_all_navigation.dart';
 import 'home_stage_rows.dart';
 

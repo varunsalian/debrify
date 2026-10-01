@@ -1,6 +1,6 @@
 import '../../../models/torrent.dart';
-import '../models/keyword_results_state.dart';
 import '../application/keyword_provider_selection.dart';
+import '../models/keyword_results_state.dart';
 
 /// Pure display projections shared by streaming focus and Keyword rendering.
 class KeywordResultsProjection {

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import '../../../models/stremio_addon.dart';
-import 'home_media_bindings.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../models/stremio_addon.dart';
 import '../../../models/youtube_resolved_streams.dart';
 import '../../../utils/tvos_device.dart';
 import '../application/home_trailer_preferences_controller.dart';
 import '../models/home_catalog_session.dart';
 import '../models/home_trailer_preferences.dart';
 import 'home_hero_preview_policy.dart';
+import 'home_media_bindings.dart';
 
 typedef HomeHeroPreviewDeps = ({
   HomeMediaBindings Function() media,

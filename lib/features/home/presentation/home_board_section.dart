@@ -1,18 +1,20 @@
 import 'dart:math';
-import '../data/home_collections_repository.dart';
-import '../data/home_return_repository.dart';
+
 import 'package:flutter/material.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/home_collection.dart';
 import '../../../models/home_preferences.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../utils/platform_util.dart';
-import '../application/home_catalog_controller.dart';
 import '../application/home_catalog_continuation_controller.dart';
+import '../application/home_catalog_controller.dart';
 import '../application/home_row_order.dart';
-import '../models/home_catalog_state.dart';
-import '../models/home_catalog_plan.dart';
+import '../data/home_collections_repository.dart';
+import '../data/home_return_repository.dart';
 import '../models/home_board_configuration.dart';
+import '../models/home_catalog_plan.dart';
 import '../models/home_catalog_search_status.dart';
+import '../models/home_catalog_state.dart';
 import 'home_board_bindings.dart';
 import 'home_board_viewport.dart';
 import 'home_progress_publication.dart';

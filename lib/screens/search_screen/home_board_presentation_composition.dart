@@ -1,25 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../features/discover/presentation/discover_section.dart';
-import '../../features/search/presentation/search_input_section.dart';
-import 'search_mode_composition.dart';
-import '../../features/search/presentation/keyword_search_section.dart';
 import '../../features/home/presentation/home_board_bindings.dart';
-import 'home_board_composition.dart';
-import 'home_stage_composition.dart';
-import 'home_rendering_composition.dart';
-import 'home_catalog_presentation_composition.dart';
-import 'home_media_composition.dart';
-import 'home_hero_composition.dart';
+import '../../features/home/presentation/home_board_rendering.dart';
+import '../../features/home/presentation/home_classic_geometry.dart';
 import '../../features/home/presentation/home_hero_shell_bridge.dart';
 import '../../features/home/presentation/home_spotlight_section.dart';
+import '../../features/search/presentation/keyword_search_section.dart';
+import '../../features/search/presentation/search_input_section.dart';
+import 'home_board_composition.dart';
+import 'home_catalog_item_actions_adapter.dart';
+import 'home_catalog_presentation_composition.dart';
 import 'home_continuation_content_composition.dart';
 import 'home_continuation_presentation_composition.dart';
-import 'home_saved_composition.dart';
+import 'home_hero_composition.dart';
 import 'home_item_composition.dart';
-import '../../features/home/presentation/home_classic_geometry.dart';
-import 'home_catalog_item_actions_adapter.dart';
-import '../../features/home/presentation/home_board_rendering.dart';
+import 'home_media_composition.dart';
+import 'home_rendering_composition.dart';
+import 'home_saved_composition.dart';
+import 'home_stage_composition.dart';
+import 'search_mode_composition.dart';
 
 typedef HomeBoardPresentationDeps = ({
   bool Function() mounted,

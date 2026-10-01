@@ -1,20 +1,21 @@
 import 'package:flutter/widgets.dart';
+
+import '../../features/home/presentation/home_board_rendering.dart';
+import '../../features/home/presentation/home_catalog_item_actions.dart';
+import '../../features/home/presentation/home_classic_geometry.dart';
+import '../../features/home/presentation/home_classic_section.dart';
+import '../../features/home/presentation/home_continuation_menu.dart';
+import '../../features/home/presentation/home_continuation_projection.dart';
+import '../../features/home/presentation/home_continuation_rows.dart';
+import '../../features/home/presentation/home_hero_shell_bridge.dart';
+import '../../features/home/presentation/home_saved_content_rows.dart';
+import '../../features/home/presentation/home_saved_content_section.dart';
+import '../../features/home/presentation/home_spotlight_section.dart';
 import '../../features/search/presentation/catalog_search_section.dart';
 import 'home_board_composition.dart';
-import '../../features/home/presentation/home_board_rendering.dart';
-import '../../features/home/presentation/home_classic_section.dart';
-import '../../features/home/presentation/home_continuation_projection.dart';
-import '../../features/home/presentation/home_continuation_menu.dart';
-import '../../features/home/presentation/home_continuation_rows.dart';
 import 'home_hero_composition.dart';
-import '../../features/home/presentation/home_hero_shell_bridge.dart';
 import 'home_media_composition.dart';
-import '../../features/home/presentation/home_saved_content_section.dart';
-import '../../features/home/presentation/home_saved_content_rows.dart';
-import '../../features/home/presentation/home_spotlight_section.dart';
 import 'home_stage_composition.dart';
-import '../../features/home/presentation/home_classic_geometry.dart';
-import '../../features/home/presentation/home_catalog_item_actions.dart';
 
 typedef HomeRenderingCompositionDeps = ({
   bool Function() mounted,

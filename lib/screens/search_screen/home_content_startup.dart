@@ -1,12 +1,14 @@
-import 'package:flutter/widgets.dart';
-import '../../features/discover/presentation/discover_loading.dart';
-import 'home_board_composition.dart';
-import 'home_catalog_presentation_composition.dart';
-import '../../features/search/presentation/keyword_search_section.dart';
 import 'dart:async';
+
+import 'package:flutter/widgets.dart';
+
+import '../../features/discover/presentation/discover_loading.dart';
 import '../../features/home/presentation/home_continuation_loading.dart';
 import '../../features/home/presentation/home_return_section.dart';
 import '../../features/home/presentation/home_saved_content_section.dart';
+import '../../features/search/presentation/keyword_search_section.dart';
+import 'home_board_composition.dart';
+import 'home_catalog_presentation_composition.dart';
 import 'home_view_bindings.dart';
 
 typedef HomeContentStartupDeps = ({

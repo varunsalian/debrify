@@ -1,22 +1,23 @@
-import '../../features/home/application/home_board_providers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../features/search/models/keyword_snapshot.dart';
-import 'search_session_lifecycle.dart';
-import '../../features/home/models/home_return_snapshot.dart';
+
+import '../../features/home/application/home_board_providers.dart';
+import '../../features/home/application/home_display_preferences_controller.dart';
 import '../../features/home/models/home_board_configuration.dart';
 import '../../features/home/models/home_catalog_session.dart';
 import '../../features/home/models/home_continuation_session.dart';
 import '../../features/home/models/home_display_preferences.dart';
-import '../../features/home/application/home_display_preferences_controller.dart';
+import '../../features/home/models/home_return_snapshot.dart';
 import '../../features/home/presentation/home_board_bindings.dart';
-import '../../features/home/presentation/home_media_bindings.dart';
-import '../../features/home/presentation/home_favorite_bindings.dart';
-import '../../features/home/presentation/home_continuation_bindings.dart';
-import '../../features/home/presentation/home_board_section.dart';
 import '../../features/home/presentation/home_board_configuration_section.dart';
+import '../../features/home/presentation/home_board_section.dart';
+import '../../features/home/presentation/home_continuation_bindings.dart';
 import '../../features/home/presentation/home_display_section.dart';
+import '../../features/home/presentation/home_favorite_bindings.dart';
 import '../../features/home/presentation/home_hero_preview.dart';
+import '../../features/home/presentation/home_media_bindings.dart';
+import '../../features/search/models/keyword_snapshot.dart';
+import 'search_session_lifecycle.dart';
 
 typedef HomeViewBindingsDeps = ({
   bool Function() mounted,

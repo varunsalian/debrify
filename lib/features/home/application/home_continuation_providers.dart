@@ -27,7 +27,7 @@ import '../models/home_tracker_authentication.dart';
 
 final homeContinuationLayoutRepositoryProvider =
     Provider<HomeContinuationLayoutRepository>(
-      (ref) => HomeContinuationLayoutRepository(
+      (ref) => const HomeContinuationLayoutRepository(
         readMerged: StorageService.getHomeCwMergedRows,
       ),
       dependencies: const [],
@@ -91,7 +91,8 @@ final homeMdblistContinuationRepositoryProvider =
     );
 
 final homeIptvContinuationRepositoryProvider = Provider<IptvCwHistory>(
-  (ref) => IptvCwHistory(readHistory: StorageService.getIptvContinueWatching),
+  (ref) =>
+      const IptvCwHistory(readHistory: StorageService.getIptvContinueWatching),
   dependencies: const [],
 );
 

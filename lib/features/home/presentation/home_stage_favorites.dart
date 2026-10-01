@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
+
 import '../../../models/iptv_playlist.dart';
+import '../../../widgets/home/spotlight_board.dart';
+import '../application/home_stage_metadata.dart';
 import '../models/home_favorite_row_ref.dart';
 import '../models/home_stremio_favorites.dart';
-import '../application/home_stage_metadata.dart';
-import '../../../widgets/home/spotlight_board.dart';
-import 'home_favorite_focus.dart';
-import 'home_stage_favorite_cards.dart';
-import 'home_spotlight_favorites.dart';
-import 'home_stage_section.dart';
 import 'home_display_section.dart';
-import 'home_hero_section.dart';
-import 'home_hero_preview.dart';
+import 'home_favorite_focus.dart';
 import 'home_hero_live.dart';
+import 'home_hero_preview.dart';
+import 'home_hero_section.dart';
+import 'home_playlist_actions.dart';
 import 'home_saved_content_section.dart';
 import 'home_saved_iptv_actions.dart';
+import 'home_spotlight_favorites.dart';
+import 'home_stage_favorite_cards.dart';
+import 'home_stage_section.dart';
 import 'home_watchlist_actions.dart';
-import 'home_playlist_actions.dart';
 
 /// Saved-content cells and focus-driven preview overrides for stage layouts.
 class HomeStageFavorites {

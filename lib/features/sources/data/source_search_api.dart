@@ -1,6 +1,6 @@
-import '../../../models/torrent.dart';
 import '../../../models/advanced_search_selection.dart';
 import '../../../models/iptv_source_result.dart';
+import '../../../models/torrent.dart';
 import 'source_search_repository.dart';
 
 // Legacy service maps are confined to this integration boundary.

@@ -1,11 +1,12 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../../../models/stremio_addon.dart';
+
 import '../../../models/hero_metadata_presentation.dart';
+import '../../../models/stremio_addon.dart';
 import '../../../theme/app_theme_scope.dart';
-import '../application/home_stage_metadata.dart';
 import '../application/home_stage_art_failures.dart';
+import '../application/home_stage_metadata.dart';
 import 'home_favorite_focus.dart';
 
 // Shared across stage views for the original process/session lifetime.

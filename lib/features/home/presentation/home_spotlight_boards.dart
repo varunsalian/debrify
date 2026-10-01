@@ -1,14 +1,16 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
-import '../../../widgets/home/spotlight_board.dart';
+
+import 'package:flutter/material.dart';
+
 import '../../../utils/platform_util.dart';
+import '../../../widgets/home/spotlight_board.dart';
+import 'home_board_media.dart';
 import 'home_display_section.dart';
 import 'home_hero_preview.dart';
-import 'home_spotlight_section.dart';
 import 'home_item_actions.dart';
-import 'home_stage_rails.dart';
 import 'home_spotlight_rows.dart';
-import 'home_board_media.dart';
+import 'home_spotlight_section.dart';
+import 'home_stage_rails.dart';
 
 typedef HomeSpotlightBoardsDeps = ({
   bool Function() mounted,

@@ -1,19 +1,21 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../../ui/core/retry_message.dart';
 import '../../../widgets/skeleton_poster.dart' show BrandLoadingStage;
 import '../models/home_catalog_search_status.dart';
-import 'home_board_section.dart';
+import 'home_board_content.dart';
+import 'home_board_focus.dart';
+import 'home_board_frame.dart';
 import 'home_board_loading.dart';
 import 'home_board_paging.dart';
-import 'home_board_focus.dart';
-import 'home_board_content.dart';
-import 'home_board_frame.dart';
-import 'home_display_section.dart';
-import 'home_spotlight_section.dart';
-import 'home_spotlight_rows.dart';
-import 'home_saved_content_section.dart';
+import 'home_board_section.dart';
 import 'home_continuation_projection.dart';
+import 'home_display_section.dart';
+import 'home_saved_content_section.dart';
+import 'home_spotlight_rows.dart';
+import 'home_spotlight_section.dart';
 
 typedef HomeBoardRenderingDeps = ({
   bool Function() mounted,
@@ -135,7 +137,7 @@ class HomeBoardRendering {
       if (_spotlightSection.spotlightHero.isEmpty &&
           (_boardSection.boardRefreshing ||
               _spotlightSection.heroSourceResolving)) {
-        return BrandLoadingStage(isTelevision: true);
+        return const BrandLoadingStage(isTelevision: true);
       }
       // Reveal once: background refreshes must not hide an already usable
       // board. Hero success enters on the hero; exhaustion enters on a card.

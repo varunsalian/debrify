@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
+
 import '../../../models/stremio_addon.dart';
-import 'home_stage_rows.dart';
-import 'home_stage_cards.dart';
-import 'home_stage_geometry.dart';
-import 'home_stage_section.dart';
-import 'home_stage_favorites.dart';
-import 'home_hero_section.dart';
-import 'home_continuation_menu.dart';
-import 'home_mosaic_cell_navigation.dart';
 import 'home_catalog_item_actions.dart';
+import 'home_continuation_menu.dart';
+import 'home_hero_section.dart';
+import 'home_mosaic_cell_navigation.dart';
+import 'home_stage_cards.dart';
+import 'home_stage_favorites.dart';
+import 'home_stage_geometry.dart';
+import 'home_stage_rows.dart';
+import 'home_stage_section.dart';
 
 /// Dim painted over every strip cell that isn't focused, so the centre-locked
 /// cell reads as the lit one. A flat fill inside the card's own clip (see

@@ -1,10 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+
 import '../models/home_tonight_card_info.dart';
 import 'home_board_media.dart';
-import 'home_tonight_layout.dart';
-import 'home_tonight_header.dart';
 import 'home_tonight_card_caption.dart';
+import 'home_tonight_header.dart';
+import 'home_tonight_layout.dart';
 
 /// Tonight's media card, continuation queue and lower rail. Geometry keeps the
 /// rail visible on short boards; the host retains queue/rail focus ownership.

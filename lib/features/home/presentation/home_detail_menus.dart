@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../models/custom_series_identity.dart';
 import '../../../models/media_identity.dart';
-import '../../../services/trakt/trakt_service.dart' show TraktTitleStatus;
-import '../../../services/simkl/simkl_service.dart' show SimklTitleStatus;
+import '../../../services/mdblist/mdblist_menu_helpers.dart'
+    show MdblistMenuOption, buildMdblistMenuOptions;
 import '../../../services/mdblist/mdblist_models.dart' show MdblistTitleStatus;
 import '../../../services/simkl/simkl_menu_helpers.dart'
     show SimklMenuOption, buildSimklMenuOptions;
-import '../../../services/mdblist/mdblist_menu_helpers.dart'
-    show MdblistMenuOption, buildMdblistMenuOptions;
+import '../../../services/simkl/simkl_service.dart' show SimklTitleStatus;
+import '../../../services/trakt/trakt_service.dart' show TraktTitleStatus;
 import '../../../widgets/trakt/trakt_menu_helpers.dart'
     show TraktMenuOption, TraktItemMenuAction, buildTraktAddOnlyMenuOptions;
 
