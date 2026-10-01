@@ -301,6 +301,7 @@ this file's source text.
 | 1 | `1e47f83a` | 5,893 | Moved no-UI dependencies and models. Focused suite: 1,101 pass / 4 observed baseline failures; comparison PASS. Size/import guards pass. |
 | 2 | `014502cf` | 4,749 | Search/fetcher owners wired; focused suite 1,101 pass / same 4 failures; comparison PASS. Analyzer and size/import guards unchanged/pass. |
 | 3 | `396c93c0` | 3,148 | Menu/launch/binding owners wired; 1,106 focused pass / 2 historical failures. No new analyzer diagnostics. Full-suite gate 1 comparison PASS: 10,294 pass / 20 fail / 29 err / 20 skip; same baseline identities and skips, 3 new passing tests. |
+| 4 | Pipeline commits listed below | 157 before final formatting | Five whole pipelines moved, each checked and committed. No new test/analyzer failures; static lifetimes retained. |
 
 ## Found, not fixed
 
@@ -418,3 +419,14 @@ this file's source text.
   were restored to the original; that screen has no final diff. Cleanup is
   restricted to the migrated source set and affected tests. All original
   analyzer diagnostics are again measured (836, none added).
+
+- `activateTorrent` →
+  `presentation/legacy_playback/manual_source_activation.dart` (394 lines).
+  Whole entry point retained, with one formatting-exposed guard exception.
+  Focused suite 1,106 pass / same 2 failures; no new diagnostics; verbatim
+  and size/import guards pass. Evidence: `<E>/tps/step4-manual.jsonl`,
+  `analyze-step4-manual.txt`. All 119 original static members now have a
+  single feature owner, both models are moved, and `TEMP(tps)` is absent.
+
+Pipeline commits: `80c44f2c` (best), `ba6a3709` (selection), `ccc56861`
+(addon), `08c04d6d` (bound), and the manual-entry commit containing this entry.
