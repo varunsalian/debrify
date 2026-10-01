@@ -15,9 +15,11 @@ import 'package:debrify/features/sources/data/source_series_fetcher.dart';
 import 'package:debrify/features/sources/models/playback_cancel_token.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/addon_stream_playback.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/automatic_play_best.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/bound_source_playback.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/source_loading_overlays.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/source_player_launch.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/source_provider_choice.dart';
+import 'package:debrify/models/playback_meta.dart';
 import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/direct_source_authorization.dart';
@@ -26,7 +28,6 @@ import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/stream_url_validator.dart';
-import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/widgets/pipeline_loading_overlay.dart';
 import 'package:flutter/material.dart';
 
@@ -263,7 +264,7 @@ final class AutomaticPlaySelection {
           (isMovie || (meta.season != null && meta.episode != null));
       if (boundUsable) {
         resolving.dismiss();
-        final played = await TorrentPlaybackService.playViaBound(
+        final played = await BoundSourcePlayback.playViaBound(
           context,
           imdbId,
           bound,

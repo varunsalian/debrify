@@ -4,10 +4,11 @@ import 'package:debrify/features/sources/application/source_candidate_checks.dar
 import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/addon_stream_playback.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/automatic_play_selection.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/bound_source_playback.dart';
+import 'package:debrify/models/playback_meta.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
 import 'package:debrify/services/storage_service.dart';
-import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:flutter/material.dart';
 
 final class SourceNextEpisode {
@@ -130,7 +131,7 @@ final class SourceNextEpisode {
         .toList();
     if (!context.mounted || !sourceBindings.isCurrent) return;
     if (bound.isNotEmpty && meta.season != null && meta.episode != null) {
-      final played = await TorrentPlaybackService.playViaBound(
+      final played = await BoundSourcePlayback.playViaBound(
         context,
         imdbId,
         bound,

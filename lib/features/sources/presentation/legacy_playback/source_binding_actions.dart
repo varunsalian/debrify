@@ -6,16 +6,17 @@ import 'package:debrify/features/sources/data/manual_source_preparation.dart';
 import 'package:debrify/features/sources/presentation/direct_source_binding.dart';
 import 'package:debrify/features/sources/presentation/iptv_source_binding.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/automatic_play_selection.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/bound_source_playback.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/source_loading_overlays.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/source_provider_choice.dart';
 import 'package:debrify/features/sources/presentation/local_source_binding.dart';
 import 'package:debrify/features/sources/presentation/torrent_source_binding.dart';
+import 'package:debrify/models/playback_meta.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/direct_source_authorization.dart';
 import 'package:debrify/services/local_bound_source_service.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
-import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:flutter/material.dart';
 
 final class SourceBindingActions {
@@ -38,7 +39,7 @@ final class SourceBindingActions {
   }) async {
     if (!context.mounted || !sourceBindings.isCurrent) return;
     if (remainingSources.isNotEmpty) {
-      final played = await TorrentPlaybackService.playViaBound(
+      final played = await BoundSourcePlayback.playViaBound(
         context,
         imdbId,
         remainingSources,

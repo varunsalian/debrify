@@ -1,7 +1,7 @@
 # Files allowed over the size limit, with their maximum line count.
 # Maintained by dev/tool/check_file_sizes.py --update (shrink only).
 22221 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
-18078 lib/screens/video_player_screen.dart
+18081 lib/screens/video_player_screen.dart
 11264 lib/screens/magic_tv_screen.dart
 10952 lib/services/storage_service.dart
 9080 lib/widgets/iptv/iptv_results_view.dart
@@ -95,7 +95,6 @@
 1347 lib/screens/video_player/widgets/stremio_tv_guide_sheet.dart
 1344 lib/widgets/deprecated/home_favorites_section.dart
 1325 lib/screens/profiles/profile_setup_flow.dart
-1316 lib/services/torrent_playback_service.dart
 1313 lib/screens/video_player/widgets/source_sheet.dart
 1307 lib/services/external_player_service.dart
 1275 lib/services/backup_restore_service.dart

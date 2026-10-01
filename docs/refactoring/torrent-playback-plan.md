@@ -404,3 +404,17 @@ this file's source text.
   verbatim and guard checks pass. Evidence: `<E>/tps/step4-addon.jsonl`,
   `analyze-step4-addon.txt`. Gate 1 private CI run `36840285688` passed all
   three jobs at `4c9aa004` (confirmed through GitHub).
+
+- `_playViaBound` and its resolution helpers →
+  `presentation/legacy_playback/bound_source_playback.dart` (665 lines) and
+  `bound_source_resolution.dart` (233 lines). Whole pipeline retained; split
+  the method in the subsequent playback refactor. One formatting-exposed
+  guard receives the scoped curly-brace exception. Source-text guards read
+  this owner and tolerate formatted argument whitespace while retaining
+  preferred-provider checks. Focused suite 1,106 pass / same 2 failures,
+  no new diagnostics; verbatim and guards pass. Evidence:
+  `<E>/tps/step4-bound-final.jsonl`, `analyze-step4-bound.txt`.
+- Accidental player-screen lint/import cleanup and its three-line size ratchet
+  were restored to the original; that screen has no final diff. Cleanup is
+  restricted to the migrated source set and affected tests. All original
+  analyzer diagnostics are again measured (836, none added).

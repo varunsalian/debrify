@@ -20,8 +20,8 @@ void main() {
   final playerBridge = File(
     'lib/services/android_tv_player_bridge.dart',
   ).readAsStringSync();
-  final playbackService = File(
-    'lib/services/torrent_playback_service.dart',
+  final boundPlaybackCode = File(
+    'lib/features/sources/presentation/legacy_playback/bound_source_playback.dart',
   ).readAsStringSync();
   final recoveryResolution = File(
     'lib/features/sources/data/recovery_source_resolution.dart',
@@ -157,18 +157,26 @@ void main() {
 
   test('saved direct fetch and resolution honor the preferred provider', () {
     final direct = _between(
-      playbackService,
+      boundPlaybackCode,
       '// Addon-direct pins store provenance',
       '// Cheap skip: a bound DEBRID source',
     );
     expect(direct, contains('recoveryProvider: preferredProvider'));
     expect(
       direct,
-      contains('seriesFetcherFor(meta: meta, provider: preferredProvider)'),
+      matches(
+        RegExp(
+          r'SourceSeriesFetcher\.seriesFetcherFor\(\s*meta:\s*meta,\s*provider:\s*preferredProvider,?\s*\)',
+        ),
+      ),
     );
     expect(
       direct,
-      contains('movieFetcherFor(meta: meta, provider: preferredProvider)'),
+      matches(
+        RegExp(
+          r'SourceMovieFetcher\.movieFetcherFor\(\s*meta:\s*meta,\s*provider:\s*preferredProvider,?\s*\)',
+        ),
+      ),
     );
   });
 
@@ -343,14 +351,17 @@ void main() {
         'Future<void> _commitValidatedStremioSource(',
       );
       final directBinding = _between(
-        playbackService,
+        boundPlaybackCode,
         '// Addon-direct pins store provenance',
         '// Cheap skip: a bound DEBRID source',
       );
 
       expect(startup, isNot(contains('_reportRejectedStremioSource')));
       expect(flutterPlayer, contains("'startupSourcesExhausted': true"));
-      expect(playbackService, isNot(contains('_rejectedDirectSourceHandler')));
+      expect(
+        boundPlaybackCode,
+        isNot(contains('_rejectedDirectSourceHandler')),
+      );
       expect(directBinding, contains('sourceBindings.removeInvalid('));
       expect(directBinding, contains('sourceBindings.removeCachedLink('));
       expect(directBinding, isNot(contains('[source, ...remainingSources]')));
@@ -360,14 +371,14 @@ void main() {
           'startupHasRemainingSavedSources: remainingSources.isNotEmpty',
         ),
       );
-      expect(playbackService, contains('remainingSources'));
+      expect(boundPlaybackCode, contains('remainingSources'));
       expect(bindingActions, contains('skipBoundSources: true'));
     },
   );
 
   test('every saved-source launch preserves remaining-pin recovery', () {
     final boundPlayback = _between(
-      playbackService,
+      boundPlaybackCode,
       'static Future<bool> playViaBound(',
       '\n  }\n',
     );
@@ -406,7 +417,7 @@ void main() {
       '\n  }\n',
     );
     final boundPlayback = _between(
-      playbackService,
+      boundPlaybackCode,
       'static Future<bool> playViaBound(',
       '\n  }\n',
     );
