@@ -6300,6 +6300,13 @@ class TorrentPlaybackService {
     Torrent torrent,
   ) => downloadSource(context, torrent, const SourceDownload());
 
+  /// User-requested provider actions (download, playlist add, ZIP, transfer,
+  /// keep-on-provider) finish once accepted, even if the user leaves the
+  /// screen meanwhile — as before the refactor. The operations still reject a
+  /// profile switch through their captured owner, and every snackbar checks
+  /// `context.mounted` itself.
+  static bool _acceptedProviderAction() => true;
+
   static Future<void> _download(
     BuildContext context,
     _Resolved r,
@@ -6309,7 +6316,7 @@ class TorrentPlaybackService {
   }) async {
     final actions = ProviderSourceActions(
       owner: sourceBindings.owner,
-      canContinue: () => context.mounted,
+      canContinue: _acceptedProviderAction,
     );
     if (!context.mounted || !actions.isCurrent) return;
     if (r.playlist != null && r.playlist!.length > 1) {
@@ -6373,7 +6380,7 @@ class TorrentPlaybackService {
   }) async {
     final playlist = SourcePlaylist(
       owner: sourceBindings.owner,
-      canContinue: () => context.mounted,
+      canContinue: _acceptedProviderAction,
     );
     if (!playlist.isCurrent) return;
     final ok = await playlist.add(r, torrent, provider, meta: meta);
@@ -6587,7 +6594,7 @@ class TorrentPlaybackService {
   }) async {
     final actions = ProviderSourceActions(
       owner: sourceBindings.owner,
-      canContinue: () => context.mounted,
+      canContinue: _acceptedProviderAction,
     );
     if (!context.mounted || !actions.isCurrent) return;
     final String? url;
@@ -6596,7 +6603,7 @@ class TorrentPlaybackService {
     } catch (_) {
       return;
     }
-    if (!context.mounted || url == null || !actions.isCurrent) return;
+    if (url == null || !actions.isCurrent) return;
     await Clipboard.setData(ClipboardData(text: url));
     if (context.mounted && actions.isCurrent) {
       _snack(context, 'ZIP download link copied to clipboard!');
@@ -6611,7 +6618,7 @@ class TorrentPlaybackService {
   }) async {
     final actions = ProviderSourceActions(
       owner: sourceBindings.owner,
-      canContinue: () => context.mounted,
+      canContinue: _acceptedProviderAction,
     );
     if (!context.mounted || !actions.isCurrent) return;
     try {
@@ -6633,7 +6640,7 @@ class TorrentPlaybackService {
   }) async {
     final actions = ProviderSourceActions(
       owner: sourceBindings.owner,
-      canContinue: () => context.mounted,
+      canContinue: _acceptedProviderAction,
     );
     if (!context.mounted || !actions.isCurrent) return;
     try {
@@ -6660,7 +6667,7 @@ class TorrentPlaybackService {
   }) async {
     final actions = ProviderSourceActions(
       owner: sourceBindings.owner,
-      canContinue: () => context.mounted,
+      canContinue: _acceptedProviderAction,
     );
     if (!context.mounted || !actions.isCurrent) return;
     DebridLoadingHandle? loading;
@@ -6689,7 +6696,7 @@ class TorrentPlaybackService {
       }
       return;
     }
-    if (!context.mounted || url == null || !actions.isCurrent) return;
+    if (url == null || !actions.isCurrent) return;
     try {
       if (copyOnly) {
         await Clipboard.setData(ClipboardData(text: url));
@@ -6762,7 +6769,7 @@ class TorrentPlaybackService {
   }) async {
     final actions = ProviderSourceActions(
       owner: sourceBindings.owner,
-      canContinue: () => context.mounted,
+      canContinue: _acceptedProviderAction,
     );
     if (!context.mounted || !actions.isCurrent) return;
     final keep = await showNotCachedDialog(context, _label(provider));
