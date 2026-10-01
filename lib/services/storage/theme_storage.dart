@@ -10,13 +10,13 @@ final class ThemeStorage {
 
   /// The app-wide theme (Appearance → App Theme). `'legacy'` is the sentinel
   /// meaning "render today's app exactly" and is the default; any other
-  /// accepted value is a [kDetailThemes] id applied app-wide.
+  /// accepted value is a `DetailPageStorage.kDetailThemes` id applied app-wide.
   ///
   /// Unknown/removed ids normalize to `'legacy'` on BOTH sides — never to a
   /// random theme — so a value written by a newer build downgrades safely.
   ///
   /// Write-through contract (owned by `AppThemeController.select`): choosing a
-  /// real app theme also mirrors the id into [_detailThemeKey], and the mirror
+  /// real app theme also mirrors the id into `DetailPageStorage.detailThemeKey`, and the mirror
   /// is written FIRST — a crash between the two writes must leave an
   /// older-build-consistent view, and old builds only read `detail_theme`.
   static String appThemeCached = 'legacy';

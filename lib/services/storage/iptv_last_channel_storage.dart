@@ -18,7 +18,7 @@ final class IptvLastChannelStorage {
   // re-tunes this unattended on every cold boot, so a dead entry would mean
   // booting into failure until the user cancels out of it.
   //
-  // Deliberately NOT [recordIptvWatch]: that store is the Continue Watching
+  // Deliberately NOT `IptvHistoryStorage.recordIptvWatch`: that store is the Continue Watching
   // shelf, which is on-demand only ("62% through Sky Sports" is meaningless).
   // ==========================================================================
 

@@ -37,7 +37,7 @@ final class IptvHistoryStorage {
 
   /// Remember that an on-demand IPTV item was played, capturing enough
   /// metadata to rebuild its row without re-fetching the panel — the same
-  /// trick [setIptvChannelFavorited] uses, and necessary for the same reason:
+  /// trick `IptvFavoritesStorage.setIptvChannelFavorited` uses, and necessary for the same reason:
   /// the provider's catalog can be renumbered or gone by the time the shelf
   /// is read.
   ///
@@ -226,14 +226,14 @@ final class IptvHistoryStorage {
   }
 
   /// Remove all watch history that belongs to a deleted playlist — mirrors
-  /// [removeIptvFavoritesByPlaylistId] so a removed provider leaves nothing
+  /// `IptvFavoritesStorage.removeIptvFavoritesByPlaylistId` so a removed provider leaves nothing
   /// behind pointing at URLs that no longer authenticate.
   static Future<void> removeIptvWatchHistoryByPlaylistId(String playlistId) {
     return IptvMediaStore.removeWatchHistoryByPlaylistId(playlistId);
   }
 
   /// Take one on-demand IPTV item off the Continue Watching shelf (history +
-  /// saved position). The local counterpart of [removeContinueWatchingItem].
+  /// saved position). The local counterpart of `ContinueWatchingStorage.removeContinueWatchingItem`.
   static Future<void> removeIptvContinueWatchingItem(String url) {
     return IptvMediaStore.removeWatchEntry(url);
   }

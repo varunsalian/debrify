@@ -496,7 +496,8 @@ identity is present with the same outcome.
 | 4 | `e30794c2` | 5,273 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 | 5 | `15704c1f` | 3,447 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 | 6 | `71e25130` | 2,022 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
-| 7 | This step commit (hash recorded by step 8) | 8 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 7 | `72dcf3bf` | 8 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 8 | This step commit (hash recorded at gate 2) | 0 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 
 ### Step 0 evidence and retained source
 
@@ -565,7 +566,7 @@ and comments are intentionally preserved for review.
 
 ## Found, not fixed
 
-(none yet)
+(none found)
 
 ### Mechanical caller size exceptions
 
@@ -587,7 +588,6 @@ each step. Unrelated whole-file extractions remain outside this plan.
 | 1 | `lib/services/download_service.dart` | 4683 | 4684 |
 | 1 | `lib/widgets/onboarding/onboarding_flow.dart` | 1206 | 1207 |
 | 1 | `lib/widgets/see_all/discover_detail_rail.dart` | 1166 | 1167 |
-
 | 2 | `lib/main.dart` | 4161 | 4169 |
 | 2 | `lib/screens/addons/addon_hub_screen.dart` | 3412 | 3415 |
 | 2 | `lib/screens/alldebrid/alldebrid_files_screen.dart` | 1995 | 1996 |
@@ -792,3 +792,30 @@ comparison to `ss/base.jsonl` PASS (no new failures, missing tests or skips).
 prescribed old-file relocation. Map/dependency, constant, declaration/reset,
 size/import and diff checks pass. Caller review confirms only authorized
 expressions, imports and whitespace changed.
+
+Step 8: `ss/step8.jsonl` records {'success': 340};
+comparison to `ss/base.jsonl` PASS (no new failures, missing tests or skips).
+`ss/analyze-step8.txt` vs the previous step adds no diagnostics after the
+prescribed old-file relocation. Map/dependency, constant, declaration/reset,
+size/import and diff checks pass. Caller review confirms only authorized
+expressions, imports and whitespace changed.
+
+Step 8 final source set: 82 Dart files in `lib/services/storage/` plus both
+enum files. The largest is `debrify_tv_storage.dart` at 381 physical lines;
+all 84 files meet the 500-line data-layer cap. The old source file and its
+size-baseline entry are gone. Twelve owner resets are reached exactly once
+before the unchanged single StorageService ledger stamp.
+
+`check_storage_references.py --self-test` is now required by CI. It scans all
+tracked Dart files, rejects executable legacy references (including string
+interpolations), old import/export URIs (including conditional imports and
+intervening comments), and shared-member references outside the storage folder.
+The reviewed remaining literal mentions are only preserved logs, test groups
+and ledger labels/assertions. Cross-owner doc references now name their owners
+without adding dependencies only for documentation.
+
+Final tooling fixtures pass (nine repoint fixtures, declaration negatives and
+reference-guard fixtures). The exact CI format scope checks 1,079 files without
+changes; its analyzer command succeeds with the same 15 existing informational
+diagnostics. All step analyzer comparisons add no diagnostics. Gate 2 remains
+the final integration and private-CI check.

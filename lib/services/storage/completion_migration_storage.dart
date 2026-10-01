@@ -39,7 +39,7 @@ final class CompletionMigrationStorage {
   /// One-time, per-profile purge of the resume "ghosts" older builds minted
   /// when an episode was unwatched.
   ///
-  /// Until [_clearEpisodeCompletion] learned to drop the row, unwatching a
+  /// Until `EpisodeCompletionStorage._clearEpisodeCompletion` learned to drop the row, unwatching a
   /// fully-watched episode zeroed its `positionMs` and stamped `updatedAt` to
   /// now. The leftover row reads as "played, 0% in, not finished", which is the
   /// newest thing in the series — so it won `getLastPlayedEpisode*` and pinned

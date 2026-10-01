@@ -36,10 +36,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final storageSources = <String, String>{
-    if (File('lib/services/storage_service.dart').existsSync())
-      'lib/services/storage_service.dart': File(
-        'lib/services/storage_service.dart',
-      ).readAsStringSync(),
     for (final file in Directory(
       'lib/services/storage',
     ).listSync().whereType<File>())
@@ -53,7 +49,7 @@ void main() {
   ).readAsStringSync();
 
   test('every synchronous mirror is cleared on profile switch', () {
-    // StorageService exposes `<name>Cached` statics that the UI reads
+    // Storage owners expose `<name>Cached` statics that the UI reads
     // synchronously, precisely so a rebuild does not have to await a disk
     // read. That speed is why they are the sharpest stale-UI edge in the app:
     // a mirror left holding profile A's value is displayed to profile B
@@ -75,7 +71,7 @@ void main() {
         unreset,
         isEmpty,
         reason:
-            '${entry.key}: These StorageService mirrors survive a profile '
+            '${entry.key}: These storage mirrors survive a profile '
             'switch. Reset each in its owner resetProfileCaches().',
       );
     }
@@ -157,12 +153,6 @@ void main() {
         reason:
             '${entry.key} must be reset exactly once through the entry point.',
       );
-      if (owner == 'StorageService') {
-        expect(entry.value, contains('static void resetProfileCaches()'));
-        final leaf = _bodyOf(entry.value, 'static void resetProfileCaches()');
-        expect(leaf, isNot(contains('resetStorageProfileCaches(')));
-        expect(leaf, isNot(matches(r'\w+Storage\.resetProfileCaches\(')));
-      }
     }
     expect(
       resetCalls.toSet(),

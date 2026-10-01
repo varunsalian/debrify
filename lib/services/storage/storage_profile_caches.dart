@@ -10,7 +10,6 @@ import 'package:debrify/services/storage/startup_iptv_storage.dart';
 import 'package:debrify/services/storage/theme_storage.dart';
 import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/services/storage/ui_feedback_storage.dart';
-import 'package:debrify/services/storage_service.dart';
 
 void resetStorageProfileCaches() {
   TvDisplayStorage.resetProfileCaches();
@@ -25,5 +24,4 @@ void resetStorageProfileCaches() {
   PlayerSettingsStorage.resetProfileCaches();
   UiFeedbackStorage.resetProfileCaches();
   StartupIptvStorage.resetProfileCaches();
-  StorageService.resetProfileCaches();
 }

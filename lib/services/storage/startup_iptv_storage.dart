@@ -65,7 +65,7 @@ final class StartupIptvStorage {
     );
   }
 
-  /// The pinned startup channel. Same blob shape as [setIptvLastLiveChannel],
+  /// The pinned startup channel. Same blob shape as `IptvLastChannelStorage.setIptvLastLiveChannel`,
   /// so both modes resolve through one code path at launch.
   static Future<Map<String, dynamic>?> getStartupIptvChannel() async {
     final prefs = await ProfilePreferences.instance();

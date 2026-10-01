@@ -112,7 +112,7 @@ final class MergedEpisodeProgressStorage {
     return merged;
   }
 
-  /// IMDb-aware counterpart to [getFinishedEpisodes], unioning historical
+  /// IMDb-aware counterpart to `EpisodeProgressStorage.getFinishedEpisodes`, unioning historical
   /// release-title records with the current title record.
   static Future<Map<String, Set<int>>> getMergedFinishedEpisodes({
     required String seriesTitle,

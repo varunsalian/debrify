@@ -17,6 +17,7 @@ jobs:
       # within 800 lines. Baseline: dev/tool/file_size_baseline.txt.
       - run: python3 dev/tool/check_file_sizes.py
       - run: python3 dev/tool/check_storage_keys.py
+      - run: python3 dev/tool/check_storage_references.py --self-test
 
   search-architecture:
     runs-on: ubuntu-latest

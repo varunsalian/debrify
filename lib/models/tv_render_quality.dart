@@ -1,5 +1,5 @@
 /// How the Android TV UI is rastered — see
-/// [StorageService.getTvRenderQuality]. Three states, not a switch: the
+/// `TvDisplayStorage.getTvRenderQuality`. Three states, not a switch: the
 /// automatic branch is the ABSENCE of the stored pref, because that absence is
 /// what lets MainActivity keep making the device-capability call.
 enum TvRenderQuality {

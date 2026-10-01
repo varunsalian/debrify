@@ -74,7 +74,7 @@ final class DiscoverStorage {
 
   /// TV Discover layout: 'stage' (the focused title full-bleed with one bottom
   /// shelf, the default) or 'grid' (the detail rail beside a poster wall). Its
-  /// own key, deliberately NOT shared with [getTvHomeStyle]: Home's Canvas
+  /// own key, deliberately NOT shared with `HomeAppearanceStorage.getTvHomeStyle`: Home's Canvas
   /// switches rails with UP/DOWN and Discover's Stage owns a filter line —
   /// neither layout has the other's axis, so one pref governing both would
   /// promise a symmetry they can't keep. Phone/desktop never read it.

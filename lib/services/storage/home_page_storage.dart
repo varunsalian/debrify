@@ -18,7 +18,7 @@ final class HomePageStorage {
   static const String _homeFavoritesOpenFolderKey = 'home_favorites_open_folder';
   static const String _homeCardOrientationKey = 'home_card_orientation';
 
-  // Startup auto-launch was removed; only [clearAllStartupSettings] remains
+  // Startup auto-launch was removed; only `StartupStorage.clearAllStartupSettings` remains
   // (used by Reset) to wipe the old persisted keys.
 
   // Home Page Default Settings
