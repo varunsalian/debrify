@@ -1,0 +1,19 @@
+# Behaviour tests CI runs for Sources and TorrentPlaybackService.
+# Keep in sync as tests move (see docs/refactoring/torrent-playback-plan.md).
+test/addon_direct_source_test.dart
+test/cinema_sources_focus_test.dart
+test/direct_episode_search_test.dart
+test/direct_stream_reuse_test.dart
+test/features/sources
+test/filter_ladder_test.dart
+test/iptv_source_search_test.dart
+test/manual_source_validation_contract_test.dart
+test/media_server_service_test.dart
+test/native_series_metadata_service_test.dart
+test/quick_play_rules_test.dart
+test/random_playback_launch_test.dart
+test/recovery_preparation_test.dart
+test/services/debrid_acquisition_retirement_test.dart
+test/simkl_native_episode_flow_test.dart
+test/stremio_series_metadata_cache_test.dart
+test/video_player_launcher_external_url_test.dart

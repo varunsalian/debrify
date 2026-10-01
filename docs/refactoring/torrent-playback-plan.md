@@ -22,24 +22,38 @@ a small facade.
 
 | Lines | Area | Key symbols | Context/UI? | Destination under `lib/features/sources/` |
 | --- | --- | --- | --- | --- |
-| 106–494 | Shared state and the manual entry point | `_cancelled`, `_noPackUntil`, `_recentlyNoPack`, `_markNoPack`, `activateTorrent` (320 lines) | `activateTorrent` yes | `_cancelled` → step 1; no-pack memory with `playFromSelection`; `activateTorrent` → `presentation/manual_source_activation.dart` |
-| 495–1178 | Automatic "play best" | `playBest` (680 lines; `playDirect` and `playFirstAliveDirect` are closures inside it), `_isDirectCandidate` | yes | `presentation/automatic_play_best.dart` |
+| 106–494 | Shared state and the manual entry point | `_cancelled`, `_noPackUntil`, `_recentlyNoPack`, `_markNoPack`, `activateTorrent` (320 lines) | `activateTorrent` yes | `_cancelled` → step 1; no-pack memory with `playFromSelection`; `activateTorrent` → `presentation/legacy_playback/manual_source_activation.dart` |
+| 495–1178 | Automatic "play best" | `playBest` (680 lines; `playDirect` and `playFirstAliveDirect` are closures inside it), `_isDirectCandidate` | yes | `presentation/legacy_playback/automatic_play_best.dart` |
 | 1179–1432 | Probing and pack safety | `selectDirect`, `probeAttemptCount`, `packTopSafety`, `_packCoverageTypes`, `_probeCandidates`, `cleanupFailedAutomaticAcquisition` | **no** | `application/source_probing.dart` |
-| 1433–2150 | Quick play from a selection | `playFromSelection`, `tryPackRoute`, ladder fallbacks; `loadLadder`, `ladderNote`, `_applyLadderNote` | yes, except the ladder helpers | `presentation/automatic_play_selection.dart`; `loadLadder`/`ladderNote` → `application/` |
+| 1433–2150 | Quick play from a selection | `playFromSelection`, `tryPackRoute`, ladder fallbacks; `loadLadder`, `ladderNote`, `_applyLadderNote` | yes, except the ladder helpers | `presentation/legacy_playback/automatic_play_selection.dart`; `loadLadder`/`ladderNote` → `application/` |
 | 2151–2555 | Ranking and search plans | `orderCandidatesForRules`, `_qualityScore`, `prefersTorrentCandidates`, `mergePreparedTorrentOrder`, alias warm-up/cache, `orderCacheCheckedCandidatesForRules`, `directValidationBudgetForRules`, `shouldPreflightDirectStream`, `shouldTryDirectBeforeTorrent`, `isAutoPlayableCandidate`, `confirmDeferredIptvAvailability`, `shouldSearchAddonsBeforeProvider`, `allowsAddonSearch`, `addonStreamSearchPlan`, `packSearchReportedErrors` | no | `application/source_candidate_ranking.dart`, `application/source_search_plans.dart` |
 | 2556–3174 | Source searches | `searchSeriesPackSources`, `seriesPackSearchPlan`, `iptvQuickPlaySearchTimeout`, `searchIptvForQuickPlay`, `_originEpisodeVideoId`, `searchCuratedSources`, `prepareRecoverySources`, `resolveRecoverySource` | no | `data/series_pack_search.dart`, `data/iptv_quick_play_search.dart`, `data/curated_source_search.dart`, `data/recovery_source_resolution.dart` |
 | 3175–3953 | Fetchers and curation | `seriesFetcherFor`, `movieFetcherFor`, `_fetchOneEngine`, `_fetchMediaServerSources`, `_mediaServerSourceRefs`, `_sourceEngineListing`, `_effectiveFetchProvider`, `_curateCandidates`, `_curatePackCandidates`, `earlyDirectCandidate`, `earlyDirectRecovery`, `leadingDirectAddonKey`, `directSearchErrors` | no | `data/source_fetchers.dart`, `application/source_curation.dart` |
-| 3954–4373 | Addon-stream playback | `_playAddonStream` | yes | `presentation/addon_stream_playback.dart` |
-| 4374–5267 | Bound-source playback | `_bindingMatchesMeta`, `_providerFromStored`, `storedProviderKey`, `_boundProviderSupported`, `_resolveLocalBound`, `_resolveProviderNativeBound`, `_seLabel`, `_resolvedHasEpisode`, `_torrentFromSource`, `_playViaBound` | yes, except the step 1 helpers under "Dependency order" | `presentation/bound_source_playback.dart`, `presentation/bound_source_resolution.dart` |
-| 5268–5470 | Binding | `_recoverAfterBoundStartupFailure`, `bindSource`, `bindDirectSource`, `bindIptvSource`, `bindLocalSource` | yes | `presentation/source_binding_actions.dart` |
-| 5471–6031 | Acquire and launch | `_add`, `_play`, `_advanceToNextEpisode`, `_playerArgs`, `playerArgsForTesting`, `_configuredProviders`, `_defaultConfiguredProvider`, `_lazyProviderResolver`, `_launch` | `_add` and the provider helpers **no**; the rest yes | `_add` → `application/source_probing.dart`; provider helpers → `application/source_provider_config.dart`; the rest → `presentation/source_player_launch.dart` |
-| 6032–7075 | Provider action menu | `_launchWithDeoVR`, `_directValidationKey`, `supportsDirectStreamDownload`, `downloadDirectStream` (calls the existing `downloadSource`), `_acceptedProviderAction`, `_download`, `_addToPlaylist`, `_showChooser`, TorBox/Premiumize ZIP and transfer, `_handleNotCached`, `_pickProvider`, `_isConfigured`, `_cacheFirst`, `_hasAcquisition`, `_label`, `_showPipeline`, `showResolvingOverlay`, `_showLoading`, `_snack` (the class's single `_snack`), `_resolverFor`, `_validatedLaunchCommitter`, `_lazySourceCommitter`, `_postAction` | yes, except the step 1 helpers under "Dependency order" | `presentation/provider_action_menu.dart`, `presentation/provider_zip_actions.dart`, `presentation/source_loading_overlays.dart`, `presentation/deovr_launch.dart` |
+| 3954–4373 | Addon-stream playback | `_playAddonStream` | yes | `presentation/legacy_playback/addon_stream_playback.dart` |
+| 4374–5267 | Bound-source playback | `_bindingMatchesMeta`, `_providerFromStored`, `storedProviderKey`, `_boundProviderSupported`, `_resolveLocalBound`, `_resolveProviderNativeBound`, `_seLabel`, `_resolvedHasEpisode`, `_torrentFromSource`, `_playViaBound` | yes, except the step 1 helpers under "Dependency order" | `presentation/legacy_playback/bound_source_playback.dart`, `presentation/legacy_playback/bound_source_resolution.dart` |
+| 5268–5470 | Binding | `_recoverAfterBoundStartupFailure`, `bindSource`, `bindDirectSource`, `bindIptvSource`, `bindLocalSource` | yes | `presentation/legacy_playback/source_binding_actions.dart` |
+| 5471–6031 | Acquire and launch | `_add`, `_play`, `_advanceToNextEpisode`, `_playerArgs`, `playerArgsForTesting`, `_configuredProviders`, `_defaultConfiguredProvider`, `_lazyProviderResolver`, `_launch` | `_add` and the provider helpers **no**; the rest yes | `_add` → `application/source_probing.dart`; provider helpers → `application/source_provider_config.dart`; the rest → `presentation/legacy_playback/source_player_launch.dart` |
+| 6032–7075 | Provider action menu | `_launchWithDeoVR`, `_directValidationKey`, `supportsDirectStreamDownload`, `downloadDirectStream` (calls the existing `downloadSource`), `_acceptedProviderAction`, `_download`, `_addToPlaylist`, `_showChooser`, TorBox/Premiumize ZIP and transfer, `_handleNotCached`, `_pickProvider`, `_isConfigured`, `_cacheFirst`, `_hasAcquisition`, `_label`, `_showPipeline`, `showResolvingOverlay`, `_showLoading`, `_snack` (the class's single `_snack`), `_resolverFor`, `_validatedLaunchCommitter`, `_lazySourceCommitter`, `_postAction` | yes, except the step 1 helpers under "Dependency order" | `presentation/legacy_playback/provider_action_menu.dart`, `presentation/legacy_playback/provider_zip_actions.dart`, `presentation/legacy_playback/source_loading_overlays.dart`, `presentation/legacy_playback/deovr_launch.dart` |
 | 7076–7103 | Private types | `_Resolved`, `_PlaybackCancelToken` | no | `models/resolved_source.dart`, `models/playback_cancel_token.dart` |
 
 The file names are suggestions. Keep each new file under 500 lines (prefer
-300) with one responsibility, and split further where needed. Before moving
+300) with one responsibility, and split further where needed.
+
+**Where presentation code goes, and why.** Moving verbatim means the moved
+pipelines, menu, launch and binding still call legacy services directly
+(`StorageService`, `DebridService`, `IptvSourceSearch`, `VideoPlayerLauncher`,
+and so on). The guard rejects `lib/services/` imports from `presentation/`,
+except in the named bridge folder `presentation/legacy_playback/`
+(`LEGACY_PLAYBACK_BRIDGE` in `dev/tool/check_search_architecture.py`):
+- Every context-taking moved file goes there, and only those.
+- It may import `lib/services/`, including the facade for `TEMP(tps)` calls.
+- `http`, `shared_preferences` and `sqflite` stay forbidden there.
+- `application/`, `data/` and `models/` keep the strict rules.
+- This is a temporary structural exception. Its exit milestone: those service
+  calls move behind Sources data contracts and the folder is dissolved, after
+  this plan. Record it in Progress. Before moving
 anything into `application/`, `data/` or `models/`, confirm it uses no
-`BuildContext`, widget or dialog. If it does, it belongs in `presentation/`.
+`BuildContext`, widget or dialog. If it does, it belongs in `presentation/legacy_playback/legacy_playback/`.
 
 **Production callers today:** 7 files (Home catalog play bridge and play
 action, the two Sources bridges, the search screen composition,
@@ -71,8 +85,12 @@ and allowed by the guard.
 
 **Temporary cross-calls.** Code that has moved but still calls an unmoved
 member goes through `TorrentPlaybackService.<name>`, with the leading `_`
-dropped and the comment `// TEMP(tps): moves in step N` on the member. Step 5
-removes every one: `grep -rn "TEMP(tps)" lib` must be empty when you finish.
+dropped and the comment `// TEMP(tps): moves in step N` on the member.
+- Only `legacy_playback/` files may make such calls.
+- `application/` and `data/` code must never need one. If it does, move the
+  callee earlier instead.
+- Step 5 removes every one: `grep -rn "TEMP(tps)" lib` must be empty when
+  you finish.
 
 Re-run this check before each step rather than trusting the table. For each
 moved member, grep the area being moved for names defined elsewhere in the
@@ -131,17 +149,35 @@ service.
 | 0 | Baseline | See below. |
 | 1 | `models/`: the two private types. `application/`: ranking and search plans (2151–2555), probing (1179–1432), the pure curation helpers from 3739–3953, and every helper in the step 1 list under "Dependency order". | No UI. Heaviest test repointing (`orderCandidatesForRules` and friends). |
 | 2 | `data/`: searches and fetchers (2556–3740). | `series_source_fetcher.dart` and `video_player_launcher.dart` call into this area. Keep those calls working through the facade, or repoint them. |
-| 3 | `presentation/`: menu, overlays, DeoVR, launch and binding (5268–7075, minus anything moved in step 1). Several commits are fine. | Keep every `context.mounted`/`isCurrent` gate and `_acceptedProviderAction` exactly as they are. **Full-suite gate 1** after this step. |
-| 4 | `presentation/`: the pipelines. `playBest`, `playFromSelection`, `_playAddonStream`, `_playViaBound` with its helpers, `activateTorrent`, and the no-pack memory. | One pipeline per commit. |
+| 3 | `presentation/legacy_playback/legacy_playback/`: menu, overlays, DeoVR, launch and binding (5268–7075, minus anything moved in step 1). Several commits are fine. | Keep every `context.mounted`/`isCurrent` gate and `_acceptedProviderAction` exactly as they are. **Full-suite gate 1** after this step. |
+| 4 | `presentation/legacy_playback/legacy_playback/`: the pipelines. `playBest`, `playFromSelection`, `_playAddonStream`, `_playViaBound` with its helpers, `activateTorrent`, and the no-pack memory. | One pipeline per commit. |
 | 5 | Facade, guards, CI, then **full-suite gate 2**. | See "Definition of done". |
 
 ### Step 0 — baseline
 
-The accepted full-suite baseline is `.git/refactor-evidence/finish/bugfixes.jsonl`:
-10,289 pass / 22 fail / 29 err / 20 skip at `1d6fa710`. Later commits touch no
-Dart, so don't rerun it. Record the whole-repo analyzer:
-`flutter analyze > .git/refactor-evidence/tps/analyze-gate0.txt` (create the
-folder). That is all of step 0.
+Evidence lives in `<git common dir>/refactor-evidence/`, so every worktree of
+this clone shares it. It is never committed. `dev/tool/suite_evidence.py`
+records and compares runs; `<E>` below is
+`$(git rev-parse --git-common-dir)/refactor-evidence`.
+
+**Baseline:** `<E>/finish/bugfixes.jsonl` at `1d6fa710`, with 10,289 pass /
+22 fail / 29 err / 20 skip.
+- Environment: Flutter 3.44.8, framework `058e0af2c2`, Dart 3.12.2, in
+  `<E>/finish/bugfixes.env.json`.
+- `compare` refuses runs whose recorded SDK differs. Run `flutter --version`
+  first; if it isn't 3.44.8 at that revision, stop and ask. Don't upgrade.
+- Later commits touch no app Dart, so reuse this baseline rather than
+  rerunning it.
+
+**If the baseline file is missing** (fresh clone, or another machine), record
+one at the base revision before moving anything:
+`git worktree add ../tps-base 1d6fa710`, then in that worktree
+`python3 dev/tool/suite_evidence.py run tps/base`, using
+`<E>/tps/base.jsonl` as the baseline. The tool must be copied in or
+cherry-picked first, because it postdates `1d6fa710`.
+
+Then record the whole-repo analyzer:
+`flutter analyze > <E>/tps/analyze-gate0.txt`. That is all of step 0.
 
 ### Per step
 
@@ -165,12 +201,23 @@ folder). That is all of step 0.
    show as changed.
 6. Commit: `refactor: move <area> out of TorrentPlaybackService`.
 
-**Full-suite gates.** Run `python3 .git/refactor-evidence/run_full.py tps/gate1`
+**Full-suite gates.** Run `python3 dev/tool/suite_evidence.py run tps/gate1`
 (later `tps/gate2`), then
-`python3 .git/refactor-evidence/compare.py --against .git/refactor-evidence/finish/bugfixes.jsonl <run>.jsonl`.
-`compare.py` decides: no new failures, no missing tests, no new skips. Show
-that each renamed or repointed test identity is present with the same
-outcome.
+`python3 dev/tool/suite_evidence.py compare --against <E>/finish/bugfixes.jsonl <E>/tps/gate1.jsonl`.
+`compare` decides (`PASS`/`FAIL`): no new failures, no missing tests, no new
+skips, same SDK. Show that each renamed or repointed test identity is present
+with the same outcome. For a focused per-step comparison, `run NAME PATHS...`
+records a scoped run, and `compare` then checks only the suites it ran.
+
+**CI behaviour tests.** The `sources-behavior` job in `checks.yml` runs
+`suite_evidence.py check dev/tool/ci_behavior_known_failures.txt @dev/tool/ci_behavior_tests.txt`.
+It fails on any failure not listed by exact identity, and on a listed
+identity that passes or no longer exists. Keep both files current:
+- A test you create or move into a new file is added to
+  `ci_behavior_tests.txt`.
+- A known failure whose guard you port is removed from
+  `ci_behavior_known_failures.txt`.
+- Never add an entry to the known-failures list to get a pass.
 
 ### Source-text tests
 
@@ -203,7 +250,7 @@ this file's source text.
 2. The guard measures the facade.
    - Register it in `dev/tool/check_search_architecture.py` with a 400-line
      cap and no import check, like `COMPOSITION_ROOTS`: it forwards into
-     `presentation/`.
+     `presentation/legacy_playback/legacy_playback/`.
    - Record it in Progress as a temporary exception. AGENTS.md wants
      context-taking playback entry points behind named presentation bridges,
      not in `lib/services`. Exit milestone: repoint the 7 callers to the
@@ -214,10 +261,14 @@ this file's source text.
 4. No new analyzer diagnostics (whole repo, against `analyze-gate0.txt`).
    - Gate 2 is clean against `bugfixes.jsonl` and `tps/gate1.jsonl`.
    - Both guard scripts pass.
-   - `file_size_baseline.txt` holds the service's lowered count.
+   - The service is gone from `file_size_baseline.txt`: `--update` drops
+     files at or under 800 lines. The guard's 400-line facade cap is what
+     enforces its size.
    - `grep -rn "TEMP(tps)" lib` is empty.
-5. CI runs on the branch: `checks.yml` already covers `refactor/**` and
-   `lib/features`.
+5. CI passes on the branch (`checks.yml` runs on `refactor/**`):
+   - file sizes, the architecture guard, and the `sources-behavior` tests;
+   - `torrent_playback_service.dart`, formatted in step 5, added to the
+     scoped `dart format` and `flutter analyze` steps.
 6. Stop after gate 2 and report. The user has Claude review
    `<step 0 commit>..HEAD` before anything is merged.
 

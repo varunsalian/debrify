@@ -32,3 +32,17 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib/features lib/screens/search_screen.dart lib/screens/search_screen test/features
       - run: python3 dev/tool/check_search_architecture.py
       - run: flutter analyze --no-fatal-infos lib/features lib/screens/search_screen.dart lib/screens/search_screen
+
+  sources-behavior:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: 'stable'
+          cache: true
+      - run: flutter pub get
+      # Sources/TorrentPlaybackService behaviour tests. Fails on any failure
+      # not listed by exact identity, and on a listed one that passes or is gone.
+      - run: python3 dev/tool/suite_evidence.py check dev/tool/ci_behavior_known_failures.txt @dev/tool/ci_behavior_tests.txt

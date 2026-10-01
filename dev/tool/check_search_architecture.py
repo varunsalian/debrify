@@ -193,6 +193,12 @@ PRESENTATION_BRIDGE_IMPORTS = {
         "lib/services/torrent_playback_service.dart",
     },
 }
+# Temporary named bridge for TorrentPlaybackService code that moved verbatim
+# (docs/refactoring/torrent-playback-plan.md). Its context-taking pipelines
+# still call legacy services directly, so files here may import lib/services/;
+# http, shared_preferences and sqflite stay forbidden. Exit milestone: those
+# calls move behind Sources data contracts and this folder is dissolved.
+LEGACY_PLAYBACK_BRIDGE = "lib/features/sources/presentation/legacy_playback/"
 GENERATED_SUFFIXES = (".g.dart", ".freezed.dart")
 DIRECTIVES = re.compile(r"^\s*(?:import|export)\s+([^;]+);", re.MULTILINE)
 URIS = re.compile(r"['\"]([^'\"]+)['\"]")
@@ -247,9 +253,11 @@ def violations(path: Path) -> list[str]:
                 names = set(re.findall(r"\w+", shown.group(1))) if shown else set()
                 if not names or not names <= bridge[target]:
                     problems.append(f"legacy presentation import must show only allowed declarations: {uri}")
+            legacy_bridge = (relative.startswith(LEGACY_PLAYBACK_BRIDGE)
+                             and target.startswith("lib/services/"))
             if layer == "presentation" and target.startswith((
                     "lib/services/", "package:http/", "package:shared_preferences/",
-                    "package:sqflite")) and target not in (
+                    "package:sqflite")) and not legacy_bridge and target not in (
                         PRESENTATION_BRIDGE_IMPORTS.get(relative, set())):
                 problems.append(f"view directly imports data/platform API: {uri}")
             if target.startswith("package:provider/"):

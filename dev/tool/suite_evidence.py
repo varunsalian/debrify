@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""Record and compare test-suite evidence by test identity (suite::name).
+
+  run NAME [PATHS...]          flutter test --reporter json (whole suite or
+                               PATHS) -> <evidence>/NAME.jsonl, plus
+                               NAME.env.json (Flutter SDK, HEAD, paths)
+  compare [--against FILE] RUN...
+                               .jsonl runs: no new failures, missing tests or
+                               newly skipped tests versus FILE. .txt files:
+                               `flutter analyze` output, no added diagnostics.
+  check KNOWN PATHS...         CI: run PATHS (`@file` = one path per line); fail on any failure not listed in
+                               KNOWN (one suite::name per line) and on any
+                               listed identity that no longer exists.
+
+<evidence> is `refactor-evidence/` in the git common directory, so every
+worktree of a clone shares it; it is never committed. A fresh clone has no
+evidence: record a baseline at the plan's base revision first. Comparisons are
+only valid between runs with the same Flutter SDK, which `run` records and
+`compare` checks when both runs have an env file.
+"""
+import json
+import re
+import subprocess
+import sys
+from collections import Counter
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def evidence_dir() -> Path:
+    common = subprocess.run(
+        ['git', 'rev-parse', '--git-common-dir'],
+        cwd=ROOT, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    return (ROOT / common).resolve() / 'refactor-evidence'
+
+
+def outcomes(path):
+    tests, suites, results, done = {}, {}, {}, False
+    for line in Path(path).read_text().splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        kind = event.get('type')
+        if kind == 'suite':
+            suites[event['suite']['id']] = event['suite']['path'].replace(str(ROOT) + '/', '')
+        elif kind == 'testStart':
+            tests[event['test']['id']] = event['test']
+        elif kind == 'done':
+            done = True
+        elif kind == 'testDone' and not event.get('hidden', False):
+            test = tests[event['testID']]
+            identity = suites[test['suiteID']] + '::' + test['name']
+            results[identity] = 'skipped' if event.get('skipped') else event['result']
+    assert done and results, f'Runner incomplete (no done event/outcomes): {path}'
+    return results, set(suites.values())
+
+
+def diagnostics(path):
+    found = Counter()
+    for line in Path(path).read_text().splitlines():
+        parts = [v.strip() for v in line.split(' • ')]
+        if len(parts) == 4:
+            location = re.sub(r':\d+:\d+$', '', parts[2])
+            found[(parts[0], location, parts[3], parts[1])] += 1
+    assert found, f'No analyzer diagnostics parsed: {path}'
+    return found
+
+
+def flutter_env(paths):
+    version = subprocess.run(
+        ['flutter', '--version', '--machine'], cwd=ROOT, capture_output=True, text=True,
+    ).stdout
+    head = subprocess.run(
+        ['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True,
+    ).stdout.strip()
+    try:
+        sdk = json.loads(version[version.index('{'):])
+        sdk = {k: sdk.get(k) for k in ('frameworkVersion', 'frameworkRevision', 'dartSdkVersion')}
+    except ValueError:
+        sdk = {'raw': version.strip()}
+    return {'sdk': sdk, 'head': head, 'paths': list(paths)}
+
+
+def flutter_test_json(paths, out: Path) -> int:
+    with out.open('w') as stdout, out.with_suffix('.stderr').open('w') as stderr:
+        return subprocess.run(
+            ['flutter', 'test', '--reporter', 'json', *paths],
+            cwd=ROOT, stdout=stdout, stderr=stderr,
+        ).returncode
+
+
+def cmd_run(name, paths):
+    prefix = evidence_dir() / name
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+    out = prefix.with_suffix('.jsonl')
+    code = flutter_test_json(paths, out)
+    prefix.with_suffix('.env.json').write_text(json.dumps(flutter_env(paths), indent=2))
+    results, _ = outcomes(out)
+    print(f'{out}: exit {code}, {dict(Counter(results.values()))}')
+    print('The verdict is `compare`, not this exit code.')
+    return 0
+
+
+def env_for(path: Path):
+    env = path.with_suffix('.env.json')
+    return json.loads(env.read_text()) if env.exists() else None
+
+
+def cmd_compare(args):
+    against = None
+    if '--against' in args:
+        i = args.index('--against')
+        against = Path(args[i + 1])
+        del args[i:i + 2]
+    if against is None:
+        print('compare needs --against <baseline>')
+        return 2
+    ok = True
+    for arg in args:
+        run = Path(arg)
+        if run.suffix == '.jsonl':
+            before_env, after_env = env_for(against), env_for(run)
+            if before_env and after_env and before_env['sdk'] != after_env['sdk']:
+                print('SDK differs; comparison invalid:', before_env['sdk'], after_env['sdk'])
+                ok = False
+                continue
+            before = (json.loads(against.read_text()) if against.suffix == '.json'
+                      else outcomes(against)[0])
+            after, suites = outcomes(run)
+            scoped = after_env and after_env.get('paths')
+            if scoped:
+                # A scoped run only answers for the suites it ran.
+                before = {k: v for k, v in before.items() if k.split('::')[0] in suites}
+            new_failures = {k: v for k, v in after.items()
+                            if v not in ('success', 'skipped')
+                            and before.get(k) not in ('failure', 'error')}
+            missing = sorted(k for k in before if k not in after)
+            missing_suites = sorted({k.split('::')[0] for k in missing} - suites)
+            newly_skipped = sorted(k for k, v in after.items()
+                                   if v == 'skipped' and before.get(k) == 'success')
+            fixed = sorted(k for k, v in after.items()
+                           if v == 'success' and before.get(k) in ('failure', 'error'))
+            added = sorted(k for k in after if k not in before)
+            print(run.name, 'vs', against.name, dict(Counter(after.values())))
+            print('new failures', new_failures)
+            print('missing tests', len(missing), '(absent suites:', missing_suites, ')')
+            for k in missing:
+                print('  missing:', k)
+            print('newly skipped', newly_skipped)
+            print('fixed', fixed, 'added identities', len(added))
+            ok = ok and not new_failures and not missing and not newly_skipped
+        else:
+            added = diagnostics(run) - diagnostics(against)
+            removed = diagnostics(against) - diagnostics(run)
+            print(run.name, 'added', list(added.elements()), 'removed', list(removed.elements()))
+            ok = ok and not added
+    print('PASS' if ok else 'FAIL')
+    return 0 if ok else 1
+
+
+def expand(paths):
+    # `@file` reads one test path per line (comments and blanks skipped).
+    out = []
+    for path in paths:
+        if path.startswith('@'):
+            out += [line.strip() for line in (ROOT / path[1:]).read_text().splitlines()
+                    if line.strip() and not line.startswith('#')]
+        else:
+            out.append(path)
+    return out
+
+
+def cmd_check(known_file, paths):
+    paths = expand(paths)
+    known = {line.strip() for line in Path(known_file).read_text().splitlines()
+             if line.strip() and not line.startswith('#')}
+    out = Path('/tmp' if Path('/tmp').is_dir() else '.') / 'suite_evidence_check.jsonl'
+    flutter_test_json(paths, out)
+    results, _ = outcomes(out)
+    failing = {k for k, v in results.items() if v not in ('success', 'skipped')}
+    unexpected = sorted(failing - known)
+    stale = sorted(k for k in known if k not in results)
+    fixed = sorted(k for k in known if results.get(k) == 'success')
+    print(dict(Counter(results.values())))
+    for k in unexpected:
+        print('UNEXPECTED FAILURE:', k)
+    for k in stale:
+        print('KNOWN FAILURE NO LONGER EXISTS (update the list):', k)
+    for k in fixed:
+        print('known failure now passes (remove it from the list):', k)
+    return 1 if unexpected or stale or fixed else 0
+
+
+def main(argv):
+    if len(argv) >= 2 and argv[0] == 'run':
+        return cmd_run(argv[1], expand(argv[2:]))
+    if argv and argv[0] == 'compare':
+        return cmd_compare(argv[1:])
+    if len(argv) >= 3 and argv[0] == 'check':
+        return cmd_check(argv[1], argv[2:])
+    print(__doc__)
+    return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))
