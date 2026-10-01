@@ -1,10 +1,11 @@
+import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
+import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/screens/settings/detail_theme_page.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_appearance_preferences.dart';
 import 'package:debrify/theme/app_looks.dart';
 import 'package:debrify/theme/app_theme.dart';
@@ -106,7 +107,7 @@ void main() {
 
   group('applying', () {
     test('sets every key it names, and only those', () async {
-      await StorageService.setIptvStyle('edition');
+      await IptvAppearanceStorage.setIptvStyle('edition');
       final classic = AppLooks.all.firstWhere((l) => l.id == 'classic');
       expect(
         classic.values.containsKey('iptv_style'),
@@ -117,7 +118,7 @@ void main() {
       await LookApplier.apply(classic);
       expect(DetailPageStorage.detailPageStyleCached, 'classic');
       expect(
-        StorageService.iptvStyleCached,
+        IptvAppearanceStorage.iptvStyleCached,
         'edition',
         reason: 'a Look must leave alone what it does not name',
       );
@@ -141,10 +142,10 @@ void main() {
         // means the Look is the newer intent, so it must win. (The generation
         // snapshot is taken when the apply STARTS, which is what expresses
         // this.)
-        await StorageService.setIptvStyle('edition');
+        await IptvAppearanceStorage.setIptvStyle('edition');
         final console = AppLooks.all.firstWhere((l) => l.id == 'console');
         await LookApplier.apply(console);
-        expect(StorageService.iptvStyleCached, 'console');
+        expect(IptvAppearanceStorage.iptvStyleCached, 'console');
       },
     );
 
@@ -158,12 +159,12 @@ void main() {
         // walking the bundle — `iptv_style` sits fifth in the map, so the note
         // lands before the applier reaches it.
         final future = LookApplier.apply(console);
-        await StorageService.setIptvStyle('edition');
+        await IptvAppearanceStorage.setIptvStyle('edition');
         LookApplier.noteExternalWrite('iptv_style');
         await future;
 
         expect(
-          StorageService.iptvStyleCached,
+          IptvAppearanceStorage.iptvStyleCached,
           'edition',
           reason: 'a deliberate choice made during the apply must survive it',
         );
@@ -197,11 +198,11 @@ void main() {
 
         await LookApplier.apply(spotlight);
         expect(AppLooks.active()?.id, 'spotlight');
-        expect(StorageService.debrifyTvStyleCached, 'spotlight');
+        expect(DebrifyTvStorage.debrifyTvStyleCached, 'spotlight');
 
         await LookApplier.apply(classic);
         expect(AppLooks.active()?.id, 'classic');
-        expect(StorageService.debrifyTvStyleCached, 'grid');
+        expect(DebrifyTvStorage.debrifyTvStyleCached, 'grid');
       },
     );
   });

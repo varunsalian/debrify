@@ -1,9 +1,9 @@
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/stremio_tv_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/material.dart';
 import '../../services/analytics_service.dart';
-import '../../services/storage_service.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
 
@@ -38,18 +38,21 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
     try {
       final rotationMinutes =
-          await StorageService.getStremioTvRotationMinutes();
+          await StremioTvStorage.getStremioTvRotationMinutes();
       final seriesRotationMinutes =
-          await StorageService.getStremioTvSeriesRotationMinutes();
-      final autoRefresh = await StorageService.getStremioTvAutoRefresh();
+          await StremioTvStorage.getStremioTvSeriesRotationMinutes();
+      final autoRefresh = await StremioTvStorage.getStremioTvAutoRefresh();
       final preferredQuality =
-          await StorageService.getStremioTvPreferredQuality();
-      final debridProvider = await StorageService.getStremioTvDebridProvider();
+          await StremioTvStorage.getStremioTvPreferredQuality();
+      final debridProvider =
+          await StremioTvStorage.getStremioTvDebridProvider();
       final maxStartPercent =
-          await StorageService.getStremioTvMaxStartPercent();
-      final hideNowPlaying = await StorageService.getStremioTvHideNowPlaying();
-      final randomEpisodes = await StorageService.getStremioTvRandomEpisodes();
-      final torrentsFirst = await StorageService.getStremioTvTorrentsFirst();
+          await StremioTvStorage.getStremioTvMaxStartPercent();
+      final hideNowPlaying =
+          await StremioTvStorage.getStremioTvHideNowPlaying();
+      final randomEpisodes =
+          await StremioTvStorage.getStremioTvRandomEpisodes();
+      final torrentsFirst = await StremioTvStorage.getStremioTvTorrentsFirst();
 
       // Detect which providers are configured
       final providers = <MapEntry<String, String>>[];
@@ -79,7 +82,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
         if (_debridProvider != 'auto' &&
             !providers.any((p) => p.key == _debridProvider)) {
           _debridProvider = 'auto';
-          StorageService.setStremioTvDebridProvider('auto');
+          StremioTvStorage.setStremioTvDebridProvider('auto');
         }
         _loading = false;
       });
@@ -95,7 +98,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
   Future<void> _setRotationMinutes(int value) async {
     try {
-      await StorageService.setStremioTvRotationMinutes(value);
+      await StremioTvStorage.setStremioTvRotationMinutes(value);
       setState(() => _rotationMinutes = value);
     } catch (e) {
       if (mounted) {
@@ -108,7 +111,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
   Future<void> _setSeriesRotationMinutes(int value) async {
     try {
-      await StorageService.setStremioTvSeriesRotationMinutes(value);
+      await StremioTvStorage.setStremioTvSeriesRotationMinutes(value);
       setState(() => _seriesRotationMinutes = value);
     } catch (e) {
       if (mounted) {
@@ -121,7 +124,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
   Future<void> _setAutoRefresh(bool value) async {
     try {
-      await StorageService.setStremioTvAutoRefresh(value);
+      await StremioTvStorage.setStremioTvAutoRefresh(value);
       setState(() => _autoRefresh = value);
     } catch (e) {
       if (mounted) {
@@ -134,7 +137,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
   Future<void> _setPreferredQuality(String value) async {
     try {
-      await StorageService.setStremioTvPreferredQuality(value);
+      await StremioTvStorage.setStremioTvPreferredQuality(value);
       setState(() => _preferredQuality = value);
     } catch (e) {
       if (mounted) {
@@ -147,7 +150,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
   Future<void> _setMaxStartPercent(int value) async {
     try {
-      await StorageService.setStremioTvMaxStartPercent(value);
+      await StremioTvStorage.setStremioTvMaxStartPercent(value);
       setState(() => _maxStartPercent = value);
     } catch (e) {
       if (mounted) {
@@ -160,7 +163,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
   Future<void> _setRandomEpisodes(bool value) async {
     try {
-      await StorageService.setStremioTvRandomEpisodes(value);
+      await StremioTvStorage.setStremioTvRandomEpisodes(value);
       setState(() => _randomEpisodes = value);
     } catch (e) {
       if (mounted) {
@@ -173,7 +176,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
   Future<void> _setHideNowPlaying(bool value) async {
     try {
-      await StorageService.setStremioTvHideNowPlaying(value);
+      await StremioTvStorage.setStremioTvHideNowPlaying(value);
       setState(() => _hideNowPlaying = value);
     } catch (e) {
       if (mounted) {
@@ -186,7 +189,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
   Future<void> _setDebridProvider(String value) async {
     try {
-      await StorageService.setStremioTvDebridProvider(value);
+      await StremioTvStorage.setStremioTvDebridProvider(value);
       setState(() => _debridProvider = value);
     } catch (e) {
       if (mounted) {
@@ -518,7 +521,9 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                             value: _torrentsFirst,
                             onChanged: (v) async {
                               setState(() => _torrentsFirst = v);
-                              await StorageService.setStremioTvTorrentsFirst(v);
+                              await StremioTvStorage.setStremioTvTorrentsFirst(
+                                v,
+                              );
                             },
                             contentPadding: EdgeInsets.zero,
                           ),

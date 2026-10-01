@@ -1,6 +1,8 @@
+import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/sidebar_storage.dart';
 import 'package:debrify/services/storage/theme_storage.dart';
@@ -8,7 +10,6 @@ import 'package:flutter/foundation.dart';
 
 import '../services/main_page_bridge.dart';
 import 'shipped_themes.dart' show kDetailThemesShipped;
-import '../services/storage_service.dart';
 import '../services/text_brightness.dart';
 import 'app_theme.dart';
 import 'app_theme_controller.dart';
@@ -142,15 +143,15 @@ abstract final class LookKeys {
   static final iptvStyle = LookKey(
     id: 'iptv_style',
     label: 'Live TV Style',
-    read: () => StorageService.iptvStyleCached,
-    write: StorageService.setIptvStyle,
+    read: () => IptvAppearanceStorage.iptvStyleCached,
+    write: IptvAppearanceStorage.setIptvStyle,
   );
 
   static final debrifyTvStyle = LookKey(
     id: 'debrify_tv_style',
     label: 'Debrify TV',
-    read: () => StorageService.debrifyTvStyleCached,
-    write: StorageService.setDebrifyTvStyle,
+    read: () => DebrifyTvStorage.debrifyTvStyleCached,
+    write: DebrifyTvStorage.setDebrifyTvStyle,
     // No notify, like iptv_style: tabs are keyed by index and rebuilt on
     // switch, so the page re-reads the pref in initState.
   );

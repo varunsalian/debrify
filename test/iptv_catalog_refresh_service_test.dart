@@ -11,8 +11,8 @@ import 'package:debrify/services/iptv_service.dart';
 import 'package:debrify/services/iptv_source_search.dart';
 import 'package:debrify/services/player_visibility.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/xtream_codes_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
@@ -160,14 +160,16 @@ void main() {
   test(
     'first movie search discovers saved legacy source and downloads missing catalog',
     () async {
-      final saved = await StorageService.setIptvPlaylistsAndReload([
+      final saved = await IptvPlaylistStorage.setIptvPlaylistsAndReload([
         xtream,
       ], forSettings: false);
       expect(saved.single.serverUrl, base);
       expect(saved.single.username, 'user');
       expect(saved.single.password, 'pass');
       expect(
-        (await StorageService.getIptvPlaylists(forSettings: false)).single.id,
+        (await IptvPlaylistStorage.getIptvPlaylists(
+          forSettings: false,
+        )).single.id,
         xtream.id,
       );
       final key = IptvCatalogKey.forPlaylist(xtream, 'vod')!;

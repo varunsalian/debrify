@@ -1,4 +1,5 @@
 import 'package:debrify/services/storage/ambient_trailer_storage.dart';
+import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/defaults_generation_storage.dart';
 import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/services/storage/sidebar_storage.dart';
@@ -7,7 +8,6 @@ import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:debrify/services/storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -59,7 +59,7 @@ void main() {
       expect(await HomeAppearanceStorage.getTvHomeStyle(), 'spotlight');
       expect(await SidebarStorage.getTvSidebarStyle(), 'pill');
       expect(await SidebarStorage.getDesktopSidebarStyle(), 'pill');
-      expect(await StorageService.getDebrifyTvStyle(), 'spotlight');
+      expect(await DebrifyTvStorage.getDebrifyTvStyle(), 'spotlight');
     });
 
     test('explicit choices survive; only unwritten prefs adopt', () async {
@@ -89,7 +89,7 @@ void main() {
       expect(await HomeAppearanceStorage.getTvHomeStyle(), 'spotlight');
       expect(await SidebarStorage.getTvSidebarStyle(), 'pill');
       expect(await SidebarStorage.getDesktopSidebarStyle(), 'pill');
-      expect(await StorageService.getDebrifyTvStyle(), 'spotlight');
+      expect(await DebrifyTvStorage.getDebrifyTvStyle(), 'spotlight');
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('detail_page_style'), 'showcase');
       expect(prefs.getString('detail_theme'), 'spotlight');

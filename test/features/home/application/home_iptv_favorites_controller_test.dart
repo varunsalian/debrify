@@ -4,7 +4,7 @@ import 'package:debrify/features/home/application/home_saved_content_providers.d
 import 'package:debrify/features/home/data/home_iptv_favorites_repository.dart';
 import 'package:debrify/features/home/models/home_favorites_session.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,7 +17,7 @@ HomeFavoritesSession session() =>
 HomeIptvFavoritesRepository repository(Future<Saved> Function() read) =>
     HomeIptvFavoritesRepository(
       favorites: read,
-      headers: StorageService.iptvFavoriteHeaders,
+      headers: IptvFavoritesStorage.iptvFavoriteHeaders,
     );
 HomeIptvFavoritesController mount(
   ProviderContainer c,

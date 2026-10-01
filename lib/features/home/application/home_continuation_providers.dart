@@ -1,4 +1,5 @@
 import 'package:debrify/services/storage/home_page_storage.dart';
+import 'package:debrify/services/storage/iptv_history_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/episode_artwork_service.dart';
@@ -93,8 +94,9 @@ final homeMdblistContinuationRepositoryProvider =
     );
 
 final homeIptvContinuationRepositoryProvider = Provider<IptvCwHistory>(
-  (ref) =>
-      const IptvCwHistory(readHistory: StorageService.getIptvContinueWatching),
+  (ref) => const IptvCwHistory(
+    readHistory: IptvHistoryStorage.getIptvContinueWatching,
+  ),
   dependencies: const [],
 );
 

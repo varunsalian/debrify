@@ -1,9 +1,9 @@
+import 'package:debrify/services/storage/iptv_history_storage.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/iptv_playlist.dart';
 import '../../models/playlist_view_mode.dart';
 import '../../models/stremio_addon.dart';
-import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_episode_model.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/xtream_codes_service.dart';
@@ -97,14 +97,14 @@ Future<void> openXtreamSeries(
     return progressFuture = () async {
       final eps = (await info())?.episodes ?? const <XtreamSeriesEpisode>[];
       if (eps.isEmpty) return <String, double>{};
-      final byUrl = await StorageService.getIptvProgressForUrls([
+      final byUrl = await IptvHistoryStorage.getIptvProgressForUrls([
         for (final e in eps) e.url,
       ]);
       final map = <String, double>{};
       for (final e in eps) {
         final fraction = byUrl[e.url];
         if (fraction == null) continue;
-        final percent = fraction >= StorageService.iptvWatchFinishedFraction
+        final percent = fraction >= IptvHistoryStorage.iptvWatchFinishedFraction
             ? 100.0
             : fraction * 100;
         final key = '${e.season}-${e.episode}';
@@ -376,7 +376,7 @@ Future<void> _launchEpisode(
   // would register hasNext=true on its finale and never age out of the shelf.
   final hasNext = ordered.skip(index + 1).any((e) => e.season != 0);
 
-  await StorageService.recordIptvWatch(
+  await IptvHistoryStorage.recordIptvWatch(
     target.url,
     channelName: _episodeDisplayName(series.name, target),
     logoUrl: series.logoUrl,

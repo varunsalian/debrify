@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
@@ -32,7 +33,6 @@ import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/pikpak_tv_service.dart';
-import '../services/storage_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/debrify_tv_channel_archive_service.dart';
 import '../services/debrify_tv_cache_service.dart';
@@ -365,7 +365,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// `debrify_tv_style`, read once per mount from the mirror warmed in
   /// `main()`: tabs are keyed by index and rebuilt on switch, so a picker
   /// change is picked up on the next entry — no bridge, like `iptv_style`.
-  final String _debrifyTvStyle = StorageService.debrifyTvStyleCached;
+  final String _debrifyTvStyle = DebrifyTvStorage.debrifyTvStyleCached;
 
   // ── Spotlight stage data (rail cheap, stage lazy — plan §7) ─────────
   Map<String, DebrifyTvRailHealth> _spotlightRailHealth = const {};
@@ -752,19 +752,20 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final startRandom = await StorageService.getDebrifyTvStartRandom();
+    final startRandom = await DebrifyTvStorage.getDebrifyTvStartRandom();
     final randomStartPercent =
-        await StorageService.getDebrifyTvRandomStartPercent();
+        await DebrifyTvStorage.getDebrifyTvRandomStartPercent();
     // Hardcoded to false - no longer loading from storage
     const hideOptions = false;
-    final showChannelName = await StorageService.getDebrifyTvShowChannelName();
-    final showVideoTitle = await StorageService.getDebrifyTvShowVideoTitle();
+    final showChannelName =
+        await DebrifyTvStorage.getDebrifyTvShowChannelName();
+    final showVideoTitle = await DebrifyTvStorage.getDebrifyTvShowVideoTitle();
     // hideBackButton is hardcoded to false - no longer loading from storage
     final avoidNsfw = await _settingsManager.getGlobalAvoidNsfw(true);
     final rdSkipBlocked = await RealDebridStorage.getRdSkipBlockedTorrents();
     final tvFilters = await DebrifyTvFilters.load();
-    final storedProvider = await StorageService.getDebrifyTvProvider();
-    final hasStoredProvider = await StorageService.hasDebrifyTvProvider();
+    final storedProvider = await DebrifyTvStorage.getDebrifyTvProvider();
+    final hasStoredProvider = await DebrifyTvStorage.hasDebrifyTvProvider();
     final rdIntegrationEnabled =
         await RealDebridStorage.getRealDebridIntegrationEnabled();
     final rdKey = await RealDebridStorage.getApiKey();
@@ -897,12 +898,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _refreshSpotlightStatsIfFocused(_spotlightFocusedId);
     }
 
-    if (await StorageService.getDebrifyTvHideSeekbar() != hideOptions) {
-      unawaited(StorageService.saveDebrifyTvHideSeekbar(hideOptions));
+    if (await DebrifyTvStorage.getDebrifyTvHideSeekbar() != hideOptions) {
+      unawaited(DebrifyTvStorage.saveDebrifyTvHideSeekbar(hideOptions));
     }
 
     if (defaultProvider != storedProvider) {
-      await StorageService.saveDebrifyTvProvider(defaultProvider);
+      await DebrifyTvStorage.saveDebrifyTvProvider(defaultProvider);
     }
   }
 
@@ -1068,7 +1069,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Future<void> _loadFavoriteChannels() async {
-    final favoriteIds = await StorageService.getDebrifyTvFavoriteChannelIds();
+    final favoriteIds = await DebrifyTvStorage.getDebrifyTvFavoriteChannelIds();
     if (!mounted) return;
     setState(() {
       _favoriteChannelIds = favoriteIds;
@@ -1079,7 +1080,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final isFavorited = _favoriteChannelIds.contains(channel.id);
     final newState = !isFavorited;
 
-    await StorageService.setDebrifyTvChannelFavorited(channel.id, newState);
+    await DebrifyTvStorage.setDebrifyTvChannelFavorited(channel.id, newState);
 
     if (!mounted) return;
     setState(() {
@@ -1460,7 +1461,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     });
 
     if (providerChanged) {
-      await StorageService.saveDebrifyTvProvider(nextChannelProvider);
+      await DebrifyTvStorage.saveDebrifyTvProvider(nextChannelProvider);
     }
   }
 
@@ -1833,7 +1834,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!next.remove(quality)) next.add(quality);
       applyFilters(DebrifyTvFilters(qualities: next, sizes: _tvFilters.sizes));
       unawaited(
-        StorageService.setDebrifyTvFilterQualities(
+        DebrifyTvStorage.setDebrifyTvFilterQualities(
           next.map((e) => e.name).toList(),
         ),
       );
@@ -1846,7 +1847,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         DebrifyTvFilters(qualities: _tvFilters.qualities, sizes: next),
       );
       unawaited(
-        StorageService.setDebrifyTvFilterSizes(
+        DebrifyTvStorage.setDebrifyTvFilterSizes(
           next.map((e) => e.name).toList(),
         ),
       );
@@ -1936,7 +1937,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _provider = value;
       });
       dialogSetState?.call(() {});
-      unawaited(StorageService.saveDebrifyTvProvider(value));
+      unawaited(DebrifyTvStorage.saveDebrifyTvProvider(value));
     }
 
     Widget providerChip({
@@ -9157,7 +9158,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       });
       dialogSetState?.call(() {});
       if (!isQuickScope) {
-        unawaited(StorageService.saveDebrifyTvStartRandom(value));
+        unawaited(DebrifyTvStorage.saveDebrifyTvStartRandom(value));
       }
     }
 
@@ -9174,7 +9175,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       });
       dialogSetState?.call(() {});
       if (!isQuickScope) {
-        unawaited(StorageService.saveDebrifyTvRandomStartPercent(value));
+        unawaited(DebrifyTvStorage.saveDebrifyTvRandomStartPercent(value));
       }
     }
 
@@ -9191,7 +9192,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       });
       dialogSetState?.call(() {});
       if (!isQuickScope) {
-        unawaited(StorageService.saveDebrifyTvShowChannelName(value));
+        unawaited(DebrifyTvStorage.saveDebrifyTvShowChannelName(value));
       }
     }
 
@@ -9208,7 +9209,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       });
       dialogSetState?.call(() {});
       if (!isQuickScope) {
-        unawaited(StorageService.saveDebrifyTvShowVideoTitle(value));
+        unawaited(DebrifyTvStorage.saveDebrifyTvShowVideoTitle(value));
       }
     }
 
@@ -9277,7 +9278,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 onChangeEnd: isQuickScope
                     ? null
                     : (next) =>
-                          StorageService.saveDebrifyTvRandomStartPercent(next),
+                          DebrifyTvStorage.saveDebrifyTvRandomStartPercent(
+                            next,
+                          ),
               ),
             ],
             // Removed Hide all options and Hide back button settings
@@ -9348,16 +9351,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 _invalidateSpotlightStats();
                 dialogSetState?.call(() {});
 
-                await StorageService.setDebrifyTvFilterQualities(const []);
-                await StorageService.setDebrifyTvFilterSizes(const []);
+                await DebrifyTvStorage.setDebrifyTvFilterQualities(const []);
+                await DebrifyTvStorage.setDebrifyTvFilterSizes(const []);
 
                 if (!isQuickScope) {
-                  await StorageService.saveDebrifyTvStartRandom(true);
-                  await StorageService.saveDebrifyTvHideSeekbar(true);
-                  await StorageService.saveDebrifyTvShowChannelName(true);
-                  await StorageService.saveDebrifyTvShowVideoTitle(true);
+                  await DebrifyTvStorage.saveDebrifyTvStartRandom(true);
+                  await DebrifyTvStorage.saveDebrifyTvHideSeekbar(true);
+                  await DebrifyTvStorage.saveDebrifyTvShowChannelName(true);
+                  await DebrifyTvStorage.saveDebrifyTvShowVideoTitle(true);
                   // No longer saving hideOptions and hideBackButton - they're hardcoded to false
-                  await StorageService.saveDebrifyTvProvider(defaultProvider);
+                  await DebrifyTvStorage.saveDebrifyTvProvider(defaultProvider);
                 }
 
                 if (!mounted) {

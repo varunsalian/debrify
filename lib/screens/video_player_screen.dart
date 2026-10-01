@@ -1,4 +1,9 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/iptv_appearance_storage.dart';
+import 'package:debrify/services/storage/iptv_audio_storage.dart';
+import 'package:debrify/services/storage/iptv_history_storage.dart';
+import 'package:debrify/services/storage/iptv_last_channel_storage.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:debrify/services/storage/player_network_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
@@ -6453,7 +6458,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // setup, so every IPTV surface that can actually appear (first tune,
     // zap, guide) already has the real value.
     _playerGuideStyle = PlayerGuideStyle.fromPref(
-      await StorageService.getIptvPlayerGuideStyle(),
+      await IptvAppearanceStorage.getIptvPlayerGuideStyle(),
     );
     _playerGuideTokens = PlayerGuideTokens.of(_playerGuideStyle);
 
@@ -7322,7 +7327,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       httpHeaders: channel.httpHeaders,
       attributes: {if (sourceId != null) 'source_playlist_id': sourceId},
     );
-    await StorageService.recordIptvWatch(
+    await IptvHistoryStorage.recordIptvWatch(
       replay.url,
       channelName: replay.name,
       logoUrl: replay.logoUrl,
@@ -7545,7 +7550,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       if (!_isPlaying) return;
       unawaited(
-        StorageService.setIptvLastLiveChannel(
+        IptvLastChannelStorage.setIptvLastLiveChannel(
           settled.url,
           name: settled.name,
           // Origin provider, resolved the same way the catchup path does —
@@ -7624,7 +7629,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _preferredIptvAudioLanguage = lang;
     final key = _iptvSeriesAudioKey();
     if (key != null) {
-      unawaited(StorageService.setIptvSeriesAudioLanguage(key, lang));
+      unawaited(IptvAudioStorage.setIptvSeriesAudioLanguage(key, lang));
     }
   }
 
@@ -7654,7 +7659,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (lang == null) {
         final key = _iptvSeriesAudioKey();
         if (key != null) {
-          lang = await StorageService.getIptvSeriesAudioLanguage(key);
+          lang = await IptvAudioStorage.getIptvSeriesAudioLanguage(key);
         }
       }
       lang ??= await SubtitleSettingsStorage.getDefaultAudioLanguage();
@@ -7685,7 +7690,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final hasNext = attrs['has_next_episode'];
     final headers = channel.httpHeaders;
     try {
-      await StorageService.recordIptvWatch(
+      await IptvHistoryStorage.recordIptvWatch(
         channel.url,
         channelName: channel.name,
         logoUrl: channel.logoUrl,
@@ -8006,7 +8011,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // edit made while this player lives (PiP, background), and every edit
     // bumps every source's revision — a stale one would be refused at start.
     try {
-      final playlists = await StorageService.getIptvPlaylists(
+      final playlists = await IptvPlaylistStorage.getIptvPlaylists(
         forSettings: false,
       );
       for (final playlist in playlists) {

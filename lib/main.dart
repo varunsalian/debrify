@@ -1,13 +1,16 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/defaults_generation_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/sidebar_storage.dart';
+import 'package:debrify/services/storage/startup_iptv_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/services/storage/ui_feedback_storage.dart';
@@ -670,7 +673,7 @@ Future<void> _continueApplicationStartup() async {
     await SidebarStorage.getSidebarConfiguration();
     // Debrify TV reads its mirror synchronously on first build; warmed here,
     // AFTER the migration, so frame one draws what generation 3 just wrote.
-    await StorageService.getDebrifyTvStyle();
+    await DebrifyTvStorage.getDebrifyTvStyle();
   });
   // Warms the Appearance → Text Brightness preset: the root theme is built
   // synchronously in DebrifyApp.build, so the stored choice must be readable
@@ -862,11 +865,11 @@ Future<void> _resolveStartupChannel() async {
     // channel round trips, and this runs before the first frame on every cold
     // start — making every user pay that so the small minority with a startup
     // channel can have one would be a plain boot regression.
-    if (!await StorageService.getStartupIptvEnabled()) return;
+    if (!await StartupIptvStorage.getStartupIptvEnabled()) return;
     await DeepLinkService.preflightLaunchIntent();
     if (DeepLinkService.launchedByIntent) return;
-    await StorageService.warmStartupIptv();
-    final channel = StorageService.startupIptvChannelCached;
+    await StartupIptvStorage.warmStartupIptv();
+    final channel = StartupIptvStorage.startupIptvChannelCached;
     if (channel != null) {
       MainPageBridge.setIptvStartupChannel(channel);
     }
@@ -883,7 +886,7 @@ Future<void> _prewarmIptvCatalogDb() async {
     // Most users never configure IPTV. Do not create a database or compete
     // with Home startup IO unless a stored source could actually use the
     // paged catalog.
-    if ((await StorageService.getIptvPlaylists()).isEmpty) return;
+    if ((await IptvPlaylistStorage.getIptvPlaylists()).isEmpty) return;
     stage = 'prewarm_open';
     await IptvCatalogDb.open();
   } catch (error, stack) {
@@ -4122,12 +4125,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   }
 
   String get _iptvStartupChannelName {
-    final name = StorageService.startupIptvChannelCached?['name'];
+    final name = StartupIptvStorage.startupIptvChannelCached?['name'];
     return name is String && name.isNotEmpty ? name : 'your channel';
   }
 
   int? get _iptvStartupChannelNumber {
-    final number = StorageService.startupIptvChannelCached?['channelNumber'];
+    final number =
+        StartupIptvStorage.startupIptvChannelCached?['channelNumber'];
     return number is num ? number.toInt() : null;
   }
 }

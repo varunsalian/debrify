@@ -3,6 +3,8 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
@@ -10,7 +12,6 @@ import '../../../services/desktop_schedule_service.dart';
 import '../../../services/iptv_epg_service.dart';
 import '../../../services/live_recording_service.dart';
 import '../../../widgets/recording_limit_dialogs.dart';
-import '../../../services/storage_service.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../utils/tv_search_focus_handoff.dart';
@@ -341,7 +342,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   }
 
   Future<void> _loadFavorites() async {
-    final favorites = await StorageService.getIptvFavoriteChannels();
+    final favorites = await IptvFavoritesStorage.getIptvFavoriteChannels();
     if (!mounted) return;
     setState(() => _favoriteUrls = favorites.keys.toSet());
   }
@@ -360,7 +361,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
     // and every sources save bumps every source's revision — a schedule
     // seeded from the stale copy would be refused when it fires.
     try {
-      final playlists = await StorageService.getIptvPlaylists(
+      final playlists = await IptvPlaylistStorage.getIptvPlaylists(
         forSettings: false,
       );
       for (final playlist in playlists) {
@@ -394,7 +395,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
         _favoriteUrls.remove(channel.url);
       }
     });
-    await StorageService.setIptvChannelFavorited(
+    await IptvFavoritesStorage.setIptvChannelFavorited(
       channel.url,
       next,
       channelName: channel.name,

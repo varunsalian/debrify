@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
@@ -18,7 +19,6 @@ import 'profiles/profile_async_authorization.dart';
 import 'profiles/profile_runtime.dart';
 import 'series_source_service.dart';
 import 'source_selection_diagnostics.dart';
-import 'storage_service.dart';
 import 'xtream_codes_service.dart';
 
 export '../models/iptv_source_result.dart';
@@ -497,7 +497,7 @@ class IptvSourceSearch {
       final capability = await ProfileAsyncAuthorization.capture(
         ProfileFeature.iptv,
       );
-      final playlists = await StorageService.getIptvPlaylists(
+      final playlists = await IptvPlaylistStorage.getIptvPlaylists(
         forSettings: false,
       );
       final eligibleCount = playlists.where(_eligiblePlaylist).length;
@@ -606,7 +606,9 @@ class IptvSourceSearch {
 
   static Future<({IptvPlaylist playlist, Future<void> Function() check})?>
   _currentPlaylist(String playlistId) async {
-    final playlists = await StorageService.getIptvPlaylists(forSettings: false);
+    final playlists = await IptvPlaylistStorage.getIptvPlaylists(
+      forSettings: false,
+    );
     final matches = playlists.where(
       (playlist) => playlist.id == playlistId && _eligiblePlaylist(playlist),
     );
@@ -623,7 +625,9 @@ class IptvSourceSearch {
         throw StateError('Profile changed');
       }
       if (capability != null) await capability.run(() async {});
-      final current = await StorageService.getIptvPlaylists(forSettings: false);
+      final current = await IptvPlaylistStorage.getIptvPlaylists(
+        forSettings: false,
+      );
       final unchanged = current.any((candidate) {
         if (candidate.id != playlist.id || candidate.credentialsRedacted) {
           return false;

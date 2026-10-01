@@ -1,5 +1,5 @@
+import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import '../models/torrent_filter_state.dart';
-import '../services/storage_service.dart';
 import 'torrent_quality.dart' show qualityTierForName;
 
 /// Debrify TV's playback filters, split by the level each one can actually be
@@ -41,8 +41,8 @@ class DebrifyTvFilters {
   /// Search tab's default filters.
   static Future<DebrifyTvFilters> load() async {
     final results = await Future.wait([
-      StorageService.getDebrifyTvFilterQualities(),
-      StorageService.getDebrifyTvFilterSizes(),
+      DebrifyTvStorage.getDebrifyTvFilterQualities(),
+      DebrifyTvStorage.getDebrifyTvFilterSizes(),
     ]);
     return DebrifyTvFilters(
       qualities: <QualityTier>{

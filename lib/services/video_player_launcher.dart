@@ -1,5 +1,8 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/external_player_storage.dart';
+import 'package:debrify/services/storage/iptv_audio_storage.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
+import 'package:debrify/services/storage/iptv_history_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
@@ -3707,11 +3710,11 @@ class VideoPlayerLauncher {
       // from the in-player guide. Attached alongside each channel rather than
       // baked into IptvChannel.toJson(): a resume point is session state, not
       // a property of the channel.
-      final resumePositions = await StorageService.getIptvResumePositions([
+      final resumePositions = await IptvHistoryStorage.getIptvResumePositions([
         for (final c in channels)
           if (!c.isLive) c.url,
       ]);
-      final favoriteUrls = await StorageService.getIptvFavoriteChannelUrls();
+      final favoriteUrls = await IptvFavoritesStorage.getIptvFavoriteChannelUrls();
 
       // Per-series audio memory: Xtream series episodes carry a series identity
       // (series_id + series_playlist_id) in their attributes. The native player
@@ -3729,7 +3732,7 @@ class VideoPlayerLauncher {
         }
       }
       if (seriesAudioKey != null) {
-        preferredAudioLang = await StorageService.getIptvSeriesAudioLanguage(
+        preferredAudioLang = await IptvAudioStorage.getIptvSeriesAudioLanguage(
           seriesAudioKey,
         );
       }

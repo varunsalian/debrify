@@ -1,12 +1,13 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/stremio_catalog_storage.dart';
+import 'package:debrify/services/storage/stremio_tv_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/stremio_addon.dart';
 import '../models/stremio_tv/stremio_tv_channel.dart';
 import '../models/stremio_tv/stremio_tv_now_playing.dart';
-import 'storage_service.dart';
 import 'stremio_service.dart';
 import 'stremio_tv_rotation.dart';
 import 'tvmaze_service.dart';
@@ -37,8 +38,9 @@ class StremioTvService {
   Future<List<StremioTvChannel>> discoverChannels() async {
     try {
       final addons = await _stremioService.getCatalogAddons();
-      final favoriteIds = await StorageService.getStremioTvFavoriteChannelIds();
-      final disabled = await StorageService.getStremioTvDisabledFilters();
+      final favoriteIds =
+          await StremioTvStorage.getStremioTvFavoriteChannelIds();
+      final disabled = await StremioTvStorage.getStremioTvDisabledFilters();
 
       final channels = <StremioTvChannel>[];
       int channelNumber = 1;
@@ -85,7 +87,8 @@ class StremioTvService {
       }
 
       // Append local catalog channels
-      final localCatalogs = await StorageService.getStremioTvLocalCatalogs();
+      final localCatalogs =
+          await StremioCatalogStorage.getStremioTvLocalCatalogs();
       for (final catalog in localCatalogs) {
         final catalogId = catalog['id'] as String? ?? '';
         final catalogName = catalog['name'] as String? ?? 'Unknown';
@@ -190,7 +193,8 @@ class StremioTvService {
     // stay under "Local Catalogs" (addon id 'local'). The addon id here becomes
     // the group prefix of each catalog's filter id, and discoverChannels derives
     // the same prefix from mdblistListId — keep the two in sync.
-    final localCatalogs = await StorageService.getStremioTvLocalCatalogs();
+    final localCatalogs =
+        await StremioCatalogStorage.getStremioTvLocalCatalogs();
     StremioAddonCatalog toCatalog(Map<String, dynamic> c) =>
         StremioAddonCatalog(
           id: c['id'] as String? ?? '',

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
+import 'package:debrify/services/storage/iptv_history_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -93,7 +95,7 @@ void main() {
         notifications++;
       };
 
-      final favorites = await StorageService.getIptvFavoriteChannels();
+      final favorites = await IptvFavoritesStorage.getIptvFavoriteChannels();
       final meta = favorites['http://h/live/u/p/1.ts']!;
       expect(meta['name'], 'Спорт ᴴᴰ');
       expect(meta['group'], 'Sports');
@@ -101,7 +103,7 @@ void main() {
       expect(meta['httpHeaders'], {'User-Agent': 'TiviMate'});
       expect(meta['addedAt'], 111);
 
-      final history = await StorageService.getIptvWatchHistory();
+      final history = await IptvHistoryStorage.getIptvWatchHistory();
       final watched = history['http://h/movie/u/p/9.mp4']!;
       expect(watched['name'], 'A Movie');
       expect(watched['seriesId'], 's1');
@@ -176,7 +178,7 @@ void main() {
         };
         SharedPreferences.setMockInitialValues({historyKey: jsonEncode(blob)});
 
-        final history = await StorageService.getIptvWatchHistory();
+        final history = await IptvHistoryStorage.getIptvWatchHistory();
         expect(history, hasLength(100));
         expect(history.containsKey('http://h/movie/249.mp4'), isTrue);
         expect(history.containsKey('http://h/movie/150.mp4'), isTrue);
@@ -204,7 +206,7 @@ void main() {
       () async {
         SharedPreferences.setMockInitialValues({favoritesKey: 'not json {'});
 
-        expect(await StorageService.getIptvFavoriteChannels(), isEmpty);
+        expect(await IptvFavoritesStorage.getIptvFavoriteChannels(), isEmpty);
         final prefs = await SharedPreferences.getInstance();
         expect(prefs.getString(favoritesKey), isNull);
       },
@@ -262,7 +264,7 @@ void main() {
         }
         await batch.commit(noResult: true);
 
-        expect(await StorageService.getIptvFavoriteChannels(), isEmpty);
+        expect(await IptvFavoritesStorage.getIptvFavoriteChannels(), isEmpty);
         expect(await db.query('iptv_list_channels'), isEmpty);
         expect(await db.query('iptv_watch_history'), isEmpty);
         expect(await db.query('video_resume'), isEmpty);
@@ -632,7 +634,7 @@ void main() {
 
   group('favorites', () {
     test('toggle on stores metadata, toggle off removes it', () async {
-      await StorageService.setIptvChannelFavorited(
+      await IptvFavoritesStorage.setIptvChannelFavorited(
         'http://h/live/u/p/7.ts',
         true,
         channelName: 'News',
@@ -643,36 +645,36 @@ void main() {
         httpHeaders: {'Referer': 'http://h/'},
       );
 
-      var favorites = await StorageService.getIptvFavoriteChannels();
+      var favorites = await IptvFavoritesStorage.getIptvFavoriteChannels();
       final meta = favorites['http://h/live/u/p/7.ts']!;
       expect(meta['name'], 'News');
       expect(meta['channelNumber'], 407);
       expect(meta['httpHeaders'], {'Referer': 'http://h/'});
       expect(meta['addedAt'], greaterThan(0));
 
-      await StorageService.setIptvChannelFavorited(
+      await IptvFavoritesStorage.setIptvChannelFavorited(
         'http://h/live/u/p/7.ts',
         false,
       );
-      favorites = await StorageService.getIptvFavoriteChannels();
+      favorites = await IptvFavoritesStorage.getIptvFavoriteChannels();
       expect(favorites, isEmpty);
     });
 
     test(
       're-starring under a different URL form replaces the old entry',
       () async {
-        await StorageService.setIptvChannelFavorited(
+        await IptvFavoritesStorage.setIptvChannelFavorited(
           'http://h/live/u/p/7.m3u8',
           true,
           channelName: 'HLS form',
         );
-        await StorageService.setIptvChannelFavorited(
+        await IptvFavoritesStorage.setIptvChannelFavorited(
           'http://h/live/u/p/7.ts',
           true,
           channelName: 'TS form',
         );
 
-        final favorites = await StorageService.getIptvFavoriteChannels();
+        final favorites = await IptvFavoritesStorage.getIptvFavoriteChannels();
         expect(
           favorites.keys,
           ['http://h/live/u/p/7.ts'],
@@ -682,27 +684,27 @@ void main() {
     );
 
     test('deleting a playlist removes only its favorites', () async {
-      await StorageService.setIptvChannelFavorited(
+      await IptvFavoritesStorage.setIptvChannelFavorited(
         'http://h/live/u/p/1.ts',
         true,
         playlistId: 'p1',
       );
-      await StorageService.setIptvChannelFavorited(
+      await IptvFavoritesStorage.setIptvChannelFavorited(
         'http://h/live/u/p/2.ts',
         true,
         playlistId: 'p2',
       );
 
-      await StorageService.removeIptvFavoritesByPlaylistId('p1');
+      await IptvFavoritesStorage.removeIptvFavoritesByPlaylistId('p1');
 
-      final favorites = await StorageService.getIptvFavoriteChannels();
+      final favorites = await IptvFavoritesStorage.getIptvFavoriteChannels();
       expect(favorites.keys, ['http://h/live/u/p/2.ts']);
     });
   });
 
   group('watch history', () {
     test('metadata round-trips, including series markers', () async {
-      await StorageService.recordIptvWatch(
+      await IptvHistoryStorage.recordIptvWatch(
         'http://h/series/u/p/55.mp4',
         channelName: 'S02E05',
         playlistId: 'p1',
@@ -714,7 +716,7 @@ void main() {
         hasNextEpisode: true,
       );
 
-      final history = await StorageService.getIptvWatchHistory();
+      final history = await IptvHistoryStorage.getIptvWatchHistory();
       final meta = history['http://h/series/u/p/55.mp4']!;
       expect(meta['name'], 'S02E05');
       expect(meta['httpHeaders'], {'User-Agent': 'X'});
@@ -725,13 +727,13 @@ void main() {
     });
 
     test('a movie entry has no series keys at all', () async {
-      await StorageService.recordIptvWatch(
+      await IptvHistoryStorage.recordIptvWatch(
         'http://h/movie/u/p/9.mp4',
         channelName: 'A Movie',
       );
 
       final meta =
-          (await StorageService.getIptvWatchHistory())['http://h/movie/u/p/9.mp4']!;
+          (await IptvHistoryStorage.getIptvWatchHistory())['http://h/movie/u/p/9.mp4']!;
       expect(meta.containsKey('seriesId'), isFalse);
       expect(meta.containsKey('season'), isFalse);
       expect(meta.containsKey('hasNext'), isFalse);
@@ -747,12 +749,12 @@ void main() {
         });
       }
 
-      await StorageService.recordIptvWatch(
+      await IptvHistoryStorage.recordIptvWatch(
         'http://h/movie/u/p/new.mp4',
         channelName: 'Newest',
       );
 
-      final history = await StorageService.getIptvWatchHistory();
+      final history = await IptvHistoryStorage.getIptvWatchHistory();
       expect(history.length, 100);
       expect(history.keys, contains('http://h/movie/u/p/new.mp4'));
       expect(
@@ -802,18 +804,18 @@ void main() {
     });
 
     test('deleting a playlist removes its history', () async {
-      await StorageService.recordIptvWatch(
+      await IptvHistoryStorage.recordIptvWatch(
         'http://h/movie/u/p/1.mp4',
         playlistId: 'p1',
       );
-      await StorageService.recordIptvWatch(
+      await IptvHistoryStorage.recordIptvWatch(
         'http://h/movie/u/p/2.mp4',
         playlistId: 'p2',
       );
 
-      await StorageService.removeIptvWatchHistoryByPlaylistId('p1');
+      await IptvHistoryStorage.removeIptvWatchHistoryByPlaylistId('p1');
 
-      expect((await StorageService.getIptvWatchHistory()).keys, [
+      expect((await IptvHistoryStorage.getIptvWatchHistory()).keys, [
         'http://h/movie/u/p/2.mp4',
       ]);
     });
@@ -829,7 +831,7 @@ void main() {
       bool? hasNext,
       String? playlistId,
     }) async {
-      await StorageService.recordIptvWatch(
+      await IptvHistoryStorage.recordIptvWatch(
         url,
         channelName: url,
         playlistId: playlistId ?? 'p1',
@@ -868,7 +870,7 @@ void main() {
           updatedAt: 10,
         );
 
-        final shelf = await StorageService.getIptvContinueWatching();
+        final shelf = await IptvHistoryStorage.getIptvContinueWatching();
         expect(shelf.map((e) => e['url']), ['http://h/mid.mp4']);
         expect(shelf.single['progress'], closeTo(0.5, 0.001));
         expect(shelf.single['positionMs'], 50000);
@@ -887,7 +889,7 @@ void main() {
           hasNext: true,
         );
 
-        final shelf = await StorageService.getIptvContinueWatching();
+        final shelf = await IptvHistoryStorage.getIptvContinueWatching();
         expect(
           shelf.map((e) => e['url']),
           ['http://h/s1e1.mp4'],
@@ -906,7 +908,7 @@ void main() {
           updatedAt: 30,
         );
 
-        await StorageService.setIptvTrackContinueWatching(false);
+        await IptvHistoryStorage.setIptvTrackContinueWatching(false);
         await watchAndResume(
           'http://h/after.mp4',
           positionMs: 50000,
@@ -915,7 +917,7 @@ void main() {
         );
 
         expect(
-          await StorageService.getIptvContinueWatching(),
+          await IptvHistoryStorage.getIptvContinueWatching(),
           isEmpty,
           reason: 'the shelf is hidden wholesale while tracking is off',
         );
@@ -926,8 +928,8 @@ void main() {
           isNotNull,
         );
 
-        await StorageService.setIptvTrackContinueWatching(true);
-        final shelf = await StorageService.getIptvContinueWatching();
+        await IptvHistoryStorage.setIptvTrackContinueWatching(true);
+        final shelf = await IptvHistoryStorage.getIptvContinueWatching();
         expect(
           shelf.map((e) => e['url']),
           ['http://h/before.mp4'],
@@ -950,7 +952,7 @@ void main() {
         updatedAt: 200,
       );
 
-      final shelf = await StorageService.getIptvContinueWatching();
+      final shelf = await IptvHistoryStorage.getIptvContinueWatching();
       expect(shelf.map((e) => e['url']), [
         'http://h/newer.mp4',
         'http://h/older.mp4',
@@ -965,7 +967,7 @@ void main() {
         durationMs: 100000,
         updatedAt: 5,
       );
-      await StorageService.recordIptvWatch(
+      await IptvHistoryStorage.recordIptvWatch(
         'http://h/untimed.mp4',
         channelName: 'Untimed',
       );
@@ -975,7 +977,7 @@ void main() {
         // no updatedAt — the shape very old legacy entries had
       });
 
-      final shelf = await StorageService.getIptvContinueWatching();
+      final shelf = await IptvHistoryStorage.getIptvContinueWatching();
       expect(
         shelf.first['url'],
         'http://h/untimed.mp4',
@@ -995,7 +997,7 @@ void main() {
         'updatedAt': 2,
       });
 
-      final positions = await StorageService.getIptvResumePositions([
+      final positions = await IptvHistoryStorage.getIptvResumePositions([
         'http://h/mid.mp4',
         'http://h/done.mp4',
         'http://h/none.mp4',
@@ -1004,7 +1006,7 @@ void main() {
         'http://h/mid.mp4': 50000,
       }, reason: 'a finished item restarts from the beginning');
 
-      final progress = await StorageService.getIptvProgressForUrls([
+      final progress = await IptvHistoryStorage.getIptvProgressForUrls([
         'http://h/mid.mp4',
         'http://h/done.mp4',
       ]);
@@ -1032,7 +1034,7 @@ void main() {
         }
         await batch.commit(noResult: true);
 
-        final progress = await StorageService.getIptvProgressForUrls(urls);
+        final progress = await IptvHistoryStorage.getIptvProgressForUrls(urls);
         expect(progress.length, 1200);
       },
     );
@@ -1192,11 +1194,11 @@ void main() {
           updatedAt: 20,
         );
 
-        await StorageService.removeIptvContinueWatchingItem(
+        await IptvHistoryStorage.removeIptvContinueWatchingItem(
           'http://h/drop.mp4',
         );
 
-        final shelf = await StorageService.getIptvContinueWatching();
+        final shelf = await IptvHistoryStorage.getIptvContinueWatching();
         expect(shelf.map((e) => e['url']), ['http://h/keep.mp4']);
         expect(
           await StorageService.getVideoResume('http://h/drop.mp4'),
@@ -1232,12 +1234,12 @@ void main() {
         hasNext: true,
       );
 
-      await StorageService.removeIptvContinueWatchingSeries(
+      await IptvHistoryStorage.removeIptvContinueWatchingSeries(
         playlistId: 'p1',
         seriesId: 's1',
       );
 
-      final shelf = await StorageService.getIptvContinueWatching();
+      final shelf = await IptvHistoryStorage.getIptvContinueWatching();
       expect(
         shelf.map((e) => e['url']),
         ['http://h/s2e1.mp4'],
@@ -1278,12 +1280,12 @@ void main() {
         playlistId: 'p2',
       );
 
-      await StorageService.removeIptvContinueWatchingSeries(
+      await IptvHistoryStorage.removeIptvContinueWatchingSeries(
         playlistId: 'p1',
         seriesId: 's1',
       );
 
-      final shelf = await StorageService.getIptvContinueWatching();
+      final shelf = await IptvHistoryStorage.getIptvContinueWatching();
       expect(shelf.map((e) => e['url']), ['http://h/b/s1e1.mp4']);
       expect(
         await StorageService.getVideoResume('http://h/b/s1e1.mp4'),

@@ -5,6 +5,11 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/services/storage/iptv_appearance_storage.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
+import 'package:debrify/services/storage/iptv_history_storage.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
+import 'package:debrify/services/storage/startup_iptv_storage.dart';
 import 'package:flutter/foundation.dart'
     show
         TargetPlatform,
@@ -32,7 +37,6 @@ import '../../services/main_page_bridge.dart';
 import '../../services/stremio_iptv_service.dart';
 import '../../services/stremio_service.dart';
 import '../../services/xtream_codes_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../utils/iptv_player_paging.dart';
 import '../../utils/tv_keys.dart' show TvHeldKeyGuard, isActivateOrSpaceKey;
@@ -189,7 +193,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   /// The cockpit's visual style (`iptv_style` pref). Only the TV/desktop
   /// cockpit branch consults it — classic and touch-tablet layouts ignore it.
-  IptvStyle _iptvStyle = IptvStyle.fromPref(StorageService.iptvStyleCached);
+  IptvStyle _iptvStyle = IptvStyle.fromPref(IptvAppearanceStorage.iptvStyleCached);
 
   /// Whether focusing a row may open its stream in the embedded side stage.
   /// The channel identity and stage actions remain available when false; only
@@ -729,7 +733,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     final affected = switch (change.scope) {
       IptvChannelOrderScope.list =>
         (playlist.isFavorites &&
-                change.target == StorageService.iptvFavoritesListId) ||
+                change.target == IptvFavoritesStorage.iptvFavoritesListId) ||
             playlist.customListId == change.target,
       IptvChannelOrderScope.source =>
         change.target.isEmpty || playlist.id == change.target,
@@ -742,15 +746,15 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Future<void> _loadFavorites() async {
-    final lists = await StorageService.getIptvLists();
-    final snapshot = await StorageService.getIptvMembershipSnapshot();
+    final lists = await IptvFavoritesStorage.getIptvLists();
+    final snapshot = await IptvFavoritesStorage.getIptvMembershipSnapshot();
     if (mounted) {
       setState(() {
         _lists = lists;
         _membership = snapshot.membership;
         _favoriteUrls = {
           for (final entry in snapshot.membership.entries)
-            if (entry.value.contains(StorageService.iptvFavoritesListId))
+            if (entry.value.contains(IptvFavoritesStorage.iptvFavoritesListId))
               entry.key,
         };
         _favoritePlaylistIds = snapshot.origins;
@@ -772,7 +776,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       final rowOrigin = channel.attributes[_kListOriginAttribute];
       if (rowOrigin != null && rowOrigin.isNotEmpty) return rowOrigin;
       final listId = playlist!.isFavorites
-          ? StorageService.iptvFavoritesListId
+          ? IptvFavoritesStorage.iptvFavoritesListId
           : playlist.customListId;
       if (listId == null) return null;
       return _favoritePlaylistIds[(listId, channel.url)];
@@ -800,7 +804,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   static const String _kListOriginAttribute = 'list_playlist_id';
 
   Future<void> _toggleFavorite(IptvChannel channel, bool isFavorited) async {
-    await StorageService.setIptvChannelFavorited(
+    await IptvFavoritesStorage.setIptvChannelFavorited(
       channel.url,
       isFavorited,
       channelName: channel.name,
@@ -824,7 +828,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             ..._membership,
             channel.url: {
               ...?_membership[channel.url],
-              StorageService.iptvFavoritesListId,
+              IptvFavoritesStorage.iptvFavoritesListId,
             },
           };
         } else {
@@ -832,7 +836,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           _membership = {
             ..._membership,
             channel.url: {...?_membership[channel.url]}
-              ..remove(StorageService.iptvFavoritesListId),
+              ..remove(IptvFavoritesStorage.iptvFavoritesListId),
           };
         }
       });
@@ -852,9 +856,9 @@ class IptvResultsViewState extends State<IptvResultsView>
       context: context,
       channelName: channel.name,
       channelLogoUrl: channel.logoUrl,
-      loadLists: () => StorageService.getIptvLists(),
-      loadMembership: () => StorageService.getIptvListsForChannel(channel.url),
-      onSetMembership: (listId, inList) => StorageService.setIptvChannelInList(
+      loadLists: () => IptvFavoritesStorage.getIptvLists(),
+      loadMembership: () => IptvFavoritesStorage.getIptvListsForChannel(channel.url),
+      onSetMembership: (listId, inList) => IptvFavoritesStorage.setIptvChannelInList(
         listId,
         channel.url,
         inList,
@@ -867,7 +871,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         duration: channel.duration,
         httpHeaders: channel.httpHeaders,
       ),
-      onCreateList: (name) => StorageService.createIptvList(name),
+      onCreateList: (name) => IptvFavoritesStorage.createIptvList(name),
     );
     if (!changed || !mounted) return;
     await _loadFavorites();
@@ -887,7 +891,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       existingNames: [for (final list in _lists) list.name],
     );
     if (name == null || !mounted) return;
-    final id = await StorageService.createIptvList(name);
+    final id = await IptvFavoritesStorage.createIptvList(name);
     if (!mounted) return;
     await _loadFavorites();
     if (!mounted) return;
@@ -912,7 +916,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     final playlist = _selectedPlaylist;
     if (playlist == null) return;
     final listId = playlist.isFavorites
-        ? StorageService.iptvFavoritesListId
+        ? IptvFavoritesStorage.iptvFavoritesListId
         : playlist.customListId;
     if (listId == null) return;
     final stillIn = _membership[channel.url]?.contains(listId) ?? false;
@@ -939,14 +943,14 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Future<void> _loadSettingsInner({bool forceReload = false}) async {
-    var playlists = await StorageService.getIptvPlaylists(forSettings: false);
-    final defaultPlaylistId = await StorageService.getIptvDefaultPlaylist();
+    var playlists = await IptvPlaylistStorage.getIptvPlaylists(forSettings: false);
+    final defaultPlaylistId = await IptvPlaylistStorage.getIptvDefaultPlaylist();
     // Cockpit look. Read on every pass so returning from Settings (which
     // re-enters here) adopts a changed style in the same setState as
     // everything else — no separate listener, no style flash.
-    final iptvStyle = IptvStyle.fromPref(await StorageService.getIptvStyle());
+    final iptvStyle = IptvStyle.fromPref(await IptvAppearanceStorage.getIptvStyle());
     final channelPreviewEnabled =
-        await StorageService.getIptvChannelPreviewEnabled();
+        await IptvAppearanceStorage.getIptvChannelPreviewEnabled();
 
     // Installed Stremio addons with live-TV catalogs appear as (non-stored)
     // virtual playlists after the user's own entries.
@@ -961,7 +965,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     //
     // One store read covers both the presence probe and the list rows — the
     // per-list channel counts come back with them.
-    final lists = await StorageService.getIptvLists();
+    final lists = await IptvFavoritesStorage.getIptvLists();
     final hasFavorites = lists.any((l) => l.isFavorites && l.channelCount > 0);
     final customLists = [
       for (final list in lists)
@@ -971,7 +975,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // half-watched — an empty shelf in the picker is just noise. Custom lists
     // stay visible even when empty: the user made them on purpose, and an
     // empty one is where they go to fill it.
-    final continueWatching = await StorageService.getIptvContinueWatching();
+    final continueWatching = await IptvHistoryStorage.getIptvContinueWatching();
     final hasContinue = continueWatching.isNotEmpty;
     if (hasFavorites || customLists.isNotEmpty || playlists.isNotEmpty) {
       playlists = [
@@ -1164,7 +1168,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     var target = current;
     if (!current.isVirtual) {
       try {
-        final stored = await StorageService.getIptvPlaylists(
+        final stored = await IptvPlaylistStorage.getIptvPlaylists(
           forSettings: false,
         );
         final byId = {for (final p in stored) p.id: p};
@@ -1328,7 +1332,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // or URL
     final IptvParseResult result;
     if (playlist.isFavorites) {
-      result = await _buildListResult(StorageService.iptvFavoritesListId);
+      result = await _buildListResult(IptvFavoritesStorage.iptvFavoritesListId);
     } else if (playlist.isCustomList) {
       result = await _buildListResult(playlist.customListId!);
     } else if (playlist.isContinueWatching) {
@@ -1481,7 +1485,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         !playlist.isFavorites &&
         !playlist.isCustomList &&
         !playlist.isContinueWatching) {
-      await StorageService.reconcileIptvFavoriteUrls(result.channels);
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrls(result.channels);
     }
     await _loadFavorites();
     if (!mounted || ticket != _loadTicket) return;
@@ -1498,7 +1502,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // context below scan hidden rows in DB mode too.
     var channels = result.channels;
     if (playlist.isLocalFile) {
-      channels = await StorageService.applyIptvCategoryChannelOrders(
+      channels = await IptvFavoritesStorage.applyIptvCategoryChannelOrders(
         playlist.id,
         channels,
       );
@@ -1618,7 +1622,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (migrateFavorites) {
       // Worker-side scan against the catalog rows — never a facade walk on
       // this isolate.
-      await StorageService.reconcileIptvFavoriteUrlsForCatalog(snap.catalogKey);
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrlsForCatalog(snap.catalogKey);
     }
     await _loadFavorites();
     if (!mounted || ticket != _loadTicket) return;
@@ -1746,7 +1750,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     ];
     if (onDemand.isEmpty) return;
     unawaited(
-      StorageService.getIptvProgressForUrls(onDemand).then((progress) {
+      IptvHistoryStorage.getIptvProgressForUrls(onDemand).then((progress) {
         if (!mounted || ticket != _loadTicket || progress.isEmpty) return;
         setState(() => _progressByUrl = {..._progressByUrl, ...progress});
       }),
@@ -2206,7 +2210,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // favorites line up on the first paint — computed on a worker from the
     // catalog rows, never by walking a facade here.
     final freshAll = _makeDbList(fresh);
-    await StorageService.reconcileIptvFavoriteUrlsForCatalog(fresh.catalogKey);
+    await IptvFavoritesStorage.reconcileIptvFavoriteUrlsForCatalog(fresh.catalogKey);
     await _loadFavorites();
     if (_revalidateSuperseded(playlist, contentType, ticket)) return;
 
@@ -2290,7 +2294,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
     // Guide rebind against the CURRENT stored configuration, mirroring the
     // materialized revalidate. No snapshot write — the DB is the store.
-    final storedPlaylists = await StorageService.getIptvPlaylists(
+    final storedPlaylists = await IptvPlaylistStorage.getIptvPlaylists(
       forSettings: false,
     );
     if (_revalidateSuperseded(playlist, contentType, ticket)) return;
@@ -2845,7 +2849,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           if (!channel.isLive && channel.contentType != 'series') channel.url,
       };
       if (urls.isEmpty) return;
-      final progress = await StorageService.getIptvProgressForUrls(urls);
+      final progress = await IptvHistoryStorage.getIptvProgressForUrls(urls);
       if (!mounted || ticket != _loadTicket || progress.isEmpty) return;
       setState(() => _progressByUrl = {..._progressByUrl, ...progress});
       return;
@@ -2864,7 +2868,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       return;
     }
 
-    final progress = await StorageService.getIptvProgressForUrls(onDemand);
+    final progress = await IptvHistoryStorage.getIptvProgressForUrls(onDemand);
     if (!mounted || ticket != _loadTicket) return;
     setState(() => _progressByUrl = progress);
   }
@@ -2873,7 +2877,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// are replayed from metadata captured at play time rather than re-fetched,
   /// so they survive a provider that has since renumbered or expired.
   Future<IptvParseResult> _buildContinueResult() async {
-    final items = await StorageService.getIptvContinueWatching();
+    final items = await IptvHistoryStorage.getIptvContinueWatching();
     _continuePlaylistIds = {};
     final channels = <IptvChannel>[];
     // A series' episodes collapse to ONE row: items are most-recent-first, so
@@ -2938,7 +2942,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           // Always on-demand — live channels are never recorded — so the row
           // draws a poster and the "LIVE" dot stays off.
           contentType: 'vod',
-          httpHeaders: StorageService.iptvFavoriteHeaders(item),
+          httpHeaders: IptvFavoritesStorage.iptvFavoriteHeaders(item),
         ),
       );
     }
@@ -2955,7 +2959,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// fetch is needed; Stremio-keyed URLs still resolve on focus/play exactly
   /// like anywhere else.
   Future<IptvParseResult> _buildListResult(String listId) async {
-    final stored = await StorageService.getIptvListChannels(listId);
+    final stored = await IptvFavoritesStorage.getIptvListChannels(listId);
     final channels = stored.entries.map((entry) {
       final meta = entry.value;
       final name = (meta['name'] as String?) ?? '';
@@ -2977,7 +2981,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           if ((meta['playlistId'] as String?)?.isNotEmpty ?? false)
             _kListOriginAttribute: meta['playlistId'] as String,
         },
-        httpHeaders: StorageService.iptvFavoriteHeaders(meta),
+        httpHeaders: IptvFavoritesStorage.iptvFavoriteHeaders(meta),
       );
     }).toList();
     final categories = <String>{
@@ -3439,7 +3443,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       return seriesOrigin;
     }
     final listId = source.isFavorites
-        ? StorageService.iptvFavoritesListId
+        ? IptvFavoritesStorage.iptvFavoritesListId
         : source.customListId;
     final shelfOrigin = (source.isFavorites || source.isCustomList)
         // Prefer the row's own origin (see [_kListOriginAttribute]); the map
@@ -3478,8 +3482,8 @@ class IptvResultsViewState extends State<IptvResultsView>
   Future<List<Map<String, dynamic>>> _playerChannelPayload(
     List<({IptvChannel channel, IptvPlaylist source})> entries,
   ) async {
-    final favoriteUrls = await StorageService.getIptvFavoriteChannelUrls();
-    final resumePositions = await StorageService.getIptvResumePositions([
+    final favoriteUrls = await IptvFavoritesStorage.getIptvFavoriteChannelUrls();
+    final resumePositions = await IptvHistoryStorage.getIptvResumePositions([
       for (final entry in entries)
         if (!entry.channel.isLive) entry.channel.url,
     ]);
@@ -3959,7 +3963,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // whatever you land on" — so it must skip the stored-identity validation
     // below, which would otherwise reject it and cancel the whole attempt.
     final firstAvailable =
-        payload[StorageService.startupIptvFirstAvailable] == true;
+        payload[StartupIptvStorage.startupIptvFirstAvailable] == true;
     final url = payload['url'];
     final name = payload['name'];
     if (!firstAvailable && (url is! String || url.isEmpty || name is! String)) {
@@ -4046,7 +4050,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // default provider, else Favourites when they have any (see
     // `_loadSettings`). Deliberately NOT resolved as a stored identity:
     // there is nothing to match, and no user expectation to get wrong.
-    if (payload[StorageService.startupIptvFirstAvailable] == true) {
+    if (payload[StartupIptvStorage.startupIptvFirstAvailable] == true) {
       return _resolveFirstAvailableRow(cancelled);
     }
 
@@ -4377,7 +4381,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         contentType: 'vod',
         httpHeaders: channel.httpHeaders,
       );
-      await StorageService.recordIptvWatch(
+      await IptvHistoryStorage.recordIptvWatch(
         replay.url,
         channelName: replay.name,
         logoUrl: replay.logoUrl,
@@ -4466,7 +4470,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     //
     // Live channels are skipped — "62% through Sky Sports" is meaningless.
     if (!channel.isLive) {
-      await StorageService.recordIptvWatch(
+      await IptvHistoryStorage.recordIptvWatch(
         channel.url,
         channelName: channel.name,
         logoUrl: channel.logoUrl,
@@ -4664,12 +4668,12 @@ class IptvResultsViewState extends State<IptvResultsView>
     try {
       if (isSeries) {
         if (seriesId.isEmpty) return;
-        await StorageService.removeIptvContinueWatchingSeries(
+        await IptvHistoryStorage.removeIptvContinueWatchingSeries(
           playlistId: playlistId,
           seriesId: seriesId,
         );
       } else {
-        await StorageService.removeIptvContinueWatchingItem(channel.url);
+        await IptvHistoryStorage.removeIptvContinueWatchingItem(channel.url);
       }
       if (!mounted) return;
       await _refreshAfterPlayback();
@@ -4692,7 +4696,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // watch-history map and the (potentially large) shared resume map off the
     // UI isolate, and this runs at the exact moment the user lands back on
     // the list — the worst time to do it three times over.
-    final items = await StorageService.getIptvContinueWatching();
+    final items = await IptvHistoryStorage.getIptvContinueWatching();
     if (!mounted) return;
     // A recording may have been started (or stopped) from inside the player —
     // the header's record-dot must not lag until the next resume.
@@ -4709,7 +4713,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // reload of the page.
     final shelf = _selectedPlaylist;
     final shelfListId = (shelf?.isFavorites ?? false)
-        ? StorageService.iptvFavoritesListId
+        ? IptvFavoritesStorage.iptvFavoritesListId
         : shelf?.customListId;
     if (shelfListId != null) {
       final stored = {

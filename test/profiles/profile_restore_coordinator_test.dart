@@ -12,11 +12,11 @@ import 'package:debrify/models/indexer_manager_config.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/services/storage/home_rows_storage.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_collection_resource_facade.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption_models.dart';
@@ -921,7 +921,7 @@ void main() {
       }
       // Exercise the production model getters (not just raw facade records).
       final List<IptvPlaylist> playlists =
-          await StorageService.getIptvPlaylists(forSettings: false);
+          await IptvPlaylistStorage.getIptvPlaylists(forSettings: false);
       expect(playlists.where((p) => !p.isVirtual), hasLength(2));
       final List<WebDavConfig> servers = await WebdavServerStorage.getWebDavServers(
         forSettings: false,

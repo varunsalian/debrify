@@ -2,6 +2,9 @@ import 'dart:io';
 
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/screens/browse_screen.dart';
+import 'package:debrify/services/storage/iptv_appearance_storage.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
@@ -12,7 +15,6 @@ import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:debrify/widgets/browse/browse_search_header.dart';
 import 'package:debrify/widgets/iptv/iptv_filters.dart';
@@ -61,8 +63,8 @@ void main() {
     IptvCatalogDb.debugDirectoryOverride = catalogDirectory.path;
     await IptvCatalogDb.open();
     resetStorageProfileCaches();
-    await StorageService.setIptvChannelPreviewEnabled(false);
-    await StorageService.setIptvPlaylists([
+    await IptvAppearanceStorage.setIptvChannelPreviewEnabled(false);
+    await IptvPlaylistStorage.setIptvPlaylists([
       IptvPlaylist(
         id: 'local-guide',
         name: 'Living room TV',
@@ -101,10 +103,10 @@ https://example.com/live/two.ts
         late String listId;
         await tester.runAsync(() async {
           listId = favorites
-              ? StorageService.iptvFavoritesListId
-              : await StorageService.createIptvList('Mixed shelf');
+              ? IptvFavoritesStorage.iptvFavoritesListId
+              : await IptvFavoritesStorage.createIptvList('Mixed shelf');
           for (var i = 0; i < 2; i++) {
-            await StorageService.setIptvChannelInList(
+            await IptvFavoritesStorage.setIptvChannelInList(
               listId,
               'https://example.com/saved/$i.ts',
               true,
@@ -322,7 +324,9 @@ https://example.com/live/two.ts
   testWidgets(
     'Desktop Spotlight traverses wrapped hero actions before leaving the panel',
     (tester) async {
-      await tester.runAsync(() => StorageService.createIptvList('Review list'));
+      await tester.runAsync(
+        () => IptvFavoritesStorage.createIptvList('Review list'),
+      );
       tester.view.physicalSize = const Size(896, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -873,7 +877,7 @@ https://example.com/live/two.ts
         ..writeln('https://example.com/live/$index.ts');
     }
     await tester.runAsync(
-      () => StorageService.setIptvPlaylists([
+      () => IptvPlaylistStorage.setIptvPlaylists([
         IptvPlaylist(
           id: 'local-guide',
           name: 'Large provider',
@@ -953,7 +957,7 @@ https://example.com/live/two.ts
     tester.view.physicalSize = const Size(900, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.runAsync(() => StorageService.setIptvStyle('command'));
+    await tester.runAsync(() => IptvAppearanceStorage.setIptvStyle('command'));
     final height = ValueNotifier<double>(439);
     addTearDown(height.dispose);
 
@@ -998,7 +1002,7 @@ https://example.com/live/two.ts
     addTearDown(tester.view.reset);
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
-    await tester.runAsync(() => StorageService.setIptvStyle('command'));
+    await tester.runAsync(() => IptvAppearanceStorage.setIptvStyle('command'));
     final height = ValueNotifier<double>(559);
     addTearDown(height.dispose);
 
@@ -1055,7 +1059,7 @@ https://example.com/live/two.ts
         ..writeln('https://example.com/startup/$index.ts');
     }
     await tester.runAsync(
-      () => StorageService.setIptvPlaylists([
+      () => IptvPlaylistStorage.setIptvPlaylists([
         IptvPlaylist(
           id: 'local-guide',
           name: 'Startup provider',

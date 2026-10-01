@@ -494,6 +494,7 @@ identity is present with the same outcome.
 | 2 | `a18aff4a` | 9,251 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 | 3 | `93435156` | 7,184 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 | 4 | `e30794c2` | 5,273 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 5 | This step commit (hash recorded by step 6) | 3,447 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 
 ### Step 0 evidence and retained source
 
@@ -639,6 +640,18 @@ each step. Unrelated whole-file extractions remain outside this plan.
 | 4 | `lib/screens/video_player_screen.dart` | 18091 | 18092 |
 | 4 | `lib/services/profiles/profile_restore_coordinator.dart` | 1938 | 1939 |
 | 4 | `lib/widgets/series_browser.dart` | 2200 | 2201 |
+| 5 | `lib/main.dart` | 4177 | 4181 |
+| 5 | `lib/screens/magic_tv_screen.dart` | 11268 | 11271 |
+| 5 | `lib/screens/settings/home_page_settings_page.dart` | 1072 | 1073 |
+| 5 | `lib/screens/settings/iptv_settings_page.dart` | 4471 | 4480 |
+| 5 | `lib/screens/settings/iptv_settings_two_pane.dart` | 2229 | 2231 |
+| 5 | `lib/screens/settings_screen.dart` | 8750 | 8754 |
+| 5 | `lib/screens/video_player/widgets/iptv_channel_sheet.dart` | 3666 | 3667 |
+| 5 | `lib/screens/video_player_screen.dart` | 18092 | 18097 |
+| 5 | `lib/services/android_tv_player_bridge.dart` | 2150 | 2153 |
+| 5 | `lib/services/iptv_source_search.dart` | 1171 | 1175 |
+| 5 | `lib/services/video_player_launcher.dart` | 6578 | 6581 |
+| 5 | `lib/widgets/iptv/iptv_results_view.dart` | 9080 | 9084 |
 <!-- storage-caller-size-rows -->
 
 Step 1: `ss/step1.jsonl` records 3,449 success, 18 error, 1 failure,
@@ -717,3 +730,26 @@ was not rewritten and cannot mask any observed-baseline regression. Analyzer
 chain, constants, complete declarations/reset partitions, architecture/size,
 CI formatting scope and diff checks pass. This gate is pushed only to `private`;
 the exact CI result and duration are recorded with step 5 after verification.
+
+Gate 1 private CI: run `36886791557` on `1a54fd34` passed all three jobs.
+https://github.com/varunsalian/debrify-refactor/actions/runs/36886791557
+The behavior job took 9m 39s including setup; it is below the plan's 12-minute
+threshold, so the expanded contract list stays in one job. No tests were dropped.
+
+Step 5 formatting note: the IPTV history file uses `// dart format width=160`
+so Dart does not introduce a trailing parameter comma when formatting the
+original record-returning `_iptvResumeStates` signature. Its declarations
+remain verbatim and the owner was below 500 lines before formatting. The strict
+declaration check caught this and passed after restoring the original punctuation.
+All profile-handoff assignments are now in their owners; the legacy reset is an
+empty leaf, forwarded exactly once until step 8 removes it.
+
+Step 5: `ss/step5.jsonl` records {'success': 1535, 'skipped': 10, 'error': 2, 'failure': 1};
+comparison to `ss/base.jsonl` PASS (no new failures, missing tests or skips).
+`ss/analyze-step5.txt` vs the previous step adds no diagnostics after the
+prescribed old-file relocation. Map/dependency, constant, declaration/reset,
+size/import and diff checks pass. Caller review confirms only authorized
+expressions, imports and whitespace changed.
+
+Gate 1 CI executed 1,991 identities: 1,987 success, one skip and the three
+exact baseline failures. All three jobs passed; the behavior job took 9m39s.

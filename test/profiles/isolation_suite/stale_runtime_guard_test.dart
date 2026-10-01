@@ -158,10 +158,10 @@ void main() {
             '${entry.key} must be reset exactly once through the entry point.',
       );
       if (owner == 'StorageService') {
-        expect(
-          _bodyOf(entry.value, 'static void resetProfileCaches()'),
-          isNotEmpty,
-        );
+        expect(entry.value, contains('static void resetProfileCaches()'));
+        final leaf = _bodyOf(entry.value, 'static void resetProfileCaches()');
+        expect(leaf, isNot(contains('resetStorageProfileCaches(')));
+        expect(leaf, isNot(matches(r'\w+Storage\.resetProfileCaches\(')));
       }
     }
     expect(

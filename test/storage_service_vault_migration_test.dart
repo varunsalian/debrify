@@ -1,10 +1,10 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Verifies the lazy plaintext→ciphertext migration for real credential keys:
@@ -45,7 +45,7 @@ void main() {
       'iptv_playlists': [legacy],
     });
 
-    final playlists = await StorageService.getIptvPlaylists();
+    final playlists = await IptvPlaylistStorage.getIptvPlaylists();
     expect(playlists, hasLength(1));
     expect(playlists.first.username, 'u1');
     expect(playlists.first.password, 'p1');
@@ -61,7 +61,7 @@ void main() {
     expect(stored['content'], startsWith('#EXTM3U'));
 
     // Round-trips through the sealed form.
-    final again = await StorageService.getIptvPlaylists();
+    final again = await IptvPlaylistStorage.getIptvPlaylists();
     expect(again.single.password, 'p1');
   });
 

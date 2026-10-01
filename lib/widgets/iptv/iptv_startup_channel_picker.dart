@@ -1,7 +1,8 @@
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/iptv_media_store.dart' show IptvListMeta;
-import '../../services/storage_service.dart';
 
 /// One selectable row: a live channel saved in Favourites or a custom list.
 ///
@@ -51,9 +52,11 @@ Future<IptvStartupChannelChoice?> showIptvStartupChannelPicker(
   BuildContext context, {
   String title = 'Startup channel',
 }) async {
-  final lists = await StorageService.getIptvLists();
-  final snapshot = await StorageService.getIptvMembershipSnapshot();
-  final playlists = await StorageService.getIptvPlaylists(forSettings: false);
+  final lists = await IptvFavoritesStorage.getIptvLists();
+  final snapshot = await IptvFavoritesStorage.getIptvMembershipSnapshot();
+  final playlists = await IptvPlaylistStorage.getIptvPlaylists(
+    forSettings: false,
+  );
   final playlistById = {
     for (final playlist in playlists) playlist.id: playlist,
   };
@@ -61,7 +64,7 @@ Future<IptvStartupChannelChoice?> showIptvStartupChannelPicker(
   final seen = <Object>{};
 
   for (final list in lists) {
-    final channels = await StorageService.getIptvListChannels(list.id);
+    final channels = await IptvFavoritesStorage.getIptvListChannels(list.id);
     channels.forEach((url, meta) {
       final contentType = meta['contentType'] as String?;
       final duration = (meta['duration'] as num?)?.toInt();
@@ -86,7 +89,7 @@ Future<IptvStartupChannelChoice?> showIptvStartupChannelPicker(
         channelNumber: (meta['channelNumber'] as num?)?.toInt(),
         group: meta['group'] as String?,
         logoUrl: meta['logoUrl'] as String?,
-        httpHeaders: StorageService.iptvFavoriteHeaders(meta),
+        httpHeaders: IptvFavoritesStorage.iptvFavoriteHeaders(meta),
         connectionResourceId: playlist?.connectionResourceId,
         connectionResourceRevision: playlist?.connectionResourceRevision,
         listName: list.name,

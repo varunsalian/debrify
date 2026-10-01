@@ -22,6 +22,8 @@ import 'package:debrify/services/profiles/profile_lock_controller.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
+import 'package:debrify/services/storage/iptv_history_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
@@ -782,7 +784,7 @@ void main() {
         )['duration'],
         -1,
       );
-      final history = await StorageService.getIptvWatchHistory();
+      final history = await IptvHistoryStorage.getIptvWatchHistory();
       expect(
         history['https://panel.invalid/movie/9']?['httpHeaders'],
         <String, String>{'Authorization': 'Bearer secret'},
@@ -1408,7 +1410,7 @@ void main() {
       final headers = <String, String>{'Authorization': 'x' * 2100};
       await IptvMediaStore.setChannelFavorited(url, true, httpHeaders: headers);
       expect(
-        (await StorageService.getIptvFavoriteChannels())[url]?['httpHeaders'],
+        (await IptvFavoritesStorage.getIptvFavoriteChannels())[url]?['httpHeaders'],
         headers,
       );
 

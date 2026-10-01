@@ -1,8 +1,8 @@
+import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
-import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
@@ -44,7 +44,9 @@ String iptvStyleLabel(String style) {
     if (c.value == style) return c.label;
   }
   return kIptvStyleChoices
-      .firstWhere((choice) => choice.value == StorageService.kIptvStyleDefault)
+      .firstWhere(
+        (choice) => choice.value == IptvAppearanceStorage.kIptvStyleDefault,
+      )
       .label;
 }
 
@@ -64,7 +66,7 @@ class IptvStylePage extends StatefulWidget {
 
 class _IptvStylePageState extends State<IptvStylePage> {
   bool _loading = true;
-  String _style = StorageService.kIptvStyleDefault;
+  String _style = IptvAppearanceStorage.kIptvStyleDefault;
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).
@@ -88,7 +90,7 @@ class _IptvStylePageState extends State<IptvStylePage> {
   }
 
   Future<void> _load() async {
-    final style = await StorageService.getIptvStyle();
+    final style = await IptvAppearanceStorage.getIptvStyle();
     if (!mounted) return;
     setState(() {
       _style = style;
@@ -112,7 +114,7 @@ class _IptvStylePageState extends State<IptvStylePage> {
     // Tell an in-flight Look apply that a human just chose this key, so it
     // does not stamp over the choice. See theme/app_looks.dart.
     LookApplier.noteExternalWrite('iptv_style');
-    await StorageService.setIptvStyle(value);
+    await IptvAppearanceStorage.setIptvStyle(value);
   }
 
   @override

@@ -1,6 +1,12 @@
 import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 
+import 'package:debrify/services/storage/iptv_appearance_storage.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
+import 'package:debrify/services/storage/iptv_history_storage.dart';
+import 'package:debrify/services/storage/iptv_last_channel_storage.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
+import 'package:debrify/services/storage/startup_iptv_storage.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,7 +18,6 @@ import '../../services/iptv_catalog_db.dart';
 import '../../services/iptv_catalog_refresh_service.dart';
 import '../../services/iptv_service.dart';
 import '../../services/xtream_codes_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/m3u_parser.dart';
 import '../../utils/platform_util.dart';
@@ -184,7 +189,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
   // Startup channel
   bool _startupEnabled = false;
-  String _startupMode = StorageService.startupIptvModeLast;
+  String _startupMode = StartupIptvStorage.startupIptvModeLast;
   Map<String, dynamic>? _startupChannel;
   Map<String, dynamic>? _lastLiveChannel;
   final FocusNode _startupChannelFocusNode = FocusNode(
@@ -235,7 +240,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   // Cockpit appearance (`iptv_style`). Shown only where the cockpit exists —
   // television and desktop; a phone or touch tablet would be picking a look it
   // can never see.
-  String _iptvStyle = StorageService.kIptvStyleDefault;
+  String _iptvStyle = IptvAppearanceStorage.kIptvStyleDefault;
 
   // In-player guide look (`iptv_player_guide_style`). Ungated: every
   // platform has a player — phones/desktop the Dart one, Android TV the
@@ -578,18 +583,18 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
   Future<void> _setStartupModeForProfile(String? mode) async {
     if (mode == null) return;
-    await StorageService.setStartupIptvMode(mode);
+    await StartupIptvStorage.setStartupIptvMode(mode);
     if (mounted) setState(() => _startupMode = mode);
     // Choosing "a specific channel" with none set yet goes straight to the
     // picker — otherwise the mode is selected but inert, which reads as broken.
-    if (mode == StorageService.startupIptvModePinned &&
+    if (mode == StartupIptvStorage.startupIptvModePinned &&
         _startupChannel == null) {
       await _pickStartupChannel();
     }
   }
 
   Future<void> _setStartupEnabled(bool enabled) => _runProfileAction(() async {
-    await StorageService.setStartupIptvEnabled(enabled);
+    await StartupIptvStorage.setStartupIptvEnabled(enabled);
     if (mounted) setState(() => _startupEnabled = enabled);
   });
 
@@ -597,7 +602,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _runProfileAction(() => _setTrackContinueWatchingForProfile(value));
 
   Future<void> _setTrackContinueWatchingForProfile(bool value) async {
-    await StorageService.setIptvTrackContinueWatching(value);
+    await IptvHistoryStorage.setIptvTrackContinueWatching(value);
     if (mounted) setState(() => _trackContinueWatching = value);
   }
 
@@ -605,7 +610,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _runProfileAction(() => _setChannelPreviewEnabledForProfile(value));
 
   Future<void> _setChannelPreviewEnabledForProfile(bool value) async {
-    await StorageService.setIptvChannelPreviewEnabled(value);
+    await IptvAppearanceStorage.setIptvChannelPreviewEnabled(value);
     if (mounted) setState(() => _channelPreviewEnabled = value);
   }
 
@@ -618,7 +623,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // A direct pick here has the same priority as the standalone picker over
     // any Look bundle that is still being applied.
     LookApplier.noteExternalWrite('iptv_style');
-    await StorageService.setIptvStyle(style);
+    await IptvAppearanceStorage.setIptvStyle(style);
     if (mounted) setState(() => _iptvStyle = style);
   }
 
@@ -628,7 +633,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Future<void> _setPlayerGuideStyleForProfile(String style) async {
     // Same persist-before-setState contract as [_setIptvStyle]: the player
     // reads the pref at launch, which can happen the moment this route pops.
-    await StorageService.setIptvPlayerGuideStyle(style);
+    await IptvAppearanceStorage.setIptvPlayerGuideStyle(style);
     if (mounted) setState(() => _playerGuideStyle = style);
   }
 
@@ -638,7 +643,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Future<void> _pickStartupChannelForProfile() async {
     final choice = await showIptvStartupChannelPicker(context);
     if (choice == null || !mounted) return;
-    await StorageService.setStartupIptvChannel(
+    await StartupIptvStorage.setStartupIptvChannel(
       choice.url,
       name: choice.name,
       playlistId: choice.playlistId,
@@ -647,7 +652,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       logoUrl: choice.logoUrl,
       httpHeaders: choice.httpHeaders.isEmpty ? null : choice.httpHeaders,
     );
-    final stored = await StorageService.getStartupIptvChannel();
+    final stored = await StartupIptvStorage.getStartupIptvChannel();
     if (mounted) setState(() => _startupChannel = stored);
   }
 
@@ -661,18 +666,21 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     } catch (_) {
       // A catalog that won't open just means "no stats"; the page still works.
     }
-    final playlists = await StorageService.getIptvPlaylists(forSettings: true);
-    final defaultId = await StorageService.getIptvDefaultPlaylist();
-    final lists = await StorageService.getIptvLists();
-    final startupEnabled = await StorageService.getStartupIptvEnabled();
-    final startupMode = await StorageService.getStartupIptvMode();
-    final startupChannel = await StorageService.getStartupIptvChannel();
-    final lastLive = await StorageService.getIptvLastLiveChannel();
-    final trackCw = await StorageService.getIptvTrackContinueWatching();
+    final playlists = await IptvPlaylistStorage.getIptvPlaylists(
+      forSettings: true,
+    );
+    final defaultId = await IptvPlaylistStorage.getIptvDefaultPlaylist();
+    final lists = await IptvFavoritesStorage.getIptvLists();
+    final startupEnabled = await StartupIptvStorage.getStartupIptvEnabled();
+    final startupMode = await StartupIptvStorage.getStartupIptvMode();
+    final startupChannel = await StartupIptvStorage.getStartupIptvChannel();
+    final lastLive = await IptvLastChannelStorage.getIptvLastLiveChannel();
+    final trackCw = await IptvHistoryStorage.getIptvTrackContinueWatching();
     final channelPreviewEnabled =
-        await StorageService.getIptvChannelPreviewEnabled();
-    final iptvStyle = await StorageService.getIptvStyle();
-    final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
+        await IptvAppearanceStorage.getIptvChannelPreviewEnabled();
+    final iptvStyle = await IptvAppearanceStorage.getIptvStyle();
+    final playerGuideStyle =
+        await IptvAppearanceStorage.getIptvPlayerGuideStyle();
     final autoRefreshHours = await IptvCatalogRefreshService.getIntervalHours();
     final engineSupported =
         !kIsWeb &&
@@ -819,7 +827,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     );
 
     final newPlaylists = [..._playlists, playlist];
-    final savedPlaylists = await StorageService.setIptvPlaylistsAndReload(
+    final savedPlaylists = await IptvPlaylistStorage.setIptvPlaylistsAndReload(
       newPlaylists,
       forSettings: true,
     );
@@ -943,10 +951,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       );
 
       final newPlaylists = [..._playlists, playlist];
-      final savedPlaylists = await StorageService.setIptvPlaylistsAndReload(
-        newPlaylists,
-        forSettings: true,
-      );
+      final savedPlaylists =
+          await IptvPlaylistStorage.setIptvPlaylistsAndReload(
+            newPlaylists,
+            forSettings: true,
+          );
       if (!mounted) return;
 
       setState(() {
@@ -1066,7 +1075,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     );
 
     final newPlaylists = [..._playlists, playlist];
-    final savedPlaylists = await StorageService.setIptvPlaylistsAndReload(
+    final savedPlaylists = await IptvPlaylistStorage.setIptvPlaylistsAndReload(
       newPlaylists,
       forSettings: true,
     );
@@ -1181,7 +1190,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
     final removedIndex = _playlists.indexWhere((p) => p.id == playlist.id);
     final newPlaylists = _playlists.where((p) => p.id != playlist.id).toList();
-    final savedPlaylists = await StorageService.setIptvPlaylistsAndReload(
+    final savedPlaylists = await IptvPlaylistStorage.setIptvPlaylistsAndReload(
       newPlaylists,
       forSettings: true,
       revokeBorrowers: revokeBorrowers,
@@ -1190,7 +1199,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
     // If removed playlist was the default, clear default
     if (_defaultPlaylistId == playlist.id) {
-      await StorageService.setIptvDefaultPlaylist(null);
+      await IptvPlaylistStorage.setIptvDefaultPlaylist(null);
       _defaultPlaylistId = null;
     }
 
@@ -1235,7 +1244,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         );
       }
     }
-    await StorageService.removeIptvCategoryOrdersForSource(playlist.id);
+    await IptvFavoritesStorage.removeIptvCategoryOrdersForSource(playlist.id);
 
     // Remove list memberships and watch history that belonged to this
     // playlist — both replay from stored metadata, so either would otherwise
@@ -1243,8 +1252,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // EVERY list, not just Favorites: the provider is gone, so its channels
     // have nowhere left to play from. The lists themselves survive, possibly
     // empty.
-    await StorageService.removeIptvListChannelsByPlaylistId(playlist.id);
-    await StorageService.removeIptvWatchHistoryByPlaylistId(playlist.id);
+    await IptvFavoritesStorage.removeIptvListChannelsByPlaylistId(playlist.id);
+    await IptvHistoryStorage.removeIptvWatchHistoryByPlaylistId(playlist.id);
 
     if (!mounted) return;
     setState(() => _playlists = savedPlaylists);
@@ -1274,7 +1283,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _runProfileAction(() => _setDefaultPlaylistForProfile(playlist));
 
   Future<void> _setDefaultPlaylistForProfile(IptvPlaylist? playlist) async {
-    await StorageService.setIptvDefaultPlaylist(playlist?.id);
+    await IptvPlaylistStorage.setIptvDefaultPlaylist(playlist?.id);
     if (!mounted) return;
     setState(() => _defaultPlaylistId = playlist?.id);
     _showSnackBar(
@@ -1369,7 +1378,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   // ── Channel lists ────────────────────────────────────────────────────────
 
   Future<void> _reloadLists() async {
-    final lists = await StorageService.getIptvLists();
+    final lists = await IptvFavoritesStorage.getIptvLists();
     if (!mounted) return;
     setState(() => _lists = lists);
     _ensureFocusNodes();
@@ -1385,7 +1394,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       existingNames: [for (final list in _lists) list.name],
     );
     if (name == null || !mounted) return;
-    await StorageService.createIptvList(name);
+    await IptvFavoritesStorage.createIptvList(name);
     await _reloadLists();
     if (!mounted) return;
     _showSnackBar('Created "$name"', isError: false);
@@ -1403,7 +1412,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       existingNames: [for (final entry in _lists) entry.name],
     );
     if (name == null || name == list.name || !mounted) return;
-    await StorageService.renameIptvList(list.id, name);
+    await IptvFavoritesStorage.renameIptvList(list.id, name);
     await _reloadLists();
   }
 
@@ -1434,7 +1443,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       ),
     );
     if (confirmed != true || !mounted) return;
-    await StorageService.deleteIptvList(list.id);
+    await IptvFavoritesStorage.deleteIptvList(list.id);
     await _reloadLists();
     if (!mounted) return;
     // The deleted row's focus node is gone with it; land DPAD on the same
@@ -1462,7 +1471,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     if (index < 0 || target < 0 || target >= order.length) return;
     order.removeAt(index);
     order.insert(target, list.id);
-    await StorageService.reorderIptvLists(order);
+    await IptvFavoritesStorage.reorderIptvLists(order);
     await _reloadLists();
   }
 
@@ -1798,7 +1807,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       for (final p in _playlists)
         if (p.id == playlist.id) updated else p,
     ];
-    final savedPlaylists = await StorageService.setIptvPlaylistsAndReload(
+    final savedPlaylists = await IptvPlaylistStorage.setIptvPlaylistsAndReload(
       newPlaylists,
       forSettings: true,
     );
@@ -2302,7 +2311,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               title: 'Startup',
               subtitle: !_startupEnabled
                   ? 'Off'
-                  : _startupMode == StorageService.startupIptvModeLast
+                  : _startupMode == StartupIptvStorage.startupIptvModeLast
                   ? 'Last watched channel'
                   : _startupChannelLabel,
               onTap: () async => _enterPhoneSection(_PhoneSection.startup),
@@ -2373,14 +2382,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Future<void> _openIptvStylePicker() async {
     await pushSettingsPage(context, const IptvStylePage());
     if (!mounted) return;
-    final style = await StorageService.getIptvStyle();
+    final style = await IptvAppearanceStorage.getIptvStyle();
     if (mounted) setState(() => _iptvStyle = style);
   }
 
   Future<void> _openPlayerGuidePicker() async {
     await pushSettingsPage(context, const PlayerGuideStylePage());
     if (!mounted) return;
-    final style = await StorageService.getIptvPlayerGuideStyle();
+    final style = await IptvAppearanceStorage.getIptvPlayerGuideStyle();
     if (mounted) setState(() => _playerGuideStyle = style);
   }
 
@@ -2605,18 +2614,18 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                               'channel, then remembers what you watch.'
                         : 'Currently: $_lastLiveChannelLabel',
                   ),
-                  value: StorageService.startupIptvModeLast,
+                  value: StartupIptvStorage.startupIptvModeLast,
                   groupValue: _startupMode,
                   onChanged: _setStartupMode,
                 ),
                 RadioListTile<String>(
                   title: const Text('A specific channel'),
                   subtitle: Text(_startupChannelLabel),
-                  value: StorageService.startupIptvModePinned,
+                  value: StartupIptvStorage.startupIptvModePinned,
                   groupValue: _startupMode,
                   onChanged: _setStartupMode,
                 ),
-                if (_startupMode == StorageService.startupIptvModePinned)
+                if (_startupMode == StartupIptvStorage.startupIptvModePinned)
                   _FocusableSettingsTile(
                     focusNode: _startupChannelFocusNode,
                     icon: Icons.live_tv_rounded,

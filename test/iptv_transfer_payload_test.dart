@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -9,7 +10,6 @@ import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_catalog_key.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/iptv_transfer_payload.dart';
-import 'package:debrify/services/storage_service.dart';
 
 /// Moving a user's IPTV setup between devices — the shared payload behind both
 /// the backup file and the phone→TV transfer.
@@ -74,14 +74,14 @@ void main() {
 
   group('providers', () {
     test('round-trips a provider onto a fresh device', () async {
-      await StorageService.setIptvPlaylists([xtream(id: 'p1')]);
+      await IptvPlaylistStorage.setIptvPlaylists([xtream(id: 'p1')]);
       final payload = await IptvTransferPayload.buildPlaylists();
 
-      await StorageService.setIptvPlaylists(const []);
+      await IptvPlaylistStorage.setIptvPlaylists(const []);
       final counts = await IptvTransferPayload.applyPlaylists(payload);
 
       expect(counts.imported, 1);
-      final restored = await StorageService.getIptvPlaylists();
+      final restored = await IptvPlaylistStorage.getIptvPlaylists();
       expect(restored, hasLength(1));
       // The id has to survive: favorites and lists name it as their origin.
       expect(restored.single.id, 'p1');
@@ -90,7 +90,7 @@ void main() {
 
     test('round-trips each catalog category order with its provider', () async {
       final provider = xtream(id: 'p1');
-      await StorageService.setIptvPlaylists([provider]);
+      await IptvPlaylistStorage.setIptvPlaylists([provider]);
       final liveKey = IptvCatalogKey.forPlaylist(provider, 'live')!;
       final vodKey = IptvCatalogKey.forPlaylist(provider, 'vod')!;
       await IptvCatalogDb.setCategoryOrder(liveKey, const ['News', 'Sports']);
@@ -102,7 +102,7 @@ void main() {
         'vod': ['Drama', 'Comedy'],
       });
 
-      await StorageService.setIptvPlaylists(const []);
+      await IptvPlaylistStorage.setIptvPlaylists(const []);
       await IptvCatalogDb.setCategoryOrder(liveKey, const []);
       await IptvCatalogDb.setCategoryOrder(vodKey, const []);
       final counts = await IptvTransferPayload.applyPlaylists(payload);
@@ -120,7 +120,7 @@ void main() {
 
     test('round-trips each default landing category with its provider', () async {
       final provider = xtream(id: 'p1');
-      await StorageService.setIptvPlaylists([provider]);
+      await IptvPlaylistStorage.setIptvPlaylists([provider]);
       final liveKey = IptvCatalogKey.forPlaylist(provider, 'live')!;
       final vodKey = IptvCatalogKey.forPlaylist(provider, 'vod')!;
       IptvCatalogDb.setDefaultCategory(liveKey, 'Sports');
@@ -132,7 +132,7 @@ void main() {
         'vod': 'Drama',
       });
 
-      await StorageService.setIptvPlaylists(const []);
+      await IptvPlaylistStorage.setIptvPlaylists(const []);
       IptvCatalogDb.setDefaultCategory(liveKey, null);
       IptvCatalogDb.setDefaultCategory(vodKey, null);
       final counts = await IptvTransferPayload.applyPlaylists(payload);
@@ -152,7 +152,7 @@ void main() {
       'a sender without a default preserves the receiver\'s default',
       () async {
         final provider = xtream(id: 'same-provider');
-        await StorageService.setIptvPlaylists([provider]);
+        await IptvPlaylistStorage.setIptvPlaylists([provider]);
 
         final payload = await IptvTransferPayload.buildPlaylists();
         expect(payload.single, isNot(contains('defaultCategories')));
@@ -173,7 +173,7 @@ void main() {
         url: 'https://example.com/default.m3u',
         addedAt: DateTime(2026, 1, 1),
       );
-      await StorageService.setIptvPlaylists([provider]);
+      await IptvPlaylistStorage.setIptvPlaylists([provider]);
       final incoming = provider.toTransferJson()
         ..['id'] = 'm3u-default-phone'
         ..['defaultCategories'] = {
@@ -195,7 +195,7 @@ void main() {
       'an uncustomized sender preserves an existing receiver order',
       () async {
         final provider = xtream(id: 'same-provider');
-        await StorageService.setIptvPlaylists([provider]);
+        await IptvPlaylistStorage.setIptvPlaylists([provider]);
 
         final payload = await IptvTransferPayload.buildPlaylists();
         expect(payload.single, isNot(contains('categoryOrders')));
@@ -219,7 +219,7 @@ void main() {
       'an explicit incoming empty order still resets the receiver',
       () async {
         final provider = xtream(id: 'local-id');
-        await StorageService.setIptvPlaylists([provider]);
+        await IptvPlaylistStorage.setIptvPlaylists([provider]);
         final liveKey = IptvCatalogKey.forPlaylist(provider, 'live')!;
         await IptvCatalogDb.setCategoryOrder(liveKey, const ['News', 'Sports']);
 
@@ -236,7 +236,7 @@ void main() {
       'category order updates an already-present matching provider',
       () async {
         final provider = xtream(id: 'local-id');
-        await StorageService.setIptvPlaylists([provider]);
+        await IptvPlaylistStorage.setIptvPlaylists([provider]);
         final key = IptvCatalogKey.forPlaylist(provider, 'live')!;
 
         final incoming = xtream(id: 'phone-id').toTransferJson()
@@ -250,7 +250,7 @@ void main() {
         expect(counts.alreadyPresent, 1);
         expect(counts.imported, 0);
         expect(IptvCatalogDb.savedCategoryOrder(key), ['Kids', 'News']);
-        expect(await StorageService.getIptvPlaylists(), hasLength(1));
+        expect(await IptvPlaylistStorage.getIptvPlaylists(), hasLength(1));
       },
     );
 
@@ -261,7 +261,7 @@ void main() {
         url: 'https://example.com/list.m3u',
         addedAt: DateTime(2026, 1, 1),
       );
-      await StorageService.setIptvPlaylists([provider]);
+      await IptvPlaylistStorage.setIptvPlaylists([provider]);
       final incoming = provider.toTransferJson()
         ..['id'] = 'm3u-phone'
         ..['categoryOrders'] = {
@@ -282,31 +282,31 @@ void main() {
     });
 
     test('applying the same payload twice adds nothing', () async {
-      await StorageService.setIptvPlaylists([xtream(id: 'p1')]);
+      await IptvPlaylistStorage.setIptvPlaylists([xtream(id: 'p1')]);
       final payload = await IptvTransferPayload.buildPlaylists();
 
       final second = await IptvTransferPayload.applyPlaylists(payload);
 
       expect(second.imported, 0);
       expect(second.alreadyPresent, 1);
-      expect(await StorageService.getIptvPlaylists(), hasLength(1));
+      expect(await IptvPlaylistStorage.getIptvPlaylists(), hasLength(1));
     });
 
     test('the same panel under a different id is not duplicated', () async {
-      await StorageService.setIptvPlaylists([xtream(id: 'local-id')]);
+      await IptvPlaylistStorage.setIptvPlaylists([xtream(id: 'local-id')]);
 
       final counts = await IptvTransferPayload.applyPlaylists([
         xtream(id: 'phone-id', name: 'Same panel, other name').toJson(),
       ]);
 
       expect(counts.alreadyPresent, 1);
-      expect(await StorageService.getIptvPlaylists(), hasLength(1));
+      expect(await IptvPlaylistStorage.getIptvPlaylists(), hasLength(1));
     });
 
     test(
       'a different account on the same server is a separate provider',
       () async {
-        await StorageService.setIptvPlaylists([
+        await IptvPlaylistStorage.setIptvPlaylists([
           xtream(id: 'p1', user: 'alice'),
         ]);
 
@@ -315,12 +315,12 @@ void main() {
         ]);
 
         expect(counts.imported, 1);
-        expect(await StorageService.getIptvPlaylists(), hasLength(2));
+        expect(await IptvPlaylistStorage.getIptvPlaylists(), hasLength(2));
       },
     );
 
     test('an id collision with a different provider is refused', () async {
-      await StorageService.setIptvPlaylists([xtream(id: 'shared')]);
+      await IptvPlaylistStorage.setIptvPlaylists([xtream(id: 'shared')]);
 
       final counts = await IptvTransferPayload.applyPlaylists([
         xtream(id: 'shared', server: 'http://other.example:8080').toJson(),
@@ -330,7 +330,7 @@ void main() {
       // two unreachable.
       expect(counts.imported, 0);
       expect(counts.failed, 1);
-      expect(await StorageService.getIptvPlaylists(), hasLength(1));
+      expect(await IptvPlaylistStorage.getIptvPlaylists(), hasLength(1));
     });
 
     test('a virtual playlist in the payload is refused', () async {
@@ -349,7 +349,7 @@ void main() {
 
       expect(counts.imported, 0);
       expect(counts.failed, 1);
-      expect(await StorageService.getIptvPlaylists(), isEmpty);
+      expect(await IptvPlaylistStorage.getIptvPlaylists(), isEmpty);
     });
 
     test('an Xtream provider imports despite carrying no url', () async {
@@ -364,7 +364,7 @@ void main() {
 
       expect(counts.imported, 1);
       expect(counts.failed, 0);
-      final restored = await StorageService.getIptvPlaylists();
+      final restored = await IptvPlaylistStorage.getIptvPlaylists();
       expect(restored.single.serverUrl, 'http://panel.example:8080');
       expect(restored.single.username, 'alice');
       expect(restored.single.password, 'pw');
@@ -382,11 +382,11 @@ void main() {
 
       expect(counts.imported, 0);
       expect(counts.failed, 1);
-      expect(await StorageService.getIptvPlaylists(), isEmpty);
+      expect(await IptvPlaylistStorage.getIptvPlaylists(), isEmpty);
     });
 
     test('a malformed empty-url provider cannot abort export', () async {
-      await StorageService.setIptvPlaylists([
+      await IptvPlaylistStorage.setIptvPlaylists([
         IptvPlaylist(
           id: 'legacy-bad-row',
           name: 'Legacy bad row',
@@ -403,7 +403,7 @@ void main() {
     });
 
     test('catalog open failure does not abort provider export', () async {
-      await StorageService.setIptvPlaylists([xtream(id: 'p1')]);
+      await IptvPlaylistStorage.setIptvPlaylists([xtream(id: 'p1')]);
       await IptvCatalogDb.closeScope();
       final notDirectory = File('${catalogDir.path}/not-a-directory');
       await notDirectory.writeAsString('x');
@@ -421,7 +421,7 @@ void main() {
 
     test('file-imported playlists are left out, and are counted so the UI '
         'can say so', () async {
-      await StorageService.setIptvPlaylists([
+      await IptvPlaylistStorage.setIptvPlaylists([
         xtream(id: 'p1'),
         IptvPlaylist(
           id: 'file1',
@@ -494,7 +494,7 @@ void main() {
       // resolve to no provider here — costing the channel its Xtream
       // credentials on resume, and leaving it behind when the provider is
       // later deleted.
-      await StorageService.setIptvPlaylists([xtream(id: 'phone-id')]);
+      await IptvPlaylistStorage.setIptvPlaylists([xtream(id: 'phone-id')]);
       final favorites = await IptvTransferPayload.buildFavorites();
       expect(favorites, isEmpty);
 
@@ -508,7 +508,7 @@ void main() {
 
       // Now stand up a "receiving device": same panel, different local id, and
       // no memberships yet.
-      await StorageService.setIptvPlaylists([xtream(id: 'tv-id')]);
+      await IptvPlaylistStorage.setIptvPlaylists([xtream(id: 'tv-id')]);
       await IptvMediaStore.setChannelFavorited(
         'http://panel.example:8080/live/alice/pw/5.ts',
         false,

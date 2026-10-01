@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,7 +8,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:debrify/screens/settings/iptv_channel_order_page.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/iptv_media_store.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/platform_util.dart';
@@ -34,7 +34,7 @@ void main() {
       ('http://h/b', 'Bravo'),
       ('http://h/c', 'Charlie'),
     ]) {
-      await StorageService.setIptvChannelFavorited(
+      await IptvFavoritesStorage.setIptvChannelFavorited(
         entry.$1,
         true,
         channelName: entry.$2,
@@ -152,7 +152,7 @@ void main() {
 
     late Map<String, Map<String, dynamic>> favorites;
     await tester.runAsync(() async {
-      favorites = await StorageService.getIptvFavoriteChannels();
+      favorites = await IptvFavoritesStorage.getIptvFavoriteChannels();
     });
     expect(favorites.keys, ['http://h/b', 'http://h/a', 'http://h/c']);
     expect(tester.takeException(), isNull);
@@ -165,7 +165,7 @@ void main() {
       ('http://h/f', 'Foxtrot'),
       ('http://h/g', 'Golf'),
     ]) {
-      await StorageService.setIptvChannelFavorited(
+      await IptvFavoritesStorage.setIptvChannelFavorited(
         entry.$1,
         true,
         channelName: entry.$2,
@@ -227,7 +227,7 @@ void main() {
     await tester.pump();
     late Map<String, Map<String, dynamic>> favorites;
     await tester.runAsync(() async {
-      favorites = await StorageService.getIptvFavoriteChannels();
+      favorites = await IptvFavoritesStorage.getIptvFavoriteChannels();
     });
     expect(favorites.keys.first, 'http://h/g');
     expect(favorites.keys.elementAt(1), 'http://h/a');
@@ -251,7 +251,7 @@ void main() {
     await tester.pump();
     late Map<String, Map<String, dynamic>> favorites;
     await tester.runAsync(() async {
-      favorites = await StorageService.getIptvFavoriteChannels();
+      favorites = await IptvFavoritesStorage.getIptvFavoriteChannels();
     });
     expect(favorites.keys.last, 'http://h/a');
     expect(tester.takeException(), isNull);

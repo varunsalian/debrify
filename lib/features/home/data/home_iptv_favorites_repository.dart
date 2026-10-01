@@ -1,5 +1,6 @@
+import 'package:debrify/services/storage/iptv_history_storage.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import '../../../models/iptv_playlist.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/stremio_iptv_service.dart';
 
 /// Hydrates the existing live-only favourites projection in stored map order.
@@ -15,7 +16,7 @@ class HomeIptvFavoritesRepository {
   final Map<String, String> Function(Map<String, dynamic>) _headers;
 
   static Future<void> recordWatch(IptvChannel channel) =>
-      StorageService.recordIptvWatch(
+      IptvHistoryStorage.recordIptvWatch(
         channel.url,
         channelName: channel.name,
         logoUrl: channel.logoUrl,
@@ -25,7 +26,7 @@ class HomeIptvFavoritesRepository {
       );
 
   static Future<List<IptvPlaylist>> playlists() =>
-      StorageService.getIptvPlaylists(forSettings: false);
+      IptvPlaylistStorage.getIptvPlaylists(forSettings: false);
 
   static bool isStremioChannelUrl(String url) =>
       StremioIptvService.isStremioChannelUrl(url);

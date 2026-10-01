@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:debrify/services/storage/stremio_catalog_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +10,6 @@ import 'package:http/http.dart' as http;
 import '../../../models/stremio_addon.dart';
 import '../../../services/mdblist/mdblist_list_source.dart';
 import '../../../services/mdblist/mdblist_service.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/trakt/trakt_item_transformer.dart';
 import '../../../services/trakt/trakt_service.dart';
 import '../../../theme/app_theme_scope.dart';
@@ -31,7 +31,7 @@ class LocalCatalogExporter {
     required String catalogId,
     required String catalogType,
   }) async {
-    final catalogs = await StorageService.getStremioTvLocalCatalogs();
+    final catalogs = await StremioCatalogStorage.getStremioTvLocalCatalogs();
     Map<String, dynamic>? catalog;
     for (final candidate in catalogs) {
       if (candidate['id'] == catalogId &&
@@ -263,7 +263,7 @@ class LocalCatalogImporter {
     updated['items'] = items;
     updated['addedAt'] = DateTime.now().toIso8601String();
     if (items.isEmpty) return 'No matching items after filtering by type';
-    final ok = await StorageService.updateStremioTvLocalCatalog(updated);
+    final ok = await StremioCatalogStorage.updateStremioTvLocalCatalog(updated);
     if (!ok) return 'Catalog not found — it may have been deleted';
     return null;
   }
@@ -311,7 +311,7 @@ class LocalCatalogImporter {
     updated['items'] = items;
     updated['addedAt'] = DateTime.now().toIso8601String();
     if (items.isEmpty) return 'No matching items after filtering by type';
-    final ok = await StorageService.updateStremioTvLocalCatalog(updated);
+    final ok = await StremioCatalogStorage.updateStremioTvLocalCatalog(updated);
     if (!ok) return 'Catalog not found — it may have been deleted';
     return null;
   }
@@ -342,7 +342,7 @@ class LocalCatalogImporter {
       // Split mixed lists into separate movie and series catalogs
       final movies = allItems.where((i) => i['type'] != 'series').toList();
       final series = allItems.where((i) => i['type'] == 'series').toList();
-      final existing = await StorageService.getStremioTvLocalCatalogs();
+      final existing = await StremioCatalogStorage.getStremioTvLocalCatalogs();
 
       if (movies.isNotEmpty && series.isNotEmpty) {
         // Mixed list — create two catalogs
@@ -352,7 +352,7 @@ class LocalCatalogImporter {
         ]) {
           final catName = '$name — ${entry.suffix}';
           if (existing.any((c) => c['name'] == catName)) continue;
-          await StorageService.addStremioTvLocalCatalog({
+          await StremioCatalogStorage.addStremioTvLocalCatalog({
             'id': generateId(catName),
             'name': catName,
             'type': entry.type,
@@ -373,7 +373,7 @@ class LocalCatalogImporter {
     final parsed = jsonDecode(content) as Map<String, dynamic>;
     final name = (parsed['name'] as String).trim();
 
-    final existing = await StorageService.getStremioTvLocalCatalogs();
+    final existing = await StremioCatalogStorage.getStremioTvLocalCatalogs();
     if (existing.any((c) => c['name'] == name)) {
       return 'Catalog "$name" already exists';
     }
@@ -387,7 +387,7 @@ class LocalCatalogImporter {
       ..._portableImportMetadata(parsed),
     };
 
-    await StorageService.addStremioTvLocalCatalog(catalog);
+    await StremioCatalogStorage.addStremioTvLocalCatalog(catalog);
     return null;
   }
 }
@@ -465,7 +465,7 @@ class _StremioTvLocalCatalogEditorDialogState
   }
 
   Future<void> _loadCatalog() async {
-    final catalogs = await StorageService.getStremioTvLocalCatalogs();
+    final catalogs = await StremioCatalogStorage.getStremioTvLocalCatalogs();
     final match = catalogs.firstWhere(
       (candidate) =>
           candidate['id'] == widget.catalogId &&
@@ -624,7 +624,7 @@ class _StremioTvLocalCatalogEditorDialogState
 
     items.removeAt(index);
     if (items.isEmpty) {
-      await StorageService.removeStremioTvLocalCatalog(widget.catalogId);
+      await StremioCatalogStorage.removeStremioTvLocalCatalog(widget.catalogId);
       _changed = true;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -638,7 +638,7 @@ class _StremioTvLocalCatalogEditorDialogState
     }
 
     updatedCatalog['items'] = items;
-    final saved = await StorageService.updateStremioTvLocalCatalog(
+    final saved = await StremioCatalogStorage.updateStremioTvLocalCatalog(
       updatedCatalog,
     );
     if (!mounted) return;
@@ -1178,7 +1178,7 @@ class _StremioTvLocalCatalogsDialogState
   }
 
   Future<void> _loadCatalogs() async {
-    final catalogs = await StorageService.getStremioTvLocalCatalogs();
+    final catalogs = await StremioCatalogStorage.getStremioTvLocalCatalogs();
     if (!mounted) return;
     _syncDeleteFocusNodes(catalogs.length);
     setState(() {
@@ -1321,7 +1321,7 @@ class _StremioTvLocalCatalogsDialogState
     if (confirmed != true || !mounted) return;
 
     final id = catalog['id'] as String? ?? '';
-    await StorageService.removeStremioTvLocalCatalog(id);
+    await StremioCatalogStorage.removeStremioTvLocalCatalog(id);
     _changed = true;
     if (!mounted) return;
     await _loadCatalogs();
@@ -2121,7 +2121,7 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
 
     try {
       // Check for duplicates
-      final existing = await StorageService.getStremioTvLocalCatalogs();
+      final existing = await StremioCatalogStorage.getStremioTvLocalCatalogs();
       if (existing.any(
         (c) =>
             c['name'] == name ||
@@ -2179,7 +2179,7 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
 
     try {
       // Check for duplicates
-      final existing = await StorageService.getStremioTvLocalCatalogs();
+      final existing = await StremioCatalogStorage.getStremioTvLocalCatalogs();
       if (existing.any(
         (c) =>
             c['name'] == name ||
@@ -2323,7 +2323,7 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
           'StremioTV TraktImport: saving split catalog "$catName" '
           'type=${entry.type} items=${entry.items.length}',
         );
-        await StorageService.addStremioTvLocalCatalog({
+        await StremioCatalogStorage.addStremioTvLocalCatalog({
           'id': LocalCatalogImporter.generateId(catName),
           'name': catName,
           'type': entry.type,
@@ -2338,7 +2338,7 @@ class _ImportTraktDialogState extends State<_ImportTraktDialog> {
         'StremioTV TraktImport: saving catalog "$name" '
         'type=$catalogType items=${catalogItems.length}',
       );
-      await StorageService.addStremioTvLocalCatalog({
+      await StremioCatalogStorage.addStremioTvLocalCatalog({
         'id': LocalCatalogImporter.generateId(name),
         'name': name,
         'type': catalogType,
@@ -2611,7 +2611,7 @@ class _ImportMdblistDialogState extends State<_ImportMdblistDialog> {
     try {
       // Duplicate check (mirrors the Trakt importer: a mixed list splits into
       // "— Movies"/"— Series", so guard those names too).
-      final existing = await StorageService.getStremioTvLocalCatalogs();
+      final existing = await StremioCatalogStorage.getStremioTvLocalCatalogs();
       if (existing.any(
         (c) =>
             c['name'] == name ||
@@ -2693,7 +2693,7 @@ class _ImportMdblistDialogState extends State<_ImportMdblistDialog> {
         (items: series, type: 'series', suffix: 'Series'),
       ]) {
         final catName = '$name — ${entry.suffix}';
-        await StorageService.addStremioTvLocalCatalog({
+        await StremioCatalogStorage.addStremioTvLocalCatalog({
           'id': LocalCatalogImporter.generateId(catName),
           'name': catName,
           'type': entry.type,
@@ -2704,7 +2704,7 @@ class _ImportMdblistDialogState extends State<_ImportMdblistDialog> {
       }
     } else {
       final catalogType = series.length > movies.length ? 'series' : 'movie';
-      await StorageService.addStremioTvLocalCatalog({
+      await StremioCatalogStorage.addStremioTvLocalCatalog({
         'id': LocalCatalogImporter.generateId(name),
         'name': name,
         'type': catalogType,

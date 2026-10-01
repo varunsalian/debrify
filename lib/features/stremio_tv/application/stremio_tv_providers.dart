@@ -1,8 +1,8 @@
+import 'package:debrify/services/storage/stremio_catalog_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 import '../data/stremio_tv_catalog_editor.dart';
 
 /// Capture an owner synchronously when a picker opens, before its route builds.
@@ -20,15 +20,15 @@ final stremioTvCatalogEditorFactoryProvider =
 
         return StremioTvCatalogEditor(
           isCurrent: () => owner == ProfileSessionMemory.captureOwner(),
-          read: () => scoped(StorageService.getStremioTvLocalCatalogs),
+          read: () => scoped(StremioCatalogStorage.getStremioTvLocalCatalogs),
           add: (catalog, current) => scoped(
-            () => StorageService.addStremioTvLocalCatalog(
+            () => StremioCatalogStorage.addStremioTvLocalCatalog(
               catalog,
               canContinue: current,
             ),
           ),
           update: (catalog, current) => scoped(
-            () => StorageService.updateStremioTvLocalCatalog(
+            () => StremioCatalogStorage.updateStremioTvLocalCatalog(
               catalog,
               canContinue: current,
             ),

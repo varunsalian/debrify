@@ -1,8 +1,10 @@
+import 'package:debrify/models/home_preferences.dart';
 import 'package:debrify/services/storage/ambient_trailer_storage.dart';
 import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/services/storage/home_hero_storage.dart';
 import 'package:debrify/services/storage/home_page_storage.dart';
 import 'package:debrify/services/storage/home_rows_storage.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:flutter/material.dart';
 import '../../utils/spotlight_interaction_policy.dart';
@@ -13,7 +15,6 @@ import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import '../../services/simkl/simkl_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../services/trakt/trakt_list_source.dart';
 import '../../services/trakt/trakt_service.dart';
@@ -465,7 +466,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
           .getEnabledCollections();
       var iptvLists = const <IptvListMeta>[];
       try {
-        iptvLists = await StorageService.getIptvLists();
+        iptvLists = await IptvFavoritesStorage.getIptvLists();
       } catch (_) {
         // Enabled iptvlist: entries surface as unavailable leaves.
       }

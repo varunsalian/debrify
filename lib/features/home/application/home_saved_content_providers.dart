@@ -1,4 +1,7 @@
+import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/home_rows_storage.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
+import 'package:debrify/services/storage/stremio_tv_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../services/debrify_tv_repository.dart';
@@ -12,7 +15,7 @@ import '../data/home_tv_favorites_repository.dart';
 
 final homeTvFavoritesRepositoryProvider = Provider<HomeTvFavoritesRepository>(
   (ref) => HomeTvFavoritesRepository(
-    favoriteIds: () => StorageService.getDebrifyTvFavoriteChannelIds(),
+    favoriteIds: () => DebrifyTvStorage.getDebrifyTvFavoriteChannelIds(),
     channels: () => DebrifyTvRepository.instance.fetchAllChannels(),
   ),
   dependencies: const [],
@@ -21,10 +24,10 @@ final homeTvFavoritesRepositoryProvider = Provider<HomeTvFavoritesRepository>(
 final homeStremioFavoritesRepositoryProvider =
     Provider<HomeStremioFavoritesRepository>(
       (ref) => HomeStremioFavoritesRepository(
-        favoriteIds: () => StorageService.getStremioTvFavoriteChannelIds(),
-        rotationMinutes: () => StorageService.getStremioTvRotationMinutes(),
+        favoriteIds: () => StremioTvStorage.getStremioTvFavoriteChannelIds(),
+        rotationMinutes: () => StremioTvStorage.getStremioTvRotationMinutes(),
         seriesRotationMinutes: () =>
-            StorageService.getStremioTvSeriesRotationMinutes(),
+            StremioTvStorage.getStremioTvSeriesRotationMinutes(),
         discover: () => StremioTvService.instance.discoverChannels(),
         loadItems: (channels) =>
             StremioTvService.instance.loadAllChannelItems(channels),
@@ -35,8 +38,8 @@ final homeStremioFavoritesRepositoryProvider =
 final homeIptvFavoritesRepositoryProvider =
     Provider<HomeIptvFavoritesRepository>(
       (ref) => HomeIptvFavoritesRepository(
-        favorites: () => StorageService.getIptvFavoriteChannels(),
-        headers: StorageService.iptvFavoriteHeaders,
+        favorites: () => IptvFavoritesStorage.getIptvFavoriteChannels(),
+        headers: IptvFavoritesStorage.iptvFavoriteHeaders,
       ),
       dependencies: const [],
     );
@@ -45,12 +48,12 @@ final homeIptvListsRepositoryProvider = Provider<HomeIptvListsRepository>(
   (ref) => HomeIptvListsRepository(
     extras: HomeRowsStorage.getHomeExtraRows,
     lists: () async => [
-      for (final meta in await StorageService.getIptvLists())
+      for (final meta in await IptvFavoritesStorage.getIptvLists())
         (id: meta.id, title: meta.name, isFavorites: meta.isFavorites),
     ],
-    channels: StorageService.getIptvListChannels,
-    headers: StorageService.iptvFavoriteHeaders,
-    favoritesListId: StorageService.iptvFavoritesListId,
+    channels: IptvFavoritesStorage.getIptvListChannels,
+    headers: IptvFavoritesStorage.iptvFavoriteHeaders,
+    favoritesListId: IptvFavoritesStorage.iptvFavoritesListId,
   ),
   dependencies: const [],
 );

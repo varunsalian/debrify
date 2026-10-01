@@ -5,7 +5,7 @@ import 'package:debrify/screens/settings/iptv_style_page.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/sanitized_profile_preferences.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/platform_util.dart';
@@ -35,17 +35,17 @@ void main() {
   test(
     'default and profile reset use Spotlight without saving a choice',
     () async {
-      expect(StorageService.iptvStyleCached, 'spotlight');
-      expect(await StorageService.getIptvStyle(), 'spotlight');
+      expect(IptvAppearanceStorage.iptvStyleCached, 'spotlight');
+      expect(await IptvAppearanceStorage.getIptvStyle(), 'spotlight');
       expect(
         (await SharedPreferences.getInstance()).containsKey('iptv_style'),
         isFalse,
       );
       for (final style in ['command', 'edition', 'console', 'spotlight']) {
-        await StorageService.setIptvStyle(style);
+        await IptvAppearanceStorage.setIptvStyle(style);
         resetStorageProfileCaches();
-        expect(StorageService.iptvStyleCached, 'spotlight');
-        expect(await StorageService.getIptvStyle(), style);
+        expect(IptvAppearanceStorage.iptvStyleCached, 'spotlight');
+        expect(await IptvAppearanceStorage.getIptvStyle(), style);
       }
     },
   );
@@ -53,19 +53,19 @@ void main() {
   test(
     'Spotlight IPTV style persists and unknown values remain safe',
     () async {
-      final write = StorageService.setIptvStyle('spotlight');
-      expect(StorageService.iptvStyleCached, 'spotlight');
+      final write = IptvAppearanceStorage.setIptvStyle('spotlight');
+      expect(IptvAppearanceStorage.iptvStyleCached, 'spotlight');
       await write;
-      expect(await StorageService.getIptvStyle(), 'spotlight');
+      expect(await IptvAppearanceStorage.getIptvStyle(), 'spotlight');
 
-      await StorageService.setIptvStyle('future-style');
-      expect(await StorageService.getIptvStyle(), 'spotlight');
+      await IptvAppearanceStorage.setIptvStyle('future-style');
+      expect(await IptvAppearanceStorage.getIptvStyle(), 'spotlight');
 
       SharedPreferences.setMockInitialValues(const <String, Object>{
         'iptv_style': 'future-style',
       });
       resetStorageProfileCaches();
-      expect(await StorageService.getIptvStyle(), 'spotlight');
+      expect(await IptvAppearanceStorage.getIptvStyle(), 'spotlight');
     },
   );
 
@@ -118,7 +118,7 @@ void main() {
     await tester.tap(find.text('Spotlight Guide'));
     await tester.pumpAndSettle();
 
-    expect(await StorageService.getIptvStyle(), 'spotlight');
+    expect(await IptvAppearanceStorage.getIptvStyle(), 'spotlight');
     expect(tester.takeException(), isNull);
   });
 

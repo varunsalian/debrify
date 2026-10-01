@@ -1,10 +1,11 @@
+import 'package:debrify/services/storage/iptv_appearance_storage.dart';
+import 'package:debrify/services/storage/startup_iptv_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/iptv_playlist.dart';
 import '../../services/iptv_media_store.dart';
 import '../../services/iptv_source_stats.dart';
-import '../../services/storage_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 import 'iptv_style_page.dart';
@@ -119,7 +120,7 @@ class IptvSettingsTwoPane extends StatefulWidget {
     required this.trackContinueWatching,
     required this.onToggleTrackContinueWatching,
     this.showAppearanceSection = false,
-    this.iptvStyle = StorageService.kIptvStyleDefault,
+    this.iptvStyle = IptvAppearanceStorage.kIptvStyleDefault,
     this.onIptvStyleChanged,
     this.playerGuideStyle = 'classic',
     this.onPlayerGuideStyleChanged,
@@ -659,7 +660,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 title: 'Startup channel',
                 subtitle: widget.startupEnabled
                     ? (widget.startupMode ==
-                              StorageService.startupIptvModePinned
+                              StartupIptvStorage.startupIptvModePinned
                           ? 'On · a specific channel'
                           : 'On · last watched')
                     : 'Off',
@@ -1192,7 +1193,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
 
   Widget _buildStartupPane() {
     var row = 0;
-    final pinned = widget.startupMode == StorageService.startupIptvModePinned;
+    final pinned =
+        widget.startupMode == StartupIptvStorage.startupIptvModePinned;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1231,13 +1233,13 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                     : 'Nothing watched yet — starts on the first channel, '
                           'then remembers what you watch.',
                 trailing: Radio<String>(
-                  value: StorageService.startupIptvModeLast,
+                  value: StartupIptvStorage.startupIptvModeLast,
                   groupValue: widget.startupMode,
                   onChanged: (v) =>
                       v == null ? null : widget.onStartupModeChanged(v),
                 ),
                 onTap: () => widget.onStartupModeChanged(
-                  StorageService.startupIptvModeLast,
+                  StartupIptvStorage.startupIptvModeLast,
                 ),
                 onLeft: _returnToRail,
               ),
@@ -1247,13 +1249,13 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 title: 'A specific channel',
                 subtitle: widget.startupChannelLabel,
                 trailing: Radio<String>(
-                  value: StorageService.startupIptvModePinned,
+                  value: StartupIptvStorage.startupIptvModePinned,
                   groupValue: widget.startupMode,
                   onChanged: (v) =>
                       v == null ? null : widget.onStartupModeChanged(v),
                 ),
                 onTap: () => widget.onStartupModeChanged(
-                  StorageService.startupIptvModePinned,
+                  StartupIptvStorage.startupIptvModePinned,
                 ),
                 onLeft: _returnToRail,
                 isLast: !pinned,

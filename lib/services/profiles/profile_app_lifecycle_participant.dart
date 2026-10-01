@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/defaults_generation_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/services/storage/home_appearance_storage.dart';
@@ -182,7 +183,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
         HomeAppearanceStorage.getTvHomeStyle(),
         SidebarStorage.getTvSidebarStyle(),
         SidebarStorage.getDesktopSidebarStyle(),
-        StorageService.getDebrifyTvStyle(),
+        DebrifyTvStorage.getDebrifyTvStyle(),
         UiFeedbackStorage.getUiSounds(),
         UiFeedbackStorage.getUiHaptics(),
         LaunchIdentStorage.getLaunchAnimation(),

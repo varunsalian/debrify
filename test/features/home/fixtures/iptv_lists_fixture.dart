@@ -1,6 +1,7 @@
 import 'package:debrify/features/home/data/home_iptv_lists_repository.dart';
 import 'package:debrify/features/home/models/home_iptv_list.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/models/home_preferences.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 
 typedef SavedChannels = Map<String, Map<String, dynamic>>;
 SavedChannels saved(String name) => {
@@ -16,6 +17,6 @@ HomeIptvListsRepository repository({
   extras: extras ?? () async => [(id: 'iptvlist:a', title: 'opt-in label')],
   lists: lists ?? () async => [meta('a')],
   channels: channels,
-  headers: StorageService.iptvFavoriteHeaders,
+  headers: IptvFavoritesStorage.iptvFavoriteHeaders,
   favoritesListId: 'favorites',
 );

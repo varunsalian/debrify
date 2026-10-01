@@ -1,6 +1,8 @@
+import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/sidebar_storage.dart';
@@ -60,7 +62,7 @@ final class DefaultWebDavSyncActiveProfileRefresher
 
     await warmIf('tv_keyboard_enabled', TvDisplayStorage.getTvKeyboardEnabled);
     await warmIf('tv_home_style', HomeAppearanceStorage.getTvHomeStyle);
-    await warmIf('debrify_tv_style', StorageService.getDebrifyTvStyle);
+    await warmIf('debrify_tv_style', DebrifyTvStorage.getDebrifyTvStyle);
     await warmIf('detail_page_style', DetailPageStorage.getDetailPageStyle);
     if (changedKeys.any(
       DetailPageStorage.detailPageSectionPreferenceKeys.contains,
@@ -69,7 +71,7 @@ final class DefaultWebDavSyncActiveProfileRefresher
     }
     await warmIf('detail_theme', DetailPageStorage.getDetailTheme);
     await warmIf('parents_guide_style', DetailPageStorage.getParentsGuideStyle);
-    await warmIf('iptv_style', StorageService.getIptvStyle);
+    await warmIf('iptv_style', IptvAppearanceStorage.getIptvStyle);
     await warmIf('discover_layout', DiscoverStorage.getDiscoverLayout);
     await warmIf('launch_animation', LaunchIdentStorage.getLaunchAnimation);
     await warmIf(

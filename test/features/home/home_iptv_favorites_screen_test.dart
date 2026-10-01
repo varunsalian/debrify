@@ -6,8 +6,8 @@ import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/storage/home_appearance_storage.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -87,7 +87,7 @@ void main() {
                             },
                     );
                   },
-                  headers: StorageService.iptvFavoriteHeaders,
+                  headers: IptvFavoritesStorage.iptvFavoriteHeaders,
                 ),
               ),
             ],

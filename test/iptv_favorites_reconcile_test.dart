@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -8,7 +9,6 @@ import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_media_store.dart';
-import 'package:debrify/services/storage_service.dart';
 
 /// Coverage for the IPTV favorites URL migration.
 ///
@@ -28,7 +28,7 @@ void main() {
   const legacyKey = 'iptv_favorite_channels_v1';
 
   Future<Map<String, Map<String, dynamic>>> readFavorites() =>
-      StorageService.getIptvFavoriteChannels();
+      IptvFavoritesStorage.getIptvFavoriteChannels();
 
   Future<void> seed(Map<String, dynamic> value) async {
     SharedPreferences.setMockInitialValues({legacyKey: jsonEncode(value)});
@@ -74,7 +74,7 @@ void main() {
       'http://host/u/p/42.ts': {'name': 'Sky', 'playlistId': 'p1'},
     });
 
-    await StorageService.reconcileIptvFavoriteUrls([
+    await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
       channel('http://host/live/u/p/42.ts', name: 'Sky'),
     ]);
 
@@ -89,7 +89,7 @@ void main() {
       'http://host/live/u/p/42.m3u8': {'name': 'Sky'},
     });
 
-    await StorageService.reconcileIptvFavoriteUrls([
+    await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
       channel('http://host/live/u/p/42.ts', name: 'Sky'),
     ]);
 
@@ -101,7 +101,7 @@ void main() {
       'http://other/live/u/p/1.ts': {'name': 'Keep me'},
     });
 
-    await StorageService.reconcileIptvFavoriteUrls([
+    await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
       channel('http://host/live/u/p/42.ts'),
     ]);
 
@@ -125,10 +125,10 @@ void main() {
       channel('http://host/live/u/p/42.ts', name: 'Migrates'),
     ];
 
-    final scan = StorageService.reconcileIptvFavoriteUrls(channels);
+    final scan = IptvFavoritesStorage.reconcileIptvFavoriteUrls(channels);
     // Land in the middle of the scan, after at least one yield.
     await Future<void>.delayed(Duration.zero);
-    await StorageService.setIptvChannelFavorited(
+    await IptvFavoritesStorage.setIptvChannelFavorited(
       'http://host/live/u/p/777.ts',
       true,
       channelName: 'Starred mid-scan',
@@ -153,9 +153,9 @@ void main() {
       channel('http://host/live/u/p/42.ts', name: 'Doomed'),
     ];
 
-    final scan = StorageService.reconcileIptvFavoriteUrls(channels);
+    final scan = IptvFavoritesStorage.reconcileIptvFavoriteUrls(channels);
     await Future<void>.delayed(Duration.zero);
-    await StorageService.setIptvChannelFavorited(
+    await IptvFavoritesStorage.setIptvChannelFavorited(
       'http://host/u/p/42.ts',
       false,
     );
@@ -173,7 +173,7 @@ void main() {
     });
     final before = jsonEncode(await readFavorites());
 
-    await StorageService.reconcileIptvFavoriteUrls([
+    await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
       channel('http://host/live/u/p/42.ts'),
     ]);
 
@@ -183,7 +183,7 @@ void main() {
   test('an empty store is a no-op', () async {
     SharedPreferences.setMockInitialValues({});
 
-    await StorageService.reconcileIptvFavoriteUrls([
+    await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
       channel('http://host/live/u/p/42.ts'),
     ]);
 
@@ -200,21 +200,21 @@ void main() {
       await seed({
         'http://host/u/p/42.ts': {'name': 'Legacy path form'},
       });
-      final kids = await StorageService.createIptvList('Kids');
-      await StorageService.setIptvChannelInList(
+      final kids = await IptvFavoritesStorage.createIptvList('Kids');
+      await IptvFavoritesStorage.setIptvChannelInList(
         kids,
         'http://host/live/u/p/42.m3u8',
         true,
         channelName: 'Legacy extension form',
       );
 
-      await StorageService.reconcileIptvFavoriteUrls([
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
         channel('http://host/live/u/p/42.ts', name: 'Sky'),
       ]);
 
       expect((await readFavorites()).keys, ['http://host/live/u/p/42.ts']);
       expect(
-        (await StorageService.getIptvListChannels(kids)).keys,
+        (await IptvFavoritesStorage.getIptvListChannels(kids)).keys,
         ['http://host/live/u/p/42.ts'],
         reason: 'every list holding the channel moves to the current form',
       );
@@ -224,27 +224,27 @@ void main() {
       await seed({
         'http://host/u/p/42.ts': {'name': 'Sky'},
       });
-      final kids = await StorageService.createIptvList('Kids');
-      await StorageService.setIptvChannelInList(
+      final kids = await IptvFavoritesStorage.createIptvList('Kids');
+      await IptvFavoritesStorage.setIptvChannelInList(
         kids,
         'http://host/u/p/42.ts',
         true,
         channelName: 'Sky',
       );
 
-      await StorageService.reconcileIptvFavoriteUrls([
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
         channel('http://host/live/u/p/42.ts', name: 'Sky'),
       ]);
 
       expect((await readFavorites()).keys, ['http://host/live/u/p/42.ts']);
-      expect((await StorageService.getIptvListChannels(kids)).keys,
+      expect((await IptvFavoritesStorage.getIptvListChannels(kids)).keys,
           ['http://host/live/u/p/42.ts']);
     });
 
     test('a rename that collides with an existing row collapses it', () async {
       // Both forms already sit in the SAME list (only reachable for rows
       // carried over from the old store, where de-dup was global).
-      final kids = await StorageService.createIptvList('Kids');
+      final kids = await IptvFavoritesStorage.createIptvList('Kids');
       final db = DebrifyTvDatabase.debugDatabaseOverride!;
       for (final url in [
         'http://host/u/p/42.ts',
@@ -258,11 +258,11 @@ void main() {
         });
       }
 
-      await StorageService.reconcileIptvFavoriteUrls([
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
         channel('http://host/live/u/p/42.ts', name: 'Sky'),
       ]);
 
-      expect((await StorageService.getIptvListChannels(kids)).keys,
+      expect((await IptvFavoritesStorage.getIptvListChannels(kids)).keys,
           ['http://host/live/u/p/42.ts'],
           reason: 'the duplicate collapses instead of throwing on the '
               '(list_id, url) primary key');
@@ -278,7 +278,7 @@ void main() {
         'http://host/movie/u/p/9.mp4': {'name': 'A Movie'},
       });
 
-      await StorageService.reconcileIptvFavoriteUrls([
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
         IptvChannel(
           name: 'A Movie',
           url: 'http://host/movie/u/p/9.mp4',
@@ -297,7 +297,7 @@ void main() {
         'http://host/u/p/42.ts': {'name': 'Sky'},
       });
 
-      await StorageService.reconcileIptvFavoriteUrls([
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
         IptvChannel(
           name: 'Sky',
           url: 'http://host/live/u/p/42.ts',
@@ -313,7 +313,7 @@ void main() {
 
     test('a known content type is never overwritten', () async {
       const url = 'http://host/movie/u/p/9.mp4';
-      await StorageService.setIptvChannelFavorited(
+      await IptvFavoritesStorage.setIptvChannelFavorited(
         url,
         true,
         channelName: 'A Movie',
@@ -322,7 +322,7 @@ void main() {
       );
 
       // A catalog that mislabels the row must not be able to flip it.
-      await StorageService.reconcileIptvFavoriteUrls([
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
         IptvChannel(name: 'A Movie', url: url, contentType: 'live'),
       ]);
 
@@ -336,7 +336,7 @@ void main() {
       await seed({
         url: {'name': 'A Movie'},
       });
-      final kids = await StorageService.createIptvList('Kids');
+      final kids = await IptvFavoritesStorage.createIptvList('Kids');
       final db = DebrifyTvDatabase.debugDatabaseOverride!;
       await db.insert('iptv_list_channels', {
         'list_id': kids,
@@ -345,7 +345,7 @@ void main() {
         'added_at': 1,
       });
 
-      await StorageService.reconcileIptvFavoriteUrls([
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrls([
         IptvChannel(
           name: 'A Movie',
           url: url,
@@ -354,7 +354,7 @@ void main() {
         ),
       ]);
 
-      expect((await StorageService.getIptvListChannels(kids))[url]!['contentType'],
+      expect((await IptvFavoritesStorage.getIptvListChannels(kids))[url]!['contentType'],
           'vod');
       expect((await readFavorites())[url]!['contentType'], 'vod');
     });
@@ -390,7 +390,7 @@ void main() {
         ],
       );
 
-      await StorageService.reconcileIptvFavoriteUrlsForCatalog(
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrlsForCatalog(
         'xc|http://host|u|live',
       );
 
@@ -408,7 +408,7 @@ void main() {
         'http://host/u/p/42.ts': {'name': 'Sky'},
       });
 
-      await StorageService.reconcileIptvFavoriteUrlsForCatalog('missing|key');
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrlsForCatalog('missing|key');
 
       expect((await readFavorites()).keys, ['http://host/u/p/42.ts']);
     });
@@ -418,8 +418,8 @@ void main() {
       await seed({
         'http://host/u/p/42.ts': {'name': 'Sky'},
       });
-      final kids = await StorageService.createIptvList('Kids');
-      await StorageService.setIptvChannelInList(
+      final kids = await IptvFavoritesStorage.createIptvList('Kids');
+      await IptvFavoritesStorage.setIptvChannelInList(
         kids,
         'http://host/live/u/p/42.m3u8',
         true,
@@ -431,12 +431,12 @@ void main() {
         channels: [channel('http://host/live/u/p/42.ts', name: 'Sky')],
       );
 
-      await StorageService.reconcileIptvFavoriteUrlsForCatalog(
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrlsForCatalog(
         'xc|http://host|u|live',
       );
 
       expect((await readFavorites()).keys, ['http://host/live/u/p/42.ts']);
-      expect((await StorageService.getIptvListChannels(kids)).keys,
+      expect((await IptvFavoritesStorage.getIptvListChannels(kids)).keys,
           ['http://host/live/u/p/42.ts']);
     });
 
@@ -458,7 +458,7 @@ void main() {
         ],
       );
 
-      await StorageService.reconcileIptvFavoriteUrlsForCatalog(
+      await IptvFavoritesStorage.reconcileIptvFavoriteUrlsForCatalog(
         'xc|http://host|u|vod',
       );
 

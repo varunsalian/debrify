@@ -20,10 +20,10 @@ import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_priority.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:debrify/services/storage/torrent_provider_storage.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -143,7 +143,7 @@ void main() {
     'unavailable movies stay visible with automatic preparation guidance',
     () async {
       expect(
-        await StorageService.getIptvPlaylists(forSettings: false),
+        await IptvPlaylistStorage.getIptvPlaylists(forSettings: false),
         hasLength(1),
       );
       final result = await IptvSourceSearch.search(movie);

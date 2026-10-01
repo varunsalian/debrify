@@ -1,12 +1,12 @@
 import 'dart:async';
 
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/iptv_playlist.dart';
 import 'iptv_catalog_db.dart';
 import 'iptv_catalog_key.dart';
 import 'iptv_media_store.dart';
-import 'storage_service.dart';
 
 /// Serializes the IPTV side of a user's setup — providers (including category
 /// order), Favorites, and custom channel lists — into plain JSON, and merges
@@ -59,7 +59,7 @@ abstract final class IptvTransferPayload {
     bool forRemoteTransfer = false,
   }) async {
     final catalogAvailable = await _openCatalogForOptionalOrders('export');
-    final playlists = await StorageService.getIptvPlaylists(
+    final playlists = await IptvPlaylistStorage.getIptvPlaylists(
       forSettings: !forRemoteTransfer,
       forRemoteTransfer: forRemoteTransfer,
     );
@@ -109,7 +109,7 @@ abstract final class IptvTransferPayload {
   /// carries and the file-imported ones it leaves behind — so a confirm
   /// dialog can say what won't be included rather than quietly dropping it.
   static Future<({int transferable, int fileImported})> countPlaylists() async {
-    final playlists = await StorageService.getIptvPlaylists();
+    final playlists = await IptvPlaylistStorage.getIptvPlaylists();
     final real = playlists.where((p) => !p.isVirtual).toList();
     final fileImported = real.where((p) => p.isLocalFile).length;
     return (
@@ -131,7 +131,7 @@ abstract final class IptvTransferPayload {
     final counts = IptvImportCounts();
     try {
       final catalogAvailable = await _openCatalogForOptionalOrders('import');
-      final existing = await StorageService.getIptvPlaylists();
+      final existing = await IptvPlaylistStorage.getIptvPlaylists();
       final existingByKey = <String, IptvPlaylist>{
         for (final p in existing) _fingerprint(p): p,
       };
@@ -205,7 +205,7 @@ abstract final class IptvTransferPayload {
       }
 
       if (counts.imported > 0) {
-        await StorageService.setIptvPlaylists(merged);
+        await IptvPlaylistStorage.setIptvPlaylists(merged);
       }
       for (final entry in categoryOrders) {
         final allowedTypes = entry.playlist.isXtreamCodes
@@ -370,7 +370,7 @@ abstract final class IptvTransferPayload {
   static Future<Map<String, String>> _fingerprintsById({
     required bool forRemoteTransfer,
   }) async {
-    final playlists = await StorageService.getIptvPlaylists(
+    final playlists = await IptvPlaylistStorage.getIptvPlaylists(
       forSettings: !forRemoteTransfer,
       forRemoteTransfer: forRemoteTransfer,
     );
@@ -494,7 +494,7 @@ abstract final class IptvTransferPayload {
       // The sender's provider ids mean nothing here. Anything whose panel this
       // device already knows is re-pointed at the local id for it.
       final localIdByFingerprint = <String, String>{
-        for (final playlist in await StorageService.getIptvPlaylists())
+        for (final playlist in await IptvPlaylistStorage.getIptvPlaylists())
           if (!playlist.isVirtual) _fingerprint(playlist): playlist.id,
         ...?Zone.current[_providerIdOverridesKey] as Map<String, String>?,
       };

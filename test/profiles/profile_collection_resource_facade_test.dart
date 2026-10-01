@@ -17,10 +17,10 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/pikpak_api_service.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/screens/settings/provider_settings_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -412,7 +412,7 @@ void main() {
   test(
     'confirmed IPTV collection removal revokes borrower grants atomically',
     () async {
-      await StorageService.setIptvPlaylists(<IptvPlaylist>[
+      await IptvPlaylistStorage.setIptvPlaylists(<IptvPlaylist>[
         IptvPlaylist(
           id: 'shared-iptv',
           name: 'Shared IPTV',
@@ -420,7 +420,9 @@ void main() {
           addedAt: DateTime.utc(2026, 8, 26),
         ),
       ]);
-      final stored = await StorageService.getIptvPlaylists(forSettings: true);
+      final stored = await IptvPlaylistStorage.getIptvPlaylists(
+        forSettings: true,
+      );
       final resourceId = stored.single.connectionResourceId!;
       final service = ConnectionResourceService(
         registry: registry,
@@ -434,7 +436,7 @@ void main() {
       );
 
       await expectLater(
-        StorageService.setIptvPlaylistsAndReload(
+        IptvPlaylistStorage.setIptvPlaylistsAndReload(
           const <IptvPlaylist>[],
           forSettings: true,
         ),
@@ -449,7 +451,7 @@ void main() {
       expect(await registry.getResource(resourceId), isNotNull);
       expect(await registry.getGrant(memberId, resourceId), isNotNull);
 
-      final remaining = await StorageService.setIptvPlaylistsAndReload(
+      final remaining = await IptvPlaylistStorage.setIptvPlaylistsAndReload(
         const <IptvPlaylist>[],
         forSettings: true,
         revokeBorrowers: true,
@@ -766,8 +768,10 @@ void main() {
       url: 'https://iptv.invalid/existing.m3u',
       addedAt: DateTime.utc(2026, 8, 1),
     );
-    await StorageService.setIptvPlaylists(<IptvPlaylist>[existing]);
-    final migrated = await StorageService.getIptvPlaylists(forSettings: false);
+    await IptvPlaylistStorage.setIptvPlaylists(<IptvPlaylist>[existing]);
+    final migrated = await IptvPlaylistStorage.getIptvPlaylists(
+      forSettings: false,
+    );
     expect(migrated.single.connectionResourceId, isNotNull);
     final existingResourceId = migrated.single.connectionResourceId;
     final existingResourceRevision = migrated.single.connectionResourceRevision;
@@ -780,7 +784,7 @@ void main() {
       url: 'https://iptv.invalid/new.m3u',
       addedAt: DateTime.utc(2026, 8, 14),
     );
-    final canonical = await StorageService.setIptvPlaylistsAndReload(
+    final canonical = await IptvPlaylistStorage.setIptvPlaylistsAndReload(
       <IptvPlaylist>[addition, ...migrated],
       forSettings: false,
     );
@@ -1095,7 +1099,9 @@ void main() {
       },
     );
 
-    final playlists = await StorageService.getIptvPlaylists(forSettings: false);
+    final playlists = await IptvPlaylistStorage.getIptvPlaylists(
+      forSettings: false,
+    );
     final panel = playlists.singleWhere((p) => p.name == 'Panel');
     expect(panel.url, '');
     expect(panel.serverUrl, 'https://panel.invalid:8080');
@@ -1118,7 +1124,9 @@ void main() {
       },
     );
 
-    final playlists = await StorageService.getIptvPlaylists(forSettings: false);
+    final playlists = await IptvPlaylistStorage.getIptvPlaylists(
+      forSettings: false,
+    );
     final imported = playlists.singleWhere((p) => p.name == 'From file');
     expect(imported.url, '');
     expect(imported.isLocalFile, isTrue);
@@ -1139,7 +1147,7 @@ void main() {
     );
 
     await expectLater(
-      StorageService.getIptvPlaylists(forSettings: false),
+      IptvPlaylistStorage.getIptvPlaylists(forSettings: false),
       throwsA(isA<TypeError>()),
     );
   });

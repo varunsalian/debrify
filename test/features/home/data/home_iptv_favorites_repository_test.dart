@@ -1,5 +1,5 @@
 import 'package:debrify/features/home/data/home_iptv_favorites_repository.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -30,7 +30,7 @@ void main() {
           reads++;
           return saved;
         },
-        headers: StorageService.iptvFavoriteHeaders,
+        headers: IptvFavoritesStorage.iptvFavoriteHeaders,
       );
       expect(reads, 0);
       final result = (await repository.read(isCurrent: () => true))!;
@@ -76,7 +76,7 @@ void main() {
         favorites: () async => {
           'url': {'name': 12},
         },
-        headers: StorageService.iptvFavoriteHeaders,
+        headers: IptvFavoritesStorage.iptvFavoriteHeaders,
       );
       await expectLater(
         repository.read(isCurrent: () => true),

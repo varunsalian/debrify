@@ -1,8 +1,11 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/services/storage/home_page_storage.dart';
+import 'package:debrify/services/storage/iptv_appearance_storage.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
@@ -12,6 +15,7 @@ import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/sidebar_storage.dart';
 import 'package:debrify/services/storage/simkl_storage.dart';
+import 'package:debrify/services/storage/startup_storage.dart';
 import 'package:debrify/services/storage/theme_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:debrify/services/storage/torrent_history_storage.dart';
@@ -300,7 +304,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _tvHomeStyle = 'canvas';
   String _discoverLayout = 'stage';
   String _tvSidebarStyle = 'ghost';
-  String _iptvStyle = StorageService.kIptvStyleDefault;
+  String _iptvStyle = IptvAppearanceStorage.kIptvStyleDefault;
   String _debrifyTvStyle = 'grid';
   String _playerGuideStyle = 'classic';
   String _playLoaderStyle = PlayLoaderStyleController.defaultStyle;
@@ -550,12 +554,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'IPTV style',
-        () => StorageService.getIptvStyle(),
+        () => IptvAppearanceStorage.getIptvStyle(),
         _iptvStyle,
       ),
       summaries.read(
         'Player guide',
-        () => StorageService.getIptvPlayerGuideStyle(),
+        () => IptvAppearanceStorage.getIptvPlayerGuideStyle(),
         _playerGuideStyle,
       ),
       summaries.read(
@@ -620,7 +624,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'Debrify TV',
-        () => StorageService.getDebrifyTvStyle(),
+        () => DebrifyTvStorage.getDebrifyTvStyle(),
         _debrifyTvStyle,
       ),
       summaries.read(
@@ -630,7 +634,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'TV player',
-        () => StorageService.getDebrifyTvPlayerStyle(),
+        () => DebrifyTvStorage.getDebrifyTvPlayerStyle(),
         _debrifyTvPlayerStyle,
       ),
       summaries.read(
@@ -650,7 +654,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'IPTV',
-        () => StorageService.getIptvPlaylists(forSettings: true),
+        () => IptvPlaylistStorage.getIptvPlaylists(forSettings: true),
         [],
       ),
       summaries.read(
@@ -6695,14 +6699,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearAllPlaylistMetadata(recordSyncDeletions: false);
     await StorageService.clearMyWatchlist();
     await TorrentHistoryStorage.clearTorrentSearchHistory();
-    await StorageService.clearAllStartupSettings();
+    await StartupStorage.clearAllStartupSettings();
     await HomePageStorage.clearAllHomePageSettings();
     await ProviderCredentialStorage.clearAllIntegrationStates();
-    await StorageService.clearDebrifyTvProviderAndLegacy();
+    await DebrifyTvStorage.clearDebrifyTvProviderAndLegacy();
     await TorrentSearchStorage.clearAllFilterSettings();
     await TorrentProviderStorage.clearAllTorrentEngineSettings();
     await ProviderCredentialStorage.clearAllPostTorrentActions();
-    await StorageService.clearAllDebrifyTvSettings();
+    await DebrifyTvStorage.clearAllDebrifyTvSettings();
     // A device-local reset must never mint circle-wide channel deletions:
     // rejoining a sync circle later means adopting its data, not erasing it.
     await DebrifyTvRepository.instance.clearAll(
@@ -7056,7 +7060,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openIptvStylePage() async {
     await pushSettingsPage(context, const IptvStylePage());
     if (!mounted) return;
-    final style = await StorageService.getIptvStyle();
+    final style = await IptvAppearanceStorage.getIptvStyle();
     if (!mounted) return;
     setState(() {
       _iptvStyle = style;
@@ -7066,7 +7070,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openDebrifyTvStylePage() async {
     await pushSettingsPage(context, const DebrifyTvStylePage());
     if (!mounted) return;
-    final style = await StorageService.getDebrifyTvStyle();
+    final style = await DebrifyTvStorage.getDebrifyTvStyle();
     if (!mounted) return;
     setState(() {
       _debrifyTvStyle = style;
@@ -7077,7 +7081,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openPlayerGuideStylePage() async {
     await pushSettingsPage(context, const PlayerGuideStylePage());
     if (!mounted) return;
-    final style = await StorageService.getIptvPlayerGuideStyle();
+    final style = await IptvAppearanceStorage.getIptvPlayerGuideStyle();
     if (!mounted) return;
     setState(() {
       _playerGuideStyle = style;
@@ -7112,7 +7116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openDebrifyTvPlayerStylePage() async {
     await pushSettingsPage(context, const DebrifyTvPlayerStylePage());
     if (!mounted) return;
-    final style = await StorageService.getDebrifyTvPlayerStyle();
+    final style = await DebrifyTvStorage.getDebrifyTvPlayerStyle();
     if (!mounted) return;
     setState(() {
       _debrifyTvPlayerStyle = style;
@@ -7240,13 +7244,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// the full [_loadSummaries] — these are local pref reads, no network.
   Future<void> _reloadAppearanceSummaries() async {
     final tvHomeStyle = await HomeAppearanceStorage.getTvHomeStyle();
-    final iptvStyle = await StorageService.getIptvStyle();
-    final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
+    final iptvStyle = await IptvAppearanceStorage.getIptvStyle();
+    final playerGuideStyle = await IptvAppearanceStorage.getIptvPlayerGuideStyle();
     final playLoaderStyle = await PlayerAppearanceStorage.getPlayLoaderStyle();
     final tvPlayerControlsStyle =
         await PlayerAppearanceStorage.getTvPlayerControlsStyle();
-    final debrifyTvStyle = await StorageService.getDebrifyTvStyle();
-    final debrifyTvPlayerStyle = await StorageService.getDebrifyTvPlayerStyle();
+    final debrifyTvStyle = await DebrifyTvStorage.getDebrifyTvStyle();
+    final debrifyTvPlayerStyle = await DebrifyTvStorage.getDebrifyTvPlayerStyle();
     final playerDockStyle = await PlayerAppearanceStorage.getPlayerDockStyle();
     final playerDockPalette = await PlayerAppearanceStorage.getPlayerDockPalette();
     final playerDockSize = await PlayerAppearanceStorage.getPlayerDockSize();

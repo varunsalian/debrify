@@ -1,3 +1,7 @@
+import 'package:debrify/services/storage/iptv_audio_storage.dart';
+import 'package:debrify/services/storage/iptv_favorites_storage.dart';
+import 'package:debrify/services/storage/iptv_history_storage.dart';
+import 'package:debrify/services/storage/iptv_last_channel_storage.dart';
 import 'package:debrify/services/storage/player_network_storage.dart';
 import 'adjacent_episode_resolver.dart';
 import 'stream_badges_service.dart';
@@ -20,7 +24,6 @@ import '../utils/series_parser.dart';
 import 'analytics_service.dart';
 import 'episode_info_service.dart';
 import 'iptv_epg_service.dart';
-import 'storage_service.dart';
 import 'movie_metadata_service.dart';
 import 'next_episode_service.dart';
 import 'stremio_iptv_service.dart';
@@ -439,7 +442,7 @@ class AndroidTvPlayerBridge {
                 key.isNotEmpty &&
                 lang != null &&
                 lang.isNotEmpty) {
-              await StorageService.setIptvSeriesAudioLanguage(key, lang);
+              await IptvAudioStorage.setIptvSeriesAudioLanguage(key, lang);
             }
           }
           return null;
@@ -1144,7 +1147,7 @@ class AndroidTvPlayerBridge {
             }
             final startOver = args['startOver'] == true;
             if (!startOver) {
-              await StorageService.recordIptvWatch(
+              await IptvHistoryStorage.recordIptvWatch(
                 url,
                 channelName: programme.title,
                 logoUrl: args['logoUrl'] as String?,
@@ -1155,7 +1158,7 @@ class AndroidTvPlayerBridge {
             }
             final resumePositions = startOver
                 ? const <String, int>{}
-                : await StorageService.getIptvResumePositions([url]);
+                : await IptvHistoryStorage.getIptvResumePositions([url]);
             return <String, dynamic>{
               'url': url,
               'title': programme.title,
@@ -1179,7 +1182,7 @@ class AndroidTvPlayerBridge {
               }
             });
           }
-          await StorageService.recordIptvWatch(
+          await IptvHistoryStorage.recordIptvWatch(
             url,
             channelName: watchArgs['name'] as String?,
             logoUrl: watchArgs['logoUrl'] as String?,
@@ -1203,7 +1206,7 @@ class AndroidTvPlayerBridge {
           final url = liveArgs['url'] as String?;
           final name = liveArgs['name'] as String?;
           if (url == null || url.isEmpty || name == null) return false;
-          await StorageService.setIptvLastLiveChannel(
+          await IptvLastChannelStorage.setIptvLastLiveChannel(
             url,
             name: name,
             playlistId: liveArgs['sourceId'] as String?,
@@ -1219,7 +1222,7 @@ class AndroidTvPlayerBridge {
           final url = favoriteArgs['url'] as String?;
           final isFavorite = favoriteArgs['isFavorite'] == true;
           if (url == null || url.isEmpty) return false;
-          await StorageService.setIptvChannelFavorited(
+          await IptvFavoritesStorage.setIptvChannelFavorited(
             url,
             isFavorite,
             channelName: favoriteArgs['name'] as String?,
@@ -1239,7 +1242,7 @@ class AndroidTvPlayerBridge {
           final listId = listArgs['listId'] as String?;
           if (url == null || url.isEmpty) return false;
           if (listId == null || listId.isEmpty) return false;
-          await StorageService.setIptvChannelInList(
+          await IptvFavoritesStorage.setIptvChannelInList(
             listId,
             url,
             listArgs['inList'] == true,
@@ -1262,7 +1265,7 @@ class AndroidTvPlayerBridge {
               ? membershipArgs['url'] as String?
               : null;
           if (url == null || url.isEmpty) return <String>[];
-          return (await StorageService.getIptvListsForChannel(url)).toList();
+          return (await IptvFavoritesStorage.getIptvListsForChannel(url)).toList();
         case 'reportIptvStreamResult':
           // Feedback from the native serial ladder: cache the URL that
           // actually played, or drop the stale candidate list when every

@@ -1,9 +1,10 @@
+import 'package:debrify/services/storage/iptv_history_storage.dart';
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:flutter/material.dart';
 
 import '../models/iptv_playlist.dart';
 import '../models/playlist_view_mode.dart';
 import '../screens/iptv/xtream_series_detail.dart';
-import 'storage_service.dart';
 import '../models/iptv_cw_entry.dart';
 import 'iptv_cw_history.dart';
 
@@ -18,8 +19,9 @@ class IptvCwRouter {
   /// [StorageService.getIptvContinueWatching] returns one entry per episode,
   /// most-recent-first; a series is collapsed here to a single row (its
   /// most-recent watched episode wins, matching the IPTV page's shelf).
-  static Future<IptvCwRows> load() =>
-      IptvCwHistory(readHistory: StorageService.getIptvContinueWatching).load();
+  static Future<IptvCwRows> load() => IptvCwHistory(
+    readHistory: IptvHistoryStorage.getIptvContinueWatching,
+  ).load();
 
   /// Open an entry: a series routes to the merged Xtream series page; a movie
   /// resumes playback (the player restores its own position by URL).
@@ -47,7 +49,9 @@ class IptvCwRouter {
     // Resolve the series' real Xtream provider from the stored origin id — the
     // shelf entry is provider-agnostic, so we can't assume any "selected"
     // playlist like the IPTV page can.
-    final playlists = await StorageService.getIptvPlaylists(forSettings: false);
+    final playlists = await IptvPlaylistStorage.getIptvPlaylists(
+      forSettings: false,
+    );
     if (!context.mounted) return;
     IptvPlaylist? origin;
     for (final p in playlists) {
@@ -107,7 +111,7 @@ class IptvCwRouter {
     // Bump recency before launch — the player process can be killed outright on
     // TV, and re-recording keeps the shelf ordering right in that case (the
     // player also re-records its final position on a clean exit).
-    await StorageService.recordIptvWatch(
+    await IptvHistoryStorage.recordIptvWatch(
       url,
       channelName: channel.name,
       logoUrl: channel.logoUrl,

@@ -2,7 +2,7 @@ import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/screens/settings/iptv_settings_page.dart';
 import 'package:debrify/screens/settings/iptv_settings_two_pane.dart';
 import 'package:debrify/services/iptv_media_store.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/startup_iptv_storage.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,7 +41,7 @@ void main() {
           refreshingIds: const {},
           customLists: lists,
           startupEnabled: startupEnabled,
-          startupMode: StorageService.startupIptvModeLast,
+          startupMode: StartupIptvStorage.startupIptvModeLast,
           startupChannelLabel: 'Not set',
           lastLiveChannelLabel: 'CH 2 · SKY',
           hasStartupChannel: false,
@@ -322,7 +322,7 @@ void main() {
                 ),
               ],
               startupEnabled: false,
-              startupMode: StorageService.startupIptvModeLast,
+              startupMode: StartupIptvStorage.startupIptvModeLast,
               startupChannelLabel: 'Not set',
               lastLiveChannelLabel: 'x',
               hasStartupChannel: false,

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -13,7 +14,6 @@ import 'player_visibility.dart';
 import 'profiles/profile_async_authorization.dart';
 import 'profiles/profile_preferences.dart';
 import 'profiles/profile_runtime.dart';
-import 'storage_service.dart';
 import 'xtream_codes_service.dart';
 
 /// One download/ingest at a time, shared by launch, settings and source search.
@@ -111,7 +111,7 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
       // Refresh uses connection-use authorization, not settings visibility:
       // shared/restricted profiles need usable credentials, and disabled
       // connections must not be scheduled.
-      final playlists = await StorageService.getIptvPlaylists(
+      final playlists = await IptvPlaylistStorage.getIptvPlaylists(
         forSettings: false,
       );
       if (scope != ProfileRuntime.scope.value || playlists.isEmpty) return;

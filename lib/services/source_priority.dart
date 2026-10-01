@@ -1,10 +1,10 @@
+import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import '../models/source_provider_ref.dart';
 import 'source_ordering.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/torrent.dart';
 import 'stremio_service.dart';
 import 'torrent_service.dart';
-import 'storage_service.dart';
 import 'iptv_source_search.dart';
 import 'media_server_service.dart';
 
@@ -112,7 +112,7 @@ class SourcePriority {
       }
     } catch (_) {}
     try {
-      final playlists = await StorageService.getIptvPlaylists(
+      final playlists = await IptvPlaylistStorage.getIptvPlaylists(
         forSettings: false,
       );
       for (final playlist in playlists.where(

@@ -5,6 +5,7 @@ import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/stremio_tv_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,7 +23,6 @@ import '../../services/mdblist/mdblist_service.dart';
 import '../../services/debrid_service.dart';
 import '../../services/stream_url_validator.dart';
 import '../../services/main_page_bridge.dart';
-import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/torbox_service.dart';
 import '../../services/torbox_torrent_control_service.dart';
@@ -211,27 +211,27 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   Future<void> _loadSettings() async {
-    _rotationMinutes = await StorageService.getStremioTvRotationMinutes();
+    _rotationMinutes = await StremioTvStorage.getStremioTvRotationMinutes();
     _seriesRotationMinutes =
-        await StorageService.getStremioTvSeriesRotationMinutes();
-    _randomEpisodes = await StorageService.getStremioTvRandomEpisodes();
-    _autoRefresh = await StorageService.getStremioTvAutoRefresh();
-    _preferredQuality = await StorageService.getStremioTvPreferredQuality();
-    final debridProvider = await StorageService.getStremioTvDebridProvider();
+        await StremioTvStorage.getStremioTvSeriesRotationMinutes();
+    _randomEpisodes = await StremioTvStorage.getStremioTvRandomEpisodes();
+    _autoRefresh = await StremioTvStorage.getStremioTvAutoRefresh();
+    _preferredQuality = await StremioTvStorage.getStremioTvPreferredQuality();
+    final debridProvider = await StremioTvStorage.getStremioTvDebridProvider();
     _availableProviders = await _loadAvailableProviders();
     if (debridProvider != 'auto' &&
         !_availableProviders.any(
           (provider) => provider.key == debridProvider,
         )) {
       _debridProvider = 'auto';
-      await StorageService.setStremioTvDebridProvider('auto');
+      await StremioTvStorage.setStremioTvDebridProvider('auto');
     } else {
       _debridProvider = debridProvider;
     }
     _rdSkipBlockedTorrents = await RealDebridStorage.getRdSkipBlockedTorrents();
-    _torrentsFirst = await StorageService.getStremioTvTorrentsFirst();
-    _maxStartPercent = await StorageService.getStremioTvMaxStartPercent();
-    _hideNowPlaying = await StorageService.getStremioTvHideNowPlaying();
+    _torrentsFirst = await StremioTvStorage.getStremioTvTorrentsFirst();
+    _maxStartPercent = await StremioTvStorage.getStremioTvMaxStartPercent();
+    _hideNowPlaying = await StremioTvStorage.getStremioTvHideNowPlaying();
   }
 
   Future<List<MapEntry<String, String>>> _loadAvailableProviders() async {
@@ -415,7 +415,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   Future<void> _openChannelFilter() async {
     final filterTree = await _service.getFilterTree();
-    final disabledBefore = await StorageService.getStremioTvDisabledFilters();
+    final disabledBefore = await StremioTvStorage.getStremioTvDisabledFilters();
     if (!mounted) return;
 
     // Full-screen DPAD-first filter page (instant push, matching the
@@ -489,7 +489,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   Future<void> _setDebridProvider(String value) async {
-    await StorageService.setStremioTvDebridProvider(value);
+    await StremioTvStorage.setStremioTvDebridProvider(value);
     if (!mounted) return;
     setState(() => _debridProvider = value);
   }
@@ -2473,7 +2473,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   Future<void> _toggleFavorite(StremioTvChannel channel) async {
     final focusedChannelId = _currentFocusedChannelId();
     final newState = !channel.isFavorite;
-    await StorageService.setStremioTvChannelFavorited(channel.id, newState);
+    await StremioTvStorage.setStremioTvChannelFavorited(channel.id, newState);
     if (!mounted) return;
     final previousChannels = List<StremioTvChannel>.from(_channels);
     setState(() {
