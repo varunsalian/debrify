@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:path/path.dart' as path;
 import 'debrid_service.dart';
 import 'torbox_service.dart';
@@ -11,7 +13,6 @@ import 'package:path_provider/path_provider.dart';
 import '../utils/app_storage.dart';
 import '../utils/streamed_file_copy.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'storage_service.dart';
 import 'android_native_downloader.dart';
 import 'android_download_history.dart';
 import 'package:flutter/material.dart';
@@ -3132,7 +3133,7 @@ class DownloadService {
       }
 
       if (meta['torboxWebDownload'] == true) {
-        final apiKey = (await StorageService.getTorboxApiKey()) ?? '';
+        final apiKey = (await TorboxStorage.getTorboxApiKey()) ?? '';
         final webDownloadId = meta['torboxWebDownloadId'] as int?;
         final fileId = meta['torboxFileId'] as int?;
         if (apiKey.isEmpty) return null;
@@ -3157,7 +3158,7 @@ class DownloadService {
         return null;
       }
       if (meta['torboxDownload'] == true) {
-        final apiKey = (await StorageService.getTorboxApiKey()) ?? '';
+        final apiKey = (await TorboxStorage.getTorboxApiKey()) ?? '';
         final torrentId = meta['torboxTorrentId'] as int?;
         final fileId = meta['torboxFileId'] as int?;
         if (apiKey.isEmpty) return null;
@@ -3181,7 +3182,7 @@ class DownloadService {
 
       // RealDebrid
       final restricted = (meta['restrictedLink'] ?? '').toString();
-      final apiKey = (await StorageService.getApiKey()) ?? '';
+      final apiKey = (await RealDebridStorage.getApiKey()) ?? '';
       if (restricted.isEmpty || apiKey.isEmpty) return null;
       final fresh = await DebridService.unrestrictLink(apiKey, restricted);
       final freshUrl = (fresh['download'] ?? '').toString();
@@ -3753,7 +3754,7 @@ class DownloadService {
 
               if (isTorboxWebDownload) {
                 // Torbox web download path
-                final apiKey = await StorageService.getTorboxApiKey();
+                final apiKey = await TorboxStorage.getTorboxApiKey();
                 final webDownloadId = meta['torboxWebDownloadId'] as int?;
                 final fileId = meta['torboxFileId'] as int?;
                 final isZip = meta['torboxZip'] == true;
@@ -3809,7 +3810,7 @@ class DownloadService {
                 }
               } else if (isTorbox) {
                 // Torbox torrent download path
-                final apiKey = await StorageService.getTorboxApiKey();
+                final apiKey = await TorboxStorage.getTorboxApiKey();
                 final torrentId = meta['torboxTorrentId'] as int?;
                 final fileId = meta['torboxFileId'] as int?;
                 final isZip = meta['torboxZip'] == true;
@@ -3860,7 +3861,7 @@ class DownloadService {
               } else {
                 // RealDebrid download path (existing logic)
                 final restrictedLink = (meta['restrictedLink'] ?? '') as String;
-                final apiKey = (await StorageService.getApiKey()) ?? '';
+                final apiKey = (await RealDebridStorage.getApiKey()) ?? '';
 
                 debugPrint('DL META: debrid link metadata present');
 
@@ -4264,7 +4265,7 @@ class DownloadService {
 
               if (isTorboxWebDownload) {
                 // Torbox web download retry path
-                final apiKey = await StorageService.getTorboxApiKey();
+                final apiKey = await TorboxStorage.getTorboxApiKey();
                 final webDownloadId = meta['torboxWebDownloadId'] as int?;
                 final fileId = meta['torboxFileId'] as int?;
                 final isZip = meta['torboxZip'] == true;
@@ -4322,7 +4323,7 @@ class DownloadService {
                 }
               } else if (isTorbox) {
                 // Torbox torrent retry path
-                final apiKey = await StorageService.getTorboxApiKey();
+                final apiKey = await TorboxStorage.getTorboxApiKey();
                 final torrentId = meta['torboxTorrentId'] as int?;
                 final fileId = meta['torboxFileId'] as int?;
                 final isZip = meta['torboxZip'] == true;
@@ -4379,7 +4380,7 @@ class DownloadService {
               } else {
                 // RealDebrid retry path (existing logic)
                 final restricted = (meta['restrictedLink'] ?? '') as String;
-                final apiKey = (await StorageService.getApiKey()) ?? '';
+                final apiKey = (await RealDebridStorage.getApiKey()) ?? '';
                 if (restricted.isNotEmpty && apiKey.isNotEmpty) {
                   final fresh = await DebridService.unrestrictLink(
                     apiKey,

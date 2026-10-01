@@ -1,3 +1,7 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'profiles/profile_playback_preparation.dart';
 import 'profiles/profile_session_memory.dart';
 import '../models/source_playlist_resolver.dart';
@@ -5015,7 +5019,7 @@ class VideoPlayerLauncher {
       if (fileId == null || (torrentId == null && webDownloadId == null)) {
         throw Exception('Torbox file metadata missing');
       }
-      final apiKey = await StorageService.getTorboxApiKey(
+      final apiKey = await TorboxStorage.getTorboxApiKey(
         canContinue: canContinue,
       );
       checkCurrent();
@@ -5069,7 +5073,7 @@ class VideoPlayerLauncher {
     // Premiumize cloud-browser lazy resolution: re-fetch a fresh direct link by
     // cloud item id (items saved from the cloud browser have no infohash).
     if (entry.premiumizeItemId != null && entry.premiumizeItemId!.isNotEmpty) {
-      final apiKey = await StorageService.getPremiumizeApiKey(
+      final apiKey = await PremiumizeStorage.getPremiumizeApiKey(
         canContinue: canContinue,
       );
       checkCurrent();
@@ -5095,7 +5099,7 @@ class VideoPlayerLauncher {
       final hash = entry.premiumizeHash;
       final path = entry.premiumizePath;
       if (hash != null && hash.isNotEmpty && path != null && path.isNotEmpty) {
-        final apiKey = await StorageService.getPremiumizeApiKey(
+        final apiKey = await PremiumizeStorage.getPremiumizeApiKey(
           canContinue: canContinue,
         );
         checkCurrent();
@@ -5116,7 +5120,7 @@ class VideoPlayerLauncher {
     }
 
     if (entry.restrictedLink != null && entry.restrictedLink!.isNotEmpty) {
-      final apiKey = await StorageService.getApiKey(canContinue: canContinue);
+      final apiKey = await RealDebridStorage.getApiKey(canContinue: canContinue);
       checkCurrent();
       if (apiKey == null || apiKey.isEmpty) {
         throw Exception('Missing Real Debrid API key');
@@ -5142,7 +5146,7 @@ class VideoPlayerLauncher {
       if (lockedLink == null || lockedLink.isEmpty) {
         throw Exception('AllDebrid link metadata missing');
       }
-      final apiKey = await StorageService.getAllDebridApiKey(
+      final apiKey = await AllDebridStorage.getAllDebridApiKey(
         canContinue: canContinue,
       );
       checkCurrent();

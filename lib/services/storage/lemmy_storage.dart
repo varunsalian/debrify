@@ -6,8 +6,7 @@ final class LemmyStorage {
   // Lemmy settings
   static const String _lemmyInstanceKey = 'lemmy_instance';
   static const String _lemmyAllowNsfwKey = 'lemmy_allow_nsfw';
-  static const String _lemmyFavoriteCommunitiesKey =
-      'lemmy_favorite_communities';
+  static const String _lemmyFavoriteCommunitiesKey = 'lemmy_favorite_communities';
   static const String _lemmyDefaultCommunityKey = 'lemmy_default_community';
 
   // Lemmy Settings

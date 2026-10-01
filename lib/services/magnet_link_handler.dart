@@ -1,3 +1,8 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/material.dart';
 import 'deep_link_service.dart';
 import 'debrid_service.dart';
@@ -5,7 +10,6 @@ import 'torbox_service.dart';
 import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
 import 'alldebrid_service.dart';
-import 'storage_service.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_torrent.dart';
 import '../widgets/not_cached_dialog.dart';
@@ -207,7 +211,7 @@ class MagnetLinkHandler {
 
   /// Add URL to RealDebrid (unrestrict link)
   Future<void> _addUrlToRealDebrid(String url, String displayName) async {
-    final apiKey = await StorageService.getApiKey();
+    final apiKey = await RealDebridStorage.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _showError('RealDebrid API key not configured');
       return;
@@ -245,7 +249,7 @@ class MagnetLinkHandler {
 
   /// Add URL to Torbox (web download)
   Future<void> _addUrlToTorbox(String url, String displayName) async {
-    final apiKey = await StorageService.getTorboxApiKey();
+    final apiKey = await TorboxStorage.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _showError('Torbox API key not configured');
       return;
@@ -306,7 +310,7 @@ class MagnetLinkHandler {
 
     try {
       // Get parent folder ID
-      final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
+      final parentFolderId = await PikpakStorage.getPikPakRestrictedFolderId();
 
       // Find or create subfolder (reuse torrents folder for shared URLs)
       String? subFolderId;
@@ -314,8 +318,8 @@ class MagnetLinkHandler {
         subFolderId = await PikPakApiService.instance.findOrCreateSubfolder(
           folderName: 'debrify-torrents',
           parentFolderId: parentFolderId,
-          getCachedId: StorageService.getPikPakTorrentsFolderId,
-          setCachedId: StorageService.setPikPakTorrentsFolderId,
+          getCachedId: PikpakStorage.getPikPakTorrentsFolderId,
+          setCachedId: PikpakStorage.setPikPakTorrentsFolderId,
         );
       } catch (e) {
         if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {
@@ -472,7 +476,7 @@ class MagnetLinkHandler {
     String torrentName,
   ) async {
     // Get API key
-    final apiKey = await StorageService.getApiKey();
+    final apiKey = await RealDebridStorage.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _showError('RealDebrid API key not configured');
       return;
@@ -532,7 +536,7 @@ class MagnetLinkHandler {
     String torrentName,
   ) async {
     // Get API key
-    final apiKey = await StorageService.getTorboxApiKey();
+    final apiKey = await TorboxStorage.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _showError('Torbox API key not configured');
       return;
@@ -637,7 +641,7 @@ class MagnetLinkHandler {
 
     try {
       // Get parent folder ID (restricted folder or root)
-      final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
+      final parentFolderId = await PikpakStorage.getPikPakRestrictedFolderId();
 
       // Find or create "debrify-torrents" subfolder (same as search)
       String? subFolderId;
@@ -645,8 +649,8 @@ class MagnetLinkHandler {
         subFolderId = await PikPakApiService.instance.findOrCreateSubfolder(
           folderName: 'debrify-torrents',
           parentFolderId: parentFolderId,
-          getCachedId: StorageService.getPikPakTorrentsFolderId,
-          setCachedId: StorageService.setPikPakTorrentsFolderId,
+          getCachedId: PikpakStorage.getPikPakTorrentsFolderId,
+          setCachedId: PikpakStorage.setPikPakTorrentsFolderId,
         );
         debugPrint('PikPak: Using subfolder ID: $subFolderId');
       } catch (e) {
@@ -724,7 +728,7 @@ class MagnetLinkHandler {
 
   /// Add magnet link to Premiumize
   Future<void> _addToPremiumize(String magnetUri, String torrentName) async {
-    final apiKey = await StorageService.getPremiumizeApiKey();
+    final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _showError('Premiumize API key not configured');
       return;
@@ -757,7 +761,7 @@ class MagnetLinkHandler {
 
   /// Add URL to Premiumize (direct download / unrestrict)
   Future<void> _addUrlToPremiumize(String url, String displayName) async {
-    final apiKey = await StorageService.getPremiumizeApiKey();
+    final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _showError('Premiumize API key not configured');
       return;
@@ -782,7 +786,7 @@ class MagnetLinkHandler {
 
   /// Add magnet link to AllDebrid
   Future<void> _addToAllDebrid(String magnetUri, String torrentName) async {
-    final apiKey = await StorageService.getAllDebridApiKey();
+    final apiKey = await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _showError('AllDebrid API key not configured');
       return;
@@ -820,7 +824,7 @@ class MagnetLinkHandler {
 
   /// Add URL to AllDebrid (unlock hoster link)
   Future<void> _addUrlToAllDebrid(String url, String displayName) async {
-    final apiKey = await StorageService.getAllDebridApiKey();
+    final apiKey = await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _showError('AllDebrid API key not configured');
       return;

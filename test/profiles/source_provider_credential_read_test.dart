@@ -5,7 +5,11 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -25,15 +29,15 @@ void main() {
 
   final readers = <String, Future<String?> Function(bool Function())>{
     'real_debrid_api_key': (active) =>
-        StorageService.getApiKey(canContinue: active),
+        RealDebridStorage.getApiKey(canContinue: active),
     'torbox_api_key': (active) =>
-        StorageService.getTorboxApiKey(canContinue: active),
+        TorboxStorage.getTorboxApiKey(canContinue: active),
     'premiumize_api_key': (active) =>
-        StorageService.getPremiumizeApiKey(canContinue: active),
+        PremiumizeStorage.getPremiumizeApiKey(canContinue: active),
     'alldebrid_api_key': (active) =>
-        StorageService.getAllDebridApiKey(canContinue: active),
+        AllDebridStorage.getAllDebridApiKey(canContinue: active),
     'pikpak_email': (active) =>
-        StorageService.getPikPakEmail(canContinue: active),
+        PikpakStorage.getPikPakEmail(canContinue: active),
   };
   for (final entry in readers.entries) {
     test('${entry.key} migrates only for a current read', () async {
@@ -58,13 +62,13 @@ void main() {
         'pikpak_email': 'fixture-email',
       });
       expect(
-        await StorageService.getPikPakEnabled(canContinue: () => false),
+        await PikpakStorage.getPikPakEnabled(canContinue: () => false),
         isFalse,
       );
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('pikpak_email'), 'fixture-email');
       expect(
-        await StorageService.getPikPakEnabled(canContinue: () => true),
+        await PikpakStorage.getPikPakEnabled(canContinue: () => true),
         isTrue,
       );
       expect(prefs.getString('pikpak_email'), startsWith(SecretVault.prefix));

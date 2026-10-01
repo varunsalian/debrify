@@ -1,9 +1,9 @@
+import 'package:debrify/services/storage/real_debrid_storage.dart';
 import '../../../services/alldebrid_service.dart';
 import '../../../services/debrid_service.dart';
 import '../../../services/pikpak_api_service.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 
 /// Existing provider rejection cleanup may finish after its action retires.
 /// It must retain the original endpoint and credentials, never the incoming scope.
@@ -38,7 +38,7 @@ Future<void> cleanupWrongEpisode(
 }) => _inOwner(owner, () async {
   try {
     if (provider == 'debrid' && (rdTorrentId?.isNotEmpty ?? false)) {
-      final key = (await StorageService.getApiKey()) ?? '';
+      final key = (await RealDebridStorage.getApiKey()) ?? '';
       await DebridService.deleteTorrent(key, rdTorrentId!);
     } else if (provider == 'pikpak' && (pikpakFileId?.isNotEmpty ?? false)) {
       await PikPakApiService.instance.batchDeleteFiles([pikpakFileId!]);

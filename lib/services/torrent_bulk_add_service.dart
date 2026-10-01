@@ -1,3 +1,8 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/material.dart';
 
 import '../models/torrent.dart';
@@ -9,7 +14,6 @@ import 'debrid_service.dart';
 import '../widgets/debrify_tv_channel_add_bridge.dart';
 import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
-import 'storage_service.dart';
 import 'torbox_service.dart';
 import 'torrent_file_service.dart';
 
@@ -42,21 +46,21 @@ class TorrentBulkAddService {
       return false;
     }
 
-    final torboxKey = await StorageService.getTorboxApiKey();
-    final rdKey = await StorageService.getApiKey();
-    final premiumizeKey = await StorageService.getPremiumizeApiKey();
-    final allDebridKey = await StorageService.getAllDebridApiKey();
-    final pikpakEnabled = await StorageService.getPikPakEnabled();
+    final torboxKey = await TorboxStorage.getTorboxApiKey();
+    final rdKey = await RealDebridStorage.getApiKey();
+    final premiumizeKey = await PremiumizeStorage.getPremiumizeApiKey();
+    final allDebridKey = await AllDebridStorage.getAllDebridApiKey();
+    final pikpakEnabled = await PikpakStorage.getPikPakEnabled();
     // A provider is offered only when its integration toggle is on AND a key is
     // saved — matching Home. A saved key with the integration disabled must not
     // be bulk-addable.
-    final rdIntegration = await StorageService.getRealDebridIntegrationEnabled();
+    final rdIntegration = await RealDebridStorage.getRealDebridIntegrationEnabled();
     final torboxIntegration =
-        await StorageService.getTorboxIntegrationEnabled();
+        await TorboxStorage.getTorboxIntegrationEnabled();
     final premiumizeIntegration =
-        await StorageService.getPremiumizeIntegrationEnabled();
+        await PremiumizeStorage.getPremiumizeIntegrationEnabled();
     final allDebridIntegration =
-        await StorageService.getAllDebridIntegrationEnabled();
+        await AllDebridStorage.getAllDebridIntegrationEnabled();
     if (!context.mounted) return false;
 
     final torboxEnabled =
@@ -266,14 +270,14 @@ class TorrentBulkAddService {
     );
 
     try {
-      final parentFolderId = await StorageService.getPikPakRestrictedFolderId();
+      final parentFolderId = await PikpakStorage.getPikPakRestrictedFolderId();
       String? subFolderId;
       try {
         subFolderId = await pikpak.findOrCreateSubfolder(
           folderName: 'debrify-torrents',
           parentFolderId: parentFolderId,
-          getCachedId: StorageService.getPikPakTorrentsFolderId,
-          setCachedId: StorageService.setPikPakTorrentsFolderId,
+          getCachedId: PikpakStorage.getPikPakTorrentsFolderId,
+          setCachedId: PikpakStorage.setPikPakTorrentsFolderId,
         );
       } catch (e) {
         if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {

@@ -8,7 +8,7 @@ import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_restore_coordinator.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_activation.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
@@ -90,7 +90,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(result, isFalse);
-      expect(await StorageService.isInitialSetupComplete(), isTrue);
+      expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
     },
   );
 
@@ -148,7 +148,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(result, isTrue);
-    expect(await StorageService.isInitialSetupComplete(), isTrue);
+    expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
   });
 
   testWidgets('backup restore only completes onboarding after success', (
@@ -204,7 +204,7 @@ void main() {
     expect(restoreCalls, 1);
     expect(result, isNull);
     expect(find.text('Restore from a backup'), findsOneWidget);
-    expect(await StorageService.isInitialSetupComplete(), isFalse);
+    expect(await ProviderCredentialStorage.isInitialSetupComplete(), isFalse);
 
     restoreSucceeds = true;
     await tester.tap(find.text('Restore from a backup'));
@@ -212,7 +212,7 @@ void main() {
     expect(restoreCalls, 2);
     expect(handoffCalls, 0);
     expect(result, isTrue);
-    expect(await StorageService.isInitialSetupComplete(), isTrue);
+    expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
   });
 
   testWidgets(
@@ -258,7 +258,7 @@ void main() {
                           handoffCalls++;
                           expect(receivedReport, same(report));
                           expect(
-                            await StorageService.isInitialSetupComplete(),
+                            await ProviderCredentialStorage.isInitialSetupComplete(),
                             isTrue,
                             reason:
                                 'the bootstrap session must clear onboarding '
@@ -283,7 +283,7 @@ void main() {
 
       expect(handoffCalls, 1);
       expect(result, isTrue);
-      expect(await StorageService.isInitialSetupComplete(), isTrue);
+      expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
     },
   );
 
@@ -416,7 +416,7 @@ void main() {
     );
     expect(find.text('Log in with WebDAV'), findsOneWidget);
     expect(result.value, isNull);
-    expect(await StorageService.isInitialSetupComplete(), isFalse);
+    expect(await ProviderCredentialStorage.isInitialSetupComplete(), isFalse);
     expect((await store.load()).bindings, isEmpty);
   });
 
@@ -456,7 +456,7 @@ void main() {
     );
     expect(find.text('Log in with WebDAV'), findsOneWidget);
     expect(result.value, isNull);
-    expect(await StorageService.isInitialSetupComplete(), isFalse);
+    expect(await ProviderCredentialStorage.isInitialSetupComplete(), isFalse);
     expect((await store.load()).bindings, isEmpty);
   });
 
@@ -500,7 +500,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(result.value, isTrue);
-    expect(await StorageService.isInitialSetupComplete(), isTrue);
+    expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
     expect((await store.load()).activeBinding?.completeOnboarding, isFalse);
   });
 
@@ -630,7 +630,7 @@ void main() {
     }
 
     expect(result.value, isTrue);
-    expect(await StorageService.isInitialSetupComplete(), isTrue);
+    expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
   });
 
   testWidgets('Back cancels an in-flight engine import transition', (
@@ -736,7 +736,7 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(result, isFalse);
-    expect(await StorageService.isInitialSetupComplete(), isTrue);
+    expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
   });
 }
 
@@ -977,7 +977,7 @@ final class _PostHandoffActivation implements WebDavSyncActivationController {
     String bindingId, {
     required bool replacementConfirmed,
   }) async {
-    await StorageService.setInitialSetupComplete(true);
+    await ProviderCredentialStorage.setInitialSetupComplete(true);
     throw WebDavSyncPostHandoffException(StateError('warmup failed'));
   }
 

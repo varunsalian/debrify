@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:debrify/services/engine/remote_engine_manager.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/widgets/initial_setup_flow.dart';
 import 'package:debrify/widgets/onboarding/key_codec.dart';
 import 'package:debrify/widgets/onboarding/onboarding_models.dart';
@@ -133,7 +133,7 @@ void main() {
     await tester.tap(find.text('Connect'));
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(await StorageService.getRealDebridHiddenFromNav(), isTrue);
+    expect(await RealDebridStorage.getRealDebridHiddenFromNav(), isTrue);
     expect(find.textContaining('Where should'), findsOneWidget);
   });
 

@@ -1,3 +1,7 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import '../../../models/playback_meta.dart';
 import '../../../models/playlist_entry.dart';
 import '../../../models/series_source.dart';
@@ -9,7 +13,6 @@ import '../../../services/pikpak_api_service.dart';
 import '../../../services/premiumize_service.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/torbox_service.dart';
 import '../../../utils/file_utils.dart';
 import '../models/acquired_source.dart';
@@ -61,7 +64,7 @@ class ProviderCloudSource {
           return null;
         }
         final apiKey =
-            (await StorageService.getApiKey(canContinue: active)) ?? '';
+            (await RealDebridStorage.getApiKey(canContinue: active)) ?? '';
         if (!active()) return null;
         if (apiKey.isEmpty) return null;
         final download = await DebridService.getDownloadById(
@@ -102,7 +105,7 @@ class ProviderCloudSource {
           return null;
         }
         final apiKey =
-            (await StorageService.getTorboxApiKey(canContinue: active)) ?? '';
+            (await TorboxStorage.getTorboxApiKey(canContinue: active)) ?? '';
         if (!active()) return null;
         final webId = int.tryParse(sourceId);
         if (apiKey.isEmpty || webId == null) return null;
@@ -196,7 +199,7 @@ class ProviderCloudSource {
           return null;
         }
         final apiKey =
-            (await StorageService.getAllDebridApiKey(canContinue: active)) ??
+            (await AllDebridStorage.getAllDebridApiKey(canContinue: active)) ??
             '';
         if (!active()) return null;
         if (apiKey.isEmpty) return null;
@@ -223,7 +226,9 @@ class ProviderCloudSource {
 
       case 'premiumize':
         final apiKey =
-            (await StorageService.getPremiumizeApiKey(canContinue: active)) ??
+            (await PremiumizeStorage.getPremiumizeApiKey(
+              canContinue: active,
+            )) ??
             '';
         if (!active()) return null;
         if (apiKey.isEmpty) return null;

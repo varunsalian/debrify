@@ -4,6 +4,13 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/provider_credential_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/services.dart';
@@ -226,7 +233,7 @@ class RemoteCommandRouter {
       return;
     }
     try {
-      final servers = await StorageService.getWebDavServers();
+      final servers = await WebdavServerStorage.getWebDavServers();
       if (pending != _onboardingWebDavSyncOffer ||
           !isProfileEntered() ||
           ProfileRuntime.capture() != scope) {
@@ -1078,7 +1085,7 @@ class RemoteCommandRouter {
             return;
           }
           final wasOnboarding =
-              !(await StorageService.isInitialSetupComplete());
+              !(await ProviderCredentialStorage.isInitialSetupComplete());
           final applied = await _commitProfileRemotePayload(
             context,
             profileBinding,
@@ -1717,7 +1724,7 @@ class RemoteCommandRouter {
       return;
     }
     final receivingDuringOnboarding =
-        !(await StorageService.isInitialSetupComplete());
+        !(await ProviderCredentialStorage.isInitialSetupComplete());
     final syncBinding = (await WebDavSyncBindingStore().load()).activeBinding;
     final webDavSyncOwnsProfileGraph =
         syncBinding?.circleId != null &&
@@ -1958,7 +1965,7 @@ class RemoteCommandRouter {
         // bootstrap Admin is still active and unlocked, is the only moment
         // this write is legal.
         try {
-          await StorageService.setInitialSetupComplete(true);
+          await ProviderCredentialStorage.setInitialSetupComplete(true);
         } catch (e) {
           debugPrint(
             'RemoteCommandRouter: could not pre-clear onboarding — $e',
@@ -3616,8 +3623,8 @@ class RemoteCommandRouter {
       }
 
       // Save the API key
-      await StorageService.saveApiKey(apiKey);
-      await StorageService.setRealDebridIntegrationEnabled(true);
+      await RealDebridStorage.saveApiKey(apiKey);
+      await RealDebridStorage.setRealDebridIntegrationEnabled(true);
 
       debugPrint('RemoteCommandRouter: Real-Debrid configured successfully');
       _showSnackBar('Real-Debrid configured successfully');
@@ -3640,8 +3647,8 @@ class RemoteCommandRouter {
       }
 
       // Save the API key
-      await StorageService.saveTorboxApiKey(apiKey);
-      await StorageService.setTorboxIntegrationEnabled(true);
+      await TorboxStorage.saveTorboxApiKey(apiKey);
+      await TorboxStorage.setTorboxIntegrationEnabled(true);
 
       debugPrint('RemoteCommandRouter: Torbox configured successfully');
       _showSnackBar('Torbox configured successfully');
@@ -3664,8 +3671,8 @@ class RemoteCommandRouter {
         return;
       }
 
-      await StorageService.savePremiumizeApiKey(apiKey);
-      await StorageService.setPremiumizeIntegrationEnabled(true);
+      await PremiumizeStorage.savePremiumizeApiKey(apiKey);
+      await PremiumizeStorage.setPremiumizeIntegrationEnabled(true);
 
       debugPrint('RemoteCommandRouter: Premiumize configured successfully');
       _showSnackBar('Premiumize configured successfully');
@@ -3688,8 +3695,8 @@ class RemoteCommandRouter {
         return;
       }
 
-      await StorageService.saveAllDebridApiKey(apiKey);
-      await StorageService.setAllDebridIntegrationEnabled(true);
+      await AllDebridStorage.saveAllDebridApiKey(apiKey);
+      await AllDebridStorage.setAllDebridIntegrationEnabled(true);
 
       debugPrint('RemoteCommandRouter: AllDebrid configured successfully');
       _showSnackBar('AllDebrid configured successfully');
@@ -3721,7 +3728,7 @@ class RemoteCommandRouter {
       }
 
       // Enable PikPak integration
-      await StorageService.setPikPakEnabled(true);
+      await PikpakStorage.setPikPakEnabled(true);
 
       debugPrint('RemoteCommandRouter: PikPak configured successfully');
       _showSnackBar('PikPak configured successfully');
@@ -3841,7 +3848,7 @@ class RemoteCommandRouter {
   Future<void> _handleConfigComplete({bool? wasOnboardingOverride}) async {
     final wasOnboarding =
         wasOnboardingOverride ??
-        !(await StorageService.isInitialSetupComplete());
+        !(await ProviderCredentialStorage.isInitialSetupComplete());
 
     if (!wasOnboarding) {
       debugPrint('RemoteCommandRouter: Config complete (already onboarded)');
@@ -3862,7 +3869,7 @@ class RemoteCommandRouter {
     // correct would strand the user on the onboarding screen behind a fully
     // imported device — the exact bug this guard exists to prevent.
     try {
-      await StorageService.setInitialSetupComplete(true);
+      await ProviderCredentialStorage.setInitialSetupComplete(true);
     } catch (e) {
       debugPrint('RemoteCommandRouter: onboarding flag write skipped — $e');
     }
@@ -4010,7 +4017,7 @@ class RemoteCommandRouter {
         return;
       }
 
-      final existing = await StorageService.getWebDavServers();
+      final existing = await WebdavServerStorage.getWebDavServers();
       final merged = List<WebDavConfig>.from(existing);
       final syncCandidates = <WebDavConfig>[];
       int imported = 0;
@@ -4046,7 +4053,7 @@ class RemoteCommandRouter {
       }
 
       final savedServers = imported > 0
-          ? await StorageService.saveWebDavServers(merged)
+          ? await WebdavServerStorage.saveWebDavServers(merged)
           : merged;
 
       if (WebDavSyncFeature.enabled &&

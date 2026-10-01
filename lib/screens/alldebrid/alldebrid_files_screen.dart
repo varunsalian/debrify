@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../screens/video_player_screen.dart'; // re-exports PlaylistEntry
@@ -210,7 +211,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       _loading = true;
       _error = null;
     });
-    final apiKey = await StorageService.getAllDebridApiKey();
+    final apiKey = await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       setState(() {
@@ -243,7 +244,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       _loadingLinks = true;
       _linksError = null;
     });
-    final apiKey = _apiKey ?? await StorageService.getAllDebridApiKey();
+    final apiKey = _apiKey ?? await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       setState(() {

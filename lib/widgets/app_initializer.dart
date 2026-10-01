@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme_controller.dart';
@@ -216,7 +217,7 @@ class _AppInitializerState extends State<AppInitializer>
     // graph. A wrong guess costs one trip through Home, not a dead screen.
     bool hasCompleted;
     try {
-      hasCompleted = await StorageService.isInitialSetupComplete();
+      hasCompleted = await ProviderCredentialStorage.isInitialSetupComplete();
     } catch (e) {
       debugPrint('AppInitializer: onboarding state unavailable — $e');
       hasCompleted = true;
@@ -382,7 +383,7 @@ class _AppInitializerState extends State<AppInitializer>
     // skipped the setState below, so _splashDone stayed false and the app
     // rendered NOTHING: the blank screen after an import-driven restart.
     try {
-      await StorageService.setInitialSetupComplete(true);
+      await ProviderCredentialStorage.setInitialSetupComplete(true);
     } catch (e) {
       debugPrint('AppInitializer: onboarding flag write skipped — $e');
     }

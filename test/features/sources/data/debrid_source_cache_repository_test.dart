@@ -3,7 +3,8 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -62,13 +63,13 @@ void main() {
           return [true, false];
         },
       );
-      await StorageService.saveTorboxApiKey('first-tb');
-      await StorageService.savePremiumizeApiKey('first-pm');
-      await StorageService.setTorboxCacheCheckEnabled(true);
-      await StorageService.setPremiumizeCacheCheckEnabled(true);
+      await TorboxStorage.saveTorboxApiKey('first-tb');
+      await PremiumizeStorage.savePremiumizeApiKey('first-pm');
+      await TorboxStorage.setTorboxCacheCheckEnabled(true);
+      await PremiumizeStorage.setPremiumizeCacheCheckEnabled(true);
       final first = await repo.open();
-      await StorageService.saveTorboxApiKey('next-tb');
-      await StorageService.savePremiumizeApiKey('next-pm');
+      await TorboxStorage.saveTorboxApiKey('next-tb');
+      await PremiumizeStorage.savePremiumizeApiKey('next-pm');
       final next = await repo.open();
       expect(tbCalls, isEmpty);
       expect(pmCalls, isEmpty);
@@ -104,8 +105,8 @@ void main() {
           return [];
         },
       );
-      await StorageService.saveTorboxApiKey('test-key');
-      await StorageService.savePremiumizeApiKey('test-key');
+      await TorboxStorage.saveTorboxApiKey('test-key');
+      await PremiumizeStorage.savePremiumizeApiKey('test-key');
       final config = await repo.open();
       ProfileRuntime.initializeCommitted(
         ProfileScope(profileId: 'next', dataGeneration: 1, sessionEpoch: 2),

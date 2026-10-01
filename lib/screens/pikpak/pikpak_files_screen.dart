@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
@@ -427,12 +428,12 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final enabled = await StorageService.getPikPakEnabled();
-    final showVideosOnly = await StorageService.getPikPakShowVideosOnly();
-    final ignoreSmallVideos = await StorageService.getPikPakIgnoreSmallVideos();
+    final enabled = await PikpakStorage.getPikPakEnabled();
+    final showVideosOnly = await PikpakStorage.getPikPakShowVideosOnly();
+    final ignoreSmallVideos = await PikpakStorage.getPikPakIgnoreSmallVideos();
     final email = await PikPakApiService.instance.getEmail();
-    final restrictedId = await StorageService.getPikPakRestrictedFolderId();
-    final restrictedName = await StorageService.getPikPakRestrictedFolderName();
+    final restrictedId = await PikpakStorage.getPikPakRestrictedFolderId();
+    final restrictedName = await PikpakStorage.getPikPakRestrictedFolderName();
 
     if (!mounted) return;
 

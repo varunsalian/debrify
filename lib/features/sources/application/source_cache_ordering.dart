@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/premiumize_service.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:debrify/services/torbox_service.dart';
 
 final class SourceCacheOrdering {
@@ -19,7 +20,7 @@ final class SourceCacheOrdering {
     final cached = <String>{};
     try {
       if (provider == 'torbox') {
-        final key = (await StorageService.getTorboxApiKey()) ?? '';
+        final key = (await TorboxStorage.getTorboxApiKey()) ?? '';
         cached.addAll(
           await TorboxService.checkCachedTorrents(
             apiKey: key,
@@ -27,7 +28,7 @@ final class SourceCacheOrdering {
           ),
         );
       } else if (provider == 'premiumize') {
-        final key = (await StorageService.getPremiumizeApiKey()) ?? '';
+        final key = (await PremiumizeStorage.getPremiumizeApiKey()) ?? '';
         final res = await PremiumizeService.checkCache(key, hashes);
         for (var i = 0; i < hashes.length && i < res.length; i++) {
           if (res[i]) cached.add(hashes[i]);

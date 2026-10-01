@@ -13,6 +13,7 @@ import 'package:debrify/services/profiles/profile_credential_facade.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -94,7 +95,7 @@ void main() {
   test(
     'guarded provider reads use the live owner outside a foreign captured zone',
     () async {
-      await StorageService.saveApiKey('origin-fixture');
+      await RealDebridStorage.saveApiKey('origin-fixture');
       final owner = ProfileSessionMemory.captureOwner();
       final foreign = ProfileScope(
         profileId: memberId,
@@ -103,7 +104,7 @@ void main() {
       );
       final value = await ProfileRuntime.withCapturedScope(
         foreign,
-        () => StorageService.getApiKey(
+        () => RealDebridStorage.getApiKey(
           canContinue: () => owner == ProfileSessionMemory.captureOwner(),
         ),
       );
@@ -111,7 +112,7 @@ void main() {
       expect(
         await ProfileRuntime.withCapturedScope(
           foreign,
-          () => StorageService.getApiKey(),
+          () => RealDebridStorage.getApiKey(),
         ),
         isNull,
       );
@@ -147,7 +148,7 @@ void main() {
   test(
     'guarded provider read retains remote-transfer permission checks',
     () async {
-      await StorageService.saveApiKey('shared-fixture');
+      await RealDebridStorage.saveApiKey('shared-fixture');
       final id = (await registry.getBoundResourceId(
         adminId,
         'provider.realDebrid',
@@ -168,17 +169,20 @@ void main() {
         ProfileScope(profileId: memberId, dataGeneration: 1, sessionEpoch: 2),
       );
       expect(
-        await StorageService.getApiKey(canContinue: () => true),
+        await RealDebridStorage.getApiKey(canContinue: () => true),
         'shared-fixture',
       );
       expect(
-        await StorageService.getApiKey(
+        await RealDebridStorage.getApiKey(
           forRemoteTransfer: true,
           canContinue: () => true,
         ),
         isNull,
       );
-      expect(await StorageService.getApiKey(forRemoteTransfer: true), isNull);
+      expect(
+        await RealDebridStorage.getApiKey(forRemoteTransfer: true),
+        isNull,
+      );
     },
   );
 
@@ -328,8 +332,8 @@ void main() {
     );
 
     expect((await registry.getResource(resourceId))!.secretPending, isFalse);
-    expect(await StorageService.getApiKey(), 'fresh-key');
-    expect(await StorageService.hasRealDebridCredential(), isTrue);
+    expect(await RealDebridStorage.getApiKey(), 'fresh-key');
+    expect(await RealDebridStorage.hasRealDebridCredential(), isTrue);
   });
 
   test(
@@ -388,7 +392,7 @@ void main() {
       expect(resource, isNotNull);
       expect(resource!.secretPending, isFalse);
       expect(await registry.getGrant(memberId, resourceId), isNotNull);
-      expect(await StorageService.getApiKey(), isNull);
+      expect(await RealDebridStorage.getApiKey(), isNull);
     },
   );
 

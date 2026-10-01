@@ -15,8 +15,7 @@ final class RedditStorage {
   static const String _redditLastSubredditKey = 'reddit_last_subreddit';
   static const String _redditRecentSubredditsKey = 'reddit_recent_subreddits';
   static const String _redditAllowNsfwKey = 'reddit_allow_nsfw';
-  static const String _redditFavoriteSubredditsKey =
-      'reddit_favorite_subreddits';
+  static const String _redditFavoriteSubredditsKey = 'reddit_favorite_subreddits';
   static const String _redditDefaultSubredditKey = 'reddit_default_subreddit';
 
   // Reddit Settings

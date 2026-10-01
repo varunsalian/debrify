@@ -1,5 +1,5 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:flutter/material.dart';
-import '../../services/storage_service.dart';
 import '../../services/alldebrid_account_service.dart';
 import '../../services/analytics_service.dart';
 import '../../widgets/alldebrid_account_status_widget.dart';
@@ -39,11 +39,11 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
   }
 
   Future<void> _load() async {
-    final configured = await StorageService.hasAllDebridCredential();
+    final configured = await AllDebridStorage.hasAllDebridCredential();
     final integrationEnabled =
-        await StorageService.getAllDebridIntegrationEnabled();
-    final postAction = await StorageService.getAllDebridPostTorrentAction();
-    final hiddenFromNav = await StorageService.getAllDebridHiddenFromNav();
+        await AllDebridStorage.getAllDebridIntegrationEnabled();
+    final postAction = await AllDebridStorage.getAllDebridPostTorrentAction();
+    final hiddenFromNav = await AllDebridStorage.getAllDebridHiddenFromNav();
     setState(() {
       _savedApiKey = configured ? '' : null;
       _integrationEnabled = integrationEnabled;
@@ -94,7 +94,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
 
   Future<void> _savePostAction(String value) async {
     setState(() => _postTorrentAction = value);
-    await StorageService.saveAllDebridPostTorrentAction(value);
+    await AllDebridStorage.saveAllDebridPostTorrentAction(value);
     _snack('Preference saved');
   }
 
@@ -146,7 +146,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
 
   Future<void> _deleteKey() async {
     try {
-      await StorageService.deleteAllDebridApiKey();
+      await AllDebridStorage.deleteAllDebridApiKey();
     } catch (_) {
       _snack(
         'This connection is shared. Revoke or transfer profile access before disconnecting.',
@@ -154,7 +154,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
       );
       return;
     }
-    await StorageService.clearAllDebridHiddenFromNav();
+    await AllDebridStorage.clearAllDebridHiddenFromNav();
     AllDebridAccountService.clearUserInfo();
     if (mounted) {
       setState(() => _hiddenFromNav = false);
@@ -201,7 +201,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
       );
       if (confirmed != true) return;
     }
-    await StorageService.setAllDebridHiddenFromNav(value);
+    await AllDebridStorage.setAllDebridHiddenFromNav(value);
     if (!mounted) return;
     setState(() => _hiddenFromNav = value);
     MainPageBridge.notifyIntegrationChanged();
@@ -214,7 +214,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
         _isEditing = false;
       }
     });
-    await StorageService.setAllDebridIntegrationEnabled(value);
+    await AllDebridStorage.setAllDebridIntegrationEnabled(value);
     MainPageBridge.notifyIntegrationChanged();
     if (!mounted) return;
     if (value && _savedApiKey != null) {

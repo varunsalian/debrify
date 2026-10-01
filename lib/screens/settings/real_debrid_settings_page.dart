@@ -1,5 +1,5 @@
+import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:flutter/material.dart';
-import '../../services/storage_service.dart';
 import '../../services/account_service.dart';
 import '../../services/analytics_service.dart';
 import '../../widgets/account_status_widget.dart';
@@ -48,13 +48,13 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   }
 
   Future<void> _load() async {
-    final configured = await StorageService.hasRealDebridCredential();
-    final selection = await StorageService.getFileSelection();
-    final postAction = await StorageService.getPostTorrentAction();
+    final configured = await RealDebridStorage.hasRealDebridCredential();
+    final selection = await RealDebridStorage.getFileSelection();
+    final postAction = await RealDebridStorage.getPostTorrentAction();
     final integrationEnabled =
-        await StorageService.getRealDebridIntegrationEnabled();
-    final hiddenFromNav = await StorageService.getRealDebridHiddenFromNav();
-    final skipBlocked = await StorageService.getRdSkipBlockedTorrents();
+        await RealDebridStorage.getRealDebridIntegrationEnabled();
+    final hiddenFromNav = await RealDebridStorage.getRealDebridHiddenFromNav();
+    final skipBlocked = await RealDebridStorage.getRdSkipBlockedTorrents();
     setState(() {
       _savedApiKey = configured ? '' : null;
       _fileSelection = selection;
@@ -162,7 +162,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
     }
 
     if (hideNavOnSave && !_hiddenFromNav) {
-      await StorageService.setRealDebridHiddenFromNav(true);
+      await RealDebridStorage.setRealDebridHiddenFromNav(true);
     }
     if (!mounted) return;
 
@@ -184,7 +184,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
 
   Future<void> _deleteKey() async {
     try {
-      await StorageService.deleteApiKey();
+      await RealDebridStorage.deleteApiKey();
     } catch (_) {
       _snack(
         'This connection is shared. Revoke or transfer profile access before disconnecting.',
@@ -194,7 +194,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
     }
     AccountService.clearUserInfo();
     // Clear the hidden from nav flag on logout
-    await StorageService.clearRealDebridHiddenFromNav();
+    await RealDebridStorage.clearRealDebridHiddenFromNav();
     _snack('Logged out successfully', err: false);
     MainPageBridge.notifyIntegrationChanged();
     // Pop back to settings page with logout flag for TV navigation
@@ -204,13 +204,13 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   }
 
   Future<void> _saveSelection(String v) async {
-    await StorageService.saveFileSelection(v);
+    await RealDebridStorage.saveFileSelection(v);
     setState(() => _fileSelection = v);
     _snack('Preference saved');
   }
 
   Future<void> _savePostAction(String v) async {
-    await StorageService.savePostTorrentAction(v);
+    await RealDebridStorage.savePostTorrentAction(v);
     setState(() => _postTorrentAction = v);
     _snack('Preference saved');
   }
@@ -222,7 +222,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
         _isEditing = false;
       }
     });
-    await StorageService.setRealDebridIntegrationEnabled(value);
+    await RealDebridStorage.setRealDebridIntegrationEnabled(value);
     MainPageBridge.notifyIntegrationChanged();
     if (!mounted) return;
     if (value && _savedApiKey != null) {
@@ -283,7 +283,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
       }
 
       // Enable hiding
-      await StorageService.setRealDebridHiddenFromNav(true);
+      await RealDebridStorage.setRealDebridHiddenFromNav(true);
       setState(() {
         _hiddenFromNav = true;
       });
@@ -867,7 +867,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                         setState(
                                           () => _skipBlockedTorrents = v,
                                         );
-                                        await StorageService.setRdSkipBlockedTorrents(
+                                        await RealDebridStorage.setRdSkipBlockedTorrents(
                                           v,
                                         );
                                       },

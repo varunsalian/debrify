@@ -490,7 +490,8 @@ identity is present with the same outcome.
 | Step | Commit | `storage_service.dart` lines | Result |
 | --- | --- | --- | --- |
 | 0 | `dfdf2d4a` | 10,952 | Baseline, complete map, resolved report, inventories and self-checked tooling; no Dart moves. |
-| 1 | This step commit (hash recorded by step 2) | 10,473 | Small subjects, enums, validator and reset entry wired; analyzer and 245 affected suites PASS against baseline. |
+| 1 | `0438a77d` | 10,473 | Small subjects, enums, validator and reset entry wired; analyzer and 245 affected suites PASS against baseline. |
+| 2 | This step commit (hash recorded by step 3) | 9,251 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 
 ### Step 0 evidence and retained source
 
@@ -582,6 +583,35 @@ each step. Unrelated whole-file extractions remain outside this plan.
 | 1 | `lib/widgets/onboarding/onboarding_flow.dart` | 1206 | 1207 |
 | 1 | `lib/widgets/see_all/discover_detail_rail.dart` | 1166 | 1167 |
 
+| 2 | `lib/main.dart` | 4161 | 4169 |
+| 2 | `lib/screens/addons/addon_hub_screen.dart` | 3412 | 3415 |
+| 2 | `lib/screens/alldebrid/alldebrid_files_screen.dart` | 1995 | 1996 |
+| 2 | `lib/screens/debrid_downloads_screen.dart` | 6444 | 6445 |
+| 2 | `lib/screens/magic_tv_screen.dart` | 11264 | 11268 |
+| 2 | `lib/screens/pikpak/pikpak_files_screen.dart` | 3441 | 3442 |
+| 2 | `lib/screens/playlist_content_view_screen.dart` | 4121 | 4128 |
+| 2 | `lib/screens/premiumize/premiumize_files_screen.dart` | 2275 | 2276 |
+| 2 | `lib/screens/settings_screen.dart` | 8727 | 8735 |
+| 2 | `lib/screens/stremio_tv/stremio_tv_screen.dart` | 3952 | 3957 |
+| 2 | `lib/screens/torbox/torbox_downloads_screen.dart` | 7069 | 7070 |
+| 2 | `lib/screens/video_player_screen.dart` | 18081 | 18085 |
+| 2 | `lib/screens/webdav/webdav_files_screen.dart` | 1169 | 1171 |
+| 2 | `lib/services/backup_restore_service.dart` | 1275 | 1281 |
+| 2 | `lib/services/download_service.dart` | 4684 | 4685 |
+| 2 | `lib/services/magnet_link_handler.dart` | 911 | 915 |
+| 2 | `lib/services/playlist_player_service.dart` | 2873 | 2880 |
+| 2 | `lib/services/remote_control/remote_command_router.dart` | 5460 | 5467 |
+| 2 | `lib/services/torrent_bulk_add_service.dart` | 1040 | 1044 |
+| 2 | `lib/services/video_player_launcher.dart` | 6571 | 6575 |
+| 2 | `lib/widgets/aggregated_search_results.dart` | 1568 | 1573 |
+| 2 | `lib/widgets/catalog_browser.dart` | 2135 | 2140 |
+| 2 | `lib/widgets/onboarding/onboarding_flow.dart` | 1207 | 1212 |
+| 2 | `lib/widgets/provider_status_cards.dart` | 1045 | 1046 |
+| 2 | `lib/widgets/remote/remote_config_export.dart` | 1584 | 1592 |
+| 2 | `lib/widgets/remote/remote_transfer_all.dart` | 1557 | 1565 |
+| 2 | `lib/widgets/trakt/trakt_results_view.dart` | 3071 | 3076 |
+<!-- storage-caller-size-rows -->
+
 Step 1: `ss/step1.jsonl` records 3,449 success, 18 error, 1 failure,
 10 skipped; comparison to `ss/base.jsonl` is PASS, with identical identities
 and outcomes for the affected tests. `ss/analyze-step1.txt` adds no diagnostics
@@ -592,3 +622,27 @@ cache owner in step 1; the omitted-class-call mutation is exercised when the
 first such owner moves in step 3. An initial concurrent analyzer/test run
 caused a 30-second large-import test timeout; the complete affected run was
 repeated with the analyzer idle and passed. Both logs are retained.
+
+Step 2 tooling correction: Dart 3.12's default formatter inserts trailing
+commas when longer cross-owner qualifiers wrap. The strict declaration checker
+caught this before affected tests or the commit. The storage folder alone uses
+a 120-column page and preserves existing trailing commas; every owner was
+already below 500 lines before this choice. This accommodates the mapped
+qualifiers while retaining original punctuation. Declaration comparisons are
+still strict, with no broader normalization. The root formatter policy and
+other folders remain unchanged.
+
+Caller formatting clarification: the plan's required formatting may add an
+optional trailing argument comma when a repointed call now wraps. This is
+limited to those call sites; no moved declaration admits punctuation changes.
+The caller review also checks that the enclosing expression is a function or
+constructor argument list containing a mapped storage reference (never a
+record), and that every other executable token and literal is unchanged.
+Callers with unrelated pre-existing formatter changes are left unformatted.
+
+Step 2: `ss/step2.jsonl` records {'success': 3733, 'error': 16, 'skipped': 10, 'failure': 1};
+comparison to `ss/base.jsonl` PASS (no new failures, missing tests or skips).
+`ss/analyze-step2.txt` vs the previous step adds no diagnostics after the
+prescribed old-file relocation. Map/dependency, constant, declaration/reset,
+size/import and diff checks pass. Caller review confirms only authorized
+expressions, imports and whitespace changed.

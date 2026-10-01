@@ -3,6 +3,10 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -757,16 +761,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final showVideoTitle = await StorageService.getDebrifyTvShowVideoTitle();
     // hideBackButton is hardcoded to false - no longer loading from storage
     final avoidNsfw = await _settingsManager.getGlobalAvoidNsfw(true);
-    final rdSkipBlocked = await StorageService.getRdSkipBlockedTorrents();
+    final rdSkipBlocked = await RealDebridStorage.getRdSkipBlockedTorrents();
     final tvFilters = await DebrifyTvFilters.load();
     final storedProvider = await StorageService.getDebrifyTvProvider();
     final hasStoredProvider = await StorageService.hasDebrifyTvProvider();
     final rdIntegrationEnabled =
-        await StorageService.getRealDebridIntegrationEnabled();
-    final rdKey = await StorageService.getApiKey();
+        await RealDebridStorage.getRealDebridIntegrationEnabled();
+    final rdKey = await RealDebridStorage.getApiKey();
     final torboxIntegrationEnabled =
-        await StorageService.getTorboxIntegrationEnabled();
-    final torboxKey = await StorageService.getTorboxApiKey();
+        await TorboxStorage.getTorboxIntegrationEnabled();
+    final torboxKey = await TorboxStorage.getTorboxApiKey();
 
     final registry = EngineRegistry.instance;
     await registry.initialize();
@@ -815,15 +819,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         torboxIntegrationEnabled && torboxKey != null && torboxKey.isNotEmpty;
     final pikpakAvailable = await PikPakTvService.instance.isAvailable();
     final premiumizeIntegrationEnabled =
-        await StorageService.getPremiumizeIntegrationEnabled();
-    final premiumizeKey = await StorageService.getPremiumizeApiKey();
+        await PremiumizeStorage.getPremiumizeIntegrationEnabled();
+    final premiumizeKey = await PremiumizeStorage.getPremiumizeApiKey();
     final premiumizeAvailable =
         premiumizeIntegrationEnabled &&
         premiumizeKey != null &&
         premiumizeKey.isNotEmpty;
     final allDebridIntegrationEnabled =
-        await StorageService.getAllDebridIntegrationEnabled();
-    final allDebridKey = await StorageService.getAllDebridApiKey();
+        await AllDebridStorage.getAllDebridIntegrationEnabled();
+    final allDebridKey = await AllDebridStorage.getAllDebridApiKey();
     final allDebridAvailable =
         allDebridIntegrationEnabled &&
         allDebridKey != null &&
@@ -1400,22 +1404,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Future<void> _syncProviderAvailability() async {
     final rdIntegrationEnabled =
-        await StorageService.getRealDebridIntegrationEnabled();
-    final rdKey = await StorageService.getApiKey();
+        await RealDebridStorage.getRealDebridIntegrationEnabled();
+    final rdKey = await RealDebridStorage.getApiKey();
     final torboxIntegrationEnabled =
-        await StorageService.getTorboxIntegrationEnabled();
-    final torboxKey = await StorageService.getTorboxApiKey();
+        await TorboxStorage.getTorboxIntegrationEnabled();
+    final torboxKey = await TorboxStorage.getTorboxApiKey();
     final pikpakAvailable = await PikPakTvService.instance.isAvailable();
     final premiumizeIntegrationEnabled =
-        await StorageService.getPremiumizeIntegrationEnabled();
-    final premiumizeKey = await StorageService.getPremiumizeApiKey();
+        await PremiumizeStorage.getPremiumizeIntegrationEnabled();
+    final premiumizeKey = await PremiumizeStorage.getPremiumizeApiKey();
     final premiumizeAvailable =
         premiumizeIntegrationEnabled &&
         premiumizeKey != null &&
         premiumizeKey.isNotEmpty;
     final allDebridIntegrationEnabled =
-        await StorageService.getAllDebridIntegrationEnabled();
-    final allDebridKey = await StorageService.getAllDebridApiKey();
+        await AllDebridStorage.getAllDebridIntegrationEnabled();
+    final allDebridKey = await AllDebridStorage.getAllDebridApiKey();
     final allDebridAvailable =
         allDebridIntegrationEnabled &&
         allDebridKey != null &&
@@ -4482,7 +4486,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     try {
       // Require RD API key early so we can prefetch as soon as results arrive
-      final String? apiKeyEarlyRaw = await StorageService.getApiKey();
+      final String? apiKeyEarlyRaw = await RealDebridStorage.getApiKey();
       if (apiKeyEarlyRaw == null || apiKeyEarlyRaw.isEmpty) {
         if (!mounted) return;
         _log('❌ Real Debrid API key not found - please add it in Settings');
@@ -4968,7 +4972,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     // Build a provider for "next" requests that reuses the same queue and keywords
-    final apiKey = await StorageService.getApiKey();
+    final apiKey = await RealDebridStorage.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -5228,7 +5232,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     void Function(String message) log,
   ) async {
     final integrationEnabled =
-        await StorageService.getTorboxIntegrationEnabled();
+        await TorboxStorage.getTorboxIntegrationEnabled();
     if (!integrationEnabled) {
       _closeProgressDialog();
       if (!mounted) return;
@@ -5243,7 +5247,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    final apiKey = await StorageService.getTorboxApiKey();
+    final apiKey = await TorboxStorage.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _closeProgressDialog();
       if (!mounted) return;
@@ -5927,7 +5931,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _seenRestrictedLinks.clear();
     _seenLinkWithTorrentId.clear();
 
-    final apiKey = await StorageService.getApiKey();
+    final apiKey = await RealDebridStorage.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       MainPageBridge.notifyAutoLaunchFailed('No Real Debrid API key');
@@ -6231,7 +6235,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _seenRestrictedLinks.clear();
     _seenLinkWithTorrentId.clear();
 
-    final apiKey = await StorageService.getAllDebridApiKey();
+    final apiKey = await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       MainPageBridge.notifyAutoLaunchFailed('No AllDebrid API key');
@@ -6693,7 +6697,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     List<Torrent> filteredTorrents = allTorrents;
     if (_provider == _providerTorbox) {
-      final apiKey = await StorageService.getTorboxApiKey();
+      final apiKey = await TorboxStorage.getTorboxApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         debugPrint('DebrifyTV: ❌ No Torbox API key configured');
         return null;
@@ -6743,7 +6747,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     try {
       if (_provider == _providerRealDebrid) {
         debugPrint('DebrifyTV: Selected channel uses Real-Debrid provider');
-        final apiKey = await StorageService.getApiKey();
+        final apiKey = await RealDebridStorage.getApiKey();
         if (apiKey == null || apiKey.isEmpty) {
           debugPrint('DebrifyTV: ❌ No Real-Debrid API key configured');
           return null;
@@ -6874,7 +6878,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       if (_provider == _providerAllDebrid) {
         debugPrint('DebrifyTV: Selected channel uses AllDebrid provider');
-        final apiKey = await StorageService.getAllDebridApiKey();
+        final apiKey = await AllDebridStorage.getAllDebridApiKey();
         if (apiKey == null || apiKey.isEmpty) {
           debugPrint('DebrifyTV: ❌ No AllDebrid API key configured');
           return null;
@@ -6957,7 +6961,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       if (_provider == _providerTorbox) {
-        final apiKey = await StorageService.getTorboxApiKey();
+        final apiKey = await TorboxStorage.getTorboxApiKey();
         if (apiKey == null || apiKey.isEmpty) {
           debugPrint('DebrifyTV: ❌ No Torbox API key configured');
           return null;
@@ -7246,7 +7250,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     final integrationEnabled =
-        await StorageService.getTorboxIntegrationEnabled();
+        await TorboxStorage.getTorboxIntegrationEnabled();
     if (!integrationEnabled) {
       _showSnack(
         'Enable Torbox in Settings to use this provider.',
@@ -7255,7 +7259,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    final apiKey = await StorageService.getTorboxApiKey();
+    final apiKey = await TorboxStorage.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       MainPageBridge.notifyAutoLaunchFailed('No Torbox API key');
       _showSnack(
@@ -7836,7 +7840,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Future<void> _playNextFromQueue() async {
     if (_isBusy) return;
-    final apiKey = await StorageService.getApiKey();
+    final apiKey = await RealDebridStorage.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -9995,7 +9999,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     void log(String message) => debugPrint('DebrifyTV/PM: $message');
 
     final integrationEnabled =
-        await StorageService.getPremiumizeIntegrationEnabled();
+        await PremiumizeStorage.getPremiumizeIntegrationEnabled();
     if (!integrationEnabled) {
       _showSnack(
         'Enable Premiumize in Settings to use this provider.',
@@ -10004,7 +10008,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    final apiKey = await StorageService.getPremiumizeApiKey();
+    final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       MainPageBridge.notifyAutoLaunchFailed('No Premiumize API key');
       _showSnack(
@@ -10204,7 +10208,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     void Function(String message) log,
   ) async {
     final integrationEnabled =
-        await StorageService.getPremiumizeIntegrationEnabled();
+        await PremiumizeStorage.getPremiumizeIntegrationEnabled();
     if (!integrationEnabled) {
       _closeProgressDialog();
       if (!mounted) return;
@@ -10219,7 +10223,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    final apiKey = await StorageService.getPremiumizeApiKey();
+    final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _closeProgressDialog();
       if (!mounted) return;
@@ -10501,7 +10505,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     void Function(String message) log,
   ) async {
     final integrationEnabled =
-        await StorageService.getAllDebridIntegrationEnabled();
+        await AllDebridStorage.getAllDebridIntegrationEnabled();
     if (!integrationEnabled) {
       _closeProgressDialog();
       if (!mounted) return;
@@ -10516,7 +10520,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       return;
     }
 
-    final apiKey = await StorageService.getAllDebridApiKey();
+    final apiKey = await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       _closeProgressDialog();
       if (!mounted) return;

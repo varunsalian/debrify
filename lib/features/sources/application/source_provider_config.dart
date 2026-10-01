@@ -3,6 +3,11 @@ import 'dart:async';
 import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
 import 'package:debrify/features/sources/data/source_provider_configuration.dart';
 import 'package:debrify/services/series_source_service.dart';
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 
 final class SourceProviderConfig {
@@ -88,27 +93,27 @@ final class SourceProviderConfig {
   }) async {
     switch (provider) {
       case 'debrid':
-        return (await StorageService.getApiKey(
+        return (await RealDebridStorage.getApiKey(
               canContinue: canContinue,
             ))?.isNotEmpty ??
             false;
       case 'torbox':
-        return (await StorageService.getTorboxApiKey(
+        return (await TorboxStorage.getTorboxApiKey(
               canContinue: canContinue,
             ))?.isNotEmpty ??
             false;
       case 'premiumize':
-        return (await StorageService.getPremiumizeApiKey(
+        return (await PremiumizeStorage.getPremiumizeApiKey(
               canContinue: canContinue,
             ))?.isNotEmpty ??
             false;
       case 'alldebrid':
-        return (await StorageService.getAllDebridApiKey(
+        return (await AllDebridStorage.getAllDebridApiKey(
               canContinue: canContinue,
             ))?.isNotEmpty ??
             false;
       case 'pikpak':
-        return StorageService.getPikPakEnabled(canContinue: canContinue);
+        return PikpakStorage.getPikPakEnabled(canContinue: canContinue);
       default:
         return false;
     }

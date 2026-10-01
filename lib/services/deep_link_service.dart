@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/foundation.dart';
 import '../utils/platform_util.dart';
 import 'package:app_links/app_links.dart';
 import 'package:flutter_sharing_intent/flutter_sharing_intent.dart';
 import 'package:flutter_sharing_intent/model/sharing_file.dart';
-import 'storage_service.dart';
 import 'profiles/desktop_single_instance.dart';
 import 'profiles/profile_lock_controller.dart';
 import 'profiles/profile_runtime.dart';
@@ -561,17 +565,17 @@ class DeepLinkService {
 
   /// Check which debrid services are configured
   static Future<ConfiguredServices> getConfiguredServices() async {
-    final rdKey = await StorageService.getApiKey();
-    final torboxKey = await StorageService.getTorboxApiKey();
-    final premiumizeKey = await StorageService.getPremiumizeApiKey();
-    final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
-    final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
-    final pikpakEnabled = await StorageService.getPikPakEnabled();
+    final rdKey = await RealDebridStorage.getApiKey();
+    final torboxKey = await TorboxStorage.getTorboxApiKey();
+    final premiumizeKey = await PremiumizeStorage.getPremiumizeApiKey();
+    final rdEnabled = await RealDebridStorage.getRealDebridIntegrationEnabled();
+    final torboxEnabled = await TorboxStorage.getTorboxIntegrationEnabled();
+    final pikpakEnabled = await PikpakStorage.getPikPakEnabled();
     final premiumizeEnabled =
-        await StorageService.getPremiumizeIntegrationEnabled();
-    final allDebridKey = await StorageService.getAllDebridApiKey();
+        await PremiumizeStorage.getPremiumizeIntegrationEnabled();
+    final allDebridKey = await AllDebridStorage.getAllDebridApiKey();
     final allDebridEnabled =
-        await StorageService.getAllDebridIntegrationEnabled();
+        await AllDebridStorage.getAllDebridIntegrationEnabled();
 
     final hasRealDebrid = rdKey != null && rdKey.isNotEmpty && rdEnabled;
     final hasTorbox =

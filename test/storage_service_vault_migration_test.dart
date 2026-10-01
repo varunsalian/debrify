@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/storage_service.dart';
@@ -18,13 +20,13 @@ void main() {
   test('standalone key: plaintext read once, then sealed at rest', () async {
     SharedPreferences.setMockInitialValues(
         {'real_debrid_api_key': 'legacyRdKey40charsAAAAAAAAAAAAAAAAAAAAAA'});
-    expect(await StorageService.getApiKey(),
+    expect(await RealDebridStorage.getApiKey(),
         'legacyRdKey40charsAAAAAAAAAAAAAAAAAAAAAA');
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString('real_debrid_api_key')!;
     expect(stored, startsWith(SecretVault.prefix));
     // Still readable after the rewrite.
-    expect(await StorageService.getApiKey(),
+    expect(await RealDebridStorage.getApiKey(),
         'legacyRdKey40charsAAAAAAAAAAAAAAAAAAAAAA');
   });
 
@@ -75,25 +77,25 @@ void main() {
     ]);
     SharedPreferences.setMockInitialValues({'webdav_servers_v1': legacy});
 
-    final servers = await StorageService.getWebDavServers();
+    final servers = await WebdavServerStorage.getWebDavServers();
     expect(servers, hasLength(1));
     expect(servers.first.password, 'hunter2');
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('webdav_servers_v1'),
         startsWith(SecretVault.prefix));
-    expect((await StorageService.getWebDavServers()).single.password,
+    expect((await WebdavServerStorage.getWebDavServers()).single.password,
         'hunter2');
   });
 
   test('device-ID change turns credentials into clean signed-out', () async {
     SharedPreferences.setMockInitialValues({});
-    await StorageService.saveApiKey('boundKey');
-    expect(await StorageService.getApiKey(), 'boundKey');
+    await RealDebridStorage.saveApiKey('boundKey');
+    expect(await RealDebridStorage.getApiKey(), 'boundKey');
     SecretVault.debugReset(deviceIdOverride: 'a-different-device');
-    expect(await StorageService.getApiKey(), isNull);
+    expect(await RealDebridStorage.getApiKey(), isNull);
     // A fresh save under the new device works.
-    await StorageService.saveApiKey('newKey');
-    expect(await StorageService.getApiKey(), 'newKey');
+    await RealDebridStorage.saveApiKey('newKey');
+    expect(await RealDebridStorage.getApiKey(), 'newKey');
   });
 }

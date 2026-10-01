@@ -14,7 +14,8 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -66,15 +67,15 @@ void main() {
       migratedLegacyInstall: false,
     );
     ProfileRuntime.initializeCommitted(origin);
-    await StorageService.saveApiKey('origin-key');
-    await StorageService.saveRdEndpoint('https://origin.test');
-    await StorageService.saveFileSelection('all');
+    await RealDebridStorage.saveApiKey('origin-key');
+    await RealDebridStorage.saveRdEndpoint('https://origin.test');
+    await RealDebridStorage.saveFileSelection('all');
     await registry.setActiveProfile(incoming.profileId);
     ProfileRuntime.publish(incoming);
     await ProfileRuntime.withCapturedScope(incoming, () async {
-      await StorageService.saveApiKey('incoming-key');
-      await StorageService.saveRdEndpoint('https://incoming.test');
-      await StorageService.saveFileSelection('largest');
+      await RealDebridStorage.saveApiKey('incoming-key');
+      await RealDebridStorage.saveRdEndpoint('https://incoming.test');
+      await RealDebridStorage.saveFileSelection('largest');
     });
     await registry.setActiveProfile(origin.profileId);
     ProfileRuntime.publish(origin);
@@ -159,12 +160,12 @@ void main() {
             expect(selection.bodyFields['files'], '2,1');
           }
           await ProfileRuntime.withCapturedScope(incoming, () async {
-            expect(await StorageService.getApiKey(), 'incoming-key');
+            expect(await RealDebridStorage.getApiKey(), 'incoming-key');
             expect(
-              await StorageService.getRdEndpoint(),
+              await RealDebridStorage.getRdEndpoint(),
               'https://incoming.test',
             );
-            expect(await StorageService.getFileSelection(), 'largest');
+            expect(await RealDebridStorage.getFileSelection(), 'largest');
           });
         },
       );
@@ -180,15 +181,11 @@ void main() {
 
       for (final scope in [origin, incoming]) {
         await activate(scope);
-        await StorageService.setPikPakAccessToken('access-${scope.profileId}');
-        await StorageService.setPikPakRefreshToken(
-          'refresh-${scope.profileId}',
-        );
-        await StorageService.setPikPakDeviceId('same-device');
-        await StorageService.setPikPakUserId('same-user');
-        await StorageService.setPikPakCaptchaToken(
-          'initial-${scope.profileId}',
-        );
+        await PikpakStorage.setPikPakAccessToken('access-${scope.profileId}');
+        await PikpakStorage.setPikPakRefreshToken('refresh-${scope.profileId}');
+        await PikpakStorage.setPikPakDeviceId('same-device');
+        await PikpakStorage.setPikPakUserId('same-user');
+        await PikpakStorage.setPikPakCaptchaToken('initial-${scope.profileId}');
       }
       await activate(origin);
       final entered = <String, Completer<void>>{
@@ -257,11 +254,11 @@ void main() {
       }, () => client);
       expect(captchaOwners, [origin.profileId, incoming.profileId]);
       expect(
-        await StorageService.getPikPakCaptchaToken(),
+        await PikpakStorage.getPikPakCaptchaToken(),
         'renewed-${incoming.profileId}',
       );
       await ProfileRuntime.withCapturedScope(origin, () async {
-        expect(await StorageService.getPikPakCaptchaToken(), isNull);
+        expect(await PikpakStorage.getPikPakCaptchaToken(), isNull);
       });
       await Future<void>.delayed(const Duration(milliseconds: 110));
     },

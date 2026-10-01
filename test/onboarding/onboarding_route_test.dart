@@ -1,7 +1,7 @@
 import 'package:debrify/services/remote_control/remote_command_router.dart';
 import 'package:debrify/services/remote_control/remote_constants.dart';
 import 'package:debrify/services/remote_control/remote_session.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/initial_setup_flow.dart';
 import 'package:flutter/material.dart';
@@ -50,7 +50,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(result, isFalse);
     expect(parentFocus.canRequestFocus, isTrue);
-    expect(await StorageService.isInitialSetupComplete(), isTrue);
+    expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
     parentFocus.dispose();
   });
@@ -95,7 +95,7 @@ void main() {
 
     expect(find.text('Restarted'), findsOneWidget);
     expect(tester.takeException(), isNull);
-    expect(await StorageService.isInitialSetupComplete(), isTrue);
+    expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
   });
 }
 

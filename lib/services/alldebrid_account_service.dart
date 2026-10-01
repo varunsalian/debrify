@@ -1,6 +1,6 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:flutter/foundation.dart';
 import '../models/alldebrid_user.dart';
-import '../services/storage_service.dart';
 import '../services/alldebrid_service.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_async_authorization.dart';
@@ -47,7 +47,7 @@ class AllDebridAccountService {
       }
       if (capability != null && !capability.isCurrentlyActive) return false;
       Future<void> commit() async {
-        if (persist) await StorageService.saveAllDebridApiKey(apiKey);
+        if (persist) await AllDebridStorage.saveAllDebridApiKey(apiKey);
         if (capability == null || capability.isCurrentlyActive) {
           _setCurrentUser(user);
         }
@@ -70,7 +70,7 @@ class AllDebridAccountService {
 
   static Future<bool> isApiKeyValid() async {
     try {
-      final apiKey = await StorageService.getAllDebridApiKey();
+      final apiKey = await AllDebridStorage.getAllDebridApiKey();
       if (apiKey == null || apiKey.isEmpty) return false;
       return validateAndGetUserInfo(apiKey, persist: false);
     } on ResourceAuthorizationException {
@@ -88,7 +88,7 @@ class AllDebridAccountService {
 
   static Future<bool> refreshUserInfo() async {
     try {
-      final apiKey = await StorageService.getAllDebridApiKey();
+      final apiKey = await AllDebridStorage.getAllDebridApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         _setCurrentUser(null);
         return false;

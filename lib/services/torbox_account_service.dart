@@ -1,6 +1,6 @@
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/foundation.dart';
 import '../models/torbox_user.dart';
-import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_async_authorization.dart';
@@ -48,7 +48,7 @@ class TorboxAccountService {
       }
       if (capability != null && !capability.isCurrentlyActive) return false;
       Future<void> commit() async {
-        if (persist) await StorageService.saveTorboxApiKey(apiKey);
+        if (persist) await TorboxStorage.saveTorboxApiKey(apiKey);
         if (capability == null || capability.isCurrentlyActive) {
           _setCurrentUser(user);
         }
@@ -71,7 +71,7 @@ class TorboxAccountService {
 
   static Future<bool> isApiKeyValid() async {
     try {
-      final apiKey = await StorageService.getTorboxApiKey();
+      final apiKey = await TorboxStorage.getTorboxApiKey();
       if (apiKey == null || apiKey.isEmpty) return false;
       return validateAndGetUserInfo(apiKey, persist: false);
     } on ResourceAuthorizationException {
@@ -88,7 +88,7 @@ class TorboxAccountService {
 
   static Future<bool> refreshUserInfo() async {
     try {
-      final apiKey = await StorageService.getTorboxApiKey();
+      final apiKey = await TorboxStorage.getTorboxApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         _setCurrentUser(null);
         return false;

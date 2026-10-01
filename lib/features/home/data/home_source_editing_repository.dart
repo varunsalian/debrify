@@ -1,8 +1,12 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import '../../../models/series_source.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../../../services/series_source_service.dart' show SeriesSourceService;
-import '../../../services/storage_service.dart';
 
 typedef HomeSourceProviders = ({
   bool rd,
@@ -92,22 +96,22 @@ class HomeSourceEditingRepository {
   Future<HomeSourceProviders?> providers({
     required bool Function() isCurrent,
   }) => _run((current) async {
-    final rd = await StorageService.getApiKey(canContinue: current);
+    final rd = await RealDebridStorage.getApiKey(canContinue: current);
     if (!current()) return null;
-    final torbox = await StorageService.getTorboxApiKey(canContinue: current);
+    final torbox = await TorboxStorage.getTorboxApiKey(canContinue: current);
     if (!current()) return null;
-    final premiumize = await StorageService.getPremiumizeApiKey(
+    final premiumize = await PremiumizeStorage.getPremiumizeApiKey(
       canContinue: current,
     );
     if (!current()) return null;
     final premiumizeEnabled =
-        await StorageService.getPremiumizeIntegrationEnabled();
+        await PremiumizeStorage.getPremiumizeIntegrationEnabled();
     if (!current()) return null;
-    final allDebrid = await StorageService.getAllDebridApiKey(
+    final allDebrid = await AllDebridStorage.getAllDebridApiKey(
       canContinue: current,
     );
     if (!current()) return null;
-    final pikpak = await StorageService.getPikPakEnabled(canContinue: current);
+    final pikpak = await PikpakStorage.getPikPakEnabled(canContinue: current);
     if (!current()) return null;
     return (
       rd: rd != null && rd.isNotEmpty,

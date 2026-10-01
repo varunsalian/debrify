@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/provider_credential_storage.dart';
 import '../profiles/profile_session_unavailable.dart';
 import 'dart:convert';
 import 'webdav_sync_backup.dart';
@@ -11,7 +12,6 @@ import '../../models/profiles/profile_policy.dart';
 import '../diagnostic_log.dart' as app_diagnostics;
 import '../debrify_tv_database.dart';
 import '../main_page_bridge.dart';
-import '../storage_service.dart';
 import '../profiles/connection_resource_service.dart';
 import '../profiles/device_key_provider.dart';
 import '../profiles/profile_app_lifecycle_participant.dart';
@@ -470,7 +470,7 @@ final class WebDavSyncRuntime
       if (enableRuntime) {
         await recoverWebDavSyncOnboardingIntent(
           bindingStore: bindingStore,
-          setInitialSetupComplete: StorageService.setInitialSetupComplete,
+          setInitialSetupComplete: ProviderCredentialStorage.setInitialSetupComplete,
           diagnostic: recordWebDavSyncDiagnostic,
         );
         await _armIfActive();

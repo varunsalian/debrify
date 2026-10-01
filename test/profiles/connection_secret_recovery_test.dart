@@ -18,8 +18,8 @@ import 'package:debrify/services/profiles/profile_restore_coordinator.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_unavailable.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -507,10 +507,12 @@ void main() {
       );
       await corrupt(resource);
       expect(
-        (await StorageService.getWebDavServers()).single.credentialsRedacted,
+        (await WebdavServerStorage.getWebDavServers())
+            .single
+            .credentialsRedacted,
         isTrue,
       );
-      await StorageService.deleteWebDavServer(resource.id);
+      await WebdavServerStorage.deleteWebDavServer(resource.id);
       expect(await registry.getResource(resource.id), isNull);
     },
   );

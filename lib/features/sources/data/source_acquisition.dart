@@ -1,3 +1,7 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import '../../../models/alldebrid_file.dart';
 import '../../../models/playlist_entry.dart';
 import '../../../models/premiumize_file.dart';
@@ -9,7 +13,6 @@ import '../../../services/debrid_service.dart';
 import '../../../services/premiumize_service.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/torbox_service.dart';
 import '../../../utils/file_utils.dart';
 import '../../../utils/rd_folder_tree_builder.dart';
@@ -61,7 +64,8 @@ class SourceAcquisition {
       case 'debrid':
         {
           final apiKey =
-              (await StorageService.getApiKey(canContinue: canContinue)) ?? '';
+              (await RealDebridStorage.getApiKey(canContinue: canContinue)) ??
+              '';
           checkCurrent();
           final result = await DebridService.addTorrentToDebrid(
             apiKey,
@@ -137,9 +141,7 @@ class SourceAcquisition {
       case 'torbox':
         {
           final apiKey =
-              (await StorageService.getTorboxApiKey(
-                canContinue: canContinue,
-              )) ??
+              (await TorboxStorage.getTorboxApiKey(canContinue: canContinue)) ??
               '';
           checkCurrent();
           final resp = await TorboxService.createTorrent(
@@ -229,7 +231,7 @@ class SourceAcquisition {
       case 'premiumize':
         {
           final apiKey =
-              (await StorageService.getPremiumizeApiKey(
+              (await PremiumizeStorage.getPremiumizeApiKey(
                 canContinue: canContinue,
               )) ??
               '';
@@ -282,7 +284,7 @@ class SourceAcquisition {
       case 'alldebrid':
         {
           final apiKey =
-              (await StorageService.getAllDebridApiKey(
+              (await AllDebridStorage.getAllDebridApiKey(
                 canContinue: canContinue,
               )) ??
               '';

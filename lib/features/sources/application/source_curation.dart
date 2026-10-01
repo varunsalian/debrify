@@ -7,7 +7,7 @@ import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/iptv_source_search.dart';
 import 'package:debrify/services/source_priority.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/utils/filter_ladder.dart';
 import 'package:debrify/utils/rd_blocked_filter.dart';
 import 'package:debrify/utils/torrent_curation.dart';
@@ -50,7 +50,7 @@ final class SourceCuration {
 
     // 3. RD blocked-keyword filter (RD provider + setting enabled).
     if (provider == 'debrid' &&
-        await StorageService.getRdSkipBlockedTorrents()) {
+        await RealDebridStorage.getRdSkipBlockedTorrents()) {
       final unblocked = out.where((t) => !isRdBlockedTorrent(t.name)).toList();
       if (unblocked.isNotEmpty) out = unblocked;
     }
@@ -103,7 +103,7 @@ final class SourceCuration {
     out = out.where(coversSeason).toList();
 
     if (provider == 'debrid' &&
-        await StorageService.getRdSkipBlockedTorrents()) {
+        await RealDebridStorage.getRdSkipBlockedTorrents()) {
       out = out.where((t) => !isRdBlockedTorrent(t.name)).toList();
     }
 

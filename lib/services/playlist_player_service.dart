@@ -1,5 +1,10 @@
 import 'dart:math';
 
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:flutter/material.dart';
 
 import 'storage_service.dart';
@@ -137,7 +142,7 @@ class PlaylistPlayerService {
     // Handle single file torrents
     if (kind == 'single') {
       final String? restrictedLink = item['restrictedLink'] as String?;
-      final String? apiKey = await StorageService.getApiKey();
+      final String? apiKey = await RealDebridStorage.getApiKey();
       if (restrictedLink != null &&
           restrictedLink.isNotEmpty &&
           apiKey != null &&
@@ -198,7 +203,7 @@ class PlaylistPlayerService {
 
     // Handle collection torrents (multi-file/series)
     if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
-      final String? apiKey = await StorageService.getApiKey();
+      final String? apiKey = await RealDebridStorage.getApiKey();
       if (apiKey == null || apiKey.isEmpty) return;
 
       try {
@@ -455,7 +460,7 @@ class PlaylistPlayerService {
     bool playRandom = false,
   }) async {
     final String kind = (item['kind'] as String?) ?? 'single';
-    final String? apiKey = await StorageService.getAllDebridApiKey();
+    final String? apiKey = await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -667,7 +672,7 @@ class PlaylistPlayerService {
     required String fallbackTitle,
     bool playRandom = false,
   }) async {
-    final String? apiKey = await StorageService.getTorboxApiKey();
+    final String? apiKey = await TorboxStorage.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1314,7 +1319,7 @@ class PlaylistPlayerService {
     required String fallbackTitle,
     bool playRandom = false,
   }) async {
-    final String? apiKey = await StorageService.getPremiumizeApiKey();
+    final String? apiKey = await PremiumizeStorage.getPremiumizeApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1590,7 +1595,7 @@ class PlaylistPlayerService {
     required String fallbackTitle,
     bool playRandom = false,
   }) async {
-    final String? apiKey = await StorageService.getPremiumizeApiKey();
+    final String? apiKey = await PremiumizeStorage.getPremiumizeApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2132,7 +2137,9 @@ class PlaylistPlayerService {
   ) async {
     final serverId = (item['webdavServerId'] ?? '').toString();
     final baseUrl = (item['webdavBaseUrl'] ?? '').toString();
-    final servers = await StorageService.getWebDavServers(forSettings: false);
+    final servers = await WebdavServerStorage.getWebDavServers(
+      forSettings: false,
+    );
     for (final server in servers) {
       if (serverId.isNotEmpty && server.id == serverId) return server;
     }
@@ -2214,7 +2221,7 @@ class PlaylistPlayerService {
     Map<String, dynamic> item,
   ) async {
     final String? torrentHash = item['torrent_hash'] as String?;
-    final String? apiKey = await StorageService.getApiKey();
+    final String? apiKey = await RealDebridStorage.getApiKey();
 
     if (torrentHash == null ||
         torrentHash.isEmpty ||

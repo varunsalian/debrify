@@ -1,9 +1,15 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
+import 'package:debrify/services/storage/webdav_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/analytics_service.dart';
 import '../services/main_page_bridge.dart';
-import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_theme_scope.dart';
 
@@ -160,43 +166,43 @@ class _CloudScreenState extends State<CloudScreen> {
   Future<List<_CloudProviderInfo>> _computeAvailableProviders() async {
     final keys = <String>{};
 
-    final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
-    final rdKey = await StorageService.getApiKey();
-    final rdHidden = await StorageService.getRealDebridHiddenFromNav();
+    final rdEnabled = await RealDebridStorage.getRealDebridIntegrationEnabled();
+    final rdKey = await RealDebridStorage.getApiKey();
+    final rdHidden = await RealDebridStorage.getRealDebridHiddenFromNav();
     if (rdEnabled && (rdKey?.isNotEmpty ?? false) && !rdHidden) {
       keys.add('realdebrid');
     }
 
-    final tbEnabled = await StorageService.getTorboxIntegrationEnabled();
-    final tbKey = await StorageService.getTorboxApiKey();
-    final tbHidden = await StorageService.getTorboxHiddenFromNav();
+    final tbEnabled = await TorboxStorage.getTorboxIntegrationEnabled();
+    final tbKey = await TorboxStorage.getTorboxApiKey();
+    final tbHidden = await TorboxStorage.getTorboxHiddenFromNav();
     if (tbEnabled && (tbKey?.isNotEmpty ?? false) && !tbHidden) {
       keys.add('torbox');
     }
 
-    final ppEnabled = await StorageService.getPikPakEnabled();
-    final ppHidden = await StorageService.getPikPakHiddenFromNav();
+    final ppEnabled = await PikpakStorage.getPikPakEnabled();
+    final ppHidden = await PikpakStorage.getPikPakHiddenFromNav();
     if (ppEnabled && !ppHidden) keys.add('pikpak');
 
-    final pmEnabled = await StorageService.getPremiumizeIntegrationEnabled();
-    final pmKey = await StorageService.getPremiumizeApiKey();
-    final pmHidden = await StorageService.getPremiumizeHiddenFromNav();
+    final pmEnabled = await PremiumizeStorage.getPremiumizeIntegrationEnabled();
+    final pmKey = await PremiumizeStorage.getPremiumizeApiKey();
+    final pmHidden = await PremiumizeStorage.getPremiumizeHiddenFromNav();
     if (pmEnabled && (pmKey?.isNotEmpty ?? false) && !pmHidden) {
       keys.add('premiumize');
     }
 
-    final adEnabled = await StorageService.getAllDebridIntegrationEnabled();
-    final adKey = await StorageService.getAllDebridApiKey();
-    final adHidden = await StorageService.getAllDebridHiddenFromNav();
+    final adEnabled = await AllDebridStorage.getAllDebridIntegrationEnabled();
+    final adKey = await AllDebridStorage.getAllDebridApiKey();
+    final adHidden = await AllDebridStorage.getAllDebridHiddenFromNav();
     if (adEnabled && (adKey?.isNotEmpty ?? false) && !adHidden) {
       keys.add('alldebrid');
     }
 
-    final webDavEnabled = await StorageService.getWebDavEnabled();
-    final webDavServers = await StorageService.getWebDavServers(
+    final webDavEnabled = await WebdavStorage.getWebDavEnabled();
+    final webDavServers = await WebdavServerStorage.getWebDavServers(
       forSettings: false,
     );
-    final wdHidden = await StorageService.getWebDavHiddenFromNav();
+    final wdHidden = await WebdavStorage.getWebDavHiddenFromNav();
     if (webDavEnabled && webDavServers.isNotEmpty && !wdHidden) {
       keys.add('webdav');
     }

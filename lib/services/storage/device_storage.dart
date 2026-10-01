@@ -3,13 +3,10 @@ import 'package:debrify/services/profiles/profile_preferences.dart';
 final class DeviceStorage {
   const DeviceStorage._();
   static const String _batteryOptStatusKey = 'battery_opt_status_v1';
-  static const String _supportRemoteConfigCacheKey =
-      'support_remote_config_cache_v1';
-  static const String _dismissedDonationCampaignIdsKey =
-      'dismissed_donation_campaign_ids_v1';
+  static const String _supportRemoteConfigCacheKey = 'support_remote_config_cache_v1';
+  static const String _dismissedDonationCampaignIdsKey = 'dismissed_donation_campaign_ids_v1';
   static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
-  static const String _updateIncludeAlphaEnabledKey =
-      'update_include_alpha_enabled';
+  static const String _updateIncludeAlphaEnabledKey = 'update_include_alpha_enabled';
   static const String _updateIgnoredVersionKey = 'update_ignored_version';
 
   // Battery optimization status
@@ -106,8 +103,7 @@ final class DeviceStorage {
 
   static Future<void> dismissDonationCampaign(String campaignId) async {
     final prefs = await DevicePreferences.instance();
-    final ids =
-        prefs.getStringList(_dismissedDonationCampaignIdsKey) ?? <String>[];
+    final ids = prefs.getStringList(_dismissedDonationCampaignIdsKey) ?? <String>[];
     if (ids.contains(campaignId)) return;
     ids.add(campaignId);
     await prefs.setStringList(_dismissedDonationCampaignIdsKey, ids);

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -199,7 +200,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         widget.initialSearchQuery!.isNotEmpty) {
       _isTorrentSearchActive = true;
       _torrentSearchController.text = widget.initialSearchQuery!;
-      StorageService.getRealDebridHiddenFromNav().then((v) {
+      RealDebridStorage.getRealDebridHiddenFromNav().then((v) {
         if (mounted) setState(() => _hiddenFromNav = v);
       });
     }
@@ -403,7 +404,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Future<void> _loadApiKeyAndData() async {
-    final apiKey = await StorageService.getApiKey();
+    final apiKey = await RealDebridStorage.getApiKey();
 
     if (mounted) {
       setState(() {
@@ -4408,7 +4409,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     try {
       // Get the default file selection preference
-      final fileSelection = await StorageService.getFileSelection();
+      final fileSelection = await RealDebridStorage.getFileSelection();
 
       // Add the magnet using the same logic as the torrent search screen
       await DebridService.addTorrentToDebrid(

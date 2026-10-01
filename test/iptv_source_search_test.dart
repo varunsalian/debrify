@@ -20,6 +20,7 @@ import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/series_source_fetcher.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_priority.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:flutter/material.dart';
@@ -1133,7 +1134,7 @@ void main() {
       final iptv = (await IptvSourceSearch.search(
         movie,
       )).single.torrents.single;
-      await StorageService.saveApiKey('rd-key');
+      await RealDebridStorage.saveApiKey('rd-key');
       await StorageService.setDefaultTorrentProvider('debrid');
       final commit = SourcePlayerLaunch.validatedSourceCommitterForTesting(
         SeriesSource.iptvDirectService,

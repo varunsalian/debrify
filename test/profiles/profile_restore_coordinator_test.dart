@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:debrify/models/indexer_manager_config.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/webdav_item.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_collection_resource_facade.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption.dart';
@@ -918,7 +919,7 @@ void main() {
       final List<IptvPlaylist> playlists =
           await StorageService.getIptvPlaylists(forSettings: false);
       expect(playlists.where((p) => !p.isVirtual), hasLength(2));
-      final List<WebDavConfig> servers = await StorageService.getWebDavServers(
+      final List<WebDavConfig> servers = await WebdavServerStorage.getWebDavServers(
         forSettings: false,
       );
       expect(servers, hasLength(1));

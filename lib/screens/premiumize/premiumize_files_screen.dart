@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../screens/video_player_screen.dart'; // re-exports PlaylistEntry
@@ -194,8 +195,8 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final enabled = await StorageService.getPremiumizeIntegrationEnabled();
-    final apiKey = await StorageService.getPremiumizeApiKey();
+    final enabled = await PremiumizeStorage.getPremiumizeIntegrationEnabled();
+    final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
 
     if (!mounted) return;
     setState(() {

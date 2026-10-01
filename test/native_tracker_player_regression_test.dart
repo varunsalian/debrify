@@ -8,6 +8,7 @@ import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
@@ -419,7 +420,7 @@ void main() {
   test(
     'native initial lazy URL rejects retirement during provider response',
     () async {
-      await StorageService.saveApiKey('original-rd');
+      await RealDebridStorage.saveApiKey('original-rd');
       var active = true;
       var requests = 0;
       final client = MockClient((request) async {

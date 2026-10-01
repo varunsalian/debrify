@@ -1,6 +1,11 @@
 import 'dart:async';
 
 import 'package:collection/collection.dart';
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -223,7 +228,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     } else {
       _debridProvider = debridProvider;
     }
-    _rdSkipBlockedTorrents = await StorageService.getRdSkipBlockedTorrents();
+    _rdSkipBlockedTorrents = await RealDebridStorage.getRdSkipBlockedTorrents();
     _torrentsFirst = await StorageService.getStremioTvTorrentsFirst();
     _maxStartPercent = await StorageService.getStremioTvMaxStartPercent();
     _hideNowPlaying = await StorageService.getStremioTvHideNowPlaying();
@@ -231,25 +236,25 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
   Future<List<MapEntry<String, String>>> _loadAvailableProviders() async {
     final providers = <MapEntry<String, String>>[];
-    final rdKey = await StorageService.getApiKey();
+    final rdKey = await RealDebridStorage.getApiKey();
     if (rdKey != null && rdKey.isNotEmpty) {
       providers.add(const MapEntry('realdebrid', 'Real-Debrid'));
     }
-    final tbKey = await StorageService.getTorboxApiKey();
+    final tbKey = await TorboxStorage.getTorboxApiKey();
     if (tbKey != null && tbKey.isNotEmpty) {
       providers.add(const MapEntry('torbox', 'TorBox'));
     }
-    final pikpakEnabled = await StorageService.getPikPakEnabled();
+    final pikpakEnabled = await PikpakStorage.getPikPakEnabled();
     if (pikpakEnabled) {
       providers.add(const MapEntry('pikpak', 'PikPak'));
     }
-    final pmEnabled = await StorageService.getPremiumizeIntegrationEnabled();
-    final pmKey = await StorageService.getPremiumizeApiKey();
+    final pmEnabled = await PremiumizeStorage.getPremiumizeIntegrationEnabled();
+    final pmKey = await PremiumizeStorage.getPremiumizeApiKey();
     if (pmEnabled && pmKey != null && pmKey.isNotEmpty) {
       providers.add(const MapEntry('premiumize', 'Premiumize'));
     }
-    final adEnabled = await StorageService.getAllDebridIntegrationEnabled();
-    final adKey = await StorageService.getAllDebridApiKey();
+    final adEnabled = await AllDebridStorage.getAllDebridIntegrationEnabled();
+    final adKey = await AllDebridStorage.getAllDebridApiKey();
     if (adEnabled && adKey != null && adKey.isNotEmpty) {
       providers.add(const MapEntry('alldebrid', 'AllDebrid'));
     }
@@ -1025,7 +1030,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       // For TorBox, filter torrent sources to only cached ones
       if (_debridProvider == 'torbox') {
-        final tbKey = await StorageService.getTorboxApiKey();
+        final tbKey = await TorboxStorage.getTorboxApiKey();
         if (tbKey != null && tbKey.isNotEmpty) {
           final torrentHashes = playableSources
               .where((t) => t.streamType == StreamType.torrent)
@@ -1067,7 +1072,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
       // For Premiumize, filter torrent sources to only cached ones
       if (_debridProvider == 'premiumize') {
-        final pmKey = await StorageService.getPremiumizeApiKey();
+        final pmKey = await PremiumizeStorage.getPremiumizeApiKey();
         if (pmKey != null && pmKey.isNotEmpty) {
           final torrentSources = playableSources
               .where((t) => t.streamType == StreamType.torrent)
@@ -1354,7 +1359,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     // TorBox cache filter
     if (_debridProvider == 'torbox') {
-      final tbKey = await StorageService.getTorboxApiKey();
+      final tbKey = await TorboxStorage.getTorboxApiKey();
       if (tbKey != null && tbKey.isNotEmpty) {
         final torrentHashes = playableSources
             .where((t) => t.streamType == StreamType.torrent)
@@ -1382,7 +1387,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
 
     // Premiumize cache filter
     if (_debridProvider == 'premiumize') {
-      final pmKey = await StorageService.getPremiumizeApiKey();
+      final pmKey = await PremiumizeStorage.getPremiumizeApiKey();
       if (pmKey != null && pmKey.isNotEmpty) {
         final torrentSources = playableSources
             .where((t) => t.streamType == StreamType.torrent)
@@ -1774,9 +1779,9 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             torrent.infohash.trim().toLowerCase(),
           );
         case 'premiumize':
-          return StorageService.getPremiumizeIntegrationEnabled();
+          return PremiumizeStorage.getPremiumizeIntegrationEnabled();
         case 'alldebrid':
-          return StorageService.getAllDebridIntegrationEnabled();
+          return AllDebridStorage.getAllDebridIntegrationEnabled();
         default:
           return true;
       }
@@ -1784,7 +1789,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     attempt: (provider) async {
       switch (provider) {
         case 'realdebrid':
-          final apiKey = await StorageService.getApiKey();
+          final apiKey = await RealDebridStorage.getApiKey();
           if (apiKey == null || apiKey.isEmpty) return null;
           return _resolveViaRealDebrid(
             torrent,
@@ -1794,7 +1799,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             episode: episode,
           );
         case 'torbox':
-          final apiKey = await StorageService.getTorboxApiKey();
+          final apiKey = await TorboxStorage.getTorboxApiKey();
           if (apiKey == null || apiKey.isEmpty) return null;
           return _resolveViaTorbox(
             torrent,
@@ -1805,7 +1810,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             isCancelled: isCancelled,
           );
         case 'pikpak':
-          if (!await StorageService.getPikPakEnabled()) return null;
+          if (!await PikpakStorage.getPikPakEnabled()) return null;
           return _resolveViaPikPak(
             torrent,
             item,
@@ -1814,7 +1819,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             isCancelled: isCancelled,
           );
         case 'premiumize':
-          final apiKey = await StorageService.getPremiumizeApiKey();
+          final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
           if (apiKey == null || apiKey.isEmpty) return null;
           return _resolveViaPremiumize(
             torrent,
@@ -1824,7 +1829,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             episode: episode,
           );
         case 'alldebrid':
-          final apiKey = await StorageService.getAllDebridApiKey();
+          final apiKey = await AllDebridStorage.getAllDebridApiKey();
           if (apiKey == null || apiKey.isEmpty) return null;
           return _resolveViaAllDebrid(
             torrent,
@@ -1844,7 +1849,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }) async {
     if (isCancelled?.call() ?? false) return const <String>{};
 
-    final apiKey = await StorageService.getTorboxApiKey();
+    final apiKey = await TorboxStorage.getTorboxApiKey();
     if (apiKey == null ||
         apiKey.isEmpty ||
         (isCancelled?.call() ?? false)) {

@@ -1,6 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/provider_credential_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import '../webdav_sync/webdav_foreground_sync.dart';
 
 import 'package:flutter/foundation.dart';
@@ -24,7 +30,6 @@ import '../../services/profiles/profile_restore_coordinator.dart';
 import '../../services/remote_control/remote_command_router.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
-import '../../services/storage_service.dart';
 import '../../services/torbox_account_service.dart';
 import '../../services/webdav_sync/webdav_sync_connect_controller.dart';
 import '../../services/webdav_sync/webdav_sync_models.dart';
@@ -568,20 +573,20 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
 
   Future<bool> _loginPikPak(String email, String password) async {
     final success = await PikPakApiService.instance.login(email, password);
-    if (success) await StorageService.setPikPakEnabled(true);
+    if (success) await PikpakStorage.setPikPakEnabled(true);
     return success;
   }
 
   Future<void> _hideProviderFromNavigation(IntegrationType type) async {
     switch (type) {
       case IntegrationType.realDebrid:
-        await StorageService.setRealDebridHiddenFromNav(true);
+        await RealDebridStorage.setRealDebridHiddenFromNav(true);
       case IntegrationType.torbox:
-        await StorageService.setTorboxHiddenFromNav(true);
+        await TorboxStorage.setTorboxHiddenFromNav(true);
       case IntegrationType.premiumize:
-        await StorageService.setPremiumizeHiddenFromNav(true);
+        await PremiumizeStorage.setPremiumizeHiddenFromNav(true);
       case IntegrationType.allDebrid:
-        await StorageService.setAllDebridHiddenFromNav(true);
+        await AllDebridStorage.setAllDebridHiddenFromNav(true);
       case IntegrationType.pikpak:
         return;
     }
@@ -614,7 +619,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
       builder: (_) => const PikPakFolderPickerDialog(),
     );
     if (result == null) return;
-    await StorageService.setPikPakRestrictedFolder(
+    await PikpakStorage.setPikPakRestrictedFolder(
       result['folderId'] as String?,
       result['folderName'] as String?,
     );
@@ -970,7 +975,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
     MainPageBridge.queuePostSetupSnackBar(
       'Setup skipped. Connect services any time in Settings › Services.',
     );
-    await StorageService.setInitialSetupComplete(true);
+    await ProviderCredentialStorage.setInitialSetupComplete(true);
     if (!mounted) return;
     Navigator.of(context).pop(false);
   }
@@ -978,7 +983,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   Future<void> _finish({Future<void> Function()? afterSetupComplete}) async {
     if (_finishing) return;
     _finishing = true;
-    await StorageService.setInitialSetupComplete(true);
+    await ProviderCredentialStorage.setInitialSetupComplete(true);
     await afterSetupComplete?.call();
     if (!mounted) return;
     Navigator.of(context).pop(_hasConfigured);

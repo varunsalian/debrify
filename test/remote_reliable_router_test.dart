@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'launch_animation/launch_package_test.dart' show packageBytes, animation;
 import 'package:debrify/services/launch_animation/launch_animation_library.dart';
 import 'dart:io';
@@ -372,7 +373,7 @@ void main() {
       Map<String, dynamic>? result;
       Object? failure;
       await tester.runAsync(() async {
-        await StorageService.setInitialSetupComplete(true);
+        await ProviderCredentialStorage.setInitialSetupComplete(true);
         final actor = await ProfileAuthorizationContext.capture(registry);
         await registry.createProfile(
           name: 'Second profile',

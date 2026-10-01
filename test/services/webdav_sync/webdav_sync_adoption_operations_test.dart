@@ -7,13 +7,13 @@ import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_data_generation.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_lifecycle.dart';
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_restore_coordinator.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_adoption_operations.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_models.dart';
 import 'package:debrify/utils/app_storage.dart';
@@ -118,7 +118,7 @@ void main() {
       );
       // Pin the actual generation check, without claiming validate checks it.
       await expectLater(
-        StorageService.isInitialSetupComplete(),
+        ProviderCredentialStorage.isInitialSetupComplete(),
         throwsStateError,
       );
       await (await ProfileAuthorizationContext.capture(
@@ -150,7 +150,10 @@ void main() {
             await (await ProfileAuthorizationContext.capture(
               registry,
             )).validate(registry);
-            expect(await StorageService.isInitialSetupComplete(), isFalse);
+            expect(
+              await ProviderCredentialStorage.isInitialSetupComplete(),
+              isFalse,
+            );
           },
         ),
         isTrue,

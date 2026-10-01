@@ -1,3 +1,9 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'local_validation_diagnostics.dart';
 import 'dart:convert';
 import 'dart:math';
@@ -72,12 +78,12 @@ class BackupRestoreService {
   static Future<Map<String, dynamic>> buildBackup({
     bool includeCredentials = true,
   }) async {
-    final realDebridKey = await StorageService.getApiKey();
-    final torboxKey = await StorageService.getTorboxApiKey();
-    final premiumizeKey = await StorageService.getPremiumizeApiKey();
-    final allDebridKey = await StorageService.getAllDebridApiKey();
-    final pikpakEmail = await StorageService.getPikPakEmail();
-    final pikpakPassword = await StorageService.getPikPakPassword();
+    final realDebridKey = await RealDebridStorage.getApiKey();
+    final torboxKey = await TorboxStorage.getTorboxApiKey();
+    final premiumizeKey = await PremiumizeStorage.getPremiumizeApiKey();
+    final allDebridKey = await AllDebridStorage.getAllDebridApiKey();
+    final pikpakEmail = await PikpakStorage.getPikPakEmail();
+    final pikpakPassword = await PikpakStorage.getPikPakPassword();
     final traktAccess = await StorageService.getTraktAccessToken();
     final traktRefresh = await StorageService.getTraktRefreshToken();
     final traktExpiry = await StorageService.getTraktTokenExpiry();
@@ -119,7 +125,7 @@ class BackupRestoreService {
 
     List<Map<String, dynamic>> webDavServers = const [];
     try {
-      final servers = await StorageService.getWebDavServers();
+      final servers = await WebdavServerStorage.getWebDavServers();
       webDavServers = servers.map((s) {
         final json = s.toTransferJson();
         if (!includeCredentials) json['password'] = '';
@@ -499,8 +505,8 @@ class BackupRestoreService {
       final key = map['realDebridApiKey'] as String?;
       if (key != null && key.isNotEmpty) {
         try {
-          await StorageService.saveApiKey(key);
-          await StorageService.setRealDebridIntegrationEnabled(true);
+          await RealDebridStorage.saveApiKey(key);
+          await RealDebridStorage.setRealDebridIntegrationEnabled(true);
           report.realDebrid = true;
         } catch (_) {
           report.errors.add('Real-Debrid: restore failed');
@@ -512,8 +518,8 @@ class BackupRestoreService {
       final key = map['torboxApiKey'] as String?;
       if (key != null && key.isNotEmpty) {
         try {
-          await StorageService.saveTorboxApiKey(key);
-          await StorageService.setTorboxIntegrationEnabled(true);
+          await TorboxStorage.saveTorboxApiKey(key);
+          await TorboxStorage.setTorboxIntegrationEnabled(true);
           report.torbox = true;
         } catch (_) {
           report.errors.add('Torbox: restore failed');
@@ -525,8 +531,8 @@ class BackupRestoreService {
       final key = map['premiumizeApiKey'] as String?;
       if (key != null && key.isNotEmpty) {
         try {
-          await StorageService.savePremiumizeApiKey(key);
-          await StorageService.setPremiumizeIntegrationEnabled(true);
+          await PremiumizeStorage.savePremiumizeApiKey(key);
+          await PremiumizeStorage.setPremiumizeIntegrationEnabled(true);
           report.premiumize = true;
         } catch (_) {
           report.errors.add('Premiumize: restore failed');
@@ -538,8 +544,8 @@ class BackupRestoreService {
       final key = map['allDebridApiKey'] as String?;
       if (key != null && key.isNotEmpty) {
         try {
-          await StorageService.saveAllDebridApiKey(key);
-          await StorageService.setAllDebridIntegrationEnabled(true);
+          await AllDebridStorage.saveAllDebridApiKey(key);
+          await AllDebridStorage.setAllDebridIntegrationEnabled(true);
           report.allDebrid = true;
         } catch (_) {
           report.errors.add('AllDebrid: restore failed');
@@ -554,11 +560,11 @@ class BackupRestoreService {
         final password = pp['password'] as String?;
         if (email != null && email.isNotEmpty) {
           try {
-            await StorageService.setPikPakEmail(email);
+            await PikpakStorage.setPikPakEmail(email);
             if (password != null && password.isNotEmpty) {
-              await StorageService.setPikPakPassword(password);
+              await PikpakStorage.setPikPakPassword(password);
             }
-            await StorageService.setPikPakEnabled(true);
+            await PikpakStorage.setPikPakEnabled(true);
             // PikPak needs an active session, not just stored credentials —
             // run a real login so isAuthenticated() returns true after
             // restore. If it fails (e.g. offline), the credentials remain
@@ -824,7 +830,7 @@ class BackupRestoreService {
     RestoreReport report,
   ) async {
     try {
-      final existing = await StorageService.getWebDavServers();
+      final existing = await WebdavServerStorage.getWebDavServers();
       final existingUrls = <String>{
         for (final s in existing) _normalizeUrl(s.baseUrl),
       };
@@ -856,7 +862,7 @@ class BackupRestoreService {
         }
       }
       if (report.webDavServersImported > 0) {
-        await StorageService.saveWebDavServers(merged);
+        await WebdavServerStorage.saveWebDavServers(merged);
         // setWebDavEnabled is handled inside saveWebDavServers.
       }
     } catch (_) {

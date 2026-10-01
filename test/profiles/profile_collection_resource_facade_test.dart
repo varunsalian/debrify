@@ -17,6 +17,8 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/pikpak_api_service.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/screens/settings/provider_settings_page.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -348,7 +350,7 @@ void main() {
           ],
         ),
       );
-      await StorageService.setPikPakEnabled(true);
+      await PikpakStorage.setPikPakEnabled(true);
 
       final presence = await ProfileCredentialFacade.isConfigured(
         'pikpak_email',
@@ -356,15 +358,15 @@ void main() {
 
       expect(presence.pending, isTrue);
       expect(presence.configured, isFalse);
-      expect(await StorageService.hasPikPakCredential(), isFalse);
-      expect(await StorageService.getPikPakEnabled(), isFalse);
+      expect(await PikpakStorage.hasPikPakCredential(), isFalse);
+      expect(await PikpakStorage.getPikPakEnabled(), isFalse);
     },
   );
 
   test('PikPak selection requires authentication and a ready secret', () async {
-    await StorageService.setPikPakEmail('ready@example.test');
-    await StorageService.setPikPakAccessToken('access-token');
-    await StorageService.setPikPakRefreshToken('refresh-token');
+    await PikpakStorage.setPikPakEmail('ready@example.test');
+    await PikpakStorage.setPikPakAccessToken('access-token');
+    await PikpakStorage.setPikPakRefreshToken('refresh-token');
     final authenticated = await PikPakApiService.instance.isAuthenticated();
     final readyPresence = await ProfileCredentialFacade.isConfigured(
       'pikpak_email',
@@ -390,11 +392,11 @@ void main() {
 
     ProfileRuntime.debugReset();
     ProfileRuntime.initializeLegacy();
-    await StorageService.setPikPakEmail('restored@example.test');
+    await PikpakStorage.setPikPakEmail('restored@example.test');
     final restoredAuthentication = await PikPakApiService.instance
         .isAuthenticated();
 
-    expect(await StorageService.getPikPakEmail(), 'restored@example.test');
+    expect(await PikpakStorage.getPikPakEmail(), 'restored@example.test');
     expect(restoredAuthentication, isFalse);
     expect(
       pikPakProviderIsSelectable(
@@ -806,7 +808,7 @@ void main() {
   });
 
   test('WebDAV save selects and returns its canonical connection', () async {
-    final saved = await StorageService.upsertWebDavServer(
+    final saved = await WebdavServerStorage.upsertWebDavServer(
       const WebDavConfig(
         id: 'editor-temporary-id',
         name: 'Media DAV',
@@ -818,7 +820,7 @@ void main() {
 
     expect(saved.id, saved.connectionResourceId);
     expect(saved.connectionResourceRevision, isNotNull);
-    expect(await StorageService.getSelectedWebDavServerId(), saved.id);
+    expect(await WebdavServerStorage.getSelectedWebDavServerId(), saved.id);
     await ProfileCollectionResourceFacade.authorizeExecution(
       resourceId: saved.connectionResourceId,
       resourceRevision: saved.connectionResourceRevision,
@@ -828,7 +830,7 @@ void main() {
       feature: ProfileFeature.cloud,
     );
 
-    final edited = await StorageService.upsertWebDavServer(
+    final edited = await WebdavServerStorage.upsertWebDavServer(
       WebDavConfig(
         id: saved.id,
         name: 'Media DAV edited',
@@ -843,15 +845,15 @@ void main() {
       greaterThan(saved.connectionResourceRevision!),
     );
 
-    await StorageService.deleteWebDavServer(edited.id);
-    expect(await StorageService.getWebDavServers(), isEmpty);
-    expect(await StorageService.getSelectedWebDavServerId(), isNull);
+    await WebdavServerStorage.deleteWebDavServer(edited.id);
+    expect(await WebdavServerStorage.getWebDavServers(), isEmpty);
+    expect(await WebdavServerStorage.getSelectedWebDavServerId(), isNull);
   });
 
   test(
     'WebDAV migration reads use backupRestore independently of cloud',
     () async {
-      final saved = await StorageService.upsertWebDavServer(
+      final saved = await WebdavServerStorage.upsertWebDavServer(
         const WebDavConfig(
           id: 'migration-dav',
           name: 'Migration DAV',
@@ -883,24 +885,24 @@ void main() {
       );
 
       await expectLater(
-        StorageService.getWebDavServers(forSettings: false),
+        WebdavServerStorage.getWebDavServers(forSettings: false),
         throwsA(isA<ResourceAuthorizationException>()),
       );
-      final migrationServers = await StorageService.getWebDavServers(
+      final migrationServers = await WebdavServerStorage.getWebDavServers(
         forSettings: false,
         feature: ProfileFeature.backupRestore,
       );
       expect(migrationServers, hasLength(1));
       expect(migrationServers.single.password, 'migration-password');
       expect(
-        (await StorageService.getSelectedWebDavServer(
+        (await WebdavServerStorage.getSelectedWebDavServer(
           forSettings: false,
           feature: ProfileFeature.backupRestore,
         ))?.connectionResourceId,
         saved.connectionResourceId,
       );
 
-      final createdForMigration = await StorageService.upsertWebDavServer(
+      final createdForMigration = await WebdavServerStorage.upsertWebDavServer(
         const WebDavConfig(
           id: 'new-migration-dav',
           name: 'New migration destination',
@@ -913,19 +915,19 @@ void main() {
       expect(createdForMigration.connectionResourceId, isNotNull);
       expect(createdForMigration.password, 'new-password');
       expect(
-        await StorageService.getWebDavServers(
+        await WebdavServerStorage.getWebDavServers(
           forSettings: false,
           feature: ProfileFeature.backupRestore,
         ),
         hasLength(2),
       );
 
-      await StorageService.deleteWebDavServer(
+      await WebdavServerStorage.deleteWebDavServer(
         createdForMigration.id,
         feature: ProfileFeature.backupRestore,
       );
       expect(
-        await StorageService.getWebDavServers(
+        await WebdavServerStorage.getWebDavServers(
           forSettings: false,
           feature: ProfileFeature.backupRestore,
         ),
@@ -937,7 +939,7 @@ void main() {
   test(
     'a shared WebDAV connection does not block unrelated mutations',
     () async {
-      final shared = await StorageService.upsertWebDavServer(
+      final shared = await WebdavServerStorage.upsertWebDavServer(
         const WebDavConfig(
           id: 'shared-editor-id',
           name: 'Shared DAV',
@@ -953,7 +955,7 @@ void main() {
         permissions: const <ResourcePermission>{ResourcePermission.use},
       );
 
-      final unrelated = await StorageService.upsertWebDavServer(
+      final unrelated = await WebdavServerStorage.upsertWebDavServer(
         const WebDavConfig(
           id: 'unrelated-editor-id',
           name: 'Private DAV',
@@ -962,10 +964,10 @@ void main() {
           password: 'private-password',
         ),
       );
-      expect(await StorageService.getWebDavServers(), hasLength(2));
+      expect(await WebdavServerStorage.getWebDavServers(), hasLength(2));
 
-      await StorageService.deleteWebDavServer(unrelated.id);
-      final remaining = await StorageService.getWebDavServers();
+      await WebdavServerStorage.deleteWebDavServer(unrelated.id);
+      final remaining = await WebdavServerStorage.getWebDavServers();
       expect(remaining, hasLength(1));
       expect(
         remaining.single.connectionResourceId,
@@ -977,10 +979,10 @@ void main() {
       );
 
       await expectLater(
-        StorageService.deleteWebDavServer(shared.id),
+        WebdavServerStorage.deleteWebDavServer(shared.id),
         throwsA(isA<StateError>()),
       );
-      expect(await StorageService.getWebDavServers(), hasLength(1));
+      expect(await WebdavServerStorage.getWebDavServers(), hasLength(1));
     },
   );
 

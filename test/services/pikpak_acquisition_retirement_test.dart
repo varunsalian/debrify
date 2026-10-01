@@ -3,7 +3,7 @@ import 'dart:async';
 
 import 'package:debrify/services/pikpak_api_service.dart';
 import 'package:debrify/services/secret_vault.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -64,11 +64,8 @@ void main() {
             );
           }, () => client);
           expect(paths, hasLength(1));
-          expect(await StorageService.getPikPakAccessToken(), 'access-before');
-          expect(
-            await StorageService.getPikPakCaptchaToken(),
-            'captcha-before',
-          );
+          expect(await PikpakStorage.getPikPakAccessToken(), 'access-before');
+          expect(await PikpakStorage.getPikPakCaptchaToken(), 'captcha-before');
         },
       );
     }
@@ -132,10 +129,10 @@ void main() {
           }, () => client);
           expect(paths, hasLength(retired ? 2 : 3));
           if (renewal == 'token') {
-            expect(await StorageService.getPikPakAccessToken(), 'access-after');
+            expect(await PikpakStorage.getPikPakAccessToken(), 'access-after');
           } else {
             expect(
-              await StorageService.getPikPakCaptchaToken(),
+              await PikpakStorage.getPikPakCaptchaToken(),
               retired ? null : 'captcha-after',
             );
             // Let the service's existing completed-captcha retention expire.
@@ -184,18 +181,18 @@ void main() {
       });
       addTearDown(client.close);
       await http.runWithClient(() async {
-        await StorageService.setPikPakDeviceId('device-one');
+        await PikpakStorage.setPikPakDeviceId('device-one');
         final first = invoke('file', () => true);
         await entered[0].future.timeout(const Duration(seconds: 5));
-        await StorageService.setPikPakDeviceId('device-two');
+        await PikpakStorage.setPikPakDeviceId('device-two');
         final second = invoke('file', () => true);
         await entered[1].future.timeout(const Duration(seconds: 5));
         // Request headers are reloaded on retry; restore each caller's device
         // before releasing its independently acquired token.
-        await StorageService.setPikPakDeviceId('device-one');
+        await PikpakStorage.setPikPakDeviceId('device-one');
         release[0].complete();
         expect(await first, {'id': 'file'});
-        await StorageService.setPikPakDeviceId('device-two');
+        await PikpakStorage.setPikPakDeviceId('device-two');
         release[1].complete();
         expect(await second, {'id': 'file'});
       }, () => client);

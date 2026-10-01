@@ -1,7 +1,8 @@
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import '../../../services/premiumize_service.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/torbox_service.dart';
 import 'source_cache_repository.dart';
 
@@ -31,12 +32,12 @@ class DebridSourceCacheRepository implements SourceCacheRepository {
   Future<SourceCacheSession> open() async {
     if (!isCurrent) throw StateError('Retired source cache session');
     Future<List<Object?>> read() => Future.wait([
-      StorageService.getTorboxCacheCheckEnabled(),
-      StorageService.getTorboxIntegrationEnabled(),
-      StorageService.getTorboxApiKey(),
-      StorageService.getPremiumizeCacheCheckEnabled(),
-      StorageService.getPremiumizeIntegrationEnabled(),
-      StorageService.getPremiumizeApiKey(),
+      TorboxStorage.getTorboxCacheCheckEnabled(),
+      TorboxStorage.getTorboxIntegrationEnabled(),
+      TorboxStorage.getTorboxApiKey(),
+      PremiumizeStorage.getPremiumizeCacheCheckEnabled(),
+      PremiumizeStorage.getPremiumizeIntegrationEnabled(),
+      PremiumizeStorage.getPremiumizeApiKey(),
     ]);
     final scope = owner.scope;
     final values = await (scope == null

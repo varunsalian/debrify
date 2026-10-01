@@ -1,7 +1,7 @@
+import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:flutter/foundation.dart';
 import '../models/rd_user.dart';
 import '../services/debrid_service.dart';
-import '../services/storage_service.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_async_authorization.dart';
 import 'profiles/connection_resource_service.dart';
@@ -47,7 +47,7 @@ class AccountService {
       if (result['success'] == true) {
         if (capability != null && !capability.isCurrentlyActive) return false;
         Future<void> commit() async {
-          await StorageService.saveApiKey(apiKey);
+          await RealDebridStorage.saveApiKey(apiKey);
           if (capability == null || capability.isCurrentlyActive) {
             _setCurrentUser(result['user'] as RDUser);
           }
@@ -78,7 +78,7 @@ class AccountService {
   // Check if API key exists and is valid
   static Future<bool> isApiKeyValid() async {
     try {
-      final apiKey = await StorageService.getApiKey();
+      final apiKey = await RealDebridStorage.getApiKey();
       if (apiKey == null || apiKey.isEmpty) return false;
       return validateAndGetUserInfo(apiKey);
     } on ResourceAuthorizationException {
@@ -96,7 +96,7 @@ class AccountService {
   // Refresh user info
   static Future<bool> refreshUserInfo() async {
     try {
-      final apiKey = await StorageService.getApiKey();
+      final apiKey = await RealDebridStorage.getApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         _setCurrentUser(null);
         return false;

@@ -1,4 +1,9 @@
 import 'dart:async';
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
@@ -1596,13 +1601,13 @@ class TraktResultsViewState extends State<TraktResultsView> {
 
   /// Show the add-source picker with every configured cloud provider.
   Future<void> _showAddSourcePicker(StremioMeta item, String imdbId) async {
-    final rdKey = await StorageService.getApiKey();
-    final torboxKey = await StorageService.getTorboxApiKey();
-    final premiumizeKey = await StorageService.getPremiumizeApiKey();
+    final rdKey = await RealDebridStorage.getApiKey();
+    final torboxKey = await TorboxStorage.getTorboxApiKey();
+    final premiumizeKey = await PremiumizeStorage.getPremiumizeApiKey();
     final premiumizeIntegration =
-        await StorageService.getPremiumizeIntegrationEnabled();
-    final allDebridKey = await StorageService.getAllDebridApiKey();
-    final pikpakEnabled = await StorageService.getPikPakEnabled();
+        await PremiumizeStorage.getPremiumizeIntegrationEnabled();
+    final allDebridKey = await AllDebridStorage.getAllDebridApiKey();
+    final pikpakEnabled = await PikpakStorage.getPikPakEnabled();
     final rdEnabled = rdKey != null && rdKey.isNotEmpty;
     final torboxEnabled = torboxKey != null && torboxKey.isNotEmpty;
     final premiumizeEnabled =

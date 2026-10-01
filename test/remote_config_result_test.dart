@@ -18,10 +18,11 @@ import 'package:debrify/services/remote_control/remote_reliable_transfer.dart';
 import 'package:debrify/services/remote_control/remote_session.dart';
 import 'package:debrify/services/remote_control/remote_transfer_encoding.dart';
 import 'package:debrify/services/remote_control/udp_command_service.dart';
+import 'package:debrify/services/storage/provider_credential_storage.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -205,7 +206,7 @@ void main() {
         var finished = false;
         await tester.runAsync(() async {
           if (scenario.existingLogin) {
-            await StorageService.saveWebDavServers(const [
+            await WebdavServerStorage.saveWebDavServers(const [
               WebDavConfig(
                 id: 'media',
                 name: 'Existing media account',
@@ -215,7 +216,7 @@ void main() {
               ),
             ]);
           }
-          await StorageService.setInitialSetupComplete(!onboarding);
+          await ProviderCredentialStorage.setInitialSetupComplete(!onboarding);
           await command(
             ConfigCommand.remoteTransferStart,
             remoteTransferRequestBody(requestId),
@@ -329,7 +330,7 @@ void main() {
           await tester.tap(find.text('Not now'));
           await tester.pumpAndSettle();
           final servers = await tester.runAsync(
-            StorageService.getWebDavServers,
+            WebdavServerStorage.getWebDavServers,
           );
           final imported = servers!.singleWhere(
             (server) => server.name == 'Imported account',

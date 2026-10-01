@@ -10,7 +10,11 @@ import 'package:debrify/features/sources/presentation/source_download_action.dar
 import 'package:debrify/features/sources/presentation/source_download_picker.dart';
 import 'package:debrify/models/playback_meta.dart';
 import 'package:debrify/models/torrent.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/material.dart';
 
 final class ProviderAcceptedActions {
@@ -128,15 +132,15 @@ final class ProviderAcceptedActions {
   static Future<String> postAction(String provider) async {
     switch (provider) {
       case 'torbox':
-        return StorageService.getTorboxPostTorrentAction();
+        return TorboxStorage.getTorboxPostTorrentAction();
       case 'premiumize':
-        return StorageService.getPremiumizePostTorrentAction();
+        return PremiumizeStorage.getPremiumizePostTorrentAction();
       case 'alldebrid':
-        return StorageService.getAllDebridPostTorrentAction();
+        return AllDebridStorage.getAllDebridPostTorrentAction();
       case 'pikpak':
-        return StorageService.getPikPakPostTorrentAction();
+        return PikpakStorage.getPikPakPostTorrentAction();
       default:
-        return StorageService.getPostTorrentAction();
+        return RealDebridStorage.getPostTorrentAction();
     }
   }
 }

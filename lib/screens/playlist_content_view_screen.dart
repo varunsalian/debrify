@@ -1,5 +1,10 @@
 import 'dart:async';
 
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -346,7 +351,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       throw Exception('No Real-Debrid torrent ID found');
     }
 
-    final apiKey = await StorageService.getApiKey();
+    final apiKey = await RealDebridStorage.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('No API key configured');
     }
@@ -372,7 +377,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     if (torrentHash == null || torrentHash.isEmpty) {
       throw Exception('No AllDebrid magnet info found');
     }
-    final apiKey = await StorageService.getAllDebridApiKey();
+    final apiKey = await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('No AllDebrid API key configured');
     }
@@ -408,7 +413,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       throw Exception('No Torbox torrent ID found');
     }
 
-    final String? apiKey = await StorageService.getTorboxApiKey();
+    final String? apiKey = await TorboxStorage.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('Please set your Torbox API key in Settings');
     }
@@ -586,7 +591,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       throw Exception('No Premiumize torrent hash found');
     }
 
-    final apiKey = await StorageService.getPremiumizeApiKey();
+    final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('Please set your Premiumize API key in Settings');
     }
@@ -3489,7 +3494,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     List<RDFileNode> videoFiles,
     int startIndex,
   ) async {
-    final String? apiKey = await StorageService.getApiKey();
+    final String? apiKey = await RealDebridStorage.getApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('Please set your Real-Debrid API key in Settings');
     }
@@ -3601,7 +3606,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     List<RDFileNode> videoFiles,
     int startIndex,
   ) async {
-    final apiKey = await StorageService.getAllDebridApiKey();
+    final apiKey = await AllDebridStorage.getAllDebridApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('Please set your AllDebrid API key in Settings');
     }
@@ -3669,7 +3674,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     List<RDFileNode> videoFiles,
     int startIndex,
   ) async {
-    final String? apiKey = await StorageService.getTorboxApiKey();
+    final String? apiKey = await TorboxStorage.getTorboxApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('Please set your Torbox API key in Settings');
     }
@@ -3879,7 +3884,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     int startIndex,
   ) async {
     final infohash = (widget.playlistItem['torrent_hash'] as String?)?.trim();
-    final apiKey = await StorageService.getPremiumizeApiKey();
+    final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('Please set your Premiumize API key in Settings');
     }
@@ -4070,7 +4075,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   Future<WebDavConfig?> _resolveWebDavConfig() async {
     final serverId = (widget.playlistItem['webdavServerId'] ?? '').toString();
     final baseUrl = (widget.playlistItem['webdavBaseUrl'] ?? '').toString();
-    final servers = await StorageService.getWebDavServers(forSettings: false);
+    final servers = await WebdavServerStorage.getWebDavServers(
+      forSettings: false,
+    );
     for (final server in servers) {
       if (serverId.isNotEmpty && server.id == serverId) return server;
     }

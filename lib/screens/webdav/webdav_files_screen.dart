@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/webdav_server_storage.dart';
+import 'package:debrify/services/storage/webdav_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -52,13 +54,13 @@ class WebDavFilesDataSource {
   Future<WebDavConfig?> loadSelectedConfig() =>
       WebDavService.getConfig(feature: feature);
 
-  Future<bool> loadShowVideosOnly() => StorageService.getWebDavShowVideosOnly();
+  Future<bool> loadShowVideosOnly() => WebdavStorage.getWebDavShowVideosOnly();
 
   Future<List<WebDavItem>> listDirectory(WebDavConfig config, String path) =>
       WebDavService.listDirectory(config: config, path: path, feature: feature);
 
   Future<void> selectConfig(String id) =>
-      StorageService.setSelectedWebDavServerId(id);
+      WebdavServerStorage.setSelectedWebDavServerId(id);
 }
 
 class WebDavFilesScreen extends StatefulWidget {

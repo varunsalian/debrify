@@ -2,6 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -137,34 +143,36 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     });
 
     try {
-      final realDebridApiKey = await StorageService.getApiKey(
+      final realDebridApiKey = await RealDebridStorage.getApiKey(
         forRemoteTransfer: true,
       );
-      final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
+      final rdEnabled =
+          await RealDebridStorage.getRealDebridIntegrationEnabled();
       final hasRd = (realDebridApiKey?.isNotEmpty ?? false) && rdEnabled;
 
-      final torboxApiKey = await StorageService.getTorboxApiKey(
+      final torboxApiKey = await TorboxStorage.getTorboxApiKey(
         forRemoteTransfer: true,
       );
-      final tbEnabled = await StorageService.getTorboxIntegrationEnabled();
+      final tbEnabled = await TorboxStorage.getTorboxIntegrationEnabled();
       final hasTb = (torboxApiKey?.isNotEmpty ?? false) && tbEnabled;
 
-      final premiumizeApiKey = await StorageService.getPremiumizeApiKey(
+      final premiumizeApiKey = await PremiumizeStorage.getPremiumizeApiKey(
         forRemoteTransfer: true,
       );
-      final pmEnabled = await StorageService.getPremiumizeIntegrationEnabled();
+      final pmEnabled =
+          await PremiumizeStorage.getPremiumizeIntegrationEnabled();
       final hasPm = (premiumizeApiKey?.isNotEmpty ?? false) && pmEnabled;
 
-      final allDebridApiKey = await StorageService.getAllDebridApiKey(
+      final allDebridApiKey = await AllDebridStorage.getAllDebridApiKey(
         forRemoteTransfer: true,
       );
-      final adEnabled = await StorageService.getAllDebridIntegrationEnabled();
+      final adEnabled = await AllDebridStorage.getAllDebridIntegrationEnabled();
       final hasAd = (allDebridApiKey?.isNotEmpty ?? false) && adEnabled;
 
-      final pikpakEmail = await StorageService.getPikPakEmail(
+      final pikpakEmail = await PikpakStorage.getPikPakEmail(
         forRemoteTransfer: true,
       );
-      final ppEnabled = await StorageService.getPikPakEnabled();
+      final ppEnabled = await PikpakStorage.getPikPakEnabled();
       final hasPp = (pikpakEmail?.isNotEmpty ?? false) && ppEnabled;
 
       final traktAccessToken = await StorageService.getTraktAccessToken(
@@ -206,7 +214,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       }
 
       try {
-        final servers = await StorageService.getWebDavServers(
+        final servers = await WebdavServerStorage.getWebDavServers(
           forSettings: false,
           forRemoteTransfer: true,
         );
@@ -1177,25 +1185,25 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       case ConfigCommand.realDebrid:
         return sendScalar(
           ConfigCommand.realDebrid,
-          () => StorageService.getApiKey(forRemoteTransfer: true),
+          () => RealDebridStorage.getApiKey(forRemoteTransfer: true),
         );
       case ConfigCommand.torbox:
         return sendScalar(
           ConfigCommand.torbox,
-          () => StorageService.getTorboxApiKey(forRemoteTransfer: true),
+          () => TorboxStorage.getTorboxApiKey(forRemoteTransfer: true),
         );
       case ConfigCommand.premiumize:
         return sendScalar(
           ConfigCommand.premiumize,
-          () => StorageService.getPremiumizeApiKey(forRemoteTransfer: true),
+          () => PremiumizeStorage.getPremiumizeApiKey(forRemoteTransfer: true),
         );
       case ConfigCommand.allDebrid:
         return sendScalar(
           ConfigCommand.allDebrid,
-          () => StorageService.getAllDebridApiKey(forRemoteTransfer: true),
+          () => AllDebridStorage.getAllDebridApiKey(forRemoteTransfer: true),
         );
       case ConfigCommand.pikpak:
-        final email = await StorageService.getPikPakEmail(
+        final email = await PikpakStorage.getPikPakEmail(
           forRemoteTransfer: true,
         );
         if (email == null || email.isEmpty) return false;
@@ -1287,7 +1295,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           configData: transferData(jsonEncode(engineIds)),
         );
       case ConfigCommand.webDav:
-        final servers = await StorageService.getWebDavServers(
+        final servers = await WebdavServerStorage.getWebDavServers(
           forSettings: false,
           forRemoteTransfer: true,
         );

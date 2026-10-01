@@ -1,3 +1,8 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/metadata/metadata_presentation_cache.dart';
@@ -239,15 +244,17 @@ final homePikpakOnlyRepositoryProvider = Provider.autoDispose
                 current();
         return HomePikpakOnlyRepository(
           readPikpakEnabled: (current) =>
-              StorageService.getPikPakEnabled(canContinue: guarded(current)),
+              PikpakStorage.getPikPakEnabled(canContinue: guarded(current)),
           readRealDebrid: (current) =>
-              StorageService.getApiKey(canContinue: guarded(current)),
+              RealDebridStorage.getApiKey(canContinue: guarded(current)),
           readTorbox: (current) =>
-              StorageService.getTorboxApiKey(canContinue: guarded(current)),
-          readPremiumize: (current) =>
-              StorageService.getPremiumizeApiKey(canContinue: guarded(current)),
-          readAllDebrid: (current) =>
-              StorageService.getAllDebridApiKey(canContinue: guarded(current)),
+              TorboxStorage.getTorboxApiKey(canContinue: guarded(current)),
+          readPremiumize: (current) => PremiumizeStorage.getPremiumizeApiKey(
+            canContinue: guarded(current),
+          ),
+          readAllDebrid: (current) => AllDebridStorage.getAllDebridApiKey(
+            canContinue: guarded(current),
+          ),
         );
       },
       retry: (count, error) => null,

@@ -1,6 +1,6 @@
+import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:flutter/foundation.dart';
 import '../models/premiumize_user.dart';
-import '../services/storage_service.dart';
 import '../services/premiumize_service.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_async_authorization.dart';
@@ -49,7 +49,7 @@ class PremiumizeAccountService {
       }
       if (capability != null && !capability.isCurrentlyActive) return false;
       Future<void> commit() async {
-        if (persist) await StorageService.savePremiumizeApiKey(apiKey);
+        if (persist) await PremiumizeStorage.savePremiumizeApiKey(apiKey);
         if (capability == null || capability.isCurrentlyActive) {
           _setCurrentUser(user);
         }
@@ -72,7 +72,7 @@ class PremiumizeAccountService {
 
   static Future<bool> isApiKeyValid() async {
     try {
-      final apiKey = await StorageService.getPremiumizeApiKey();
+      final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
       if (apiKey == null || apiKey.isEmpty) return false;
       return validateAndGetUserInfo(apiKey, persist: false);
     } on ResourceAuthorizationException {
@@ -89,7 +89,7 @@ class PremiumizeAccountService {
 
   static Future<bool> refreshUserInfo() async {
     try {
-      final apiKey = await StorageService.getPremiumizeApiKey();
+      final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         _setCurrentUser(null);
         return false;

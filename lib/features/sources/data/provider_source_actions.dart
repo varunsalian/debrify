@@ -1,5 +1,9 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import '../../../models/playlist_entry.dart';
 import '../../../services/alldebrid_service.dart';
 import '../../../services/debrid_service.dart';
@@ -7,7 +11,6 @@ import '../../../services/download_service.dart';
 import '../../../services/premiumize_service.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/torbox_service.dart';
 import 'source_acquisition_cleanup.dart';
 
@@ -113,7 +116,7 @@ class ProviderSourceActions {
     try {
       if (entry.restrictedLink?.isNotEmpty == true) {
         final key =
-            (await StorageService.getApiKey(canContinue: () => isCurrent)) ??
+            (await RealDebridStorage.getApiKey(canContinue: () => isCurrent)) ??
             '';
         _check();
         final result = await DebridService.unrestrictLink(
@@ -125,7 +128,7 @@ class ProviderSourceActions {
       }
       if (entry.torboxTorrentId != null && entry.torboxFileId != null) {
         final key =
-            (await StorageService.getTorboxApiKey(
+            (await TorboxStorage.getTorboxApiKey(
               canContinue: () => isCurrent,
             )) ??
             '';
@@ -139,7 +142,7 @@ class ProviderSourceActions {
       }
       if (entry.allDebridLink?.isNotEmpty == true) {
         final key =
-            (await StorageService.getAllDebridApiKey(
+            (await AllDebridStorage.getAllDebridApiKey(
               canContinue: () => isCurrent,
             )) ??
             '';
@@ -156,7 +159,7 @@ class ProviderSourceActions {
 
   Future<String?> torboxZipUrl(int torrentId) => _owned(() async {
     final key =
-        (await StorageService.getTorboxApiKey(canContinue: () => isCurrent)) ??
+        (await TorboxStorage.getTorboxApiKey(canContinue: () => isCurrent)) ??
         '';
     _check();
     return key.isEmpty
@@ -184,7 +187,7 @@ class ProviderSourceActions {
 
   Future<bool> transferPremiumize(String magnet) => _owned(() async {
     final key =
-        (await StorageService.getPremiumizeApiKey(
+        (await PremiumizeStorage.getPremiumizeApiKey(
           canContinue: () => isCurrent,
         )) ??
         '';
@@ -199,7 +202,7 @@ class ProviderSourceActions {
     void Function()? onStarted,
   }) => _owned(() async {
     final key =
-        (await StorageService.getPremiumizeApiKey(
+        (await PremiumizeStorage.getPremiumizeApiKey(
           canContinue: () => isCurrent,
         )) ??
         '';
@@ -229,9 +232,7 @@ class ProviderSourceActions {
     // RD/AllDebrid already added the item; only these two need a new request.
     if (provider == 'torbox') {
       final key =
-          (await StorageService.getTorboxApiKey(
-            canContinue: () => isCurrent,
-          )) ??
+          (await TorboxStorage.getTorboxApiKey(canContinue: () => isCurrent)) ??
           '';
       _check();
       try {
@@ -244,7 +245,7 @@ class ProviderSourceActions {
       } catch (_) {}
     } else if (provider == 'premiumize') {
       final key =
-          (await StorageService.getPremiumizeApiKey(
+          (await PremiumizeStorage.getPremiumizeApiKey(
             canContinue: () => isCurrent,
           )) ??
           '';

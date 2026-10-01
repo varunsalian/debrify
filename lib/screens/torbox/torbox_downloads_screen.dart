@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:ui';
 
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -243,7 +244,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         widget.initialSearchQuery!.isNotEmpty) {
       _isTorrentSearchActive = true;
       _torrentSearchController.text = widget.initialSearchQuery!;
-      StorageService.getTorboxHiddenFromNav().then((v) {
+      TorboxStorage.getTorboxHiddenFromNav().then((v) {
         if (mounted) setState(() => _hiddenFromNav = v);
       });
     }
@@ -1153,7 +1154,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   }
 
   Future<void> _loadApiKeyAndTorrents() async {
-    final key = await StorageService.getTorboxApiKey();
+    final key = await TorboxStorage.getTorboxApiKey();
     if (!mounted) return;
 
     setState(() {

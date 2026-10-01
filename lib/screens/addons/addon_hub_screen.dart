@@ -1,6 +1,10 @@
 import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
@@ -17,7 +21,6 @@ import '../../services/engine/engine_registry.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/engine/remote_engine_manager.dart';
 import '../../services/main_page_bridge.dart';
-import '../../services/storage_service.dart';
 import '../../services/stremio_marketplace_service.dart';
 import '../../services/stremio_service.dart';
 import '../../theme/app_theme_scope.dart';
@@ -134,10 +137,10 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
   Future<void> _loadDebridState() async {
     final configured = await Future.wait([
-      StorageService.hasRealDebridCredential(),
-      StorageService.hasTorboxCredential(),
-      StorageService.hasPremiumizeCredential(),
-      StorageService.hasAllDebridCredential(),
+      RealDebridStorage.hasRealDebridCredential(),
+      TorboxStorage.hasTorboxCredential(),
+      PremiumizeStorage.hasPremiumizeCredential(),
+      AllDebridStorage.hasAllDebridCredential(),
     ]);
     final has = configured.any((value) => value);
     if (mounted) setState(() => _hasDebrid = has);

@@ -1,3 +1,7 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'widgets/settings_load_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -82,26 +86,25 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
         currentProvider,
       ) = await (() async {
         // Check which providers are available
-        final torboxConfigured = await StorageService.hasTorboxCredential();
-        final rdConfigured = await StorageService.hasRealDebridCredential();
+        final torboxConfigured = await TorboxStorage.hasTorboxCredential();
+        final rdConfigured = await RealDebridStorage.hasRealDebridCredential();
         final premiumizeConfigured =
-            await StorageService.hasPremiumizeCredential();
+            await PremiumizeStorage.hasPremiumizeCredential();
         final allDebridConfigured =
-            await StorageService.hasAllDebridCredential();
+            await AllDebridStorage.hasAllDebridCredential();
         final pikpakAuthenticated = await PikPakApiService.instance
             .isAuthenticated();
         final pikpakPresence = await ProfileCredentialFacade.isConfigured(
           'pikpak_email',
         );
 
-        final torboxEnabled =
-            await StorageService.getTorboxIntegrationEnabled();
+        final torboxEnabled = await TorboxStorage.getTorboxIntegrationEnabled();
         final rdEnabled =
-            await StorageService.getRealDebridIntegrationEnabled();
+            await RealDebridStorage.getRealDebridIntegrationEnabled();
         final premiumizeEnabled =
-            await StorageService.getPremiumizeIntegrationEnabled();
+            await PremiumizeStorage.getPremiumizeIntegrationEnabled();
         final allDebridEnabled =
-            await StorageService.getAllDebridIntegrationEnabled();
+            await AllDebridStorage.getAllDebridIntegrationEnabled();
 
         final torboxAvailable = torboxEnabled && torboxConfigured;
         final rdAvailable = rdEnabled && rdConfigured;

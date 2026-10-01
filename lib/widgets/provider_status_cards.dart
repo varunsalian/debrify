@@ -1,3 +1,5 @@
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/rd_user.dart';
@@ -5,7 +7,6 @@ import '../models/torbox_user.dart';
 import '../services/account_service.dart';
 import '../services/torbox_account_service.dart';
 import '../services/pikpak_api_service.dart';
-import '../services/storage_service.dart';
 import 'home_focus_controller.dart';
 import '../utils/tv_keys.dart';
 
@@ -177,7 +178,7 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
 
   Future<void> _loadRealDebridStatus() async {
     try {
-      final apiKey = await StorageService.getApiKey();
+      final apiKey = await RealDebridStorage.getApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         _rdStatus = const ProviderStatus(
           name: 'Real-Debrid',
@@ -229,7 +230,7 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
 
   Future<void> _loadTorboxStatus() async {
     try {
-      final apiKey = await StorageService.getTorboxApiKey();
+      final apiKey = await TorboxStorage.getTorboxApiKey();
       if (apiKey == null || apiKey.isEmpty) {
         _torboxStatus = const ProviderStatus(
           name: 'Torbox',

@@ -1,3 +1,10 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
+import 'package:debrify/services/storage/webdav_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/webdav_sync/webdav_log_upload.dart';
 import 'services/cache_scratch_cleanup.dart';
@@ -2706,8 +2713,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     String fileId,
     String fileName,
   ) async {
-    final postAction = await StorageService.getPikPakPostTorrentAction();
-    final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
+    final postAction = await PikpakStorage.getPikPakPostTorrentAction();
+    final pikpakHidden = await PikpakStorage.getPikPakHiddenFromNav();
 
     // For 'none' action, just show success
     if (postAction == 'none') {
@@ -2900,25 +2907,26 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   }
 
   Future<void> _loadIntegrationStateForCurrentProfile() async {
-    final rdKey = await StorageService.getApiKey();
-    final torboxKey = await StorageService.getTorboxApiKey();
-    final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
-    final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
-    final rdHidden = await StorageService.getRealDebridHiddenFromNav();
-    final tbHidden = await StorageService.getTorboxHiddenFromNav();
-    final pikpakEnabled = await StorageService.getPikPakEnabled();
-    final pikpakHidden = await StorageService.getPikPakHiddenFromNav();
-    final webDavEnabled = await StorageService.getWebDavEnabled();
-    final webDavServers = await StorageService.getWebDavServers();
-    final webDavHidden = await StorageService.getWebDavHiddenFromNav();
-    final premiumizeKey = await StorageService.getPremiumizeApiKey();
+    final rdKey = await RealDebridStorage.getApiKey();
+    final torboxKey = await TorboxStorage.getTorboxApiKey();
+    final rdEnabled = await RealDebridStorage.getRealDebridIntegrationEnabled();
+    final torboxEnabled = await TorboxStorage.getTorboxIntegrationEnabled();
+    final rdHidden = await RealDebridStorage.getRealDebridHiddenFromNav();
+    final tbHidden = await TorboxStorage.getTorboxHiddenFromNav();
+    final pikpakEnabled = await PikpakStorage.getPikPakEnabled();
+    final pikpakHidden = await PikpakStorage.getPikPakHiddenFromNav();
+    final webDavEnabled = await WebdavStorage.getWebDavEnabled();
+    final webDavServers = await WebdavServerStorage.getWebDavServers();
+    final webDavHidden = await WebdavStorage.getWebDavHiddenFromNav();
+    final premiumizeKey = await PremiumizeStorage.getPremiumizeApiKey();
     final premiumizeEnabledPref =
-        await StorageService.getPremiumizeIntegrationEnabled();
-    final premiumizeHidden = await StorageService.getPremiumizeHiddenFromNav();
-    final allDebridKey = await StorageService.getAllDebridApiKey();
+        await PremiumizeStorage.getPremiumizeIntegrationEnabled();
+    final premiumizeHidden =
+        await PremiumizeStorage.getPremiumizeHiddenFromNav();
+    final allDebridKey = await AllDebridStorage.getAllDebridApiKey();
     final allDebridEnabledPref =
-        await StorageService.getAllDebridIntegrationEnabled();
-    final allDebridHidden = await StorageService.getAllDebridHiddenFromNav();
+        await AllDebridStorage.getAllDebridIntegrationEnabled();
+    final allDebridHidden = await AllDebridStorage.getAllDebridHiddenFromNav();
     // Trakt/Simkl connection gates the Calendar tab. Login/logout of either
     // fires notifyIntegrationChanged(), so this re-reads on those events too.
     final traktAuthed = await TraktService.instance.isAuthenticated();

@@ -1,3 +1,6 @@
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/material.dart';
 import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
@@ -50,13 +53,13 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
       // Detect which providers are configured
       final providers = <MapEntry<String, String>>[];
-      if (await StorageService.hasRealDebridCredential()) {
+      if (await RealDebridStorage.hasRealDebridCredential()) {
         providers.add(const MapEntry('realdebrid', 'Real-Debrid'));
       }
-      if (await StorageService.hasTorboxCredential()) {
+      if (await TorboxStorage.hasTorboxCredential()) {
         providers.add(const MapEntry('torbox', 'TorBox'));
       }
-      final pikpakEnabled = await StorageService.getPikPakEnabled();
+      final pikpakEnabled = await PikpakStorage.getPikPakEnabled();
       if (pikpakEnabled) {
         providers.add(const MapEntry('pikpak', 'PikPak'));
       }

@@ -3,6 +3,7 @@ import 'package:debrify/services/profiles/profile_local_writes.dart';
 import 'package:debrify/services/android_tv_player_bridge.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:debrify/features/sources/data/source_playlist.dart';
@@ -437,7 +438,7 @@ void main() {
         activeProfileId: origin.profileId,
         migratedLegacyInstall: false,
       );
-      await StorageService.saveApiKey('original-key');
+      await RealDebridStorage.saveApiKey('original-key');
       final playlist = SourcePlaylist(
         owner: ProfileSessionMemory.captureOwner(),
         canContinue: () => true,

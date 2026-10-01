@@ -1,3 +1,11 @@
+import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/premiumize_storage.dart';
+import 'package:debrify/services/storage/provider_credential_storage.dart';
+import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/webdav_server_storage.dart';
+import 'package:debrify/services/storage/webdav_storage.dart';
 import 'settings/tv_collection_list_style_page.dart';
 import 'settings/metadata_settings_page.dart';
 import '../widgets/collections/tmdb_attribution.dart';
@@ -431,12 +439,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final results = await Future.wait<Object?>([
       summaries.read(
         'Real Debrid',
-        () => StorageService.hasRealDebridCredential(),
+        () => RealDebridStorage.hasRealDebridCredential(),
         false,
       ),
       summaries.read(
         'Torbox',
-        () => StorageService.hasTorboxCredential(),
+        () => TorboxStorage.hasTorboxCredential(),
         false,
       ),
       summaries.read(
@@ -444,10 +452,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         () => PikPakApiService.instance.isAuthenticated(),
         false,
       ),
-      summaries.read('WebDAV', () => StorageService.getWebDavEnabled(), false),
+      summaries.read('WebDAV', () => WebdavStorage.getWebDavEnabled(), false),
       summaries.read(
         'WebDAV',
-        () => StorageService.getWebDavServers(forSettings: true),
+        () => WebdavServerStorage.getWebDavServers(forSettings: true),
         <WebDavConfig>[],
       ),
       summaries.read('Trakt', () => StorageService.hasTraktCredential(), false),
@@ -480,12 +488,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'Premiumize',
-        () => StorageService.hasPremiumizeCredential(),
+        () => PremiumizeStorage.hasPremiumizeCredential(),
         false,
       ),
       summaries.read(
         'AllDebrid',
-        () => StorageService.hasAllDebridCredential(),
+        () => AllDebridStorage.hasAllDebridCredential(),
         false,
       ),
       summaries.read('Simkl', () => StorageService.hasSimklCredential(), false),
@@ -6649,15 +6657,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    await StorageService.deleteApiKey();
+    await RealDebridStorage.deleteApiKey();
     AccountService.clearUserInfo();
-    await StorageService.deleteTorboxApiKey();
+    await TorboxStorage.deleteTorboxApiKey();
     TorboxAccountService.clearUserInfo();
-    await StorageService.deletePremiumizeApiKey();
-    await StorageService.deleteAllDebridApiKey();
+    await PremiumizeStorage.deletePremiumizeApiKey();
+    await AllDebridStorage.deleteAllDebridApiKey();
     AllDebridAccountService.clearUserInfo();
-    await StorageService.clearPikPakAuth();
-    await StorageService.clearWebDav();
+    await PikpakStorage.clearPikPakAuth();
+    await WebdavStorage.clearWebDav();
     await StorageService.clearTraktAuth();
     // Clears the token + username AND the in-memory library cache.
     await SimklService.instance.logout();
@@ -6674,11 +6682,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearTorrentSearchHistory();
     await StorageService.clearAllStartupSettings();
     await StorageService.clearAllHomePageSettings();
-    await StorageService.clearAllIntegrationStates();
+    await ProviderCredentialStorage.clearAllIntegrationStates();
     await StorageService.clearDebrifyTvProviderAndLegacy();
     await StorageService.clearAllFilterSettings();
     await StorageService.clearAllTorrentEngineSettings();
-    await StorageService.clearAllPostTorrentActions();
+    await ProviderCredentialStorage.clearAllPostTorrentActions();
     await StorageService.clearAllDebrifyTvSettings();
     // A device-local reset must never mint circle-wide channel deletions:
     // rejoining a sync circle later means adopting its data, not erasing it.
@@ -6686,7 +6694,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       origin: WebDavSyncMutationOrigin.maintenance,
     );
     await StremioService.instance.clearAllAddons();
-    await StorageService.setInitialSetupComplete(false);
+    await ProviderCredentialStorage.setInitialSetupComplete(false);
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
