@@ -1,12 +1,12 @@
 import 'dart:async';
 
+import 'package:debrify/services/storage/episode_completion_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/series_playlist.dart';
 import 'package:debrify/screens/video_player/models/playlist_entry.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/widgets/series_browser.dart';
 
 void main() {
@@ -144,7 +144,7 @@ void main() {
   testWidgets('local completion survives an alternate release title', (
     tester,
   ) async {
-    await StorageService.markEpisodeAsFinished(
+    await EpisodeCompletionStorage.markEpisodeAsFinished(
       seriesTitle: 'Completely Different Release Name',
       season: 1,
       episode: 2,
@@ -194,7 +194,7 @@ void main() {
     (tester) async {
       final playlist = buildPlaylist();
       final ready = Completer<void>();
-      await StorageService.markEpisodeAsFinished(
+      await EpisodeCompletionStorage.markEpisodeAsFinished(
         seriesTitle: 'Completely Different Late Release',
         season: 1,
         episode: 2,

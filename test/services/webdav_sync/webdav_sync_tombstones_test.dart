@@ -8,7 +8,9 @@ import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_preference_portability.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/playback_cleanup_storage.dart';
+import 'package:debrify/services/storage/playback_recovery_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:debrify/services/tv_playback_recovery.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_binding_store.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_clock.dart';
@@ -534,7 +536,7 @@ void main() {
       sink: (_, keys) => recorded.addAll(keys),
     );
 
-    await StorageService.clearPlaybackStateByImdbId('tt-guard');
+    await PlaybackCleanupStorage.clearPlaybackStateByImdbId('tt-guard');
 
     expect(
       recorded,
@@ -732,7 +734,7 @@ void main() {
           'aspect': 'contain',
         }),
       )!;
-      await StorageService.saveVideoPlaybackState(
+      await VideoProgressStorage.saveVideoPlaybackState(
         videoTitle: 'movie',
         videoUrl: 'https://example.invalid/video',
         positionMs: 5000,
@@ -776,7 +778,7 @@ void main() {
       );
       expect(
         checkpoint.isOwnRecoveryWrite(
-          await StorageService.getVideoPlaybackState(videoTitle: 'movie'),
+          await VideoProgressStorage.getVideoPlaybackState(videoTitle: 'movie'),
         ),
         isTrue,
       );
@@ -797,7 +799,7 @@ void main() {
             ),
           );
       Future<bool> newerIntent() =>
-          StorageService.hasNewerPlaybackRecoveryIntent(
+          PlaybackRecoveryStorage.hasNewerPlaybackRecoveryIntent(
             resumeId: 'movie',
             checkpointAtMs: 1000,
             isOwnRecoveryWrite: checkpoint.isOwnRecoveryWrite,
@@ -874,7 +876,7 @@ void main() {
         scope: scope,
         apply: (checkpoint, _) async {
           decisions.add(
-            await StorageService.hasNewerPlaybackRecoveryIntent(
+            await PlaybackRecoveryStorage.hasNewerPlaybackRecoveryIntent(
               seriesTitle: 'Example',
               season: 1,
               episode: checkpoint.episode,

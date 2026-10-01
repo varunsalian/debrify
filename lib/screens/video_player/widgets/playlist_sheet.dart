@@ -1,3 +1,5 @@
+import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
+import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:flutter/material.dart';
 import '../../../models/series_playlist.dart';
 import '../../../models/movie_collection.dart';
@@ -6,7 +8,6 @@ import '../../../widgets/series_browser.dart';
 import '../../../widgets/movie_collection_browser.dart';
 import '../models/playlist_entry.dart';
 import '../constants/color_constants.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/tracking_source_policy.dart';
 import '../../../utils/episode_progress_merge.dart';
 import '../constants/timing_constants.dart';
@@ -90,20 +91,20 @@ class PlaylistSheet {
                             ? seriesPlaylist.imdbId!.trim()
                             : imdbId?.trim());
                         final localProgress =
-                            await StorageService.getMergedEpisodeProgress(
+                            await MergedEpisodeProgressStorage.getMergedEpisodeProgress(
                               seriesTitle: title,
                               imdbId: resolvedImdbId,
                             );
                         final trackerMaps =
                             resolvedImdbId != null && resolvedImdbId.isNotEmpty
                             ? await Future.wait([
-                                StorageService.getEpisodeTraktProgress(
+                                TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
                                   imdbId: resolvedImdbId,
                                 ),
-                                StorageService.getEpisodeSimklProgress(
+                                TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
                                   imdbId: resolvedImdbId,
                                 ),
-                                StorageService.getEpisodeMdblistProgress(
+                                TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(
                                   imdbId: resolvedImdbId,
                                 ),
                               ])

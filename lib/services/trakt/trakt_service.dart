@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:flutter/foundation.dart';
@@ -15,7 +16,6 @@ import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
 import '../profiles/profile_session_memory.dart';
 import '../profiles/profile_credential_facade.dart';
-import '../storage_service.dart';
 import 'trakt_calendar_service.dart';
 import 'trakt_constants.dart';
 import '../../models/media_identity.dart';
@@ -530,7 +530,7 @@ class TraktService {
       if (shared != null) {
         if (shared) {
           _invalidateLibraryCache();
-          StorageService.movieFinishedRevision.value++;
+          MovieProgressStorage.movieFinishedRevision.value++;
         }
         return shared;
       }
@@ -572,7 +572,7 @@ class TraktService {
     // Drop cached library state so a later sign-in (possibly a different
     // account) never reads the previous user's watchlist/collection/ratings.
     _invalidateLibraryCache();
-    StorageService.movieFinishedRevision.value++;
+    MovieProgressStorage.movieFinishedRevision.value++;
   }
 
   /// Get the stored username.
@@ -598,7 +598,7 @@ class TraktService {
       refreshToken: data['refresh_token'] as String,
       expiryMs: expiryMs,
     );
-    StorageService.movieFinishedRevision.value++;
+    MovieProgressStorage.movieFinishedRevision.value++;
   }
 
   // ============================================================================
@@ -937,7 +937,7 @@ class TraktService {
       }
       if (path == '/scrobble/stop' && progress > 80) {
         _invalidateLibraryCache();
-        StorageService.movieFinishedRevision.value++;
+        MovieProgressStorage.movieFinishedRevision.value++;
       }
       debugPrint('Trakt: Scrobble completed');
       return true;
@@ -997,7 +997,7 @@ class TraktService {
         if (type == 'series') {
           EpisodeTrackerSnapshotRevision.invalidateTitle('trakt', imdbId);
         }
-        StorageService.movieFinishedRevision.value++;
+        MovieProgressStorage.movieFinishedRevision.value++;
       }
     }
     return ok;
@@ -1132,7 +1132,7 @@ class TraktService {
     } else if (path == '/sync/history' || path == '/sync/history/remove') {
       _invalidateLibraryCache();
       EpisodeTrackerSnapshotRevision.invalidateTitle('trakt', showImdbId);
-      StorageService.movieFinishedRevision.value++;
+      MovieProgressStorage.movieFinishedRevision.value++;
     }
     return ok;
   }

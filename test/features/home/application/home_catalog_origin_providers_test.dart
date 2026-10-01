@@ -8,8 +8,8 @@ import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
+import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -151,7 +151,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString(key(addon, item)), isNull);
       expect(
-        prefs.getString(StorageService.localSeriesCompletionStateKey),
+        prefs.getString(LocalCompletionStorage.localSeriesCompletionStateKey),
         isNull,
       );
       expect(StremioService.instance.catalogProgressRevision.value, revision);

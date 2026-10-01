@@ -1,6 +1,10 @@
 import 'package:debrify/services/local_playback_resume_resolver.dart';
+import 'package:debrify/services/storage/continue_watching_storage.dart';
 import 'package:debrify/services/storage/discover_storage.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/episode_completion_storage.dart';
+import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,7 +20,7 @@ void main() {
         'medialibrary:one:show': 20000,
         'medialibrary:two:show': 30000,
       }.entries) {
-        await StorageService.saveSeriesPlaybackState(
+        await SeriesProgressStorage.saveSeriesPlaybackState(
           seriesTitle: 'Show',
           season: 1,
           episode: 1,
@@ -49,14 +53,14 @@ void main() {
         ),
         isNull,
       );
-      await StorageService.markEpisodeAsFinished(
+      await EpisodeCompletionStorage.markEpisodeAsFinished(
         seriesTitle: 'Show',
         season: 1,
         episode: 1,
         imdbId: 'tt123',
       );
       expect(
-        await StorageService.getMergedFinishedEpisodes(
+        await MergedEpisodeProgressStorage.getMergedFinishedEpisodes(
           seriesTitle: 'Show',
           imdbId: 'medialibrary:one:show',
         ),
@@ -72,7 +76,7 @@ void main() {
         'medialibrary:one:recording',
         'medialibrary:two:recording',
       ]) {
-        await StorageService.saveVideoPlaybackState(
+        await VideoProgressStorage.saveVideoPlaybackState(
           videoTitle: 'Recording',
           videoUrl: 'https://server/video',
           positionMs: id == 'tt123'
@@ -104,19 +108,20 @@ void main() {
         ),
         isNull,
       );
-      await StorageService.saveContinueWatchingItem(
+      await ContinueWatchingStorage.saveContinueWatchingItem(
         imdbId: 'medialibrary:one:recording',
         title: 'Recording',
         contentType: 'movie',
       );
-      expect(await StorageService.getContinueWatchingItems(), isEmpty);
-      await StorageService.saveContinueWatchingItem(
+      expect(await ContinueWatchingStorage.getContinueWatchingItems(), isEmpty);
+      await ContinueWatchingStorage.saveContinueWatchingItem(
         imdbId: 'tt123',
         title: 'Movie',
         contentType: 'movie',
       );
       expect(
-        (await StorageService.getContinueWatchingItems()).single['imdbId'],
+        (await ContinueWatchingStorage.getContinueWatchingItems())
+            .single['imdbId'],
         'tt123',
       );
     },

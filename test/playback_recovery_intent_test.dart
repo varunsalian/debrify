@@ -4,8 +4,11 @@ import 'package:debrify/services/playback_recovery_intent.dart';
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
+import 'package:debrify/services/storage/playback_cleanup_storage.dart';
 import 'package:debrify/services/storage/playlist_progress_storage.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
@@ -35,10 +38,10 @@ void main() {
       () async {
         final store = _FailingHistoryStore(throwing: throwing, failures: 1);
         SharedPreferencesStorePlatform.instance = store;
-        await StorageService.markMovieAsFinished('tt1234');
+        await MovieProgressStorage.markMovieAsFinished('tt1234');
         final before = DateTime.now().millisecondsSinceEpoch - 1000;
-        await StorageService.unmarkMovieAsFinished('tt1234');
-        expect(await StorageService.isMovieFinished('tt1234'), isFalse);
+        await MovieProgressStorage.unmarkMovieAsFinished('tt1234');
+        expect(await MovieProgressStorage.isMovieFinished('tt1234'), isFalse);
         expect(store.historyWrites, 2);
         // Lose the isolate-only fallback; the small cutoff must be durable.
         PlaybackRecoveryIntent.debugReset();
@@ -57,10 +60,10 @@ void main() {
       throwing: true,
       failures: 2,
     );
-    await StorageService.markMovieAsFinished('tt1234');
+    await MovieProgressStorage.markMovieAsFinished('tt1234');
     final before = DateTime.now().millisecondsSinceEpoch - 1000;
-    await StorageService.unmarkMovieAsFinished('tt1234');
-    expect(await StorageService.isMovieFinished('tt1234'), isFalse);
+    await MovieProgressStorage.unmarkMovieAsFinished('tt1234');
+    expect(await MovieProgressStorage.isMovieFinished('tt1234'), isFalse);
     await (await SharedPreferences.getInstance()).reload();
     expect(
       (await SharedPreferences.getInstance()).getString(_historyKey),
@@ -106,7 +109,7 @@ void main() {
     'corrupt history is replaced with a cutoff while progress clears',
     () async {
       SharedPreferences.setMockInitialValues({_historyKey: '{broken'});
-      await StorageService.saveVideoPlaybackState(
+      await VideoProgressStorage.saveVideoPlaybackState(
         videoTitle: 'Movie',
         videoUrl: 'https://example.invalid/video',
         positionMs: 1000,
@@ -114,9 +117,9 @@ void main() {
         imdbId: 'tt1234',
       );
       final before = DateTime.now().millisecondsSinceEpoch - 1000;
-      await StorageService.clearPlaybackStateByImdbId('tt1234');
+      await PlaybackCleanupStorage.clearPlaybackStateByImdbId('tt1234');
       expect(
-        await StorageService.getVideoPlaybackState(videoTitle: 'Movie'),
+        await VideoProgressStorage.getVideoPlaybackState(videoTitle: 'Movie'),
         isNull,
       );
       PlaybackRecoveryIntent.debugReset();
@@ -154,7 +157,7 @@ void main() {
     ProfilePreferenceBudget.debugEnforcedOverride = true;
     await PlaylistProgressStorage.clearPlaylistProgress(title: 'Example');
     expect(
-      await StorageService.getSeriesPlaybackState(
+      await SeriesProgressStorage.getSeriesPlaybackState(
         seriesTitle: 'Example',
         season: 1,
         episode: 1,

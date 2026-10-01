@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/completion_migration_storage.dart';
 import 'package:debrify/services/storage/launch_ident_storage.dart';
 import '../local_validation_diagnostics.dart';
 import 'dart:convert';
@@ -18,7 +19,6 @@ import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/backup_restore_service.dart';
 import '../../services/iptv_transfer_payload.dart';
-import '../../services/storage_service.dart';
 import '../../utils/stremio_url.dart';
 import 'connection_resource_service.dart';
 import 'device_key_provider.dart';
@@ -246,7 +246,7 @@ class ProfileRestoreCoordinator {
           values,
           includeCredentialEngineSettings: true,
         );
-        StorageService.rearmGhostPurgeForImportedPlayback(values);
+        CompletionMigrationStorage.rearmGhostPurgeForImportedPlayback(values);
         for (final entry in values.entries) {
           if (!await _writePreference(preferences, entry.key, entry.value)) {
             throw StateError('Could not stage imported profile settings');
@@ -715,7 +715,7 @@ class ProfileRestoreCoordinator {
     // Merge-mode restore keeps destination keys the package omits, so imported
     // playback must re-arm the purge or its ghosts are stranded behind an
     // already-satisfied generation marker.
-    StorageService.rearmGhostPurgeForImportedPlayback(values);
+    CompletionMigrationStorage.rearmGhostPurgeForImportedPlayback(values);
 
     final operationId = _newId('restore');
     final current = ProfileRuntime.capture();

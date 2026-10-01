@@ -10,7 +10,7 @@ import 'package:debrify/features/home/models/home_catalog_origin.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/native_series_metadata_service.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/continue_watching_storage.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -78,7 +78,7 @@ void main() {
               await prefs.setString('continue_watching_v1', history);
               await prefs.setString('playback_state_v1', playback);
             }
-            return StorageService.getContinueWatchingItems();
+            return ContinueWatchingStorage.getContinueWatchingItems();
           },
           readAddons: () async => [],
           readEpisode: (_) async => null,

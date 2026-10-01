@@ -1,6 +1,6 @@
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,47 +14,55 @@ void main() {
   test(
     'stores Simkl episode progress independently for each IMDb show',
     () async {
-      await StorageService.saveEpisodeSimklProgress(
+      await TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
         imdbId: 'tt001',
         percents: const {'1_1': 100, '1_2': 42.5},
       );
-      await StorageService.saveEpisodeSimklProgress(
+      await TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
         imdbId: 'TT002',
         percents: const {'2_3': 67},
       );
 
       expect(
-        await StorageService.getEpisodeSimklProgress(imdbId: 'tt001'),
+        await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
+          imdbId: 'tt001',
+        ),
         const {'1_1': 100.0, '1_2': 42.5},
       );
       expect(
-        await StorageService.getEpisodeSimklProgress(imdbId: 'tt002'),
+        await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
+          imdbId: 'tt002',
+        ),
         const {'2_3': 67.0},
       );
     },
   );
 
   test('replacing a Simkl snapshot clears stale remote progress', () async {
-    await StorageService.saveEpisodeSimklProgress(
+    await TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
       imdbId: 'tt001',
       percents: const {'1_1': 100, '1_2': 55},
     );
-    await StorageService.saveEpisodeSimklProgress(
+    await TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
       imdbId: 'tt001',
       percents: const {'1_2': 25},
     );
 
     expect(
-      await StorageService.getEpisodeSimklProgress(imdbId: 'tt001'),
+      await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
+        imdbId: 'tt001',
+      ),
       const {'1_2': 25.0},
     );
 
-    await StorageService.saveEpisodeSimklProgress(
+    await TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
       imdbId: 'tt001',
       percents: const {},
     );
     expect(
-      await StorageService.getEpisodeSimklProgress(imdbId: 'tt001'),
+      await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
+        imdbId: 'tt001',
+      ),
       isEmpty,
     );
   });
@@ -62,21 +70,25 @@ void main() {
   test(
     'Simkl and Trakt episode snapshots do not overwrite each other',
     () async {
-      await StorageService.saveEpisodeTraktProgress(
+      await TrackerEpisodeProgressStorage.saveEpisodeTraktProgress(
         imdbId: 'tt001',
         percents: const {'1_1': 30},
       );
-      await StorageService.saveEpisodeSimklProgress(
+      await TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
         imdbId: 'tt001',
         percents: const {'1_1': 80},
       );
 
       expect(
-        await StorageService.getEpisodeTraktProgress(imdbId: 'tt001'),
+        await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
+          imdbId: 'tt001',
+        ),
         const {'1_1': 30.0},
       );
       expect(
-        await StorageService.getEpisodeSimklProgress(imdbId: 'tt001'),
+        await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
+          imdbId: 'tt001',
+        ),
         const {'1_1': 80.0},
       );
     },
@@ -94,30 +106,36 @@ void main() {
           >[
             (
               save: (imdbId, percents) =>
-                  StorageService.saveEpisodeTraktProgress(
+                  TrackerEpisodeProgressStorage.saveEpisodeTraktProgress(
                     imdbId: imdbId,
                     percents: percents,
                   ),
               read: (imdbId) =>
-                  StorageService.getEpisodeTraktProgress(imdbId: imdbId),
+                  TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
+                    imdbId: imdbId,
+                  ),
             ),
             (
               save: (imdbId, percents) =>
-                  StorageService.saveEpisodeSimklProgress(
+                  TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
                     imdbId: imdbId,
                     percents: percents,
                   ),
               read: (imdbId) =>
-                  StorageService.getEpisodeSimklProgress(imdbId: imdbId),
+                  TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
+                    imdbId: imdbId,
+                  ),
             ),
             (
               save: (imdbId, percents) =>
-                  StorageService.saveEpisodeMdblistProgress(
+                  TrackerEpisodeProgressStorage.saveEpisodeMdblistProgress(
                     imdbId: imdbId,
                     percents: percents,
                   ),
               read: (imdbId) =>
-                  StorageService.getEpisodeMdblistProgress(imdbId: imdbId),
+                  TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(
+                    imdbId: imdbId,
+                  ),
             ),
           ];
 
@@ -158,11 +176,11 @@ void main() {
       });
 
       final queued = <Future<void>>[
-        StorageService.saveEpisodeTraktProgress(
+        TrackerEpisodeProgressStorage.saveEpisodeTraktProgress(
           imdbId: 'tt-profile-a-one',
           percents: const {'1_1': 20},
         ),
-        StorageService.saveEpisodeTraktProgress(
+        TrackerEpisodeProgressStorage.saveEpisodeTraktProgress(
           imdbId: 'tt-profile-a-two',
           percents: const {'1_2': 40},
         ),
@@ -171,15 +189,16 @@ void main() {
       await Future.wait(queued);
 
       expect(
-        await StorageService.getEpisodeTraktProgress(
+        await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
           imdbId: 'tt-profile-a-one',
         ),
         isEmpty,
       );
       final firstProfileSnapshot = await ProfileRuntime.withCapturedScope(
         first,
-        () =>
-            StorageService.getEpisodeTraktProgress(imdbId: 'tt-profile-a-two'),
+        () => TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
+          imdbId: 'tt-profile-a-two',
+        ),
       );
       expect(firstProfileSnapshot, const {'1_2': 40.0});
     },

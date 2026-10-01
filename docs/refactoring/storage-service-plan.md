@@ -495,7 +495,8 @@ identity is present with the same outcome.
 | 3 | `93435156` | 7,184 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 | 4 | `e30794c2` | 5,273 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 | 5 | `15704c1f` | 3,447 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
-| 6 | This step commit (hash recorded by step 7) | 2,022 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 6 | `71e25130` | 2,022 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 7 | This step commit (hash recorded by step 8) | 8 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 
 ### Step 0 evidence and retained source
 
@@ -661,6 +662,12 @@ each step. Unrelated whole-file extractions remain outside this plan.
 | 6 | `lib/screens/video_player_screen.dart` | 18097 | 18099 |
 | 6 | `lib/services/video_player_launcher.dart` | 6581 | 6584 |
 | 6 | `lib/widgets/series_browser.dart` | 2201 | 2206 |
+| 7 | `lib/main.dart` | 4181 | 4182 |
+| 7 | `lib/screens/playlist_content_view_screen.dart` | 4136 | 4140 |
+| 7 | `lib/screens/settings_screen.dart` | 8756 | 8757 |
+| 7 | `lib/screens/video_player_screen.dart` | 18099 | 18106 |
+| 7 | `lib/services/video_player_launcher.dart` | 6584 | 6594 |
+| 7 | `lib/widgets/series_browser.dart` | 2206 | 2208 |
 <!-- storage-caller-size-rows -->
 
 Step 1: `ss/step1.jsonl` records 3,449 success, 18 error, 1 failure,
@@ -766,6 +773,22 @@ exact baseline failures. All three jobs passed; the behavior job took 9m39s.
 Step 6: `ss/step6.jsonl` records {'success': 916, 'skipped': 10, 'error': 2};
 comparison to `ss/base.jsonl` PASS (no new failures, missing tests or skips).
 `ss/analyze-step6.txt` vs the previous step adds no diagnostics after the
+prescribed old-file relocation. Map/dependency, constant, declaration/reset,
+size/import and diff checks pass. Caller review confirms only authorized
+expressions, imports and whitespace changed.
+
+Step 7 formatting note: Dart adds an outer argument comma to the original
+`saveContinueWatchingItem` predicate at every tested page width because its
+inner call already has a trailing comma. Three comments preserve just that
+original statement with a formatter off/on region; the rest of the 147-line
+owner is formatted normally. No punctuation is normalized away by the strict
+declaration checker. This preserves the requested verbatim code and does not
+reduce the file to meet a size limit. Formatter controls are documented at
+https://dart.dev/blog/announcing-dart-3-7 .
+
+Step 7: `ss/step7.jsonl` records {'success': 2451, 'error': 6, 'skipped': 10};
+comparison to `ss/base.jsonl` PASS (no new failures, missing tests or skips).
+`ss/analyze-step7.txt` vs the previous step adds no diagnostics after the
 prescribed old-file relocation. Map/dependency, constant, declaration/reset,
 size/import and diff checks pass. Caller review confirms only authorized
 expressions, imports and whitespace changed.

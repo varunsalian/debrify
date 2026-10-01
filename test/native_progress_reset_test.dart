@@ -6,9 +6,9 @@ import 'package:debrify/services/local_series_completion_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
 import 'package:debrify/services/series_progress_reset_service.dart';
+import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:debrify/services/storage/trakt_storage.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -62,11 +62,11 @@ void main() {
         test(
           '$provider resets $id movie=$movie without crossing identities',
           () async {
-            await StorageService.saveEpisodeTraktProgress(
+            await TrackerEpisodeProgressStorage.saveEpisodeTraktProgress(
               imdbId: id,
               percents: {'4_6': 100},
             );
-            await StorageService.saveEpisodeMdblistProgress(
+            await TrackerEpisodeProgressStorage.saveEpisodeMdblistProgress(
               imdbId: id,
               percents: {'4_6': 100},
             );
@@ -134,13 +134,13 @@ void main() {
               ],
             });
             expect(
-              await StorageService.getEpisodeTraktProgress(imdbId: id),
+              await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(imdbId: id),
               !movie && provider == TrackingSource.trakt
                   ? isEmpty
                   : {'4_6': 100},
             );
             expect(
-              await StorageService.getEpisodeMdblistProgress(imdbId: id),
+              await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(imdbId: id),
               !movie && provider == TrackingSource.mdblist
                   ? isEmpty
                   : {'4_6': 100},
@@ -182,11 +182,11 @@ void main() {
     test(
       '$provider failed native playback deletion preserves cached progress',
       () async {
-        await StorageService.saveEpisodeTraktProgress(
+        await TrackerEpisodeProgressStorage.saveEpisodeTraktProgress(
           imdbId: 'tmdb:237243',
           percents: {'4_6': 100},
         );
-        await StorageService.saveEpisodeMdblistProgress(
+        await TrackerEpisodeProgressStorage.saveEpisodeMdblistProgress(
           imdbId: 'tmdb:237243',
           percents: {'4_6': 100},
         );
@@ -213,11 +213,11 @@ void main() {
           );
         }, () => client);
         expect(
-          await StorageService.getEpisodeTraktProgress(imdbId: 'tmdb:237243'),
+          await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(imdbId: 'tmdb:237243'),
           {'4_6': 100},
         );
         expect(
-          await StorageService.getEpisodeMdblistProgress(imdbId: 'tmdb:237243'),
+          await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(imdbId: 'tmdb:237243'),
           {'4_6': 100},
         );
       },

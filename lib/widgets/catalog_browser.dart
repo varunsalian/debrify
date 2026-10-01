@@ -1,4 +1,5 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/episode_resume_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
@@ -17,7 +18,6 @@ import '../services/trakt/trakt_service.dart';
 import '../services/simkl/simkl_service.dart';
 import '../services/local_bound_source_service.dart';
 import '../services/series_source_service.dart';
-import '../services/storage_service.dart';
 import '../screens/debrid_downloads_screen.dart';
 import '../screens/alldebrid/alldebrid_files_screen.dart';
 import '../screens/pikpak/pikpak_files_screen.dart';
@@ -718,7 +718,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
       // Try IMDB-based lookup first (reliable, no title guessing)
       final imdbId = item.effectiveImdbId;
       if (imdbId != null) {
-        final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(
+        final lastPlayed = await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(
           imdbId,
         );
         if (!mounted) return;
@@ -730,7 +730,7 @@ class CatalogBrowserState extends State<CatalogBrowser> {
 
       // Fallback to title-based lookup (for existing data written before imdbId tracking)
       if (season == null || episode == null) {
-        final byTitle = await StorageService.getLastPlayedEpisode(
+        final byTitle = await EpisodeResumeStorage.getLastPlayedEpisode(
           seriesTitle: item.name,
         );
         if (!mounted) return;

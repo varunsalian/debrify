@@ -1,7 +1,7 @@
+import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:flutter/material.dart';
 import '../models/movie_collection.dart';
 import '../screens/video_player/models/playlist_entry.dart';
-import '../services/storage_service.dart';
 
 class MovieCollectionBrowser extends StatefulWidget {
   final MovieCollection collection;
@@ -49,7 +49,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
       final entry = widget.collection.allFiles[i];
       futures.add(() async {
         final key = _resumeIdForEntry(entry);
-        final state = await StorageService.getVideoPlaybackState(videoTitle: key);
+        final state = await VideoProgressStorage.getVideoPlaybackState(videoTitle: key);
         if (state != null) {
           _progressByIndex[i] = state;
         }

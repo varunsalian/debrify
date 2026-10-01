@@ -3,13 +3,13 @@ import 'package:debrify/services/profiles/profile_local_writes.dart';
 import 'package:debrify/services/android_tv_player_bridge.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'package:debrify/services/storage/continue_watching_storage.dart';
 import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:debrify/features/sources/data/source_playlist.dart';
 import 'package:debrify/features/sources/models/acquired_source.dart';
-import 'package:debrify/services/storage_service.dart';
 
 import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
 import 'package:debrify/features/sources/data/source_binding_committer.dart';
@@ -535,7 +535,7 @@ void main() {
       await ProfileRuntime.withCapturedScope(
         incoming,
         () => preparation.write(
-          () => StorageService.saveContinueWatchingItem(
+          () => ContinueWatchingStorage.saveContinueWatchingItem(
             imdbId: 'tt123',
             title: 'Original',
             contentType: 'movie',
@@ -544,11 +544,11 @@ void main() {
       );
       final original = await ProfileRuntime.withCapturedScope(
         origin,
-        StorageService.getContinueWatchingItems,
+        ContinueWatchingStorage.getContinueWatchingItems,
       );
       final other = await ProfileRuntime.withCapturedScope(
         incoming,
-        StorageService.getContinueWatchingItems,
+        ContinueWatchingStorage.getContinueWatchingItems,
       );
       expect(original.single['title'], 'Original');
       expect(other, isEmpty);
@@ -596,7 +596,7 @@ void main() {
       final pending = preparation.write(() async {
         entered.complete();
         await release.future;
-        await StorageService.saveContinueWatchingItem(
+        await ContinueWatchingStorage.saveContinueWatchingItem(
           imdbId: 'tt123',
           title: 'Accepted',
           contentType: 'movie',
@@ -616,14 +616,14 @@ void main() {
       expect(
         (await ProfileRuntime.withCapturedScope(
           origin,
-          StorageService.getContinueWatchingItems,
+          ContinueWatchingStorage.getContinueWatchingItems,
         )).single['title'],
         'Accepted',
       );
       expect(
         await ProfileRuntime.withCapturedScope(
           incoming,
-          StorageService.getContinueWatchingItems,
+          ContinueWatchingStorage.getContinueWatchingItems,
         ),
         isEmpty,
       );

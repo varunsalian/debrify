@@ -24,7 +24,7 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:debrify/services/storage/iptv_history_storage.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_circle_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_models.dart';
@@ -790,13 +790,15 @@ void main() {
         <String, String>{'Authorization': 'Bearer secret'},
       );
       expect(
-        (await StorageService.getVideoResume(
+        (await VideoResumeStorage.getVideoResume(
           'https://panel.invalid/movie/9',
         ))?['positionMs'],
         42000,
       );
       expect(
-        (await StorageService.getVideoResume('generic-title'))?['positionMs'],
+        (await VideoResumeStorage.getVideoResume(
+          'generic-title',
+        ))?['positionMs'],
         7000,
       );
 
@@ -1151,8 +1153,8 @@ void main() {
       );
 
       expect(outcome.result, WebDavSyncLibraryApplyResult.conflict);
-      expect(await StorageService.getVideoResume(remoteKey), isNull);
-      expect(await StorageService.getVideoResume('local-race'), isNotNull);
+      expect(await VideoResumeStorage.getVideoResume(remoteKey), isNull);
+      expect(await VideoResumeStorage.getVideoResume('local-race'), isNotNull);
     },
   );
 

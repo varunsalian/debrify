@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:debrify/screens/video_player_screen.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
+import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:debrify/services/video_player_launcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,7 +40,7 @@ void main() {
   ]) {
     final isolated = id != null && !id.startsWith('tt');
     test('Flutter final resume fallback respects $id', () async {
-      await StorageService.upsertVideoResume('same-stream', {
+      await VideoResumeStorage.upsertVideoResume('same-stream', {
         'positionMs': 45000,
         'durationMs': 100000,
         'speed': 1.5,
@@ -65,7 +67,7 @@ void main() {
         url: 'https://server/episode',
         title: 'Same episode',
       );
-      await StorageService.saveVideoPlaybackState(
+      await VideoProgressStorage.saveVideoPlaybackState(
         videoTitle: VideoPlayerLauncher.resumeIdForEntry(entry),
         videoUrl: entry.url,
         positionMs: 45000,
@@ -85,7 +87,7 @@ void main() {
         await VideoPlayerLauncher.debugNativeResumePositions(args, [entry]),
         [isolated ? 0 : 45000],
       );
-      await StorageService.saveSeriesPlaybackState(
+      await SeriesProgressStorage.saveSeriesPlaybackState(
         seriesTitle: 'Show',
         season: 1,
         episode: 1,
@@ -112,6 +114,6 @@ void main() {
     expect(selection, contains('VideoPlayerScreen.readLocalResume('));
     expect(selection, contains('contentId: _effectiveContentImdbId'));
     expect(selection, contains('enhanced: _getEnhancedPlaybackState'));
-    expect(selection, isNot(contains('StorageService.getVideoResume')));
+    expect(selection, isNot(contains('VideoResumeStorage.getVideoResume')));
   });
 }

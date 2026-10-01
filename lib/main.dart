@@ -1,4 +1,5 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/completion_migration_storage.dart';
 import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/defaults_generation_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
@@ -6,6 +7,7 @@ import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/playback_cleanup_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
@@ -85,7 +87,6 @@ import 'models/profiles/user_profile.dart';
 import 'models/sidebar_configuration.dart';
 import 'services/secret_vault.dart';
 import 'services/play_loader_style.dart';
-import 'services/storage_service.dart';
 import 'services/tv_hero_artwork_quality_controller.dart';
 import 'services/tv_playback_recovery.dart';
 import 'services/tvos_top_shelf_service.dart';
@@ -652,7 +653,7 @@ Future<void> _continueApplicationStartup() async {
   // drifted must cost the user a watched badge, not the whole app.
   await _bestEffortStartupStep(
     'playback-completion-migration',
-    StorageService.migrateExistingPlaybackCompletionThresholds,
+    CompletionMigrationStorage.migrateExistingPlaybackCompletionThresholds,
   );
   // Drop the zero-position rows older builds left behind when unwatching an
   // episode; they outrank real progress and pin Continue Watching to an
@@ -660,7 +661,7 @@ Future<void> _continueApplicationStartup() async {
   // one-shot, and best-effort for the same reason as the step above.
   await _bestEffortStartupStep(
     'resume-ghost-purge',
-    StorageService.purgeUnwatchedResumeGhosts,
+    CompletionMigrationStorage.purgeUnwatchedResumeGhosts,
   );
   // Warm the layout prefs the shell reads through field initializers —
   // without this the first frame paints canvas/ghost/rail and then snaps
@@ -957,7 +958,7 @@ void _updateFocusHighlightStrategy(bool isTv) {
 
 Future<void> _cleanupPlaybackState() async {
   try {
-    await StorageService.cleanupOldPlaybackState();
+    await PlaybackCleanupStorage.cleanupOldPlaybackState();
   } catch (e) {}
 }
 

@@ -4,8 +4,13 @@ import 'package:debrify/models/custom_series_identity.dart';
 import 'package:debrify/services/playback_recovery_intent.dart';
 
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage/episode_completion_storage.dart';
+import 'package:debrify/services/storage/episode_progress_storage.dart';
+import 'package:debrify/services/storage/episode_resume_storage.dart';
+import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
 import 'package:debrify/services/tv_playback_recovery.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_preference_portability.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,7 +44,7 @@ void main() {
     final checkpoint = TvPlaybackCheckpoint.tryParse(jsonEncode(raw))!;
     expect(checkpoint.shouldPersistCompletion, isFalse);
     expect(checkpoint.isResumable, isTrue);
-    await StorageService.saveSeriesPlaybackState(
+    await SeriesProgressStorage.saveSeriesPlaybackState(
       seriesTitle: 'The Example Show',
       season: 2,
       episode: 4,
@@ -64,7 +69,7 @@ void main() {
     );
     expect(applied, isTrue);
     expect(
-      (await StorageService.getSeriesPlaybackState(
+      (await SeriesProgressStorage.getSeriesPlaybackState(
         seriesTitle: 'The Example Show',
         season: 2,
         episode: 4,
@@ -75,24 +80,24 @@ void main() {
 
   test('custom recovery cannot overwrite canonical episode with the same title', () async {
     final identity = const CustomSeriesIdentity('edit-config', 'OnePace').id;
-    await StorageService.saveSeriesPlaybackState(seriesTitle: 'The Example Show',
+    await SeriesProgressStorage.saveSeriesPlaybackState(seriesTitle: 'The Example Show',
       season: 2, episode: 4, positionMs: 1234, durationMs: 3122536, imdbId: 'tt1234567');
     final raw = _checkpoint(positionMs: 20000)..['imdbId'] = identity;
     final checkpoint = TvPlaybackCheckpoint.tryParse(jsonEncode(raw))!;
     await TvPlaybackRecovery.applyCheckpoint(checkpoint, sameProcessReturn: true);
-    expect((await StorageService.getLastPlayedEpisodeByImdbId(identity))?['positionMs'], 20000);
-    expect((await StorageService.getLastPlayedEpisodeByImdbId('tt1234567'))?['positionMs'], 1234);
+    expect((await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(identity))?['positionMs'], 20000);
+    expect((await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId('tt1234567'))?['positionMs'], 1234);
   });
 
   test('clearing original cannot suppress recovery of a same-title custom edit', () async {
     final identity = const CustomSeriesIdentity('edit-config', 'OnePace').id;
     final raw = _checkpoint(positionMs: 20000)..['imdbId'] = identity;
-    await StorageService.saveSeriesPlaybackState(seriesTitle: 'The Example Show',
+    await SeriesProgressStorage.saveSeriesPlaybackState(seriesTitle: 'The Example Show',
       season: 2, episode: 4, positionMs: 1234, durationMs: 3122536, imdbId: 'tt1234567');
-    await StorageService.clearSeriesWatchProgress('tt1234567', 'The Example Show');
+    await SeriesProgressStorage.clearSeriesWatchProgress('tt1234567', 'The Example Show');
     final checkpoint = TvPlaybackCheckpoint.tryParse(jsonEncode(raw))!;
     expect(await TvPlaybackRecovery.applyCheckpoint(checkpoint, sameProcessReturn: true), isTrue);
-    expect((await StorageService.getLastPlayedEpisodeByImdbId(identity))?['positionMs'], 20000);
+    expect((await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(identity))?['positionMs'], 20000);
   });
 
   test(
@@ -314,7 +319,7 @@ void main() {
         ),
       )!;
       // The old host saved progress, then died before saving the watched marker.
-      await StorageService.saveSeriesPlaybackState(
+      await SeriesProgressStorage.saveSeriesPlaybackState(
         seriesTitle: 'The Example Show',
         season: 2,
         episode: 4,
@@ -329,7 +334,7 @@ void main() {
         isTrue,
       );
       expect(
-        await StorageService.isEpisodeFinished(
+        await EpisodeProgressStorage.isEpisodeFinished(
           seriesTitle: 'The Example Show',
           season: 2,
           episode: 4,
@@ -388,7 +393,7 @@ void main() {
       );
       expect(acked, [6, 7]);
       expect(
-        (await StorageService.getSeriesPlaybackState(
+        (await SeriesProgressStorage.getSeriesPlaybackState(
           seriesTitle: 'The Example Show',
           season: 2,
           episode: 4,
@@ -470,7 +475,7 @@ void main() {
       );
       expect(acked, [1, 2, 3]);
       expect(
-        await StorageService.getMergedFinishedEpisodes(
+        await MergedEpisodeProgressStorage.getMergedFinishedEpisodes(
           seriesTitle: 'The Example Show',
           imdbId: 'tt1234567',
         ),
@@ -479,7 +484,7 @@ void main() {
         },
       );
       expect(
-        (await StorageService.getSeriesPlaybackState(
+        (await SeriesProgressStorage.getSeriesPlaybackState(
           seriesTitle: 'The Example Show',
           season: 2,
           episode: 6,
@@ -512,14 +517,14 @@ void main() {
           );
       await expectLater(recover(ackFails: true), throwsStateError);
       expect(
-        await StorageService.isEpisodeFinished(
+        await EpisodeProgressStorage.isEpisodeFinished(
           seriesTitle: 'The Example Show',
           season: 2,
           episode: 4,
         ),
         isTrue,
       );
-      await StorageService.unmarkEpisodeAsFinished(
+      await EpisodeCompletionStorage.unmarkEpisodeAsFinished(
         seriesTitle: 'The Example Show',
         season: 2,
         episode: 4,
@@ -527,7 +532,7 @@ void main() {
       );
       await recover(ackFails: false);
       expect(
-        await StorageService.isEpisodeFinished(
+        await EpisodeProgressStorage.isEpisodeFinished(
           seriesTitle: 'The Example Show',
           season: 2,
           episode: 4,
@@ -535,7 +540,7 @@ void main() {
         isFalse,
       );
       expect(
-        await StorageService.getSeriesPlaybackState(
+        await SeriesProgressStorage.getSeriesPlaybackState(
           seriesTitle: 'The Example Show',
           season: 2,
           episode: 4,
@@ -554,13 +559,13 @@ void main() {
             ..['updatedAtMs'] = DateTime.now().millisecondsSinceEpoch - 1000,
         ),
       )!;
-      await StorageService.markEpisodeAsFinished(
+      await EpisodeCompletionStorage.markEpisodeAsFinished(
         seriesTitle: 'Localized title',
         season: 2,
         episode: 4,
         imdbId: 'tt1234567',
       );
-      await StorageService.unmarkEpisodeAsFinished(
+      await EpisodeCompletionStorage.unmarkEpisodeAsFinished(
         seriesTitle: 'Localized title',
         season: 2,
         episode: 4,
@@ -574,7 +579,7 @@ void main() {
         isFalse,
       );
       expect(
-        await StorageService.getMergedFinishedEpisodes(
+        await MergedEpisodeProgressStorage.getMergedFinishedEpisodes(
           seriesTitle: 'The Example Show',
           imdbId: 'tt1234567',
         ),
@@ -590,7 +595,7 @@ void main() {
           ..['updatedAtMs'] = DateTime.now().millisecondsSinceEpoch - 1000,
       ),
     )!;
-    await StorageService.saveSeriesPlaybackState(
+    await SeriesProgressStorage.saveSeriesPlaybackState(
       seriesTitle: 'The Example Show',
       season: 2,
       episode: 4,
@@ -605,7 +610,7 @@ void main() {
       isFalse,
     );
     expect(
-      (await StorageService.getSeriesPlaybackState(
+      (await SeriesProgressStorage.getSeriesPlaybackState(
         seriesTitle: 'The Example Show',
         season: 2,
         episode: 4,
@@ -623,8 +628,8 @@ void main() {
             ..['updatedAtMs'] = DateTime.now().millisecondsSinceEpoch - 1000,
         ),
       )!;
-      await StorageService.markMovieAsFinished('tt1234567');
-      await StorageService.unmarkMovieAsFinished('tt1234567');
+      await MovieProgressStorage.markMovieAsFinished('tt1234567');
+      await MovieProgressStorage.unmarkMovieAsFinished('tt1234567');
       expect(
         await TvPlaybackRecovery.applyCheckpoint(
           checkpoint,
@@ -632,7 +637,7 @@ void main() {
         ),
         isFalse,
       );
-      expect(await StorageService.isMovieFinished('tt1234567'), isFalse);
+      expect(await MovieProgressStorage.isMovieFinished('tt1234567'), isFalse);
     },
   );
 

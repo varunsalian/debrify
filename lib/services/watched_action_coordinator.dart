@@ -1,3 +1,5 @@
+import 'package:debrify/services/storage/episode_completion_storage.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'profiles/profile_local_writes.dart';
 import 'profiles/profile_runtime.dart';
 import 'profiles/profile_session_memory.dart';
@@ -8,7 +10,6 @@ import 'local_series_completion_service.dart';
 import 'mdblist/mdblist_models.dart';
 import 'mdblist/mdblist_service.dart';
 import 'simkl/simkl_service.dart';
-import 'storage_service.dart';
 import 'tracking_source_policy.dart';
 import 'trakt/trakt_service.dart';
 import 'watched_status_service.dart';
@@ -81,14 +82,17 @@ class WatchedActionCoordinator {
     // originating scope. The profile lifecycle drains this whole sequence.
     await ProfileLocalWrites.run(() async {
       if (series) {
-        await StorageService.setSeriesExplicitlyWatched(id, watched: watched);
+        await MovieProgressStorage.setSeriesExplicitlyWatched(
+          id,
+          watched: watched,
+        );
         if (!watched) {
           await LocalSeriesCompletionService.instance.clearCompletedHistory(id);
         }
       } else if (watched) {
-        await StorageService.markMovieAsFinished(id);
+        await MovieProgressStorage.markMovieAsFinished(id);
       } else {
-        await StorageService.unmarkMovieAsFinished(id);
+        await MovieProgressStorage.unmarkMovieAsFinished(id);
       }
     });
     final failures = <String>[];
@@ -176,14 +180,14 @@ class WatchedActionCoordinator {
     Set<TrackingSource> forceTargets = const <TrackingSource>{},
   }) async {
     if (watched) {
-      await StorageService.markEpisodeAsFinished(
+      await EpisodeCompletionStorage.markEpisodeAsFinished(
         seriesTitle: seriesTitle,
         season: season,
         episode: episode,
         imdbId: imdbId,
       );
     } else {
-      await StorageService.unmarkEpisodeAsFinished(
+      await EpisodeCompletionStorage.unmarkEpisodeAsFinished(
         seriesTitle: seriesTitle,
         season: season,
         episode: episode,

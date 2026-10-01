@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/webdav_protocol_client.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_codec.dart';
@@ -170,9 +170,9 @@ void main() {
   for (final key in [
     'app_last_version',
     'app_last_build_number',
-    StorageService.localSeriesCompletionStateKey,
-    StorageService.localSeriesCalendarAttemptedAtKey,
-    StorageService.localSeriesCalendarCheckedAtKey,
+    LocalCompletionStorage.localSeriesCompletionStateKey,
+    LocalCompletionStorage.localSeriesCalendarAttemptedAtKey,
+    LocalCompletionStorage.localSeriesCalendarCheckedAtKey,
   ]) {
     test('startup bookkeeping $key syncs without creating save feedback', () {
       fakeAsync((async) {
@@ -215,9 +215,9 @@ void main() {
       unawaited(scheduler.signal(WebDavSyncTrigger.launch));
       async.flushMicrotasks();
       for (final key in [
-        StorageService.localSeriesCalendarAttemptedAtKey,
-        StorageService.localSeriesCompletionStateKey,
-        StorageService.localSeriesCalendarCheckedAtKey,
+        LocalCompletionStorage.localSeriesCalendarAttemptedAtKey,
+        LocalCompletionStorage.localSeriesCompletionStateKey,
+        LocalCompletionStorage.localSeriesCalendarCheckedAtKey,
       ]) {
         scheduler.notifyLocalChange(key);
       }
@@ -250,9 +250,9 @@ void main() {
       scheduler.notifyLocalChange('tracking_scrobble_targets');
       final savedRevision = feedback.revision;
       for (final key in [
-        StorageService.localSeriesCalendarAttemptedAtKey,
-        StorageService.localSeriesCompletionStateKey,
-        StorageService.localSeriesCalendarCheckedAtKey,
+        LocalCompletionStorage.localSeriesCalendarAttemptedAtKey,
+        LocalCompletionStorage.localSeriesCompletionStateKey,
+        LocalCompletionStorage.localSeriesCalendarCheckedAtKey,
       ]) {
         scheduler.notifyLocalChange(key);
       }

@@ -1,5 +1,6 @@
 import 'package:debrify/services/storage/ambient_trailer_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:debrify/services/storage/watchlist_storage.dart';
@@ -29,7 +30,6 @@ import '../services/debrify_image_cache.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../services/main_page_bridge.dart';
-import '../services/storage_service.dart';
 import '../services/movie_completion_service.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../widgets/rewatch_progress_dialog.dart';
@@ -524,7 +524,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   void initState() {
     super.initState();
     TrackingSourceStorage.trackingSourceRevision.addListener(_onMovieProgressPolicyChanged);
-    StorageService.movieFinishedRevision.addListener(_loadLocalMovieFinished);
+    MovieProgressStorage.movieFinishedRevision.addListener(_loadLocalMovieFinished);
     MdblistService.instance.watchedRevision.addListener(_loadLocalMovieFinished);
     AnalyticsService.screenView('series_detail');
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
@@ -1114,7 +1114,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   @override
   void dispose() {
     TrackingSourceStorage.trackingSourceRevision.removeListener(_onMovieProgressPolicyChanged);
-    StorageService.movieFinishedRevision.removeListener(_loadLocalMovieFinished);
+    MovieProgressStorage.movieFinishedRevision.removeListener(_loadLocalMovieFinished);
     MdblistService.instance.watchedRevision.removeListener(_loadLocalMovieFinished);
     appRouteObserver.unsubscribe(this);
     MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);

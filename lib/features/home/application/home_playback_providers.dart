@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/episode_resume_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/episode_tracker_snapshot_revision.dart';
@@ -8,7 +9,6 @@ import '../../../services/next_episode_service.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../../../services/simkl/simkl_service.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/stremio_service.dart';
 import '../../../services/trakt/trakt_continue_watching_service.dart';
 import '../data/home_catalog_playback_readers.dart';
@@ -132,10 +132,11 @@ final homeSeriesResumeRepositoryProvider = Provider.autoDispose
               canContinue: current,
             ),
           ),
-          readLocalById: (id) =>
-              scoped(() => StorageService.getLastPlayedEpisodeByImdbId(id)),
+          readLocalById: (id) => scoped(
+            () => EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(id),
+          ),
           readLocalByTitle: (title) => scoped(
-            () => StorageService.getLastPlayedEpisode(seriesTitle: title),
+            () => EpisodeResumeStorage.getLastPlayedEpisode(seriesTitle: title),
           ),
           isOwnerCurrent: () => owner == ProfileSessionMemory.captureOwner(),
           log: debugPrint,

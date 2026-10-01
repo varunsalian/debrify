@@ -7,18 +7,28 @@ void main() {
     'every audited hot deletion API reaches its central tombstone helper',
     () {
       const storageOwners = <String, String>{
-        'removeContinueWatchingItem': 'lib/services/storage_service.dart',
-        'clearContinueWatching': 'lib/services/storage_service.dart',
-        'unmarkMovieAsFinished': 'lib/services/storage_service.dart',
-        'setSeriesExplicitlyWatched': 'lib/services/storage_service.dart',
-        'clearPlaybackStateByImdbId': 'lib/services/storage_service.dart',
-        'unmarkEpisodeAsFinished': 'lib/services/storage_service.dart',
-        'unmarkSeriesAsFinished': 'lib/services/storage_service.dart',
-        'cleanupOldPlaybackState': 'lib/services/storage_service.dart',
-        'clearAllPlaybackData': 'lib/services/storage_service.dart',
+        'removeContinueWatchingItem':
+            'lib/services/storage/continue_watching_storage.dart',
+        'clearContinueWatching':
+            'lib/services/storage/continue_watching_storage.dart',
+        'unmarkMovieAsFinished':
+            'lib/services/storage/movie_progress_storage.dart',
+        'setSeriesExplicitlyWatched':
+            'lib/services/storage/movie_progress_storage.dart',
+        'clearPlaybackStateByImdbId':
+            'lib/services/storage/playback_cleanup_storage.dart',
+        'unmarkEpisodeAsFinished':
+            'lib/services/storage/episode_completion_storage.dart',
+        'unmarkSeriesAsFinished':
+            'lib/services/storage/episode_completion_storage.dart',
+        'cleanupOldPlaybackState':
+            'lib/services/storage/playback_cleanup_storage.dart',
+        'clearAllPlaybackData':
+            'lib/services/storage/playback_cleanup_storage.dart',
         'clearPlaylistProgress':
             'lib/services/storage/playlist_progress_storage.dart',
-        'purgeUnwatchedResumeGhosts': 'lib/services/storage_service.dart',
+        'purgeUnwatchedResumeGhosts':
+            'lib/services/storage/completion_migration_storage.dart',
         'savePlaylistItemsRaw': 'lib/services/storage/playlist_storage.dart',
         'removePlaylistItemByKey': 'lib/services/storage/playlist_storage.dart',
         'clearPlaylist': 'lib/services/storage/playlist_storage.dart',
@@ -36,8 +46,8 @@ void main() {
       ).readAsStringSync();
 
       const storageAudit = <String, String>{
-        'removeContinueWatchingItem': '_saveContinueWatchingItems',
-        'clearContinueWatching': '_saveContinueWatchingItems',
+        'removeContinueWatchingItem': 'saveContinueWatchingItems',
+        'clearContinueWatching': 'saveContinueWatchingItems',
         'unmarkMovieAsFinished': 'WebDavSyncTombstoneRecorder',
         'setSeriesExplicitlyWatched': 'WebDavSyncTombstoneRecorder',
         'clearPlaybackStateByImdbId': 'PlaybackStateStore.savePlaybackStateMap',

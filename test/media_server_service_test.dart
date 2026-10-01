@@ -30,8 +30,11 @@ import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/series_source_service.dart';
+import 'package:debrify/services/storage/episode_progress_storage.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:debrify/services/torrent_playback_service.dart';
 import 'package:debrify/services/torrent_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_hot_merge.dart';
@@ -361,7 +364,7 @@ void main() {
       expect(requestCount, before);
       expect(watchReports, isEmpty);
       expect(
-        await StorageService.getVideoPlaybackStateByImdbId('tt123'),
+        await VideoProgressStorage.getVideoPlaybackStateByImdbId('tt123'),
         isNull,
       );
     },
@@ -378,7 +381,7 @@ void main() {
           final source = (await search(movie: movie)).first;
           // Older local resume must not be erased by the server's Played flag.
           if (movie) {
-            await StorageService.saveVideoPlaybackState(
+            await VideoProgressStorage.saveVideoPlaybackState(
               videoTitle: source.displayTitle,
               videoUrl: source.directUrl!,
               imdbId: 'tt123',
@@ -394,16 +397,18 @@ void main() {
           );
           await controller.close();
           final state = movie
-              ? await StorageService.getVideoPlaybackStateByImdbId('tt123')
-              : await StorageService.getSeriesPlaybackState(
+              ? await VideoProgressStorage.getVideoPlaybackStateByImdbId(
+                  'tt123',
+                )
+              : await SeriesProgressStorage.getSeriesPlaybackState(
                   seriesTitle: 'Stable catalog title',
                   imdbId: 'tt123',
                   season: 1,
                   episode: 1,
                 );
           final finished = movie
-              ? await StorageService.isMovieFinished('tt123')
-              : await StorageService.isEpisodeFinished(
+              ? await MovieProgressStorage.isMovieFinished('tt123')
+              : await EpisodeProgressStorage.isEpisodeFinished(
                   seriesTitle: 'Stable catalog title',
                   imdbId: 'tt123',
                   season: 1,
@@ -653,14 +658,14 @@ void main() {
     () async {
       await connect();
       await MediaServerWatchSync.setEnabled(true);
-      await StorageService.markMovieAsFinished('tt123');
+      await MovieProgressStorage.markMovieAsFinished('tt123');
       final source = (await search()).first;
       final controller = MediaServerWatchController();
       await controller.prepare(source);
       await controller.close();
-      expect(await StorageService.isMovieFinished('tt123'), true);
+      expect(await MovieProgressStorage.isMovieFinished('tt123'), true);
       expect(
-        await StorageService.getVideoPlaybackStateByImdbId('tt123'),
+        await VideoProgressStorage.getVideoPlaybackStateByImdbId('tt123'),
         isNull,
       );
     },
@@ -670,7 +675,7 @@ void main() {
     await connect();
     await MediaServerWatchSync.setEnabled(true);
     final source = (await search()).first;
-    await StorageService.saveVideoPlaybackState(
+    await VideoProgressStorage.saveVideoPlaybackState(
       videoTitle: source.displayTitle,
       videoUrl: source.directUrl!,
       imdbId: 'tt123',
@@ -683,7 +688,9 @@ void main() {
     final controller = MediaServerWatchController();
     await controller.prepare(source);
     await controller.close();
-    final state = await StorageService.getVideoPlaybackStateByImdbId('tt123');
+    final state = await VideoProgressStorage.getVideoPlaybackStateByImdbId(
+      'tt123',
+    );
     expect(state?['positionMs'], 30000);
     expect(state?['speed'], 1.5);
     expect(state?['aspect'], 'cover');
@@ -700,8 +707,8 @@ void main() {
         final controller = MediaServerWatchController();
         await controller.prepare(source, contentTitle: 'Stable catalog title');
         final state = movie
-            ? await StorageService.getVideoPlaybackStateByImdbId('tt123')
-            : await StorageService.getSeriesPlaybackState(
+            ? await VideoProgressStorage.getVideoPlaybackStateByImdbId('tt123')
+            : await SeriesProgressStorage.getSeriesPlaybackState(
                 seriesTitle: 'Stable catalog title',
                 imdbId: 'tt123',
                 season: 1,
@@ -764,7 +771,7 @@ void main() {
       await connect();
       await MediaServerWatchSync.setEnabled(true);
       final source = (await search()).first;
-      await StorageService.saveVideoPlaybackState(
+      await VideoProgressStorage.saveVideoPlaybackState(
         videoTitle: source.displayTitle,
         videoUrl: source.directUrl!,
         imdbId: 'tt123',
@@ -777,7 +784,9 @@ void main() {
       final controller = MediaServerWatchController();
       await controller.prepare(source);
       await controller.close();
-      final state = await StorageService.getVideoPlaybackStateByImdbId('tt123');
+      final state = await VideoProgressStorage.getVideoPlaybackStateByImdbId(
+        'tt123',
+      );
       expect(state?['positionMs'], 70000);
       expect(state?['speed'], 1.5);
       expect(state?['aspect'], 'cover');
@@ -795,7 +804,7 @@ void main() {
       final controller = MediaServerWatchController();
       await controller.prepare(source);
       await controller.close();
-      expect(await StorageService.isMovieFinished('tt123'), true);
+      expect(await MovieProgressStorage.isMovieFinished('tt123'), true);
       expect(watchReports, isEmpty);
     },
   );
@@ -821,7 +830,7 @@ void main() {
       await controller.close();
       expect(watchReports, isEmpty);
       expect(
-        await StorageService.getVideoPlaybackStateByImdbId('tt123'),
+        await VideoProgressStorage.getVideoPlaybackStateByImdbId('tt123'),
         isNull,
       );
     },

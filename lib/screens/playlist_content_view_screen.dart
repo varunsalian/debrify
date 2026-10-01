@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/episode_completion_storage.dart';
+import 'package:debrify/services/storage/episode_progress_storage.dart';
+import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
 import 'package:debrify/services/storage/playlist_artwork_storage.dart';
 import 'package:debrify/services/storage/playlist_metadata_storage.dart';
 import 'package:debrify/services/storage/playlist_poster_storage.dart';
@@ -18,7 +21,6 @@ import '../models/playlist_view_mode.dart';
 import '../models/rd_file_node.dart';
 import '../models/series_playlist.dart';
 import '../services/analytics_service.dart';
-import '../services/storage_service.dart';
 import '../services/debrid_service.dart';
 import '../services/alldebrid_service.dart';
 import '../models/alldebrid_file.dart';
@@ -276,16 +278,17 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // 1. Try IMDB ID lookup first (most reliable — avoids title mismatches)
       final imdbId = widget.playlistItem['imdbId'] as String?;
       if (imdbId != null && imdbId.isNotEmpty) {
-        episodeProgress = await StorageService.getEpisodeProgressByImdbId(
-          imdbId,
-        );
+        episodeProgress =
+            await MergedEpisodeProgressStorage.getEpisodeProgressByImdbId(
+              imdbId,
+            );
       }
 
       // 2. Fallback: try seriesTitle field
       if (episodeProgress.isEmpty) {
         final seriesTitle = widget.playlistItem['seriesTitle'] as String?;
         if (seriesTitle != null && seriesTitle.isNotEmpty) {
-          episodeProgress = await StorageService.getEpisodeProgress(
+          episodeProgress = await EpisodeProgressStorage.getEpisodeProgress(
             seriesTitle: seriesTitle,
           );
         }
@@ -295,7 +298,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       if (episodeProgress.isEmpty) {
         final title = widget.playlistItem['title'] as String?;
         if (title != null) {
-          episodeProgress = await StorageService.getEpisodeProgress(
+          episodeProgress = await EpisodeProgressStorage.getEpisodeProgress(
             seriesTitle: title,
           );
         }
@@ -2083,7 +2086,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       if (seriesTitle != null && seriesTitle.isNotEmpty) {
         print('🔄 Reloading progress after video playback for: $seriesTitle');
-        final episodeProgress = await StorageService.getEpisodeProgress(
+        final episodeProgress = await EpisodeProgressStorage.getEpisodeProgress(
           seriesTitle: seriesTitle,
         );
 
@@ -2188,7 +2191,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       if (titleForProgress != null && titleForProgress.isNotEmpty) {
         print('🔄 Reloading progress with clean title: $titleForProgress');
         print('📌 isSeries: ${_seriesPlaylist!.isSeries}');
-        final episodeProgress = await StorageService.getEpisodeProgress(
+        final episodeProgress = await EpisodeProgressStorage.getEpisodeProgress(
           seriesTitle: titleForProgress,
         );
         print('📊 Loaded ${episodeProgress.length} episodes with progress');
@@ -3323,17 +3326,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     try {
       // Check current watched state
-      final isCurrentlyFinished = await StorageService.isEpisodeFinished(
-        seriesTitle: seriesTitle,
-        season: season,
-        episode: episodeNum,
-        imdbId: imdbId,
-      );
+      final isCurrentlyFinished =
+          await EpisodeProgressStorage.isEpisodeFinished(
+            seriesTitle: seriesTitle,
+            season: season,
+            episode: episodeNum,
+            imdbId: imdbId,
+          );
 
       if (isCurrentlyFinished) {
         // Episode is marked as watched, unmark it
         print('🔄 Unmarking as watched: $seriesTitle S${season}E$episodeNum');
-        await StorageService.unmarkEpisodeAsFinished(
+        await EpisodeCompletionStorage.unmarkEpisodeAsFinished(
           seriesTitle: seriesTitle,
           season: season,
           episode: episodeNum,
@@ -3342,7 +3346,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       } else {
         // Episode is not watched, mark it as finished
         print('✅ Marking as watched: $seriesTitle S${season}E$episodeNum');
-        await StorageService.markEpisodeAsFinished(
+        await EpisodeCompletionStorage.markEpisodeAsFinished(
           seriesTitle: seriesTitle,
           season: season,
           episode: episodeNum,

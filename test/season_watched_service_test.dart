@@ -3,9 +3,9 @@ import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/services/episode_tracker_snapshot_revision.dart';
 import 'package:debrify/models/tracking_source.dart';
 import 'package:debrify/services/season_watched_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
+import 'package:debrify/services/storage/episode_progress_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -113,7 +113,9 @@ void main() {
       );
       expect(await status(), false);
       expect(
-        await StorageService.getFinishedEpisodesByImdbId(imdbId: 'tt001'),
+        await EpisodeProgressStorage.getFinishedEpisodesByImdbId(
+          imdbId: 'tt001',
+        ),
         {
           '2': {1},
         },
@@ -249,13 +251,17 @@ void main() {
           0,
         );
         expect(
-          await StorageService.getFinishedEpisodesByImdbId(imdbId: 'tt001'),
+          await EpisodeProgressStorage.getFinishedEpisodesByImdbId(
+            imdbId: 'tt001',
+          ),
           {
             '2': {1, 3, 7},
           },
         );
         expect(
-          await StorageService.getFinishedEpisodesByImdbId(imdbId: 'tt002'),
+          await EpisodeProgressStorage.getFinishedEpisodesByImdbId(
+            imdbId: 'tt002',
+          ),
           isEmpty,
         );
         expect(

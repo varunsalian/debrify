@@ -11,7 +11,7 @@ void main() {
       ]) {
         final source = File('lib/screens/$path.dart').readAsStringSync();
         for (final notifier in [
-          'StorageService.movieFinishedRevision',
+          'MovieProgressStorage.movieFinishedRevision',
           'MdblistService.instance.watchedRevision',
         ]) {
           expect(

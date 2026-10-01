@@ -1,6 +1,10 @@
+import 'package:debrify/services/storage/continue_watching_storage.dart';
+import 'package:debrify/services/storage/episode_resume_storage.dart';
 import 'package:debrify/services/storage/home_page_storage.dart';
 import 'package:debrify/services/storage/iptv_history_storage.dart';
+import 'package:debrify/services/storage/playback_cleanup_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/episode_artwork_service.dart';
 import '../../../services/iptv_cw_history.dart';
@@ -13,7 +17,6 @@ import '../../../services/profiles/profile_session_memory.dart';
 import '../../../services/simkl/simkl_continue_watching_removal.dart';
 import '../../../services/simkl/simkl_continue_watching_service.dart';
 import '../../../services/simkl/simkl_service.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/stremio_service.dart';
 import '../../../services/trakt/trakt_continue_watching_service.dart';
 import '../../../services/trakt/trakt_service.dart';
@@ -41,10 +44,10 @@ final homeLocalContinuationRepositoryProvider =
       (ref) => HomeLocalContinuationRepository(
         readProgressSource: TrackingSourceStorage.getWatchProgressSource,
         readEnabled: HomePageStorage.getHomeContinueWatchingEnabled,
-        readItems: StorageService.getContinueWatchingItems,
+        readItems: ContinueWatchingStorage.getContinueWatchingItems,
         readAddons: StremioService.instance.getEnabledAddons,
-        readEpisode: StorageService.getLastPlayedEpisodeByImdbId,
-        readMovie: StorageService.getVideoPlaybackStateByImdbId,
+        readEpisode: EpisodeResumeStorage.getLastPlayedEpisodeByImdbId,
+        readMovie: VideoProgressStorage.getVideoPlaybackStateByImdbId,
       ),
       dependencies: const [],
     );
@@ -113,8 +116,8 @@ final homeLocalHistoryRemovalProvider = Provider.autoDispose
         write: (id) {
           final scope = owner.scope;
           Future<void> remove() async {
-            await StorageService.removeContinueWatchingItem(id);
-            await StorageService.clearPlaybackStateByImdbId(id);
+            await ContinueWatchingStorage.removeContinueWatchingItem(id);
+            await PlaybackCleanupStorage.clearPlaybackStateByImdbId(id);
           }
 
           return scope == null

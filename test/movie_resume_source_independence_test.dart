@@ -1,6 +1,7 @@
 import 'package:debrify/screens/video_player/models/playlist_entry.dart';
 import 'package:debrify/services/local_playback_resume_resolver.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:debrify/services/video_player_launcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -32,7 +33,7 @@ void main() {
     double speed = 1,
     String aspect = 'contain',
   }) {
-    return StorageService.saveVideoPlaybackState(
+    return VideoProgressStorage.saveVideoPlaybackState(
       videoTitle: VideoPlayerLauncher.resumeIdForEntry(e),
       videoUrl: e.url,
       positionMs: positionMs,
@@ -115,7 +116,7 @@ void main() {
 
   test('catalog playback falls back to a pre-IMDb exact record', () async {
     final current = entry('Legacy.Movie.2018.1080p');
-    await StorageService.saveVideoPlaybackState(
+    await VideoProgressStorage.saveVideoPlaybackState(
       videoTitle: VideoPlayerLauncher.resumeIdForEntry(current),
       videoUrl: current.url,
       positionMs: 1200000,
@@ -153,7 +154,7 @@ void main() {
       imdbId: 'tt1234567',
       positionMs: 7000000,
     );
-    await StorageService.markMovieAsFinished('tt1234567');
+    await MovieProgressStorage.markMovieAsFinished('tt1234567');
 
     final state = await VideoPlayerLauncher.readMovieResumeState(
       entry: entry('Some Movie 2019 2160p WEB-DL-OTHER'),
@@ -165,7 +166,7 @@ void main() {
   });
 
   test('a blank IMDb id never matches an unrelated record', () async {
-    await StorageService.saveVideoPlaybackState(
+    await VideoProgressStorage.saveVideoPlaybackState(
       videoTitle: VideoPlayerLauncher.resumeIdForEntry(entry('Unrelated.File')),
       videoUrl: 'https://example.test/unrelated.mkv',
       positionMs: 900000,
@@ -187,7 +188,10 @@ void main() {
       ),
       isNull,
     );
-    expect(await StorageService.getVideoPlaybackStateByImdbId(''), isNull);
+    expect(
+      await VideoProgressStorage.getVideoPlaybackStateByImdbId(''),
+      isNull,
+    );
   });
 
   test('debrid file-id keys recover across providers too', () async {
@@ -217,7 +221,7 @@ void main() {
     });
 
     expect(
-      (await StorageService.getVideoPlaybackStateByImdbId(
+      (await VideoProgressStorage.getVideoPlaybackStateByImdbId(
         'tt1234567',
       ))?['positionMs'],
       3600000,

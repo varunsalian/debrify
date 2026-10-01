@@ -2,8 +2,8 @@ import 'package:debrify/features/home/application/home_playback_providers.dart';
 import 'package:debrify/features/home/data/home_catalog_playback_readers.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/simkl_storage.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
@@ -254,7 +254,7 @@ void main() {
         homeSimklHistoryRemovalProvider(ProfileSessionMemory.captureOwner()),
       );
       var current = true;
-      final revision = StorageService.movieFinishedRevision.value;
+      final revision = MovieProgressStorage.movieFinishedRevision.value;
       await http.runWithClient(
         () async {
           expect(
@@ -268,7 +268,7 @@ void main() {
           return http.Response('{}', 201);
         }),
       );
-      expect(StorageService.movieFinishedRevision.value, revision + 1);
+      expect(MovieProgressStorage.movieFinishedRevision.value, revision + 1);
     },
   );
 
@@ -368,7 +368,8 @@ void main() {
         );
         var current = true;
         final requests = <String>[];
-        var revisionBeforeReply = StorageService.movieFinishedRevision.value;
+        var revisionBeforeReply =
+            MovieProgressStorage.movieFinishedRevision.value;
         await http.runWithClient(
           () => ProfileRuntime.withCapturedScope(
             other,
@@ -388,7 +389,8 @@ void main() {
                 ProfileSessionMemory.clearAll();
                 ProfileRuntime.publish(other);
               }
-              revisionBeforeReply = StorageService.movieFinishedRevision.value;
+              revisionBeforeReply =
+                  MovieProgressStorage.movieFinishedRevision.value;
               return http.Response(
                 library(scenario == 'watching' ? 'watching' : 'completed'),
                 200,
@@ -407,7 +409,8 @@ void main() {
               ProfileSessionMemory.clearAll();
               ProfileRuntime.publish(other);
             }
-            revisionBeforeReply = StorageService.movieFinishedRevision.value;
+            revisionBeforeReply =
+                MovieProgressStorage.movieFinishedRevision.value;
             return http.Response(
               scenario == 'not-found' ? '{"not_found":{"movies":[{}]}}' : '{}',
               scenario == 'failed-write' ? 500 : 200,
@@ -421,7 +424,7 @@ void main() {
         ].contains(scenario);
         expect(requests, ['GET', if (writes) 'POST']);
         expect(
-          StorageService.movieFinishedRevision.value,
+          MovieProgressStorage.movieFinishedRevision.value,
           revisionBeforeReply +
               (['completed', 'retire-write'].contains(scenario) ? 1 : 0),
         );
@@ -472,7 +475,7 @@ void main() {
       );
       final release = Completer<http.Response>();
       var reads = 0;
-      final revision = StorageService.movieFinishedRevision.value;
+      final revision = MovieProgressStorage.movieFinishedRevision.value;
       await http.runWithClient(
         () async {
           await readers.prepareMovieRewatch(
@@ -480,10 +483,13 @@ void main() {
             'tt123',
             isCurrent: () => true,
           );
-          expect(StorageService.movieFinishedRevision.value, revision);
+          expect(MovieProgressStorage.movieFinishedRevision.value, revision);
           release.complete(http.Response('{}', 200));
           await Future<void>.delayed(const Duration(milliseconds: 40));
-          expect(StorageService.movieFinishedRevision.value, revision + 1);
+          expect(
+            MovieProgressStorage.movieFinishedRevision.value,
+            revision + 1,
+          );
           await SimklService.instance.fetchTitleStatus(
             'tt123',
             contentType: 'movie',

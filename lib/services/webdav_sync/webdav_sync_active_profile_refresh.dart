@@ -4,6 +4,7 @@ import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/services/storage/launch_ident_storage.dart';
+import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/sidebar_storage.dart';
 import 'package:debrify/services/storage/tv_display_storage.dart';
@@ -16,7 +17,6 @@ import '../engine/local_engine_storage.dart';
 import '../main_page_bridge.dart';
 import '../metadata_preferences_service.dart';
 import '../play_loader_style.dart';
-import '../storage_service.dart';
 import '../stream_badges_service.dart';
 import '../stremio_service.dart';
 import '../text_brightness.dart';
@@ -154,7 +154,7 @@ final class DefaultWebDavSyncActiveProfileRefresher
 
     if (changedKeys.any(_affectsLocalCompletion)) {
       authorizationBarrier();
-      StorageService.localCompletionRevision.value++;
+      LocalCompletionStorage.localCompletionRevision.value++;
       authorizationBarrier();
     }
     if (changedKeys.contains(WebDavSyncHotMerge.playlistPreference) ||

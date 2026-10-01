@@ -1,3 +1,9 @@
+import 'package:debrify/services/storage/continue_watching_storage.dart';
+import 'package:debrify/services/storage/local_completion_storage.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
+import 'package:debrify/services/storage/playback_cleanup_storage.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
+import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:debrify/services/storage/trakt_storage.dart';
 import '../models/media_identity.dart';
 import 'episode_tracker_snapshot_revision.dart';
@@ -11,7 +17,6 @@ import 'profiles/profile_runtime.dart';
 import 'profiles/profile_local_writes.dart';
 import 'profiles/profile_session_memory.dart';
 import 'simkl/simkl_service.dart';
-import 'storage_service.dart';
 import 'tracker_identity_service.dart';
 import 'trakt/trakt_service.dart';
 import '../models/tracking_source.dart';
@@ -91,14 +96,14 @@ class SeriesProgressResetService {
           isOwnerCurrent: current,
           write: (id) async {
             if (isMovie) {
-              await StorageService.clearPlaybackStateByImdbId(id);
-              await StorageService.unmarkMovieAsFinished(id);
+              await PlaybackCleanupStorage.clearPlaybackStateByImdbId(id);
+              await MovieProgressStorage.unmarkMovieAsFinished(id);
             } else {
-              await StorageService.clearSeriesWatchProgress(id, title);
+              await SeriesProgressStorage.clearSeriesWatchProgress(id, title);
               // Exact reset removes completion records; do not also match title.
               await LocalSeriesCompletionService.instance.caughtUpIds();
             }
-            await StorageService.removeContinueWatchingItem(id);
+            await ContinueWatchingStorage.removeContinueWatchingItem(id);
           },
         );
         await removal.remove(id, isCurrent: current);
@@ -171,7 +176,7 @@ class SeriesProgressResetService {
         if (!current()) return false;
         if (ok && !isMovie)
           await ProfileLocalWrites.run(
-            () => StorageService.saveEpisodeTraktProgress(
+            () => TrackerEpisodeProgressStorage.saveEpisodeTraktProgress(
               imdbId: id,
               percents: {},
             ),
@@ -205,7 +210,7 @@ class SeriesProgressResetService {
         if (!current()) return false;
         if (history && playback && !isMovie)
           await ProfileLocalWrites.run(
-            () => StorageService.saveEpisodeSimklProgress(
+            () => TrackerEpisodeProgressStorage.saveEpisodeSimklProgress(
               imdbId: id,
               percents: {},
             ),
@@ -264,7 +269,7 @@ class SeriesProgressResetService {
         if (!current()) return false;
         if (ok && !isMovie)
           await ProfileLocalWrites.run(
-            () => StorageService.saveEpisodeMdblistProgress(
+            () => TrackerEpisodeProgressStorage.saveEpisodeMdblistProgress(
               imdbId: id,
               percents: {},
             ),
@@ -278,9 +283,9 @@ class SeriesProgressResetService {
     }
     if (provider == null) {
       EpisodeTrackerSnapshotRevision.invalidateTitle('local', id);
-      StorageService.localCompletionRevision.value++;
+      LocalCompletionStorage.localCompletionRevision.value++;
     }
-    StorageService.movieFinishedRevision.value++;
+    MovieProgressStorage.movieFinishedRevision.value++;
     return failures;
   }
 }

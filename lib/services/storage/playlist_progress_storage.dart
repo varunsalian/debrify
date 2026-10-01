@@ -1,6 +1,6 @@
+import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/playback_state_store.dart';
 import 'package:debrify/services/storage/playlist_storage.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:flutter/foundation.dart';
 
 final class PlaylistProgressStorage {
@@ -108,7 +108,7 @@ final class PlaylistProgressStorage {
       await PlaybackStateStore.savePlaybackStateMap(map, recordDeletions: true);
       // Finished episodes live in this same map. Re-derive local series
       // completion so watched badges and Continue Watching update immediately.
-      StorageService.localCompletionRevision.value++;
+      LocalCompletionStorage.localCompletionRevision.value++;
       debugPrint(
         'StorageService: clearPlaylistProgress completed - removed ${keysToRemove.length} entries for "$title"',
       );

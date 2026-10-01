@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/completion_migration_storage.dart';
 import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/defaults_generation_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
@@ -31,7 +32,6 @@ import '../pikpak_api_service.dart';
 import '../premiumize_account_service.dart';
 import '../remote_control/remote_command_router.dart';
 import '../simkl/simkl_service.dart';
-import '../storage_service.dart';
 import 'profile_local_writes.dart';
 import '../stream_badges_service.dart';
 import '../stremio_service.dart';
@@ -173,7 +173,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
       // forever. Best-effort — a profile switch must not fail over cleanup of
       // playback state written by builds as old as 0.7.0.
       try {
-        await StorageService.purgeUnwatchedResumeGhosts();
+        await CompletionMigrationStorage.purgeUnwatchedResumeGhosts();
       } catch (e) {
         debugPrint('ProfileAppLifecycle: resume-ghost purge failed — $e');
       }

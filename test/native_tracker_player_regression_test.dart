@@ -8,11 +8,15 @@ import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
+import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:debrify/services/storage/trakt_storage.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
+import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
 import 'package:debrify/services/video_player_launcher.dart';
@@ -65,7 +69,7 @@ void main() {
       test(
         '$id local completion at $threshold still delivers remote completion',
         () async {
-          await StorageService.setMovieCompletionThreshold(threshold);
+          await LocalCompletionStorage.setMovieCompletionThreshold(threshold);
           // Local mode also covers the existing IMDb local + remote combination.
           if (id.startsWith('tt')) {
             await TrackingSourceStorage.setWatchProgressSource(
@@ -146,10 +150,10 @@ void main() {
               : {'tmdb': 237243};
           expect(jsonDecode(traktStop.body)['movie']['ids'], expectedIds);
           expect(jsonDecode(mdbStop.body)['movie']['ids'], expectedIds);
-          expect(await StorageService.isMovieFinished(id), isTrue);
-          expect(await StorageService.getVideoResume(resumeId), isNull);
+          expect(await MovieProgressStorage.isMovieFinished(id), isTrue);
+          expect(await VideoResumeStorage.getVideoResume(resumeId), isNull);
           expect(
-            await StorageService.getVideoPlaybackStateByImdbId(id),
+            await VideoProgressStorage.getVideoPlaybackStateByImdbId(id),
             isNull,
           );
         },
@@ -207,7 +211,10 @@ void main() {
         expect(body['episode'], {'season': 4, 'number': 6});
         expect(body['progress'], 20);
       }
-      expect(await StorageService.isMovieFinished('tmdb:237243'), isFalse);
+      expect(
+        await MovieProgressStorage.isMovieFinished('tmdb:237243'),
+        isFalse,
+      );
     },
   );
 
@@ -373,7 +380,7 @@ void main() {
           if (mode == WatchProgressSource.mdblist) {
             await MdblistStorage.saveMdblistApiKey('test-key');
           }
-          await StorageService.saveSeriesPlaybackState(
+          await SeriesProgressStorage.saveSeriesPlaybackState(
             seriesTitle: 'Big Brother',
             season: 4,
             episode: 6,
@@ -381,7 +388,7 @@ void main() {
             durationMs: 100000,
             imdbId: id,
           );
-          await StorageService.saveSeriesPlaybackState(
+          await SeriesProgressStorage.saveSeriesPlaybackState(
             seriesTitle: 'Big Brother',
             season: 20,
             episode: 1,

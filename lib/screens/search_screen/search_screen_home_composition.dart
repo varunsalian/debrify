@@ -1,4 +1,5 @@
 import 'package:debrify/services/storage/detail_navigation_storage.dart';
+import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/watchlist_storage.dart';
 import '../../features/home/application/home_board_providers.dart';
 import '../../features/home/application/home_continuation_providers.dart';
@@ -17,7 +18,6 @@ import '../../services/profiles/profile_policy_guard.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../services/profiles/profile_session_memory.dart';
 import '../../services/simkl/simkl_menu_helpers.dart';
-import '../../services/storage_service.dart';
 import '../../services/tvos_top_shelf_service.dart';
 import '../../services/video_player_launcher.dart';
 import 'home_board_presentation_composition.dart';
@@ -255,7 +255,7 @@ void composeSearchScreenHome(SearchScreenComposer c) {
           DetailNavigationStorage.getMergedSeriesPageEnabled,
       cardSettings: () => c.discoverLifecycle.bindings.cards,
       tabIndex: () => c.tabIndex,
-      localCompletion: () => StorageService.localCompletionRevision,
+      localCompletion: () => LocalCompletionStorage.localCompletionRevision,
       mdblistPlayback: () => MdblistService.instance.playbackRevision,
     ),
     board: c.board.workflow,

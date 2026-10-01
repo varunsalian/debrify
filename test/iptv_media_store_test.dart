@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:debrify/services/storage/iptv_history_storage.dart';
+import 'package:debrify/services/storage/playback_cleanup_storage.dart';
+import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -9,7 +11,6 @@ import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/iptv_channel_order.dart';
 import 'package:debrify/services/iptv_media_store.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_library_models.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_library_mutation.dart';
 
@@ -113,7 +114,7 @@ void main() {
       expect(watched['hasNext'], true);
       expect(watched['lastPlayedAt'], 222);
 
-      final resume = await StorageService.getVideoResume(
+      final resume = await VideoResumeStorage.getVideoResume(
         'http://h/movie/u/p/9.mp4',
       );
       expect(resume, isNotNull);
@@ -839,7 +840,7 @@ void main() {
         seriesName: seriesId == null ? null : 'Show $seriesId',
         hasNextEpisode: hasNext,
       );
-      await StorageService.upsertVideoResume(url, {
+      await VideoResumeStorage.upsertVideoResume(url, {
         'positionMs': positionMs,
         'durationMs': durationMs,
         'speed': 1.0,
@@ -924,7 +925,7 @@ void main() {
         // Resume positions are a separate store and deliberately survive, so
         // both items still play from where they were left.
         expect(
-          await StorageService.getVideoResume('http://h/after.mp4'),
+          await VideoResumeStorage.getVideoResume('http://h/after.mp4'),
           isNotNull,
         );
 
@@ -971,7 +972,7 @@ void main() {
         'http://h/untimed.mp4',
         channelName: 'Untimed',
       );
-      await StorageService.upsertVideoResume('http://h/untimed.mp4', {
+      await VideoResumeStorage.upsertVideoResume('http://h/untimed.mp4', {
         'positionMs': 50000,
         'durationMs': 100000,
         // no updatedAt — the shape very old legacy entries had
@@ -986,12 +987,12 @@ void main() {
     });
 
     test('resume windows: positions only inside the resumable band', () async {
-      await StorageService.upsertVideoResume('http://h/mid.mp4', {
+      await VideoResumeStorage.upsertVideoResume('http://h/mid.mp4', {
         'positionMs': 50000,
         'durationMs': 100000,
         'updatedAt': 1,
       });
-      await StorageService.upsertVideoResume('http://h/done.mp4', {
+      await VideoResumeStorage.upsertVideoResume('http://h/done.mp4', {
         'positionMs': 99000,
         'durationMs': 100000,
         'updatedAt': 2,
@@ -1040,15 +1041,15 @@ void main() {
     );
 
     test('clearAllPlaybackData empties the resume store', () async {
-      await StorageService.upsertVideoResume('http://h/v.mp4', {
+      await VideoResumeStorage.upsertVideoResume('http://h/v.mp4', {
         'positionMs': 1000,
         'durationMs': 2000,
         'updatedAt': 1,
       });
 
-      await StorageService.clearAllPlaybackData();
+      await PlaybackCleanupStorage.clearAllPlaybackData();
 
-      expect(await StorageService.getVideoResume('http://h/v.mp4'), isNull);
+      expect(await VideoResumeStorage.getVideoResume('http://h/v.mp4'), isNull);
     });
 
     test('clear-all writes one tombstone per resume in one revision', () async {
@@ -1201,12 +1202,12 @@ void main() {
         final shelf = await IptvHistoryStorage.getIptvContinueWatching();
         expect(shelf.map((e) => e['url']), ['http://h/keep.mp4']);
         expect(
-          await StorageService.getVideoResume('http://h/drop.mp4'),
+          await VideoResumeStorage.getVideoResume('http://h/drop.mp4'),
           isNull,
           reason: 'the position must go too, or a replay resumes mid-item',
         );
         expect(
-          await StorageService.getVideoResume('http://h/keep.mp4'),
+          await VideoResumeStorage.getVideoResume('http://h/keep.mp4'),
           isNotNull,
           reason: 'nothing else may be touched',
         );
@@ -1247,13 +1248,13 @@ void main() {
       );
       for (var i = 1; i <= 3; i++) {
         expect(
-          await StorageService.getVideoResume('http://h/s1e$i.mp4'),
+          await VideoResumeStorage.getVideoResume('http://h/s1e$i.mp4'),
           isNull,
           reason: 'episode $i kept its position, so its progress bar lives on',
         );
       }
       expect(
-        await StorageService.getVideoResume('http://h/s2e1.mp4'),
+        await VideoResumeStorage.getVideoResume('http://h/s2e1.mp4'),
         isNotNull,
       );
     });
@@ -1288,7 +1289,7 @@ void main() {
       final shelf = await IptvHistoryStorage.getIptvContinueWatching();
       expect(shelf.map((e) => e['url']), ['http://h/b/s1e1.mp4']);
       expect(
-        await StorageService.getVideoResume('http://h/b/s1e1.mp4'),
+        await VideoResumeStorage.getVideoResume('http://h/b/s1e1.mp4'),
         isNotNull,
       );
     });

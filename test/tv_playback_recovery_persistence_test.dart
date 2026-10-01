@@ -6,8 +6,14 @@ import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
+import 'package:debrify/services/storage/episode_progress_storage.dart';
+import 'package:debrify/services/storage/episode_resume_storage.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
+import 'package:debrify/services/storage/playback_cleanup_storage.dart';
 import 'package:debrify/services/storage/playlist_progress_storage.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
+import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:debrify/services/tv_playback_recovery.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,7 +54,7 @@ void main() {
         'tracker movie at $position recovers both bookmarks (return: $sameProcessReturn)',
         () async {
           final timestamp = DateTime.now().millisecondsSinceEpoch - 1000;
-          await StorageService.saveVideoPlaybackState(
+          await VideoProgressStorage.saveVideoPlaybackState(
             videoTitle: 'episode-4',
             videoUrl: 'https://example.invalid/video',
             positionMs: 5000,
@@ -56,7 +62,7 @@ void main() {
             imdbId: 'tt1234',
             recoveryUpdatedAtMs: timestamp - 1000,
           );
-          await StorageService.upsertVideoResume('episode-4', {
+          await VideoResumeStorage.upsertVideoResume('episode-4', {
             'positionMs': 5000,
             'durationMs': 100000,
             'updatedAt': timestamp - 1000,
@@ -77,16 +83,16 @@ void main() {
             ),
             isTrue,
           );
-          final video = await StorageService.getVideoPlaybackState(
+          final video = await VideoProgressStorage.getVideoPlaybackState(
             videoTitle: 'episode-4',
             includeFinished: true,
           );
-          final resume = await StorageService.getVideoResume('episode-4');
+          final resume = await VideoResumeStorage.getVideoResume('episode-4');
           expect(video?['positionMs'], position);
           expect(video?['updatedAt'], timestamp);
           expect(resume?['positionMs'], position);
           expect(resume?['updatedAt'], timestamp);
-          expect(await StorageService.isMovieFinished('tt1234'), isFalse);
+          expect(await MovieProgressStorage.isMovieFinished('tt1234'), isFalse);
         },
       );
     }
@@ -114,16 +120,16 @@ void main() {
           ),
           isTrue,
         );
-        expect(await StorageService.isMovieFinished('null'), isFalse);
+        expect(await MovieProgressStorage.isMovieFinished('null'), isFalse);
         expect(
-          (await StorageService.getVideoPlaybackState(
+          (await VideoProgressStorage.getVideoPlaybackState(
             videoTitle: 'episode-4',
             includeFinished: true,
           ))?['positionMs'],
           99000,
         );
         expect(
-          (await StorageService.getVideoResume('episode-4'))?['positionMs'],
+          (await VideoResumeStorage.getVideoResume('episode-4'))?['positionMs'],
           99000,
         );
       },
@@ -145,7 +151,9 @@ void main() {
         throwsA(anything),
       );
       expect(
-        await StorageService.getVideoPlaybackState(videoTitle: 'episode-4'),
+        await VideoProgressStorage.getVideoPlaybackState(
+          videoTitle: 'episode-4',
+        ),
         isNotNull,
       );
       await db.execute('DROP TRIGGER fail_resume');
@@ -167,7 +175,7 @@ void main() {
       );
       expect(acknowledged, isTrue);
       expect(
-        await StorageService.getVideoResume('episode-4'),
+        await VideoResumeStorage.getVideoResume('episode-4'),
         isNotNull,
         reason:
             'ACK must follow both stores, not discard the retry because of its own first write',
@@ -201,7 +209,7 @@ void main() {
       );
       expect(acked, [6, 7]);
       expect(
-        await StorageService.isEpisodeFinished(
+        await EpisodeProgressStorage.isEpisodeFinished(
           seriesTitle: 'Example Show',
           season: 2,
           episode: 4,
@@ -210,7 +218,7 @@ void main() {
         reason:
             'Opening a series episode does not unwatch it in the normal progress path',
       );
-      final canonical = await StorageService.getLastPlayedEpisodeByImdbId(
+      final canonical = await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(
         'tt1234',
       );
       expect(canonical?['episode'], 4);
@@ -237,7 +245,7 @@ void main() {
                 ..['updatedAtMs'] = time + number;
           if (existingProgress) {
             for (final number in [4, 5]) {
-              await StorageService.saveSeriesPlaybackState(
+              await SeriesProgressStorage.saveSeriesPlaybackState(
                 seriesTitle: 'Example Show',
                 season: season,
                 episode: number,
@@ -267,9 +275,8 @@ void main() {
             discard: (_) async => fail('valid journal discarded'),
           );
           expect(acked, [4, 5, 6]);
-          final latest = await StorageService.getLastPlayedEpisodeByImdbId(
-            'tt1234',
-          );
+          final latest =
+              await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId('tt1234');
           expect(latest?['season'], season);
           expect(latest?['episode'], 6);
           expect(latest?['positionMs'], 5000);
@@ -314,7 +321,7 @@ void main() {
         jsonEncode(record()..['updatedAtMs'] = time + 1000),
       )!;
       // Only the source-specific write finished before the host died.
-      await StorageService.saveVideoPlaybackState(
+      await VideoProgressStorage.saveVideoPlaybackState(
         videoTitle: 'episode-4',
         videoUrl: 'https://example.invalid/video',
         positionMs: rewatch.positionMs,
@@ -330,7 +337,7 @@ void main() {
         ),
         isTrue,
       );
-      final canonical = await StorageService.getLastPlayedEpisodeByImdbId(
+      final canonical = await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(
         'tt1234',
       );
       expect(canonical?['positionMs'], rewatch.positionMs);
@@ -343,7 +350,7 @@ void main() {
     final checkpoint = TvPlaybackCheckpoint.tryParse(
       jsonEncode(record(completed: true)),
     )!;
-    await StorageService.saveSeriesPlaybackState(
+    await SeriesProgressStorage.saveSeriesPlaybackState(
       seriesTitle: 'Example Show',
       season: 2,
       episode: 4,
@@ -351,7 +358,7 @@ void main() {
       durationMs: 100000,
       imdbId: 'tt1234',
     );
-    final before = await StorageService.getSeriesPlaybackState(
+    final before = await SeriesProgressStorage.getSeriesPlaybackState(
       seriesTitle: 'Example Show',
       season: 2,
       episode: 4,
@@ -364,7 +371,7 @@ void main() {
       isTrue,
     );
     expect(
-      await StorageService.isEpisodeFinished(
+      await EpisodeProgressStorage.isEpisodeFinished(
         seriesTitle: 'Example Show',
         season: 2,
         episode: 4,
@@ -372,7 +379,7 @@ void main() {
       isTrue,
     );
     expect(
-      await StorageService.getSeriesPlaybackState(
+      await SeriesProgressStorage.getSeriesPlaybackState(
         seriesTitle: 'Example Show',
         season: 2,
         episode: 4,
@@ -388,7 +395,7 @@ void main() {
       'an existing completed bookmark needs return proof for a rewatch (proof: $provenReturn)',
       () async {
         final time = DateTime.now().millisecondsSinceEpoch - 10000;
-        await StorageService.saveSeriesPlaybackState(
+        await SeriesProgressStorage.saveSeriesPlaybackState(
           seriesTitle: 'Example Show',
           season: 2,
           episode: 4,
@@ -411,9 +418,8 @@ void main() {
           rewatch,
           sameProcessReturn: provenReturn,
         );
-        final canonical = await StorageService.getLastPlayedEpisodeByImdbId(
-          'tt1234',
-        );
+        final canonical =
+            await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId('tt1234');
         expect(canonical?['positionMs'], provenReturn ? 5000 : 100000);
         expect(canonical?['updatedAt'], provenReturn ? time + 1000 : time);
         expect(canonical?['finished'], isTrue);
@@ -423,7 +429,7 @@ void main() {
           sameProcessReturn: false,
         );
         expect(
-          await StorageService.getLastPlayedEpisodeByImdbId('tt1234'),
+          await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId('tt1234'),
           canonical,
         );
       },
@@ -431,7 +437,7 @@ void main() {
   }
 
   test('a movie rewatch retries both stores before unmarking watched', () async {
-    await StorageService.markMovieAsFinished('tt1234');
+    await MovieProgressStorage.markMovieAsFinished('tt1234');
     final checkpoint = TvPlaybackCheckpoint.tryParse(
       jsonEncode(record(type: 'single')),
     )!;
@@ -443,7 +449,7 @@ void main() {
       TvPlaybackRecovery.applyCheckpoint(checkpoint, sameProcessReturn: true),
       throwsA(anything),
     );
-    expect(await StorageService.isMovieFinished('tt1234'), isTrue);
+    expect(await MovieProgressStorage.isMovieFinished('tt1234'), isTrue);
     await db.execute('DROP TRIGGER fail_resume');
     expect(
       await TvPlaybackRecovery.applyCheckpoint(
@@ -452,13 +458,13 @@ void main() {
       ),
       isTrue,
     );
-    expect(await StorageService.isMovieFinished('tt1234'), isFalse);
+    expect(await MovieProgressStorage.isMovieFinished('tt1234'), isFalse);
     expect(
-      (await StorageService.getVideoResume('episode-4'))?['positionMs'],
+      (await VideoResumeStorage.getVideoResume('episode-4'))?['positionMs'],
       5000,
     );
     expect(
-      (await StorageService.getVideoPlaybackState(
+      (await VideoProgressStorage.getVideoPlaybackState(
         videoTitle: 'episode-4',
       ))?['positionMs'],
       5000,
@@ -471,7 +477,7 @@ void main() {
       final checkpoint = TvPlaybackCheckpoint.tryParse(
         jsonEncode(record(type: 'single', completed: true)),
       )!;
-      await StorageService.saveVideoPlaybackState(
+      await VideoProgressStorage.saveVideoPlaybackState(
         videoTitle: 'episode-4',
         videoUrl: 'https://example.invalid/video',
         positionMs: 1000,
@@ -479,7 +485,7 @@ void main() {
         imdbId: 'tt1234',
         recoveryUpdatedAtMs: checkpoint.updatedAtMs - 1000,
       );
-      await StorageService.upsertVideoResume('episode-4', {
+      await VideoResumeStorage.upsertVideoResume('episode-4', {
         'positionMs': 1000,
         'durationMs': 100000,
         'updatedAt': checkpoint.updatedAtMs - 1000,
@@ -492,7 +498,7 @@ void main() {
         TvPlaybackRecovery.applyCheckpoint(checkpoint, sameProcessReturn: true),
         throwsA(anything),
       );
-      expect(await StorageService.isMovieFinished('tt1234'), isFalse);
+      expect(await MovieProgressStorage.isMovieFinished('tt1234'), isFalse);
       await db.execute('DROP TRIGGER fail_delete');
       expect(
         await TvPlaybackRecovery.applyCheckpoint(
@@ -501,8 +507,8 @@ void main() {
         ),
         isTrue,
       );
-      expect(await StorageService.isMovieFinished('tt1234'), isTrue);
-      expect(await StorageService.getVideoResume('episode-4'), isNull);
+      expect(await MovieProgressStorage.isMovieFinished('tt1234'), isTrue);
+      expect(await VideoResumeStorage.getVideoResume('episode-4'), isNull);
     },
   );
 
@@ -522,7 +528,7 @@ void main() {
       await db.execute('DROP TRIGGER fail_resume');
       switch (action) {
         case 'rewind':
-          await StorageService.saveVideoPlaybackState(
+          await VideoProgressStorage.saveVideoPlaybackState(
             videoTitle: 'episode-4',
             videoUrl: 'https://example.invalid/video',
             positionMs: 100,
@@ -530,10 +536,10 @@ void main() {
             imdbId: 'tt1234',
           );
         case 'unwatch':
-          await StorageService.markMovieAsFinished('tt1234');
-          await StorageService.unmarkMovieAsFinished('tt1234');
+          await MovieProgressStorage.markMovieAsFinished('tt1234');
+          await MovieProgressStorage.unmarkMovieAsFinished('tt1234');
         case 'clear':
-          await StorageService.clearAllPlaybackData();
+          await PlaybackCleanupStorage.clearAllPlaybackData();
       }
       expect(
         await TvPlaybackRecovery.applyCheckpoint(
@@ -542,9 +548,9 @@ void main() {
         ),
         isFalse,
       );
-      expect(await StorageService.getVideoResume('episode-4'), isNull);
+      expect(await VideoResumeStorage.getVideoResume('episode-4'), isNull);
       expect(
-        (await StorageService.getVideoPlaybackState(
+        (await VideoProgressStorage.getVideoPlaybackState(
           videoTitle: 'episode-4',
         ))?['positionMs'],
         action == 'rewind' ? 100 : isNull,
@@ -569,7 +575,7 @@ void main() {
       discard: (_) async => fail('invalid'),
     );
     expect(
-      await StorageService.isEpisodeFinished(
+      await EpisodeProgressStorage.isEpisodeFinished(
         seriesTitle: 'Example Show',
         season: 0,
         episode: 4,
@@ -616,7 +622,7 @@ void main() {
         isFalse,
       );
       expect(
-        await StorageService.getSeriesPlaybackState(
+        await SeriesProgressStorage.getSeriesPlaybackState(
           seriesTitle: 'Example Show',
           season: 1,
           episode: 1,
@@ -636,15 +642,15 @@ void main() {
         checkpoint,
         sameProcessReturn: true,
       );
-      expect(await StorageService.isMovieFinished('tt1234'), isTrue);
+      expect(await MovieProgressStorage.isMovieFinished('tt1234'), isTrue);
       // Native ACK failed, then the user chose Settings > Clear playback data.
-      await StorageService.clearAllPlaybackData();
-      expect(await StorageService.isMovieFinished('tt1234'), isFalse);
+      await PlaybackCleanupStorage.clearAllPlaybackData();
+      expect(await MovieProgressStorage.isMovieFinished('tt1234'), isFalse);
       await TvPlaybackRecovery.applyCheckpoint(
         checkpoint,
         sameProcessReturn: false,
       );
-      expect(await StorageService.isMovieFinished('tt1234'), isFalse);
+      expect(await MovieProgressStorage.isMovieFinished('tt1234'), isFalse);
     },
   );
 
@@ -652,7 +658,9 @@ void main() {
     final checkpoint = TvPlaybackCheckpoint.tryParse(
       jsonEncode(record(completed: true)),
     )!;
-    await StorageService.clearAllPlaybackData(recordSyncDeletions: false);
+    await PlaybackCleanupStorage.clearAllPlaybackData(
+      recordSyncDeletions: false,
+    );
     expect(
       await TvPlaybackRecovery.applyCheckpoint(
         checkpoint,

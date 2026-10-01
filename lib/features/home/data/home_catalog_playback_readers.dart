@@ -1,10 +1,11 @@
+import 'package:debrify/services/storage/episode_resume_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../services/native_series_metadata_service.dart';
 import '../../../services/next_episode_service.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
 import '../../../services/simkl/simkl_service.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/stremio_service.dart';
 
 /// Remaining legacy reads for catalog playback. Every call retains its origin.
@@ -31,19 +32,23 @@ class HomeCatalogPlaybackReaders {
   Future<bool?> movieStarted(String id, {required bool Function() isCurrent}) =>
       _read(
         () async =>
-            await StorageService.getVideoPlaybackStateByImdbId(id) != null,
+            await VideoProgressStorage.getVideoPlaybackStateByImdbId(id) !=
+            null,
         isCurrent,
       );
 
   Future<Map<String, dynamic>?> localById(
     String id, {
     required bool Function() isCurrent,
-  }) => _read(() => StorageService.getLastPlayedEpisodeByImdbId(id), isCurrent);
+  }) => _read(
+    () => EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(id),
+    isCurrent,
+  );
   Future<Map<String, dynamic>?> localByTitle(
     String title, {
     required bool Function() isCurrent,
   }) => _read(
-    () => StorageService.getLastPlayedEpisode(seriesTitle: title),
+    () => EpisodeResumeStorage.getLastPlayedEpisode(seriesTitle: title),
     isCurrent,
   );
 

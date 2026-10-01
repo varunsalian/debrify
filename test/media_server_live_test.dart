@@ -17,7 +17,8 @@ import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -327,10 +328,10 @@ void main() {
                 contentTitle: 'Debrify Test Series',
               );
               final local = movie
-                  ? await StorageService.getVideoPlaybackStateByImdbId(
+                  ? await VideoProgressStorage.getVideoPlaybackStateByImdbId(
                       'tt1254207',
                     )
-                  : await StorageService.getSeriesPlaybackState(
+                  : await SeriesProgressStorage.getSeriesPlaybackState(
                       seriesTitle: 'Debrify Test Series',
                       imdbId: 'tt0903747',
                       season: 1,

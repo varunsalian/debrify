@@ -1,3 +1,5 @@
+import 'package:debrify/services/storage/episode_completion_storage.dart';
+import 'package:debrify/services/storage/episode_progress_storage.dart';
 import '../models/tracking_source.dart';
 import '../models/custom_series_identity.dart';
 import 'profiles/profile_runtime.dart';
@@ -5,7 +7,6 @@ import 'trakt/trakt_service.dart';
 import 'simkl/simkl_service.dart';
 import 'mdblist/mdblist_service.dart';
 import 'mdblist/mdblist_models.dart';
-import 'storage_service.dart';
 import 'episode_tracker_snapshot_revision.dart';
 
 /// Panel-owned retry intent, isolated by title, season and provider.
@@ -39,7 +40,7 @@ class SeasonWatchedService {
       Set<String>? inventory;
       switch (provider) {
         case TrackingSource.local:
-          final local = await StorageService.getFinishedEpisodesByImdbId(
+          final local = await EpisodeProgressStorage.getFinishedEpisodesByImdbId(
             imdbId: imdbId,
             seriesTitle: title,
           );
@@ -110,8 +111,8 @@ class SeasonWatchedService {
               continue;
             }
             final write = watched
-                ? StorageService.markEpisodeAsFinished
-                : StorageService.unmarkEpisodeAsFinished;
+                ? EpisodeCompletionStorage.markEpisodeAsFinished
+                : EpisodeCompletionStorage.unmarkEpisodeAsFinished;
             await write(
               seriesTitle: seriesTitle,
               imdbId: imdbId,

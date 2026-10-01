@@ -1,15 +1,26 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/continue_watching_storage.dart';
+import 'package:debrify/services/storage/episode_completion_storage.dart';
+import 'package:debrify/services/storage/episode_progress_storage.dart';
+import 'package:debrify/services/storage/episode_resume_storage.dart';
 import 'package:debrify/services/storage/external_player_storage.dart';
 import 'package:debrify/services/storage/iptv_audio_storage.dart';
 import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:debrify/services/storage/iptv_history_storage.dart';
+import 'package:debrify/services/storage/local_completion_storage.dart';
+import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/playlist_artwork_storage.dart';
 import 'package:debrify/services/storage/playlist_metadata_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:debrify/services/storage/torrent_search_storage.dart';
+import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
+import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:debrify/services/storage/watchlist_storage.dart';
 import 'profiles/profile_playback_preparation.dart';
 import 'profiles/profile_session_memory.dart';
@@ -53,7 +64,6 @@ import '../services/analytics_service.dart';
 import '../services/episode_tracker_snapshot_service.dart';
 import '../services/local_playback_resume_resolver.dart';
 import '../services/series_source_fetcher.dart';
-import '../services/storage_service.dart';
 import '../services/torbox_service.dart';
 import '../services/pikpak_api_service.dart';
 import '../services/premiumize_service.dart';
@@ -1034,7 +1044,7 @@ class VideoPlayerLauncher {
             !trackingPolicy.nativeIdentity) {
           await write(
             () =>
-                StorageService.removeContinueWatchingItem(args.contentImdbId!),
+                ContinueWatchingStorage.removeContinueWatchingItem(args.contentImdbId!),
           );
           if (!active()) return;
         }
@@ -1139,7 +1149,7 @@ class VideoPlayerLauncher {
         if (!trackingPolicy.forcesLocalCompletion) {
           await write(
             () =>
-                StorageService.removeContinueWatchingItem(args.contentImdbId!),
+                ContinueWatchingStorage.removeContinueWatchingItem(args.contentImdbId!),
           );
           if (!active()) return;
         }
@@ -1197,7 +1207,7 @@ class VideoPlayerLauncher {
       if (!trackingPolicy.forcesLocalCompletion &&
           !trackingPolicy.nativeIdentity) {
         await write(
-          () => StorageService.removeContinueWatchingItem(args.contentImdbId!),
+          () => ContinueWatchingStorage.removeContinueWatchingItem(args.contentImdbId!),
         );
         if (!active()) return;
       }
@@ -1223,7 +1233,7 @@ class VideoPlayerLauncher {
         ) &&
         args.stremioTvChannels == null) {
       await write(
-        () => StorageService.saveContinueWatchingItem(
+        () => ContinueWatchingStorage.saveContinueWatchingItem(
           imdbId: args.contentImdbId!,
           title: args.contentTitle ?? args.title,
           contentType: args.contentType!,
@@ -1639,7 +1649,7 @@ class VideoPlayerLauncher {
           final trackingPolicy = await TrackingSourcePolicy.load();
           if (!context.mounted || !active()) return false;
           final lastEpisode = trackingPolicy.progressFrom(TrackingSource.local)
-              ? await StorageService.getLastPlayedEpisode(
+              ? await EpisodeResumeStorage.getLastPlayedEpisode(
                   seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
                 )
               : null;
@@ -1654,7 +1664,7 @@ class VideoPlayerLauncher {
               startIndex = originalIndex;
 
               // Check if this episode is finished - if so, advance to next
-              final isFinished = await StorageService.isEpisodeFinished(
+              final isFinished = await EpisodeProgressStorage.isEpisodeFinished(
                 seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
                 season: lastSeason,
                 episode: lastEpisodeNum,
@@ -1722,7 +1732,7 @@ class VideoPlayerLauncher {
                   episode.seriesInfo.episode!,
                 );
                 Future<void> markFinished() =>
-                    StorageService.markEpisodeAsFinished(
+                    EpisodeCompletionStorage.markEpisodeAsFinished(
                       seriesTitle:
                           seriesPlaylist.seriesTitle ?? 'Unknown Series',
                       season: episode.seriesInfo.season!,
@@ -2642,9 +2652,9 @@ class VideoPlayerLauncher {
           final sourceImdbId = effectiveContentImdbId();
           final sourceTrackerMaps = sourceImdbId != null
               ? await Future.wait([
-                  StorageService.getEpisodeTraktProgress(imdbId: sourceImdbId),
-                  StorageService.getEpisodeSimklProgress(imdbId: sourceImdbId),
-                  StorageService.getConnectedEpisodeMdblistProgress(
+                  TrackerEpisodeProgressStorage.getEpisodeTraktProgress(imdbId: sourceImdbId),
+                  TrackerEpisodeProgressStorage.getEpisodeSimklProgress(imdbId: sourceImdbId),
+                  TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(
                     imdbId: sourceImdbId,
                   ),
                 ])
@@ -2663,13 +2673,13 @@ class VideoPlayerLauncher {
           final stableSeriesTitle =
               args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
           final localSeriesProgress = isSeries
-              ? await StorageService.getMergedEpisodeProgress(
+              ? await MergedEpisodeProgressStorage.getMergedEpisodeProgress(
                   seriesTitle: stableSeriesTitle,
                   imdbId: sourceImdbId,
                 )
               : const <String, Map<String, dynamic>>{};
           final localFinishedEpisodes = isSeries
-              ? await StorageService.getMergedFinishedEpisodes(
+              ? await MergedEpisodeProgressStorage.getMergedFinishedEpisodes(
                   seriesTitle: stableSeriesTitle,
                   imdbId: sourceImdbId,
                 )
@@ -3154,24 +3164,24 @@ class VideoPlayerLauncher {
               final stableSeriesTitle = args.contentTitle ?? args.title;
               final episodeImdbId = effectiveContentImdbId();
               final localProgress =
-                  await StorageService.getMergedEpisodeProgress(
+                  await MergedEpisodeProgressStorage.getMergedEpisodeProgress(
                     seriesTitle: stableSeriesTitle,
                     imdbId: episodeImdbId,
                   );
               final locallyFinished =
-                  await StorageService.getMergedFinishedEpisodes(
+                  await MergedEpisodeProgressStorage.getMergedFinishedEpisodes(
                     seriesTitle: stableSeriesTitle,
                     imdbId: episodeImdbId,
                   );
               final trackerMaps = episodeImdbId != null
                   ? await Future.wait([
-                      StorageService.getEpisodeTraktProgress(
+                      TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
                         imdbId: episodeImdbId,
                       ),
-                      StorageService.getEpisodeSimklProgress(
+                      TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
                         imdbId: episodeImdbId,
                       ),
-                      StorageService.getConnectedEpisodeMdblistProgress(
+                      TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(
                         imdbId: episodeImdbId,
                       ),
                     ])
@@ -3839,7 +3849,7 @@ class VideoPlayerLauncher {
       final durationMs = (progress['durationMs'] as num?)?.toInt() ?? 0;
       if (durationMs <= 0 || positionMs <= 0) return;
 
-      await StorageService.upsertVideoResume(url, {
+      await VideoResumeStorage.upsertVideoResume(url, {
         'positionMs': positionMs,
         'durationMs': durationMs,
         'speed': (progress['speed'] as num?)?.toDouble() ?? 1.0,
@@ -4013,24 +4023,24 @@ class VideoPlayerLauncher {
         >
         buildUpdates() async {
           final localEpisodeProgress =
-              await StorageService.getMergedEpisodeProgress(
+              await MergedEpisodeProgressStorage.getMergedEpisodeProgress(
                 seriesTitle: seriesPlaylist.seriesTitle ?? payload.title,
                 imdbId: discoveredImdbId,
               );
           final locallyFinished =
-              await StorageService.getMergedFinishedEpisodes(
+              await MergedEpisodeProgressStorage.getMergedFinishedEpisodes(
                 seriesTitle: seriesPlaylist.seriesTitle ?? payload.title,
                 imdbId: discoveredImdbId,
               );
           final trackerMaps = discoveredImdbId != null
               ? await Future.wait([
-                  StorageService.getEpisodeTraktProgress(
+                  TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
                     imdbId: discoveredImdbId,
                   ),
-                  StorageService.getEpisodeSimklProgress(
+                  TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
                     imdbId: discoveredImdbId,
                   ),
-                  StorageService.getConnectedEpisodeMdblistProgress(
+                  TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(
                     imdbId: discoveredImdbId,
                   ),
                 ])
@@ -4439,16 +4449,16 @@ class VideoPlayerLauncher {
         if (!payload.localMovieRewatchStarted &&
             positionMs > 0 &&
             movieProgress < payload.movieCompletionThreshold) {
-          await StorageService.unmarkMovieAsFinished(payload.imdbId!);
+          await MovieProgressStorage.unmarkMovieAsFinished(payload.imdbId!);
           payload.localMovieRewatchStarted = true;
         }
         if (localCompleted ||
             completed ||
             progress['localCompletionEligible'] == true) {
           await Future.wait([
-            StorageService.markMovieAsFinished(payload.imdbId!),
+            MovieProgressStorage.markMovieAsFinished(payload.imdbId!),
             if (resumeId != null && resumeId.isNotEmpty)
-              StorageService.removeVideoResume(resumeId),
+              VideoResumeStorage.removeVideoResume(resumeId),
           ]);
           payload.localMovieCompletionRecorded = true;
         }
@@ -4804,7 +4814,7 @@ class VideoPlayerLauncher {
         final episode = progress['episode'] as int?;
         final seriesTitle = payload.seriesTitle ?? payload.title;
         if (season != null && episode != null) {
-          await StorageService.saveSeriesPlaybackState(
+          await SeriesProgressStorage.saveSeriesPlaybackState(
             seriesTitle: seriesTitle,
             season: season,
             episode: episode,
@@ -4817,7 +4827,7 @@ class VideoPlayerLauncher {
 
           if (completed ||
               (payload.localCompletionTracking && localCompleted)) {
-            await StorageService.markEpisodeAsFinished(
+            await EpisodeCompletionStorage.markEpisodeAsFinished(
               seriesTitle: seriesTitle,
               season: season,
               episode: episode,
@@ -4839,7 +4849,7 @@ class VideoPlayerLauncher {
               (resumeId != null ? _resolvedStreamCache[resumeId] : null) ??
               item.url;
 
-          await StorageService.saveVideoPlaybackState(
+          await VideoProgressStorage.saveVideoPlaybackState(
             videoTitle: resumeId,
             videoUrl: persistedUrl,
             positionMs: positionMs,
@@ -4869,7 +4879,7 @@ class VideoPlayerLauncher {
           (resumeId != null ? _resolvedStreamCache[resumeId] : null) ??
           item.url;
 
-      await StorageService.saveVideoPlaybackState(
+      await VideoProgressStorage.saveVideoPlaybackState(
         videoTitle: videoTitle,
         videoUrl: persistedUrl,
         positionMs: positionMs,
@@ -4880,7 +4890,7 @@ class VideoPlayerLauncher {
       );
 
       if (payload.contentType == _PlaybackContentType.single) {
-        await StorageService.upsertVideoResume(videoTitle, {
+        await VideoResumeStorage.upsertVideoResume(videoTitle, {
           'positionMs': positionMs,
           'durationMs': durationMs,
           'speed': speed,
@@ -4897,7 +4907,7 @@ class VideoPlayerLauncher {
           '📺 AndroidTV Collection Save Check: seriesTitle="${payload.seriesTitle}", itemIndex=$fallbackIndex',
         );
 
-        await StorageService.saveSeriesPlaybackState(
+        await SeriesProgressStorage.saveSeriesPlaybackState(
           seriesTitle: payload.seriesTitle!,
           season: 0, // Use season 0 for non-series collections
           episode: fallbackIndex + 1, // Use 1-based index as episode number
@@ -4914,7 +4924,7 @@ class VideoPlayerLauncher {
 
         // Mark as finished if completed
         if (completed) {
-          await StorageService.markEpisodeAsFinished(
+          await EpisodeCompletionStorage.markEpisodeAsFinished(
             seriesTitle: payload.seriesTitle!,
             season: 0,
             episode: fallbackIndex + 1,
@@ -5269,9 +5279,9 @@ class _AndroidTvPlaybackPayload {
     this.mdblistProgressPercent,
     this.localCompletionTracking = false,
     this.movieCompletionThreshold =
-        StorageService.defaultLocalCompletionThreshold,
+        LocalCompletionStorage.defaultLocalCompletionThreshold,
     this.episodeCompletionThreshold =
-        StorageService.defaultLocalCompletionThreshold,
+        LocalCompletionStorage.defaultLocalCompletionThreshold,
     this.initialSubtitles,
   });
 
@@ -5665,12 +5675,12 @@ class _AndroidTvPlaybackPayloadBuilder {
         args.iptvChannels == null;
     final completionThresholds = localCompletionTracking
         ? await Future.wait<int>([
-            StorageService.getMovieCompletionThreshold(),
-            StorageService.getEpisodeCompletionThreshold(),
+            LocalCompletionStorage.getMovieCompletionThreshold(),
+            LocalCompletionStorage.getEpisodeCompletionThreshold(),
           ])
         : const <int>[
-            StorageService.defaultLocalCompletionThreshold,
-            StorageService.defaultLocalCompletionThreshold,
+            LocalCompletionStorage.defaultLocalCompletionThreshold,
+            LocalCompletionStorage.defaultLocalCompletionThreshold,
           ];
     if (canContinue?.call() == false) return null;
     final perItemStates = await _fetchPerItemPlaybackState(
@@ -5682,7 +5692,7 @@ class _AndroidTvPlaybackPayloadBuilder {
     final stableSeriesTitle =
         args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
     final locallyFinished = contentType == _PlaybackContentType.series
-        ? await StorageService.getMergedFinishedEpisodes(
+        ? await MergedEpisodeProgressStorage.getMergedFinishedEpisodes(
             seriesTitle: stableSeriesTitle,
             imdbId: args.contentImdbId,
           )
@@ -5694,9 +5704,9 @@ class _AndroidTvPlaybackPayloadBuilder {
     if (canContinue?.call() == false) return null;
     final trackerProgressMaps = args.contentImdbId != null
         ? await Future.wait([
-            StorageService.getEpisodeTraktProgress(imdbId: args.contentImdbId!),
-            StorageService.getEpisodeSimklProgress(imdbId: args.contentImdbId!),
-            StorageService.getConnectedEpisodeMdblistProgress(
+            TrackerEpisodeProgressStorage.getEpisodeTraktProgress(imdbId: args.contentImdbId!),
+            TrackerEpisodeProgressStorage.getEpisodeSimklProgress(imdbId: args.contentImdbId!),
+            TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(
               imdbId: args.contentImdbId!,
             ),
           ])
@@ -6188,7 +6198,7 @@ class _AndroidTvPlaybackPayloadBuilder {
     final stableSeriesTitle =
         args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
     final seriesProgress = contentType == _PlaybackContentType.series
-        ? await StorageService.getMergedEpisodeProgress(
+        ? await MergedEpisodeProgressStorage.getMergedEpisodeProgress(
             seriesTitle: stableSeriesTitle,
             imdbId: args.contentImdbId,
           )
@@ -6270,7 +6280,7 @@ class _AndroidTvPlaybackPayloadBuilder {
 
   Future<_PerItemState> _readVideoState(String resumeId) async {
     return _stateFromRecord(
-      await StorageService.getVideoPlaybackState(videoTitle: resumeId),
+      await VideoProgressStorage.getVideoPlaybackState(videoTitle: resumeId),
     );
   }
 
@@ -6387,8 +6397,8 @@ class _AndroidTvPlaybackPayloadBuilder {
         hadExplicitTarget || !trackingPolicy.progressFrom(TrackingSource.local)
         ? null
         : trackingPolicy.nativeIdentity && args.contentImdbId != null
-        ? await StorageService.getLastPlayedEpisodeByImdbId(args.contentImdbId!)
-        : await StorageService.getLastPlayedEpisode(
+        ? await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(args.contentImdbId!)
+        : await EpisodeResumeStorage.getLastPlayedEpisode(
             seriesTitle: playlist.seriesTitle ?? 'Unknown Series',
           );
     if (lastEpisode == null) {

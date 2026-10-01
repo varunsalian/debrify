@@ -1,4 +1,5 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/continue_watching_storage.dart';
 import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/services/storage/discover_storage.dart';
@@ -9,6 +10,7 @@ import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/playback_cleanup_storage.dart';
 import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
@@ -78,7 +80,6 @@ import '../services/iptv_transfer_payload.dart';
 import '../services/download_service.dart';
 import '../services/mdblist/mdblist_service.dart';
 import '../services/simkl/simkl_service.dart';
-import '../services/storage_service.dart';
 import '../services/support_remote_config_service.dart';
 import '../services/torbox_account_service.dart';
 import '../services/premiumize_account_service.dart';
@@ -6542,7 +6543,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (confirmed == true) {
-      await StorageService.clearAllPlaybackData();
+      await PlaybackCleanupStorage.clearAllPlaybackData();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -6695,8 +6696,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await DownloadService.instance.clearDownloadDatabase();
     // Reset is a device-local wipe: none of these clears may record synced
     // deletions, or reconnecting sync later replays them circle-wide.
-    await StorageService.clearAllPlaybackData(recordSyncDeletions: false);
-    await StorageService.clearContinueWatching(recordSyncDeletions: false);
+    await PlaybackCleanupStorage.clearAllPlaybackData(recordSyncDeletions: false);
+    await ContinueWatchingStorage.clearContinueWatching(recordSyncDeletions: false);
     await PlaylistStorage.clearPlaylist(recordSyncDeletions: false);
     await PlaylistStorage.clearAllPlaylistMetadata(recordSyncDeletions: false);
     await WatchlistStorage.clearMyWatchlist();

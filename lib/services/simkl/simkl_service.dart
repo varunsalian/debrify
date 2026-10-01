@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/simkl_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import '../../models/media_identity.dart';
@@ -13,7 +14,6 @@ import '../episode_tracker_snapshot_revision.dart';
 import '../profiles/profile_async_authorization.dart';
 import '../profiles/profile_runtime.dart';
 import '../profiles/profile_session_memory.dart';
-import '../storage_service.dart';
 import 'simkl_calendar_service.dart';
 import 'simkl_constants.dart';
 
@@ -364,7 +364,7 @@ class SimklService {
     // the derived calendar (mirrors TraktService clearing TraktCalendarService).
     _invalidateLibraryCache();
     SimklCalendarService.instance.invalidate();
-    StorageService.movieFinishedRevision.value++;
+    MovieProgressStorage.movieFinishedRevision.value++;
   }
 
   /// Get the stored username, if known.
@@ -442,7 +442,7 @@ class SimklService {
               TrackingSource.simkl,
             );
             await _fetchAndStoreUsername(accessToken);
-            StorageService.movieFinishedRevision.value++;
+            MovieProgressStorage.movieFinishedRevision.value++;
           }
 
           try {
@@ -716,7 +716,7 @@ class SimklService {
     // Moving to or away from Completed changes the effective watched set.
     // We do not know the previous status here, so every successful move must
     // invalidate; unlike ratings, any list move can remove an existing tick.
-    StorageService.movieFinishedRevision.value++;
+    MovieProgressStorage.movieFinishedRevision.value++;
     if (type == 'series') {
       EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
     }
@@ -827,7 +827,7 @@ class SimklService {
       return false;
     }
     _invalidateLibraryCache();
-    StorageService.movieFinishedRevision.value++;
+    MovieProgressStorage.movieFinishedRevision.value++;
     if (type == 'series') {
       EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
     }
@@ -871,7 +871,7 @@ class SimklService {
       return false;
     }
     _invalidateLibraryCache();
-    StorageService.movieFinishedRevision.value++;
+    MovieProgressStorage.movieFinishedRevision.value++;
     if (type == 'series') {
       EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
     }
@@ -927,7 +927,7 @@ class SimklService {
     _invalidateLibraryCache();
     EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', showImdbId);
     // A final regular episode can move the show into the caught-up badge set.
-    StorageService.movieFinishedRevision.value++;
+    MovieProgressStorage.movieFinishedRevision.value++;
     return true;
   }
 
@@ -950,7 +950,7 @@ class SimklService {
     if (!_wasMatched(result, 'shows')) return false;
     _invalidateLibraryCache();
     EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', showImdbId);
-    StorageService.movieFinishedRevision.value++;
+    MovieProgressStorage.movieFinishedRevision.value++;
     return true;
   }
 
@@ -1013,7 +1013,7 @@ class SimklService {
     }
     _invalidateLibraryCache();
     EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
-    StorageService.movieFinishedRevision.value++;
+    MovieProgressStorage.movieFinishedRevision.value++;
     return true;
   }
 
@@ -1141,7 +1141,7 @@ class SimklService {
       }
       if (path == '/scrobble/stop' && progress >= 80) {
         _invalidateLibraryCache();
-        StorageService.movieFinishedRevision.value++;
+        MovieProgressStorage.movieFinishedRevision.value++;
       }
     } else if (path == '/scrobble/stop' &&
         failureStatus == 409 &&
@@ -1233,7 +1233,7 @@ class SimklService {
       _invalidatePlaybackCache();
       _invalidateLibraryCache();
       EpisodeTrackerSnapshotRevision.invalidateTitle('simkl', imdbId);
-      StorageService.movieFinishedRevision.value++;
+      MovieProgressStorage.movieFinishedRevision.value++;
     } catch (error) {
       debugPrint('Simkl: stop-conflict recovery error (${error.runtimeType})');
     }

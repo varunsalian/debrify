@@ -1,3 +1,4 @@
+import 'package:debrify/services/storage/episode_resume_storage.dart';
 import '../models/media_identity.dart';
 import '../services/metadata_preferences_service.dart';
 import '../services/diagnostic_log.dart';
@@ -18,7 +19,6 @@ import '../services/stremio_service.dart';
 import '../services/trakt/trakt_episode_model.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/tvmaze_service.dart';
-import '../services/storage_service.dart';
 import '../services/local_series_completion_service.dart';
 import '../utils/platform_util.dart';
 import '../utils/episode_progress_merge.dart';
@@ -455,7 +455,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // policy admits it, so one map serves rendering and resume arbitration.
     final merged = <String, double>{
       if (policy.progressFrom(TrackingSource.local))
-        ...await StorageService.getEpisodeWatchProgressByImdbId(imdbId),
+        ...await EpisodeResumeStorage.getEpisodeWatchProgressByImdbId(imdbId),
     };
     if (!mounted || generation != _episodeModeGeneration) return;
 
@@ -1242,7 +1242,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           effectiveEpisode == null) {
         final imdbId = show.progressId;
         if (imdbId != null) {
-          final lastPlayed = await StorageService.getLastPlayedEpisodeByImdbId(
+          final lastPlayed = await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(
             imdbId,
           );
           if (!mounted || generation != _episodeModeGeneration) return;
@@ -1252,7 +1252,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           }
         }
         if (!MediaIdentity.isNative(show.progressId) && !CustomSeriesIdentity.isCustom(show.imdbId) && effectiveSeason == null && effectiveEpisode == null) {
-          final byTitle = await StorageService.getLastPlayedEpisode(
+          final byTitle = await EpisodeResumeStorage.getLastPlayedEpisode(
             seriesTitle: show.name,
           );
           if (!mounted || generation != _episodeModeGeneration) return;

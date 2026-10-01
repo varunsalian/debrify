@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:debrify/services/storage/external_player_storage.dart';
+import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/player_network_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
@@ -9,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/external_player_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/android_native_downloader.dart';
 import '../../services/subtitle_font_service.dart';
 import '../../services/analytics_service.dart';
@@ -125,9 +125,9 @@ class _ExternalPlayerSettingsPageState
   bool _subtitleForcedOnly = false;
   bool _subtitleAutoSync = false; // Native players only, experimental opt-in
   int _movieCompletionThreshold =
-      StorageService.defaultLocalCompletionThreshold;
+      LocalCompletionStorage.defaultLocalCompletionThreshold;
   int _episodeCompletionThreshold =
-      StorageService.defaultLocalCompletionThreshold;
+      LocalCompletionStorage.defaultLocalCompletionThreshold;
   bool _skipSegmentsEnabled = true;
   String _skipSegmentProvider = SkipSegmentProviders.auto;
   String _netPatience = NetworkTuning.standard;
@@ -626,9 +626,9 @@ class _ExternalPlayerSettingsPageState
       final subtitleAutoSync =
           await SubtitleSettingsStorage.getSubtitleAutoSyncEnabled();
       final movieCompletionThreshold =
-          await StorageService.getMovieCompletionThreshold();
+          await LocalCompletionStorage.getMovieCompletionThreshold();
       final episodeCompletionThreshold =
-          await StorageService.getEpisodeCompletionThreshold();
+          await LocalCompletionStorage.getEpisodeCompletionThreshold();
       final skipSegmentsEnabled = await SkipSegmentsStorage.getSkipSegmentsEnabled();
       final storedSkipSegmentProvider =
           await SkipSegmentsStorage.getSkipSegmentProvider();
@@ -1225,13 +1225,13 @@ class _ExternalPlayerSettingsPageState
   }
 
   List<int> get _completionThresholdOptions =>
-      StorageService.localCompletionThresholdOptions;
+      LocalCompletionStorage.localCompletionThresholdOptions;
 
   int _completionThresholdIndex(int value) {
     final index = _completionThresholdOptions.indexOf(value);
     return index < 0
         ? _completionThresholdOptions.indexOf(
-            StorageService.defaultLocalCompletionThreshold,
+            LocalCompletionStorage.defaultLocalCompletionThreshold,
           )
         : index;
   }
@@ -1239,13 +1239,13 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setMovieCompletionThresholdIndex(int index) async {
     final value = _completionThresholdOptions[index];
     setState(() => _movieCompletionThreshold = value);
-    await StorageService.setMovieCompletionThreshold(value);
+    await LocalCompletionStorage.setMovieCompletionThreshold(value);
   }
 
   Future<void> _setEpisodeCompletionThresholdIndex(int index) async {
     final value = _completionThresholdOptions[index];
     setState(() => _episodeCompletionThreshold = value);
-    await StorageService.setEpisodeCompletionThreshold(value);
+    await LocalCompletionStorage.setEpisodeCompletionThreshold(value);
   }
 
   Future<void> _setSkipSegmentsEnabled(bool enabled) async {

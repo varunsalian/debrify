@@ -1,6 +1,5 @@
 import 'package:debrify/features/home/application/home_detail_providers.dart';
 import 'package:debrify/features/home/application/home_playback_providers.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
@@ -12,6 +11,7 @@ import 'dart:io';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:debrify/features/home/application/home_continuation_providers.dart';
@@ -324,7 +324,7 @@ void main() {
         homeTraktHistoryRemovalProvider(ProfileSessionMemory.captureOwner()),
       );
       var current = true;
-      final revision = StorageService.movieFinishedRevision.value;
+      final revision = MovieProgressStorage.movieFinishedRevision.value;
       await http.runWithClient(
         () async {
           expect(
@@ -338,7 +338,7 @@ void main() {
           return http.Response('{}', 200);
         }),
       );
-      expect(StorageService.movieFinishedRevision.value, revision + 1);
+      expect(MovieProgressStorage.movieFinishedRevision.value, revision + 1);
     },
   );
 

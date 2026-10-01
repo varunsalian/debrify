@@ -7,7 +7,7 @@ import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_session_memory.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -37,7 +37,7 @@ void main() {
         await release.future;
       });
       await entered.future;
-      final revision = StorageService.localCompletionRevision.value;
+      final revision = LocalCompletionStorage.localCompletionRevision.value;
       var calls = 0;
       final write = repository.recordInventory(
         'tt1234567',
@@ -58,10 +58,10 @@ void main() {
       await write;
       final prefs = await SharedPreferences.getInstance();
       expect(
-        prefs.getString(StorageService.localSeriesCompletionStateKey),
+        prefs.getString(LocalCompletionStorage.localSeriesCompletionStateKey),
         isNull,
       );
-      expect(StorageService.localCompletionRevision.value, revision);
+      expect(LocalCompletionStorage.localCompletionRevision.value, revision);
     },
   );
 
@@ -112,7 +112,7 @@ void main() {
         {'season': 1, 'episode': 1, 'released': '2025-01-01T00:00:00Z'},
       ], () => true);
       final prefs = await SharedPreferences.getInstance();
-      final key = StorageService.localSeriesCompletionStateKey;
+      final key = LocalCompletionStorage.localSeriesCompletionStateKey;
       expect(prefs.getString(scope.preferenceKey(key)), contains('tt1234567'));
       expect(prefs.getString(key), isNull);
     },

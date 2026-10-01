@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:debrify/services/storage/detail_navigation_storage.dart';
+import 'package:debrify/services/storage/episode_resume_storage.dart';
+import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
 import 'package:debrify/services/storage/playlist_artwork_storage.dart';
 import 'package:debrify/services/storage/playlist_metadata_storage.dart';
 import 'package:debrify/services/storage/playlist_poster_storage.dart';
 import 'package:debrify/services/storage/playlist_storage.dart';
+import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
 import 'package:debrify/services/storage/tvmaze_mapping_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -14,7 +17,6 @@ import '../models/custom_series_identity.dart';
 import '../models/media_identity.dart';
 import '../services/episode_info_service.dart';
 import '../services/episode_tracker_snapshot_service.dart';
-import '../services/storage_service.dart';
 import '../services/tracking_source_policy.dart';
 import '../services/tvmaze_service.dart';
 import '../utils/episode_progress_merge.dart';
@@ -440,8 +442,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   Future<void> _loadLastPlayedEpisode() async {
     try {
       final lastEpisode = CustomSeriesIdentity.isCustom(_effectiveImdbId)
-          ? await StorageService.getLastPlayedEpisodeByImdbId(_effectiveImdbId!)
-          : await StorageService.getLastPlayedEpisode(
+          ? await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(_effectiveImdbId!)
+          : await EpisodeResumeStorage.getLastPlayedEpisode(
         seriesTitle: widget.seriesPlaylist.seriesTitle ?? 'Unknown Series',
       );
       if (lastEpisode != null && mounted) {
@@ -459,7 +461,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     try {
       if (widget.seriesPlaylist.isSeries) {
         final allFinishedEpisodes =
-            await StorageService.getMergedFinishedEpisodes(
+            await MergedEpisodeProgressStorage.getMergedFinishedEpisodes(
               seriesTitle: widget.seriesPlaylist.seriesTitle ?? '',
               imdbId: _effectiveImdbId,
             );
@@ -480,18 +482,18 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       if (widget.seriesPlaylist.isSeries) {
         final imdbId = _effectiveImdbId;
         final results = await Future.wait([
-          StorageService.getMergedEpisodeProgress(
+          MergedEpisodeProgressStorage.getMergedEpisodeProgress(
             seriesTitle: widget.seriesPlaylist.seriesTitle ?? '',
             imdbId: imdbId,
           ),
           (imdbId != null && imdbId.isNotEmpty)
-              ? StorageService.getEpisodeTraktProgress(imdbId: imdbId)
+              ? TrackerEpisodeProgressStorage.getEpisodeTraktProgress(imdbId: imdbId)
               : Future.value(const <String, double>{}),
           (imdbId != null && imdbId.isNotEmpty)
-              ? StorageService.getEpisodeSimklProgress(imdbId: imdbId)
+              ? TrackerEpisodeProgressStorage.getEpisodeSimklProgress(imdbId: imdbId)
               : Future.value(const <String, double>{}),
           (imdbId != null && imdbId.isNotEmpty)
-              ? StorageService.getConnectedEpisodeMdblistProgress(imdbId: imdbId)
+              ? TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(imdbId: imdbId)
               : Future.value(const <String, double>{}),
           TrackingSourcePolicy.load(),
         ]);

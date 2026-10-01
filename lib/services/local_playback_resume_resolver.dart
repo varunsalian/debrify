@@ -1,5 +1,8 @@
+import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
 import '../models/playback_resume_policy.dart';
-import 'storage_service.dart';
 import '../models/custom_series_identity.dart';
 
 export '../models/playback_resume_policy.dart';
@@ -19,20 +22,20 @@ class LocalPlaybackResumeResolver {
   }) async {
     final wanted = imdbId?.trim() ?? '';
     if (wanted.startsWith('medialibrary:')) {
-      return StorageService.getVideoPlaybackStateByImdbId(wanted);
+      return VideoProgressStorage.getVideoPlaybackStateByImdbId(wanted);
     }
     if (CustomSeriesIdentity.isCustom(wanted)) {
-      return StorageService.getVideoPlaybackStateByImdbId(wanted);
+      return VideoProgressStorage.getVideoPlaybackStateByImdbId(wanted);
     }
 
     if (policy == PlaybackResumePolicy.catalogCanonical && wanted.isNotEmpty) {
       // Completion is canonical too. In particular, do not resurrect a legacy
       // exact-source row that predates IMDb being written into playback state.
-      if (await StorageService.isMovieFinished(wanted)) return null;
+      if (await MovieProgressStorage.isMovieFinished(wanted)) return null;
 
       final reads = await Future.wait<Map<String, dynamic>?>([
-        StorageService.getVideoPlaybackStateByImdbId(wanted),
-        StorageService.getVideoPlaybackState(videoTitle: resumeId),
+        VideoProgressStorage.getVideoPlaybackStateByImdbId(wanted),
+        VideoProgressStorage.getVideoPlaybackState(videoTitle: resumeId),
       ]);
       final canonical = reads[0];
       final exact = _catalogEligibleExact(reads[1], wanted);
@@ -45,12 +48,12 @@ class LocalPlaybackResumeResolver {
 
     // Existing generic behavior: the precise file/provider record owns resume;
     // IMDb is only a recovery path when that source has never been seen.
-    final exact = await StorageService.getVideoPlaybackState(
+    final exact = await VideoProgressStorage.getVideoPlaybackState(
       videoTitle: resumeId,
     );
     if (exact != null) return exact;
     if (wanted.isEmpty) return null;
-    return StorageService.getVideoPlaybackStateByImdbId(wanted);
+    return VideoProgressStorage.getVideoPlaybackStateByImdbId(wanted);
   }
 
   static Future<Map<String, dynamic>?> episode({
@@ -62,7 +65,7 @@ class LocalPlaybackResumeResolver {
   }) async {
     if (policy != PlaybackResumePolicy.catalogCanonical ||
         imdbId?.trim().isNotEmpty != true) {
-      return StorageService.getSeriesPlaybackState(
+      return SeriesProgressStorage.getSeriesPlaybackState(
         seriesTitle: seriesTitle,
         imdbId: imdbId,
         season: season,
@@ -71,11 +74,11 @@ class LocalPlaybackResumeResolver {
     }
 
     final reads = await Future.wait<dynamic>([
-      StorageService.getMergedEpisodeProgress(
+      MergedEpisodeProgressStorage.getMergedEpisodeProgress(
         seriesTitle: seriesTitle,
         imdbId: imdbId!.trim(),
       ),
-      StorageService.getSeriesPlaybackState(
+      SeriesProgressStorage.getSeriesPlaybackState(
         seriesTitle: seriesTitle,
         imdbId: imdbId,
         season: season,

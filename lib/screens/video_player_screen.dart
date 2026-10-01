@@ -1,9 +1,13 @@
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/episode_completion_storage.dart';
+import 'package:debrify/services/storage/episode_resume_storage.dart';
 import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/services/storage/iptv_audio_storage.dart';
 import 'package:debrify/services/storage/iptv_history_storage.dart';
 import 'package:debrify/services/storage/iptv_last_channel_storage.dart';
 import 'package:debrify/services/storage/iptv_playlist_storage.dart';
+import 'package:debrify/services/storage/local_completion_storage.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:debrify/services/storage/player_network_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
@@ -12,10 +16,14 @@ import 'package:debrify/services/storage/playlist_metadata_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
 import 'package:debrify/services/storage/skip_segments_storage.dart';
 import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:debrify/services/storage/track_preferences_storage.dart';
+import 'package:debrify/services/storage/tracker_episode_progress_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
+import 'package:debrify/services/storage/video_resume_storage.dart';
 import '../models/source_playlist_resolver.dart';
 import '../widgets/playback_startup_view.dart';
 import '../utils/episode_playback_request.dart';
@@ -41,7 +49,6 @@ import '../services/player_display_controls.dart';
 import 'package:synchronized/synchronized.dart';
 
 // Removed volume_controller; using media_kit player volume instead
-import '../services/storage_service.dart';
 import '../services/local_playback_resume_resolver.dart';
 import '../services/startup_stream_policy.dart';
 import '../services/direct_source_authorization.dart';
@@ -272,7 +279,7 @@ class VideoPlayerScreen extends StatefulWidget {
         (contentId?.startsWith('medialibrary:') ?? false)) {
       return state;
     }
-    return StorageService.getVideoResume(resumeKey);
+    return VideoResumeStorage.getVideoResume(resumeKey);
   }
 
   final String videoUrl;
@@ -1466,9 +1473,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _currentMovieMarkedAsFinished = false;
   bool _currentMovieRewatchStarted = false;
   int _movieCompletionThreshold =
-      StorageService.defaultLocalCompletionThreshold;
+      LocalCompletionStorage.defaultLocalCompletionThreshold;
   int _episodeCompletionThreshold =
-      StorageService.defaultLocalCompletionThreshold;
+      LocalCompletionStorage.defaultLocalCompletionThreshold;
   // We render using a large logical surface; fit is controlled by BoxFit
   StreamSubscription? _posSub;
   StreamSubscription? _durSub;
@@ -1812,8 +1819,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _loadLocalCompletionThresholds() async {
     final values = await Future.wait<int>([
-      StorageService.getMovieCompletionThreshold(),
-      StorageService.getEpisodeCompletionThreshold(),
+      LocalCompletionStorage.getMovieCompletionThreshold(),
+      LocalCompletionStorage.getEpisodeCompletionThreshold(),
     ]);
     if (!mounted) return;
     _movieCompletionThreshold = values[0];
@@ -2623,7 +2630,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // user advances to a different episode while this is in flight, we key
     // off the episode that's actually current when the fetch resolves.
     if (_traktEpisodeProgress == null) {
-      final loaded = await StorageService.getEpisodeTraktProgress(
+      final loaded = await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
         imdbId: imdbId,
       );
       if (_episodeTrackerProgressImdbId != imdbId) return null;
@@ -2680,7 +2687,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Await before resolving the episode identity for the same race-safety as
     // [_currentEpisodeTraktPercent].
     if (_simklEpisodeProgress == null) {
-      final loaded = await StorageService.getEpisodeSimklProgress(
+      final loaded = await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
         imdbId: imdbId,
       );
       if (_episodeTrackerProgressImdbId != imdbId) return null;
@@ -2726,7 +2733,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (imdbId == null) return null;
     _bindEpisodeTrackerProgressIdentity(imdbId);
     if (_mdblistEpisodeProgress == null) {
-      final loaded = await StorageService.getEpisodeMdblistProgress(
+      final loaded = await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(
         imdbId: imdbId,
       );
       if (_episodeTrackerProgressImdbId != imdbId) return null;
@@ -3343,7 +3350,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               debugPrint(
                 'Resume: checking entry[$i] title="${entry.title}" resumeId=$resumeId',
               );
-              final state = await StorageService.getVideoPlaybackState(
+              final state = await VideoProgressStorage.getVideoPlaybackState(
                 videoTitle: resumeId,
               );
               if (state != null) {
@@ -5205,7 +5212,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     SeriesPlaylist seriesPlaylist,
   ) async {
     try {
-      final lastEpisode = await StorageService.getLastPlayedEpisode(
+      final lastEpisode = await EpisodeResumeStorage.getLastPlayedEpisode(
         seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
       );
 
@@ -10375,7 +10382,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         widget.contentImdbId != null) {
       _currentEpisodeMarkedAsFinished = true;
       try {
-        await StorageService.markEpisodeAsFinished(
+        await EpisodeCompletionStorage.markEpisodeAsFinished(
           seriesTitle: widget.contentTitle ?? widget.title,
           season: widget.contentSeason!,
           episode: widget.contentEpisode!,
@@ -10400,7 +10407,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         if (currentEpisode.seriesInfo.season != null &&
             currentEpisode.seriesInfo.episode != null) {
-          await StorageService.markEpisodeAsFinished(
+          await EpisodeCompletionStorage.markEpisodeAsFinished(
             seriesTitle: seriesPlaylist.seriesTitle!,
             season: currentEpisode.seriesInfo.season!,
             episode: currentEpisode.seriesInfo.episode!,
@@ -10423,8 +10430,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _currentMovieMarkedAsFinished = true;
     try {
       await Future.wait([
-        StorageService.markMovieAsFinished(imdbId),
-        StorageService.removeVideoResume(_resumeKey, playbackCheckpoint: true),
+        MovieProgressStorage.markMovieAsFinished(imdbId),
+        VideoResumeStorage.removeVideoResume(_resumeKey, playbackCheckpoint: true),
       ]);
     } catch (_) {
       // Playback remains usable if local storage is temporarily unavailable.
@@ -10450,7 +10457,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // below its threshold is a rewatch, so restore it to normal local
         // Continue Watching behavior before the next resume save.
         _currentMovieRewatchStarted = true;
-        unawaited(StorageService.unmarkMovieAsFinished(movieImdbId));
+        unawaited(MovieProgressStorage.unmarkMovieAsFinished(movieImdbId));
       }
       if (!_currentMovieMarkedAsFinished &&
           percent >= _movieCompletionThreshold) {
@@ -12305,7 +12312,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final locallyFinishedMovie =
         !preferLocalResume &&
         localMovieImdbId != null &&
-        await StorageService.isMovieFinished(localMovieImdbId);
+        await MovieProgressStorage.isMovieFinished(localMovieImdbId);
     // Speed/aspect are device prefs riding in the resume record — restore
     // them in EVERY progress mode; only the POSITION is a policy-gated
     // resume candidate.
@@ -12568,7 +12575,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
         if (widget.resumePolicy == PlaybackResumePolicy.sourceSpecific &&
             currentEntry != null) {
-          final exactVideo = await StorageService.getVideoPlaybackState(
+          final exactVideo = await VideoProgressStorage.getVideoPlaybackState(
             videoTitle: _resumeIdForEntry(currentEntry),
           );
           if (exactVideo != null) return exactVideo;
@@ -12588,14 +12595,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Legacy single-episode launches may only have the mirrored video row.
         if (currentEntry != null) {
-          return StorageService.getVideoPlaybackState(
+          return VideoProgressStorage.getVideoPlaybackState(
             videoTitle: _resumeIdForEntry(currentEntry),
           );
         }
         final legacyTitle = widget.title.isNotEmpty
             ? widget.title
             : 'Unknown Video';
-        return StorageService.getVideoPlaybackState(videoTitle: legacyTitle);
+        return VideoProgressStorage.getVideoPlaybackState(videoTitle: legacyTitle);
       }
 
       final resumeId = currentEntry != null
@@ -12754,7 +12761,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
           if (currentEpisode.seriesInfo.season != null &&
               currentEpisode.seriesInfo.episode != null) {
-            await StorageService.saveSeriesPlaybackState(
+            await SeriesProgressStorage.saveSeriesPlaybackState(
               seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
               season: currentEpisode.seriesInfo.season!,
               episode: currentEpisode.seriesInfo.episode!,
@@ -12788,7 +12795,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               currentVideoUrl = widget.videoUrl;
             }
 
-            await StorageService.saveVideoPlaybackState(
+            await VideoProgressStorage.saveVideoPlaybackState(
               videoTitle: resumeId,
               videoUrl: currentVideoUrl,
               positionMs: pos.inMilliseconds,
@@ -12809,7 +12816,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               final season = seriesInfo.season ?? 0;
               final episode = seriesInfo.episode ?? (_currentIndex + 1);
 
-              await StorageService.saveSeriesPlaybackState(
+              await SeriesProgressStorage.saveSeriesPlaybackState(
                 seriesTitle: seriesPlaylist.seriesTitle!,
                 season: season, // Parsed from filename, fallback to 0
                 episode: episode, // Parsed from filename, fallback to index
@@ -12834,7 +12841,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           if (_effectiveContentType == 'series' &&
               _effectiveContentSeason != null &&
               _effectiveContentEpisode != null) {
-            await StorageService.saveSeriesPlaybackState(
+            await SeriesProgressStorage.saveSeriesPlaybackState(
               seriesTitle: _effectiveContentTitle ?? widget.title,
               season: _effectiveContentSeason!,
               episode: _effectiveContentEpisode!,
@@ -12852,7 +12859,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             final title = _currentStremioTvContentTitle ?? widget.title;
             final videoTitle = title.isNotEmpty ? title : 'Unknown Video';
 
-            await StorageService.saveVideoPlaybackState(
+            await VideoProgressStorage.saveVideoPlaybackState(
               videoTitle: videoTitle,
               videoUrl: currentUrl,
               positionMs: pos.inMilliseconds,
@@ -12867,7 +12874,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (e) {}
 
     // Also save to legacy system for backward compatibility
-    if (!CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) await StorageService.upsertVideoResume(
+    if (!CustomSeriesIdentity.isCustom(_effectiveContentImdbId)) await VideoResumeStorage.upsertVideoResume(
       _resumeKey,
       {
         'positionMs': pos.inMilliseconds,

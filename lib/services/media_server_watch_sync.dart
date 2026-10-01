@@ -1,6 +1,11 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:debrify/services/storage/episode_completion_storage.dart';
+import 'package:debrify/services/storage/episode_progress_storage.dart';
+import 'package:debrify/services/storage/movie_progress_storage.dart';
+import 'package:debrify/services/storage/series_progress_storage.dart';
+import 'package:debrify/services/storage/video_progress_storage.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../models/media_server.dart';
@@ -12,7 +17,6 @@ import 'media_server_client.dart';
 import 'media_server_service.dart';
 import 'profiles/profile_async_authorization.dart';
 import 'profiles/profile_preferences.dart';
-import 'storage_service.dart';
 
 /// Playback-driven sync, not a library crawler or a persistent retry queue.
 class MediaServerWatchSync {
@@ -59,8 +63,8 @@ class MediaServerWatchSync {
             policy: PlaybackResumePolicy.catalogCanonical,
           );
     final played = target.isMovie
-        ? await StorageService.isMovieFinished(target.contentId)
-        : await StorageService.isEpisodeFinished(
+        ? await MovieProgressStorage.isMovieFinished(target.contentId)
+        : await EpisodeProgressStorage.isEpisodeFinished(
             seriesTitle: title,
             season: target.season!,
             episode: target.episode!,
@@ -75,9 +79,9 @@ class MediaServerWatchSync {
     await target.authorize();
     if (remote.played && !remote.hasPartialBookmark) {
       if (target.isMovie) {
-        await StorageService.markMovieAsFinished(target.contentId);
+        await MovieProgressStorage.markMovieAsFinished(target.contentId);
       } else {
-        await StorageService.markEpisodeAsFinished(
+        await EpisodeCompletionStorage.markEpisodeAsFinished(
           seriesTitle: title,
           season: target.season!,
           episode: target.episode!,
@@ -89,7 +93,7 @@ class MediaServerWatchSync {
       final speed = (local?['speed'] as num?)?.toDouble() ?? 1.0;
       final aspect = local?['aspect'] as String? ?? 'contain';
       if (target.isMovie) {
-        await StorageService.saveVideoPlaybackState(
+        await VideoProgressStorage.saveVideoPlaybackState(
           videoTitle: source.displayTitle,
           videoUrl: source.directUrl ?? '',
           imdbId: target.contentId,
@@ -100,7 +104,7 @@ class MediaServerWatchSync {
           recoveryUpdatedAtMs: remote.lastPlayedAtMs,
         );
       } else {
-        await StorageService.saveSeriesPlaybackState(
+        await SeriesProgressStorage.saveSeriesPlaybackState(
           seriesTitle: title,
           season: target.season!,
           episode: target.episode!,

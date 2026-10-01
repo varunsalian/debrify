@@ -10,8 +10,8 @@ import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/storage/home_appearance_storage.dart';
 import 'package:debrify/services/storage/home_page_storage.dart';
+import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -137,7 +137,7 @@ void main() {
         await http.runWithClient(() => tester.pump(), () => client);
         expect(node.hasFocus, isTrue);
         await tester.runAsync(() async {
-          StorageService.localCompletionRevision.value++;
+          LocalCompletionStorage.localCompletionRevision.value++;
           await Future<void>.delayed(const Duration(milliseconds: 100));
         });
         await http.runWithClient(

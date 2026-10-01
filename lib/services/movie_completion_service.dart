@@ -1,6 +1,6 @@
+import 'package:debrify/services/storage/movie_progress_storage.dart';
 import '../models/media_identity.dart';
 import 'tracking_source_policy.dart';
-import 'storage_service.dart';
 import 'trakt/trakt_service.dart';
 import 'simkl/simkl_service.dart';
 import 'mdblist/mdblist_service.dart';
@@ -30,7 +30,7 @@ class MovieCompletionService {
   static Future<bool> _read(String id, TrackingSource source) async {
     switch (source) {
       case TrackingSource.local:
-        return StorageService.isMovieFinished(id);
+        return MovieProgressStorage.isMovieFinished(id);
       case TrackingSource.trakt:
         final service = TraktService.instance;
         if (!await service.isAuthenticated()) return false;
