@@ -1,9 +1,15 @@
 import 'dart:async';
 
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/playlist_artwork_storage.dart';
+import 'package:debrify/services/storage/playlist_metadata_storage.dart';
+import 'package:debrify/services/storage/playlist_poster_storage.dart';
+import 'package:debrify/services/storage/playlist_preferences_storage.dart';
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
+import 'package:debrify/services/storage/tvmaze_mapping_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -144,9 +150,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       await _parseSeriesPlaylist();
 
       // Auto-set Series View for detected series (only if no saved preference exists)
-      final savedViewMode = await StorageService.getPlaylistItemViewMode(
-        widget.playlistItem,
-      );
+      final savedViewMode =
+          await PlaylistPreferencesStorage.getPlaylistItemViewMode(
+            widget.playlistItem,
+          );
       if (_seriesPlaylist?.isSeries == true && savedViewMode == null) {
         setState(() {
           _currentViewMode = FolderViewMode.seriesArrange;
@@ -212,9 +219,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Load saved view mode for this playlist item
   Future<void> _loadSavedViewMode() async {
-    final savedModeString = await StorageService.getPlaylistItemViewMode(
-      widget.playlistItem,
-    );
+    final savedModeString =
+        await PlaylistPreferencesStorage.getPlaylistItemViewMode(
+          widget.playlistItem,
+        );
     if (savedModeString != null && mounted) {
       setState(() {
         _currentViewMode = _viewModeFromString(savedModeString);
@@ -838,7 +846,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     });
 
     // Save view mode preference
-    StorageService.savePlaylistItemViewMode(
+    PlaylistPreferencesStorage.savePlaylistItemViewMode(
       widget.playlistItem,
       _viewModeToString(mode),
     );
@@ -2121,7 +2129,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         ? (widget.playlistItem?['torrent_hash'] as String?)
         : null;
 
-    await StorageService.updatePlaylistItemImdbId(
+    await PlaylistMetadataStorage.updatePlaylistItemImdbId(
       imdbId,
       rdTorrentId: rdTorrentId,
       torboxTorrentId: torboxTorrentId,
@@ -2199,7 +2207,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Only show loading indicator if data needs to be fetched
       bool showLoading = true;
       if (widget.playlistItem != null) {
-        final mapping = await StorageService.getTVMazeSeriesMapping(
+        final mapping = await TvMazeMappingStorage.getTVMazeSeriesMapping(
           widget.playlistItem!,
         );
         if (mapping != null) {
@@ -2258,7 +2266,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     if (selectedShow != null && mounted) {
       // 1. Get OLD mapping (before it's overwritten)
-      final oldMapping = await StorageService.getTVMazeSeriesMapping(
+      final oldMapping = await TvMazeMappingStorage.getTVMazeSeriesMapping(
         widget.playlistItem,
       );
       final oldShowId = oldMapping?['tvmazeShowId'] as int?;
@@ -2277,7 +2285,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       await TVMazeService.clearSeriesCache(_seriesPlaylist?.seriesTitle ?? '');
 
       // 4. Save new mapping
-      await StorageService.saveTVMazeSeriesMapping(
+      await TvMazeMappingStorage.saveTVMazeSeriesMapping(
         playlistItem: widget.playlistItem,
         tvmazeShowId: selectedShow['id'] as int,
         showName: selectedShow['name'] as String,
@@ -2343,22 +2351,22 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     if (posterUrl == null || posterUrl.isEmpty) return;
 
     try {
-      await StorageService.savePlaylistPosterOverride(
+      await PlaylistPosterStorage.savePlaylistPosterOverride(
         playlistItem: widget.playlistItem,
         posterUrl: posterUrl,
       );
 
-      final itemKey = StorageService.computePlaylistDedupeKey(
+      final itemKey = PlaylistStorage.computePlaylistDedupeKey(
         widget.playlistItem,
       );
-      final items = await StorageService.getPlaylistItemsRaw();
+      final items = await PlaylistStorage.getPlaylistItemsRaw();
       final itemIndex = items.indexWhere(
-        (item) => StorageService.computePlaylistDedupeKey(item) == itemKey,
+        (item) => PlaylistStorage.computePlaylistDedupeKey(item) == itemKey,
       );
 
       if (itemIndex >= 0) {
         items[itemIndex]['posterUrl'] = posterUrl;
-        await StorageService.savePlaylistItemsRaw(items);
+        await PlaylistStorage.savePlaylistItemsRaw(items);
       }
     } catch (e) {
       debugPrint('Error saving detected series poster: $e');
@@ -2387,7 +2395,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // CRITICAL: Save poster override to persistent storage
       // This ensures the poster persists across app restarts
-      await StorageService.savePlaylistPosterOverride(
+      await PlaylistPosterStorage.savePlaylistPosterOverride(
         playlistItem: widget.playlistItem,
         posterUrl: posterUrl,
       );
@@ -2400,7 +2408,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       if (provider.toLowerCase() == 'realdebrid') {
         final rdTorrentId = widget.playlistItem['rdTorrentId'] as String?;
         if (rdTorrentId != null) {
-          updated = await StorageService.updatePlaylistItemPoster(
+          updated = await PlaylistArtworkStorage.updatePlaylistItemPoster(
             posterUrl,
             rdTorrentId: rdTorrentId,
           );
@@ -2410,14 +2418,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         if (torboxTorrentId != null) {
           // Torbox uses integer IDs, but updatePlaylistItemPoster expects String
           // We need to update the playlist manually
-          final items = await StorageService.getPlaylistItemsRaw();
+          final items = await PlaylistStorage.getPlaylistItemsRaw();
           final itemIndex = items.indexWhere(
             (item) => item['torboxTorrentId'] == torboxTorrentId,
           );
 
           if (itemIndex >= 0) {
             items[itemIndex]['posterUrl'] = posterUrl;
-            await StorageService.savePlaylistItemsRaw(items);
+            await PlaylistStorage.savePlaylistItemsRaw(items);
             updated = true;
           }
         }
@@ -2425,7 +2433,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         final pikpakCollectionId =
             widget.playlistItem['pikpakFileId'] as String?;
         if (pikpakCollectionId != null) {
-          updated = await StorageService.updatePlaylistItemPoster(
+          updated = await PlaylistArtworkStorage.updatePlaylistItemPoster(
             posterUrl,
             pikpakCollectionId: pikpakCollectionId,
           );
@@ -2435,12 +2443,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         final premiumizeItemId = widget.playlistItem['premiumizeItemId']
             ?.toString();
         if (premiumizeHash != null && premiumizeHash.isNotEmpty) {
-          updated = await StorageService.updatePlaylistItemPoster(
+          updated = await PlaylistArtworkStorage.updatePlaylistItemPoster(
             posterUrl,
             premiumizeHash: premiumizeHash,
           );
         } else if (premiumizeItemId != null && premiumizeItemId.isNotEmpty) {
-          updated = await StorageService.updatePlaylistItemPoster(
+          updated = await PlaylistArtworkStorage.updatePlaylistItemPoster(
             posterUrl,
             premiumizeItemId: premiumizeItemId,
           );
@@ -2448,7 +2456,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       } else if (provider.toLowerCase() == 'alldebrid') {
         final allDebridHash = widget.playlistItem['torrent_hash'] as String?;
         if (allDebridHash != null && allDebridHash.isNotEmpty) {
-          updated = await StorageService.updatePlaylistItemPoster(
+          updated = await PlaylistArtworkStorage.updatePlaylistItemPoster(
             posterUrl,
             allDebridHash: allDebridHash,
           );

@@ -1,10 +1,10 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/watchlist_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:debrify/models/stremio_addon.dart';
-import 'package:debrify/services/storage_service.dart';
 
 StremioMeta _title({
   required String id,
@@ -42,25 +42,25 @@ void main() {
       addon: addon,
     );
 
-    await StorageService.setMyWatchlistItem(movie, true);
+    await WatchlistStorage.setMyWatchlistItem(movie, true);
     await Future<void>.delayed(const Duration(milliseconds: 2));
-    await StorageService.setMyWatchlistItem(series, true);
+    await WatchlistStorage.setMyWatchlistItem(series, true);
 
-    final saved = await StorageService.getMyWatchlistItems();
+    final saved = await WatchlistStorage.getMyWatchlistItems();
     expect(saved.map((item) => item.name), ['A Series', 'A Movie']);
     expect(saved.first.poster, series.poster);
     expect(saved.first.sourceAddon?.id, addon.id);
-    expect(await StorageService.isInMyWatchlist(movie), isTrue);
+    expect(await WatchlistStorage.isInMyWatchlist(movie), isTrue);
   });
 
   test('deduplicates the same IMDb title across addons', () async {
     final first = _title(id: 'addon-a:1', imdbId: 'tt1234567', name: 'Old');
     final second = _title(id: 'addon-b:9', imdbId: 'tt1234567', name: 'Fresh');
 
-    await StorageService.setMyWatchlistItem(first, true);
-    await StorageService.setMyWatchlistItem(second, true);
+    await WatchlistStorage.setMyWatchlistItem(first, true);
+    await WatchlistStorage.setMyWatchlistItem(second, true);
 
-    final saved = await StorageService.getMyWatchlistItems();
+    final saved = await WatchlistStorage.getMyWatchlistItems();
     expect(saved, hasLength(1));
     expect(saved.single.name, 'Fresh');
   });
@@ -81,12 +81,12 @@ void main() {
     final first = _title(id: 'local:1', name: 'First', addon: addonA);
     final second = _title(id: 'local:1', name: 'Second', addon: addonB);
 
-    await StorageService.setMyWatchlistItem(first, true);
-    await StorageService.setMyWatchlistItem(second, true);
+    await WatchlistStorage.setMyWatchlistItem(first, true);
+    await WatchlistStorage.setMyWatchlistItem(second, true);
 
-    expect(await StorageService.getMyWatchlistItems(), hasLength(2));
-    await StorageService.setMyWatchlistItem(first, false);
-    final remaining = await StorageService.getMyWatchlistItems();
+    expect(await WatchlistStorage.getMyWatchlistItems(), hasLength(2));
+    await WatchlistStorage.setMyWatchlistItem(first, false);
+    final remaining = await WatchlistStorage.getMyWatchlistItems();
     expect(remaining.map((item) => item.name), ['Second']);
   });
 
@@ -107,11 +107,11 @@ void main() {
     final sourceLess = _title(id: 'local:2');
 
     expect(
-      StorageService.withMyWatchlistSource(sourced, fallback).sourceAddon?.id,
+      WatchlistStorage.withMyWatchlistSource(sourced, fallback).sourceAddon?.id,
       stored.id,
     );
     expect(
-      StorageService.withMyWatchlistSource(sourceLess, fallback).sourceAddon?.id,
+      WatchlistStorage.withMyWatchlistSource(sourceLess, fallback).sourceAddon?.id,
       fallback.id,
     );
   });
@@ -128,16 +128,16 @@ void main() {
       type: 'series',
       name: 'Direct Series',
     );
-    final identity = StorageService.withMyWatchlistSource(
+    final identity = WatchlistStorage.withMyWatchlistSource(
       sourceLess,
       fallback,
     );
 
-    await StorageService.setMyWatchlistItem(identity, true);
-    expect(await StorageService.isInMyWatchlist(identity), isTrue);
-    await StorageService.setMyWatchlistItem(identity, false);
-    expect(await StorageService.isInMyWatchlist(identity), isFalse);
-    expect(await StorageService.getMyWatchlistItems(), isEmpty);
+    await WatchlistStorage.setMyWatchlistItem(identity, true);
+    expect(await WatchlistStorage.isInMyWatchlist(identity), isTrue);
+    await WatchlistStorage.setMyWatchlistItem(identity, false);
+    expect(await WatchlistStorage.isInMyWatchlist(identity), isFalse);
+    expect(await WatchlistStorage.getMyWatchlistItems(), isEmpty);
   });
 
   test('canonicalizes an older un-namespaced fallback key', () async {
@@ -156,21 +156,21 @@ void main() {
       ]),
     );
 
-    expect(await StorageService.isInMyWatchlist(item), isTrue);
-    await StorageService.setMyWatchlistItem(item, false);
-    expect(await StorageService.getMyWatchlistItems(), isEmpty);
+    expect(await WatchlistStorage.isInMyWatchlist(item), isTrue);
+    await WatchlistStorage.setMyWatchlistItem(item, false);
+    expect(await WatchlistStorage.getMyWatchlistItems(), isEmpty);
   });
 
   test('rejects unsupported content types', () async {
     final channel = _title(id: 'channel:1', type: 'channel');
 
-    expect(StorageService.supportsMyWatchlistItem(channel), isFalse);
-    expect(await StorageService.isInMyWatchlist(channel), isFalse);
+    expect(WatchlistStorage.supportsMyWatchlistItem(channel), isFalse);
+    expect(await WatchlistStorage.isInMyWatchlist(channel), isFalse);
     await expectLater(
-      StorageService.setMyWatchlistItem(channel, true),
+      WatchlistStorage.setMyWatchlistItem(channel, true),
       throwsArgumentError,
     );
-    expect(await StorageService.getMyWatchlistItems(), isEmpty);
+    expect(await WatchlistStorage.getMyWatchlistItems(), isEmpty);
   });
 
   test('a malformed addedAt does not hide valid saved rows', () async {
@@ -189,28 +189,28 @@ void main() {
       ]),
     );
 
-    final saved = await StorageService.getMyWatchlistItems();
+    final saved = await WatchlistStorage.getMyWatchlistItems();
     expect(saved.map((item) => item.name), ['Second', 'First']);
   });
 
   test('removes a title and clears the list', () async {
     final movie = _title(id: 'tt7654321', imdbId: 'tt7654321');
-    await StorageService.setMyWatchlistItem(movie, true);
-    await StorageService.setMyWatchlistItem(movie, false);
+    await WatchlistStorage.setMyWatchlistItem(movie, true);
+    await WatchlistStorage.setMyWatchlistItem(movie, false);
 
-    expect(await StorageService.isInMyWatchlist(movie), isFalse);
-    expect(await StorageService.getMyWatchlistItems(), isEmpty);
+    expect(await WatchlistStorage.isInMyWatchlist(movie), isFalse);
+    expect(await WatchlistStorage.getMyWatchlistItems(), isEmpty);
   });
 
   test('tvOS cap trims oldest rows and always keeps the newest save', () async {
-    StorageService.debugMyWatchlistTvOsCapOverride = true;
-    addTearDown(() => StorageService.debugMyWatchlistTvOsCapOverride = null);
+    WatchlistStorage.debugMyWatchlistTvOsCapOverride = true;
+    addTearDown(() => WatchlistStorage.debugMyWatchlistTvOsCapOverride = null);
 
     // ~5KB per row, so a handful of saves cross the 48KiB ceiling.
     final filler = 'x' * 5000;
     for (var i = 0; i < 15; i++) {
       final imdb = 'tt${i.toString().padLeft(7, '0')}';
-      await StorageService.setMyWatchlistItem(
+      await WatchlistStorage.setMyWatchlistItem(
         _title(id: imdb, imdbId: imdb, name: 'Movie $i $filler'),
         true,
       );
@@ -224,10 +224,10 @@ void main() {
     final encoded = prefs.getString(storedKey)!;
     expect(
       utf8.encode(encoded).length,
-      lessThanOrEqualTo(StorageService.myWatchlistTvOsCapBytes),
+      lessThanOrEqualTo(WatchlistStorage.myWatchlistTvOsCapBytes),
     );
 
-    final saved = await StorageService.getMyWatchlistItems();
+    final saved = await WatchlistStorage.getMyWatchlistItems();
     expect(saved.length, lessThan(15), reason: 'the cap must have trimmed');
     expect(saved.first.name, startsWith('Movie 14 '));
     expect(
@@ -238,13 +238,13 @@ void main() {
   });
 
   test('re-saving the oldest title over the cap never evicts it', () async {
-    StorageService.debugMyWatchlistTvOsCapOverride = true;
-    addTearDown(() => StorageService.debugMyWatchlistTvOsCapOverride = null);
+    WatchlistStorage.debugMyWatchlistTvOsCapOverride = true;
+    addTearDown(() => WatchlistStorage.debugMyWatchlistTvOsCapOverride = null);
 
     final filler = 'x' * 5000;
     for (var i = 0; i < 15; i++) {
       final imdb = 'tt${i.toString().padLeft(7, '0')}';
-      await StorageService.setMyWatchlistItem(
+      await WatchlistStorage.setMyWatchlistItem(
         _title(id: imdb, imdbId: imdb, name: 'Movie $i $filler'),
         true,
       );
@@ -253,27 +253,27 @@ void main() {
 
     // Re-save the oldest survivor with bigger metadata, forcing a trim while
     // it holds the oldest addedAt (re-saves keep the original timestamp).
-    final oldest = (await StorageService.getMyWatchlistItems()).last;
+    final oldest = (await WatchlistStorage.getMyWatchlistItems()).last;
     final grown = _title(
       id: oldest.effectiveImdbId!,
       imdbId: oldest.effectiveImdbId,
       name: '${oldest.name} ${'y' * 8000}',
     );
-    await StorageService.setMyWatchlistItem(grown, true);
+    await WatchlistStorage.setMyWatchlistItem(grown, true);
 
-    expect(await StorageService.isInMyWatchlist(grown), isTrue);
+    expect(await WatchlistStorage.isInMyWatchlist(grown), isTrue);
   });
 
   test('the cap never drops the sole remaining row', () async {
-    StorageService.debugMyWatchlistTvOsCapOverride = true;
-    addTearDown(() => StorageService.debugMyWatchlistTvOsCapOverride = null);
+    WatchlistStorage.debugMyWatchlistTvOsCapOverride = true;
+    addTearDown(() => WatchlistStorage.debugMyWatchlistTvOsCapOverride = null);
 
     final oversized = _title(
       id: 'tt7654321',
       imdbId: 'tt7654321',
-      name: 'Huge ${'x' * (StorageService.myWatchlistTvOsCapBytes + 1024)}',
+      name: 'Huge ${'x' * (WatchlistStorage.myWatchlistTvOsCapBytes + 1024)}',
     );
-    await StorageService.setMyWatchlistItem(oversized, true);
-    expect(await StorageService.getMyWatchlistItems(), hasLength(1));
+    await WatchlistStorage.setMyWatchlistItem(oversized, true);
+    expect(await WatchlistStorage.getMyWatchlistItems(), hasLength(1));
   });
 }

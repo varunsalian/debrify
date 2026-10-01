@@ -1,11 +1,11 @@
 import 'dart:async';
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../screens/video_player_screen.dart'; // re-exports PlaylistEntry
 import '../../services/analytics_service.dart';
 import '../../services/premiumize_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/download_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/main_page_bridge.dart';
@@ -924,7 +924,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       _showSnackBar('Only video files can be added to playlist', isError: true);
       return;
     }
-    final added = await StorageService.addPlaylistItemRaw({
+    final added = await PlaylistStorage.addPlaylistItemRaw({
       'provider': 'premiumize',
       'title': FileUtils.cleanPlaylistTitle(file.name),
       'kind': 'single',
@@ -959,7 +959,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
       if (videos.length == 1) {
         final v = videos.first;
-        final added = await StorageService.addPlaylistItemRaw({
+        final added = await PlaylistStorage.addPlaylistItemRaw({
           'provider': 'premiumize',
           'title': FileUtils.cleanPlaylistTitle(v.name),
           'kind': 'single',
@@ -978,7 +978,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       final filesMeta = videos
           .map((v) => {'id': v.id, 'name': v.name, 'size': v.size})
           .toList();
-      final added = await StorageService.addPlaylistItemRaw({
+      final added = await PlaylistStorage.addPlaylistItemRaw({
         'provider': 'premiumize',
         'title': FileUtils.cleanPlaylistTitle(folder.name),
         'kind': 'collection',

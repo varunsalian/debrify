@@ -10,6 +10,7 @@ import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/player_appearance_storage.dart';
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
@@ -23,6 +24,7 @@ import 'package:debrify/services/storage/torrent_provider_storage.dart';
 import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/storage/tv_display_storage.dart';
+import 'package:debrify/services/storage/watchlist_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/storage/webdav_storage.dart';
 import 'settings/tv_collection_list_style_page.dart';
@@ -6695,9 +6697,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // deletions, or reconnecting sync later replays them circle-wide.
     await StorageService.clearAllPlaybackData(recordSyncDeletions: false);
     await StorageService.clearContinueWatching(recordSyncDeletions: false);
-    await StorageService.clearPlaylist(recordSyncDeletions: false);
-    await StorageService.clearAllPlaylistMetadata(recordSyncDeletions: false);
-    await StorageService.clearMyWatchlist();
+    await PlaylistStorage.clearPlaylist(recordSyncDeletions: false);
+    await PlaylistStorage.clearAllPlaylistMetadata(recordSyncDeletions: false);
+    await WatchlistStorage.clearMyWatchlist();
     await TorrentHistoryStorage.clearTorrentSearchHistory();
     await StartupStorage.clearAllStartupSettings();
     await HomePageStorage.clearAllHomePageSettings();

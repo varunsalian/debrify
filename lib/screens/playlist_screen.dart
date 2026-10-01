@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:debrify/services/storage/playlist_poster_storage.dart';
+import 'package:debrify/services/storage/playlist_preferences_storage.dart';
+import 'package:debrify/services/storage/playlist_progress_storage.dart';
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/analytics_service.dart';
-import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
 import '../theme/app_theme_scope.dart';
 import '../services/playlist_player_service.dart';
@@ -137,11 +140,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<void> _loadData() async {
-    final items = await StorageService.getPlaylistItemsRaw();
+    final items = await PlaylistStorage.getPlaylistItemsRaw();
 
     // Apply poster overrides for items that have saved custom posters
     for (var item in items) {
-      final posterOverride = await StorageService.getPlaylistPosterOverride(
+      final posterOverride = await PlaylistPosterStorage.getPlaylistPosterOverride(
         item,
       );
       if (posterOverride != null && posterOverride.isNotEmpty) {
@@ -150,10 +153,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     }
 
     // Load progress data from playback state
-    final progressMap = await StorageService.buildPlaylistProgressMap(items);
+    final progressMap = await PlaylistProgressStorage.buildPlaylistProgressMap(items);
 
     // Load favorites
-    final favoriteKeys = await StorageService.getPlaylistFavoriteKeys();
+    final favoriteKeys = await PlaylistPreferencesStorage.getPlaylistFavoriteKeys();
 
     if (!mounted) return;
     setState(() {
@@ -188,7 +191,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   // Favorites section items (filtered by search)
   List<Map<String, dynamic>> _getFavoriteItems(String query) {
     return _getFilteredItems(query).where((item) {
-      final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+      final dedupeKey = PlaylistStorage.computePlaylistDedupeKey(item);
       return _favoriteKeys.contains(dedupeKey);
     }).toList();
   }
@@ -200,10 +203,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   // Toggle favorite status for an item
   Future<void> _toggleFavorite(Map<String, dynamic> item) async {
-    final dedupeKey = StorageService.computePlaylistDedupeKey(item);
+    final dedupeKey = PlaylistStorage.computePlaylistDedupeKey(item);
     final isCurrentlyFavorited = _favoriteKeys.contains(dedupeKey);
 
-    await StorageService.setPlaylistItemFavorited(item, !isCurrentlyFavorited);
+    await PlaylistPreferencesStorage.setPlaylistItemFavorited(item, !isCurrentlyFavorited);
 
     if (!mounted) return;
     setState(() {
@@ -310,12 +313,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         // Find the index of the item being deleted for focus restoration
         final currentIndex = _allItems.indexWhere(
           (playlistItem) =>
-              StorageService.computePlaylistDedupeKey(playlistItem) ==
-              StorageService.computePlaylistDedupeKey(item),
+              PlaylistStorage.computePlaylistDedupeKey(playlistItem) ==
+              PlaylistStorage.computePlaylistDedupeKey(item),
         );
 
-        final dedupeKey = StorageService.computePlaylistDedupeKey(item);
-        await StorageService.removePlaylistItemByKey(dedupeKey);
+        final dedupeKey = PlaylistStorage.computePlaylistDedupeKey(item);
+        await PlaylistStorage.removePlaylistItemByKey(dedupeKey);
         if (!mounted) return;
         ScaffoldMessenger.of(
           context,
@@ -402,7 +405,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
     if (confirmed == true) {
       final title = item['title'] as String? ?? '';
-      await StorageService.clearPlaylistProgress(title: title);
+      await PlaylistProgressStorage.clearPlaylistProgress(title: title);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,

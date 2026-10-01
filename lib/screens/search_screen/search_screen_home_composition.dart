@@ -1,4 +1,5 @@
 import 'package:debrify/services/storage/detail_navigation_storage.dart';
+import 'package:debrify/services/storage/watchlist_storage.dart';
 import '../../features/home/application/home_board_providers.dart';
 import '../../features/home/application/home_continuation_providers.dart';
 import '../../features/home/application/home_detail_providers.dart';
@@ -121,7 +122,7 @@ void composeSearchScreenHome(SearchScreenComposer c) {
     search: c.search,
     actions: c.homeActions,
     playPlaylist: PlaylistPlayerService.play,
-    removeWatchlist: (item) => StorageService.setMyWatchlistItem(item, false),
+    removeWatchlist: (item) => WatchlistStorage.setMyWatchlistItem(item, false),
     iptvListId: HomeExtraRowIds.iptvList,
     openIptv: IptvCwRouter.open,
     launchIptv: (context, videoUrl, channel, isStremio) {

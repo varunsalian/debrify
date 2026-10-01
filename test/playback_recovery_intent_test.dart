@@ -4,6 +4,7 @@ import 'package:debrify/services/playback_recovery_intent.dart';
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage/playlist_progress_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -151,7 +152,7 @@ void main() {
       'padding': 'x' * (ProfilePreferenceBudget.limitBytes - base - 10),
     });
     ProfilePreferenceBudget.debugEnforcedOverride = true;
-    await StorageService.clearPlaylistProgress(title: 'Example');
+    await PlaylistProgressStorage.clearPlaylistProgress(title: 'Example');
     expect(
       await StorageService.getSeriesPlaybackState(
         seriesTitle: 'Example',

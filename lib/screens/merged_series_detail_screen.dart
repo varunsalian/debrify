@@ -2,6 +2,7 @@ import 'package:debrify/services/storage/ambient_trailer_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/watchlist_storage.dart';
 import '../widgets/metadata_franchise_rail.dart';
 import '../widgets/metadata_title_navigation.dart';
 import '../services/metadata_provider_service.dart';
@@ -505,8 +506,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// Debrify's local watchlist is independent of tracker connectivity.
   bool _inMyWatchlist = false;
   bool get _supportsMyWatchlist =>
-      StorageService.supportsMyWatchlistItem(_item);
-  StremioMeta get _myWatchlistItem => StorageService.withMyWatchlistSource(
+      WatchlistStorage.supportsMyWatchlistItem(_item);
+  StremioMeta get _myWatchlistItem => WatchlistStorage.withMyWatchlistSource(
     _item,
     widget.item.sourceAddon ?? widget.addon,
   );
@@ -772,7 +773,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   Future<void> _loadMyWatchlistState() async {
     if (!_supportsMyWatchlist) return;
-    final saved = await StorageService.isInMyWatchlist(_myWatchlistItem);
+    final saved = await WatchlistStorage.isInMyWatchlist(_myWatchlistItem);
     if (!mounted || saved == _inMyWatchlist) return;
     setState(() => _inMyWatchlist = saved);
   }
@@ -782,7 +783,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     final next = !_inMyWatchlist;
     setState(() => _inMyWatchlist = next);
     try {
-      await StorageService.setMyWatchlistItem(_myWatchlistItem, next);
+      await WatchlistStorage.setMyWatchlistItem(_myWatchlistItem, next);
       if (!mounted) return;
       HapticFeedback.mediumImpact();
       ScaffoldMessenger.of(context)

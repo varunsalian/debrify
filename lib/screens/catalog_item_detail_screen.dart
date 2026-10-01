@@ -1,5 +1,6 @@
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
+import 'package:debrify/services/storage/watchlist_storage.dart';
 import '../services/metadata_provider_service.dart';
 import '../widgets/metadata_franchise_rail.dart';
 import '../widgets/metadata_title_navigation.dart';
@@ -193,7 +194,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   StremioMeta get originalMetadata => _enriched ?? widget.item;
   StremioMeta get _item => presentedMetadata!;
   bool get _supportsMyWatchlist =>
-      StorageService.supportsMyWatchlistItem(_item);
+      WatchlistStorage.supportsMyWatchlistItem(_item);
 
   /// Drives the staggered entrance reveal of the content sections.
   late final AnimationController _revealCtrl;
@@ -271,7 +272,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   Future<void> _loadMyWatchlistState() async {
     if (!_supportsMyWatchlist) return;
-    final saved = await StorageService.isInMyWatchlist(_item);
+    final saved = await WatchlistStorage.isInMyWatchlist(_item);
     if (!mounted || saved == _inMyWatchlist) return;
     setState(() => _inMyWatchlist = saved);
   }
@@ -285,7 +286,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       final savedItem = sourceAddon == null
           ? _item
           : _item.withSourceAddon(sourceAddon);
-      await StorageService.setMyWatchlistItem(savedItem, next);
+      await WatchlistStorage.setMyWatchlistItem(savedItem, next);
       if (!mounted) return;
       HapticFeedback.mediumImpact();
       ScaffoldMessenger.of(context)

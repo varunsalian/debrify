@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/services/storage/playlist_progress_storage.dart';
+import 'package:debrify/services/storage/watchlist_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/series_progress_reset_service.dart';
 import 'package:http/http.dart' as http;
@@ -116,7 +118,9 @@ void main() {
     );
     final revisionBefore = StorageService.localCompletionRevision.value;
 
-    await StorageService.clearPlaylistProgress(title: 'Example Series');
+    await PlaylistProgressStorage.clearPlaylistProgress(
+      title: 'Example Series',
+    );
 
     expect(
       await StorageService.isEpisodeFinished(
@@ -447,17 +451,17 @@ void main() {
       type: 'movie',
       name: 'Watchlist Movie',
     );
-    await StorageService.setMyWatchlistItem(item, true);
+    await WatchlistStorage.setMyWatchlistItem(item, true);
 
     expect(
-      await StorageService.removeMyWatchlistItemForPlayback(
+      await WatchlistStorage.removeMyWatchlistItemForPlayback(
         imdbId: 'TT-WATCHLIST-PLAY',
         contentType: 'movie',
         title: 'Different presentation title',
       ),
       isTrue,
     );
-    expect(await StorageService.getMyWatchlistItems(), isEmpty);
+    expect(await WatchlistStorage.getMyWatchlistItems(), isEmpty);
   });
 
   test(

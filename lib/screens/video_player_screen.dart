@@ -7,6 +7,8 @@ import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/player_appearance_storage.dart';
 import 'package:debrify/services/storage/player_network_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
+import 'package:debrify/services/storage/playlist_artwork_storage.dart';
+import 'package:debrify/services/storage/playlist_metadata_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
@@ -11550,7 +11552,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (imdbId == null || !imdbId.startsWith('tt')) return;
     if (widget.contentImdbId != null) return;
 
-    await StorageService.updatePlaylistItemImdbId(
+    await PlaylistMetadataStorage.updatePlaylistItemImdbId(
       imdbId,
       rdTorrentId: widget.rdTorrentId,
       torboxTorrentId: widget.torboxTorrentId,
@@ -11596,19 +11598,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     print('  Poster URL: $posterUrl');
     try {
       if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
-        await StorageService.updatePlaylistItemPoster(
+        await PlaylistArtworkStorage.updatePlaylistItemPoster(
           posterUrl,
           rdTorrentId: rdTorrentId,
         );
       }
       if (torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
-        await StorageService.updatePlaylistItemPoster(
+        await PlaylistArtworkStorage.updatePlaylistItemPoster(
           posterUrl,
           torboxTorrentId: torboxTorrentId,
         );
       }
       if (pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
-        await StorageService.updatePlaylistItemPoster(
+        await PlaylistArtworkStorage.updatePlaylistItemPoster(
           posterUrl,
           pikpakCollectionId: pikpakCollectionId,
         );

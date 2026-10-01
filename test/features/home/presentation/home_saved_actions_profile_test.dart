@@ -4,7 +4,7 @@ import 'package:debrify/features/home/presentation/home_saved_iptv_actions.dart'
 import 'package:debrify/features/home/presentation/home_watchlist_actions.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:flutter/material.dart';
@@ -51,7 +51,7 @@ void main() {
       required bool switchProfile,
     }) async {
       SharedPreferences.setMockInitialValues({});
-      await tester.runAsync(() => StorageService.addPlaylistItemRaw(item));
+      await tester.runAsync(() => PlaylistStorage.addPlaylistItemRaw(item));
       await host(tester);
       var current = true;
       final actions = HomePlaylistActions((
@@ -68,7 +68,7 @@ void main() {
       await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();
       await tester.runAsync(() => done);
-      final rows = await tester.runAsync(StorageService.getPlaylistItemsRaw);
+      final rows = await tester.runAsync(PlaylistStorage.getPlaylistItemsRaw);
       return rows!.isNotEmpty;
     }
 

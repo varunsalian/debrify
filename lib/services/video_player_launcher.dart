@@ -3,11 +3,14 @@ import 'package:debrify/services/storage/external_player_storage.dart';
 import 'package:debrify/services/storage/iptv_audio_storage.dart';
 import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:debrify/services/storage/iptv_history_storage.dart';
+import 'package:debrify/services/storage/playlist_artwork_storage.dart';
+import 'package:debrify/services/storage/playlist_metadata_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:debrify/services/storage/torrent_search_storage.dart';
+import 'package:debrify/services/storage/watchlist_storage.dart';
 import 'profiles/profile_playback_preparation.dart';
 import 'profiles/profile_session_memory.dart';
 import '../models/source_playlist_resolver.dart';
@@ -1238,7 +1241,7 @@ class VideoPlayerLauncher {
     // nothing and native Android TV playback follows the same rule.
     if (args.contentType != null && args.stremioTvChannels == null) {
       await write(
-        () => StorageService.removeMyWatchlistItemForPlayback(
+        () => WatchlistStorage.removeMyWatchlistItemForPlayback(
           imdbId: args.contentImdbId,
           contentType: args.contentType!,
           title: args.contentTitle ?? args.title,
@@ -3973,7 +3976,7 @@ class VideoPlayerLauncher {
         if (seriesImdbId != null &&
             seriesImdbId.startsWith('tt') &&
             contentImdbId == null) {
-          await StorageService.updatePlaylistItemImdbId(
+          await PlaylistMetadataStorage.updatePlaylistItemImdbId(
             seriesImdbId,
             rdTorrentId: rdTorrentId,
             torboxTorrentId: torboxTorrentId,
@@ -4293,25 +4296,25 @@ class VideoPlayerLauncher {
 
     try {
       if (rdTorrentId != null && rdTorrentId.isNotEmpty) {
-        await StorageService.updatePlaylistItemPoster(
+        await PlaylistArtworkStorage.updatePlaylistItemPoster(
           posterUrl,
           rdTorrentId: rdTorrentId,
         );
       }
       if (torboxTorrentId != null && torboxTorrentId.isNotEmpty) {
-        await StorageService.updatePlaylistItemPoster(
+        await PlaylistArtworkStorage.updatePlaylistItemPoster(
           posterUrl,
           torboxTorrentId: torboxTorrentId,
         );
       }
       if (pikpakCollectionId != null && pikpakCollectionId.isNotEmpty) {
-        await StorageService.updatePlaylistItemPoster(
+        await PlaylistArtworkStorage.updatePlaylistItemPoster(
           posterUrl,
           pikpakCollectionId: pikpakCollectionId,
         );
       }
       if (webDavPath != null && webDavPath.isNotEmpty) {
-        await StorageService.updatePlaylistItemPoster(
+        await PlaylistArtworkStorage.updatePlaylistItemPoster(
           posterUrl,
           webDavServerId: webDavServerId,
           webDavBaseUrl: webDavBaseUrl,

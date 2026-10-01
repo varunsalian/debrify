@@ -494,7 +494,8 @@ identity is present with the same outcome.
 | 2 | `a18aff4a` | 9,251 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 | 3 | `93435156` | 7,184 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 | 4 | `e30794c2` | 5,273 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
-| 5 | This step commit (hash recorded by step 6) | 3,447 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 5 | `15704c1f` | 3,447 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
+| 6 | This step commit (hash recorded by step 7) | 2,022 | Verbatim moves; analyzer, keys/bodies, size/import guards and affected suites PASS. |
 
 ### Step 0 evidence and retained source
 
@@ -652,6 +653,14 @@ each step. Unrelated whole-file extractions remain outside this plan.
 | 5 | `lib/services/iptv_source_search.dart` | 1171 | 1175 |
 | 5 | `lib/services/video_player_launcher.dart` | 6578 | 6581 |
 | 5 | `lib/widgets/iptv/iptv_results_view.dart` | 9080 | 9084 |
+| 6 | `lib/screens/catalog_item_detail_screen.dart` | 3499 | 3500 |
+| 6 | `lib/screens/merged_series_detail_screen.dart` | 5531 | 5532 |
+| 6 | `lib/screens/playlist_content_view_screen.dart` | 4128 | 4136 |
+| 6 | `lib/screens/playlist_screen.dart` | 880 | 883 |
+| 6 | `lib/screens/settings_screen.dart` | 8754 | 8756 |
+| 6 | `lib/screens/video_player_screen.dart` | 18097 | 18099 |
+| 6 | `lib/services/video_player_launcher.dart` | 6581 | 6584 |
+| 6 | `lib/widgets/series_browser.dart` | 2201 | 2206 |
 <!-- storage-caller-size-rows -->
 
 Step 1: `ss/step1.jsonl` records 3,449 success, 18 error, 1 failure,
@@ -753,3 +762,10 @@ expressions, imports and whitespace changed.
 
 Gate 1 CI executed 1,991 identities: 1,987 success, one skip and the three
 exact baseline failures. All three jobs passed; the behavior job took 9m39s.
+
+Step 6: `ss/step6.jsonl` records {'success': 916, 'skipped': 10, 'error': 2};
+comparison to `ss/base.jsonl` PASS (no new failures, missing tests or skips).
+`ss/analyze-step6.txt` vs the previous step adds no diagnostics after the
+prescribed old-file relocation. Map/dependency, constant, declaration/reset,
+size/import and diff checks pass. Caller review confirms only authorized
+expressions, imports and whitespace changed.

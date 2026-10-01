@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:ui';
 
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,7 +15,6 @@ import '../../services/series_source_service.dart';
 import '../../services/torbox_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/torbox_torrent_control_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/download_service.dart';
 import '../../widgets/debrify_tv_channel_add_bridge.dart';
@@ -402,7 +402,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       final displayName = file.shortName.isNotEmpty
           ? file.shortName
           : FileUtils.getFileName(file.name);
-      final added = await StorageService.addPlaylistItemRaw({
+      final added = await PlaylistStorage.addPlaylistItemRaw({
         'provider': 'torbox',
         'title': FileUtils.cleanPlaylistTitle(
           displayName.isNotEmpty ? displayName : torrent.name,
@@ -424,7 +424,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     }
 
     final ids = videoFiles.map((file) => file.id).toList();
-    final added = await StorageService.addPlaylistItemRaw({
+    final added = await PlaylistStorage.addPlaylistItemRaw({
       'provider': 'torbox',
       'title': FileUtils.cleanPlaylistTitle(torrent.name),
       'kind': 'collection',
@@ -1824,7 +1824,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     if (videoFiles.length == 1) {
       // Single video - add as single item
       final file = videoFiles.first;
-      final added = await StorageService.addPlaylistItemRaw({
+      final added = await PlaylistStorage.addPlaylistItemRaw({
         'provider': 'torbox_webdl',
         'title': FileUtils.cleanPlaylistTitle(webDownload.name),
         'kind': 'single',
@@ -1841,7 +1841,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     } else {
       // Multiple videos - add as collection
       final ids = videoFiles.map((f) => f.id).toList();
-      final added = await StorageService.addPlaylistItemRaw({
+      final added = await PlaylistStorage.addPlaylistItemRaw({
         'provider': 'torbox_webdl',
         'title': FileUtils.cleanPlaylistTitle(webDownload.name),
         'kind': 'collection',
@@ -4607,7 +4607,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           'count': torboxFiles.length,
         };
       }
-      final added = await StorageService.addPlaylistItemRaw(playlistData);
+      final added = await PlaylistStorage.addPlaylistItemRaw(playlistData);
 
       _showSnackBar(
         added
@@ -4641,7 +4641,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
             'sizeBytes': torboxFile.size,
           };
         }
-        final added = await StorageService.addPlaylistItemRaw(playlistData);
+        final added = await PlaylistStorage.addPlaylistItemRaw(playlistData);
 
         _showSnackBar(
           added ? 'Added to playlist' : 'Already in playlist',

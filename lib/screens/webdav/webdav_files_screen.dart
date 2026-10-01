@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/storage/webdav_storage.dart';
 import 'package:flutter/material.dart';
@@ -13,7 +14,6 @@ import '../../services/analytics_service.dart';
 import '../../services/download_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../widgets/tv_text_field.dart';
-import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/webdav_service.dart';
 import '../../theme/app_theme.dart';
@@ -507,7 +507,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
     }
 
     try {
-      final added = await StorageService.addPlaylistItemRaw({
+      final added = await PlaylistStorage.addPlaylistItemRaw({
         'provider': 'webdav',
         'title': FileUtils.cleanPlaylistTitle(file.name),
         'kind': 'single',
@@ -556,7 +556,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
         0,
         (sum, file) => sum + (file.sizeBytes ?? 0),
       );
-      final added = await StorageService.addPlaylistItemRaw({
+      final added = await PlaylistStorage.addPlaylistItemRaw({
         'provider': 'webdav',
         'title': FileUtils.cleanPlaylistTitle(folder.name),
         'kind': 'collection',

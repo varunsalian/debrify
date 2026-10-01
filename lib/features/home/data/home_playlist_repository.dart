@@ -1,4 +1,6 @@
-import '../../../services/storage_service.dart';
+import 'package:debrify/services/storage/playlist_preferences_storage.dart';
+import 'package:debrify/services/storage/playlist_progress_storage.dart';
+import 'package:debrify/services/storage/playlist_storage.dart';
 import '../models/home_playlist.dart';
 
 /// Keeps the three initial reads parallel, then applies ordering/posters before
@@ -33,16 +35,16 @@ class HomePlaylistRepository {
 
   // Legacy playlist writes retain their existing profile resolution and payloads.
   static Future<void> setFavorite(Map<String, dynamic> item, bool favorite) =>
-      StorageService.setPlaylistItemFavorited(item, favorite);
+      PlaylistPreferencesStorage.setPlaylistItemFavorited(item, favorite);
 
   static Future<void> clearProgress({required String title}) =>
-      StorageService.clearPlaylistProgress(title: title);
+      PlaylistProgressStorage.clearPlaylistProgress(title: title);
 
   static String dedupeKey(Map<String, dynamic> item) =>
-      StorageService.computePlaylistDedupeKey(item);
+      PlaylistStorage.computePlaylistDedupeKey(item);
 
   static Future<void> removeByKey(String key) =>
-      StorageService.removePlaylistItemByKey(key);
+      PlaylistStorage.removePlaylistItemByKey(key);
 
   Future<HomePlaylist?> read({required bool Function() isCurrent}) async {
     if (!isCurrent()) return null;

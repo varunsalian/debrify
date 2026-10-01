@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,7 +13,6 @@ import '../services/analytics_service.dart';
 import '../theme/app_theme_scope.dart';
 import '../services/debrid_service.dart';
 import '../services/series_source_service.dart';
-import '../services/storage_service.dart';
 import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
@@ -3814,7 +3814,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
 
         if (FileUtils.isVideoMimeType(mimeType)) {
-          final ok = await StorageService.addPlaylistItemRaw({
+          final ok = await PlaylistStorage.addPlaylistItemRaw({
             'title': FileUtils.cleanPlaylistTitle(torrent.filename),
             'url': '',
             'restrictedLink': torrent.links[0],
@@ -3838,7 +3838,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         }
       }
     } else {
-      final ok = await StorageService.addPlaylistItemRaw({
+      final ok = await PlaylistStorage.addPlaylistItemRaw({
         'title': FileUtils.cleanPlaylistTitle(torrent.filename),
         'kind': 'collection',
         'rdTorrentId': torrent.id,
@@ -4920,7 +4920,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           'rdTorrentId': torrent.id,
           'kind': 'single',
         };
-        final ok = await StorageService.addPlaylistItemRaw(item);
+        final ok = await PlaylistStorage.addPlaylistItemRaw(item);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -6308,7 +6308,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (_currentTorrentId == null) return;
 
     try {
-      final added = await StorageService.addPlaylistItemRaw({
+      final added = await PlaylistStorage.addPlaylistItemRaw({
         'provider': 'rd',
         'title': FileUtils.cleanPlaylistTitle(file.name),
         'kind': 'single',
@@ -6340,7 +6340,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       // Add as a collection to playlist
-      final added = await StorageService.addPlaylistItemRaw({
+      final added = await PlaylistStorage.addPlaylistItemRaw({
         'provider': 'rd',
         'title': FileUtils.cleanPlaylistTitle(folder.name),
         'kind': 'collection',

@@ -6,9 +6,31 @@ void main() {
   test(
     'every audited hot deletion API reaches its central tombstone helper',
     () {
-      final storage = File(
-        'lib/services/storage_service.dart',
-      ).readAsStringSync();
+      const storageOwners = <String, String>{
+        'removeContinueWatchingItem': 'lib/services/storage_service.dart',
+        'clearContinueWatching': 'lib/services/storage_service.dart',
+        'unmarkMovieAsFinished': 'lib/services/storage_service.dart',
+        'setSeriesExplicitlyWatched': 'lib/services/storage_service.dart',
+        'clearPlaybackStateByImdbId': 'lib/services/storage_service.dart',
+        'unmarkEpisodeAsFinished': 'lib/services/storage_service.dart',
+        'unmarkSeriesAsFinished': 'lib/services/storage_service.dart',
+        'cleanupOldPlaybackState': 'lib/services/storage_service.dart',
+        'clearAllPlaybackData': 'lib/services/storage_service.dart',
+        'clearPlaylistProgress':
+            'lib/services/storage/playlist_progress_storage.dart',
+        'purgeUnwatchedResumeGhosts': 'lib/services/storage_service.dart',
+        'savePlaylistItemsRaw': 'lib/services/storage/playlist_storage.dart',
+        'removePlaylistItemByKey': 'lib/services/storage/playlist_storage.dart',
+        'clearPlaylist': 'lib/services/storage/playlist_storage.dart',
+        'setPlaylistItemFavorited':
+            'lib/services/storage/playlist_preferences_storage.dart',
+        'clearAllPlaylistMetadata':
+            'lib/services/storage/playlist_storage.dart',
+      };
+      final storageSources = <String, String>{
+        for (final path in storageOwners.values.toSet())
+          path: File(path).readAsStringSync(),
+      };
       final sources = File(
         'lib/services/series_source_service.dart',
       ).readAsStringSync();
@@ -40,7 +62,7 @@ void main() {
 
       for (final entry in storageAudit.entries) {
         expect(
-          _methodBody(storage, entry.key),
+          _methodBody(storageSources[storageOwners[entry.key]]!, entry.key),
           contains(entry.value),
           reason: '${entry.key} bypasses the audited deletion helper',
         );
@@ -58,7 +80,13 @@ void main() {
         r'(?:(?:PlaybackStateStore|ContinueWatchingStorage|PlaylistStorage)\.)?'
         r'(?:_?playbackStateKey|_?continueWatchingKey|_?playlistKey)\s*\)',
       );
-      expect(forbiddenRemoval.hasMatch(storage), isFalse);
+      for (final entry in storageSources.entries) {
+        expect(
+          forbiddenRemoval.hasMatch(entry.value),
+          isFalse,
+          reason: entry.key,
+        );
+      }
     },
   );
 }

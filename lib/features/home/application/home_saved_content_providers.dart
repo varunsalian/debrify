@@ -1,11 +1,16 @@
 import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/home_rows_storage.dart';
 import 'package:debrify/services/storage/iptv_favorites_storage.dart';
+import 'package:debrify/services/storage/playlist_identity_storage.dart';
+import 'package:debrify/services/storage/playlist_poster_storage.dart';
+import 'package:debrify/services/storage/playlist_preferences_storage.dart';
+import 'package:debrify/services/storage/playlist_progress_storage.dart';
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/stremio_tv_storage.dart';
+import 'package:debrify/services/storage/watchlist_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../services/debrify_tv_repository.dart';
-import '../../../services/storage_service.dart';
 import '../../../services/stremio_tv_service.dart';
 import '../data/home_iptv_favorites_repository.dart';
 import '../data/home_iptv_lists_repository.dart';
@@ -61,18 +66,18 @@ final homeIptvListsRepositoryProvider = Provider<HomeIptvListsRepository>(
 /// The existing storage API already supplies a typed, ordered list.
 final homeWatchlistReaderProvider =
     Provider<Future<List<StremioMeta>> Function()>(
-      (ref) => StorageService.getMyWatchlistItems,
+      (ref) => WatchlistStorage.getMyWatchlistItems,
       dependencies: const [],
     );
 
 final homePlaylistRepositoryProvider = Provider<HomePlaylistRepository>(
   (ref) => const HomePlaylistRepository(
-    items: StorageService.getPlaylistItemsRaw,
-    favorites: StorageService.getPlaylistFavoriteKeys,
-    posters: StorageService.getAllPlaylistPosterOverrides,
-    posterKey: StorageService.getPlaylistItemUniqueKey,
-    dedupeKey: StorageService.computePlaylistDedupeKey,
-    progress: StorageService.buildPlaylistProgressMap,
+    items: PlaylistStorage.getPlaylistItemsRaw,
+    favorites: PlaylistPreferencesStorage.getPlaylistFavoriteKeys,
+    posters: PlaylistPosterStorage.getAllPlaylistPosterOverrides,
+    posterKey: PlaylistIdentityStorage.getPlaylistItemUniqueKey,
+    dedupeKey: PlaylistStorage.computePlaylistDedupeKey,
+    progress: PlaylistProgressStorage.buildPlaylistProgressMap,
   ),
   dependencies: const [],
 );

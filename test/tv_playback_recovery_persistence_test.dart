@@ -6,6 +6,7 @@ import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
+import 'package:debrify/services/storage/playlist_progress_storage.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/tv_playback_recovery.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -605,7 +606,9 @@ void main() {
       });
       ProfilePreferenceBudget.debugEnforcedOverride = true;
       PlaybackRecoveryIntent.debugSupportedOverride = false;
-      await StorageService.clearPlaylistProgress(title: 'Example Show');
+      await PlaylistProgressStorage.clearPlaylistProgress(
+        title: 'Example Show',
+      );
       expect(
         (await SharedPreferences.getInstance()).containsKey(
           'remote_tv_playback_recovery_deletions_v1',

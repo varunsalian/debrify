@@ -3,6 +3,7 @@ import 'package:debrify/services/profiles/profile_local_writes.dart';
 import 'package:debrify/services/android_tv_player_bridge.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -377,14 +378,14 @@ void main() {
       expect(
         (await ProfileRuntime.withCapturedScope(
           origin,
-          StorageService.getPlaylistItemsRaw,
+          PlaylistStorage.getPlaylistItemsRaw,
         )).single['torboxTorrentId'],
         42,
       );
       expect(
         await ProfileRuntime.withCapturedScope(
           incoming,
-          StorageService.getPlaylistItemsRaw,
+          PlaylistStorage.getPlaylistItemsRaw,
         ),
         isEmpty,
       );
@@ -418,14 +419,14 @@ void main() {
       expect(
         await ProfileRuntime.withCapturedScope(
           origin,
-          StorageService.getPlaylistItemsRaw,
+          PlaylistStorage.getPlaylistItemsRaw,
         ),
         isEmpty,
       );
       expect(
         await ProfileRuntime.withCapturedScope(
           incoming,
-          StorageService.getPlaylistItemsRaw,
+          PlaylistStorage.getPlaylistItemsRaw,
         ),
         isEmpty,
       );
@@ -464,14 +465,14 @@ void main() {
       expect(
         await ProfileRuntime.withCapturedScope(
           origin,
-          StorageService.getPlaylistItemsRaw,
+          PlaylistStorage.getPlaylistItemsRaw,
         ),
         isEmpty,
       );
       expect(
         await ProfileRuntime.withCapturedScope(
           incoming,
-          StorageService.getPlaylistItemsRaw,
+          PlaylistStorage.getPlaylistItemsRaw,
         ),
         isEmpty,
       );

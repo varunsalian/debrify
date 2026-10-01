@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../screens/video_player_screen.dart'; // re-exports PlaylistEntry
 import '../../services/alldebrid_service.dart';
 import '../../services/analytics_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/download_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/main_page_bridge.dart';
@@ -969,7 +969,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     }
     bool added;
     if (videos.length == 1) {
-      added = await StorageService.addPlaylistItemRaw({
+      added = await PlaylistStorage.addPlaylistItemRaw({
         'provider': 'alldebrid',
         'title': FileUtils.cleanPlaylistTitle(magnet.name),
         'kind': 'single',
@@ -978,7 +978,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         'sizeBytes': videos.first.size,
       });
     } else {
-      added = await StorageService.addPlaylistItemRaw({
+      added = await PlaylistStorage.addPlaylistItemRaw({
         'provider': 'alldebrid',
         'title': FileUtils.cleanPlaylistTitle(magnet.name),
         'kind': 'collection',

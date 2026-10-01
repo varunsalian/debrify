@@ -1,11 +1,11 @@
 import 'package:debrify/services/storage/pikpak_storage.dart';
+import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
 import '../../screens/video_player_screen.dart';
 import '../../services/analytics_service.dart';
 import '../../services/pikpak_api_service.dart';
-import '../../services/storage_service.dart';
 import '../../services/download_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/main_page_bridge.dart';
@@ -2953,7 +2953,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       return;
     }
 
-    final added = await StorageService.addPlaylistItemRaw({
+    final added = await PlaylistStorage.addPlaylistItemRaw({
       'provider': 'pikpak',
       'title': FileUtils.cleanPlaylistTitle(file['name'] ?? 'Video'),
       'kind': 'single',
@@ -3047,7 +3047,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       if (videoFiles.length == 1) {
         // Single video file - store full metadata for instant playback
         final file = videoFiles.first;
-        final added = await StorageService.addPlaylistItemRaw({
+        final added = await PlaylistStorage.addPlaylistItemRaw({
           'provider': 'pikpak',
           'title': FileUtils.cleanPlaylistTitle(file['name'] ?? folderName),
           'kind': 'single',
@@ -3079,7 +3079,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             )
             .toList();
 
-        final added = await StorageService.addPlaylistItemRaw({
+        final added = await PlaylistStorage.addPlaylistItemRaw({
           'provider': 'pikpak',
           'title': FileUtils.cleanPlaylistTitle(folderName),
           'kind': 'collection',

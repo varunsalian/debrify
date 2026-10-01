@@ -1,8 +1,8 @@
+import 'package:debrify/services/storage/playlist_storage.dart';
 import '../../../models/playback_meta.dart';
 import '../../../models/torrent.dart';
 import '../../../services/profiles/profile_runtime.dart';
 import '../../../services/profiles/profile_session_memory.dart';
-import '../../../services/storage_service.dart';
 import '../../../utils/file_utils.dart';
 import '../models/acquired_source.dart';
 
@@ -21,7 +21,7 @@ class SourcePlaylist {
     PlaybackMeta? meta,
   }) async {
     if (!isCurrent) return false;
-    Future<bool> save() => StorageService.addPlaylistItemRaw(
+    Future<bool> save() => PlaylistStorage.addPlaylistItemRaw(
       describe(source, torrent, provider, meta: meta),
       canContinue: () => isCurrent,
     );
