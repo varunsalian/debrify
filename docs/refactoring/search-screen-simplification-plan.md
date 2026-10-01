@@ -65,6 +65,13 @@ Declined, with rationale:
 - `search-screen-plan.md` is frozen history and still names files that no
   longer exist; its header points to the current plans.
 
+**Iteration 2** (`1d16efc2`): no bugs. Removed now-dead dependency fields
+(rendering `navigation`/`badges`, stages `badges`) and the unused
+`rendering.classic`, so `board().geometry` is the only path to Classic
+sizing. The picker's `ValueKey('create')` is back on the `AnimatedSwitcher`
+child, and one import was reordered. The mixed-context row extent stays a
+recorded pre-existing issue.
+
 ## Found, not fixed
 
 - `HomeClassicGeometry.classicCatalogRowExtent` mixes the screen context

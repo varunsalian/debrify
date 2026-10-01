@@ -36,7 +36,6 @@ class StremioTvCatalogCreateView extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     return Padding(
-      key: const ValueKey('create'),
       padding: const EdgeInsets.all(20),
       child: Column(
         mainAxisSize: MainAxisSize.min,

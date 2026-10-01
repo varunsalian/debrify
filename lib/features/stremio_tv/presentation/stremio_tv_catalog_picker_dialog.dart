@@ -371,6 +371,7 @@ class _StremioTvCatalogPickerDialogState
               duration: const Duration(milliseconds: 180),
               child: _showCreateView
                   ? StremioTvCatalogCreateView(
+                      key: const ValueKey('create'),
                       theme: theme,
                       itemName: widget.item.name,
                       saving: _saving,

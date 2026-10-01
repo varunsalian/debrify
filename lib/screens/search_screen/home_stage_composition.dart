@@ -6,7 +6,6 @@ import '../../features/home/presentation/home_board_section.dart';
 import '../../features/home/presentation/home_board_focus.dart';
 import '../../features/home/presentation/home_board_paging.dart';
 import '../../features/home/presentation/home_rows_navigation.dart';
-import '../../features/home/presentation/home_catalog_badges.dart';
 import '../../features/home/presentation/home_stage_rails.dart';
 import '../../features/home/presentation/home_stage_section.dart';
 import '../../features/home/presentation/home_stage_favorites.dart';
@@ -44,7 +43,6 @@ typedef HomeStageCompositionDeps = ({
   HomeBoardFocus Function() focus,
   HomeBoardPaging Function() paging,
   HomeRowsNavigation Function() navigation,
-  HomeCatalogBadges Function() badges,
   HomeBoardMedia Function() media,
   VoidCallback sidebar,
 });

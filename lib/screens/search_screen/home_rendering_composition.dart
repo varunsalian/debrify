@@ -3,14 +3,12 @@ import '../../features/search/presentation/catalog_search_section.dart';
 import 'home_board_composition.dart';
 import '../../features/home/presentation/home_board_rendering.dart';
 import '../../features/home/presentation/home_classic_section.dart';
-import '../../features/home/presentation/home_catalog_badges.dart';
 import '../../features/home/presentation/home_continuation_projection.dart';
 import '../../features/home/presentation/home_continuation_menu.dart';
 import '../../features/home/presentation/home_continuation_rows.dart';
 import 'home_hero_composition.dart';
 import '../../features/home/presentation/home_hero_shell_bridge.dart';
 import 'home_media_composition.dart';
-import '../../features/home/presentation/home_rows_navigation.dart';
 import '../../features/home/presentation/home_saved_content_section.dart';
 import '../../features/home/presentation/home_saved_content_rows.dart';
 import '../../features/home/presentation/home_spotlight_section.dart';
@@ -26,15 +24,10 @@ typedef HomeRenderingCompositionDeps = ({
   bool Function() discoverMode,
   bool Function() profileCurrent,
   HomeMediaComposition Function() media,
-  HomeRowsNavigation Function() navigation,
-  HomeCatalogBadges Function() badges,
   int Function() heroIdentity,
 });
 
-typedef HomeRenderingComposition = ({
-  HomeClassicSection classic,
-  HomeBoardRendering rendering,
-});
+typedef HomeRenderingComposition = ({HomeBoardRendering rendering});
 
 /// Wires the classic rows and layout selector to their existing borrowed owners.
 HomeRenderingComposition createHomeRendering(
@@ -115,5 +108,5 @@ HomeRenderingComposition createHomeRendering(
     saved,
     continuationProjection,
   );
-  return (classic: classic, rendering: rendering);
+  return (rendering: rendering);
 }

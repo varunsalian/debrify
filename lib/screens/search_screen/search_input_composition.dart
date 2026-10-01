@@ -1,4 +1,3 @@
-import '../../features/home/presentation/home_classic_geometry.dart';
 import 'package:flutter/material.dart';
 import '../../utils/tv_search_focus_handoff.dart';
 import 'home_board_composition.dart';
@@ -13,6 +12,7 @@ import '../../features/search/presentation/lists_search_section.dart';
 import '../../features/search/presentation/search_title_section.dart';
 import 'keyword_composition.dart';
 import '../../features/search/presentation/lists_search_rows.dart';
+import '../../features/home/presentation/home_classic_geometry.dart';
 import '../../features/search/presentation/search_page_shell.dart'
     show buildSearchModeContent;
 
