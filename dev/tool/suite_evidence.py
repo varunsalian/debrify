@@ -4,13 +4,17 @@
   run NAME [PATHS...]          flutter test --reporter json (whole suite or
                                PATHS) -> <evidence>/NAME.jsonl, plus
                                NAME.env.json (Flutter SDK, HEAD, paths)
-  compare [--against FILE] [--moved] RUN...
+  compare [--against FILE] [--moved | --relocate FROM=TO_PREFIX ...] RUN...
                                .jsonl runs: no new failures, missing tests or
                                newly skipped tests versus FILE. .txt files:
                                `flutter analyze` output, no added diagnostics
                                (by file, rule and message; with --moved, by
                                rule and message only, for move-only batches
-                               whose diagnostics change file).
+                               whose diagnostics change file). --relocate is
+                               stricter: a diagnostic may change file only
+                               from FROM to a file under TO_PREFIX, with the
+                               same severity, rule and message; everything
+                               else is compared by file. Repeatable.
   check KNOWN PATHS...         CI: run PATHS (`@file` = one path per line); fail on any failure not listed in
                                KNOWN (one suite::name per line) and on any
                                listed identity that no longer exists.
@@ -95,6 +99,21 @@ def without_location(found):
     return merged
 
 
+def relocate(added, removed, source, prefix):
+    # Pair each added diagnostic under `prefix` with a removed one from
+    # `source` that has the same severity, message and rule.
+    added, removed = Counter(added), Counter(removed)
+    for (severity, location, message, rule), count in list(added.items()):
+        if not location.startswith(prefix):
+            continue
+        origin = (severity, source, message, rule)
+        paired = min(count, removed.get(origin, 0))
+        if paired:
+            added[(severity, location, message, rule)] -= paired
+            removed[origin] -= paired
+    return +added, +removed
+
+
 def flutter_env(paths):
     version = subprocess.run(
         ['flutter', '--version', '--machine'], cwd=ROOT, capture_output=True, text=True,
@@ -144,6 +163,12 @@ def cmd_compare(args):
     moved = '--moved' in args
     if moved:
         args.remove('--moved')
+    relocations = []
+    while '--relocate' in args:
+        i = args.index('--relocate')
+        source, _, prefix = args[i + 1].partition('=')
+        relocations.append((source, prefix))
+        del args[i:i + 2]
     if against is None:
         print('compare needs --against <baseline>')
         return 2
@@ -186,6 +211,8 @@ def cmd_compare(args):
             if moved:
                 after, before = without_location(after), without_location(before)
             added, removed = after - before, before - after
+            for source, prefix in relocations:
+                added, removed = relocate(added, removed, source, prefix)
             print(run.name, 'added', list(added.elements()), 'removed', list(removed.elements()))
             ok = ok and not added
     print('PASS' if ok else 'FAIL')
