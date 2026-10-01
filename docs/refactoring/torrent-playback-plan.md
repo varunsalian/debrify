@@ -55,10 +55,11 @@ except in the named bridge folder `presentation/legacy_playback/`
 anything into `application/`, `data/` or `models/`, confirm it uses no
 `BuildContext`, widget or dialog. If it does, it belongs in `presentation/legacy_playback/`.
 
-**Production callers today:** 7 files (Home catalog play bridge and play
-action, the two Sources bridges, the search screen composition,
-`video_player_launcher.dart`, `series_source_fetcher.dart`), plus 26 test
-files.
+**Production callers at the base:** 6 files (Home catalog play bridge and
+play action, the two Sources bridges, search screen composition, and
+`video_player_launcher.dart`). `series_source_fetcher.dart` has a documentation
+reference, updated in step 5. The original import inventory includes 26 test
+files. Count actual syntax references rather than documentation matches.
 
 ## Dependency order (checked at `1d6fa710`)
 
@@ -249,11 +250,11 @@ this file's source text.
 
 1. `torrent_playback_service.dart` is a facade of **at most 400 lines**. It
    holds only members with a production caller, each forwarding to its new
-   owner. At `1d6fa710` there are 14:
+   owner. The final actual production surface has 13:
    - `activateTorrent`, `playFromSelection`, `showResolvingOverlay`
    - `bindSource`, `bindDirectSource`, `bindIptvSource`
    - `downloadDirectStream`, `supportsDirectStreamDownload`
-   - `seriesFetcherFor`, `prepareRecoverySources`, `resolveRecoverySource`
+   - `prepareRecoverySources`, `resolveRecoverySource`
    - `loadLadder`, `directValidationBudgetForRules`,
      `shouldPreflightDirectStream`
 
@@ -266,7 +267,7 @@ this file's source text.
      `presentation/legacy_playback/`.
    - Record it in Progress as a temporary exception. AGENTS.md wants
      context-taking playback entry points behind named presentation bridges,
-     not in `lib/services`. Exit milestone: repoint the 7 callers to the
+     not in `lib/services`. Exit milestone: repoint the 6 production caller files to the
      Sources bridges and delete the facade.
 3. New files are at most 500 lines. The exception is the four pipeline files,
    which may reach 800 while their method moves whole. Record them in
@@ -302,6 +303,7 @@ this file's source text.
 | 2 | `014502cf` | 4,749 | Search/fetcher owners wired; focused suite 1,101 pass / same 4 failures; comparison PASS. Analyzer and size/import guards unchanged/pass. |
 | 3 | `396c93c0` | 3,148 | Menu/launch/binding owners wired; 1,106 focused pass / 2 historical failures. No new analyzer diagnostics. Full-suite gate 1 comparison PASS: 10,294 pass / 20 fail / 29 err / 20 skip; same baseline identities and skips, 3 new passing tests. |
 | 4 | Pipeline commits listed below | 157 before final formatting | Five whole pipelines moved, each checked and committed. No new test/analyzer failures; static lifetimes retained. |
+| 5 | step-5 commit (this entry) | 206 | Forwarding-only facade, explicit source-set caps, CI formatting/analyzer coverage. Local checks pass; full-suite gate 2 pending. |
 
 ## Found, not fixed
 
@@ -429,4 +431,31 @@ this file's source text.
   single feature owner, both models are moved, and `TEMP(tps)` is absent.
 
 Pipeline commits: `80c44f2c` (best), `ba6a3709` (selection), `ccc56861`
-(addon), `08c04d6d` (bound), and the manual-entry commit containing this entry.
+(addon), `08c04d6d` (bound), and `cf3de97c` (manual).
+
+### Step 5 completion evidence
+
+- Facade: 206 formatted lines, no state or test-only forwarders. All 13
+  forwarded APIs have actual callers across the six production files.
+  `seriesFetcherFor` lives in the feature and has no external facade caller;
+  its unused forwarder is removed and the legacy fetcher documentation updated.
+- The guard registers the facade with a 400-line cap and no import check,
+  and the complete 36-file extraction source set with 500-line caps plus the
+  four named 800-line pipeline exceptions. Every source must exist; leftover
+  `TEMP(tps)` markers fail the guard. Synthetic rejection checks cover those
+  caps, the legacy bridge HTTP prohibition, and temporary markers.
+- Final pipeline counts: best 739, selection 790, addon 482, bound 665. Each
+  retains its whole original method. Their exit milestone is splitting those
+  methods in the subsequent playback control-flow refactor. All remaining
+  extracted files are under 500 lines. No-pack and alias caches retain their
+  process-wide static lifetimes; cancellation flags remain action-owned.
+- Whole-repo analyzer: 836 baseline diagnostics, none added, matched by rule,
+  affected member, and message across moves. CI formatting checks 995 files
+  with no changes; scoped CI analysis passes with 15 baseline infos, including
+  the diagnostics moved out of the legacy service. Both guards pass.
+- Source-token verification covers all 119 original static members against
+  the step-0 service (only visibility, qualifiers, and the required DeoVR
+  extraction differ). Source-text tests retain their assertions and names.
+- The service is removed from the repo size baseline; no other entry changes.
+  SDK, lockfile, native code, and engine payloads are unchanged. Native/device
+  playback was not exercised; this batch changes no native boundary payload.

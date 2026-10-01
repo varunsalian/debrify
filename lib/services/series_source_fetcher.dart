@@ -84,7 +84,8 @@ class SourceEngineRef {
 ///
 /// Deliberately player-agnostic: it holds no channel/UI code, so the Flutter
 /// player's sources sheet can reuse it as-is. The search closures are built by
-/// `TorrentPlaybackService.seriesFetcherFor` / `movieFetcherFor`, which reuse
+/// `SourceSeriesFetcher.seriesFetcherFor` / `SourceMovieFetcher.movieFetcherFor`,
+/// which reuse
 /// the exact search + curation + filter-ladder chains the Quick Play flow runs.
 class SeriesSourceFetcher {
   /// Series flavor: pack/episode tabs, each independently fetchable.

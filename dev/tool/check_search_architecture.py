@@ -15,6 +15,53 @@ FEATURES = ("search", "home", "discover", "sources", "stremio_tv")
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
 FACADE = "lib/screens/search_screen.dart"
+PLAYBACK_FACADE = "lib/services/torrent_playback_service.dart"
+# Verbatim playback extraction source set; exceptions and exit milestones are
+# recorded in docs/refactoring/torrent-playback-plan.md.
+TORRENT_PLAYBACK_SOURCE_FILES = {
+    "lib/features/sources/application/source_cache_ordering.dart",
+    "lib/features/sources/application/source_candidate_checks.dart",
+    "lib/features/sources/application/source_candidate_ranking.dart",
+    "lib/features/sources/application/source_curation.dart",
+    "lib/features/sources/application/source_filter_ladder.dart",
+    "lib/features/sources/application/source_iptv_availability.dart",
+    "lib/features/sources/application/source_probing.dart",
+    "lib/features/sources/application/source_provider_config.dart",
+    "lib/features/sources/application/source_search_plans.dart",
+    "lib/features/sources/data/curated_source_search.dart",
+    "lib/features/sources/data/deovr_json_upload.dart",
+    "lib/features/sources/data/iptv_quick_play_search.dart",
+    "lib/features/sources/data/recovery_source_resolution.dart",
+    "lib/features/sources/data/series_pack_search.dart",
+    "lib/features/sources/data/source_engine_fetchers.dart",
+    "lib/features/sources/data/source_movie_fetcher.dart",
+    "lib/features/sources/data/source_series_fetcher.dart",
+    "lib/features/sources/models/playback_cancel_token.dart",
+    "lib/features/sources/models/resolved_source.dart",
+    "lib/features/sources/presentation/legacy_playback/addon_stream_playback.dart",
+    "lib/features/sources/presentation/legacy_playback/automatic_play_best.dart",
+    "lib/features/sources/presentation/legacy_playback/automatic_play_selection.dart",
+    "lib/features/sources/presentation/legacy_playback/bound_source_playback.dart",
+    "lib/features/sources/presentation/legacy_playback/bound_source_resolution.dart",
+    "lib/features/sources/presentation/legacy_playback/deovr_launch.dart",
+    "lib/features/sources/presentation/legacy_playback/manual_source_activation.dart",
+    "lib/features/sources/presentation/legacy_playback/provider_accepted_actions.dart",
+    "lib/features/sources/presentation/legacy_playback/provider_action_menu.dart",
+    "lib/features/sources/presentation/legacy_playback/provider_zip_actions.dart",
+    "lib/features/sources/presentation/legacy_playback/source_binding_actions.dart",
+    "lib/features/sources/presentation/legacy_playback/source_loading_overlays.dart",
+    "lib/features/sources/presentation/legacy_playback/source_next_episode.dart",
+    "lib/features/sources/presentation/legacy_playback/source_play_action.dart",
+    "lib/features/sources/presentation/legacy_playback/source_player_args.dart",
+    "lib/features/sources/presentation/legacy_playback/source_player_launch.dart",
+    "lib/features/sources/presentation/legacy_playback/source_provider_choice.dart",
+}
+TORRENT_PLAYBACK_PIPELINES = {
+    "lib/features/sources/presentation/legacy_playback/automatic_play_best.dart",
+    "lib/features/sources/presentation/legacy_playback/automatic_play_selection.dart",
+    "lib/features/sources/presentation/legacy_playback/addon_stream_playback.dart",
+    "lib/features/sources/presentation/legacy_playback/bound_source_playback.dart",
+}
 # The screen's composition root binds concrete services, as AGENTS.md allows
 # for composition: the facade (it captures the bootstrap Home configuration and
 # profile scope for the State) plus the composer and its three factories. They
@@ -22,6 +69,8 @@ FACADE = "lib/screens/search_screen.dart"
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
     FACADE,
+    # Temporary forwarding-only bridge, with its own 400-line cap.
+    PLAYBACK_FACADE,
     f"{COMPOSITION}/search_screen_composer.dart",
     f"{COMPOSITION}/search_screen_search_composition.dart",
     f"{COMPOSITION}/search_screen_home_composition.dart",
@@ -30,6 +79,7 @@ COMPOSITION_ROOTS = {
 # Register extracted/adopted application files outside the feature directories.
 # Retained facades join this source set when their migration reaches its final checks.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
+    PLAYBACK_FACADE,
     "lib/ui/core/trailer_indicators.dart",
     "lib/ui/core/spotlight_search_button.dart",
     "lib/ui/core/retry_message.dart",
@@ -211,6 +261,15 @@ def violations(path: Path) -> list[str]:
     lines = len(source.splitlines())
     if relative == FACADE and lines > 300:
         problems.append(f"{lines} lines exceeds the 300-line facade limit")
+    if relative == PLAYBACK_FACADE and lines > 400:
+        problems.append(f"{lines} lines exceeds the 400-line playback facade limit")
+    if relative in TORRENT_PLAYBACK_SOURCE_FILES:
+        limit = 800 if relative in TORRENT_PLAYBACK_PIPELINES else 500
+        if lines > limit:
+            problems.append(f"{lines} lines exceeds the {limit}-line playback extraction limit")
+    if relative in TORRENT_PLAYBACK_SOURCE_FILES or relative == PLAYBACK_FACADE:
+        if "TEMP(tps)" in source:
+            problems.append("temporary TorrentPlaybackService cross-call remains")
     if lines > 800:
         problems.append(f"{lines} lines exceeds the 800-line ceiling")
     if re.search(r"^\s*part\s+of\b", source, re.MULTILINE):
@@ -285,6 +344,7 @@ def main() -> int:
         if not p.name.endswith(GENERATED_SUFFIXES)
     }
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)
+    paths.update(ROOT / p for p in TORRENT_PLAYBACK_SOURCE_FILES)
     paths.update((ROOT / COMPOSITION).rglob("*.dart"))
     paths.add(ROOT / FACADE)
     problems = [
