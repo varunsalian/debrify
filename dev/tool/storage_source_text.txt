@@ -1,0 +1,13 @@
+Storage source-text inventory at 072407c3. Generated with the lossless lexer.
+Import URIs are handled by repoint_storage.py, not source-text guards.
+Executable interpolation references are handled by the script, not left as text.
+Each test identity stays unchanged.
+
+test/home_extra_rows_test.dart	step 4	lines 32	Keep the test group name verbatim; executable calls use HomeRowsStorage.
+test/home_hero_source_test.dart	step 4	lines 12	Keep the test group name verbatim; executable calls use HomeHeroStorage.
+test/launch_ident_registry_test.dart	step 4	lines 23	Update the diagnostic reason to LaunchIdentStorage._launchAnimationValues; keep identities.
+test/media_server_player_resume_test.dart	step 7	lines 115	Forbid VideoResumeStorage.getVideoResume in the guarded Flutter selection; keep the negative guard.
+test/profiles/isolation_suite/live_switch_isolation_test.dart	step 1	lines 180	Keep the ledger label 'StorageService' and assertion unchanged; redirect resets to the entry point.
+test/profiles/isolation_suite/stale_runtime_guard_test.dart	step 1	lines 39,70	Scan legacy plus storage owners, verify the complete reset chain, preserve the other basename rules; mutation-check omitted reset lines/calls/legacy leaf.
+test/rewatch_launch_routing_test.dart	step 7	lines 14	Expect MovieProgressStorage.movieFinishedRevision in both screen listener add/remove guards.
+test/services/webdav_sync/webdav_sync_tombstone_audit_test.dart	step 3	lines 10	Step 3: shared map-helper spelling and qualified-key negatives; step 6: playlist owners; step 7: playback owners; keep all audited pairs and forbidden removals.

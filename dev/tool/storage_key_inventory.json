@@ -1,0 +1,1886 @@
+[
+  {
+    "name": "_allDebridApiKey",
+    "expression": "'alldebrid_api_key'",
+    "resolved_expression": "'alldebrid_api_key'",
+    "occurrences": 1
+  },
+  {
+    "name": "_allDebridHiddenFromNavKey",
+    "expression": "'alldebrid_hidden_from_nav'",
+    "resolved_expression": "'alldebrid_hidden_from_nav'",
+    "occurrences": 1
+  },
+  {
+    "name": "_allDebridIntegrationEnabledKey",
+    "expression": "'alldebrid_integration_enabled'",
+    "resolved_expression": "'alldebrid_integration_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_allDebridPostTorrentActionKey",
+    "expression": "'alldebrid_post_torrent_action'",
+    "resolved_expression": "'alldebrid_post_torrent_action'",
+    "occurrences": 1
+  },
+  {
+    "name": "_allTrackingSources",
+    "expression": "<TrackingSource>{\n    TrackingSource.local,\n    TrackingSource.trakt,\n    TrackingSource.simkl,\n    TrackingSource.mdblist,\n  }",
+    "resolved_expression": "<TrackingSource>{\n    TrackingSource.local,\n    TrackingSource.trakt,\n    TrackingSource.simkl,\n    TrackingSource.mdblist,\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "_androidVideoRendererGpuMigrationKey",
+    "expression": "'android_video_renderer_gpu_migration_v1'",
+    "resolved_expression": "'android_video_renderer_gpu_migration_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_androidVideoRendererModeKey",
+    "expression": "'android_video_renderer_mode'",
+    "resolved_expression": "'android_video_renderer_mode'",
+    "occurrences": 1
+  },
+  {
+    "name": "_apiKeyKey",
+    "expression": "'real_debrid_api_key'",
+    "resolved_expression": "'real_debrid_api_key'",
+    "occurrences": 1
+  },
+  {
+    "name": "_appThemeKey",
+    "expression": "'app_theme'",
+    "resolved_expression": "'app_theme'",
+    "occurrences": 1
+  },
+  {
+    "name": "_appleMultichannelAudioKey",
+    "expression": "'player_apple_multichannel_audio'",
+    "resolved_expression": "'player_apple_multichannel_audio'",
+    "occurrences": 1
+  },
+  {
+    "name": "_audioPassthroughKey",
+    "expression": "'player_audio_passthrough'",
+    "resolved_expression": "'player_audio_passthrough'",
+    "occurrences": 1
+  },
+  {
+    "name": "_autoBindSeriesPacksKey",
+    "expression": "'auto_bind_series_packs_on_play'",
+    "resolved_expression": "'auto_bind_series_packs_on_play'",
+    "occurrences": 1
+  },
+  {
+    "name": "_batteryOptStatusKey",
+    "expression": "'battery_opt_status_v1'",
+    "resolved_expression": "'battery_opt_status_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_catalogSearchDisabledAddonsKey",
+    "expression": "'catalog_search_disabled_addons_v1'",
+    "resolved_expression": "'catalog_search_disabled_addons_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_collectionSpotlightMigrationKey",
+    "expression": "'tv_collection_spotlight_alpha_migrated_v1'",
+    "resolved_expression": "'tv_collection_spotlight_alpha_migrated_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_contentDisplayMatchModeKey",
+    "expression": "'content_display_match_mode'",
+    "resolved_expression": "'content_display_match_mode'",
+    "occurrences": 1
+  },
+  {
+    "name": "_continueWatchingKey",
+    "expression": "'continue_watching_v1'",
+    "resolved_expression": "'continue_watching_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_currentDefaultsGeneration",
+    "expression": "5",
+    "resolved_expression": "5",
+    "occurrences": 1
+  },
+  {
+    "name": "_currentPlaybackCompletionMigrationGeneration",
+    "expression": "1",
+    "resolved_expression": "1",
+    "occurrences": 1
+  },
+  {
+    "name": "_currentResumeGhostPurgeGeneration",
+    "expression": "1",
+    "resolved_expression": "1",
+    "occurrences": 1
+  },
+  {
+    "name": "_currentTvosKeyboardDefaultGeneration",
+    "expression": "1",
+    "resolved_expression": "1",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvAvoidNsfwKey",
+    "expression": "'debrify_tv_avoid_nsfw'",
+    "resolved_expression": "'debrify_tv_avoid_nsfw'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvChannelsKey",
+    "expression": "'debrify_tv_channels'",
+    "resolved_expression": "'debrify_tv_channels'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvExternalNoticeDismissedKey",
+    "expression": "'debrify_tv_external_notice_dismissed'",
+    "resolved_expression": "'debrify_tv_external_notice_dismissed'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvFavoriteChannelsKey",
+    "expression": "'debrify_tv_favorite_channels_v1'",
+    "resolved_expression": "'debrify_tv_favorite_channels_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvFilterQualitiesKey",
+    "expression": "'debrify_tv_filter_qualities'",
+    "resolved_expression": "'debrify_tv_filter_qualities'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvFilterSizesKey",
+    "expression": "'debrify_tv_filter_sizes'",
+    "resolved_expression": "'debrify_tv_filter_sizes'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvHideBackButtonKey",
+    "expression": "'debrify_tv_hide_back_button'",
+    "resolved_expression": "'debrify_tv_hide_back_button'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvHideOptionsKey",
+    "expression": "'debrify_tv_hide_options'",
+    "resolved_expression": "'debrify_tv_hide_options'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvHideSeekbarKey",
+    "expression": "'debrify_tv_hide_seekbar'",
+    "resolved_expression": "'debrify_tv_hide_seekbar'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvPlayerStyleKey",
+    "expression": "'debrify_tv_player_style'",
+    "resolved_expression": "'debrify_tv_player_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvPlayerStyles",
+    "expression": "{\n    'classic',\n    'network',\n    'cinema',\n    'guide',\n    'spotlight',\n    'prestige',\n  }",
+    "resolved_expression": "{\n    'classic',\n    'network',\n    'cinema',\n    'guide',\n    'spotlight',\n    'prestige',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvProviderKey",
+    "expression": "'debrify_tv_provider'",
+    "resolved_expression": "'debrify_tv_provider'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvRandomStartPercentDefault",
+    "expression": "20",
+    "resolved_expression": "20",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvRandomStartPercentKey",
+    "expression": "'debrify_tv_random_start_percent'",
+    "resolved_expression": "'debrify_tv_random_start_percent'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvRandomStartPercentMax",
+    "expression": "90",
+    "resolved_expression": "90",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvRandomStartPercentMin",
+    "expression": "10",
+    "resolved_expression": "10",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvShowChannelNameKey",
+    "expression": "'debrify_tv_show_watermark'",
+    "resolved_expression": "'debrify_tv_show_watermark'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvShowVideoTitleKey",
+    "expression": "'debrify_tv_show_video_title'",
+    "resolved_expression": "'debrify_tv_show_video_title'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvStartRandomKey",
+    "expression": "'debrify_tv_start_random'",
+    "resolved_expression": "'debrify_tv_start_random'",
+    "occurrences": 1
+  },
+  {
+    "name": "_debrifyTvStyleKey",
+    "expression": "'debrify_tv_style'",
+    "resolved_expression": "'debrify_tv_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_defaultFilterDynamicRangesKey",
+    "expression": "'default_filter_dynamic_ranges_v1'",
+    "resolved_expression": "'default_filter_dynamic_ranges_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_defaultFilterLanguagesKey",
+    "expression": "'default_filter_languages_v1'",
+    "resolved_expression": "'default_filter_languages_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_defaultFilterQualitiesKey",
+    "expression": "'default_filter_qualities_v1'",
+    "resolved_expression": "'default_filter_qualities_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_defaultFilterRipSourcesKey",
+    "expression": "'default_filter_rip_sources_v1'",
+    "resolved_expression": "'default_filter_rip_sources_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_defaultFilterSizesKey",
+    "expression": "'default_filter_sizes_v1'",
+    "resolved_expression": "'default_filter_sizes_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_defaultPlayerModeKey",
+    "expression": "'default_player_mode'",
+    "resolved_expression": "'default_player_mode'",
+    "occurrences": 1
+  },
+  {
+    "name": "_defaultTorrentProviderKey",
+    "expression": "'default_torrent_provider_v1'",
+    "resolved_expression": "'default_torrent_provider_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_defaultsGenerationKey",
+    "expression": "'defaults_generation'",
+    "resolved_expression": "'defaults_generation'",
+    "occurrences": 1
+  },
+  {
+    "name": "_desktopSidebarStyleKey",
+    "expression": "'desktop_sidebar_style'",
+    "resolved_expression": "'desktop_sidebar_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_desktopSidebarStyles",
+    "expression": "{'rail', 'pill'}",
+    "resolved_expression": "{'rail', 'pill'}",
+    "occurrences": 1
+  },
+  {
+    "name": "_detailPageStyleKey",
+    "expression": "'detail_page_style'",
+    "resolved_expression": "'detail_page_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_detailShowAvailabilityLinkKey",
+    "expression": "'detail_show_availability_link'",
+    "resolved_expression": "'detail_show_availability_link'",
+    "occurrences": 1
+  },
+  {
+    "name": "_detailShowBuyKey",
+    "expression": "'detail_show_buy'",
+    "resolved_expression": "'detail_show_buy'",
+    "occurrences": 1
+  },
+  {
+    "name": "_detailShowDidYouKnowKey",
+    "expression": "'detail_show_did_you_know'",
+    "resolved_expression": "'detail_show_did_you_know'",
+    "occurrences": 1
+  },
+  {
+    "name": "_detailShowRentKey",
+    "expression": "'detail_show_rent'",
+    "resolved_expression": "'detail_show_rent'",
+    "occurrences": 1
+  },
+  {
+    "name": "_detailShowWhereToWatchKey",
+    "expression": "'detail_show_where_to_watch'",
+    "resolved_expression": "'detail_show_where_to_watch'",
+    "occurrences": 1
+  },
+  {
+    "name": "_detailThemeKey",
+    "expression": "'detail_theme'",
+    "resolved_expression": "'detail_theme'",
+    "occurrences": 1
+  },
+  {
+    "name": "_discoverDefaultSourceKey",
+    "expression": "'discover_default_source'",
+    "resolved_expression": "'discover_default_source'",
+    "occurrences": 1
+  },
+  {
+    "name": "_discoverLastSourceKey",
+    "expression": "'discover_last_source'",
+    "resolved_expression": "'discover_last_source'",
+    "occurrences": 1
+  },
+  {
+    "name": "_discoverLayoutKey",
+    "expression": "'discover_layout'",
+    "resolved_expression": "'discover_layout'",
+    "occurrences": 1
+  },
+  {
+    "name": "_dismissedDonationCampaignIdsKey",
+    "expression": "'dismissed_donation_campaign_ids_v1'",
+    "resolved_expression": "'dismissed_donation_campaign_ids_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_downloadDirPathKey",
+    "expression": "'download_dir_path_v1'",
+    "resolved_expression": "'download_dir_path_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_downloadTreeNameKey",
+    "expression": "'download_tree_display_name_v1'",
+    "resolved_expression": "'download_tree_display_name_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_downloadTreeUriKey",
+    "expression": "'download_tree_uri_v1'",
+    "resolved_expression": "'download_tree_uri_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_episodeCompletionThresholdKey",
+    "expression": "'episode_completion_threshold'",
+    "resolved_expression": "'episode_completion_threshold'",
+    "occurrences": 1
+  },
+  {
+    "name": "_episodeMdblistProgressKey",
+    "expression": "'episode_mdblist_progress_v1'",
+    "resolved_expression": "'episode_mdblist_progress_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_episodeSimklProgressKey",
+    "expression": "'episode_simkl_progress_v1'",
+    "resolved_expression": "'episode_simkl_progress_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_episodeTraktProgressKey",
+    "expression": "'episode_trakt_progress_v2'",
+    "resolved_expression": "'episode_trakt_progress_v2'",
+    "occurrences": 1
+  },
+  {
+    "name": "_explicitlyWatchedSeriesKey",
+    "expression": "'explicitly_watched_series_v1'",
+    "resolved_expression": "'explicitly_watched_series_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_externalPlayerCustomCommandKey",
+    "expression": "'external_player_custom_command'",
+    "resolved_expression": "'external_player_custom_command'",
+    "occurrences": 1
+  },
+  {
+    "name": "_externalPlayerCustomNameKey",
+    "expression": "'external_player_custom_name'",
+    "resolved_expression": "'external_player_custom_name'",
+    "occurrences": 1
+  },
+  {
+    "name": "_externalPlayerCustomPathKey",
+    "expression": "'external_player_custom_path'",
+    "resolved_expression": "'external_player_custom_path'",
+    "occurrences": 1
+  },
+  {
+    "name": "_externalPlayerPreferredKey",
+    "expression": "'external_player_preferred'",
+    "resolved_expression": "'external_player_preferred'",
+    "occurrences": 1
+  },
+  {
+    "name": "_fileSelectionKey",
+    "expression": "'real_debrid_file_selection'",
+    "resolved_expression": "'real_debrid_file_selection'",
+    "occurrences": 1
+  },
+  {
+    "name": "_finishedMoviesKey",
+    "expression": "'finished_movies_v1'",
+    "resolved_expression": "'finished_movies_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeCardOrientationKey",
+    "expression": "'home_card_orientation'",
+    "resolved_expression": "'home_card_orientation'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeContinueWatchingEnabledKey",
+    "expression": "'home_continue_watching_enabled'",
+    "resolved_expression": "'home_continue_watching_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeCwHoldToQuickPlayKey",
+    "expression": "'home_cw_hold_to_quick_play'",
+    "resolved_expression": "'home_cw_hold_to_quick_play'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeCwMergedRowsKeyPrefix",
+    "expression": "'home_cw_merge_'",
+    "resolved_expression": "'home_cw_merge_'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeDefaultAddonUrlKey",
+    "expression": "'home_default_addon_url'",
+    "resolved_expression": "'home_default_addon_url'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeDefaultCatalogIdKey",
+    "expression": "'home_default_catalog_id'",
+    "resolved_expression": "'home_default_catalog_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeDefaultSourceTypeKey",
+    "expression": "'home_default_source_type'",
+    "resolved_expression": "'home_default_source_type'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeDefaultTraktContentTypeKey",
+    "expression": "'home_default_trakt_content_type'",
+    "resolved_expression": "'home_default_trakt_content_type'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeDefaultTraktListTypeKey",
+    "expression": "'home_default_trakt_list_type'",
+    "resolved_expression": "'home_default_trakt_list_type'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeDisabledSectionsKey",
+    "expression": "'home_disabled_sections_v1'",
+    "resolved_expression": "'home_disabled_sections_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeExtraRowsKey",
+    "expression": "'home_extra_rows_v1'",
+    "resolved_expression": "'home_extra_rows_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeFavoritesOpenFolderKey",
+    "expression": "'home_favorites_open_folder'",
+    "resolved_expression": "'home_favorites_open_folder'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeHeroSourceKey",
+    "expression": "'home_hero_source_v1'",
+    "resolved_expression": "'home_hero_source_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeHideCardTitlesAndRatingsKey",
+    "expression": "'home_hide_card_titles_and_ratings'",
+    "resolved_expression": "'home_hide_card_titles_and_ratings'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeHideCatalogAddonNamesKey",
+    "expression": "'home_hide_catalog_addon_names'",
+    "resolved_expression": "'home_hide_catalog_addon_names'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeHideCollectionNamesKey",
+    "expression": "'home_hide_collection_names'",
+    "resolved_expression": "'home_hide_collection_names'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeHideProviderCardsKey",
+    "expression": "'home_hide_provider_cards'",
+    "resolved_expression": "'home_hide_provider_cards'",
+    "occurrences": 1
+  },
+  {
+    "name": "_homeRowOrderKey",
+    "expression": "'home_row_order_v1'",
+    "resolved_expression": "'home_row_order_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_indexerManagerConfigsKey",
+    "expression": "'indexer_manager_configs_v1'",
+    "resolved_expression": "'indexer_manager_configs_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iosCustomSchemeTemplateKey",
+    "expression": "'ios_custom_scheme_template'",
+    "resolved_expression": "'ios_custom_scheme_template'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iosExternalPlayerPreferredKey",
+    "expression": "'ios_external_player_preferred'",
+    "resolved_expression": "'ios_external_player_preferred'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvChannelPreviewEnabledKey",
+    "expression": "'iptv_channel_preview_enabled'",
+    "resolved_expression": "'iptv_channel_preview_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvDecoderModeKey",
+    "expression": "'iptv_decoder_mode'",
+    "resolved_expression": "'iptv_decoder_mode'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvDefaultPlaylistKey",
+    "expression": "'iptv_default_playlist'",
+    "resolved_expression": "'iptv_default_playlist'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvLastLiveChannelKey",
+    "expression": "'iptv_last_live_channel'",
+    "resolved_expression": "'iptv_last_live_channel'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvPlayerGuideStyleKey",
+    "expression": "'iptv_player_guide_style'",
+    "resolved_expression": "'iptv_player_guide_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvPlayerGuideStyles",
+    "expression": "{\n    'classic',\n    'glass',\n    'edition',\n    'console',\n    'spotlight',\n  }",
+    "resolved_expression": "{\n    'classic',\n    'glass',\n    'edition',\n    'console',\n    'spotlight',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvPlaylistSecretFields",
+    "expression": "[\n    'url', 'serverUrl', 'username', 'password', 'epgUrl', //\n  ]",
+    "resolved_expression": "[\n    'url', 'serverUrl', 'username', 'password', 'epgUrl', //\n  ]",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvPlaylistsKey",
+    "expression": "'iptv_playlists'",
+    "resolved_expression": "'iptv_playlists'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvSeriesAudioLangKey",
+    "expression": "'iptv_series_audio_lang'",
+    "resolved_expression": "'iptv_series_audio_lang'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvStyleKey",
+    "expression": "'iptv_style'",
+    "resolved_expression": "'iptv_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvStyles",
+    "expression": "{\n    'command',\n    'edition',\n    'console',\n    'spotlight',\n  }",
+    "resolved_expression": "{\n    'command',\n    'edition',\n    'console',\n    'spotlight',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvTrackContinueWatchingKey",
+    "expression": "'iptv_track_continue_watching'",
+    "resolved_expression": "'iptv_track_continue_watching'",
+    "occurrences": 1
+  },
+  {
+    "name": "_iptvWatchStartedFraction",
+    "expression": "0.02",
+    "resolved_expression": "0.02",
+    "occurrences": 1
+  },
+  {
+    "name": "_launchAnimationKey",
+    "expression": "'launch_animation'",
+    "resolved_expression": "'launch_animation'",
+    "occurrences": 1
+  },
+  {
+    "name": "_launchAnimationValues",
+    "expression": "{\n    'drop',\n    'marquee',\n    'prism',\n    'horizon',\n    'collider',\n    'neon',\n    'chrome',\n    'monogram',\n    'aperture',\n    'blueprint',\n    'ripple',\n    'ember',\n    'swiss',\n    'origami',\n    'anamorphic',\n    'constellation',\n    'silk',\n    'rackfocus',\n    'imprint',\n    'frost',\n    'trace',\n  }",
+    "resolved_expression": "{\n    'drop',\n    'marquee',\n    'prism',\n    'horizon',\n    'collider',\n    'neon',\n    'chrome',\n    'monogram',\n    'aperture',\n    'blueprint',\n    'ripple',\n    'ember',\n    'swiss',\n    'origami',\n    'anamorphic',\n    'constellation',\n    'silk',\n    'rackfocus',\n    'imprint',\n    'frost',\n    'trace',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "_launchIdentPaletteKey",
+    "expression": "'launch_ident_palette'",
+    "resolved_expression": "'launch_ident_palette'",
+    "occurrences": 1
+  },
+  {
+    "name": "_launchIdentPalettes",
+    "expression": "{'ident', 'theme'}",
+    "resolved_expression": "{'ident', 'theme'}",
+    "occurrences": 1
+  },
+  {
+    "name": "_lemmyAllowNsfwKey",
+    "expression": "'lemmy_allow_nsfw'",
+    "resolved_expression": "'lemmy_allow_nsfw'",
+    "occurrences": 1
+  },
+  {
+    "name": "_lemmyDefaultCommunityKey",
+    "expression": "'lemmy_default_community'",
+    "resolved_expression": "'lemmy_default_community'",
+    "occurrences": 1
+  },
+  {
+    "name": "_lemmyFavoriteCommunitiesKey",
+    "expression": "'lemmy_favorite_communities'",
+    "resolved_expression": "'lemmy_favorite_communities'",
+    "occurrences": 1
+  },
+  {
+    "name": "_lemmyInstanceKey",
+    "expression": "'lemmy_instance'",
+    "resolved_expression": "'lemmy_instance'",
+    "occurrences": 1
+  },
+  {
+    "name": "_linuxCustomCommandKey",
+    "expression": "'linux_custom_command'",
+    "resolved_expression": "'linux_custom_command'",
+    "occurrences": 1
+  },
+  {
+    "name": "_linuxExternalPlayerPreferredKey",
+    "expression": "'linux_external_player_preferred'",
+    "resolved_expression": "'linux_external_player_preferred'",
+    "occurrences": 1
+  },
+  {
+    "name": "_mdblistApiKeyKey",
+    "expression": "'mdblist_api_key'",
+    "resolved_expression": "'mdblist_api_key'",
+    "occurrences": 1
+  },
+  {
+    "name": "_mdblistSavedClonesKey",
+    "expression": "'mdblist_saved_clones'",
+    "resolved_expression": "'mdblist_saved_clones'",
+    "occurrences": 1
+  },
+  {
+    "name": "_mdblistSyncCheckpointKey",
+    "expression": "'mdblist_sync_checkpoint_v1'",
+    "resolved_expression": "'mdblist_sync_checkpoint_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_mdblistUsernameKey",
+    "expression": "'mdblist_username'",
+    "resolved_expression": "'mdblist_username'",
+    "occurrences": 1
+  },
+  {
+    "name": "_movieCompletionThresholdKey",
+    "expression": "'movie_completion_threshold'",
+    "resolved_expression": "'movie_completion_threshold'",
+    "occurrences": 1
+  },
+  {
+    "name": "_myWatchlistKey",
+    "expression": "TvOsRecoveryLimits.myWatchlistPreferenceKey",
+    "resolved_expression": "('my_watchlist_v1')",
+    "occurrences": 1
+  },
+  {
+    "name": "_networkBufferSizeKey",
+    "expression": "'network_buffer_size'",
+    "resolved_expression": "'network_buffer_size'",
+    "occurrences": 1
+  },
+  {
+    "name": "_networkConnectPatienceKey",
+    "expression": "'network_connect_patience'",
+    "resolved_expression": "'network_connect_patience'",
+    "occurrences": 1
+  },
+  {
+    "name": "_onboardingCompleteKey",
+    "expression": "'initial_setup_complete_v1'",
+    "resolved_expression": "'initial_setup_complete_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_parentsGuideStyleKey",
+    "expression": "'parents_guide_style'",
+    "resolved_expression": "'parents_guide_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_phoneNavBarIndicesKey",
+    "expression": "'phone_nav_bar_indices'",
+    "resolved_expression": "'phone_nav_bar_indices'",
+    "occurrences": 1
+  },
+  {
+    "name": "_phoneNavStyleKey",
+    "expression": "'phone_nav_style'",
+    "resolved_expression": "'phone_nav_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakAccessTokenKey",
+    "expression": "'pikpak_access_token'",
+    "resolved_expression": "'pikpak_access_token'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakCaptchaTokenKey",
+    "expression": "'pikpak_captcha_token'",
+    "resolved_expression": "'pikpak_captcha_token'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakDeviceIdKey",
+    "expression": "'pikpak_device_id'",
+    "resolved_expression": "'pikpak_device_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakEmailKey",
+    "expression": "'pikpak_email'",
+    "resolved_expression": "'pikpak_email'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakEnabledKey",
+    "expression": "'pikpak_enabled'",
+    "resolved_expression": "'pikpak_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakHiddenFromNavKey",
+    "expression": "'pikpak_hidden_from_nav'",
+    "resolved_expression": "'pikpak_hidden_from_nav'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakIgnoreSmallVideosKey",
+    "expression": "'pikpak_ignore_small_videos'",
+    "resolved_expression": "'pikpak_ignore_small_videos'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakPasswordKey",
+    "expression": "'pikpak_password'",
+    "resolved_expression": "'pikpak_password'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakPostTorrentActionKey",
+    "expression": "'pikpak_post_torrent_action'",
+    "resolved_expression": "'pikpak_post_torrent_action'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakRefreshTokenKey",
+    "expression": "'pikpak_refresh_token'",
+    "resolved_expression": "'pikpak_refresh_token'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakRestrictedFolderIdKey",
+    "expression": "'pikpak_restricted_folder_id'",
+    "resolved_expression": "'pikpak_restricted_folder_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakRestrictedFolderNameKey",
+    "expression": "'pikpak_restricted_folder_name'",
+    "resolved_expression": "'pikpak_restricted_folder_name'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakShowVideosOnlyKey",
+    "expression": "'pikpak_show_videos_only'",
+    "resolved_expression": "'pikpak_show_videos_only'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakTorrentsFolderIdKey",
+    "expression": "'pikpak_torrents_folder_id'",
+    "resolved_expression": "'pikpak_torrents_folder_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakTvFolderIdKey",
+    "expression": "'pikpak_tv_folder_id'",
+    "resolved_expression": "'pikpak_tv_folder_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_pikpakUserIdKey",
+    "expression": "'pikpak_user_id'",
+    "resolved_expression": "'pikpak_user_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playButtonModeKey",
+    "expression": "'play_button_mode'",
+    "resolved_expression": "'play_button_mode'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playLoaderStyleKey",
+    "expression": "'play_loader_style'",
+    "resolved_expression": "'play_loader_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playLoaderStyles",
+    "expression": "{'marquee', 'classic'}",
+    "resolved_expression": "{'marquee', 'classic'}",
+    "occurrences": 1
+  },
+  {
+    "name": "_playbackCompletionMigrationGenerationKey",
+    "expression": "'playback_completion_migration_generation'",
+    "resolved_expression": "'playback_completion_migration_generation'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playbackStateKey",
+    "expression": "'playback_state_v1'",
+    "resolved_expression": "'playback_state_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerDefaultAspectIndexKey",
+    "expression": "'player_default_aspect_index'",
+    "resolved_expression": "'player_default_aspect_index'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerDefaultAspectIndexTvKey",
+    "expression": "'player_default_aspect_index_tv'",
+    "resolved_expression": "'player_default_aspect_index_tv'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerDefaultAudioLanguageKey",
+    "expression": "'player_default_audio_language'",
+    "resolved_expression": "'player_default_audio_language'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerDefaultSubtitleLanguageKey",
+    "expression": "'player_default_subtitle_language'",
+    "resolved_expression": "'player_default_subtitle_language'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerDockPaletteKey",
+    "expression": "'player_dock_palette'",
+    "resolved_expression": "'player_dock_palette'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerDockPalettes",
+    "expression": "{\n    'ultraviolet',\n    'crimson',\n    'aurum',\n    'ice',\n  }",
+    "resolved_expression": "{\n    'ultraviolet',\n    'crimson',\n    'aurum',\n    'ice',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerDockSizeKey",
+    "expression": "'player_dock_size'",
+    "resolved_expression": "'player_dock_size'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerDockSizes",
+    "expression": "{\n    'auto',\n    'small',\n    'medium',\n    'large',\n  }",
+    "resolved_expression": "{\n    'auto',\n    'small',\n    'medium',\n    'large',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerDockStyleKey",
+    "expression": "'player_dock_style'",
+    "resolved_expression": "'player_dock_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerDockStyles",
+    "expression": "{\n    'classic',\n    'auto',\n    'compact',\n    'tiers',\n    'cinema',\n    // The value shipped before the arrangements became selectable. Still\n    // accepted on read so existing installs keep the dock they chose; it\n    // means the same thing 'auto' does.\n    'two_tier',\n  }",
+    "resolved_expression": "{\n    'classic',\n    'auto',\n    'compact',\n    'tiers',\n    'cinema',\n    // The value shipped before the arrangements became selectable. Still\n    // accepted on read so existing installs keep the dock they chose; it\n    // means the same thing 'auto' does.\n    'two_tier',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerNightModeIndexKey",
+    "expression": "'player_night_mode_index'",
+    "resolved_expression": "'player_night_mode_index'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerStartPortraitKey",
+    "expression": "'player_start_portrait'",
+    "resolved_expression": "'player_start_portrait'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playerSystemAudioEffectsKey",
+    "expression": "'player_system_audio_effects'",
+    "resolved_expression": "'player_system_audio_effects'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playlistFavoritesKey",
+    "expression": "'playlist_favorites_v1'",
+    "resolved_expression": "'playlist_favorites_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playlistKey",
+    "expression": "'user_playlist_v1'",
+    "resolved_expression": "'user_playlist_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playlistPosterOverridesKey",
+    "expression": "'playlist_poster_overrides_v1'",
+    "resolved_expression": "'playlist_poster_overrides_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_playlistViewModesKey",
+    "expression": "'playlist_view_modes_v1'",
+    "resolved_expression": "'playlist_view_modes_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_postTorrentActionKey",
+    "expression": "'post_torrent_action'",
+    "resolved_expression": "'post_torrent_action'",
+    "occurrences": 1
+  },
+  {
+    "name": "_premiumizeApiKey",
+    "expression": "'premiumize_api_key'",
+    "resolved_expression": "'premiumize_api_key'",
+    "occurrences": 1
+  },
+  {
+    "name": "_premiumizeCacheCheckPref",
+    "expression": "'premiumize_check_cache_before_search'",
+    "resolved_expression": "'premiumize_check_cache_before_search'",
+    "occurrences": 1
+  },
+  {
+    "name": "_premiumizeHiddenFromNavKey",
+    "expression": "'premiumize_hidden_from_nav'",
+    "resolved_expression": "'premiumize_hidden_from_nav'",
+    "occurrences": 1
+  },
+  {
+    "name": "_premiumizeIntegrationEnabledKey",
+    "expression": "'premiumize_integration_enabled'",
+    "resolved_expression": "'premiumize_integration_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_premiumizePostTorrentActionKey",
+    "expression": "'premiumize_post_torrent_action'",
+    "resolved_expression": "'premiumize_post_torrent_action'",
+    "occurrences": 1
+  },
+  {
+    "name": "_quickPlayHonorsFiltersKey",
+    "expression": "'quick_play_honors_filters_v1'",
+    "resolved_expression": "'quick_play_honors_filters_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_quickPlayMaxRetriesKey",
+    "expression": "'quick_play_max_retries'",
+    "resolved_expression": "'quick_play_max_retries'",
+    "occurrences": 1
+  },
+  {
+    "name": "_quickPlayMovieRulesKey",
+    "expression": "'quick_play_movie_rules_v2'",
+    "resolved_expression": "'quick_play_movie_rules_v2'",
+    "occurrences": 1
+  },
+  {
+    "name": "_quickPlaySearchTimeoutKey",
+    "expression": "'quick_play_search_timeout'",
+    "resolved_expression": "'quick_play_search_timeout'",
+    "occurrences": 1
+  },
+  {
+    "name": "_quickPlaySeriesRulesKey",
+    "expression": "'quick_play_series_rules_v2'",
+    "resolved_expression": "'quick_play_series_rules_v2'",
+    "occurrences": 1
+  },
+  {
+    "name": "_quickPlayTryMultipleTorrentsKey",
+    "expression": "'quick_play_try_multiple_torrents'",
+    "resolved_expression": "'quick_play_try_multiple_torrents'",
+    "occurrences": 1
+  },
+  {
+    "name": "_quickPlayVrAutoDetectFormatKey",
+    "expression": "'quick_play_vr_auto_detect_format'",
+    "resolved_expression": "'quick_play_vr_auto_detect_format'",
+    "occurrences": 1
+  },
+  {
+    "name": "_quickPlayVrDefaultScreenTypeKey",
+    "expression": "'quick_play_vr_default_screen_type'",
+    "resolved_expression": "'quick_play_vr_default_screen_type'",
+    "occurrences": 1
+  },
+  {
+    "name": "_quickPlayVrDefaultStereoModeKey",
+    "expression": "'quick_play_vr_default_stereo_mode'",
+    "resolved_expression": "'quick_play_vr_default_stereo_mode'",
+    "occurrences": 1
+  },
+  {
+    "name": "_quickPlayVrModeKey",
+    "expression": "'quick_play_vr_mode'",
+    "resolved_expression": "'quick_play_vr_mode'",
+    "occurrences": 1
+  },
+  {
+    "name": "_quickPlayVrShowDialogKey",
+    "expression": "'quick_play_vr_show_dialog'",
+    "resolved_expression": "'quick_play_vr_show_dialog'",
+    "occurrences": 1
+  },
+  {
+    "name": "_rdEndpointKey",
+    "expression": "'real_debrid_endpoint'",
+    "resolved_expression": "'real_debrid_endpoint'",
+    "occurrences": 1
+  },
+  {
+    "name": "_rdSkipBlockedTorrentsKey",
+    "expression": "'rd_skip_blocked_torrents'",
+    "resolved_expression": "'rd_skip_blocked_torrents'",
+    "occurrences": 1
+  },
+  {
+    "name": "_realDebridHiddenFromNavKey",
+    "expression": "'real_debrid_hidden_from_nav'",
+    "resolved_expression": "'real_debrid_hidden_from_nav'",
+    "occurrences": 1
+  },
+  {
+    "name": "_realDebridIntegrationEnabledKey",
+    "expression": "'real_debrid_integration_enabled'",
+    "resolved_expression": "'real_debrid_integration_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_redditAccessTokenKey",
+    "expression": "'reddit_access_token'",
+    "resolved_expression": "'reddit_access_token'",
+    "occurrences": 1
+  },
+  {
+    "name": "_redditAllowNsfwKey",
+    "expression": "'reddit_allow_nsfw'",
+    "resolved_expression": "'reddit_allow_nsfw'",
+    "occurrences": 1
+  },
+  {
+    "name": "_redditDefaultSubredditKey",
+    "expression": "'reddit_default_subreddit'",
+    "resolved_expression": "'reddit_default_subreddit'",
+    "occurrences": 1
+  },
+  {
+    "name": "_redditEnabledKey",
+    "expression": "'reddit_enabled'",
+    "resolved_expression": "'reddit_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_redditFavoriteSubredditsKey",
+    "expression": "'reddit_favorite_subreddits'",
+    "resolved_expression": "'reddit_favorite_subreddits'",
+    "occurrences": 1
+  },
+  {
+    "name": "_redditHiddenFromNavKey",
+    "expression": "'reddit_hidden_from_nav'",
+    "resolved_expression": "'reddit_hidden_from_nav'",
+    "occurrences": 1
+  },
+  {
+    "name": "_redditLastSubredditKey",
+    "expression": "'reddit_last_subreddit'",
+    "resolved_expression": "'reddit_last_subreddit'",
+    "occurrences": 1
+  },
+  {
+    "name": "_redditRecentSubredditsKey",
+    "expression": "'reddit_recent_subreddits'",
+    "resolved_expression": "'reddit_recent_subreddits'",
+    "occurrences": 1
+  },
+  {
+    "name": "_redditRefreshTokenKey",
+    "expression": "'reddit_refresh_token'",
+    "resolved_expression": "'reddit_refresh_token'",
+    "occurrences": 1
+  },
+  {
+    "name": "_redditUsernameKey",
+    "expression": "'reddit_username'",
+    "resolved_expression": "'reddit_username'",
+    "occurrences": 1
+  },
+  {
+    "name": "_remoteControlEnabledKey",
+    "expression": "'remote_control_enabled'",
+    "resolved_expression": "'remote_control_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_remoteIntroShownKey",
+    "expression": "'remote_intro_shown'",
+    "resolved_expression": "'remote_intro_shown'",
+    "occurrences": 1
+  },
+  {
+    "name": "_remoteLastDeviceKey",
+    "expression": "'remote_last_device'",
+    "resolved_expression": "'remote_last_device'",
+    "occurrences": 1
+  },
+  {
+    "name": "_remoteTvDeviceNameKey",
+    "expression": "'remote_tv_device_name'",
+    "resolved_expression": "'remote_tv_device_name'",
+    "occurrences": 1
+  },
+  {
+    "name": "_resumeGhostPurgeGenerationKey",
+    "expression": "'resume_ghost_purge_generation'",
+    "resolved_expression": "'resume_ghost_purge_generation'",
+    "occurrences": 1
+  },
+  {
+    "name": "_seriesAutoPinOnPlayKey",
+    "expression": "'series_auto_pin_on_play'",
+    "resolved_expression": "'series_auto_pin_on_play'",
+    "occurrences": 1
+  },
+  {
+    "name": "_sidebarConfigurationKey",
+    "expression": "'sidebar_configuration_v1'",
+    "resolved_expression": "'sidebar_configuration_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_simklAccessTokenKey",
+    "expression": "'simkl_access_token'",
+    "resolved_expression": "'simkl_access_token'",
+    "occurrences": 1
+  },
+  {
+    "name": "_simklUsernameKey",
+    "expression": "'simkl_username'",
+    "resolved_expression": "'simkl_username'",
+    "occurrences": 1
+  },
+  {
+    "name": "_skipSegmentProviderKey",
+    "expression": "'skip_segment_provider'",
+    "resolved_expression": "'skip_segment_provider'",
+    "occurrences": 1
+  },
+  {
+    "name": "_skipSegmentsEnabledKey",
+    "expression": "'skip_segments_enabled'",
+    "resolved_expression": "'skip_segments_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_startupAutoLaunchEnabledKey",
+    "expression": "'startup_auto_launch_enabled'",
+    "resolved_expression": "'startup_auto_launch_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_startupChannelIdKey",
+    "expression": "'startup_channel_id'",
+    "resolved_expression": "'startup_channel_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_startupContinueWatchingItemIdKey",
+    "expression": "'startup_continue_watching_item_id'",
+    "resolved_expression": "'startup_continue_watching_item_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_startupIptvChannelKey",
+    "expression": "'startup_iptv_channel'",
+    "resolved_expression": "'startup_iptv_channel'",
+    "occurrences": 1
+  },
+  {
+    "name": "_startupIptvModeKey",
+    "expression": "'startup_iptv_mode'",
+    "resolved_expression": "'startup_iptv_mode'",
+    "occurrences": 1
+  },
+  {
+    "name": "_startupModeKey",
+    "expression": "'startup_mode'",
+    "resolved_expression": "'startup_mode'",
+    "occurrences": 1
+  },
+  {
+    "name": "_startupPlaylistItemIdKey",
+    "expression": "'startup_playlist_item_id'",
+    "resolved_expression": "'startup_playlist_item_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_startupStremioTvChannelIdKey",
+    "expression": "'startup_stremio_tv_channel_id'",
+    "resolved_expression": "'startup_stremio_tv_channel_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_startupTraktContinueWatchingMovieIdKey",
+    "expression": "'startup_trakt_continue_watching_movie_id'",
+    "resolved_expression": "'startup_trakt_continue_watching_movie_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_startupTraktContinueWatchingShowIdKey",
+    "expression": "'startup_trakt_continue_watching_show_id'",
+    "resolved_expression": "'startup_trakt_continue_watching_show_id'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioSourcesTimeoutKey",
+    "expression": "'stremio_sources_timeout'",
+    "resolved_expression": "'stremio_sources_timeout'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvAutoRefreshKey",
+    "expression": "'stremio_tv_auto_refresh'",
+    "resolved_expression": "'stremio_tv_auto_refresh'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvCatalogRepoUrlsKey",
+    "expression": "'stremio_tv_catalog_repo_urls_v1'",
+    "resolved_expression": "'stremio_tv_catalog_repo_urls_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvDebridProviderKey",
+    "expression": "'stremio_tv_debrid_provider'",
+    "resolved_expression": "'stremio_tv_debrid_provider'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvDisabledChannelFiltersKey",
+    "expression": "'stremio_tv_disabled_channel_filters_v1'",
+    "resolved_expression": "'stremio_tv_disabled_channel_filters_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvFavoriteChannelsKey",
+    "expression": "'stremio_tv_favorite_channels_v1'",
+    "resolved_expression": "'stremio_tv_favorite_channels_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvHideNowPlayingKey",
+    "expression": "'stremio_tv_hide_now_playing'",
+    "resolved_expression": "'stremio_tv_hide_now_playing'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvLocalCatalogsKey",
+    "expression": "'stremio_tv_local_catalogs_v1'",
+    "resolved_expression": "'stremio_tv_local_catalogs_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvMaxStartPercentKey",
+    "expression": "'stremio_tv_max_start_percent'",
+    "resolved_expression": "'stremio_tv_max_start_percent'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvPreferredQualityKey",
+    "expression": "'stremio_tv_preferred_quality'",
+    "resolved_expression": "'stremio_tv_preferred_quality'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvRandomEpisodesKey",
+    "expression": "'stremio_tv_random_episodes'",
+    "resolved_expression": "'stremio_tv_random_episodes'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvRotationMinutesKey",
+    "expression": "'stremio_tv_rotation_minutes'",
+    "resolved_expression": "'stremio_tv_rotation_minutes'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvSeriesRotationMinutesKey",
+    "expression": "'stremio_tv_series_rotation_minutes'",
+    "resolved_expression": "'stremio_tv_series_rotation_minutes'",
+    "occurrences": 1
+  },
+  {
+    "name": "_stremioTvTorrentsFirstKey",
+    "expression": "'stremio_tv_torrents_first'",
+    "resolved_expression": "'stremio_tv_torrents_first'",
+    "occurrences": 1
+  },
+  {
+    "name": "_subtitleAutoSyncKey",
+    "expression": "'subtitle_auto_sync_enabled'",
+    "resolved_expression": "'subtitle_auto_sync_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_supportRemoteConfigCacheKey",
+    "expression": "'support_remote_config_cache_v1'",
+    "resolved_expression": "'support_remote_config_cache_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_supportedSkipSegmentProviders",
+    "expression": "<String>{\n    skipSegmentProviderAuto,\n    skipSegmentProviderSkipDb,\n    skipSegmentProviderIntroDb,\n    skipSegmentProviderTheIntroDb,\n  }",
+    "resolved_expression": "<String>{\n    ('auto'),\n    ('skipdb'),\n    ('introdb'),\n    ('theintrodb'),\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "_textBrightnessKey",
+    "expression": "'text_brightness'",
+    "resolved_expression": "'text_brightness'",
+    "occurrences": 1
+  },
+  {
+    "name": "_textBrightnessValues",
+    "expression": "{'bright', 'soft', 'dim'}",
+    "resolved_expression": "{'bright', 'soft', 'dim'}",
+    "occurrences": 1
+  },
+  {
+    "name": "_themeOverridesKey",
+    "expression": "'theme_overrides'",
+    "resolved_expression": "'theme_overrides'",
+    "occurrences": 1
+  },
+  {
+    "name": "_torboxApiKey",
+    "expression": "'torbox_api_key'",
+    "resolved_expression": "'torbox_api_key'",
+    "occurrences": 1
+  },
+  {
+    "name": "_torboxCacheCheckPref",
+    "expression": "'torbox_check_cache_before_search'",
+    "resolved_expression": "'torbox_check_cache_before_search'",
+    "occurrences": 1
+  },
+  {
+    "name": "_torboxHiddenFromNavKey",
+    "expression": "'torbox_hidden_from_nav'",
+    "resolved_expression": "'torbox_hidden_from_nav'",
+    "occurrences": 1
+  },
+  {
+    "name": "_torboxIntegrationEnabledKey",
+    "expression": "'torbox_integration_enabled'",
+    "resolved_expression": "'torbox_integration_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_torboxPostTorrentActionKey",
+    "expression": "'torbox_post_torrent_action'",
+    "resolved_expression": "'torbox_post_torrent_action'",
+    "occurrences": 1
+  },
+  {
+    "name": "_torrentSearchHistoryEnabledKey",
+    "expression": "'torrent_search_history_enabled'",
+    "resolved_expression": "'torrent_search_history_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_torrentSearchHistoryKey",
+    "expression": "'torrent_search_history_v1'",
+    "resolved_expression": "'torrent_search_history_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_traktAccessTokenKey",
+    "expression": "'trakt_access_token'",
+    "resolved_expression": "'trakt_access_token'",
+    "occurrences": 1
+  },
+  {
+    "name": "_traktRefreshTokenKey",
+    "expression": "'trakt_refresh_token'",
+    "resolved_expression": "'trakt_refresh_token'",
+    "occurrences": 1
+  },
+  {
+    "name": "_traktTokenExpiryKey",
+    "expression": "'trakt_token_expiry'",
+    "resolved_expression": "'trakt_token_expiry'",
+    "occurrences": 1
+  },
+  {
+    "name": "_traktUsernameKey",
+    "expression": "'trakt_username'",
+    "resolved_expression": "'trakt_username'",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvHeroArtworkQualityKey",
+    "expression": "'tv_hero_artwork_quality'",
+    "resolved_expression": "'tv_hero_artwork_quality'",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvHomeStyleKey",
+    "expression": "'tv_home_style'",
+    "resolved_expression": "'tv_home_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvMazeSeriesMappingKey",
+    "expression": "'tvmaze_series_mappings'",
+    "resolved_expression": "'tvmaze_series_mappings'",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvPlayerControlsStyleKey",
+    "expression": "'tv_player_controls_style'",
+    "resolved_expression": "'tv_player_controls_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvPlayerControlsStyles",
+    "expression": "{\n    'classic',\n    'ott',\n    'frost',\n    'marquee',\n    'broadcast',\n    'pulse',\n    'ticket',\n  }",
+    "resolved_expression": "{\n    'classic',\n    'ott',\n    'frost',\n    'marquee',\n    'broadcast',\n    'pulse',\n    'ticket',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvRenderQualityKey",
+    "expression": "'tv_low_res_render'",
+    "resolved_expression": "'tv_low_res_render'",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvSidebarStyleKey",
+    "expression": "'tv_sidebar_style'",
+    "resolved_expression": "'tv_sidebar_style'",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvSidebarStyles",
+    "expression": "{\n    'classic',\n    'ghost',\n    'island',\n    'marquee',\n    'badge',\n    'pill',\n  }",
+    "resolved_expression": "{\n    'classic',\n    'ghost',\n    'island',\n    'marquee',\n    'badge',\n    'pill',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvosForceSoftwareDecodeKey",
+    "expression": "'tvos_force_software_decode'",
+    "resolved_expression": "'tvos_force_software_decode'",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvosForceStereoAudioKey",
+    "expression": "'tvos_force_stereo_audio_v1'",
+    "resolved_expression": "'tvos_force_stereo_audio_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvosKeyboardDefaultGenerationKey",
+    "expression": "'tvos_keyboard_default_generation'",
+    "resolved_expression": "'tvos_keyboard_default_generation'",
+    "occurrences": 1
+  },
+  {
+    "name": "_tvosLegacyAudioOutputKey",
+    "expression": "'tvos_legacy_audio_output_v1'",
+    "resolved_expression": "'tvos_legacy_audio_output_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_uiHapticsKey",
+    "expression": "'ui_haptics'",
+    "resolved_expression": "'ui_haptics'",
+    "occurrences": 1
+  },
+  {
+    "name": "_uiSoundsKey",
+    "expression": "'ui_sounds'",
+    "resolved_expression": "'ui_sounds'",
+    "occurrences": 1
+  },
+  {
+    "name": "_updateAutoCheckEnabledKey",
+    "expression": "'update_auto_check_enabled'",
+    "resolved_expression": "'update_auto_check_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_updateIgnoredVersionKey",
+    "expression": "'update_ignored_version'",
+    "resolved_expression": "'update_ignored_version'",
+    "occurrences": 1
+  },
+  {
+    "name": "_updateIncludeAlphaEnabledKey",
+    "expression": "'update_include_alpha_enabled'",
+    "resolved_expression": "'update_include_alpha_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_videoResumeKey",
+    "expression": "'video_resume_v1'",
+    "resolved_expression": "'video_resume_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_webDavBaseUrlKey",
+    "expression": "'webdav_base_url'",
+    "resolved_expression": "'webdav_base_url'",
+    "occurrences": 1
+  },
+  {
+    "name": "_webDavEnabledKey",
+    "expression": "'webdav_enabled'",
+    "resolved_expression": "'webdav_enabled'",
+    "occurrences": 1
+  },
+  {
+    "name": "_webDavHiddenFromNavKey",
+    "expression": "'webdav_hidden_from_nav'",
+    "resolved_expression": "'webdav_hidden_from_nav'",
+    "occurrences": 1
+  },
+  {
+    "name": "_webDavPasswordKey",
+    "expression": "'webdav_password'",
+    "resolved_expression": "'webdav_password'",
+    "occurrences": 1
+  },
+  {
+    "name": "_webDavSelectedServerIdKey",
+    "expression": "'webdav_selected_server_id_v1'",
+    "resolved_expression": "'webdav_selected_server_id_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_webDavServersKey",
+    "expression": "'webdav_servers_v1'",
+    "resolved_expression": "'webdav_servers_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "_webDavShowVideosOnlyKey",
+    "expression": "'webdav_show_videos_only'",
+    "resolved_expression": "'webdav_show_videos_only'",
+    "occurrences": 1
+  },
+  {
+    "name": "_webDavUsernameKey",
+    "expression": "'webdav_username'",
+    "resolved_expression": "'webdav_username'",
+    "occurrences": 1
+  },
+  {
+    "name": "_windowsCustomCommandKey",
+    "expression": "'windows_custom_command'",
+    "resolved_expression": "'windows_custom_command'",
+    "occurrences": 1
+  },
+  {
+    "name": "_windowsExternalPlayerPreferredKey",
+    "expression": "'windows_external_player_preferred'",
+    "resolved_expression": "'windows_external_player_preferred'",
+    "occurrences": 1
+  },
+  {
+    "name": "_youtubeMaxHeightKey",
+    "expression": "'youtube_max_height'",
+    "resolved_expression": "'youtube_max_height'",
+    "occurrences": 1
+  },
+  {
+    "name": "defaultLocalCompletionThreshold",
+    "expression": "80",
+    "resolved_expression": "80",
+    "occurrences": 1
+  },
+  {
+    "name": "detailPageSectionPreferenceKeys",
+    "expression": "{\n    _detailShowWhereToWatchKey,\n    _detailShowRentKey,\n    _detailShowBuyKey,\n    _detailShowAvailabilityLinkKey,\n    _detailShowDidYouKnowKey,\n  }",
+    "resolved_expression": "{\n    ('detail_show_where_to_watch'),\n    ('detail_show_rent'),\n    ('detail_show_buy'),\n    ('detail_show_availability_link'),\n    ('detail_show_did_you_know'),\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "discoverDefaultRememberLast",
+    "expression": "'remember'",
+    "resolved_expression": "'remember'",
+    "occurrences": 1
+  },
+  {
+    "name": "homeTickSourcesKey",
+    "expression": "'home_tick_sources'",
+    "resolved_expression": "'home_tick_sources'",
+    "occurrences": 1
+  },
+  {
+    "name": "importedLaunchAnimationKey",
+    "expression": "'imported_launch_animation_v1'",
+    "resolved_expression": "'imported_launch_animation_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "iptvDecoderModes",
+    "expression": "['auto', 'hardware', 'software']",
+    "resolved_expression": "['auto', 'hardware', 'software']",
+    "occurrences": 1
+  },
+  {
+    "name": "iptvFavoritesListId",
+    "expression": "IptvMediaStore.favoritesListId",
+    "resolved_expression": "(('favorites'))",
+    "occurrences": 1
+  },
+  {
+    "name": "iptvWatchFinishedFraction",
+    "expression": "0.95",
+    "resolved_expression": "0.95",
+    "occurrences": 1
+  },
+  {
+    "name": "kDebrifyTvStyles",
+    "expression": "{'grid', 'spotlight'}",
+    "resolved_expression": "{'grid', 'spotlight'}",
+    "occurrences": 1
+  },
+  {
+    "name": "kDetailPageStyleDefault",
+    "expression": "'console'",
+    "resolved_expression": "'console'",
+    "occurrences": 1
+  },
+  {
+    "name": "kDetailPageStyles",
+    "expression": "{\n    'classic',\n    'marquee',\n    'dossier',\n    'broadsheet',\n    'stage',\n    'filmstrip',\n    'console',\n    'vista',\n    'monolith',\n    'mosaic',\n    'halo',\n    'premiere',\n    'showcase',\n  }",
+    "resolved_expression": "{\n    'classic',\n    'marquee',\n    'dossier',\n    'broadsheet',\n    'stage',\n    'filmstrip',\n    'console',\n    'vista',\n    'monolith',\n    'mosaic',\n    'halo',\n    'premiere',\n    'showcase',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "kDetailThemes",
+    "expression": "{\n    'signal',\n    'noir',\n    'broadsheet',\n    'phosphor',\n    'aurora',\n    'concrete',\n    'velvet',\n    'blueprint',\n    'broadcast',\n    'sepia',\n    'obsidian',\n    'halo',\n    'prestige',\n    'deep_field',\n    'graphite',\n    'vault',\n    'spectrum',\n    'verdant',\n    'frost',\n    'cinemascope',\n    // The five premium looks. Accepted here from the build that introduces\n    // them, for the same downgrade reason as everything above: a value a newer\n    // build wrote must survive being read by an older one, which normalizes it\n    // to 'signal' rather than losing the key.\n    'glass',\n    'field',\n    'hearth',\n    'console',\n    'reel',\n\n    'spotlight',\n  }",
+    "resolved_expression": "{\n    'signal',\n    'noir',\n    'broadsheet',\n    'phosphor',\n    'aurora',\n    'concrete',\n    'velvet',\n    'blueprint',\n    'broadcast',\n    'sepia',\n    'obsidian',\n    'halo',\n    'prestige',\n    'deep_field',\n    'graphite',\n    'vault',\n    'spectrum',\n    'verdant',\n    'frost',\n    'cinemascope',\n    // The five premium looks. Accepted here from the build that introduces\n    // them, for the same downgrade reason as everything above: a value a newer\n    // build wrote must survive being read by an older one, which normalizes it\n    // to 'signal' rather than losing the key.\n    'glass',\n    'field',\n    'hearth',\n    'console',\n    'reel',\n\n    'spotlight',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "kIptvStyleDefault",
+    "expression": "'spotlight'",
+    "resolved_expression": "'spotlight'",
+    "occurrences": 1
+  },
+  {
+    "name": "kParentsGuideStyles",
+    "expression": "{'classic', 'compass'}",
+    "resolved_expression": "{'classic', 'compass'}",
+    "occurrences": 1
+  },
+  {
+    "name": "kTvHomeStyles",
+    "expression": "{\n    'canvas',\n    'classic',\n    'atrium',\n    'mosaic',\n    'promenade',\n    'deck',\n    'tonight',\n    'spotlight',\n  }",
+    "resolved_expression": "{\n    'canvas',\n    'classic',\n    'atrium',\n    'mosaic',\n    'promenade',\n    'deck',\n    'tonight',\n    'spotlight',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "kTvUiScaleDefault",
+    "expression": "90",
+    "resolved_expression": "90",
+    "occurrences": 1
+  },
+  {
+    "name": "kTvUiScaleOptions",
+    "expression": "[100, 90, 80]",
+    "resolved_expression": "[100, 90, 80]",
+    "occurrences": 1
+  },
+  {
+    "name": "localCompletionThresholdOptions",
+    "expression": "<int>[\n    50,\n    60,\n    70,\n    75,\n    80,\n    85,\n    90,\n    95,\n    100,\n  ]",
+    "resolved_expression": "<int>[\n    50,\n    60,\n    70,\n    75,\n    80,\n    85,\n    90,\n    95,\n    100,\n  ]",
+    "occurrences": 1
+  },
+  {
+    "name": "localSeriesCalendarAttemptedAtKey",
+    "expression": "'local_series_completion_calendar_attempted_at_v1'",
+    "resolved_expression": "'local_series_completion_calendar_attempted_at_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "localSeriesCalendarCheckedAtKey",
+    "expression": "'local_series_completion_calendar_checked_at_v1'",
+    "resolved_expression": "'local_series_completion_calendar_checked_at_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "localSeriesCompletionStateKey",
+    "expression": "'local_series_completion_v1'",
+    "resolved_expression": "'local_series_completion_v1'",
+    "occurrences": 1
+  },
+  {
+    "name": "myWatchlistTvOsCapBytes",
+    "expression": "TvOsRecoveryLimits.envelopeValueBytes - 16 * 1024",
+    "resolved_expression": "(64 * 1024) - 16 * 1024",
+    "occurrences": 1
+  },
+  {
+    "name": "skipSegmentProviderAuto",
+    "expression": "'auto'",
+    "resolved_expression": "'auto'",
+    "occurrences": 1
+  },
+  {
+    "name": "skipSegmentProviderIntroDb",
+    "expression": "'introdb'",
+    "resolved_expression": "'introdb'",
+    "occurrences": 1
+  },
+  {
+    "name": "skipSegmentProviderSkipDb",
+    "expression": "'skipdb'",
+    "resolved_expression": "'skipdb'",
+    "occurrences": 1
+  },
+  {
+    "name": "skipSegmentProviderTheIntroDb",
+    "expression": "'theintrodb'",
+    "resolved_expression": "'theintrodb'",
+    "occurrences": 1
+  },
+  {
+    "name": "startupIptvFirstAvailable",
+    "expression": "'firstAvailable'",
+    "resolved_expression": "'firstAvailable'",
+    "occurrences": 1
+  },
+  {
+    "name": "startupIptvModeLast",
+    "expression": "'last'",
+    "resolved_expression": "'last'",
+    "occurrences": 1
+  },
+  {
+    "name": "startupIptvModePinned",
+    "expression": "'pinned'",
+    "resolved_expression": "'pinned'",
+    "occurrences": 1
+  },
+  {
+    "name": "trackingScrobbleTargetsKey",
+    "expression": "TrackingScrobblePreferences.key",
+    "resolved_expression": "('tracking_scrobble_targets')",
+    "occurrences": 1
+  },
+  {
+    "name": "tvCollectionListStyles",
+    "expression": "{\n    'spotlight',\n    'grid',\n    'gallery',\n    'filmstrip',\n    'journal',\n  }",
+    "resolved_expression": "{\n    'spotlight',\n    'grid',\n    'gallery',\n    'filmstrip',\n    'journal',\n  }",
+    "occurrences": 1
+  },
+  {
+    "name": "watchProgressSourceKey",
+    "expression": "'watch_progress_source'",
+    "resolved_expression": "'watch_progress_source'",
+    "occurrences": 1
+  }
+]

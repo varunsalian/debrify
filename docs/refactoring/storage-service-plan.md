@@ -489,7 +489,72 @@ identity is present with the same outcome.
 
 | Step | Commit | `storage_service.dart` lines | Result |
 | --- | --- | --- | --- |
-| 0 | | 10,952 | |
+| 0 | This tooling commit (hash recorded by step 1) | 10,952 | Baseline, complete map, resolved report, inventories and self-checked tooling; no Dart moves. |
+
+### Step 0 evidence and retained source
+
+- Baseline checkout: `e5c962c6`; `git diff 072407c3 -- lib test pubspec.yaml
+  pubspec.lock` is empty. The four intervening commits only revise this plan
+  and its comparison tooling; the application under test is exactly `072407c3`.
+- SDK: Flutter 3.44.8, framework `058e0af2c2`, Dart 3.12.2. Evidence is in
+  the clone's git common directory, `refactor-evidence/ss/`.
+- `python3 dev/tool/suite_evidence.py run ss/base`: 10,294 success,
+  20 failure, 29 error, 20 skipped. The runner completed. These exact observed
+  identities, including every success, are the comparison authority.
+- `flutter analyze` saved as `ss/analyze-base.txt`: 836 diagnostics. Later
+  steps use the prescribed file-aware relocation comparison.
+- `check_storage_map.py`: all 1,081 rows covered; the generated
+  `storage_dependencies.txt` reports **Unresolved: 0**. Shared members are
+  individually identified by `shared=yes` in the map and by their promotion
+  and complete consumer list in that report. Keys required by an earlier
+  step move at that earlier step into their eventual owner's file.
+- `check_storage_keys.py`: 314 original constants, each declared once,
+  including inferred constants and resolved external constant expressions.
+  The inventory is committed for shallow CI clones.
+- `repoint_storage.py --self-test`: nine fixtures cover calls, tear-offs,
+  assignments, types, import combinators/aliases, nested interpolations,
+  literals/comments, re-exported Home types, tracked scope, and two passes
+  with the protected legacy reset leaf.
+- `check_storage_bodies.py --self-test`: rejects changed defaults, inline
+  keys, receivers and literal whitespace; accepts only mapped promotions
+  and qualifiers. It also verifies the reset partition.
+- The eight source-text inventory files are registered in CI, along with
+  the plan's storage contract suites. The added WebDAV failure is an exact
+  identity observed at `ss/base`; the existing two CI failures remain.
+- Temporary retention: `lib/services/storage_service.dart` remains oversized
+  because each step must keep unmoved subjects usable. Its remaining
+  responsibilities are exactly the map rows not yet moved. Milestone: each
+  step ratchets its size down; step 8 deletes it. New owners have a 500-line
+  cap from their first production use.
+
+### Static state ownership (unchanged by the split)
+
+Every item below retains its original declaration, initializer and single
+owner; `check_storage_bodies.py` verifies those declarations at each step.
+The map records the destination. No lifecycle or storage classification is
+changed by the mechanical move.
+
+| Original state | Existing classification and lifetime |
+| --- | --- |
+| `trackingSourceRevision`, `movieFinishedRevision`, `localCompletionRevision` | Process-lifetime invalidation notifiers for profile-owned changes; retained notifier identity, no new reset. |
+| `_episodeTrackerSnapshotWriteLock`, `_detailPageSectionWriteLock`, `_collectionStyleLock`, `_launchSelectionLock` | Process-lifetime locks; existing captured-profile write guards remain unchanged. |
+| `_detailPageSectionWriteGeneration` | Process-lifetime write generation, existing per-action stale-write checks. |
+| `_launchSelectionGeneration` | Process-lifetime write generation, bumped during every profile handoff. |
+| `_tvTrailerUnderlaySession` | Launch-session choice, retained until its existing explicit debug reset. |
+| `debugMyWatchlistTvOsCapOverride` | Existing process/test hook; no new handoff reset. |
+| `tvKeyboardEnabledCached`, `tvHomeStyleCached`, `debrifyTvStyleCached`, `detailPageStyleCached`, `detailPageSectionVisibilityCached`, `detailThemeCached`, `appThemeCached`, `themeOverridesCached`, `parentsGuideStyleCached`, `iptvStyleCached`, `discoverLayoutCached`, `launchAnimationCached`, `importedLaunchAnimationCached`, `launchIdentPaletteCached`, `tvSidebarStyleCached`, `desktopSidebarStyleCached`, `sidebarConfigurationCached`, `playerStartPortraitCached`, `uiSoundsCached`, `uiHapticsCached` | Profile-owned synchronous mirrors; reset before the existing single ledger stamp, then warmed in the existing order. |
+| `_startupIptvChannelCached` | Profile-owned startup snapshot; cleared at handoff and warmed by `warmStartupIptv`. The public getter remains a getter. |
+
+### Applying the rename on other branches
+
+After merging these commits, run
+`python3 dev/tool/repoint_storage.py --through-step N`, where `N` is the
+highest merged step (8 for the completed split). It scans every tracked Dart
+file, including `tool/` and `dev/perf/`; run it again to verify zero changes.
+Port branch-specific source-text guards without changing their meaning, then
+run the relevant analyzer/tests and `check_storage_keys.py`. Local clones
+with `072407c3` available also run `check_storage_bodies.py`. Plain literals
+and comments are intentionally preserved for review.
 
 ## Found, not fixed
 

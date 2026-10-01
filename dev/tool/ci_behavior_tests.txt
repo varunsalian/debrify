@@ -1,4 +1,4 @@
-# Behaviour tests CI runs for Sources and TorrentPlaybackService.
+# Behaviour tests CI runs for Sources, TorrentPlaybackService and storage.
 # Keep in sync as tests move (see docs/refactoring/torrent-playback-plan.md).
 test/addon_direct_source_test.dart
 test/cinema_sources_focus_test.dart
@@ -17,3 +17,24 @@ test/services/debrid_acquisition_retirement_test.dart
 test/simkl_native_episode_flow_test.dart
 test/stremio_series_metadata_cache_test.dart
 test/video_player_launcher_external_url_test.dart
+test/profiles/isolation_suite
+test/services/webdav_sync
+test/defaults_generation_test.dart
+test/launch_animation/launch_selection_test.dart
+test/tvos_keyboard_default_migration_test.dart
+test/profiles/source_provider_credential_read_test.dart
+test/storage_service_vault_migration_test.dart
+test/episode_simkl_progress_storage_test.dart
+test/episode_local_progress_storage_test.dart
+test/local_watch_completion_storage_test.dart
+test/tracking_source_storage_test.dart
+test/tracking_source_policy_test.dart
+test/audio_settings_storage_test.dart
+test/home_extra_rows_test.dart
+test/home_hero_source_test.dart
+test/launch_ident_registry_test.dart
+test/media_server_player_resume_test.dart
+test/profiles/isolation_suite/live_switch_isolation_test.dart
+test/profiles/isolation_suite/stale_runtime_guard_test.dart
+test/rewatch_launch_routing_test.dart
+test/services/webdav_sync/webdav_sync_tombstone_audit_test.dart

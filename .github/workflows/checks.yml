@@ -16,6 +16,7 @@ jobs:
       # Repo-wide ratchet: over-limit files may only shrink, new files stay
       # within 800 lines. Baseline: dev/tool/file_size_baseline.txt.
       - run: python3 dev/tool/check_file_sizes.py
+      - run: python3 dev/tool/check_storage_keys.py
 
   search-architecture:
     runs-on: ubuntu-latest
