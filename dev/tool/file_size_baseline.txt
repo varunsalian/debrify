@@ -70,7 +70,6 @@
 1797 lib/services/simkl/simkl_service.dart
 1778 lib/services/webdav_sync/webdav_sync_hot_merge.dart
 1766 lib/services/iptv_epg_service.dart
-1751 lib/services/torrent_playback_service.dart
 1707 lib/widgets/pipeline_loading_overlay.dart
 1685 lib/widgets/detail/detail_layout_premium.dart
 1602 lib/widgets/iptv/iptv_channel_row.dart
@@ -96,6 +95,7 @@
 1347 lib/screens/video_player/widgets/stremio_tv_guide_sheet.dart
 1344 lib/widgets/deprecated/home_favorites_section.dart
 1325 lib/screens/profiles/profile_setup_flow.dart
+1316 lib/services/torrent_playback_service.dart
 1313 lib/screens/video_player/widgets/source_sheet.dart
 1307 lib/services/external_player_service.dart
 1275 lib/services/backup_restore_service.dart

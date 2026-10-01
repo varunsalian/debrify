@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:debrify/features/sources/application/source_candidate_checks.dart';
 import 'package:debrify/features/sources/data/automatic_source_bindings.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/addon_stream_playback.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/automatic_play_selection.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/source_selection_diagnostics.dart';
@@ -143,7 +144,7 @@ final class SourceNextEpisode {
     }
     final rules = await StorageService.getQuickPlayRules(isMovie: false);
     if (!context.mounted || !sourceBindings.isCurrent) return;
-    await TorrentPlaybackService.playAddonStream(
+    await AddonStreamPlayback.playAddonStream(
       context,
       imdbId,
       isMovie: false,

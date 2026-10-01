@@ -13,6 +13,7 @@ import 'package:debrify/features/sources/data/iptv_quick_play_search.dart';
 import 'package:debrify/features/sources/data/series_pack_search.dart';
 import 'package:debrify/features/sources/data/source_series_fetcher.dart';
 import 'package:debrify/features/sources/models/playback_cancel_token.dart';
+import 'package:debrify/features/sources/presentation/legacy_playback/addon_stream_playback.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/automatic_play_best.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/source_loading_overlays.dart';
 import 'package:debrify/features/sources/presentation/legacy_playback/source_player_launch.dart';
@@ -218,7 +219,7 @@ final class AutomaticPlaySelection {
       // worse answer than the explicit message.
       if (handedToPicker()) return;
       resolving.dismiss();
-      await TorrentPlaybackService.playAddonStream(
+      await AddonStreamPlayback.playAddonStream(
         context,
         imdbId,
         isMovie: isMovie,
@@ -293,7 +294,7 @@ final class AutomaticPlaySelection {
     // ordinary torrent-vs-addon preference for canonical titles.
     if (meta.hasStremioEpisodeIdentity) {
       resolving.dismiss();
-      await TorrentPlaybackService.playAddonStream(
+      await AddonStreamPlayback.playAddonStream(
         context,
         imdbId,
         isMovie: isMovie,
@@ -324,7 +325,7 @@ final class AutomaticPlaySelection {
       resolving.dismiss();
       final fallBackToEngines =
           rules.sourceMode == QuickPlaySourceMode.addonsThenTorrents;
-      final handled = await TorrentPlaybackService.playAddonStream(
+      final handled = await AddonStreamPlayback.playAddonStream(
         context,
         imdbId,
         isMovie: isMovie,
@@ -376,7 +377,7 @@ final class AutomaticPlaySelection {
       // No debrid provider — but some titles still have a direct addon stream
       // that plays without one. Run an addon-only search and let playBest open
       // a direct link; if there's none it shows the "add a provider" snack.
-      await TorrentPlaybackService.playAddonStream(
+      await AddonStreamPlayback.playAddonStream(
         context,
         imdbId,
         isMovie: isMovie,

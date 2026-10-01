@@ -396,3 +396,11 @@ this file's source text.
   line-specific curly-brace exception as step 2. Focused suite 1,106 pass /
   same 2 failures, no new diagnostics, verbatim and guard checks pass.
   Evidence: `<E>/tps/step4-selection.jsonl`, `analyze-step4-selection.txt`.
+
+- `_playAddonStream` → `presentation/legacy_playback/addon_stream_playback.dart`
+  (482 lines). Whole method retained; split in the subsequent playback refactor.
+  One additional formatting-exposed guard gets a line-specific curly-brace
+  exception. Focused suite 1,106 pass / same 2 failures, no new diagnostics,
+  verbatim and guard checks pass. Evidence: `<E>/tps/step4-addon.jsonl`,
+  `analyze-step4-addon.txt`. Gate 1 private CI run `36840285688` passed all
+  three jobs at `4c9aa004` (confirmed through GitHub).
