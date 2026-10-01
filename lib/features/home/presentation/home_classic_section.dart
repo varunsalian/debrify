@@ -145,7 +145,7 @@ class HomeClassicSection {
   }
 
   /// Status strip for a streaming catalog search (see the call site in
-  /// [_buildBoard]). Fixed height so the swap from "searching" bar to the
+  /// [buildClassicBoard]). Fixed height so the swap from "searching" bar to the
   /// failure note doesn't reflow the rows under DPAD focus.
   Widget _buildSearchStatusStrip() => buildCatalogSearchStatus(
     _deps.context(),

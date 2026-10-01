@@ -63,9 +63,7 @@ HomeBoardPresentation createHomeBoardPresentation(
   required ValueNotifier<Color?> heroTint,
   required ValueNotifier<bool> Function() ready,
 }) {
-  late final HomeStages stages;
   late final HomeBoardWorkflow workflow;
-  late final HomeBoardRendering rendering;
   // One catalog-item role and one Classic geometry for every board consumer.
   final items = HomeCatalogItemActionsAdapter(
     badges: () => deps.catalog().badges,
@@ -76,7 +74,7 @@ HomeBoardPresentation createHomeBoardPresentation(
     isTelevision: deps.isTelevision,
     searchMode: deps.searchMode,
   ), hero.displaySection);
-  stages = createHomeStages(
+  final stages = createHomeStages(
     (
       mounted: deps.mounted,
       setState: deps.setState,
@@ -140,7 +138,7 @@ HomeBoardPresentation createHomeBoardPresentation(
     stages: stages,
     ready: ready(),
   );
-  rendering = createHomeRendering(
+  final rendering = createHomeRendering(
     (
       mounted: deps.mounted,
       context: deps.context,

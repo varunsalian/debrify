@@ -78,12 +78,22 @@ this pass does not sort them. Checks: scoped analyze unchanged, 1,613
 affected Home/Stremio TV/screen tests with no new failures, guard and format
 clean. The mixed-context row extent stays a recorded pre-existing issue.
 
-**Iteration 3** (reviewed `1cc97a28`, fixed in this commit): no bugs.
+**Iteration 3** (reviewed `1cc97a28`, fixed in `b66866b2`): no bugs.
 `createHomeRendering` returns `HomeBoardRendering` directly (no one-field
 record, no `rendering.rendering`), with plain finals instead of needless
 `late` fields. `HomeClassicSection`'s geometry and row/footer/status builders
 are private now that nothing outside reaches it, and its doc no longer
-claims row geometry.
+claims row geometry. Checks: scoped analyze unchanged, 1,594 Home and
+screen tests with no new failures, guard and format clean.
+
+**Iteration 4** (reviewed `b66866b2`, fixed in the final commit of this
+pass): no bugs. `stages` and `rendering` are plain finals (only `workflow` is
+read before it is assigned), and a stale doc reference was corrected.
+Declined: the per-build layouts map and Classic's positional wiring predate
+this pass (behaviour-neutral polish for a later change); the constant footer
+and import grouping are cosmetic, and this pass does not sort imports.
+Four rounds found no correctness issues and shrinking findings, so review
+stopped here.
 
 ## Found, not fixed
 
