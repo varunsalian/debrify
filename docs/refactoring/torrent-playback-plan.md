@@ -300,11 +300,11 @@ this file's source text.
 | 0 | `e0d3e932` | 7,103 | Reused `finish/bugfixes.jsonl` at `1d6fa710`; SDK matches. Whole-repo `flutter analyze`: 836 existing diagnostics in `<E>/tps/analyze-gate0.txt`. |
 | 1 | `1e47f83a` | 5,893 | Moved no-UI dependencies and models. Focused suite: 1,101 pass / 4 observed baseline failures; comparison PASS. Size/import guards pass. |
 | 2 | `014502cf` | 4,749 | Search/fetcher owners wired; focused suite 1,101 pass / same 4 failures; comparison PASS. Analyzer and size/import guards unchanged/pass. |
-| 3 | step-3 commit (this entry) | 3,148 | Menu/launch/binding owners wired; 1,106 focused pass / 2 historical failures. No new analyzer diagnostics. Full-suite gate 1 pending. |
+| 3 | `396c93c0` | 3,148 | Menu/launch/binding owners wired; 1,106 focused pass / 2 historical failures. No new analyzer diagnostics. Full-suite gate 1 comparison PASS: 10,294 pass / 20 fail / 29 err / 20 skip; same baseline identities and skips, 3 new passing tests. |
 
 ## Found, not fixed
 
-(none yet)
+- `test/profiles/profiles_hub_test.dart`, `settle` / disable-profile test: under full-suite load the disabled badge can miss the six 50 ms real-I/O windows. Gate-1 first attempt failed this unchanged test; isolated run passed all 5 and the same-SDK/configuration full rerun passed the baseline comparison. No allowlist or application change. Evidence: `<E>/tps/gate1-first.jsonl`, `gate1-profile-check.jsonl`, `gate1.jsonl`.
 
 ### Retained oversized service and structural exceptions
 
@@ -376,3 +376,5 @@ this file's source text.
 - Evidence: `<E>/tps/step3-final.jsonl` (comparison PASS), `analyze-step3.txt`
   (836 diagnostics, none added), verbatim comparison for all 119 members.
   Temporary facade cross-calls are presentation-only and retire in step 4.
+
+- Gate 1 local CI commands: formatting 988 files unchanged; scoped analyzer passed with 5 baseline infos. Gate run revision `396c93c0`; private CI verification follows the evidence commit.
