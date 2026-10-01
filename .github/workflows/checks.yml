@@ -1,14 +1,22 @@
-name: Search architecture checks
+name: Code health checks
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'refactor/**']
 
 permissions:
   contents: read
 
 jobs:
+  file-sizes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Repo-wide ratchet: over-limit files may only shrink, new files stay
+      # within 800 lines. Baseline: dev/tool/file_size_baseline.txt.
+      - run: python3 dev/tool/check_file_sizes.py
+
   search-architecture:
     runs-on: ubuntu-latest
     steps:
