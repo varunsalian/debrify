@@ -14,6 +14,7 @@ import 'package:debrify/models/quick_play_rules.dart';
 import 'package:debrify/models/torrent.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_catalog_key.dart';
+import 'package:debrify/services/iptv_catalog_refresh_service.dart';
 import 'package:debrify/services/iptv_source_search.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/secret_vault.dart';
@@ -62,6 +63,9 @@ void main() {
     await IptvCatalogDb.open();
   });
   tearDown(() async {
+    // A search can leave its catalog refresh running in the background; let
+    // it finish before this test's database is closed and deleted.
+    await IptvCatalogRefreshService.instance.debugSettle();
     IptvCatalogDb.debugClose();
     IptvCatalogDb.debugDirectoryOverride = null;
     ProfileRuntime.debugReset();
@@ -895,6 +899,10 @@ void main() {
     expect(stored.single.isIptvDirect, isTrue);
     expect(stored.single.iptvEntryKey, 'series:901');
     expect(stored.single.toJson().toString(), isNot(contains('secret')));
+    // The search queued a background catalog refresh. Let its queue pause run
+    // out on this test's fake clock, so no timer outlives the test (it used
+    // to pass only when an earlier test had left the refresh queue stuck).
+    await tester.pump(const Duration(seconds: 1));
   });
 
   test(

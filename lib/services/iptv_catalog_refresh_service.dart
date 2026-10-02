@@ -32,6 +32,8 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
   Timer? _timer;
   Timer? _launchTimer;
   bool _running = false;
+  // Changed only by [debugSettle]; constant in the app.
+  int _generation = 0;
   bool _checking = false;
   bool _started = false;
   bool _foreground = true;
@@ -258,6 +260,30 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
     }
   }
 
+  /// Test-only: gives a job that is genuinely running a moment to finish,
+  /// then abandons the queue so the next test starts with an idle service.
+  /// A job left behind (for example, frozen on a finished widget test's fake
+  /// clock) can't touch the new queue: [_pump] checks [_generation], which
+  /// only this method changes. Queued jobs complete with a failure result.
+  @visibleForTesting
+  Future<void> debugSettle({
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (_running && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    _generation++;
+    _running = false;
+    for (final job in _pending) {
+      if (!job.done.isCompleted) job.done.complete(_failure('Test reset'));
+    }
+    _pending.clear();
+    _jobs.clear();
+    _retryAfter.clear();
+    _failures.clear();
+  }
+
   @visibleForTesting
   static bool isDue(int? updatedAt, int hours, DateTime now) =>
       hours > 0 &&
@@ -268,6 +294,7 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
   Future<void> _pump() async {
     if (_running) return;
     _running = true;
+    final generation = _generation;
     try {
       while (_pending.isNotEmpty) {
         if (_pending.first.automatic &&
@@ -281,6 +308,11 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
           result = await job.run();
         } catch (error) {
           result = _failure('Refresh failed (${error.runtimeType})');
+        }
+        if (generation != _generation) {
+          // Abandoned by a test reset: finish this caller, touch nothing else.
+          if (!job.done.isCompleted) job.done.complete(result);
+          return;
         }
         if (result.hasError) {
           final failures = (_failures[job.id] ?? 0) + 1;
@@ -298,9 +330,10 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
         // Yield between providers/catalogs even with an instantaneous mock or
         // cache hit. UI work and pending cancellation get an execution turn.
         await Future<void>.delayed(const Duration(milliseconds: 100));
+        if (generation != _generation) return;
       }
     } finally {
-      _running = false;
+      if (generation == _generation) _running = false;
     }
   }
 
