@@ -17,6 +17,7 @@ ALLOWED = {'unchanged', 'rename', 'receiver', 'state_callback', 'context_guard',
            'classic_update_indicator_const', 'public_widget_key'}
 
 PUBLIC_WIDGET_KEY_DIFFERENCE = 'public_widget_key: add optional super.key only; no caller passes a key'
+RECEIVERS = {'_deps', '_summaries', 'layout', '_connections'}
 
 NAMED_EXCEPTIONS = {
     'production_api_annotation': (
@@ -108,6 +109,15 @@ def normalize(values, rows, row=None):
     i = 0
     while i < len(values):
         value = values[i]
+        # A member qualification needs braces in a formerly simple string
+        # interpolation. Canonicalize only an otherwise identical single read.
+        if value == '${':
+            if values[i + 1:i + 2] and values[i + 1] in RECEIVERS and values[i + 2:i + 3] == ['.'] and values[i + 4:i + 5] == ['}'] and values[i + 3] in mapped:
+                out.extend(['$', mapping.get(values[i + 3], values[i + 3])])
+                i += 5; continue
+            if values[i + 2:i + 3] == ['}'] and values[i + 1] in mapping:
+                out.extend(['$', mapping[values[i + 1]]])
+                i += 3; continue
         # Injected context acquisition is checked separately BEFORE removing it.
         if values[i:i + 9] == ['final', 'context', '=', '_deps', '.', 'context', '(', ')', ';']:
             i += 9
@@ -116,7 +126,7 @@ def normalize(values, rows, row=None):
             raise ValueError('context.mounted is a property, not a callback')
         if values[i:i + 3] == ['context', '.', 'mounted']:
             out.append('mounted'); i += 3; continue
-        if value in {'_deps', '_summaries', 'layout'} and i + 2 < len(values) and values[i + 1] == '.':
+        if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
             if target in mapped or target in {'mounted', 'setState', 'context', 'summaryReadOverrides'}:
                 if target in {'mounted', 'context', 'summaryReadOverrides'} and values[i + 3:i + 5] == ['(', ')']:
@@ -127,6 +137,8 @@ def normalize(values, rows, row=None):
             # Preserve comment contents, allowing documented identifier renames.
             for old, new in mapping.items():
                 value = re.sub(r'\b' + re.escape(old) + r'\b', new, value)
+            for receiver in RECEIVERS:
+                value = re.sub(r'\b' + re.escape(receiver) + r'\.(' + '|'.join(map(re.escape, mapped)) + r')\b', r'\1', value)
             out.append(re.sub(r'\s+', '', value))
         else:
             out.append(mapping.get(value, value))
@@ -386,7 +398,7 @@ def all_nodes(parsed):
     return found
 
 
-def destination_ownership(parsed, rows, source_path):
+def destination_ownership(parsed, rows, source_path, scaffolds=()):
     """No unregistered original copy or extra feature helper can hide in a move.
 
     The three extra layout leaves are exactly the structural additions named
@@ -395,6 +407,7 @@ def destination_ownership(parsed, rows, source_path):
     """
     known = {(r['destination_file'], r['destination_class'], r['new_name'])
              for r in rows}
+    known.update((s['file'], s['owner'], s['name']) for s in scaffolds)
     layout = 'lib/features/settings/presentation/settings_layout.dart'
     known.update((layout, 'SettingsLayout', name)
                  for name in ('legacyReasonSummary', 'build', 'buildSpotlightCategory'))
@@ -416,6 +429,16 @@ def destination_ownership(parsed, rows, source_path):
     return errors
 
 
+def check_scaffolds(lookup, scaffolds):
+    errors = []
+    for scaffold in scaffolds:
+        key = (scaffold['file'], scaffold['owner'], scaffold['name'])
+        node = lookup.get(key)
+        if node is None or tokens(node) != scaffold['tokens']:
+            errors.append('Registered settings scaffold changed: ' + str(key))
+    return errors
+
+
 def check(original_source, sources, rows, source_path, package=None,
           partition=False, context_guard=False):
     from check_verbatim_moves import parse, original_leaves, split_names, missing_line_comments, ROOT
@@ -428,7 +451,11 @@ def check(original_source, sources, rows, source_path, package=None,
     if set(original) != known:
         return ['Settings manifest coverage differs: ' + str(sorted(set(original) ^ known))]
     lookup = all_nodes(parsed)
-    errors.extend(destination_ownership(parsed, rows, source_path))
+    scaffold_path = ROOT / 'dev/tool/settings_scaffolding.json'
+    scaffolds = (json.loads(scaffold_path.read_text())['scaffolds']
+                 if source_path == 'lib/screens/settings_screen.dart' and scaffold_path.exists() else [])
+    errors.extend(check_scaffolds(lookup, scaffolds))
+    errors.extend(destination_ownership(parsed, rows, source_path, scaffolds))
     mapping = names(rows)
     # Retained/moved widget class headers are also part of the contract. New
     # section classes have no original header; original widget headers do.
@@ -478,7 +505,9 @@ def check(original_source, sources, rows, source_path, package=None,
             errors.extend(key + ': ' + e for e in check_context(before, actual, rows, row))
     # Only the registered single test accessor is new in the facade at step 0.
     leaves = original_leaves(parsed[source_path]['declarations'], split_names(rows))
-    extras = set(leaves) - known - {'settingsScreenTestAccess'}
+    registered_facade = {s['owner'] + '.' + s['name'] for s in scaffolds
+                         if s['file'] == source_path}
+    extras = set(leaves) - known - {'settingsScreenTestAccess'} - registered_facade
     if extras:
         errors.append('Unregistered facade declarations: ' + str(sorted(extras)))
     layout_path = 'lib/features/settings/presentation/settings_layout.dart'
@@ -664,6 +693,29 @@ def self_test(package=None):
     if check_context(shadow, shadow_good):
         raise AssertionError('Builder context incorrectly treated as State context')
     print('Settings self-test builder parameter context: passed')
+    interpolation_row = dict(original_name='Original._caption', new_name='caption')
+    interpolation_before = method("String title() => '$_caption';")
+    interpolation_after = method("String title() => '${_summaries.caption}';")
+    if normalize(tokens(interpolation_before), [interpolation_row]) != normalize(tokens(interpolation_after), [interpolation_row]):
+        raise AssertionError('Qualified single-value interpolation rejected')
+    for text in ("String title() => '${_summaries.other}';",
+                 "String title() => '${_summaries.caption.length}';"):
+        if normalize(tokens(interpolation_before), [interpolation_row]) == normalize(tokens(method(text)), [interpolation_row]):
+            raise AssertionError('Accepted changed interpolation value/expression')
+    print('Settings self-test changed interpolation expression: rejected')
+    scaffold_source = {'owner': 'class NewOwner { final int dependency = 1; }'}
+    scaffold_lookup = all_nodes(parse(scaffold_source, package))
+    scaffold_key = ('owner', 'NewOwner', 'dependency')
+    scaffold = dict(file='owner', owner='NewOwner', name='dependency',
+                    tokens=tokens(scaffold_lookup[scaffold_key]))
+    if check_scaffolds(scaffold_lookup, [scaffold]):
+        raise AssertionError('Registered exact scaffold rejected')
+    for changed in ('class NewOwner { final int dependency = 2; }',
+                    'class NewOwner { int dependency = 1; }',
+                    'class NewOwner {}'):
+        if not check_scaffolds(all_nodes(parse({'owner': changed}, package)), [scaffold]):
+            raise AssertionError('Accepted changed/missing registered scaffold')
+    print('Settings self-test changed registered scaffold: rejected')
     before_owner = 'class Original { int value = 1; }'
     owner_row = {'original_name': 'Original.value', 'destination_file': 'owner',
                  'destination_class': 'NewOwner', 'new_name': 'value',

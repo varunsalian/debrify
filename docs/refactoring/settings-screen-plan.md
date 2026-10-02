@@ -570,6 +570,35 @@ the named files under "Size" below.
   missing/misplaced indicator consts and any other indicator edits. No approval
   is inferred for any other new diagnostic.
 
+### Step 2 — summaries and connection views
+
+- Step 1 commit: `dd2aa11a`. Baseline SDK/configuration and diagnostic/test
+  identities remain applicable; no dependency or engine change.
+- `SettingsSummaries` owns all 73 original summary fields (88 lines), preserving
+  initializers and their relative order. One instance belongs to each Settings
+  State; every existing load, action, search and layout read/write uses it.
+  Focus node/handler and update resources retain their previous owners.
+- `SettingsConnections` owns the 13 connection getters and two failure-caption
+  helpers (198 lines). It reads current summaries and borrows the original
+  typed action tear-offs through a narrow record. No connection snapshot is
+  retained. Production layout and search callers use these getters.
+- The five new constructor/dependency/wiring leaves are registered exactly in
+  `settings_scaffolding.json`; the move check rejects missing/changed scaffolds
+  and unregistered additions. Necessary braces around qualified single-value
+  string interpolation preserve the original value; mutation self-tests reject
+  another field/expression. Original comments move with their responsibilities.
+- `settings/step2`: all 24 affected tests pass, including summary authorization,
+  profile remounts, pending credentials, real index ordering, TV rendering and
+  disposal. Comparisons against both the original full baseline and observed
+  step 1 run pass. Two new connection-boundary tests pass, verifying live
+  status/failure/availability precedence, immutable prior views and unchanged
+  action tear-offs. No Riverpod setup is added to this bounded legacy stage.
+- `analyze-step2.txt` matches the original 832 diagnostic identities with the
+  Settings relocation rule; no added or removed diagnostics. Move/partition/
+  context checks and all self-tests, formatting, architecture guard, size
+  ratchet and diff checks pass. State shrinks 7438 → 7218 lines. Gates 1/2
+  and private CI remain pending.
+
 ## Found, not fixed
 
 (none yet)

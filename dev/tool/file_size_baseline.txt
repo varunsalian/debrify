@@ -4,7 +4,7 @@
 18106 lib/screens/video_player_screen.dart
 11271 lib/screens/magic_tv_screen.dart
 9084 lib/widgets/iptv/iptv_results_view.dart
-7438 lib/screens/settings_screen.dart
+7218 lib/screens/settings_screen.dart
 7070 lib/screens/torbox/torbox_downloads_screen.dart
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
