@@ -36,7 +36,7 @@ void main() {
     'lib/features/sources/presentation/legacy_playback/source_binding_actions.dart',
   ).readAsStringSync();
   final launcher = File(
-    'lib/services/video_player_launcher.dart',
+    'lib/features/player_launch/presentation/legacy_launch/launch_router.dart',
   ).readAsStringSync();
   final nativeLauncher = File(
     'lib/features/player_launch/data/android_tv_native_launch.dart',
@@ -83,13 +83,22 @@ void main() {
       );
       expect(
         nativeLauncher,
-        matches(RegExp(r'automaticRecovery\s*&&\s*!await recoveryPreflight\.allows')),
+        matches(
+          RegExp(r'automaticRecovery\s*&&\s*!await recoveryPreflight\.allows'),
+        ),
       );
       expect(
         nativeLauncher,
-        matches(RegExp(r'TorrentPlaybackService\.resolveRecoverySource\(\s*torrent,')),
+        matches(
+          RegExp(r'TorrentPlaybackService\.resolveRecoverySource\(\s*torrent,'),
+        ),
       );
-      expect(nativeLauncher, contains(': await resolveSourceToPlaylist(torrent, canContinue: active)'));
+      expect(
+        nativeLauncher,
+        contains(
+          ': await resolveSourceToPlaylist(torrent, canContinue: active)',
+        ),
+      );
       final automaticProbe = _between(
         recoveryResolution,
         'static Future<List<PlaylistEntry>?> resolveRecoverySource(',
@@ -152,7 +161,10 @@ void main() {
   test(
     'native recovery reports candidate production before merging duplicates',
     () {
-      expect(nativeLauncher, contains("'recoveryCandidateCount': automatic.length"));
+      expect(
+        nativeLauncher,
+        contains("'recoveryCandidateCount': automatic.length"),
+      );
       expect(nativePlayer, contains('map["recoveryCandidateCount"]'));
       expect(nativePlayer, contains('startupRecoveryIsConsumed('));
     },
@@ -502,7 +514,9 @@ void main() {
     expect(failure, contains('current() && playerRoute?.isActive == true'));
     expect(
       flutterPlayer,
-      contains('if (!mounted || !current() || playerRoute?.isCurrent != true) return;'),
+      contains(
+        'if (!mounted || !current() || playerRoute?.isCurrent != true) return;',
+      ),
     );
   });
 }

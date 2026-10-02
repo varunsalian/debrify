@@ -11,12 +11,18 @@ String _between(String source, String start, String end) {
 }
 
 void main() {
-  final source = File(
-    'lib/services/video_player_launcher.dart',
-  ).readAsStringSync() + Directory('lib/features/player_launch')
-      .listSync(recursive: true).whereType<File>()
-      .where((file) => file.path.endsWith('.dart'))
-      .map((file) => file.readAsStringSync()).join('\n');
+  final source =
+      File('lib/services/video_player_launcher.dart').readAsStringSync() +
+      Directory('lib/features/player_launch')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart'))
+          .map((file) => file.readAsStringSync())
+          .join('\n');
+
+  final seeding = File(
+    'lib/features/player_launch/presentation/legacy_launch/tracker_progress_seeding.dart',
+  ).readAsStringSync();
 
   test('Android TV source switch carries MDBList episode resume progress', () {
     final resolver = _between(
@@ -82,9 +88,9 @@ void main() {
     'MDBList launch seed is lightweight and full history follows cached push',
     () {
       final seed = _between(
-        source,
-        'static Future<void> _seedMdblistEpisodeProgress(String imdbId)',
-        '/// [onPlayerHandoff]',
+        seeding,
+        'static Future<void> seedMdblistEpisodeProgress(String imdbId)',
+        '\n}',
       );
 
       expect(seed, contains('seedMdblistPlayback(imdbId)'));
@@ -103,8 +109,16 @@ void main() {
         '// Real packs retain the existing Trakt/Simkl launch-time snapshots',
         "AnalyticsService.trackInBackground('playback_started'",
       );
-      expect(launchSeeds, contains('unawaited(_seedMdblistEpisodeProgress'));
-      expect(launchSeeds, isNot(contains('await _seedMdblistEpisodeProgress')));
+      expect(
+        launchSeeds,
+        contains('unawaited(TrackerProgressSeeding.seedMdblistEpisodeProgress'),
+      );
+      expect(
+        launchSeeds,
+        isNot(
+          contains('await TrackerProgressSeeding.seedMdblistEpisodeProgress'),
+        ),
+      );
     },
   );
 
@@ -120,9 +134,9 @@ void main() {
 
   test('legacy Trakt history is never written into local completion again', () {
     final refresh = _between(
-      source,
-      'static Future<void> _refreshTraktEpisodeProgress(String imdbId)',
-      'static Future<void> _seedSimklEpisodeProgress',
+      seeding,
+      'static Future<void> refreshTraktEpisodeProgress(String imdbId)',
+      'static Future<void> seedSimklEpisodeProgress',
     );
 
     expect(refresh, contains('refreshTrakt(imdbId)'));

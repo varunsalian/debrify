@@ -265,8 +265,14 @@ PLAYER_LAUNCH_SIZE_EXCEPTIONS = {
     # Whole progress/completion handlers: split in a later control-flow change.
     "lib/features/player_launch/data/native_progress_handler.dart": 584,
     # Whole router: split during a later control-flow change.
-    "lib/features/player_launch/presentation/legacy_launch/launch_router.dart": 0,
+    "lib/features/player_launch/presentation/legacy_launch/launch_router.dart": 592,
 }
+# User-approved verbatim DeoVR upload/UI bridge; exit: extract upload into a
+# data contract in a later control-flow change. No other HTTP bridge is allowed.
+PLAYER_LAUNCH_DEOVR_HTTP_IMPORT = (
+    "lib/features/player_launch/presentation/legacy_launch/deovr_launch.dart",
+    "package:http/http.dart",
+)
 GENERATED_SUFFIXES = (".g.dart", ".freezed.dart")
 DIRECTIVES = re.compile(r"^\s*(?:import|export)\s+([^;]+);", re.MULTILINE)
 URIS = re.compile(r"['\"]([^'\"]+)['\"]")
@@ -344,7 +350,7 @@ def violations(path: Path) -> list[str]:
                              and target.startswith("lib/services/"))
             if layer == "presentation" and target.startswith((
                     "lib/services/", "package:http/", "package:shared_preferences/",
-                    "package:sqflite")) and not legacy_bridge and target not in (
+                    "package:sqflite")) and not legacy_bridge and (relative, target) != PLAYER_LAUNCH_DEOVR_HTTP_IMPORT and target not in (
                         PRESENTATION_BRIDGE_IMPORTS.get(relative, set())):
                 problems.append(f"view directly imports data/platform API: {uri}")
             if target.startswith("package:provider/"):

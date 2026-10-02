@@ -124,7 +124,7 @@ Imports below identify the original contracts used by each declaration. Imports/
 | `VideoPlayerLauncher.normalizeScrobbleFlags` | `data/launch_tracking_policy.dart` | `LaunchTrackingPolicy` | 2 / data | `package:debrify/services/tracking_source_policy.dart`; `package:flutter/foundation.dart` |
 | `VideoPlayerLauncher.shouldExplainExternalPlayerFallback` | `presentation/legacy_launch/external_disclosure.dart` | `ExternalDisclosure` | 4 / presentation | `dart:io` |
 | `VideoPlayerLauncher.showAuthenticatedWebDavPlayerNotice` | `presentation/legacy_launch/webdav_player_notice.dart` | `WebdavPlayerNotice` | 4 / presentation | `package:flutter/foundation.dart`; `package:flutter/material.dart` |
-| `VideoPlayerLauncher.push` | `presentation/legacy_launch/video_player_launch_action.dart` | `VideoPlayerLaunchAction` | 4 / presentation | `package:debrify/services/android_tv_player_bridge.dart`; `package:debrify/services/main_page_bridge.dart`; `package:debrify/services/profiles/profile_playback_preparation.dart`; `package:debrify/services/profiles/profile_session_memory.dart`; `package:flutter/foundation.dart`; `package:flutter/material.dart` |
+| `VideoPlayerLauncher.push` | `presentation/legacy_launch/launch_router.dart` | `LaunchRouter` | 4 / presentation | `package:debrify/services/android_tv_player_bridge.dart`; `package:debrify/services/main_page_bridge.dart`; `package:debrify/services/profiles/profile_playback_preparation.dart`; `package:debrify/services/profiles/profile_session_memory.dart`; `package:flutter/foundation.dart`; `package:flutter/material.dart` |
 | `VideoPlayerLauncher._push` | `presentation/legacy_launch/launch_router.dart` | `LaunchRouter` | 4 / presentation | `dart:async`; `dart:io`; `package:debrify/services/analytics_service.dart`; `package:debrify/services/main_page_bridge.dart`; `package:debrify/services/mdblist/mdblist_service.dart`; `package:debrify/services/profiles/profile_playback_preparation.dart`; `package:debrify/services/simkl/simkl_service.dart`; `package:debrify/services/storage/continue_watching_storage.dart`; `package:debrify/services/storage/external_player_storage.dart`; `package:debrify/services/storage/watchlist_storage.dart`; `package:debrify/services/tracking_source_policy.dart`; `package:debrify/services/trakt/trakt_service.dart`; `package:flutter/foundation.dart`; `package:flutter/material.dart` |
 | `VideoPlayerLauncher._commitExternalLaunchSource` | `presentation/legacy_launch/external_launch_commit.dart` | `ExternalLaunchCommit` | 4 / presentation | `package:flutter/foundation.dart` |
 | `VideoPlayerLauncher._seedTrackerContinueWatching` | `presentation/legacy_launch/external_launch_commit.dart` | `ExternalLaunchCommit` | 4 / presentation | `package:debrify/services/mdblist/mdblist_models.dart`; `package:debrify/services/mdblist/mdblist_service.dart`; `package:debrify/services/simkl/simkl_service.dart`; `package:debrify/services/trakt/trakt_service.dart`; `package:flutter/foundation.dart` |
@@ -366,7 +366,7 @@ Every listed edge uses the renamed declaration or its destination static owner. 
 
 ## Public facade and static dispatch
 
-All 14 original public launcher methods retain signatures, annotations, defaults and argument order in forwarding methods; the ownership checker verifies these independently. The facade exports `VideoPlayerLaunchArgs` and `VideoPlayerLaunchArgsWidget`. Repository search found no `extends VideoPlayerLaunchArgs` / `implements VideoPlayerLaunchArgs`, and no method tear-offs: all seven `.toWidget` references in `lib/` and `test/` are calls. Extension static dispatch is therefore compatible.
+All 13 original public launcher methods retain signatures, annotations, defaults and argument order in forwarding methods; the ownership checker verifies these independently. The facade exports `VideoPlayerLaunchArgs` and `VideoPlayerLaunchArgsWidget`. Repository search found no `extends VideoPlayerLaunchArgs` / `implements VideoPlayerLaunchArgs`, and no method tear-offs: all eight `.toWidget` references in `lib/` and `test/` are calls (seven test calls and the production router call). Extension static dispatch is therefore compatible.
 
 ## Enum stringification audit
 
@@ -382,6 +382,20 @@ implementations on 2026-10-02: `debugNativeResumePositions`,
 Without the amendment, splitting libraries introduces analyzer warnings at
 unchanged production/facade calls. The checker verifies each exact removal
 and the retained facade annotation, with positive and negative fixtures.
+
+## Approved DeoVR bridge amendment and router grouping
+
+The user approved the exact HTTP import in `presentation/legacy_launch/deovr_launch.dart`
+on 2026-10-02. The existing `_launchWithDeoVR` combines UI and a JSON upload;
+its whole body remains verbatim. The guard allows only that path/URI pair.
+Exit: move the upload behind a data contract in a later control-flow change.
+Step 0 listed this import but missed its conflict with the bridge prohibition;
+the conflict was reported and approval obtained before the bridge move.
+
+`VideoPlayerLauncher.push` and `_push` share `LaunchRouter`. The public action
+calls `_push`, which can dispatch the public action for a next episode; separate
+files would form a circular import. `_push` retains its underscore within this
+single owner. The manifest/report are updated before step 4; no method is split.
 
 ## Exact expected differences
 

@@ -60,7 +60,6 @@
 1937 lib/services/remote_control/remote_control_state.dart
 1928 lib/screens/profiles/profile_gate_looks.dart
 1864 lib/screens/collections/collection_folder_screen.dart
-1855 lib/services/video_player_launcher.dart
 1844 lib/screens/video_player/widgets/player_menu_panel.dart
 1829 lib/screens/settings/settings_tv_layout.dart
 1826 lib/utils/series_parser.dart

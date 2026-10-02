@@ -100,9 +100,11 @@ def renames(rows):
     return mapping
 
 
-def canonical(node, rows, *, static_added=False):
+def canonical(node, rows, *, static_added=False, normalize_qualifiers=True):
     mapping = renames(rows)
     owner_for = {r['new_name']: r['destination_class'] for r in rows if r['destination_class']}
+    origin_owner_for = {r['new_name']: r['original_name'].split('.')[0]
+                        for r in rows if '.' in r['original_name']}
     tokens = node['tokens']
     result = []
     i = 0
@@ -112,9 +114,11 @@ def canonical(node, rows, *, static_added=False):
         if token['comment']:
             result.append(re.sub(r'\s+', '', value)); i += 1; continue
         value = mapping.get(value, value)
-        if i + 2 < len(tokens) and tokens[i + 1]['text'] == '.':
+        if (normalize_qualifiers and i + 2 < len(tokens)
+                and tokens[i + 1]['text'] == '.'
+                and (i == 0 or tokens[i - 1]['text'] not in ('.', '?.'))):
             target = mapping.get(tokens[i + 2]['text'], tokens[i + 2]['text'])
-            if value == owner_for.get(target) or (value == 'VideoPlayerLauncher' and target in owner_for):
+            if value == owner_for.get(target) or (value == origin_owner_for.get(target) and target in owner_for):
                 i += 2; continue
         if static_added and value == 'static':
             static_added = False; i += 1; continue
@@ -181,6 +185,17 @@ def check(original_source, sources, rows, source_path=SOURCE, package=None):
         return ['Original parse/manifest mismatch: missing=' + str(sorted(known - set(original)))
                 + ' extra=' + str(sorted(set(original) - known))]
     expected_patches = apply_exact_exceptions(original, rows, package)
+    headers = {d['name']: d for d in parsed['<original>']['declarations'] if d['name'] in splits}
+    def header(node):
+        copy = dict(node)
+        opening = next(i for i, t in enumerate(node['tokens']) if t['text'] == '{')
+        copy['tokens'] = node['tokens'][:opening]
+        return canonical(copy, rows)
+    for path, unit in parsed.items():
+        if path == '<original>': continue
+        for declaration in unit['declarations']:
+            if declaration['name'] in headers and header(declaration) != header(headers[declaration['name']]):
+                errors.append('Split class header changed: ' + declaration['name'])
     current = original_leaves(parsed[source_path]['declarations'], splits)
     destination_nodes = {}
     expected_dest = {(r['destination_file'], r['destination_class'], r['new_name']) for r in rows}
@@ -221,8 +236,8 @@ def check(original_source, sources, rows, source_path=SOURCE, package=None):
                 if not any(t['text'] == 'static' for t in actual['tokens']):
                     errors.append('Missing static single owner: ' + key)
             if in_place is not None:
-                if key.startswith('VideoPlayerLauncher.') and not key.split('.')[-1].startswith('_') and baseline['parameters'] is not None:
-                    forwarders[key] = 'class VideoPlayerLauncher {\n' + forwarding_source(baseline, row) + '\n}'
+                if '.' in key and not key.split('.')[-1].startswith('_') and baseline['parameters'] is not None:
+                    forwarders[key] = 'class ' + key.split('.')[0] + ' {\n' + forwarding_source(baseline, row) + '\n}'
                 else:
                     errors.append('Duplicate original/destination declaration: ' + key)
         before = canonical(expected, rows)
@@ -236,7 +251,7 @@ def check(original_source, sources, rows, source_path=SOURCE, package=None):
         expected = parse(forwarders, package)
         current_all = original_leaves(parsed[source_path]['declarations'], splits)
         for key, unit in expected.items():
-            if canonical(unit['declarations'][0]['members'][0], rows) != canonical(current_all[key], rows):
+            if canonical(unit['declarations'][0]['members'][0], rows, normalize_qualifiers=False) != canonical(current_all[key], rows, normalize_qualifiers=False):
                 errors.append('Forwarder signature/default/arguments changed: ' + key)
     return errors
 
@@ -248,7 +263,7 @@ def self_test(package=None):
     cases = json.loads((fixtures / 'cases.json').read_text())
     for name, case in cases.items():
         sources = {SOURCE: case['facade'], 'owner.dart': case['owner']}
-        case_rows = [dict(r, expected_difference=case.get('exception', r['expected_difference'])) for r in rows]
+        case_rows = case.get('manifest') or [dict(r, expected_difference=case.get('exception', r['expected_difference'])) for r in rows]
         errors = check(case.get('original', original), sources, case_rows, package=package)
         if bool(errors) == case['passes']:
             raise AssertionError(f'Self-test {name}: {errors}')

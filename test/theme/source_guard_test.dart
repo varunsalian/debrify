@@ -50,11 +50,16 @@ void main() {
       'lib/screens/magic_tv_screen.dart', // 12 pushes, all FrozenLegacyPageRoute
       'lib/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart', // the shared factory
     };
-    final factory = _code(File(
-      'lib/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart',
-    ));
-    expect('VideoPlayerScreen('.allMatches(factory), hasLength(1),
-        reason: 'the shared extension must construct exactly one frozen player');
+    final factory = _code(
+      File(
+        'lib/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart',
+      ),
+    );
+    expect(
+      'VideoPlayerScreen('.allMatches(factory),
+      hasLength(1),
+      reason: 'the shared extension must construct exactly one frozen player',
+    );
     final offenders = <String>[];
     for (final file in _libDartFiles()) {
       if (allowed.contains(_rel(file))) continue;
@@ -62,26 +67,47 @@ void main() {
         offenders.add(_rel(file));
       }
     }
-    expect(offenders, isEmpty,
-        reason:
-            'VideoPlayerScreen constructed outside the frozen push paths — '
-            'route it through pushExcluded/FrozenLegacyPageRoute '
-            '(theme/app_surfaces.dart): $offenders');
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'VideoPlayerScreen constructed outside the frozen push paths — '
+          'route it through pushExcluded/FrozenLegacyPageRoute '
+          '(theme/app_surfaces.dart): $offenders',
+    );
   });
 
   test('magic_tv_screen pushes the player only via FrozenLegacyPageRoute', () {
     final source = _code(File('lib/screens/magic_tv_screen.dart'));
-    expect(source.contains('MaterialPageRoute'), isFalse,
-        reason: 'a raw MaterialPageRoute in magic_tv_screen would push an '
-            'excluded screen without the legacy freeze');
+    expect(
+      source.contains('MaterialPageRoute'),
+      isFalse,
+      reason:
+          'a raw MaterialPageRoute in magic_tv_screen would push an '
+          'excluded screen without the legacy freeze',
+    );
   });
 
   test('video_player_launcher pushes via FrozenLegacyPageRoute', () {
-    final source = _code(File('lib/services/video_player_launcher.dart'));
+    final source = _code(
+      File(
+        'lib/features/player_launch/presentation/legacy_launch/launch_router.dart',
+      ),
+    );
     expect(source.contains('videoPlayerRoute('), isTrue);
     final route = _code(File('lib/screens/video_player/player_pip_route.dart'));
     expect(route.contains('extends FrozenLegacyPageRoute'), isTrue);
-    expect(source.contains('MaterialPageRoute'), isFalse);
+    for (final file
+        in Directory('lib/features/player_launch/presentation/legacy_launch')
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.dart'))) {
+      expect(
+        _code(file).contains('MaterialPageRoute'),
+        isFalse,
+        reason: '${file.path} must preserve the frozen player route',
+      );
+    }
   });
 
   test('frozen tab roots are constructed only by main.dart', () {
@@ -109,9 +135,13 @@ void main() {
         }
       }
     }
-    expect(offenders, isEmpty,
-        reason: 'frozen tab root constructed outside main.dart\'s '
-            'tab-boundary factory: $offenders');
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'frozen tab root constructed outside main.dart\'s '
+          'tab-boundary factory: $offenders',
+    );
   });
 
   test('frozen surfaces never read the app theme', () {
@@ -131,10 +161,14 @@ void main() {
       if (kThemingPrepared.contains(rel)) continue;
       if (_code(file).contains('AppThemeScope')) offenders.add(rel);
     }
-    expect(offenders, isEmpty,
-        reason: 'excluded surfaces must not consume the app theme '
-            '(add the file to kThemingPrepared if it is mid-migration): '
-            '$offenders');
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'excluded surfaces must not consume the app theme '
+          '(add the file to kThemingPrepared if it is mid-migration): '
+          '$offenders',
+    );
   });
 
   test('every kThemingPrepared entry is actually inside a frozen surface', () {
@@ -163,9 +197,13 @@ void main() {
     final stray = kThemingPrepared
         .where((f) => !frozen.any(f.startsWith))
         .toList();
-    expect(stray, isEmpty,
-        reason: 'kThemingPrepared entry outside every frozen prefix, so the '
-            'frozen-surface guard cannot see it: $stray');
+    expect(
+      stray,
+      isEmpty,
+      reason:
+          'kThemingPrepared entry outside every frozen prefix, so the '
+          'frozen-surface guard cannot see it: $stray',
+    );
   });
 
   test('a themed surface never pushes a frozen child route', () {
@@ -186,7 +224,7 @@ void main() {
     const frozenDestinationPushers = {
       'lib/theme/legacy_theme_boundary.dart', // defines it
       'lib/theme/app_surfaces.dart', // the boundary factory that vends it
-      'lib/services/video_player_launcher.dart', // the shared player factory
+      'lib/features/player_launch/presentation/legacy_launch/launch_router.dart', // the shared player factory
       'lib/screens/magic_tv_screen.dart', // 12 player pushes
       'lib/screens/playlist_screen.dart', // player push
       'lib/screens/downloads_screen.dart', // player push
@@ -209,10 +247,14 @@ void main() {
         offenders.add(rel);
       }
     }
-    expect(offenders, isEmpty,
-        reason: 'a themed surface still pushes a frozen child route — remove '
-            'the freeze, or allow-list it if the destination is playback or '
-            'another frozen surface\'s screen: $offenders');
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'a themed surface still pushes a frozen child route — remove '
+          'the freeze, or allow-list it if the destination is playback or '
+          'another frozen surface\'s screen: $offenders',
+    );
   });
 
   test('the frozen path list agrees with the tab classification', () {
@@ -240,8 +282,12 @@ void main() {
     // form was also broader than the two paths it meant.
     expect(
       kStillFrozenPaths,
-      const ['lib/screens/video_player_screen.dart', 'lib/screens/video_player/'],
-      reason: 'only playback may sit outside the app palette by path. Changing '
+      const [
+        'lib/screens/video_player_screen.dart',
+        'lib/screens/video_player/',
+      ],
+      reason:
+          'only playback may sit outside the app palette by path. Changing '
           'this list changes what the frozen-surface scans can see, so it '
           'needs a matching AppSurfaces.tabs entry and a note here',
     );
@@ -252,7 +298,8 @@ void main() {
     expect(
       frozenTabs,
       [0],
-      reason: 'AppSurfaces froze a tab other than the inert slot — either the '
+      reason:
+          'AppSurfaces froze a tab other than the inert slot — either the '
           'freeze is wrong, or kStillFrozenPaths needs its screen and the '
           'push guard needs a matching allow-list entry',
     );
@@ -290,18 +337,26 @@ void main() {
               r'\s*=',
           multiLine: true,
         );
-        expect(declared.hasMatch(source), isTrue,
-            reason: '${entry.key} must still DECLARE $symbol — frozen '
-                'surfaces import it');
+        expect(
+          declared.hasMatch(source),
+          isTrue,
+          reason:
+              '${entry.key} must still DECLARE $symbol — frozen '
+              'surfaces import it',
+        );
       }
     }
   });
 
   test('main.dart routes tabs through the boundary factory', () {
     final source = _code(File('lib/main.dart'));
-    expect(source.contains('AppSurfaces.wrapTab('), isTrue,
-        reason: '_buildPage must route every destination through '
-            'AppSurfaces.wrapTab');
+    expect(
+      source.contains('AppSurfaces.wrapTab('),
+      isTrue,
+      reason:
+          '_buildPage must route every destination through '
+          'AppSurfaces.wrapTab',
+    );
   });
 }
 
@@ -316,13 +371,10 @@ Iterable<File> _libDartFiles() => Directory('lib')
     // Deprecated trees keep dead references; they are not entry points.
     .where((f) => !f.path.contains('/deprecated/'));
 
-String _rel(File f) => f.path.startsWith(_root)
-    ? f.path.substring(_root.length + 1)
-    : f.path;
+String _rel(File f) =>
+    f.path.startsWith(_root) ? f.path.substring(_root.length + 1) : f.path;
 
 /// File text with line comments stripped, so commented-out code (of which the
 /// deprecated screens left plenty) can't trip a guard.
-String _code(File f) => f
-    .readAsLinesSync()
-    .where((l) => !l.trimLeft().startsWith('//'))
-    .join('\n');
+String _code(File f) =>
+    f.readAsLinesSync().where((l) => !l.trimLeft().startsWith('//')).join('\n');

@@ -44,7 +44,7 @@ facade. Callers don't change.
 `showAuthenticatedWebDavPlayerNotice`, `normalizeScrobbleFlags`,
 `androidExternalVideoIntent`, `shouldEnableMdblistTracking`,
 `launchExternalIfConfigured`, `isExternalPlayerDefault`, and the
-`VideoPlayerLaunchArgs` class (with `toWidget()`, used by 7 call sites).
+`VideoPlayerLaunchArgs` class (with `toWidget()`, used by 8 call sites).
 About 45 files import the launcher.
 
 Line numbers are approximate. Re-derive them; the dependency report (step 0)
@@ -139,7 +139,7 @@ constructs `VideoPlayerScreen` (from `lib/screens/`), so the class can't
 live in `models/` as is. Move the method body verbatim into
 `extension VideoPlayerLaunchArgsWidget on VideoPlayerLaunchArgs { VideoPlayerScreen toWidget() {...} }`
 in `presentation/legacy_launch/video_player_launch_widget.dart`. The facade
-re-exports it, so the 7 `args.toWidget()` call sites compile unchanged. Before
+re-exports it, so the 8 `args.toWidget()` call sites compile unchanged. Before
 doing it, confirm that nothing subclasses or implements
 `VideoPlayerLaunchArgs` and that `toWidget` isn't torn off; extension dispatch
 is static. Record the result in Progress.
@@ -247,6 +247,12 @@ next-episode ordering (3566).
   `invalid_use_of_visible_for_testing_member`. The manifest/checker verify
   each exact removal and retained facade annotation; no suppression or other
   annotation change is permitted.
+- **User-approved amendment (2026-10-02):** only
+  `presentation/legacy_launch/deovr_launch.dart` may retain its existing
+  `package:http/http.dart` import. `_launchWithDeoVR` combines upload and UI;
+  splitting it would violate this move-only batch. The guard names that exact
+  path/URI pair; every other bridge keeps the HTTP prohibition. Exit milestone:
+  move the JSON upload behind a data contract in a later control-flow change.
 - **Not allowed:**
   - reordering `await`s, guards, timer starts or cancels, bridge calls or map
     insertions in payloads;
@@ -407,7 +413,7 @@ failures, no missing tests, no new skips.
 2. **Feature registration.**
    - `lib/features/player_launch/` is in the guard's `FEATURES`.
    - `presentation/legacy_launch/` is a named bridge folder: it may import
-     `lib/services/`, never `http`, `shared_preferences` or `sqflite`. That
+     `lib/services/`, never `shared_preferences` or `sqflite`; HTTP remains forbidden except for the user-approved exact DeoVR path/URI pair. That
      means generalising `LEGACY_PLAYBACK_BRIDGE` to a tuple of bridge folders.
    - Every file is under 500 lines, except the four files in the
      size-exception table (`android_tv_native_launch.dart`,
@@ -457,7 +463,34 @@ failures, no missing tests, no new skips.
 | 0 | `cfe1e2cd` | 6,594 | Baseline, dependency report, manifest/checker/self-tests committed before any move. |
 | 1 | `fb19821d` | 5,783 | Models/extension and single session/cache owners wired; comparisons PASS. |
 | 2 | `5468465e` | 3,358 | Context-free resume, payload, metadata and progress owners wired; comparisons PASS. |
-| 3 | Step-3 commit (recorded by step 4) | 1,855 | Native/IPTV launch owners wired; full-suite gate 1 PASS. |
+| 3 | `03420c5e` | 1,855 | Native/IPTV launch owners wired; full-suite gate 1 PASS. |
+| 4 | (this step commit) | 238 | Presentation bridge owners wired; all 134 affected tests pass. |
+
+### Step 4 evidence
+
+- All remaining presentation declarations move to the named legacy bridge.
+  `LaunchRouter` owns both public `push` and the whole private `_push`, plus
+  the platform check, avoiding a circular import. Its measured **592-line**
+  cap is the fourth and final size exception; exit is a later control-flow split.
+- `ExternalActivityLifecycle` owns the original arm timeout and single
+  armed-return observer, unchanged initializers and cover/return ordering.
+  The observer classes move whole. Service calls still belong to this named
+  temporary bridge; exit is to put them behind data contracts and dissolve it.
+- The approved exact DeoVR HTTP path/URI exception is enforced; mutations
+  reject HTTP in another bridge, other HTTP imports, preferences and SQLite.
+  The method remains verbatim. Its upload moves behind a data contract later.
+- `analyze-step4.txt` vs step 3: PASS, no added/removed diagnostics.
+  `vpl/step4` vs base: PASS, all **134 affected tests succeed**.
+  Source guards follow the seeding/router owners; the route guard scans every
+  bridge Dart file for `MaterialPageRoute`, retaining the freeze assertion.
+- Verbatim checker: all **154 leaves** and facade forwarders pass; **22**
+  self-tests include static-state/header mutations and recursive/wrong-receiver
+  forwarding rejection. Qualifier normalization never hides a changed receiver
+  or the facade's actual dispatch owner. Architecture and size ratchet pass.
+- The external-player method has formatter off/on comments outside its
+  declaration: the formatter otherwise adds a comma to the original two-argument
+  call even in preservation mode. Its full declaration retains original tokens;
+  this changes no diagnostic rule. All other new bridge code is formatted.
 
 ### Step 3 / gate 1 evidence
 
@@ -478,8 +511,13 @@ failures, no missing tests, no new skips.
   29 error / 20 skipped; zero new failures, missing tests or new skips;
   six repaired source guards and four added heartbeat tests pass.
 - Local CI behavior command: PASS, 2,060 success and the one known WebDAV
-  appearance failure. The current CI scope is retained; remote duration will
-  be measured after pushing this gate to `private`.
+  appearance failure. Private CI passed at `e5856f4b`:
+  https://github.com/varunsalian/debrify-refactor/actions/runs/36978433063
+  (behavior job **8m05s**, below the 12-minute split threshold). The first
+  run had a transient error in the IPTV auto-pin test; the same application
+  passed its local targeted run and remote rerun. Diagnostic-only follow-up
+  `e5856f4b` exposes unexpected errors/stacks and saves runner artifacts;
+  verdicts and failure identities are unchanged.
 - Android TV device sequence checks remain pending; host evidence is limited
   to the contracts documented above.
 
@@ -542,7 +580,7 @@ failures, no missing tests, no new skips.
   it changes no application dependency. Source fixtures use `.dart.txt` to
   keep tool-only packages and intentionally broken fixtures out of app analysis.
 - `VideoPlayerLaunchArgs` has no subclass/implementation and no `toWidget`
-  tear-off; all seven references are calls. Its borrowed fetcher exception
+  tear-off; all eight references are calls (seven test calls plus the router). Its borrowed fetcher exception
   remains until that service's session state moves behind a contract.
 - Enum full-text uses are exactly the three log interpolations at original
   3883, 3891 and 5889; native/persisted projection uses `.name`. Accepted log
