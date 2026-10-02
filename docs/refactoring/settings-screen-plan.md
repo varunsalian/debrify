@@ -468,6 +468,108 @@ the named files under "Size" below.
 - Gate 1 and gate 2 pushes/Ubuntu CI are pending; nothing has been pushed for
   this prerequisite step.
 
+
+### Step 1 — UI extraction
+
+- Prerequisite commit: `3fe409a1` (step 0); all required artifacts and tests
+  were committed before moving declarations.
+- `settings_pending_credentials.dart` owns the original pure helper; the
+  public screen re-exports it. The seven presentation files own category
+  definitions, search-bar focus, the small layout class, connection grid,
+  spotlight summary, spotlight category body and classic layout body.
+  Production still constructs the layout from the State and reads the
+  legacy-reason getter live at the original renderer position.
+- The two dispatch methods preserve signatures and method tear-offs. The
+  layout constructor remains const; defaults, widget keys and focus owners
+  are unchanged. `SettingsLayout` currently measures 219 lines. Classic
+  layout currently measures 420; spotlight category 433. Every destination
+  remains within 500. The screen shrinks from 8772 to 7438 lines; the ratchet
+  records that shrinkage.
+- Architecture guard now registers Settings, confines service exemptions to
+  the exact legacy bridge path and measures destination caps. The facade
+  cap/TEMP rejection switch stays off until step 6. CI already formats all
+  features and now analyzes the legacy screen as well.
+- Source ports preserve all assertions: TV-safe text-field checks scan the
+  whole source set; Sync/Migrate labels, classic title and category switches
+  read their new owners; negative backup checks scan all feature files.
+  Search-bar bare radii move as 3 to the extracted map; the screen keeps 1
+  and its sole token call until step 3.
+- Both theme manifest consumers include all seven presentation files using
+  exact per-directory patterns. The move checker now verifies the named
+  first-parameter, live-getter and forwarder edits. AST-specific argument /
+  parameter trailing commas may follow dart format; record commas retain
+  their semantics and a mutation self-test verifies this distinction.
+- A first focused run exposed an incorrect source-test owner for the classic
+  Sync/Migrate title. The assertion was redirected to its actual owner;
+  both Sync/Migrate tests then passed. The final focused run has 85 success,
+  2 failure, 1 error and passes comparisons against both the observed full
+  baseline and step 0, including the production-order and disposal identities.
+  The architecture guard, ratchet, move/partition/context checks with self-tests,
+  formatting and diff checks pass. Whole-repo analyzer comparison identifies
+  exactly two added prefer_const_constructors infos in the moved classic body;
+  changing its widget const calls is forbidden by this move-only plan.
+  The user rejected lint suppressions and authorized two exact named exceptions:
+  `production_api_annotation` removes only `@visibleForTesting` from the
+  production `shouldApplyPendingCredentialOverride` API; its now-unused
+  annotation import and the draft screen-wide ignore are removed.
+  `classic_update_indicator_const` adds `const` only to the flagged update
+  trailing `SizedBox` (20 × 20, stroke width 2.5). Its nested
+  `CircularProgressIndicator` inherits the const context, resolving both
+  flagged infos without adding an unnecessary nested const. The manifest
+  records both edits and the checker compares the complete declarations
+  against exactly those baseline transformations. Beyond the named exceptions,
+  no other annotation, widget const call, signature, default or diagnostic
+  suppression is allowed.
+  Both draft public-constructor ignores are removed. The intermediate analyzer run
+  (`analyze-step1-exceptions.txt`) has no removed diagnostics and exactly two
+  added `use_key_in_widget_constructors` infos, one each on `SettingsLayout`
+  and `SettingsSearchBar`. The user approved `public_widget_key`: add optional
+  `super.key` to exactly those two const constructors, matching the reviewed
+  `constructor-key-proposal.diff`. No caller passes a key, so existing calls,
+  defaults and behavior remain unchanged. The manifest records each constructor
+  and the checker requires the exact added parameter with all other tokens
+  unchanged. For the rest of this run, the same exception is authorized only
+  when a private-to-public widget move exposes `use_key_in_widget_constructors`;
+  record every such constructor. Any other new diagnostic requires approval.
+  The exception-focused run (`settings/step1-exceptions`) passes all 12 tests,
+  including the pure helper, production index/order, disposal and TV spotlight
+  behavior. Comparisons against the observed full baseline and prior focused
+  step 1 run pass with no missing tests, new failures or skips. Move checks
+  and all self-tests, architecture/size checks, formatting and diff checks pass.
+- Final step 1 verification at `dd7dc356` plus the reviewed worktree:
+  `analyze-step1-final.txt` matches all 832 baseline diagnostic identities after
+  the Settings-only relocation rule: no added or removed diagnostics. The
+  constructor-focused run (`settings/step1-key`) passes all 10 tests and its
+  comparison against the observed full baseline passes. Earlier 12-test
+  exception evidence and the full focused batch remain applicable. Formatting,
+  move/partition/context checks with all self-tests, architecture/size checks
+  and `git diff --check` pass. No lint suppressions remain in the Settings
+  source set. The single new key parameter preserves each const constructor
+  and every existing default; checker self-tests reject missing/required keys,
+  changed defaults and lost const capability.
+- Continuation audit retained the user's intervening `dd7dc356` IPTV-test cleanup
+  commit. The SDK still matches the recorded evidence. A diagnostic full-suite
+  run (`settings/step1-full`) completed because that commit changed shared
+  refresh infrastructure after the original baseline; it is not a named gate.
+  Result: 10,306 success, 14 failure, 29 error, 20 skipped. Comparison against
+  `settings/base.jsonl` passes by identity: no new failures, missing tests or
+  new skips; the only two added identities are the passing order/disposal
+  contracts. Both those tests also pass in this full-suite run.
+- Move-check coverage now also rejects unregistered destination helpers,
+  classes/functions and duplicate fields. Context-guard evidence compares the
+  canonical prefix of the original first-use statement as well as mounted /
+  await order, so acquisition above a synchronous early return or a service
+  call is rejected too. Await boundaries use the operand's end: arguments
+  such as `await show(context)` are evaluated before suspension, and the
+  legal first-statement acquisition remains accepted. Added positive/negative
+  self-tests pass; the launcher verifier and its self-tests still pass with
+  the extended parser. Application code remains unchanged by these verification
+  improvements. The earlier `lint-exceptions-proposal.diff` is rejected and
+  superseded by the user's two named exceptions above. The checker rejects
+  added lint suppressions, retained/extra API annotations, API body changes,
+  missing/misplaced indicator consts and any other indicator edits. No approval
+  is inferred for any other new diagnostic.
+
 ## Found, not fixed
 
 (none yet)

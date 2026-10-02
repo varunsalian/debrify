@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -19,6 +19,16 @@ STORAGE_SOURCE_DIR = 'lib/services/storage'
 STORAGE_ENUM_FILES = ('lib/models/ambient_trailer_surface.dart', 'lib/models/tv_render_quality.dart')
 PLAYBACK_FACADE = "lib/services/torrent_playback_service.dart"
 PLAYER_LAUNCH_FACADE = "lib/services/video_player_launcher.dart"
+SETTINGS_FACADE = "lib/screens/settings_screen.dart"
+# Step 6 enables the facade cap and rejects remaining temporary cross-calls.
+# Until then, the facade is measured only by the repo-wide shrinking ratchet.
+SETTINGS_COMPLETE = False
+SETTINGS_BRIDGE = "lib/features/settings/presentation/legacy_settings/"
+SETTINGS_SIZE_EXCEPTIONS = {
+    # Set to its measured size when the original 588-line loader moves at step 4.
+    SETTINGS_BRIDGE + "settings_summary_loader.dart": 0,
+    "lib/features/settings/presentation/settings_classic_layout.dart": 420,
+}
 # Verbatim playback extraction source set; exceptions and exit milestones are
 # recorded in docs/refactoring/torrent-playback-plan.md.
 TORRENT_PLAYBACK_SOURCE_FILES = {
@@ -257,6 +267,8 @@ LEGACY_PLAYBACK_BRIDGES = (
     "lib/features/sources/presentation/legacy_playback/",
     # Move-only launcher bridge; exit: data contracts replace service calls.
     "lib/features/player_launch/presentation/legacy_launch/",
+    # Bounded State-driven settings bridge; exit: Settings data contracts.
+    SETTINGS_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -292,6 +304,14 @@ def violations(path: Path) -> list[str]:
         problems.append(f"{lines} lines exceeds the 300-line launcher facade limit")
     if relative == PLAYBACK_FACADE and lines > 400:
         problems.append(f"{lines} lines exceeds the 400-line playback facade limit")
+    if SETTINGS_COMPLETE and relative == SETTINGS_FACADE and lines > 400:
+        problems.append(f"{lines} lines exceeds the 400-line settings facade limit")
+    if relative.startswith("lib/features/settings/"):
+        limit = SETTINGS_SIZE_EXCEPTIONS.get(relative, 500)
+        if lines > limit:
+            problems.append(f"{lines} lines exceeds the {limit}-line settings extraction limit")
+        if "TEMP(settings)" in source and (SETTINGS_COMPLETE or not relative.startswith(SETTINGS_BRIDGE)):
+            problems.append("temporary settings cross-call outside the staged legacy bridge")
     if relative in TORRENT_PLAYBACK_SOURCE_FILES:
         limit = 800 if relative in TORRENT_PLAYBACK_PIPELINES else 500
         if lines > limit:
@@ -388,6 +408,8 @@ def main() -> int:
         if not p.name.endswith(GENERATED_SUFFIXES)
     }
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)
+    if SETTINGS_COMPLETE:
+        paths.add(ROOT / SETTINGS_FACADE)
     paths.update(ROOT / p for p in TORRENT_PLAYBACK_SOURCE_FILES)
     paths.update((ROOT / COMPOSITION).rglob("*.dart"))
     paths.add(ROOT / FACADE)

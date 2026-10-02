@@ -23,6 +23,35 @@ class References extends RecursiveAstVisitor<void> {
   final List<Map<String, Object?>> callbacks = [];
   final List<String> scopes = [];
   final List<Set<String>> parameters = [];
+  final List<int> formatCommas = [];
+  final List<Map<String, Object?>> awaits = [];
+
+  @override
+  void visitAwaitExpression(AwaitExpression node) {
+    awaits.add({
+      'offset': node.offset,
+      'end': node.end,
+      'scope': scopes.join('/'),
+      'contextParameter': parameters.any((p) => p.contains('context')),
+    });
+    super.visitAwaitExpression(node);
+  }
+
+  @override
+  void visitArgumentList(ArgumentList node) {
+    if (node.endToken.previous?.lexeme == ',') {
+      formatCommas.add(node.endToken.previous!.offset);
+    }
+    super.visitArgumentList(node);
+  }
+
+  @override
+  void visitFormalParameterList(FormalParameterList node) {
+    if (node.endToken.previous?.lexeme == ',') {
+      formatCommas.add(node.endToken.previous!.offset);
+    }
+    super.visitFormalParameterList(node);
+  }
 
   @override
   void visitFunctionExpression(FunctionExpression node) {
@@ -54,6 +83,10 @@ class References extends RecursiveAstVisitor<void> {
         parent is PostfixExpression ||
         parent is PrefixExpression &&
             (parent.operator.lexeme == '++' || parent.operator.lexeme == '--');
+    AstNode? statement = parent;
+    while (statement != null && statement is! Statement) {
+      statement = statement.parent;
+    }
     values.add({
       'name': node.name,
       'offset': node.offset,
@@ -68,6 +101,7 @@ class References extends RecursiveAstVisitor<void> {
       'scope': scopes.join('/'),
       'contextParameter': parameters.any((p) => p.contains('context')),
       'parent': parent.runtimeType.toString(),
+      'statementOffset': statement?.offset,
     });
     super.visitSimpleIdentifier(node);
   }
@@ -272,7 +306,19 @@ Map<String, Object?> describe(
         : null,
     'references': [
       for (final r in refs.values)
-        {...r, 'offset': pos(r['offset'] as int), 'end': pos(r['end'] as int)},
+        {
+          ...r,
+          'offset': pos(r['offset'] as int),
+          'end': pos(r['end'] as int),
+          'statementOffset': r['statementOffset'] == null
+              ? null
+              : pos(r['statementOffset'] as int),
+        },
+    ],
+    'formatCommas': [for (final offset in refs.formatCommas) pos(offset)],
+    'awaits': [
+      for (final a in refs.awaits)
+        {...a, 'offset': pos(a['offset'] as int), 'end': pos(a['end'] as int)},
     ],
     'callbacks': [
       for (final c in refs.callbacks)

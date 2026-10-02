@@ -13,13 +13,80 @@ from pathlib import Path
 ALLOWED = {'unchanged', 'rename', 'receiver', 'state_callback', 'context_guard',
            'lifecycle_wiring', 'layout_body', 'layout_first_param',
            'layout_legacy_param', 'live_service_getter', 'partition',
-           'summary_accessor'}
+           'summary_accessor', 'production_api_annotation',
+           'classic_update_indicator_const', 'public_widget_key'}
+
+PUBLIC_WIDGET_KEY_DIFFERENCE = 'public_widget_key: add optional super.key only; no caller passes a key'
+
+NAMED_EXCEPTIONS = {
+    'production_api_annotation': (
+        'shouldApplyPendingCredentialOverride',
+        'lib/features/settings/application/settings_pending_credentials.dart',
+        'production_api_annotation: remove only @visibleForTesting; production API'),
+    'classic_update_indicator_const': (
+        '_SettingsLayout.build',
+        'lib/features/settings/presentation/settings_classic_layout.dart',
+        'classic_update_indicator_const: add const only to checkingUpdates trailing SizedBox; child CircularProgressIndicator inherits const context'),
+}
+
+
+def named_exception_tokens(values, row):
+    """User-authorized edits, at exact baseline token sequences only."""
+    values = list(values)
+    if 'production_api_annotation' in row['allowed_edits'].split(','):
+        if values[:2] != ['@', 'visibleForTesting']:
+            raise ValueError('Production API exception requires the original annotation')
+        del values[:2]
+    if 'classic_update_indicator_const' in row['allowed_edits'].split(','):
+        sequence = ['trailing', ':', 'checkingUpdates', '?', 'SizedBox', '(',
+                    'width', ':', '20', ',', 'height', ':', '20', ',',
+                    'child', ':', 'CircularProgressIndicator', '(',
+                    'strokeWidth', ':', '2.5', ')', ')', ':', 'null']
+        matches = [i for i in range(len(values))
+                   if values[i:i + len(sequence)] == sequence]
+        if len(matches) != 1:
+            raise ValueError('Classic const exception must match exactly one original update indicator')
+        values.insert(matches[0] + 4, 'const')
+    if 'public_widget_key' in row['allowed_edits'].split(','):
+        opening = values.index('(')
+        named = values.index('{', opening)
+        if named != opening + 1 or 'key' in values[opening:named]:
+            raise ValueError('Public widget key exception requires the original named parameters')
+        values[named + 1:named + 1] = ['super', '.', 'key', ',']
+    return values
+
+
+def check_named_exceptions(rows):
+    errors = []
+    for row in rows:
+        if 'public_widget_key' in row['allowed_edits'].split(','):
+            owner, _, constructor = row['original_name'].rpartition('.')
+            if (not owner.startswith('_') or constructor != owner
+                    or row['destination_class'] != owner[1:]
+                    or row['new_name'] != owner[1:]
+                    or row['expected_difference'] != PUBLIC_WIDGET_KEY_DIFFERENCE):
+                errors.append('Public widget key exception must name one private-to-public constructor')
+        for name in set(row['allowed_edits'].split(',')) & NAMED_EXCEPTIONS.keys():
+            original, destination, difference = NAMED_EXCEPTIONS[name]
+            if (row['original_name'], row['destination_file'], row['expected_difference']) != (original, destination, difference):
+                errors.append('Named exception registered outside its exact declaration: ' + name)
+    return errors
+
+
+def check_lint_comments(original_source, sources):
+    pattern = r'(?m)^\s*//\s*ignore(?:_for_file)?:[^\n]*'
+    before = Counter(x.strip() for x in re.findall(pattern, original_source))
+    after = Counter(x.strip() for source in sources.values()
+                    for x in re.findall(pattern, source))
+    return [] if before == after else ['Settings lint suppressions changed outside the authorized exceptions']
 
 
 def tokens(node, start=None, end=None):
+    punctuation = set(node.get('formatCommas', []))
     return [t['text'] for t in node['tokens']
             if (start is None or t['offset'] >= start)
-            and (end is None or t['offset'] < end)]
+            and (end is None or t['offset'] < end)
+            and t['offset'] not in punctuation]
 
 
 def names(rows):
@@ -35,6 +102,8 @@ def names(rows):
 def normalize(values, rows, row=None):
     mapping = names(rows)
     mapped = set(mapping.values()) | {r['new_name'] for r in rows}
+    if row and 'live_service_getter' in row['allowed_edits']:
+        mapped.add('legacyReasonSummary')
     out = []
     i = 0
     while i < len(values):
@@ -65,6 +134,50 @@ def normalize(values, rows, row=None):
     return out
 
 
+def declaration_tokens(node, rows, row, *, original=False):
+    """Apply ONLY the plan's named structural edits to the expected baseline.
+
+    Actual signatures, defaults, widgets, tear-offs and bodies still compare
+    completely. Commas are normalized only at AST argument/parameter-list ends;
+    a record comma (which changes its type/value) is never removed.
+    """
+    values = normalize(tokens(node), rows, row)
+    if not original:
+        return values
+    key = row['original_name']
+    old = key.split('.')[-1]
+    mapped = names(rows).get(old, old)
+    # A common name such as build is renamed only on this declaration.
+    if old != row['new_name'] and mapped != row['new_name']:
+        index = values.index(mapped)
+        values[index] = row['new_name']
+    if 'layout_first_param' in row['allowed_edits']:
+        opening = values.index('(')
+        values[opening + 1:opening + 1] = ['SettingsLayout', 'layout', ',']
+        # Calls get the layout argument; method tear-offs remain class methods.
+        i = opening + 4
+        while i < len(values) - 1:
+            if values[i] in {'buildConnectionGrid', 'buildSpotlightLayout'} and values[i + 1] == '(':
+                values[i + 2:i + 2] = ['layout', ',']
+                i += 2
+            i += 1
+    if 'layout_body' in row['allowed_edits'] and values[:2] == ['@', 'override']:
+        del values[:2]
+    if key == '_SettingsLayout._SettingsLayout':
+        sequence = ['required', 'this', '.', 'connections', ',']
+        index = next(i for i in range(len(values)) if values[i:i + 5] == sequence) + 5
+        values[index:index] = ['required', 'this', '.', 'legacyReasonSummary', ',']
+    if key == '_SettingsScreenState._buildLayout':
+        index = values.index('SettingsLayout') + 2
+        values[index:index] = ['legacyReasonSummary', ':', '(', ')', '=>',
+                              'ProfileBootstrap', '.', 'legacyReasonSummary', ',']
+    if key == '_SettingsLayout._buildSpotlightCategory':
+        sequence = ['ProfileBootstrap', '.', 'legacyReasonSummary']
+        index = next(i for i in range(len(values)) if values[i:i + 3] == sequence)
+        values[index:index + 3] = ['legacyReasonSummary', '(', ')']
+    return named_exception_tokens(values, row)
+
+
 def context_events(node):
     """Owned context reads/acquisition and guards by closure, excluding builders.
 
@@ -91,15 +204,13 @@ def context_events(node):
         # The explicit injected acquisition and its later local uses count as
         # the same first-context event, not two independent guards.
         events_by_offset.append((ref['offset'], ref['scope'], 'guard' if name == 'mounted' else 'context'))
-    # Await boundaries matter too: an acquisition cannot jump above an
-    # awaited permission gate, even when that gate has no mounted reference.
-    for token in code:
-        if token['text'] == 'await':
-            callbacks = [c for c in node['callbacks'] if c['offset'] <= token['offset'] < c['end']]
-            callback = callbacks[-1] if callbacks else None
-            if callback and 'context' in callback['parameters']:
-                continue
-            events_by_offset.append((token['offset'], callback['scope'] if callback else '', 'await'))
+    # Arguments are evaluated before suspension. The boundary is at the end
+    # of the await operand, not at its keyword: `await show(context)` permits
+    # the named context acquisition before that statement, while acquiring it
+    # above a preceding awaited permission gate must still be rejected.
+    for awaited in node['awaits']:
+        if not awaited['contextParameter']:
+            events_by_offset.append((awaited['end'], awaited['scope'], 'await'))
     for _, scope, event in sorted(events_by_offset):
         groups.setdefault(scope, []).append(event)
     return [([e for e in events[:events.index('context')] if e in {'guard', 'await'}]
@@ -107,9 +218,35 @@ def context_events(node):
              events.count('guard')) for events in groups.values()]
 
 
-def check_context(before, after):
+def context_prefixes(node, rows, row):
+    """First owned context must start at the same original statement.
+
+    Counting mounted/await alone misses a synchronous early-return guard or
+    a service call before first context use. Compare the canonical statement
+    prefix as well; the named injected acquisition is removed, but no original
+    statement is ignored. Dialog/builder parameter contexts remain excluded.
+    """
+    code = [t for t in node['tokens'] if not t['comment']]
+    indexes = {t['offset']: i for i, t in enumerate(code)}
+    prefixes = {}
+    for ref in node['references']:
+        if ref['name'] != 'context' or ref['contextParameter']:
+            continue
+        i = indexes.get(ref['offset'])
+        if i is None or [t['text'] for t in code[i:i + 3]] == ['context', '.', 'mounted']:
+            continue
+        if ref['scope'] not in prefixes:
+            start = ref['statementOffset']
+            prefixes[ref['scope']] = normalize(tokens(node, end=start), rows, row)
+    return list(prefixes.values())
+
+
+def check_context(before, after, rows=None, row=None):
     expected, actual = context_events(before), context_events(after)
-    return [] if expected == actual else [f'Context/guard scope or first-use position changed: {expected} -> {actual}']
+    errors = [] if expected == actual else [f'Context/guard scope or first-use position changed: {expected} -> {actual}']
+    if context_prefixes(before, rows or [], row) != context_prefixes(after, rows or [], row):
+        errors.append('First owned context acquisition moved across an original statement/guard')
+    return errors
 
 
 def partition_elements(node):
@@ -237,12 +374,46 @@ def check_partition(before, current, spec, lookup, rows, package=None):
 
 def all_nodes(parsed):
     found = {}
+    def add(key, node):
+        if key in found:
+            raise ValueError('Duplicate settings destination declaration: ' + str(key))
+        found[key] = node
     for path, unit in parsed.items():
         for d in unit['declarations']:
-            found[path, '', d['name']] = d
+            add((path, '', d['name']), d)
             for m in d['members']:
-                found[path, d['name'], m['name']] = m
+                add((path, d['name'], m['name']), m)
     return found
+
+
+def destination_ownership(parsed, rows, source_path):
+    """No unregistered original copy or extra feature helper can hide in a move.
+
+    The three extra layout leaves are exactly the structural additions named
+    in the plan and checked separately below. Later section/deps scaffolding
+    must be registered explicitly when that step is implemented.
+    """
+    known = {(r['destination_file'], r['destination_class'], r['new_name'])
+             for r in rows}
+    layout = 'lib/features/settings/presentation/settings_layout.dart'
+    known.update((layout, 'SettingsLayout', name)
+                 for name in ('legacyReasonSummary', 'build', 'buildSpotlightCategory'))
+    owners = {(path, owner) for path, owner, _ in known if owner}
+    errors = []
+    for path, unit in parsed.items():
+        if path in ('<original>', source_path):
+            continue
+        for declaration in unit['declarations']:
+            name = declaration['name']
+            if (path, '', name) in known:
+                continue
+            if (path, name) not in owners:
+                errors.append('Unregistered settings destination owner: ' + str((path, name)))
+            for member in declaration['members']:
+                key = (path, name, member['name'])
+                if key not in known:
+                    errors.append('Unregistered settings destination leaf: ' + str(key))
+    return errors
 
 
 def check(original_source, sources, rows, source_path, package=None,
@@ -251,10 +422,13 @@ def check(original_source, sources, rows, source_path, package=None,
     parsed = parse({'<original>': original_source, **sources}, package)
     original = original_leaves(parsed['<original>']['declarations'], split_names(rows))
     errors = missing_line_comments(original_source, sources, rows)
+    errors.extend(check_named_exceptions(rows))
+    errors.extend(check_lint_comments(original_source, sources))
     known = {r['original_name'] for r in rows}
     if set(original) != known:
         return ['Settings manifest coverage differs: ' + str(sorted(set(original) ^ known))]
     lookup = all_nodes(parsed)
+    errors.extend(destination_ownership(parsed, rows, source_path))
     mapping = names(rows)
     # Retained/moved widget class headers are also part of the contract. New
     # section classes have no original header; original widget headers do.
@@ -262,6 +436,14 @@ def check(original_source, sources, rows, source_path, package=None,
         if not declaration['members']:
             continue
         name = declaration['name']
+        key_rows = [r for r in rows if r['original_name'] == name + '.' + name
+                    and 'public_widget_key' in r['allowed_edits'].split(',')]
+        if key_rows:
+            values = tokens(declaration)
+            if not any(values[i:i + 2] == ['extends', base]
+                       for base in ('StatelessWidget', 'StatefulWidget')
+                       for i in range(len(values))):
+                errors.append('Public widget key exception used on a non-widget: ' + name)
         new_name = mapping.get(name, name)
         headers = [d for path, unit in parsed.items() if path != '<original>'
                    for d in unit['declarations'] if d['name'] in {name, new_name}]
@@ -289,16 +471,29 @@ def check(original_source, sources, rows, source_path, package=None,
             errors.append('Duplicate settings owner: ' + key)
         if partition and key in partitions:
             errors.extend(key + ': ' + e for e in check_partition(before, actual, partitions[key], lookup, rows, package))
-        elif normalize(tokens(before), rows, row) != normalize(tokens(actual), rows, row):
-            diff = '\n'.join(list(difflib.unified_diff(normalize(tokens(before), rows), normalize(tokens(actual), rows)))[:45])
+        elif declaration_tokens(before, rows, row, original=destination is not None or (key == '_SettingsScreenState._buildLayout' and 'lib/features/settings/presentation/settings_layout.dart' in sources)) != declaration_tokens(actual, rows, row):
+            diff = '\n'.join(list(difflib.unified_diff(declaration_tokens(before, rows, row, original=destination is not None or (key == '_SettingsScreenState._buildLayout' and 'lib/features/settings/presentation/settings_layout.dart' in sources)), declaration_tokens(actual, rows, row)))[:45])
             errors.append('Non-verbatim settings declaration: ' + key + '\n' + diff)
         if context_guard and 'context_guard' in row['allowed_edits']:
-            errors.extend(key + ': ' + e for e in check_context(before, actual))
+            errors.extend(key + ': ' + e for e in check_context(before, actual, rows, row))
     # Only the registered single test accessor is new in the facade at step 0.
     leaves = original_leaves(parsed[source_path]['declarations'], split_names(rows))
     extras = set(leaves) - known - {'settingsScreenTestAccess'}
     if extras:
         errors.append('Unregistered facade declarations: ' + str(sorted(extras)))
+    layout_path = 'lib/features/settings/presentation/settings_layout.dart'
+    if layout_path in sources:
+        required_field = lookup.get((layout_path, 'SettingsLayout', 'legacyReasonSummary'))
+        if required_field is None or tokens(required_field) != ['final', 'String', 'Function', '(', ')', 'legacyReasonSummary', ';']:
+            errors.append('Live legacyReasonSummary constructor field differs from the named edit')
+        forwarders = {
+            'build': ['@', 'override', 'Widget', 'build', '(', 'BuildContext', 'context', ')', '=>', 'buildClassicSettingsLayout', '(', 'this', ',', 'context', ')', ';'],
+            'buildSpotlightCategory': ['Widget', 'buildSpotlightCategory', '(', 'BuildContext', 'context', ',', 'int', 'category', ')', '=>', 'spotlight', '.', 'buildSpotlightCategory', '(', 'this', ',', 'context', ',', 'category', ')', ';'],
+        }
+        for name, expected in forwarders.items():
+            forwarder = lookup.get((layout_path, 'SettingsLayout', name))
+            if forwarder is None or tokens(forwarder) != expected:
+                errors.append('Layout forwarder signature or dispatch changed: ' + name)
     accessor = lookup.get((source_path, '', 'settingsScreenTestAccess'))
     if accessor is not None:
         expected = json.loads((ROOT / 'dev/tool/settings_test_accessor.json').read_text())
@@ -350,12 +545,115 @@ def self_test(package=None):
     if not check_partition(before, reordered, spec, lookup, [], package):
         raise AssertionError('Accepted reordered dispatcher')
     print('Settings self-test reordered dispatcher: rejected')
+    layout_row = {'original_name': '_SettingsLayout._buildSpotlight',
+                  'new_name': 'buildSpotlightLayout',
+                  'allowed_edits': 'rename,receiver,layout_first_param'}
+    layout_before = method('Widget _buildSpotlight(BuildContext context) { return const Thing(); }')
+    layout_after = method('Widget buildSpotlightLayout(SettingsLayout layout, BuildContext context) { return const Thing(); }')
+    expected = declaration_tokens(layout_before, [layout_row], layout_row, original=True)
+    if expected != declaration_tokens(layout_after, [layout_row], layout_row):
+        raise AssertionError('Named layout first-parameter edit rejected')
+    for label, text in {
+        'changed layout parameter': 'Widget buildSpotlightLayout(Object layout, BuildContext context) { return const Thing(); }',
+        'changed widget const': 'Widget buildSpotlightLayout(SettingsLayout layout, BuildContext context) { return Thing(); }',
+    }.items():
+        if expected == declaration_tokens(method(text), [layout_row], layout_row):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
+    api_row = dict(original_name='shouldApplyPendingCredentialOverride',
+                   new_name='shouldApplyPendingCredentialOverride',
+                   destination_file=NAMED_EXCEPTIONS['production_api_annotation'][1],
+                   allowed_edits='production_api_annotation',
+                   expected_difference=NAMED_EXCEPTIONS['production_api_annotation'][2])
+    api_before = method('@visibleForTesting bool shouldApplyPendingCredentialOverride() => true;')
+    api_after = method('bool shouldApplyPendingCredentialOverride() => true;')
+    expected_api = declaration_tokens(api_before, [api_row], api_row, original=True)
+    if check_named_exceptions([api_row]) or expected_api != declaration_tokens(api_after, [api_row], api_row):
+        raise AssertionError('Authorized annotation-only exception rejected')
+    for label, changed in {
+        'retained production API annotation': api_before,
+        'additional API annotation': method('@deprecated bool shouldApplyPendingCredentialOverride() => true;'),
+        'changed production API body': method('bool shouldApplyPendingCredentialOverride() => false;'),
+    }.items():
+        if expected_api == declaration_tokens(changed, [api_row], api_row):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
+    for key, value in {'original_name': 'Other.helper', 'destination_file': 'other.dart',
+                       'expected_difference': 'remove any annotation'}.items():
+        if not check_named_exceptions([dict(api_row, **{key: value})]):
+            raise AssertionError('Accepted widened named exception: ' + key)
+    print('Settings self-test widened named exception: rejected')
+    const_row = dict(original_name='_SettingsLayout.build',
+                     new_name='buildClassicSettingsLayout',
+                     destination_file=NAMED_EXCEPTIONS['classic_update_indicator_const'][1],
+                     allowed_edits='classic_update_indicator_const',
+                     expected_difference=NAMED_EXCEPTIONS['classic_update_indicator_const'][2])
+    const_before_text = 'Widget build() { return Tile(trailing: checkingUpdates ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5)) : null); }'
+    const_after_text = const_before_text.replace('Widget build()', 'Widget buildClassicSettingsLayout()').replace('? SizedBox', '? const SizedBox')
+    expected_const = declaration_tokens(method(const_before_text), [const_row], const_row, original=True)
+    if check_named_exceptions([const_row]) or expected_const != declaration_tokens(method(const_after_text), [const_row], const_row):
+        raise AssertionError('Authorized exact update-indicator const exception rejected')
+    for label, changed in {
+        'missing update indicator const': const_after_text.replace('? const SizedBox', '? SizedBox'),
+        'additional nested const': const_after_text.replace('child: CircularProgressIndicator', 'child: const CircularProgressIndicator'),
+        'changed indicator dimensions': const_after_text.replace('width: 20', 'width: 21'),
+        'const on another widget': const_after_text.replace('return Tile', 'return const Tile'),
+    }.items():
+        if expected_const == declaration_tokens(method(changed), [const_row], const_row):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
+    if check_lint_comments('', {'source': 'void action() {}'}) or not check_lint_comments('', {'source': '// ignore_for_file: some_lint\nvoid action() {}'}):
+        raise AssertionError('Lint suppression addition check failed')
+    print('Settings self-test new lint suppression: rejected')
+    key_row = dict(original_name='_Example._Example', new_name='Example',
+                   destination_class='Example', allowed_edits='rename,public_widget_key',
+                   expected_difference=PUBLIC_WIDGET_KEY_DIFFERENCE)
+    def constructor(text, owner):
+        return parse({'test': 'class ' + owner + ' { ' + text + ' }'}, package)['test']['declarations'][0]['members'][0]
+    key_before = constructor('const _Example({this.title = "default"});', '_Example')
+    key_after_text = 'const Example({super.key, this.title = "default"});'
+    expected_key = declaration_tokens(key_before, [key_row], key_row, original=True)
+    if check_named_exceptions([key_row]) or expected_key != declaration_tokens(constructor(key_after_text, 'Example'), [key_row], key_row):
+        raise AssertionError('Authorized optional widget key exception rejected')
+    for label, changed in {
+        'missing optional widget key': key_after_text.replace('super.key, ', ''),
+        'required widget key': key_after_text.replace('super.key', 'required super.key'),
+        'changed constructor default': key_after_text.replace('"default"', '"other"'),
+        'lost constructor const': key_after_text.replace('const ', ''),
+    }.items():
+        if expected_key == declaration_tokens(constructor(changed, 'Example'), [key_row], key_row):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
+    singleton = method('List<Object> one() { return [(1,)]; }')
+    nonrecord = method('List<Object> one() { return [(1)]; }')
+    if not compare_elements(singleton, [nonrecord], []):
+        raise AssertionError('Record comma was treated as formatting')
+    print('Settings self-test changed record comma: rejected')
     original = method('void snack() { if (!mounted) return; ScaffoldMessenger.of(context); }')
     good_context = method('void snack() { if (!_deps.mounted()) return; final context = _deps.context(); ScaffoldMessenger.of(context); }')
     bad_context = method('void snack() { final context = _deps.context(); if (!_deps.mounted()) return; ScaffoldMessenger.of(context); }')
     if check_context(original, good_context) or not check_context(original, bad_context):
         raise AssertionError('Context guard self-test failed')
     print('Settings self-test context fetched before guard: rejected')
+    permission = method('void action() async { if (!await allowed()) return; show(context); }')
+    permission_hoist = method('void action() async { final context = _deps.context(); if (!await allowed()) return; show(context); }')
+    if not check_context(permission, permission_hoist):
+        raise AssertionError('Accepted context fetched before awaited permission')
+    print('Settings self-test context fetched before awaited permission: rejected')
+    awaited_context = method('void action() async { await show(context); if (!mounted) return; }')
+    acquired_context = method('void action() async { final context = _deps.context(); await show(context); if (!context.mounted) return; }')
+    if check_context(awaited_context, acquired_context):
+        raise AssertionError('Context argument before its await suspension was rejected')
+    print('Settings self-test context argument evaluated before await: passed')
+    for label, prefix in {
+        'context fetched before synchronous guard': 'if (busy) return;',
+        'context fetched before service call': 'service.prepare();',
+    }.items():
+        action = method('void action() { ' + prefix + ' show(context); }')
+        hoisted = method('void action() { final context = _deps.context(); ' + prefix + ' show(context); }')
+        if not check_context(action, hoisted):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
     delayed = method('void finish() { future.then((_) { if (!mounted) return; show(context); }); }')
     hoisted = method('void finish() { final context = _deps.context(); future.then((_) { if (!_deps.mounted()) return; show(context); }); }')
     if not check_context(delayed, hoisted):
@@ -366,3 +664,27 @@ def self_test(package=None):
     if check_context(shadow, shadow_good):
         raise AssertionError('Builder context incorrectly treated as State context')
     print('Settings self-test builder parameter context: passed')
+    before_owner = 'class Original { int value = 1; }'
+    owner_row = {'original_name': 'Original.value', 'destination_file': 'owner',
+                 'destination_class': 'NewOwner', 'new_name': 'value',
+                 'allowed_edits': 'unchanged', 'expected_difference': ''}
+    valid_owner = {'source': 'class Original {}',
+                   'owner': 'class NewOwner { int value = 1; }'}
+    errors = check(before_owner, valid_owner, [owner_row], 'source', package)
+    if errors:
+        raise AssertionError('Valid single destination owner rejected: ' + str(errors))
+    for label, extra in {
+        'unregistered destination helper': 'class NewOwner { int value = 1; void extra() {} }',
+        'unregistered destination class': 'class NewOwner { int value = 1; } class Extra {}',
+        'unregistered destination function': 'class NewOwner { int value = 1; } void extra() {}',
+    }.items():
+        if not check(before_owner, dict(valid_owner, owner=extra), [owner_row], 'source', package):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
+    duplicate = parse({'owner': 'class NewOwner { int value = 1; int value = 1; }'}, package)
+    try:
+        all_nodes(duplicate)
+    except ValueError:
+        print('Settings self-test duplicate destination field: rejected')
+    else:
+        raise AssertionError('Accepted duplicate destination field')

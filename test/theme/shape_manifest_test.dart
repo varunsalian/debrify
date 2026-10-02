@@ -94,7 +94,7 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/settings/trakt_settings_page.dart': 1,
   'lib/screens/settings/widgets/dynamic_settings_builder.dart': 7,
   'lib/screens/settings/widgets/settings_widgets.dart': 10,
-  'lib/screens/settings_screen.dart': 4,
+  'lib/screens/settings_screen.dart': 1,
   'lib/screens/stremio_tv/stremio_tv_filter_page.dart': 0,
   'lib/screens/stremio_tv/stremio_tv_screen.dart': 0,
   'lib/screens/stremio_tv/widgets/stremio_tv_empty_state.dart': 0,
@@ -139,6 +139,7 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/settings/presentation/settings_search_bar.dart': 3,
   'lib/screens/search_screen/home_saved_composition.dart': 0,
   'lib/screens/search_screen/discover_panel_composition.dart': 0,
   'lib/screens/search_screen/search_input_composition.dart': 0,
@@ -180,7 +181,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/home/presentation/home_hero_identity.dart': 1,
   'lib/features/home/presentation/home_catalog_card_layers.dart': 0,
   'lib/features/home/presentation/home_poster_flight.dart': 0,
-  'lib/features/stremio_tv/presentation/stremio_tv_catalog_picker_views.dart': 2,
+  'lib/features/stremio_tv/presentation/stremio_tv_catalog_picker_views.dart':
+      2,
   'lib/features/home/presentation/home_hero_transitions.dart': 0,
   'lib/features/home/presentation/home_hero_tint_surface.dart': 0,
   'lib/features/home/presentation/home_hero_title_art.dart': 0,
