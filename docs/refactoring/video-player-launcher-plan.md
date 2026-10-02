@@ -227,6 +227,9 @@ next-episode ordering (3566).
       native call, stop and ask.
     - If they are all logs, record the label change as an accepted, logged
       exception to Invariant 5.
+    - Checked at `204b1011`: the native payload uses `contentType.name`
+      (5311), which the rename doesn't change. Only logs use the full text
+      (3883, 3891, 5889). The step 0 report re-confirms this.
 - **Not allowed:**
   - reordering `await`s, guards, timer starts or cancels, bridge calls or map
     insertions in payloads;
