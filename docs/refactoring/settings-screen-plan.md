@@ -798,14 +798,23 @@ the named files under "Size" below.
 - Final size check covers 1895 tracked app files, with 177 existing over-limit
   files ratcheted; the Settings facade is outside that list. No dependency or
   SDK change. The bounded Riverpod, bridge and localization exceptions retain
-  their recorded exit milestones. Step 6 commit, private push and exact-commit
-  Ubuntu CI follow these local checks.
+  their recorded exit milestones. Step 6 commit: `8381bfa5`, pushed only to
+  `private` after the completed gate.
 - The exact local CI behavior command passes: 2142 success, three observed
   failures and one observed error, all covered by the unchanged-or-newly-seeded
   exact identity list. Its 2146 identities match completed gate 2. No failing
   identity that passed in an observed run was allowed. Whole-repo and scoped
   formatting/analyzer evidence, storage/size/architecture guards and both move
-  checkers are complete before the private push.
+  checkers pass. The scoped local CI analyzer command also passes (23 existing
+  infos; no fatal warnings/errors).
+- Ubuntu CI run `37021987319` at exact code commit `8381bfa5` passes formatting,
+  analyzer, architecture, size/storage and the real Linux production-index order
+  test. Its behavior job fails only five pixel goldens in the unchanged Spotlight
+  shell/TV fixture tests; those five pass in both observed macOS full gates.
+  They have not entered the allowlist. A temporary evidence workflow checks out
+  original `17db33f2` on the same Ubuntu/Flutter configuration to characterize
+  those pixels and capture independently grounded Linux references.
+  https://github.com/varunsalian/debrify-refactor/actions/runs/37021987319
 
 ## Found, not fixed
 

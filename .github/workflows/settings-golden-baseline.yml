@@ -1,0 +1,52 @@
+name: Original Settings Linux golden evidence
+
+on:
+  push:
+    branches: ['refactor/**']
+    paths: ['.github/workflows/settings-golden-baseline.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  original-settings-goldens:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 17db33f29164f0dda7d6ff8dd8d9b6b757aadd8b
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Characterize original pixels, then capture Linux references
+        run: |
+          mkdir -p baseline-evidence
+          git rev-parse HEAD > baseline-evidence/revision.txt
+          flutter --version --machine > baseline-evidence/sdk.json
+          python3 - <<'PY'
+          import json, subprocess, sys
+          from pathlib import Path
+          sys.path.insert(0, 'dev/tool')
+          import suite_evidence
+          tests = ['test/settings_spotlight_shell_test.dart', 'test/settings_tv_spotlight_layout_test.dart']
+          command = ['flutter', 'test', '--reporter', 'json', '--plain-name', ' visual', *tests]
+          with open('baseline-evidence/original.jsonl', 'w') as out, open('baseline-evidence/original.stderr', 'w') as err:
+              result = subprocess.run(command, stdout=out, stderr=err)
+          outcomes, _ = suite_evidence.outcomes('baseline-evidence/original.jsonl')
+          assert len(outcomes) == 5 and all(value not in ('success', 'skipped') for value in outcomes.values()), outcomes
+          assert Path('baseline-evidence/original.jsonl').read_text().count('Pixel test failed') == 5
+          print('Original Linux baseline reproduces all five strict pixel failures:', outcomes)
+          subprocess.run(['flutter', 'test', '--update-goldens', '--plain-name', ' visual', *tests], check=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: original-settings-linux-goldens
+          path: |
+            baseline-evidence/
+            test/goldens/settings_spotlight*.png
+            test/failures/
+          retention-days: 7
