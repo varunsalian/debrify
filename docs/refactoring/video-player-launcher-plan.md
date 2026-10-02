@@ -91,6 +91,14 @@ decides.
   `PlaybackContentType`, `PerItemState`, `NavigationMaps`, and the payload
   data classes that are plain data. Only immutable data, under the guard's
   model rules (AGENTS.md: models are immutable at boundaries).
+  - **Documented exception:** `VideoPlayerLaunchArgs` is an immutable
+    parameter bundle, but it carries borrowed callbacks and one borrowed
+    mutable handle, `seriesSourceFetcher` (328). That fetcher keeps session
+    flags (`series_source_fetcher.dart:238`) and mutates them while fetching
+    (278), and `copyWith` passes the same object on (513).
+  - The args never own or mutate it; they hand it to the player. Record this
+    borrowed-handle exception in Progress. It goes away when the fetcher's
+    session state moves behind a contract, out of scope here.
   - The payload's **mutable MDBList session objects and factories** (5232)
     stay in `data/`, with the payload type that holds them. Metadata push
     mutates their identity (4011), and teardown clears the factory before
@@ -253,7 +261,7 @@ next-episode ordering (3566).
 | --- | --- | --- |
 | 0 | Baseline, dependency report, verbatim checker, source-text inventory | Nothing moves. |
 | 1 | Create the feature, register it in the guard (with the size-exception table) and CI. Move `models/` (`PlaybackContentType`, `VideoPlayerLaunchArgs` and the `toWidget` extension, payload data classes, `PerItemState`, `NavigationMaps`, `LauncherEntry`) and the shared `data/` cores (`native_scrobble_session.dart`, `stream_redirect_resolver.dart`). | Ports the theme source guard (see Source-text tests). |
-| 2 | `data/`: resume-record parsing, entry-URL resolution, payload builder and playlist resolver, MDBList native session, metadata push, progress and completion handling | All context-free. |
+| 2 | `data/`: first the resume helpers `readMovieResumeState` (724) and `resumeIdForEntry` (681), with facade forwarders; then resume-record parsing, entry-URL resolution, payload builder and playlist resolver, MDBList native session, metadata push, progress and completion handling | All context-free. The builder calls both resume helpers (6252, 6533), the native launch's source-playlist resolver calls `readMovieResumeState` (2702), and `readMovieResumeState` calls `resumeIdForEntry` (735). So they need a data owner before anything uses them; `data/` code may not call back through the launcher. |
 | 3 | `data/`: IPTV on Android TV, then `_launchOnAndroidTv` (size exception) | **Full-suite gate 1** after this step. |
 | 4 | `presentation/legacy_launch/`: observers, external players, DeoVR, disclosure, analytics labels, external launch commit and seeding, progress-seeding helpers, WebDAV notice, `_push` | One commit per cohesive group is fine. |
 | 5 | Facade, guards, CI, **full-suite gate 2** | See "Definition of done". |
@@ -392,8 +400,11 @@ failures, no missing tests, no new skips.
    - `presentation/legacy_launch/` is a named bridge folder: it may import
      `lib/services/`, never `http`, `shared_preferences` or `sqflite`. That
      means generalising `LEGACY_PLAYBACK_BRIDGE` to a tuple of bridge folders.
-   - Every file is under 500 lines, except the documented
-     `android_tv_native_launch.dart` exception, capped at its moved size.
+   - Every file is under 500 lines, except the four files in the
+     size-exception table (`android_tv_native_launch.dart`,
+     `android_tv_payload_builder.dart`, `native_progress_handler.dart`,
+     `launch_router.dart`). Each is capped at its measured moved size in the
+     guard's exception table. No other file gets an exception.
 3. **Checks.** `check_verbatim_moves.py` passes for every original
    declaration, with its self-tests. No `TEMP(vpl)` markers remain.
 4. **Analyzer and tests.** The whole-repo analyzer chain adds no
@@ -406,8 +417,10 @@ failures, no missing tests, no new skips.
      plus the tests that exercise the launcher's behaviour through
      `debugNativePlaybackSession`/`debugNativeResumePositions` and `push`
      (list them in step 0).
-   - Any of their failures at `vpl/base` go in
-     `ci_behavior_known_failures.txt` by exact identity.
+   - Seed `ci_behavior_known_failures.txt` from the failures that **still
+     fail at gate 2**, by exact identity, not from every `vpl/base` failure.
+     A stale guard repaired during the port must not be listed:
+     `suite_evidence.py check` fails on a listed test that passes.
    - Measure the job; split it rather than drop tests if it would pass about
      12 minutes.
    - CI passes on `private`.
