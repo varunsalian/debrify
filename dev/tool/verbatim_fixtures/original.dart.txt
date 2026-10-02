@@ -1,0 +1,9 @@
+/// Class documentation.
+class VideoPlayerLauncher {
+  /// Method documentation.
+  static Future<int> run(int value, {String label = 'old'}) async {
+    print('keep $label');
+    await Future<void>.value();
+    return value;
+  }
+}

@@ -1,0 +1,101 @@
+// AST/token adapter for check_verbatim_moves.py. Tool-only analyzer 14.3.0;
+// its isolated package config never changes the application's dependencies.
+import 'dart:convert';
+import 'dart:io';
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:analyzer/dart/ast/token.dart';
+
+class Identifiers extends RecursiveAstVisitor<void> {
+  final List<Map<String, Object>> values = [];
+  @override
+  void visitSimpleIdentifier(SimpleIdentifier node) {
+    values.add({'name': node.name, 'offset': node.offset, 'end': node.end});
+    super.visitSimpleIdentifier(node);
+  }
+}
+
+String nameOf(AstNode node) {
+  if (node is ClassDeclaration) return node.namePart.typeName.lexeme;
+  if (node is EnumDeclaration) return node.namePart.typeName.lexeme;
+  if (node is ExtensionDeclaration) return node.name?.lexeme ?? '<unnamed>';
+  if (node is FunctionDeclaration) return node.name.lexeme;
+  if (node is MethodDeclaration) return node.name.lexeme;
+  if (node is ConstructorDeclaration) {
+    return node.typeName2!.lexeme + (node.name == null ? '' : '.${node.name!.lexeme}');
+  }
+  if (node is FieldDeclaration) return node.fields.variables.single.name.lexeme;
+  if (node is TopLevelVariableDeclaration) return node.variables.variables.single.name.lexeme;
+  throw StateError('Unsupported declaration ${node.runtimeType}: ${node.toSource()}');
+}
+
+Map<String, Object?> describe(AstNode node, String source, {String owner = '', required List<int> positions}) {
+  int pos(int offset) => positions[offset];
+  final ids = Identifiers();
+  node.accept(ids);
+  final start = node is AnnotatedNode
+      ? node.documentationComment?.offset ?? node.offset
+      : node.offset;
+  final tokens = <Map<String, Object>>[];
+  var token = node is AnnotatedNode
+      ? (node.metadata.isEmpty ? node.firstTokenAfterCommentAndMetadata : node.metadata.first.beginToken)
+      : node.beginToken;
+  while (true) {
+    Token? comment = token.precedingComments;
+    while (comment != null) {
+      if (comment.offset >= start) {
+        tokens.add({'text': comment.lexeme, 'offset': pos(comment.offset), 'comment': true});
+      }
+      comment = comment.next;
+    }
+    tokens.add({'text': token.lexeme, 'offset': pos(token.offset), 'comment': false});
+    if (token.offset >= node.endToken.offset || token.next == null) break;
+    token = token.next!;
+  }
+  final members = node is ClassDeclaration ? node.body.members
+      : node is ExtensionDeclaration ? node.body.members : <ClassMember>[];
+  FormalParameterList? parameters;
+  FunctionBody? body;
+  if (node is MethodDeclaration) { parameters = node.parameters; body = node.body; }
+  if (node is FunctionDeclaration) {
+    parameters = node.functionExpression.parameters;
+    body = node.functionExpression.body;
+  }
+  if (node is ConstructorDeclaration) parameters = node.parameters;
+  return {
+    'name': nameOf(node), 'owner': owner, 'kind': node.runtimeType.toString(),
+    'offset': pos(node.offset), 'start': pos(start), 'end': pos(node.end),
+    'text': source.substring(start, node.end), 'tokens': tokens,
+    'identifiers': [for (final id in ids.values) {...id, 'offset': pos(id['offset'] as int), 'end': pos(id['end'] as int)}],
+    'members': [for (final m in members) describe(m, source, owner: nameOf(node), positions: positions)],
+    'endTokenText': node.endToken.lexeme,
+    'parameters': parameters?.toSource(),
+    'parameterNames': [for (final p in parameters?.parameters ?? <FormalParameter>[]) p.name?.lexeme],
+    'namedParameters': [for (final p in parameters?.parameters ?? <FormalParameter>[]) p.isNamed],
+    'bodyOffset': body == null ? null : pos(body.offset), 'bodyText': body?.toSource(),
+  };
+}
+
+void main() {
+  final input = jsonDecode(stdin.readLineSync()!) as Map<String, dynamic>;
+  final output = <String, Object>{};
+  for (final entry in input.entries) {
+    final source = entry.value as String;
+    final parsed = parseString(content: source, throwIfDiagnostics: false);
+    if (parsed.errors.isNotEmpty) {
+      throw StateError('${entry.key}: ${parsed.errors}');
+    }
+    final positions = <int>[0];
+    var point = 0;
+    for (final rune in source.runes) {
+      if (rune > 0xffff) positions.add(point);
+      positions.add(++point);
+    }
+    output[entry.key] = {
+      'declarations': [for (final d in parsed.unit.declarations) describe(d, source, positions: positions)],
+      'directives': [for (final d in parsed.unit.directives) d.toSource()],
+    };
+  }
+  stdout.write(jsonEncode(output));
+}

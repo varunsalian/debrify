@@ -445,7 +445,45 @@ failures, no missing tests, no new skips.
 
 | Step | Commit | Launcher lines | Result |
 | --- | --- | --- | --- |
-| 0 | | 6,594 | |
+| 0 | Step-0 commit (recorded by step 1) | 6,594 | Baseline, dependency report, 154-leaf manifest and checker/self-tests committed before any move. |
+
+### Step 0 evidence
+
+- Application source/lockfile at HEAD `3bf55ea4` are identical to `204b1011`.
+  Flutter 3.44.8 / Dart 3.12.2, framework `058e0af2c2`.
+- `python3 dev/tool/suite_evidence.py run vpl/base`: 10,294 success,
+  20 failure, 29 error, 20 skipped; complete JSON evidence under the git
+  common directory's `refactor-evidence/vpl/`. Exit 1 is baseline evidence,
+  not a passing full suite. Subsequent gates must pass the identity comparison.
+- `flutter analyze > <E>/vpl/analyze-base.txt`: 836 existing diagnostics;
+  launcher has three warnings and five infos. The only allowed warning
+  removals are the three specified above.
+- [Dependency report](video-player-launcher-deps.md): all 154 leaves and
+  283 declarations including members of whole classes, destinations, imports,
+  private cross-file edges, state owners and layer decisions; nothing unresolved.
+- `check_verbatim_moves.py --self-test`: all 154 in-place leaves pass;
+  correct split passes; changed default/literal/order/await, duplicate/missing/
+  empty declarations and changed facade defaults/argument order are rejected.
+  Token completeness is checked, including declarations with doc comments.
+  The isolated parser uses pinned analyzer 14.3.0 and a checked-in tool lockfile;
+  it changes no application dependency. Source fixtures use `.dart.txt` to
+  keep tool-only packages and intentionally broken fixtures out of app analysis.
+- `VideoPlayerLaunchArgs` has no subclass/implementation and no `toWidget`
+  tear-off; all seven references are calls. Its borrowed fetcher exception
+  remains until that service's session state moves behind a contract.
+- Enum full-text uses are exactly the three log interpolations at original
+  3883, 3891 and 5889; native/persisted projection uses `.name`. Accepted log
+  label exception: `_PlaybackContentType` becomes `PlaybackContentType`.
+- Android TV launch enrichment, finish/disposal and next-episode ordering
+  remain **pending on a real Android TV device**. Host tests cover builder
+  payload/resume behavior only.
+- Temporary oversized original: `lib/services/video_player_launcher.dart`
+  retains unmoved routing/native/tracker/external responsibilities through
+  steps 1–4; extraction milestones are those steps, then the 300-line facade
+  at step 5. Four whole-declaration exceptions will be measured on creation;
+  their exit milestone is a later control-flow split.
+- Bridge exit milestone: move legacy service calls behind data contracts and
+  dissolve `presentation/legacy_launch/` in a later migration.
 
 ## Found, not fixed
 

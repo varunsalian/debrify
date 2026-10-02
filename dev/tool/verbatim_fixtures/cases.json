@@ -1,0 +1,57 @@
+{
+  "correct_split": {
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+    "passes": true
+  },
+  "changed_default": {
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'new'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+    "passes": false
+  },
+  "changed_string": {
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('changed $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+    "passes": false
+  },
+  "reordered_statement": {
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    await Future<void>.value();\n    print('keep $label');\n    return value;\n  }\n}\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+    "passes": false
+  },
+  "dropped_await": {
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    Future<void>.value();\n    return value;\n  }\n}\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+    "passes": false
+  },
+  "duplicated_declaration": {
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n\n/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+    "passes": false
+  },
+  "missing_declaration": {
+    "owner": "",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+    "passes": false
+  },
+  "empty_input": {
+    "owner": "",
+    "facade": "",
+    "passes": false
+  },
+  "forwarder_default": {
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'new'}) => Owner.run(value, label: label);\n}\n",
+    "passes": false
+  },
+  "forwarder_arguments": {
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(2, label: label);\n}\n",
+    "passes": false
+  },
+  "unknown_declaration": {
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n\nint unexpected = 1;\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+    "passes": false
+  }
+}

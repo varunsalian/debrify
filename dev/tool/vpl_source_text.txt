@@ -1,0 +1,12 @@
+# VideoPlayerLauncher source-text inventory at 204b1011
+# Search: rg video_player_launcher|VideoPlayerLauncher|toWidget across test/dev/lib; inspect all File/readAsString uses and named member literals.
+# Path | port step | preserved meaning
+test/manual_source_validation_contract_test.dart | 3,4 | Split router/native sources; preserve recovery, call-order and negative assertions.
+test/android_tv_mdblist_progress_source_test.dart | 2,3,4 | Payload/builder/metadata/native sources and seeding/router; repair resolver marker to actual signature, preserve every assertion, scan all feature files for whole-source negatives.
+test/native_player_settings_wiring_test.dart | 3,4 | Scan original plus entire feature to retain the two terminal-error guards and routing catch.
+test/media_server_watch_player_wiring_test.dart | 3 | Read native launch owner; preserve prepare/commit/observe/close ordering.
+test/media_server_player_resume_test.dart | 2 | Behavior importer uses debug resume harness; source reader targets only unchanged player screen.
+test/theme/source_guard_test.dart | 1,4 | Extension construction count must be exactly one (mutation checks zero/two); router and all legacy bridge files keep frozen-route/no MaterialPageRoute rules; line-184 allowed set retains meaning.
+dev/tool/theme_rendered_set.py | 1,4 | Register extension and legacy bridge as route boundaries; retain facade boundary.
+dev/tool/file_size_baseline.txt | 1,2,3,4 | Ratchet launcher shrink; hand-register only builder/native-launch measured over-800 exceptions.
+dev/tool/ci_behavior_tests.txt | 1,5 | Register all affected source and behavioral tests; gate2 exact still-failing identities only.

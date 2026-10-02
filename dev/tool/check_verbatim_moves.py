@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""Compare every manifest leaf with its one owner, including in-place leaves.
+
+Dart's analyzer supplies declaration boundaries and scanner tokens: literals,
+annotations, defaults, initializers, comments and statement order are retained.
+Only whitespace outside literals, registered symbol renames and the qualifier
+of that symbol's registered owner are normalized. Split classes are never
+compared whole. Forwarders are independently checked, including signatures and
+argument order. Tool-only analyzer 14.3.0 is resolved in git's evidence directory
+(or --parser-package); no application dependency is added. Not a CI check:
+its default original is git show 204b1011:lib/services/video_player_launcher.dart.
+
+  python3 dev/tool/check_verbatim_moves.py [--self-test]
+  python3 dev/tool/check_verbatim_moves.py --baseline REV --source PATH \
+      --manifest PATH --feature DIR
+"""
+import argparse
+import csv
+import difflib
+import json
+import re
+import subprocess
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE = 'lib/services/video_player_launcher.dart'
+FEATURE = 'lib/features/player_launch'
+
+
+def parser_package():
+    from suite_evidence import evidence_dir
+    package = evidence_dir() / 'verbatim-parser'
+    config = package / '.dart_tool/package_config.json'
+    if not config.exists():
+        package.mkdir(parents=True, exist_ok=True)
+        (package / 'pubspec.yaml').write_text(
+            "name: refactor_verbatim_parser\nenvironment:\n"
+            "  sdk: '>=3.12.0 <4.0.0'\ndependencies:\n  analyzer: 14.3.0\n")
+        (package / 'pubspec.lock').write_text(
+            (ROOT / 'dev/tool/verbatim_parser.pubspec.lock').read_text())
+        subprocess.run(['dart', 'pub', 'get', '--enforce-lockfile', '--directory', str(package)],
+                       check=True, stdout=subprocess.DEVNULL)
+    return config
+
+
+def parse(sources, package=None):
+    package = package or parser_package()
+    adapter = ROOT / 'dev/tool/verbatim_ast.dart.txt'
+    kernel = package.parent / 'verbatim_ast.dill'
+    if not kernel.exists() or kernel.stat().st_mtime < adapter.stat().st_mtime:
+        subprocess.run(['dart', 'compile', 'kernel', '--packages=' + str(package),
+                        '-o', str(kernel), str(adapter)], check=True,
+                       stdout=subprocess.DEVNULL)
+    result = subprocess.run(
+        ['dart', str(kernel)],
+        input=json.dumps(sources), text=True, capture_output=True, check=True)
+    parsed = json.loads(result.stdout)
+    def complete(node):
+        code = [t for t in node['tokens'] if not t['comment']]
+        if not code or code[-1]['text'] != node['endTokenText']:
+            raise ValueError('Incomplete token parse: ' + node['name'])
+        for member in node['members']: complete(member)
+    for unit in parsed.values():
+        for declaration in unit['declarations']: complete(declaration)
+    return parsed
+
+
+def read_manifest(path):
+    with Path(path).open() as file:
+        rows = list(csv.DictReader(file, delimiter='\t'))
+    if not rows or len({r['original_name'] for r in rows}) != len(rows):
+        raise ValueError('Empty manifest or duplicate original names')
+    destinations = [(r['destination_file'], r['destination_class'], r['new_name']) for r in rows]
+    if len(set(destinations)) != len(destinations):
+        raise ValueError('Duplicate destination ownership')
+    return rows
+
+
+def split_names(rows):
+    return {r['original_name'].split('.')[0] for r in rows if '.' in r['original_name']}
+
+
+def original_leaves(declarations, splits):
+    leaves = {}
+    for d in declarations:
+        items = [(d['name'] + '.' + m['name'], m) for m in d['members']] if d['name'] in splits else [(d['name'], d)]
+        for name, node in items:
+            if name in leaves:
+                raise ValueError('Duplicate declaration: ' + name)
+            leaves[name] = node
+    return leaves
+
+
+def renames(rows):
+    mapping = {r['original_name'].split('.')[-1]: r['new_name'] for r in rows
+               if r['original_name'].split('.')[-1] != r['new_name']}
+    for row in rows:
+        for old, new in re.findall(r'rename:(\w+)=(\w+)', row['expected_difference']):
+            mapping[old] = new
+    return mapping
+
+
+def canonical(node, rows, *, static_added=False):
+    mapping = renames(rows)
+    owner_for = {r['new_name']: r['destination_class'] for r in rows if r['destination_class']}
+    tokens = node['tokens']
+    result = []
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        value = token['text']
+        if token['comment']:
+            result.append(re.sub(r'\s+', '', value)); i += 1; continue
+        value = mapping.get(value, value)
+        if i + 2 < len(tokens) and tokens[i + 1]['text'] == '.':
+            target = mapping.get(tokens[i + 2]['text'], tokens[i + 2]['text'])
+            if value == owner_for.get(target) or (value == 'VideoPlayerLauncher' and target in owner_for):
+                i += 2; continue
+        if static_added and value == 'static':
+            static_added = False; i += 1; continue
+        result.append(value)
+        i += 1
+    return result
+
+
+def apply_exact_exceptions(original, rows, package=None):
+    """Patch only named original snippets, once each, to the expected text.
+
+    Applying these to the baseline and then comparing complete declarations
+    means neither a broad ignore nor an additional 'warning fix' can pass.
+    """
+    patches = {
+        'VideoPlayerLauncher._handleProgressUpdate': (
+            'progressUrl ??\n              (resumeId != null ? _resolvedStreamCache[resumeId] : null)',
+            'progressUrl ??\n              _resolvedStreamCache[resumeId]'),
+        '_AndroidTvPlaylistResolver': (
+            '${target != null}, entry: ${target?.entry.title}',
+            '${true}, entry: ${target.entry.title}'),
+    }
+    changed = {}
+    for row in rows:
+        key = row['original_name']
+        note = row['expected_difference']
+        if note.startswith('warning fix'):
+            if key not in patches:
+                raise ValueError('Unknown exact warning exception: ' + key)
+            before, after = patches[key]
+            text = original[key]['text']
+            if text.count(before) != 1:
+                raise ValueError('Warning exception baseline differs: ' + key)
+            text = text.replace(before, after)
+            owner = original[key]['owner']
+            changed[key] = f'class {owner} {{\n{text}\n}}' if owner else text
+    if not changed:
+        return {}
+    parsed = parse(changed, package)
+    return {key: value['declarations'][0]['members'][0] if original[key]['owner']
+            else value['declarations'][0] for key, value in parsed.items()}
+
+
+def forwarding_source(node, row):
+    prefix = node['text'][:node['bodyOffset'] - node['start']]
+    args = [f'{name}: {name}' if named else name for name, named in
+            zip(node['parameterNames'], node['namedParameters'])]
+    return prefix + '=> ' + row['destination_class'] + '.' + row['new_name'] + '(' + ', '.join(args) + ');'
+
+
+def check(original_source, sources, rows, source_path=SOURCE, package=None):
+    errors = []
+    parsed = parse({'<original>': original_source, **sources}, package)
+    splits = split_names(rows)
+    original = original_leaves(parsed['<original>']['declarations'], splits)
+    known = {r['original_name'] for r in rows}
+    if not original or set(original) != known:
+        return ['Original parse/manifest mismatch: missing=' + str(sorted(known - set(original)))
+                + ' extra=' + str(sorted(set(original) - known))]
+    expected_patches = apply_exact_exceptions(original, rows, package)
+    current = original_leaves(parsed[source_path]['declarations'], splits)
+    destination_nodes = {}
+    expected_dest = {(r['destination_file'], r['destination_class'], r['new_name']) for r in rows}
+    for path, unit in parsed.items():
+        if path in ('<original>', source_path): continue
+        for d in unit['declarations']:
+            whole = (path, '', d['name'])
+            if whole in expected_dest:
+                items = [(whole, d)]
+            else:
+                wrapper = (path, d['name'])
+                if not any((p, c) == wrapper for p, c, _ in expected_dest):
+                    errors.append('Unknown destination declaration: ' + str(whole))
+                items = [((path, d['name'], m['name']), m) for m in d['members']]
+                if d['name'] == 'VideoPlayerLaunchArgsWidget':
+                    header = d['text'].split('{', 1)[0]
+                    if re.sub(r'\s+', '', header) != 'extensionVideoPlayerLaunchArgsWidgetonVideoPlayerLaunchArgs':
+                        errors.append('toWidget extension target/header changed')
+            for key, node in items:
+                if key not in expected_dest: errors.append('Unknown destination leaf: ' + str(key))
+                if key in destination_nodes: errors.append('Duplicate destination declaration: ' + str(key))
+                destination_nodes[key] = node
+    forwarders = {}
+    for row in rows:
+        key = row['original_name']; baseline = original[key]
+        destination = destination_nodes.get((row['destination_file'], row['destination_class'], row['new_name']))
+        in_place = current.pop(key, None)
+        if destination is None:
+            if in_place is None: errors.append('Missing declaration: ' + key); continue
+            actual, expected, added = in_place, baseline, False
+        else:
+            actual = destination
+            expected = expected_patches.get(key, baseline)
+            added = row['expected_difference'].startswith(('state owner:', 'static owner:'))
+            if added:
+                # Only the declaration modifier may be new; initializer/body
+                # tokens still compare in full, and duplicate fields fail above.
+                if not any(t['text'] == 'static' for t in actual['tokens']):
+                    errors.append('Missing static single owner: ' + key)
+            if in_place is not None:
+                if key.startswith('VideoPlayerLauncher.') and not key.split('.')[-1].startswith('_') and baseline['parameters'] is not None:
+                    forwarders[key] = 'class VideoPlayerLauncher {\n' + forwarding_source(baseline, row) + '\n}'
+                else:
+                    errors.append('Duplicate original/destination declaration: ' + key)
+        before = canonical(expected, rows)
+        after = canonical(actual, rows, static_added=added)
+        if before != after:
+            diff = '\n'.join(list(difflib.unified_diff(before, after, fromfile=key, tofile=row['destination_file']))[:60])
+            errors.append('Non-verbatim declaration: ' + key + '\n' + diff)
+    if current:
+        errors.append('Unknown original declarations: ' + str(sorted(current)))
+    if forwarders:
+        expected = parse(forwarders, package)
+        current_all = original_leaves(parsed[source_path]['declarations'], splits)
+        for key, unit in expected.items():
+            if canonical(unit['declarations'][0]['members'][0], rows) != canonical(current_all[key], rows):
+                errors.append('Forwarder signature/default/arguments changed: ' + key)
+    return errors
+
+
+def self_test(package=None):
+    fixtures = ROOT / 'dev/tool/verbatim_fixtures'
+    rows = read_manifest(fixtures / 'manifest.tsv')
+    original = (fixtures / 'original.dart.txt').read_text()
+    cases = json.loads((fixtures / 'cases.json').read_text())
+    for name, case in cases.items():
+        sources = {SOURCE: case['facade'], 'owner.dart': case['owner']}
+        errors = check(original, sources, rows, package=package)
+        if bool(errors) == case['passes']:
+            raise AssertionError(f'Self-test {name}: {errors}')
+        print(f'Self-test {name}: {"PASS" if not errors else "rejected"}')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--baseline', default='204b1011')
+    parser.add_argument('--source', default=SOURCE)
+    parser.add_argument('--manifest', default='dev/tool/vpl_manifest.tsv')
+    parser.add_argument('--feature', default=FEATURE)
+    parser.add_argument('--parser-package', type=Path)
+    parser.add_argument('--self-test', action='store_true')
+    args = parser.parse_args()
+    package = args.parser_package or parser_package()
+    if args.self_test: self_test(package)
+    rows = read_manifest(ROOT / args.manifest)
+    original = subprocess.run(['git', 'show', f'{args.baseline}:{args.source}'],
+                              cwd=ROOT, text=True, capture_output=True, check=True).stdout
+    sources = {args.source: (ROOT / args.source).read_text()}
+    sources.update({p.relative_to(ROOT).as_posix(): p.read_text()
+                    for p in (ROOT / args.feature).rglob('*.dart')})
+    errors = check(original, sources, rows, args.source, package)
+    if errors:
+        print('\n'.join(errors)); return 1
+    print(f'Verbatim moves: {len(rows)} leaves and all present facade forwarders passed.')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
