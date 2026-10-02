@@ -481,7 +481,7 @@ final class LaunchRouter {
     // Every external-activity launch below arms the playback-return signal
     // (content only): control comes straight back to Flutter without a route
     // ever being pushed, so RouteAware can't tell those screens when playback
-    // actually ended. See [_notifyOnReturnFromExternalActivity].
+    // actually ended. See [ExternalActivityLifecycle.notifyOnReturnFromExternalActivity].
     if (!args.disableExternalPlayer && defaultPlayerMode == 'external') {
       int? chosenSeason;
       int? chosenEpisode;

@@ -1,165 +1,189 @@
 {
-  "correct_split": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "passes": true
-  },
-  "changed_default": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'new'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "passes": false
-  },
-  "changed_string": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('changed $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "passes": false
-  },
-  "reordered_statement": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    await Future<void>.value();\n    print('keep $label');\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "passes": false
-  },
-  "dropped_await": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "passes": false
-  },
-  "duplicated_declaration": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n\n/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "passes": false
-  },
-  "missing_declaration": {
-    "owner": "",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "passes": false
-  },
-  "empty_input": {
-    "owner": "",
-    "facade": "",
-    "passes": false
-  },
-  "forwarder_default": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'new'}) => Owner.run(value, label: label);\n}\n",
-    "passes": false
-  },
-  "forwarder_arguments": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(2, label: label);\n}\n",
-    "passes": false
-  },
-  "unknown_declaration": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n\nint unexpected = 1;\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "passes": false
-  },
-  "approved_annotation": {
-    "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "exception": "annotation removal: @visibleForTesting on moved implementation only",
-    "passes": true
-  },
-  "lost_facade_annotation": {
-    "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "exception": "annotation removal: @visibleForTesting on moved implementation only",
-    "passes": false
-  },
-  "annotation_not_removed": {
-    "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "exception": "annotation removal: @visibleForTesting on moved implementation only",
-    "passes": false
-  },
-  "empty_original": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "passes": false,
-    "original": ""
-  },
-  "changed_split_header": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nabstract class VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "passes": false
-  },
-  "correct_state_owner": {
-    "original": "double _state = 0.0;",
-    "facade": "",
-    "owner": "final class State { static double state = 0.0; }",
-    "manifest": [
-      {
-        "original_name": "_state",
-        "destination_file": "owner.dart",
-        "destination_class": "State",
-        "new_name": "state",
-        "expected_difference": "state owner: add static only; retain initializer"
-      }
-    ],
-    "passes": true
-  },
-  "changed_state_initializer": {
-    "original": "double _state = 0.0;",
-    "facade": "",
-    "owner": "final class State { static double state = 1.0; }",
-    "manifest": [
-      {
-        "original_name": "_state",
-        "destination_file": "owner.dart",
-        "destination_class": "State",
-        "new_name": "state",
-        "expected_difference": "state owner: add static only; retain initializer"
-      }
-    ],
-    "passes": false
-  },
-  "missing_static_state": {
-    "original": "double _state = 0.0;",
-    "facade": "",
-    "owner": "final class State { double state = 0.0; }",
-    "manifest": [
-      {
-        "original_name": "_state",
-        "destination_file": "owner.dart",
-        "destination_class": "State",
-        "new_name": "state",
-        "expected_difference": "state owner: add static only; retain initializer"
-      }
-    ],
-    "passes": false
-  },
-  "duplicated_state": {
-    "original": "double _state = 0.0;",
-    "facade": "",
-    "owner": "final class State { static double state = 0.0; static double state = 0.0; }",
-    "manifest": [
-      {
-        "original_name": "_state",
-        "destination_file": "owner.dart",
-        "destination_class": "State",
-        "new_name": "state",
-        "expected_difference": "state owner: add static only; retain initializer"
-      }
-    ],
-    "passes": false
-  },
-  "forwarder_recursive_owner": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => VideoPlayerLauncher.run(value, label: label);\n}\n",
-    "passes": false
-  },
-  "qualified_receiver_changed": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    receiver.Owner.run();\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
-    "passes": false,
-    "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    receiver.run();\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n"
-  },
-  "formatted_forwarder_call": {
-    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
-    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label,);\n}\n",
-    "passes": true
-  }
+ "correct_split": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": true
+ },
+ "changed_default": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'new'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false
+ },
+ "changed_string": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('changed $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false
+ },
+ "reordered_statement": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    await Future<void>.value();\n    print('keep $label');\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false
+ },
+ "dropped_await": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false
+ },
+ "duplicated_declaration": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n\n/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false
+ },
+ "missing_declaration": {
+  "owner": "",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false
+ },
+ "empty_input": {
+  "owner": "",
+  "facade": "",
+  "passes": false
+ },
+ "forwarder_default": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'new'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false
+ },
+ "forwarder_arguments": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(2, label: label);\n}\n",
+  "passes": false
+ },
+ "unknown_declaration": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n\nint unexpected = 1;\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false
+ },
+ "approved_annotation": {
+  "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "exception": "annotation removal: @visibleForTesting on moved implementation only",
+  "passes": true
+ },
+ "lost_facade_annotation": {
+  "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "exception": "annotation removal: @visibleForTesting on moved implementation only",
+  "passes": false
+ },
+ "annotation_not_removed": {
+  "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "exception": "annotation removal: @visibleForTesting on moved implementation only",
+  "passes": false
+ },
+ "empty_original": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false,
+  "original": ""
+ },
+ "changed_split_header": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nabstract class VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false
+ },
+ "correct_state_owner": {
+  "original": "double _state = 0.0;",
+  "facade": "",
+  "owner": "final class State { static double state = 0.0; }",
+  "manifest": [
+   {
+    "original_name": "_state",
+    "destination_file": "owner.dart",
+    "destination_class": "State",
+    "new_name": "state",
+    "expected_difference": "state owner: add static only; retain initializer"
+   }
+  ],
+  "passes": true
+ },
+ "changed_state_initializer": {
+  "original": "double _state = 0.0;",
+  "facade": "",
+  "owner": "final class State { static double state = 1.0; }",
+  "manifest": [
+   {
+    "original_name": "_state",
+    "destination_file": "owner.dart",
+    "destination_class": "State",
+    "new_name": "state",
+    "expected_difference": "state owner: add static only; retain initializer"
+   }
+  ],
+  "passes": false
+ },
+ "missing_static_state": {
+  "original": "double _state = 0.0;",
+  "facade": "",
+  "owner": "final class State { double state = 0.0; }",
+  "manifest": [
+   {
+    "original_name": "_state",
+    "destination_file": "owner.dart",
+    "destination_class": "State",
+    "new_name": "state",
+    "expected_difference": "state owner: add static only; retain initializer"
+   }
+  ],
+  "passes": false
+ },
+ "duplicated_state": {
+  "original": "double _state = 0.0;",
+  "facade": "",
+  "owner": "final class State { static double state = 0.0; static double state = 0.0; }",
+  "manifest": [
+   {
+    "original_name": "_state",
+    "destination_file": "owner.dart",
+    "destination_class": "State",
+    "new_name": "state",
+    "expected_difference": "state owner: add static only; retain initializer"
+   }
+  ],
+  "passes": false
+ },
+ "forwarder_recursive_owner": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => VideoPlayerLauncher.run(value, label: label);\n}\n",
+  "passes": false
+ },
+ "qualified_receiver_changed": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    receiver.Owner.run();\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false,
+  "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    receiver.run();\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n"
+ },
+ "formatted_forwarder_call": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label,);\n}\n",
+  "passes": true
+ },
+ "doc_link_follows_owner_move": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation. See [Owner.run].\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation. See [VideoPlayerLauncher.run].\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": true,
+  "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation. See [VideoPlayerLauncher.run].\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n"
+ },
+ "doc_link_wrong_target": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation. See [Owner.walk].\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation. See [VideoPlayerLauncher.run].\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false,
+  "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation. See [VideoPlayerLauncher.run].\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n"
+ },
+ "line_comment_kept": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    // Keep this note.\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": true,
+  "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    // Keep this note.\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n"
+ },
+ "line_comment_lost": {
+  "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+  "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+  "passes": false,
+  "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    // Keep this note.\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n"
+ }
 }

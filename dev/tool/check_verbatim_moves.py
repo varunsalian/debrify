@@ -14,6 +14,7 @@ its default original is git show 204b1011:lib/services/video_player_launcher.dar
   python3 dev/tool/check_verbatim_moves.py --baseline REV --source PATH \
       --manifest PATH --feature DIR
 """
+from collections import Counter
 import argparse
 import csv
 import difflib
@@ -112,6 +113,17 @@ def canonical(node, rows, *, static_added=False, normalize_qualifiers=True):
         token = tokens[i]
         value = token['text']
         if token['comment']:
+            # Doc links ([name], [Owner.name]) follow the same registered
+            # renames and owner qualifiers as code; any other text is exact.
+            def link(match):
+                parts = match.group(1).split('.')
+                name = mapping.get(parts[-1], parts[-1])
+                owner = parts[0] if len(parts) == 2 else None
+                if owner and (owner == owner_for.get(name)
+                              or (owner == origin_owner_for.get(name) and name in owner_for)):
+                    return '[' + name + ']'
+                return '[' + '.'.join(parts[:-1] + [name]) + ']'
+            value = re.sub(r'\[(\w+(?:\.\w+)?)\]', link, value)
             result.append(re.sub(r'\s+', '', value)); i += 1; continue
         value = mapping.get(value, value)
         if (normalize_qualifiers and i + 2 < len(tokens)
@@ -185,6 +197,49 @@ def forwarding_tokens(node, rows):
     return tokens
 
 
+def line_comments(text, rows):
+    """Non-doc `//` comments: whole-line ones, plus trailing ones whose code
+    part has balanced quotes (so `//` inside a string never counts)."""
+    mapping = renames(rows)
+    owner_for = {r['new_name']: r['destination_class'] for r in rows if r['destination_class']}
+    origin_owner_for = {r['new_name']: r['original_name'].split('.')[0]
+                        for r in rows if '.' in r['original_name']}
+    def link(match):
+        parts = match.group(1).split('.')
+        name = mapping.get(parts[-1], parts[-1])
+        owner = parts[0] if len(parts) == 2 else None
+        if owner and (owner == owner_for.get(name)
+                      or (owner == origin_owner_for.get(name) and name in owner_for)):
+            return '[' + name + ']'
+        return '[' + '.'.join(parts[:-1] + [name]) + ']'
+    found = Counter()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith('///'):
+            continue
+        if stripped.startswith('//'):
+            comment = stripped
+        else:
+            match = re.match(r'^(.*\S)\s+(//(?!/).*)$', line)
+            if not match or match.group(1).count("'") % 2 or match.group(1).count('"') % 2:
+                continue
+            comment = match.group(2)
+        if re.fullmatch(r'//\s*dart format (off|on)\b.*', comment):
+            continue
+        found[re.sub(r'\s+', '', re.sub(r'\[(\w+(?:\.\w+)?)\]', link, comment))] += 1
+    return found
+
+
+def missing_line_comments(original_source, sources, rows):
+    """Every original line comment must survive somewhere in the destinations."""
+    before = line_comments(original_source, rows)
+    after = Counter()
+    for text in sources.values():
+        after += line_comments(text, rows)
+    return [f'Line comment lost ({count}x): {comment}'
+            for comment, count in sorted((before - after).items())]
+
+
 def check(original_source, sources, rows, source_path=SOURCE, package=None):
     errors = []
     parsed = parse({'<original>': original_source, **sources}, package)
@@ -194,6 +249,7 @@ def check(original_source, sources, rows, source_path=SOURCE, package=None):
     if not original or set(original) != known:
         return ['Original parse/manifest mismatch: missing=' + str(sorted(known - set(original)))
                 + ' extra=' + str(sorted(set(original) - known))]
+    errors.extend(missing_line_comments(original_source, sources, rows))
     expected_patches = apply_exact_exceptions(original, rows, package)
     headers = {d['name']: d for d in parsed['<original>']['declarations'] if d['name'] in splits}
     def header(node):

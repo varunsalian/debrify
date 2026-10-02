@@ -631,6 +631,25 @@ failures, no missing tests, no new skips.
 - Bridge exit milestone: move legacy service calls behind data contracts and
   dissolve `presentation/legacy_launch/` in a later migration.
 
+## Review follow-up
+
+A three-agent review of `cfe1e2cd..6d6676cc` found no behaviour change: code
+is token-identical, state has single owners, native payloads are unchanged,
+and the facade signatures match. Fixed afterwards:
+- 17 `//` comments dropped from `VideoPlayerLaunchArgs` are restored.
+- `check_verbatim_moves.py` now also requires every original line comment to
+  survive somewhere in the destinations (it caught exactly those 17). Doc
+  links (`[name]`, `[Owner.name]`) follow the manifest's renames and owner
+  qualifiers. There are four new self-tests (27 in all).
+- Five doc links that pointed at old private names are updated.
+- `ExternalActivityLifecycle._armedReturnObserver` is private again: nothing
+  outside its file used it, so making it public had only widened its
+  visibility.
+
+Open, outside this refactor: `test/iptv_source_search_test.dart` flaked
+twice, once in CI run 36977466848 and once locally. Reading the code points to
+a process-wide catalog refresh job that the tests never drain between cases.
+
 ## Found, not fixed
 
 (none yet)

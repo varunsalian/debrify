@@ -75,9 +75,10 @@ class VideoPlayerLaunchArgs {
 
   final PlaylistViewMode? viewMode;
 
+  // Content metadata for fetching external subtitles from Stremio addons
   final String? contentImdbId;
 
-  final String? contentType;
+  final String? contentType; // 'movie' or 'series'
 
   final int? contentSeason;
 
@@ -87,6 +88,7 @@ class VideoPlayerLaunchArgs {
   /// identity. Direct/generic launchers default to source-specific behavior.
   final PlaybackResumePolicy resumePolicy;
 
+  // IPTV channel list for in-player channel switching
   final List<IptvChannel>? iptvChannels;
 
   final int? iptvStartIndex;
@@ -113,12 +115,14 @@ class VideoPlayerLaunchArgs {
 
   final Future<Map<String, dynamic>?> Function(Map<String, dynamic>)? iptvBrowseProvider;
 
+  // Stremio sources for in-player source switching
   final List<Torrent>? stremioSources;
 
   final int? stremioCurrentSourceIndex;
 
   final Future<String?> Function(Torrent)? resolveStremioSource;
 
+  // Torrent search source switching: resolves a Torrent to a full playlist
   final SourcePlaylistResolve? resolveSourceToPlaylist;
 
   /// Startup failover is an automatic Quick Play behavior. Explicit source
@@ -140,8 +144,11 @@ class VideoPlayerLaunchArgs {
 
   final bool startupHasRemainingSavedSources;
 
+  // Series source tabs: on-demand "Load more sources" fetcher for the
+  // pack/episode split. Non-null only for series plays with a searchable id.
   final SeriesSourceFetcher? seriesSourceFetcher;
 
+  // Stremio TV in-player channel guide
   final List<Map<String, dynamic>>? stremioTvChannels;
 
   final String? stremioTvCurrentChannelId;
@@ -158,15 +165,21 @@ class VideoPlayerLaunchArgs {
 
   final Future<Map<String, dynamic>?> Function(String)? stremioTvNextProvider;
 
+  // Trakt scrobble: send playback progress to Trakt
   final bool traktScrobble;
 
+  // Prevent launcher-level Trakt auto-sync upgrade for playlist-origin playback.
+  // Context-scoped, not Trakt-specific: contexts that suppress Trakt auto-sync
+  // (playlists, Stremio TV) suppress the Simkl auto-sync upgrade too.
   final bool suppressTrackerAutoSync;
 
   @Deprecated('Use suppressTrackerAutoSync')
   bool get suppressTraktAutoSync => suppressTrackerAutoSync;
 
+  // Trakt progress: resume fallback when no local resume exists (0-100)
   final double? traktProgressPercent;
 
+  // Simkl scrobble/progress — fully parallel to the Trakt pair above.
   final bool simklScrobble;
 
   final double? simklProgressPercent;
@@ -175,13 +188,14 @@ class VideoPlayerLaunchArgs {
 
   final double? mdblistProgressPercent;
 
-  final String? contentTitle;
+  // Continue watching metadata (for home screen section)
+  final String? contentTitle; // Clean display name (IMDB title)
 
   final String? posterUrl;
 
   final String? contentYear;
 
-  final String? addonId;
+  final String? addonId; // Stremio addon used for playback
 
   /// Subtitle tracks known at launch time, surfaced in the player's subtitle
   /// menu as a pre-loaded provider group (no addon fetch needed). Used for
