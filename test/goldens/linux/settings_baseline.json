@@ -1,0 +1,19 @@
+{
+  "source_revision": "17db33f29164f0dda7d6ff8dd8d9b6b757aadd8b",
+  "host": "Ubuntu Linux x64",
+  "flutter": {
+    "frameworkVersion": "3.44.8",
+    "frameworkRevision": "058e0af2c2b57e369d905a03ac9748b0ebf543c6",
+    "engineRevision": "0cd610717bde95fd88343c64f81c11ba4e5c0010",
+    "engineContentHash": "13ffd72b2f9a5ca4db2a74ea52d5353ec2e8f939",
+    "dartSdkVersion": "3.12.2"
+  },
+  "capture_run": "https://github.com/varunsalian/debrify-refactor/actions/runs/37024823266",
+  "sha256": {
+    "settings_spotlight_desktop.png": "601117f92645660dd40e992cdf61ea2193db7490373a65adefd83fcfcf9254f2",
+    "settings_spotlight_phone.png": "af14c98095b7a4773e8d31a66449667fc03a13fefac97431f8dccb7a492ed603",
+    "settings_spotlight_phone_appearance.png": "70a96fd0a1fb766f1fbdedf1c35d3d670c8f52bad782b3b471aa128cf4d0ffbe",
+    "settings_spotlight_tablet.png": "780066fa6bf57304db1bed4bffc46c588fb87811f72ae731b1883482a4633c99",
+    "settings_spotlight_tv.png": "cbbb3b3bcc3c8af032e2a8c9c38d7c9b0c6eb063604d32bb75e4594d9c5ee0e9"
+  }
+}

@@ -813,8 +813,33 @@ the named files under "Size" below.
   shell/TV fixture tests; those five pass in both observed macOS full gates.
   They have not entered the allowlist. A temporary evidence workflow checks out
   original `17db33f2` on the same Ubuntu/Flutter configuration to characterize
-  those pixels and capture independently grounded Linux references.
+  those pixels and capture independently grounded Linux references (evidence
+  commit `9a20d8f1`).
   https://github.com/varunsalian/debrify-refactor/actions/runs/37021987319
+
+- Original-revision Ubuntu evidence run `37024823266` passes. All five original
+  pixel failures have exactly the same percent/pixel differences as current CI.
+  Every newly captured Linux reference is byte-identical to its original-revision
+  strict-failure test image. SDK/engine revisions, source revision and image hashes
+  are recorded in `test/goldens/linux/settings_baseline.json`.
+  https://github.com/varunsalian/debrify-refactor/actions/runs/37024823266
+- The two existing fixture files now select those original Linux references on
+  Linux and retain the original Mac paths elsewhere. Pixel assertions remain
+  strict; no test is skipped, no existing image is overwritten, and the five
+  passing Mac identities never enter the allowlist. All 21 affected Mac tests
+  pass against gate 2. The temporary capture workflow is removed. Production
+  Dart, the approved exception manifest/checks and the four-entry CI failure
+  list are unchanged. Final whole-repo analyzer still matches all 832 original
+  identities. Refreshed completion run `settings/gate2-final` retains 10315
+  success, 14 failure, 29 error and 20 skips. Full comparisons against the original
+  baseline, gate 1 and the first gate-2 run all pass; no missing, newly failing or
+  newly skipped identities. The historical helper still reports the same 34
+  failures/errors outside its unchanged nine-entry list. Final CI formatting
+  checks 1176 files without changes. Exact-head private CI status and job evidence
+  are retained in the git common directory at
+  `refactor-evidence/settings/gate2-final-private-status.json`; the completion
+  report links that run. Production checks from `8381bfa5` remain valid because
+  the host reference follow-up changes no production Dart or move/check manifests.
 
 ## Found, not fixed
 

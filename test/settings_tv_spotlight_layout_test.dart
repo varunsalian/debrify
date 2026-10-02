@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/settings_golden.dart';
+
 Future<void> _noop() async {}
 void _voidNoop() {}
 void _toggleNoop(bool _) {}
@@ -405,7 +407,7 @@ void main() {
     await tester.pump();
     await expectLater(
       find.byType(SettingsTvLayout),
-      matchesGoldenFile('goldens/settings_spotlight_tv.png'),
+      matchesGoldenFile(settingsGoldenPath('settings_spotlight_tv.png')),
     );
   });
 
