@@ -238,6 +238,27 @@ def expand(paths):
     return out
 
 
+def failure_details(path, identities):
+    """Expose runner errors for unexpected identities without changing verdicts."""
+    suites, tests = {}, {}
+    for line in Path(path).read_text().splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get('type') == 'suite':
+            suites[event['suite']['id']] = event['suite']['path'].replace(str(ROOT) + '/', '')
+        elif event.get('type') == 'testStart':
+            test = event['test']
+            tests[test['id']] = suites[test['suiteID']] + '::' + test['name']
+        elif event.get('type') == 'error' and tests.get(event['testID']) in identities:
+            print('RUNNER ERROR:', tests[event['testID']])
+            print(event.get('error', ''))
+            print(event.get('stackTrace', ''))
+
+
 def cmd_check(known_file, paths):
     paths = expand(paths)
     known = {line.strip() for line in Path(known_file).read_text().splitlines()
@@ -252,6 +273,8 @@ def cmd_check(known_file, paths):
     print(dict(Counter(results.values())))
     for k in unexpected:
         print('UNEXPECTED FAILURE:', k)
+    if unexpected:
+        failure_details(out, set(unexpected))
     for k in stale:
         print('KNOWN FAILURE NO LONGER EXISTS (update the list):', k)
     for k in fixed:
