@@ -145,18 +145,20 @@ void main() {
   });
 
   test('settings update actions enforce the app-update permission', () {
-    final source = File('lib/screens/settings_screen.dart').readAsStringSync();
+    final source = File(
+      'lib/features/settings/presentation/legacy_settings/settings_updates.dart',
+    ).readAsStringSync();
     for (final method in <String>[
-      '_checkForAppUpdates',
-      '_toggleAutoUpdateChecks',
-      '_toggleIncludeAlphaUpdates',
+      'checkForAppUpdates',
+      'toggleAutoUpdateChecks',
+      'toggleIncludeAlphaUpdates',
     ]) {
       expect(
         source,
         matches(
           RegExp(
             'Future<void> $method\\([^)]*\\) async \\{\\s*'
-            'if \\(!await _ensureProfileFeature\\('
+            'if \\(!await _deps\\.ensureProfileFeature\\('
             'ProfileFeature\\.appUpdates\\)\\) return;',
           ),
         ),

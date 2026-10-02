@@ -94,7 +94,8 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/settings/trakt_settings_page.dart': 1,
   'lib/screens/settings/widgets/dynamic_settings_builder.dart': 7,
   'lib/screens/settings/widgets/settings_widgets.dart': 10,
-  'lib/screens/settings_screen.dart': 1,
+  'lib/features/settings/presentation/legacy_settings/settings_release_details.dart':
+      0,
   'lib/screens/stremio_tv/stremio_tv_filter_page.dart': 0,
   'lib/screens/stremio_tv/stremio_tv_screen.dart': 0,
   'lib/screens/stremio_tv/widgets/stremio_tv_empty_state.dart': 0,
@@ -139,6 +140,9 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/screens/settings_screen.dart': 0,
+  'lib/features/settings/presentation/legacy_settings/settings_download_location.dart':
+      1,
   'lib/features/settings/presentation/settings_search_bar.dart': 3,
   'lib/screens/search_screen/home_saved_composition.dart': 0,
   'lib/screens/search_screen/discover_panel_composition.dart': 0,

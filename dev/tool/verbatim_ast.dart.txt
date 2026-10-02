@@ -54,6 +54,15 @@ class References extends RecursiveAstVisitor<void> {
   }
 
   @override
+  void visitRecordTypeAnnotation(RecordTypeAnnotation node) {
+    final named = node.namedFields;
+    if (named?.endToken.previous?.lexeme == ',') {
+      formatCommas.add(named!.endToken.previous!.offset);
+    }
+    super.visitRecordTypeAnnotation(node);
+  }
+
+  @override
   void visitFunctionExpression(FunctionExpression node) {
     scopes.add('${callbacks.length}');
     parameters.add({
@@ -87,6 +96,14 @@ class References extends RecursiveAstVisitor<void> {
     while (statement != null && statement is! Statement) {
       statement = statement.parent;
     }
+    final blocks = <int>[];
+    for (
+      AstNode? ancestor = parent;
+      ancestor != null;
+      ancestor = ancestor.parent
+    ) {
+      if (ancestor is Block) blocks.add(ancestor.offset);
+    }
     values.add({
       'name': node.name,
       'offset': node.offset,
@@ -102,6 +119,8 @@ class References extends RecursiveAstVisitor<void> {
       'contextParameter': parameters.any((p) => p.contains('context')),
       'parent': parent.runtimeType.toString(),
       'statementOffset': statement?.offset,
+      'statementInBlock': statement?.parent is Block,
+      'blocks': blocks,
     });
     super.visitSimpleIdentifier(node);
   }
@@ -313,6 +332,7 @@ Map<String, Object?> describe(
           'statementOffset': r['statementOffset'] == null
               ? null
               : pos(r['statementOffset'] as int),
+          'blocks': [for (final block in r['blocks'] as List<int>) pos(block)],
         },
     ],
     'formatCommas': [for (final offset in refs.formatCommas) pos(offset)],

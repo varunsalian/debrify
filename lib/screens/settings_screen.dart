@@ -1,62 +1,53 @@
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_updates.dart';
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_diagnostics.dart';
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_page_navigation.dart';
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_connection_navigation.dart';
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_profile_actions.dart';
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_backup.dart';
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_restore.dart';
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_download_location.dart';
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_maintenance.dart';
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_release_details.dart';
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_appearance_navigation.dart';
+import 'package:debrify/features/settings/presentation/legacy_settings/settings_snacks.dart';
 import 'package:debrify/features/settings/presentation/legacy_settings/settings_summaries.dart';
 import 'package:debrify/features/settings/presentation/legacy_settings/settings_connections.dart';
 import 'package:debrify/features/settings/application/settings_pending_credentials.dart';
 import 'package:debrify/features/settings/presentation/settings_layout.dart';
 export 'package:debrify/features/settings/application/settings_pending_credentials.dart' show shouldApplyPendingCredentialOverride;
 import 'package:debrify/services/storage/alldebrid_storage.dart';
-import 'package:debrify/services/storage/continue_watching_storage.dart';
 import 'package:debrify/services/storage/debrify_tv_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/services/storage/discover_storage.dart';
 import 'package:debrify/services/storage/home_appearance_storage.dart';
-import 'package:debrify/services/storage/home_page_storage.dart';
 import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/launch_ident_storage.dart';
 import 'package:debrify/services/storage/mdblist_storage.dart';
-import 'package:debrify/services/storage/pikpak_storage.dart';
-import 'package:debrify/services/storage/playback_cleanup_storage.dart';
 import 'package:debrify/services/storage/player_appearance_storage.dart';
-import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
-import 'package:debrify/services/storage/provider_credential_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/sidebar_storage.dart';
 import 'package:debrify/services/storage/simkl_storage.dart';
-import 'package:debrify/services/storage/startup_storage.dart';
 import 'package:debrify/services/storage/theme_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
-import 'package:debrify/services/storage/torrent_history_storage.dart';
 import 'package:debrify/services/storage/torrent_provider_storage.dart';
-import 'package:debrify/services/storage/torrent_search_storage.dart';
 import 'package:debrify/services/storage/trakt_storage.dart';
 import 'package:debrify/services/storage/tv_display_storage.dart';
-import 'package:debrify/services/storage/watchlist_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/storage/webdav_storage.dart';
-import 'settings/tv_collection_list_style_page.dart';
-import 'settings/metadata_settings_page.dart';
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io' show File, Platform, exit;
+import 'dart:io' show Platform;
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../utils/app_version_info.dart';
-import 'package:path/path.dart' as path;
-import 'package:permission_handler/permission_handler.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../models/webdav_item.dart';
 import '../models/android_video_renderer_mode.dart';
 import '../models/profiles/profile_policy.dart';
 import '../models/profiles/connection_resource.dart';
-import '../models/profiles/user_profile.dart';
 import '../services/main_page_bridge.dart';
 import '../services/external_player_service.dart';
 import '../services/play_loader_style.dart';
@@ -64,54 +55,33 @@ import '../services/subtitle_font_service.dart';
 import '../services/text_brightness.dart';
 import '../services/profiles/profile_runtime.dart';
 import '../services/profiles/connection_resource_service.dart';
-import '../services/profiles/portable_profile_package.dart';
-import '../services/profiles/profile_app_lifecycle_participant.dart';
-import '../services/profiles/profile_lifecycle.dart';
 import '../services/profiles/profile_lock_controller.dart';
-import '../services/profiles/profile_authorization.dart';
 import '../services/profiles/profile_bootstrap.dart';
-import '../services/profiles/profile_device_reset_service.dart';
-import '../services/profiles/profile_reset_service.dart';
-import '../services/webdav_sync/webdav_sync_library_models.dart';
 import '../utils/platform_util.dart';
 import '../utils/deovr_utils.dart' as deovr;
 
 import '../services/analytics_service.dart';
 import '../services/diagnostic_log.dart';
 import '../services/account_service.dart';
-import '../services/backup_restore_service.dart';
-import '../services/iptv_transfer_payload.dart';
-import '../services/download_service.dart';
 import '../services/mdblist/mdblist_service.dart';
-import '../services/simkl/simkl_service.dart';
 import '../services/support_remote_config_service.dart';
 import '../services/torbox_account_service.dart';
 import '../services/premiumize_account_service.dart';
 import '../services/alldebrid_account_service.dart';
 import '../services/pikpak_api_service.dart';
-import '../services/debrify_tv_repository.dart';
-import '../services/stremio_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/live_recording_service.dart';
 import '../services/desktop_schedule_service.dart';
 import '../services/update_service.dart';
-import '../widgets/support_donation_chooser_dialog.dart';
-import '../widgets/tv_text_field.dart';
-import 'settings/debrify_tv_settings_page.dart';
 import 'settings/settings_tv_layout.dart';
 import 'settings/settings_search.dart';
 import 'settings/discover_layout_page.dart';
-import 'settings/discover_settings_page.dart';
 import 'settings/iptv_style_page.dart';
 import 'settings/debrify_tv_style_page.dart';
 import 'settings/text_brightness_page.dart';
-import 'settings/launch_animation_page.dart';
 import '../widgets/launch/launch_ident.dart';
 import 'settings/detail_page_style_page.dart';
 import 'settings/app_theme_page.dart';
-import 'settings/looks_page.dart';
-import 'settings/theme_tokens_page.dart';
-import 'settings/theme_lab_page.dart';
 import 'settings/detail_theme_page.dart';
 import '../widgets/detail/theme/detail_themes.dart';
 import '../theme/app_theme_controller.dart';
@@ -122,53 +92,18 @@ import 'settings/player_guide_style_page.dart';
 import 'settings/tv_player_controls_style_page.dart';
 import 'settings/debrify_tv_player_style_page.dart';
 import 'settings/tv_home_style_page.dart';
-import 'settings/tv_render_quality_page.dart';
 import 'settings/tv_hero_artwork_quality_page.dart';
-import 'settings/tv_screen_size_page.dart';
-import 'settings/recordings_page.dart';
 import 'settings/desktop_sidebar_style_page.dart';
 import 'settings/tv_sidebar_style_page.dart';
-import 'settings/sidebar_customization_page.dart';
-import 'settings/profile_backup_flows.dart';
-import 'settings/sync_and_migrate_page.dart';
-import 'settings/profile_appearance_page.dart';
 import 'settings/widgets/settings_widgets.dart';
-import 'settings/pikpak_settings_page.dart';
 import 'settings/settings_summary_reads.dart';
-import 'settings/real_debrid_settings_page.dart';
-import 'settings/iptv_settings_page.dart';
-import 'settings/iptv_channel_order_page.dart';
-import 'settings/collections_settings_page.dart';
-import 'settings/stream_badges_settings_page.dart';
-import 'settings/home_page_settings_page.dart';
-import 'settings/torbox_settings_page.dart';
-import 'settings/premiumize_settings_page.dart';
-import 'settings/alldebrid_settings_page.dart';
-import 'settings/torrent_settings_page.dart';
-import 'settings/filter_settings_page.dart';
-import 'settings/indexer_managers_settings_page.dart';
-import 'settings/provider_settings_page.dart';
-import 'settings/quick_play_settings_page.dart';
-import 'settings/external_player_settings_page.dart';
-import 'settings/playback_settings_page.dart';
 import 'settings/playback_settings_section.dart';
 import 'settings/subtitle_priority_page.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import 'video_player/services/network_tuning.dart';
-import 'settings/profiles_settings_page.dart';
-import 'profiles/profile_setup_flow.dart';
 import 'profiles/profile_wall_screen.dart';
-import 'settings/trakt_settings_page.dart';
-import 'settings/simkl_settings_page.dart';
-import 'settings/mdblist_settings_page.dart';
-import 'settings/tracking_settings_page.dart';
-import 'settings/webdav_settings_page.dart';
-import 'settings/media_server_settings_page.dart';
 import '../services/media_server_service.dart';
-import 'settings/stremio_tv_settings_page.dart';
-import '../widgets/remote/remote_role_picker_screen.dart';
 import '../theme/app_looks.dart';
-import '../theme/app_theme_scope.dart';
 import '../models/tv_hero_artwork_quality.dart';
 import 'package:debrify/models/tv_render_quality.dart';
 import 'package:debrify/services/storage/device_storage.dart';
@@ -184,7 +119,7 @@ import 'package:debrify/services/storage/device_storage.dart';
   return (
     index: settings._buildSearchIndex,
     leaves: settings._leafSearchEntries,
-    snack: settings._showSnack,
+    snack: settings._snacks.showSnack,
   );
 }
 
@@ -199,23 +134,126 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  late final SettingsUpdates _updates = SettingsUpdates(
+    _summaries,
+    (
+      ensureProfileFeature: (ProfileFeature feature) => _profileActions.ensureProfileFeature(feature),
+      showReleaseDetails: (UpdateSummary summary) => _releaseDetails.showReleaseDetails(summary),
+      showSnack: (String message) => _snacks.showSnack(message),
+      mounted: () => mounted,
+      setState: setState,
+    ),
+  );
+  late final SettingsDiagnostics _diagnostics = SettingsDiagnostics(
+    _summaries,
+    (
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+    ),
+  );
+  late final SettingsPageNavigation _pageNavigation = SettingsPageNavigation(
+    _summaries,
+    (
+      ensureProfileFeature: (ProfileFeature feature) => _profileActions.ensureProfileFeature(feature),
+      reloadAppearanceSummaries: () => _reloadAppearanceSummaries(),
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+    ),
+  );
+  late final SettingsConnectionNavigation _connectionNavigation = SettingsConnectionNavigation(
+    _summaries,
+    (
+      ensureProfileFeature: (ProfileFeature feature) => _profileActions.ensureProfileFeature(feature),
+      focusFirstCard: () => focusFirstCard(),
+      loadSummaries: () => _loadSummaries(),
+      reloadAppearanceSummaries: () => _reloadAppearanceSummaries(),
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+    ),
+  );
+  late final SettingsProfileActions _profileActions = SettingsProfileActions(
+    _summaries,
+    (
+      activeProfileMayExportDiagnostics: () => _diagnostics.activeProfileMayExportDiagnostics(),
+      loadSummaries: () => _loadSummaries(),
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+    ),
+  );
+  late final SettingsBackup _backup = SettingsBackup(
+    (
+      createProfileBackup: () => _profileActions.createProfileBackup(),
+      context: () => context,
+      mounted: () => mounted,
+    ),
+  );
+  late final SettingsRestore _restore = SettingsRestore(
+    (
+      loadSummaries: () => _loadSummaries(),
+      restoreProfileBackup: () => _profileActions.restoreProfileBackup(),
+      context: () => context,
+      mounted: () => mounted,
+    ),
+  );
+  late final SettingsDownloadLocation _downloadLocation = SettingsDownloadLocation(
+    _summaries,
+    (
+      loadDownloadLocation: () => _loadDownloadLocation(),
+      context: () => context,
+      mounted: () => mounted,
+    ),
+  );
+  late final SettingsMaintenance _maintenance = SettingsMaintenance(
+    (
+      loadSummaries: () => _loadSummaries(),
+      context: () => context,
+      mounted: () => mounted,
+    ),
+  );
+  late final SettingsReleaseDetails _releaseDetails = SettingsReleaseDetails(
+    _summaries,
+    (
+      openReleasesPage: (Uri url) => _updates.openReleasesPage(url),
+      startAndroidUpdateDownload: (AppRelease release) => _updates.startAndroidUpdateDownload(release),
+      context: () => context,
+      mounted: () => mounted,
+    ),
+  );
+  late final SettingsAppearanceNavigation _appearanceNavigation = SettingsAppearanceNavigation(
+    _summaries,
+    (
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+    ),
+  );
+  late final SettingsSnacks _snacks = SettingsSnacks(
+    (
+      context: () => context,
+      mounted: () => mounted,
+    ),
+  );
   final SettingsSummaries _summaries = SettingsSummaries();
   late final SettingsConnections _connections = SettingsConnections(
     _summaries,
     (
-      openAllDebridSettings: _openAllDebridSettings,
-      openIndexerManagersSettings: _openIndexerManagersSettings,
-      openIptvSettings: _openIptvSettings,
-      openMdblistSettings: _openMdblistSettings,
-      openMediaServerSettings: _openMediaServerSettings,
-      openPikPakSettings: _openPikPakSettings,
-      openPremiumizeSettings: _openPremiumizeSettings,
-      openRealDebridSettings: _openRealDebridSettings,
-      openSimklSettings: _openSimklSettings,
-      openTorboxSettings: _openTorboxSettings,
-      openTrackingSettings: _openTrackingSettings,
-      openTraktSettings: _openTraktSettings,
-      openWebDavSettings: _openWebDavSettings,
+      openAllDebridSettings: _connectionNavigation.openAllDebridSettings,
+      openIndexerManagersSettings: _connectionNavigation.openIndexerManagersSettings,
+      openIptvSettings: _connectionNavigation.openIptvSettings,
+      openMdblistSettings: _connectionNavigation.openMdblistSettings,
+      openMediaServerSettings: _connectionNavigation.openMediaServerSettings,
+      openPikPakSettings: _connectionNavigation.openPikPakSettings,
+      openPremiumizeSettings: _connectionNavigation.openPremiumizeSettings,
+      openRealDebridSettings: _connectionNavigation.openRealDebridSettings,
+      openSimklSettings: _connectionNavigation.openSimklSettings,
+      openTorboxSettings: _connectionNavigation.openTorboxSettings,
+      openTrackingSettings: _connectionNavigation.openTrackingSettings,
+      openTraktSettings: _connectionNavigation.openTraktSettings,
+      openWebDavSettings: _connectionNavigation.openWebDavSettings,
     ),
   );
 
@@ -270,9 +308,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // TV content focus handler (stored for proper unregistration)
   VoidCallback? _tvContentFocusHandler;
 
-  StreamSubscription<Map<String, dynamic>>? _updateDownloadSub;
-  String? _updateDownloadTaskId;
-
   @override
   void initState() {
     super.initState();
@@ -307,7 +342,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
     _firstCardFocusNode.dispose();
-    _updateDownloadSub?.cancel();
+    _updates.dispose();
     super.dispose();
   }
 
@@ -339,25 +374,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ProfileRuntime.scope.value == startingScope)) {
         setState(() => _summaries.loading = false);
       }
-    }
-  }
-
-  Future<bool> _activeProfileMayExportDiagnostics() async {
-    // saveBackupFile has no user-retrievable destination on physical tvOS.
-    // Keep this hidden until diagnostics use the authenticated Remote
-    // transfer flow, as profile backups already do on Apple TV.
-    if (PlatformUtil.isTvOS) return false;
-    try {
-      if (ProfileRuntime.mode == ProfileRuntimeMode.legacyCompatibility) {
-        // A legacy install has one implicit device owner/admin.
-        return true;
-      }
-      final registry = ProfileBootstrap.registry;
-      final authorization = await ProfileAuthorizationContext.capture(registry);
-      final actor = await authorization.validate(registry);
-      return actor.role == UserProfileRole.admin;
-    } catch (_) {
-      return false;
     }
   }
 
@@ -590,7 +606,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       summaries.read(
         'Diagnostics',
-        () => _activeProfileMayExportDiagnostics(),
+        () => _diagnostics.activeProfileMayExportDiagnostics(),
         false,
       ),
       summaries.read(
@@ -989,17 +1005,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _summaries.supportSettingsSubtitle = config.donation.settingsSubtitle;
   }
 
-  Future<void> _openSupportDonation() async {
-    await showSupportDonationChooserDialog(
-      context,
-      donation: _summaries.supportDonation,
-      title: _summaries.supportSettingsLabel,
-      // Match the settings palette (the dialog is shown from the State's
-      // context, which sits above the scoped theme in build()).
-      theme: settingsPageTheme(context),
-    );
-  }
-
   void _applyRdUserInfo(dynamic user) {
     final expiry = _tryParseDate(user.expiration);
     final bool isPremium = user.isPremium;
@@ -1124,104 +1129,104 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ],
       firstFocusNode: _firstCardFocusNode,
       onOpenSearch: _openSettingsSearch,
-      onOpenHomePageSettings: _openHomePageSettings,
-      onOpenMetadataSettings: _openMetadataSettings,
-      onOpenCollectionsSettings: _openCollectionsSettings,
-      onOpenBadgesSettings: _openBadgesSettings,
-      onOpenPlaybackSection: _openPlaybackSection,
-      onOpenRemoteControl: _openRemoteControl,
+      onOpenHomePageSettings: _pageNavigation.openHomePageSettings,
+      onOpenMetadataSettings: _pageNavigation.openMetadataSettings,
+      onOpenCollectionsSettings: _pageNavigation.openCollectionsSettings,
+      onOpenBadgesSettings: _pageNavigation.openBadgesSettings,
+      onOpenPlaybackSection: _pageNavigation.openPlaybackSection,
+      onOpenRemoteControl: _pageNavigation.openRemoteControl,
       showSwitchProfile:
           ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted,
-      onSwitchProfile: _switchProfile,
-      onAddProfile: _addProfile,
-      onEditProfile: _editActiveProfile,
-      onOpenTorrentSettings: _openTorrentSettings,
-      onOpenFilterSettings: _openFilterSettings,
-      onOpenProviderSettings: _openProviderSettings,
-      onOpenQuickPlaySettings: _openQuickPlaySettings,
-      onOpenDiscoverSettings: _openDiscoverSettings,
-      onOpenDebrifyTvSettings: _openDebrifyTvSettings,
-      onClearDownloads: _clearDownloadData,
-      onClearPlayback: _clearPlaybackData,
-      onOpenDownloadLocation: _downloadLocationSupported
-          ? _openDownloadLocationSettings
+      onSwitchProfile: _profileActions.switchProfile,
+      onAddProfile: _profileActions.addProfile,
+      onEditProfile: _profileActions.editActiveProfile,
+      onOpenTorrentSettings: _connectionNavigation.openTorrentSettings,
+      onOpenFilterSettings: _pageNavigation.openFilterSettings,
+      onOpenProviderSettings: _pageNavigation.openProviderSettings,
+      onOpenQuickPlaySettings: _pageNavigation.openQuickPlaySettings,
+      onOpenDiscoverSettings: _pageNavigation.openDiscoverSettings,
+      onOpenDebrifyTvSettings: _connectionNavigation.openDebrifyTvSettings,
+      onClearDownloads: _maintenance.clearDownloadData,
+      onClearPlayback: _maintenance.clearPlaybackData,
+      onOpenDownloadLocation: _downloadLocation.downloadLocationSupported
+          ? _downloadLocation.openDownloadLocationSettings
           : null,
       downloadLocationSubtitle: _summaries.downloadLocationSubtitle,
-      onCreateBackup: _createBackup,
-      onRestoreBackup: _restoreBackup,
-      onOpenSyncAndMigrate: _openSyncAndMigrate,
+      onCreateBackup: _backup.createBackup,
+      onRestoreBackup: _restore.restoreBackup,
+      onOpenSyncAndMigrate: _profileActions.openSyncAndMigrate,
       onExportDiagnosticLogs: _summaries.diagnosticExportVisible
-          ? _exportDiagnosticLogs
+          ? _diagnostics.exportDiagnosticLogs
           : null,
-      onDangerAction: _resetAppData,
+      onDangerAction: _maintenance.resetAppData,
       appVersion: _summaries.appVersion,
-      onCheckForUpdates: _checkForAppUpdates,
+      onCheckForUpdates: _updates.checkForAppUpdates,
       updateSubtitle: _summaries.updateSubtitle,
       checkingUpdates: _summaries.checkingUpdates,
       autoUpdateChecksEnabled: _summaries.autoUpdateChecksEnabled,
-      onToggleAutoUpdateChecks: _toggleAutoUpdateChecks,
+      onToggleAutoUpdateChecks: _updates.toggleAutoUpdateChecks,
       includeAlphaUpdates: _summaries.includeAlphaUpdates,
-      onToggleIncludeAlphaUpdates: _toggleIncludeAlphaUpdates,
+      onToggleIncludeAlphaUpdates: _updates.toggleIncludeAlphaUpdates,
       tvKeyboardEnabled: _summaries.tvKeyboardEnabled,
-      onToggleTvKeyboard: _toggleTvKeyboard,
+      onToggleTvKeyboard: _appearanceNavigation.toggleTvKeyboard,
       textBrightnessLabel: textBrightnessLabel(_summaries.textBrightness),
-      onOpenTextBrightness: _openTextBrightnessPage,
+      onOpenTextBrightness: _appearanceNavigation.openTextBrightnessPage,
       launchAnimationLabel: launchIdentLabel(_summaries.launchAnimation),
-      onOpenLaunchAnimation: _openLaunchAnimationPage,
+      onOpenLaunchAnimation: _appearanceNavigation.openLaunchAnimationPage,
       tvUiScalePercent: _summaries.tvUiScalePercent,
-      onOpenTvScreenSize: _openTvScreenSize,
+      onOpenTvScreenSize: _appearanceNavigation.openTvScreenSize,
       tvRenderQualityLabel: tvRenderQualityLabel(_summaries.tvRenderQuality),
-      onOpenTvRenderQuality: _openTvRenderQuality,
+      onOpenTvRenderQuality: _appearanceNavigation.openTvRenderQuality,
       tvHeroArtworkQualityLabel: tvHeroArtworkQualityLabel(
         _summaries.tvHeroArtworkQuality,
       ),
-      onOpenTvHeroArtworkQuality: _openTvHeroArtworkQuality,
+      onOpenTvHeroArtworkQuality: _appearanceNavigation.openTvHeroArtworkQuality,
       tvSidebarStyleLabel: tvSidebarStyleLabel(_summaries.tvSidebarStyle),
-      onOpenTvSidebarStyle: _openTvSidebarStyle,
+      onOpenTvSidebarStyle: _appearanceNavigation.openTvSidebarStyle,
       discoverLayoutLabel: discoverLayoutLabel(_summaries.discoverLayout),
-      onOpenDiscoverLayout: _openDiscoverLayout,
-      onOpenCollectionListStyle: _openCollectionListStyle,
+      onOpenDiscoverLayout: _appearanceNavigation.openDiscoverLayout,
+      onOpenCollectionListStyle: _appearanceNavigation.openCollectionListStyle,
       tvHomeStyleLabel: tvHomeStyleLabel(_summaries.tvHomeStyle),
-      onOpenTvHomeStyle: _openTvHomeStyle,
+      onOpenTvHomeStyle: _appearanceNavigation.openTvHomeStyle,
       profileAppearanceLabel: ProfileGateStyle.labelFor(
         ProfileGateStyle.cached,
       ),
-      onOpenProfileAppearance: _openProfileAppearance,
+      onOpenProfileAppearance: _appearanceNavigation.openProfileAppearance,
       iptvStyleLabel: iptvStyleLabel(_summaries.iptvStyle),
-      onOpenIptvStyle: _openIptvStylePage,
+      onOpenIptvStyle: _appearanceNavigation.openIptvStylePage,
       debrifyTvStyleLabel: debrifyTvStyleLabel(_summaries.debrifyTvStyle),
-      onOpenDebrifyTvStyle: _openDebrifyTvStylePage,
+      onOpenDebrifyTvStyle: _appearanceNavigation.openDebrifyTvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_summaries.playerGuideStyle),
       playLoaderStyleLabel: playLoaderStyleLabel(_summaries.playLoaderStyle),
-      onOpenPlayLoaderStyle: _openPlayLoaderStylePage,
-      onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
+      onOpenPlayLoaderStyle: _appearanceNavigation.openPlayLoaderStylePage,
+      onOpenPlayerGuideStyle: _appearanceNavigation.openPlayerGuideStylePage,
       tvPlayerControlsStyleLabel: tvPlayerControlsStyleLabel(
         _summaries.tvPlayerControlsStyle,
       ),
-      onOpenTvPlayerControlsStyle: _openTvPlayerControlsStylePage,
+      onOpenTvPlayerControlsStyle: _appearanceNavigation.openTvPlayerControlsStylePage,
       debrifyTvPlayerStyleLabel: debrifyTvPlayerStyleLabel(
         _summaries.debrifyTvPlayerStyle,
       ),
-      onOpenDebrifyTvPlayerStyle: _openDebrifyTvPlayerStylePage,
+      onOpenDebrifyTvPlayerStyle: _appearanceNavigation.openDebrifyTvPlayerStylePage,
       detailPageStyleLabel: detailPageStyleLabel(_summaries.detailPageStyle),
-      onOpenDetailPageStyle: _openDetailPageStylePage,
+      onOpenDetailPageStyle: _appearanceNavigation.openDetailPageStylePage,
       appThemeLabel: appThemeLabel(AppThemeController.instance.id),
       looksLabel: AppLooks.active()?.label ?? 'Custom',
-      onOpenLooks: _openLooksPage,
-      onOpenThemeTokens: _openThemeTokensPage,
-      themeTokensLabel: _themeTokensLabel,
-      onOpenThemeLab: _openThemeLab,
-      onOpenAppTheme: _openAppThemePage,
+      onOpenLooks: _appearanceNavigation.openLooksPage,
+      onOpenThemeTokens: _appearanceNavigation.openThemeTokensPage,
+      themeTokensLabel: _appearanceNavigation.themeTokensLabel,
+      onOpenThemeLab: _appearanceNavigation.openThemeLab,
+      onOpenAppTheme: _appearanceNavigation.openAppThemePage,
       detailThemeLabel: detailThemeLabel(_summaries.detailTheme),
-      onOpenDetailTheme: _openDetailThemePage,
+      onOpenDetailTheme: _appearanceNavigation.openDetailThemePage,
       parentsGuideStyleLabel: parentsGuideStyleLabel(_summaries.parentsGuideStyle),
-      onOpenParentsGuideStyle: _openParentsGuideStylePage,
-      onOpenRecordings: _openRecordings,
-      onOpenIptvSettings: _openIptvSettings,
+      onOpenParentsGuideStyle: _appearanceNavigation.openParentsGuideStylePage,
+      onOpenRecordings: _pageNavigation.openRecordings,
+      onOpenIptvSettings: _connectionNavigation.openIptvSettings,
       showSupportDonation: _summaries.supportDonation.hasProviders,
       supportDonationLabel: _summaries.supportSettingsLabel,
       supportDonationSubtitle: _summaries.supportSettingsSubtitle,
-      onOpenSupportDonation: _openSupportDonation,
+      onOpenSupportDonation: _pageNavigation.openSupportDonation,
     );
   }
 
@@ -1246,96 +1251,96 @@ class _SettingsScreenState extends State<SettingsScreen> {
         firstCardFocusNode: _firstCardFocusNode,
       ),
       onOpenSearch: _openSettingsSearch,
-      onOpenTorrentSettings: _openTorrentSettings,
-      onOpenFilterSettings: _openFilterSettings,
-      onOpenProviderSettings: _openProviderSettings,
-      onOpenQuickPlaySettings: _openQuickPlaySettings,
-      onOpenDiscoverSettings: _openDiscoverSettings,
-      onOpenDebrifyTvSettings: _openDebrifyTvSettings,
-      onOpenPikPakSettings: _openPikPakSettings,
-      onOpenHomePageSettings: _openHomePageSettings,
-      onOpenMetadataSettings: _openMetadataSettings,
-      onOpenCollectionsSettings: _openCollectionsSettings,
-      onOpenBadgesSettings: _openBadgesSettings,
-      onOpenCollectionListStyle: _openCollectionListStyle,
-      onOpenPlaybackSection: _openPlaybackSection,
-      onOpenRemoteControl: _openRemoteControl,
+      onOpenTorrentSettings: _connectionNavigation.openTorrentSettings,
+      onOpenFilterSettings: _pageNavigation.openFilterSettings,
+      onOpenProviderSettings: _pageNavigation.openProviderSettings,
+      onOpenQuickPlaySettings: _pageNavigation.openQuickPlaySettings,
+      onOpenDiscoverSettings: _pageNavigation.openDiscoverSettings,
+      onOpenDebrifyTvSettings: _connectionNavigation.openDebrifyTvSettings,
+      onOpenPikPakSettings: _connectionNavigation.openPikPakSettings,
+      onOpenHomePageSettings: _pageNavigation.openHomePageSettings,
+      onOpenMetadataSettings: _pageNavigation.openMetadataSettings,
+      onOpenCollectionsSettings: _pageNavigation.openCollectionsSettings,
+      onOpenBadgesSettings: _pageNavigation.openBadgesSettings,
+      onOpenCollectionListStyle: _appearanceNavigation.openCollectionListStyle,
+      onOpenPlaybackSection: _pageNavigation.openPlaybackSection,
+      onOpenRemoteControl: _pageNavigation.openRemoteControl,
       showSwitchProfile:
           ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted,
-      onSwitchProfile: _switchProfile,
-      onAddProfile: _addProfile,
-      onEditProfile: _editActiveProfile,
-      onOpenNavigationSettings: _openNavigationSettings,
+      onSwitchProfile: _profileActions.switchProfile,
+      onAddProfile: _profileActions.addProfile,
+      onEditProfile: _profileActions.editActiveProfile,
+      onOpenNavigationSettings: _connectionNavigation.openNavigationSettings,
       isAndroidTv: _summaries.isAndroidTv,
-      onClearDownloads: _clearDownloadData,
-      onClearPlayback: _clearPlaybackData,
-      onOpenDownloadLocation: _downloadLocationSupported
-          ? _openDownloadLocationSettings
+      onClearDownloads: _maintenance.clearDownloadData,
+      onClearPlayback: _maintenance.clearPlaybackData,
+      onOpenDownloadLocation: _downloadLocation.downloadLocationSupported
+          ? _downloadLocation.openDownloadLocationSettings
           : null,
       downloadLocationSubtitle: _summaries.downloadLocationSubtitle,
-      onCreateBackup: _createBackup,
-      onRestoreBackup: _restoreBackup,
-      onOpenSyncAndMigrate: _openSyncAndMigrate,
+      onCreateBackup: _backup.createBackup,
+      onRestoreBackup: _restore.restoreBackup,
+      onOpenSyncAndMigrate: _profileActions.openSyncAndMigrate,
       onExportDiagnosticLogs: _summaries.diagnosticExportVisible
-          ? _exportDiagnosticLogs
+          ? _diagnostics.exportDiagnosticLogs
           : null,
-      onDangerAction: _resetAppData,
+      onDangerAction: _maintenance.resetAppData,
       appVersion: _summaries.appVersion,
-      onCheckForUpdates: _checkForAppUpdates,
+      onCheckForUpdates: _updates.checkForAppUpdates,
       updateSubtitle: _summaries.updateSubtitle,
       checkingUpdates: _summaries.checkingUpdates,
       autoUpdateChecksEnabled: _summaries.autoUpdateChecksEnabled,
-      onToggleAutoUpdateChecks: _toggleAutoUpdateChecks,
+      onToggleAutoUpdateChecks: _updates.toggleAutoUpdateChecks,
       includeAlphaUpdates: _summaries.includeAlphaUpdates,
-      onToggleIncludeAlphaUpdates: _toggleIncludeAlphaUpdates,
+      onToggleIncludeAlphaUpdates: _updates.toggleIncludeAlphaUpdates,
       tvKeyboardEnabled: _summaries.tvKeyboardEnabled,
-      onToggleTvKeyboard: _toggleTvKeyboard,
+      onToggleTvKeyboard: _appearanceNavigation.toggleTvKeyboard,
       showSupportDonation: _summaries.supportDonation.hasProviders,
       supportDonationLabel: _summaries.supportSettingsLabel,
       supportDonationSubtitle: _summaries.supportSettingsSubtitle,
-      onOpenSupportDonation: _openSupportDonation,
-      onOpenRecordings: _openRecordings,
-      onOpenIptvSettings: _openIptvSettings,
+      onOpenSupportDonation: _pageNavigation.openSupportDonation,
+      onOpenRecordings: _pageNavigation.openRecordings,
+      onOpenIptvSettings: _connectionNavigation.openIptvSettings,
       showIptvAppearance: _iptvAppearanceSearchable,
       textBrightnessLabel: textBrightnessLabel(_summaries.textBrightness),
-      onOpenTextBrightness: _openTextBrightnessPage,
+      onOpenTextBrightness: _appearanceNavigation.openTextBrightnessPage,
       launchAnimationLabel: launchIdentLabel(_summaries.launchAnimation),
-      onOpenLaunchAnimation: _openLaunchAnimationPage,
+      onOpenLaunchAnimation: _appearanceNavigation.openLaunchAnimationPage,
       iptvStyleLabel: iptvStyleLabel(_summaries.iptvStyle),
-      onOpenIptvStyle: _openIptvStylePage,
+      onOpenIptvStyle: _appearanceNavigation.openIptvStylePage,
       debrifyTvStyleLabel: debrifyTvStyleLabel(_summaries.debrifyTvStyle),
-      onOpenDebrifyTvStyle: _openDebrifyTvStylePage,
+      onOpenDebrifyTvStyle: _appearanceNavigation.openDebrifyTvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_summaries.playerGuideStyle),
       playLoaderStyleLabel: playLoaderStyleLabel(_summaries.playLoaderStyle),
-      onOpenPlayLoaderStyle: _openPlayLoaderStylePage,
+      onOpenPlayLoaderStyle: _appearanceNavigation.openPlayLoaderStylePage,
       playerDockLabel: playerDockLabel(
         _summaries.playerDockStyle,
         _summaries.playerDockPalette,
         _summaries.playerDockSize,
       ),
-      onOpenPlayerDock: _openPlayerDockPage,
-      onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
+      onOpenPlayerDock: _appearanceNavigation.openPlayerDockPage,
+      onOpenPlayerGuideStyle: _appearanceNavigation.openPlayerGuideStylePage,
       detailPageStyleLabel: detailPageStyleLabel(_summaries.detailPageStyle),
-      onOpenDetailPageStyle: _openDetailPageStylePage,
+      onOpenDetailPageStyle: _appearanceNavigation.openDetailPageStylePage,
       appThemeLabel: appThemeLabel(AppThemeController.instance.id),
-      onOpenLooks: _openLooksPage,
-      onOpenThemeTokens: _openThemeTokensPage,
-      themeTokensLabel: _themeTokensLabel,
-      onOpenThemeLab: _openThemeLab,
-      onOpenAppTheme: _openAppThemePage,
+      onOpenLooks: _appearanceNavigation.openLooksPage,
+      onOpenThemeTokens: _appearanceNavigation.openThemeTokensPage,
+      themeTokensLabel: _appearanceNavigation.themeTokensLabel,
+      onOpenThemeLab: _appearanceNavigation.openThemeLab,
+      onOpenAppTheme: _appearanceNavigation.openAppThemePage,
       detailThemeLabel: detailThemeLabel(_summaries.detailTheme),
-      onOpenDetailTheme: _openDetailThemePage,
+      onOpenDetailTheme: _appearanceNavigation.openDetailThemePage,
       parentsGuideStyleLabel: parentsGuideStyleLabel(_summaries.parentsGuideStyle),
-      onOpenParentsGuideStyle: _openParentsGuideStylePage,
+      onOpenParentsGuideStyle: _appearanceNavigation.openParentsGuideStylePage,
       phoneNavStyleLabel: _summaries.phoneNavStyle == 'floating'
           ? 'Floating button'
           : 'Classic bar',
       desktopSidebarStyleLabel: desktopSidebarStyleLabel(_summaries.desktopSidebarStyle),
-      onOpenDesktopSidebarStyle: _openDesktopSidebarStyle,
+      onOpenDesktopSidebarStyle: _appearanceNavigation.openDesktopSidebarStyle,
       profileAppearanceLabel: ProfileGateStyle.labelFor(
         ProfileGateStyle.cached,
       ),
-      onOpenProfileAppearance: _openProfileAppearance,
+      onOpenProfileAppearance: _appearanceNavigation.openProfileAppearance,
     );
   }
 
@@ -1405,7 +1410,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.switchProfile,
           'Profiles',
-          _switchProfile,
+          _profileActions.switchProfile,
           keywords: const [
             'profile',
             'profiles',
@@ -1430,7 +1435,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.addProfile,
           'Profiles',
-          _addProfile,
+          _profileActions.addProfile,
           keywords: const [
             'create profile',
             'new profile',
@@ -1455,7 +1460,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.editProfile,
           'Profiles',
-          _editActiveProfile,
+          _profileActions.editActiveProfile,
           keywords: const [
             'rename',
             'avatar',
@@ -1584,7 +1589,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'iptv',
           'collection',
         ],
-        onTap: _openIptvSettings,
+        onTap: _connectionNavigation.openIptvSettings,
       ),
       SettingsSearchEntry(
         icon: Icons.live_tv_rounded,
@@ -1604,7 +1609,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'iptv',
           'live tv',
         ],
-        onTap: _openIptvSettings,
+        onTap: _connectionNavigation.openIptvSettings,
       ),
       SettingsSearchEntry(
         icon: Icons.history_toggle_off_rounded,
@@ -1625,7 +1630,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'movies',
           'series',
         ],
-        onTap: _openIptvSettings,
+        onTap: _connectionNavigation.openIptvSettings,
       ),
       conn(_connections.indexerManagersInfo, const [
         'indexer',
@@ -1670,7 +1675,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.homePage,
         'Home & Display',
-        _openHomePageSettings,
+        _pageNavigation.openHomePageSettings,
         keywords: const [
           'home page',
           'default view',
@@ -1682,13 +1687,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.badges,
         'Badges',
-        _openBadgesSettings,
+        _pageNavigation.openBadgesSettings,
         keywords: const ['stream badges', 'rules', 'nuvio'],
       ),
       nav(
         SettingsRows.collections,
         'Collections',
-        _openCollectionsSettings,
+        _pageNavigation.openCollectionsSettings,
         keywords: const [
           'collections',
           'collection',
@@ -1702,7 +1707,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.metadata,
         'Metadata',
-        _openMetadataSettings,
+        _pageNavigation.openMetadataSettings,
         keywords: const [
           'tmdb',
           'language',
@@ -1723,7 +1728,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.textBrightness,
         'Appearance',
-        _openTextBrightnessPage,
+        _appearanceNavigation.openTextBrightnessPage,
         subtitle: textBrightnessLabel(_summaries.textBrightness),
         keywords: [
           'text',
@@ -1749,7 +1754,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.launchAnimation,
         'Appearance',
-        _openLaunchAnimationPage,
+        _appearanceNavigation.openLaunchAnimationPage,
         subtitle: launchIdentLabel(_summaries.launchAnimation),
         keywords: [
           'launch',
@@ -1779,7 +1784,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.tvScreenSize,
           'Appearance',
-          _openTvScreenSize,
+          _appearanceNavigation.openTvScreenSize,
           subtitle: tvUiScaleLabel(_summaries.tvUiScalePercent),
           keywords: [
             'zoom',
@@ -1807,7 +1812,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.tvRenderQuality,
           'Appearance',
-          _openTvRenderQuality,
+          _appearanceNavigation.openTvRenderQuality,
           subtitle: tvRenderQualityLabel(_summaries.tvRenderQuality),
           keywords: [
             'stutter',
@@ -1848,7 +1853,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.tvHeroArtworkQuality,
           'Appearance',
-          _openTvHeroArtworkQuality,
+          _appearanceNavigation.openTvHeroArtworkQuality,
           subtitle: tvHeroArtworkQualityLabel(_summaries.tvHeroArtworkQuality),
           keywords: [
             'hero',
@@ -1876,7 +1881,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.tvHomeStyle,
         'Appearance',
-        _openTvHomeStyle,
+        _appearanceNavigation.openTvHomeStyle,
         subtitle: tvHomeStyleLabel(
           _summaries.isAndroidTv ? _summaries.tvHomeStyle : effectiveOffTvHomeStyle(_summaries.tvHomeStyle),
         ),
@@ -1903,7 +1908,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.profileAppearance,
         'Appearance',
-        _openProfileAppearance,
+        _appearanceNavigation.openProfileAppearance,
         subtitle: ProfileGateStyle.labelFor(ProfileGateStyle.cached),
         keywords: [
           'profile',
@@ -1925,7 +1930,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.collectionListStyle,
           'Appearance',
-          _openCollectionListStyle,
+          _appearanceNavigation.openCollectionListStyle,
           subtitle: 'Grid · Gallery · Filmstrip · Journal · Spotlight',
           keywords: [
             'collection', 'list', 'gallery', 'filmstrip', 'journal', 'spotlight',
@@ -1935,7 +1940,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.discoverLayout,
           'Appearance',
-          _openDiscoverLayout,
+          _appearanceNavigation.openDiscoverLayout,
           subtitle: discoverLayoutLabel(_summaries.discoverLayout),
           keywords: [
             'discover',
@@ -1957,7 +1962,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.tvSidebarStyle,
           'Appearance',
-          _openTvSidebarStyle,
+          _appearanceNavigation.openTvSidebarStyle,
           subtitle: tvSidebarStyleLabel(_summaries.tvSidebarStyle),
           keywords: [
             'sidebar',
@@ -1982,7 +1987,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.desktopSidebarStyle,
           'Appearance',
-          _openDesktopSidebarStyle,
+          _appearanceNavigation.openDesktopSidebarStyle,
           subtitle: desktopSidebarStyleLabel(_summaries.desktopSidebarStyle),
           keywords: [
             'sidebar',
@@ -2009,7 +2014,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.iptvAppearance,
           'Appearance',
-          _openIptvStylePage,
+          _appearanceNavigation.openIptvStylePage,
           subtitle: iptvStyleLabel(_summaries.iptvStyle),
           keywords: [
             'iptv',
@@ -2037,7 +2042,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.debrifyTvAppearance,
         'Appearance',
-        _openDebrifyTvStylePage,
+        _appearanceNavigation.openDebrifyTvStylePage,
         subtitle: debrifyTvStyleLabel(_summaries.debrifyTvStyle),
         keywords: [
           'debrify tv',
@@ -2059,7 +2064,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.playerGuideStyle,
         'Appearance',
-        _openPlayerGuideStylePage,
+        _appearanceNavigation.openPlayerGuideStylePage,
         subtitle: playerGuideStyleLabel(_summaries.playerGuideStyle),
         keywords: [
           'iptv',
@@ -2088,7 +2093,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.playLoaderStyle,
         'Appearance',
-        _openPlayLoaderStylePage,
+        _appearanceNavigation.openPlayLoaderStylePage,
         subtitle: playLoaderStyleLabel(_summaries.playLoaderStyle),
         keywords: [
           'play',
@@ -2116,7 +2121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.tvPlayerControls,
           'Appearance',
-          _openTvPlayerControlsStylePage,
+          _appearanceNavigation.openTvPlayerControlsStylePage,
           subtitle: tvPlayerControlsStyleLabel(_summaries.tvPlayerControlsStyle),
           keywords: [
             'player',
@@ -2143,7 +2148,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.debrifyTvPlayer,
           'Appearance',
-          _openDebrifyTvPlayerStylePage,
+          _appearanceNavigation.openDebrifyTvPlayerStylePage,
           subtitle: debrifyTvPlayerStyleLabel(_summaries.debrifyTvPlayerStyle),
           keywords: [
             'debrify tv',
@@ -2169,7 +2174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.playerDock,
           'Appearance',
-          _openPlayerDockPage,
+          _appearanceNavigation.openPlayerDockPage,
           subtitle: playerDockLabel(
             _summaries.playerDockStyle,
             _summaries.playerDockPalette,
@@ -2206,8 +2211,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.themeTokens,
         'Appearance',
-        _openThemeTokensPage,
-        subtitle: _themeTokensLabel,
+        _appearanceNavigation.openThemeTokensPage,
+        subtitle: _appearanceNavigation.themeTokensLabel,
         keywords: [
           'advanced',
           'token',
@@ -2223,7 +2228,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.looks,
         'Appearance',
-        _openLooksPage,
+        _appearanceNavigation.openLooksPage,
         subtitle: AppLooks.active()?.label ?? 'Custom',
         keywords: [
           'app',
@@ -2253,7 +2258,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.parentsGuideStyle,
         'Appearance',
-        _openParentsGuideStylePage,
+        _appearanceNavigation.openParentsGuideStylePage,
         subtitle: parentsGuideStyleLabel(_summaries.parentsGuideStyle),
         keywords: [
           'parents',
@@ -2272,7 +2277,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.detailPageStyle,
         'Appearance',
-        _openDetailPageStylePage,
+        _appearanceNavigation.openDetailPageStylePage,
         subtitle: detailPageStyleLabel(_summaries.detailPageStyle),
         keywords: [
           'details',
@@ -2310,7 +2315,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.navigationStyle,
           'Appearance',
-          _openNavigationSettings,
+          _connectionNavigation.openNavigationSettings,
           keywords: const [
             'navigation',
             'nav',
@@ -2327,7 +2332,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.player,
         'Playback',
-        _openExternalPlayerSettings,
+        _pageNavigation.openExternalPlayerSettings,
         keywords: [
           'external player',
           'video player',
@@ -2353,7 +2358,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.remote,
         'Devices',
-        _openRemoteControl,
+        _pageNavigation.openRemoteControl,
         keywords: const [
           'cast',
           'handoff',
@@ -2367,13 +2372,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.searchSettings,
         'Search',
-        _openTorrentSettings,
+        _connectionNavigation.openTorrentSettings,
         keywords: const ['engines', 'sorting', 'torrent', 'sources'],
       ),
       nav(
         SettingsRows.filterSettings,
         'Search',
-        _openFilterSettings,
+        _pageNavigation.openFilterSettings,
         keywords: const [
           'quality',
           'resolution',
@@ -2392,7 +2397,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.providerSettings,
         'Search',
-        _openProviderSettings,
+        _pageNavigation.openProviderSettings,
         keywords: const [
           'default provider',
           'add torrent',
@@ -2409,13 +2414,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.quickPlay,
         'Search',
-        _openQuickPlaySettings,
+        _pageNavigation.openQuickPlaySettings,
         keywords: const ['instant', 'auto play', 'one tap'],
       ),
       nav(
         SettingsRows.discoverDefault,
         'Discover',
-        _openDiscoverSettings,
+        _pageNavigation.openDiscoverSettings,
         keywords: const [
           'remember last',
           'default source',
@@ -2472,7 +2477,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.debrifyTv,
         'Live TV & DVR',
-        _openDebrifyTvSettings,
+        _connectionNavigation.openDebrifyTvSettings,
         keywords: const ['channels', 'limits', 'playback', 'android tv'],
       ),
       // One row, one entry: the recordings page owns the whole DVR — a second
@@ -2482,7 +2487,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.recordings,
         'Live TV & DVR',
-        _openRecordings,
+        _pageNavigation.openRecordings,
         keywords: const [
           'record',
           'recording',
@@ -2501,7 +2506,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.iptvPlaylists,
         'Live TV & DVR',
-        _openIptvSettings,
+        _connectionNavigation.openIptvSettings,
         keywords: const ['m3u', 'xtream', 'channels', 'epg', 'live tv'],
       ),
       // Reachable only from the Stremio TV screen's own gear — indexed so its
@@ -2527,7 +2532,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'now playing',
           'start position',
         ],
-        onTap: _openStremioTvSettings,
+        onTap: _connectionNavigation.openStremioTvSettings,
       ),
       SettingsSearchEntry(
         icon: SettingsRows.tvKeyboard.icon,
@@ -2548,13 +2553,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'speak',
         ],
         toggleValue: () => _summaries.tvKeyboardEnabled,
-        onToggle: _toggleTvKeyboard,
+        onToggle: _appearanceNavigation.toggleTvKeyboard,
       ),
 
       nav(
         SettingsRows.syncAndMigrate,
         'Sync and Migrate',
-        _openSyncAndMigrate,
+        _profileActions.openSyncAndMigrate,
         keywords: const [
           'webdav',
           'migration',
@@ -2566,11 +2571,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
 
       // Downloads
-      if (_downloadLocationSupported)
+      if (_downloadLocation.downloadLocationSupported)
         nav(
           SettingsRows.downloadLocation,
           'Data & Backup',
-          _openDownloadLocationSettings,
+          _downloadLocation.openDownloadLocationSettings,
           subtitle: _summaries.downloadLocationSubtitle,
           keywords: const [
             'sd card',
@@ -2591,13 +2596,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.clearDownloads,
         'Data & Backup',
-        _clearDownloadData,
+        _maintenance.clearDownloadData,
         keywords: const ['queue', 'history', 'clear', 'remove'],
       ),
       nav(
         SettingsRows.clearPlayback,
         'Data & Backup',
-        _clearPlaybackData,
+        _maintenance.clearPlaybackData,
         keywords: const [
           'resume',
           'watch history',
@@ -2610,7 +2615,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.createBackup,
         'Data & Backup',
-        _createBackup,
+        _backup.createBackup,
         keywords: const [
           'export',
           'save',
@@ -2628,7 +2633,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.restoreBackup,
         'Data & Backup',
-        _restoreBackup,
+        _restore.restoreBackup,
         keywords: const [
           'import',
           'load',
@@ -2646,7 +2651,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         nav(
           SettingsRows.exportDiagnosticLogs,
           'Data & Backup',
-          _exportDiagnosticLogs,
+          _diagnostics.exportDiagnosticLogs,
           keywords: const [
             'logs',
             'diagnostics',
@@ -2666,7 +2671,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         category: 'About',
         keywords: const ['notify', 'releases', 'startup'],
         toggleValue: () => _summaries.autoUpdateChecksEnabled,
-        onToggle: _toggleAutoUpdateChecks,
+        onToggle: _updates.toggleAutoUpdateChecks,
       ),
       SettingsSearchEntry(
         icon: SettingsRows.includeAlphaUpdates.icon,
@@ -2675,12 +2680,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         category: 'About',
         keywords: const ['alpha', 'beta', 'prerelease', 'experimental'],
         toggleValue: () => _summaries.includeAlphaUpdates,
-        onToggle: _toggleIncludeAlphaUpdates,
+        onToggle: _updates.toggleIncludeAlphaUpdates,
       ),
       nav(
         SettingsRows.checkUpdates,
         'About',
-        _checkForAppUpdates,
+        _updates.checkForAppUpdates,
         subtitle: _summaries.updateSubtitle,
         keywords: const ['version', 'upgrade', 'github', 'new build'],
       ),
@@ -2693,7 +2698,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: _summaries.supportSettingsSubtitle,
           category: 'About',
           keywords: const ['donate', 'tip', 'contribute', 'fund'],
-          onTap: _openSupportDonation,
+          onTap: _pageNavigation.openSupportDonation,
         ),
       nav(
         SettingsRows.reddit,
@@ -2718,7 +2723,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       nav(
         SettingsRows.resetDebrify,
         'Danger Zone',
-        _resetAppData,
+        _maintenance.resetAppData,
         destructive: true,
         keywords: const ['wipe', 'factory reset', 'clear all', 'erase'],
       ),
@@ -2765,33 +2770,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'Remote': Icons.phonelink_rounded,
     };
     final pageOpeners = <String, Future<void> Function()>{
-      'Torbox': _openTorboxSettings,
-      'Premiumize': _openPremiumizeSettings,
-      'Real Debrid': _openRealDebridSettings,
-      'AllDebrid': _openAllDebridSettings,
-      'PikPak': _openPikPakSettings,
-      'WebDAV': _openWebDavSettings,
-      'Indexer Managers': _openIndexerManagersSettings,
-      'Engines': _openTorrentSettings,
-      'Filters': _openFilterSettings,
-      'Default Provider': _openProviderSettings,
-      'Quick Play': _openQuickPlaySettings,
-      'Home Screen': _openHomePageSettings,
-      'Launch Animation': _openLaunchAnimationPage,
-      'Advanced': _openThemeTokensPage,
-      'Sidebar': _openSidebarCustomization,
-      'Profile Picker': _openProfileAppearance,
-      'Playback': _openExternalPlayerSettings,
-      'Debrify TV': _openDebrifyTvSettings,
-      'Stremio TV': _openStremioTvSettings,
-      'IPTV Playlists': _openIptvSettings,
-      'Recordings': _openRecordings,
-      'Trakt': _openTraktSettings,
-      'Tracking': _openTrackingSettings,
-      'Simkl': _openSimklSettings,
-      'MDBList': _openMdblistSettings,
-      'Profiles': _switchProfile,
-      'Remote': _openRemoteControl,
+      'Torbox': _connectionNavigation.openTorboxSettings,
+      'Premiumize': _connectionNavigation.openPremiumizeSettings,
+      'Real Debrid': _connectionNavigation.openRealDebridSettings,
+      'AllDebrid': _connectionNavigation.openAllDebridSettings,
+      'PikPak': _connectionNavigation.openPikPakSettings,
+      'WebDAV': _connectionNavigation.openWebDavSettings,
+      'Indexer Managers': _connectionNavigation.openIndexerManagersSettings,
+      'Engines': _connectionNavigation.openTorrentSettings,
+      'Filters': _pageNavigation.openFilterSettings,
+      'Default Provider': _pageNavigation.openProviderSettings,
+      'Quick Play': _pageNavigation.openQuickPlaySettings,
+      'Home Screen': _pageNavigation.openHomePageSettings,
+      'Launch Animation': _appearanceNavigation.openLaunchAnimationPage,
+      'Advanced': _appearanceNavigation.openThemeTokensPage,
+      'Sidebar': _appearanceNavigation.openSidebarCustomization,
+      'Profile Picker': _appearanceNavigation.openProfileAppearance,
+      'Playback': _pageNavigation.openExternalPlayerSettings,
+      'Debrify TV': _connectionNavigation.openDebrifyTvSettings,
+      'Stremio TV': _connectionNavigation.openStremioTvSettings,
+      'IPTV Playlists': _connectionNavigation.openIptvSettings,
+      'Recordings': _pageNavigation.openRecordings,
+      'Trakt': _connectionNavigation.openTraktSettings,
+      'Tracking': _connectionNavigation.openTrackingSettings,
+      'Simkl': _connectionNavigation.openSimklSettings,
+      'MDBList': _connectionNavigation.openMdblistSettings,
+      'Profiles': _profileActions.switchProfile,
+      'Remote': _pageNavigation.openRemoteControl,
     };
 
     SettingsSearchEntry leaf(
@@ -3779,7 +3784,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           section.label,
           section.description,
           const [],
-          onTap: () => _openPlaybackSection(section),
+          onTap: () => _pageNavigation.openPlaybackSection(section),
         ),
       leaf(
         'Playback',
@@ -3794,7 +3799,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'language',
         ],
         onTap: () async {
-          if (!await _ensureProfileFeature(ProfileFeature.externalPlayers)) {
+          if (!await _profileActions.ensureProfileFeature(ProfileFeature.externalPlayers)) {
             return;
           }
           if (!mounted) return;
@@ -3815,7 +3820,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'system app chooser',
           'deovr',
         ],
-        onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
+        onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.player),
       ),
       leaf(
         'Playback',
@@ -3828,14 +3833,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'captions',
           ...subtitleLanguageLabels,
         ],
-        onTap: () => _openPlaybackSection(PlaybackSettingsSection.subtitles),
+        onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.subtitles),
       ),
       leaf(
         'Playback',
         'Default Audio language',
         'Preferred audio language / track',
         const ['audio', 'language', 'track', 'dub', ...audioLanguageLabels],
-        onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
+        onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.audio),
       ),
       leaf(
         'Playback',
@@ -3861,7 +3866,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             SubtitleFont.builtInOptions.map((option) => option.label),
           ),
         ],
-        onTap: () => _openPlaybackSection(PlaybackSettingsSection.subtitles),
+        onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.subtitles),
       ),
       leaf(
         'Playback',
@@ -3885,7 +3890,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           '3:2',
           '5:4',
         ],
-        onTap: () => _openPlaybackSection(PlaybackSettingsSection.video),
+        onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.video),
       ),
       leaf(
         'Playback',
@@ -3903,7 +3908,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'percent',
           'rewatch',
         ],
-        onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
+        onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.player),
       ),
       leaf(
         'Playback',
@@ -3917,7 +3922,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'ending',
           'skip segment',
         ],
-        onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
+        onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.player),
       ),
       leaf(
         'Playback',
@@ -3932,7 +3937,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'timestamp',
           'segments',
         ],
-        onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
+        onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.player),
       ),
       leaf(
         'Playback',
@@ -3953,7 +3958,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ...optionLabels(NetworkTuning.patienceOptions.values),
           ...optionLabels(NetworkTuning.bufferOptions.values),
         ],
-        onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
+        onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.player),
       ),
       if (_isAndroid)
         leaf(
@@ -3961,7 +3966,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Allow system audio effects',
           'Let equalizer apps process audio (Android)',
           const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (_isAndroid)
         leaf(
@@ -3977,7 +3982,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'receiver',
             'avr',
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (PlatformUtil.isTvOS || PlatformUtil.isIosMobile)
         leaf(
@@ -3992,7 +3997,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'lpcm',
             'audio channels',
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (PlatformUtil.isTvOS)
         leaf(
@@ -4007,7 +4012,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'hardware decoding',
             '10-bit',
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.video),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.video),
         ),
       if (PlatformUtil.isTvOS)
         leaf(
@@ -4024,7 +4029,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'receiver',
             'tvos',
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (PlatformUtil.isTvOS)
         leaf(
@@ -4040,7 +4045,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'no sound',
             'tvos',
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (_isAndroid && PlatformUtil.isAndroidTvCached)
         leaf(
@@ -4057,7 +4062,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'audio only',
             'no picture',
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.video),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.video),
         ),
       if (_isAndroid && !PlatformUtil.isAndroidTvCached)
         leaf(
@@ -4075,7 +4080,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               AndroidVideoRendererMode.values.map((mode) => mode.label),
             ),
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.video),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.video),
         ),
       if (_isAndroid && PlatformUtil.isAndroidTvCached)
         leaf(
@@ -4096,7 +4101,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'max',
             'off',
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.audio),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.audio),
         ),
       if (PlatformUtil.supportsSubtitleAutoSync)
         leaf(
@@ -4112,7 +4117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'offset',
             'experimental',
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.subtitles),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.subtitles),
         ),
       if (_isPhone)
         leaf(
@@ -4128,7 +4133,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'vertical',
             'horizontal',
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.player),
         ),
       if (_preferredExternalPlayerSupported)
         leaf(
@@ -4143,7 +4148,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'custom url scheme',
             ...externalPlayerLabels(),
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.player),
         ),
       if (_customPlayerCommandSupported)
         leaf(
@@ -4159,7 +4164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'save command',
             'command template',
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.player),
         ),
       leaf(
         'Playback',
@@ -4175,7 +4180,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'delete font',
           'subtitle',
         ],
-        onTap: () => _openPlaybackSection(PlaybackSettingsSection.subtitles),
+        onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.subtitles),
       ),
       // Android only: the page disables the DeoVR mode off Android and builds
       // its format controls under `Platform.isAndroid`.
@@ -4200,7 +4205,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ...optionLabels(deovr.screenTypeLabels.values),
             ...optionLabels(deovr.stereoModeLabels.values),
           ],
-          onTap: () => _openPlaybackSection(PlaybackSettingsSection.player),
+          onTap: () => _pageNavigation.openPlaybackSection(PlaybackSettingsSection.player),
         ),
 
       // Debrify TV
@@ -4364,7 +4369,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'browse files',
           'name your playlist',
         ],
-        onTap: _openIptvAddSource,
+        onTap: _connectionNavigation.openIptvAddSource,
       ),
       leaf(
         'IPTV Playlists',
@@ -4469,7 +4474,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'reorder channels',
           'dpad',
         ],
-        onTap: _openIptvChannelOrder,
+        onTap: _connectionNavigation.openIptvChannelOrder,
       ),
       leaf(
         'IPTV Playlists',
@@ -4759,429 +4764,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ];
   }
 
-  Future<void> _openTorrentSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.torrentSearch)) return;
-    if (!mounted) return;
-    await pushSettingsPage(context, const TorrentSettingsPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openIndexerManagersSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.torrentSearch)) return;
-    if (!mounted) return;
-    await pushSettingsPage(context, const IndexerManagersSettingsPage());
-    if (!mounted) return;
-
-    final configs = await TorrentProviderStorage.getIndexerManagerConfigs(
-      forSettings: true,
-    );
-    if (!mounted) return;
-    setState(() {
-      _summaries.indexerManagersConfigured = configs.isNotEmpty;
-      _summaries.indexerManagersStatus = configs.isNotEmpty ? 'Active' : 'Not configured';
-      _summaries.indexerManagersCaption = configs.isNotEmpty
-          ? '${configs.length} engine${configs.length == 1 ? '' : 's'} configured'
-          : 'Connect Jackett or Prowlarr';
-    });
-  }
-
-  Future<void> _openDebrifyTvSettings() async {
-    await pushSettingsPage(context, const DebrifyTvSettingsPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  /// Stremio TV's channel settings. The row lives on the Stremio TV screen
-  /// (not in Settings), but the page is self-contained — search deep-links
-  /// into it so "random episodes"/"rotation" are findable from Settings.
-  Future<void> _openStremioTvSettings() async {
-    await pushSettingsPage(context, const StremioTvSettingsPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openPikPakSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
-    if (!mounted) return;
-    final loggedOut = await pushSettingsPage<bool>(
-      context,
-      const PikPakSettingsPage(),
-    );
-    if (!mounted) return;
-    await _loadSummaries();
-    if (loggedOut == true) {
-      _focusFirstCard();
-    }
-  }
-
-  Future<void> _openMediaServerSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
-    if (!mounted) return;
-    await pushSettingsPage(context, const MediaServerSettingsPage());
-    if (mounted) await _loadSummaries();
-  }
-
-  Future<void> _openWebDavSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
-    if (!mounted) return;
-    await pushSettingsPage(context, const WebDavSettingsPage());
-    if (!mounted) return;
-    await _loadSummaries();
-  }
-
-  Future<void> _openTraktSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.trackersAndDiscovery)) {
-      return;
-    }
-    if (!mounted) return;
-    await pushSettingsPage(context, const TraktSettingsPage());
-    if (!mounted) return;
-    await _loadSummaries();
-  }
-
-  Future<void> _openTrackingSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.trackersAndDiscovery)) {
-      return;
-    }
-    if (!mounted) return;
-    await pushSettingsPage(context, const TrackingSettingsPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openSimklSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.trackersAndDiscovery)) {
-      return;
-    }
-    if (!mounted) return;
-    await pushSettingsPage(context, const SimklSettingsPage());
-    if (!mounted) return;
-    await _loadSummaries();
-  }
-
-  Future<void> _openMdblistSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.trackersAndDiscovery)) {
-      return;
-    }
-    if (!mounted) return;
-    await pushSettingsPage(context, const MdblistSettingsPage());
-    if (!mounted) return;
-    await _loadSummaries();
-  }
-
-  /// Phone/small-window chrome choice: classic bottom bar (default) vs the
-  /// floating glass button. Applies live — MainPageBridge tells the shell.
-  Future<void> _openNavigationSettings() async {
-    final current = await SidebarStorage.getPhoneNavStyle();
-    if (!mounted) return;
-
-    // The dialog RETURNS the choice; the write is awaited here before the
-    // bridge fires. Popping first and writing unawaited (the old shape)
-    // let an immediate pref re-read race the write.
-    final chosen = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        Widget option({
-          required IconData icon,
-          required String title,
-          required String subtitle,
-          required String value,
-        }) {
-          final selected = current == value;
-          return ListTile(
-            leading: Icon(
-              icon,
-              color: selected ? const Color(0xFFC7BFFF) : null,
-            ),
-            title: Text(
-              title,
-              style: TextStyle(
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-              ),
-            ),
-            subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-            trailing: selected
-                ? const Icon(Icons.check_rounded, color: Color(0xFFC7BFFF))
-                : null,
-            onTap: () => Navigator.of(dialogContext).pop(value),
-          );
-        }
-
-        return AlertDialog(
-          title: const Text('Navigation'),
-          contentPadding: const EdgeInsets.fromLTRB(0, 16, 0, 12),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              option(
-                icon: Icons.call_to_action_rounded,
-                title: 'Classic bar',
-                subtitle:
-                    'Bottom tabs \u2014 Home, three slots you pick, More '
-                    'holds the rest',
-                value: 'classic',
-              ),
-              option(
-                icon: Icons.blur_on_rounded,
-                title: 'Floating button',
-                subtitle: 'The glass button with the expanding menu',
-                value: 'floating',
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    if (chosen == null || chosen == current || !mounted) return;
-    await SidebarStorage.setPhoneNavStyle(chosen);
-    if (!mounted) return;
-    setState(() => _summaries.phoneNavStyle = chosen);
-    MainPageBridge.navPrefsChanged?.call();
-  }
-
-  Future<void> _openIptvSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.iptv)) return;
-    if (!mounted) return;
-    await pushSettingsPage(context, const IptvSettingsPage());
-    if (!mounted) return;
-    // IPTV settings hosts its own Appearance/Player guide sections — keep
-    // the Appearance row captions honest.
-    await _reloadAppearanceSummaries();
-  }
-
-  Future<void> _openIptvChannelOrder() async {
-    if (!await _ensureProfileFeature(ProfileFeature.iptv)) return;
-    if (!mounted) return;
-    await pushSettingsPage(context, const IptvChannelOrderPage());
-  }
-
-  /// IPTV settings landing on the add-source form — what a search for "add
-  /// playlist" is actually after. Without the flag the wide (TV/desktop)
-  /// layout opens its source rail instead, and the form is another hop away.
-  Future<void> _openIptvAddSource() async {
-    if (!await _ensureProfileFeature(ProfileFeature.iptv)) return;
-    if (!mounted) return;
-    await pushSettingsPage(
-      context,
-      const IptvSettingsPage(openAddSource: true),
-    );
-    if (!mounted) return;
-    // The two-pane reached from here still exposes the Appearance/Player
-    // guide sections — keep the Appearance row captions honest.
-    await _reloadAppearanceSummaries();
-  }
-
-  /// Live TV & DVR › Recordings — the same page IPTV settings and the
-  /// recording dialogs open, promoted to a first-class settings row.
-  Future<void> _openRecordings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.recordings)) return;
-    if (!mounted) return;
-    await pushSettingsPage(context, const RecordingsPage());
-  }
-
-  Future<void> _openMetadataSettings() async {
-    await pushSettingsPage(context, const MetadataSettingsPage());
-  }
-
-  Future<void> _openBadgesSettings() async {
-    await pushSettingsPage(context, const StreamBadgesSettingsPage());
-  }
-
-  Future<void> _openCollectionsSettings() async {
-    await pushSettingsPage(context, const CollectionsSettingsPage());
-  }
-
-  Future<void> _openHomePageSettings() async {
-    await pushSettingsPage(context, const HomePageSettingsPage());
-    if (!mounted) return;
-    // The Home Screen page hosts its own TV home layout row — keep the
-    // Appearance row caption honest.
-    await _reloadAppearanceSummaries();
-  }
-
-  Future<void> _openPlaybackSection(PlaybackSettingsSection section) async {
-    if (!await _ensureProfileFeature(ProfileFeature.externalPlayers)) return;
-    if (!mounted) return;
-    await pushSettingsPage(
-      context,
-      ExternalPlayerSettingsPage(section: section),
-    );
-    if (!mounted) return;
-    await _reloadAppearanceSummaries();
-  }
-
-  Future<void> _openExternalPlayerSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.externalPlayers)) return;
-    if (!mounted) return;
-    await pushSettingsPage(context, const PlaybackSettingsPage());
-    if (!mounted) return;
-    await _reloadAppearanceSummaries();
-  }
-
-  Future<void> _openRemoteControl() async {
-    if (!await _ensureProfileFeature(ProfileFeature.remoteControl)) return;
-    if (!mounted) return;
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const RemoteRolePickerScreen()));
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  /// Opens the Profiles hub (roster + switch + create). The bare
-  /// switch-picker call moved onto the hub itself.
-  Future<void> _switchProfile() async {
-    await pushSettingsPage(context, const ProfilesSettingsPage());
-    if (!mounted) return;
-    final diagnosticExportVisible = await _activeProfileMayExportDiagnostics();
-    if (!mounted) return;
-    setState(() => _summaries.diagnosticExportVisible = diagnosticExportVisible);
-  }
-
-  /// The admin check the hub applies before its Create/Manage rows — the
-  /// Profiles card's action rows share it, but answer with a spoken refusal
-  /// instead of hiding: a card whose rows come and go with who is signed in
-  /// reads as broken, not as policy.
-  Future<bool> _mayManageProfiles() async {
-    final registry = ProfileBootstrap.registry;
-    final authorization = await ProfileAuthorizationContext.capture(registry);
-    UserProfile? actor;
-    try {
-      actor = await authorization.validate(registry);
-    } catch (_) {
-      actor = null;
-    }
-    return actor != null &&
-        actor.role == UserProfileRole.admin &&
-        actor.allows(ProfileFeature.manageProfiles);
-  }
-
-  void _profilesDenied(String action) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Only an admin can $action profiles.')),
-    );
-  }
-
-  /// The Profiles card's "Add a profile" row — the hub's create flow without
-  /// the detour through the hub.
-  Future<void> _addProfile() async {
-    if (!await _mayManageProfiles()) {
-      _profilesDenied('add');
-      return;
-    }
-    if (!mounted) return;
-    await ProfileSetupFlow.show(context);
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  /// The Profiles card's "Edit this profile" row — straight into the ACTIVE
-  /// profile's editor, matching the hub's active-card Edit button.
-  Future<void> _editActiveProfile() async {
-    final registry = ProfileBootstrap.registry;
-    if (!await _mayManageProfiles()) {
-      _profilesDenied('edit');
-      return;
-    }
-    final profiles = await registry.listProfiles();
-    final activeId = ProfileRuntime.capture().profileId;
-    UserProfile? active;
-    for (final profile in profiles) {
-      if (profile.id == activeId) {
-        active = profile;
-        break;
-      }
-    }
-    if (active == null) return;
-    if (!mounted) return;
-    await ProfileSetupFlow.show(context, profile: active);
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openFilterSettings() async {
-    await pushSettingsPage(context, const FilterSettingsPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openProviderSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
-    if (!mounted) return;
-    await pushSettingsPage(context, const ProviderSettingsPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openQuickPlaySettings() async {
-    await pushSettingsPage(context, const QuickPlaySettingsPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openDiscoverSettings() async {
-    await pushSettingsPage(context, const DiscoverSettingsPage());
-  }
-
-  Future<void> _openRealDebridSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
-    if (!mounted) return;
-    final loggedOut = await pushSettingsPage<bool>(
-      context,
-      const RealDebridSettingsPage(),
-    );
-    if (!mounted) return;
-    await _loadSummaries();
-    if (loggedOut == true) {
-      _focusFirstCard();
-    }
-  }
-
-  Future<void> _openTorboxSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
-    if (!mounted) return;
-    final loggedOut = await pushSettingsPage<bool>(
-      context,
-      const TorboxSettingsPage(),
-    );
-    if (!mounted) return;
-    await _loadSummaries();
-    if (loggedOut == true) {
-      _focusFirstCard();
-    }
-  }
-
-  Future<void> _openPremiumizeSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
-    if (!mounted) return;
-    final loggedOut = await pushSettingsPage<bool>(
-      context,
-      const PremiumizeSettingsPage(),
-    );
-    if (!mounted) return;
-    await _loadSummaries();
-    if (loggedOut == true) {
-      _focusFirstCard();
-    }
-  }
-
-  Future<void> _openAllDebridSettings() async {
-    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
-    if (!mounted) return;
-    final loggedOut = await pushSettingsPage<bool>(
-      context,
-      const AllDebridSettingsPage(),
-    );
-    if (!mounted) return;
-    await _loadSummaries();
-    if (loggedOut == true) {
-      _focusFirstCard();
-    }
-  }
-
-  void _focusFirstCard() {
+  void focusFirstCard() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _firstCardFocusNode.requestFocus();
@@ -5189,1846 +4772,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  /// Route checks are defense in depth; services still validate their own
-  /// capabilities. Keeping this helper fail-closed also protects search/deep
-  /// links that call an opener while a policy edit is propagating.
-  Future<bool> _ensureProfileFeature(ProfileFeature feature) async {
-    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
-      return true;
-    }
-    var allowed = false;
-    try {
-      final registry = ProfileBootstrap.registry;
-      final authorization = await ProfileAuthorizationContext.capture(registry);
-      final actor = await authorization.validate(registry);
-      allowed = actor.allows(feature);
-    } catch (_) {
-      allowed = false;
-    }
-    if (!allowed && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This feature is disabled for this profile.'),
-        ),
-      );
-    }
-    return allowed;
-  }
-
-  Future<void> _createProfileBackup() =>
-      ProfileBackupFlows(context).createProfileBackup();
-
-  Future<void> _restoreProfileBackup() async {
-    await ProfileBackupFlows(
-      context,
-      onRestored: () async {
-        await _loadSummaries();
-        MainPageBridge.notifyIntegrationChanged();
-      },
-    ).restoreProfileBackup();
-  }
-
-  Future<void> _openSyncAndMigrate() async {
-    if (ProfileRuntime.mode != ProfileRuntimeMode.profileCommitted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Sync and Migrate becomes available after Profiles setup.',
-            ),
-          ),
-        );
-      }
-      return;
-    }
-    if (!await _ensureProfileFeature(ProfileFeature.backupRestore)) return;
-    if (!mounted) return;
-    await pushSettingsPage(context, const SyncAndMigratePage());
-  }
-
-  Future<void> _createBackup() async {
-    if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) {
-      await _createProfileBackup();
-      return;
-    }
-    final app = AppThemeScope.of(context);
-    // Build the payload first so we can warn if it's empty.
-    final Map<String, dynamic> payload;
-    try {
-      payload = await BackupRestoreService.buildBackup();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to build the backup')),
-      );
-      return;
-    }
-
-    final summary = BackupRestoreService.summarize(payload);
-    if (summary.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nothing to back up — no services are configured.'),
-        ),
-      );
-      return;
-    }
-
-    // File-imported IPTV playlists are left out of the payload on purpose —
-    // say so rather than let the user discover it after a restore.
-    final iptvProviders = await IptvTransferPayload.countPlaylists();
-
-    if (!mounted) return;
-    var includeCredentials = true;
-    var usePassphrase = false;
-    final passphraseController = TextEditingController();
-    final confirmController = TextEditingController();
-    final passphraseFocus = FocusNode(debugLabel: 'backupPassphrase');
-    final confirmFocus = FocusNode(debugLabel: 'backupPassphraseConfirmation');
-    final confirmed = await showSettingsDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final passphraseOk =
-              !usePassphrase ||
-              (passphraseController.text.isNotEmpty &&
-                  passphraseController.text == confirmController.text);
-          return AlertDialog(
-            title: const Text('Create backup'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('The backup will include:'),
-                  const SizedBox(height: 8),
-                  ..._backupSummaryLines(
-                    summary,
-                  ).map((line) => Text('• $line')),
-                  if (iptvProviders.fileImported > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        '${iptvProviders.fileImported} IPTV playlist'
-                        '${iptvProviders.fileImported == 1 ? '' : 's'} imported from '
-                        'a file won\'t be included — re-import the file on the other '
-                        'device. Starred channels from them still travel.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: app.fade(app.core.tx, 0x99 / 0xFF),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: const Text('Include credentials'),
-                    subtitle: const Text(
-                      'Off: share your setup without your accounts. Skips '
-                      'anything that embeds them: addons, Xtream providers, '
-                      'indexers, starred channels and lists. M3U URLs are '
-                      'kept — use a passphrase to protect those.',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    value: includeCredentials,
-                    onChanged: (v) =>
-                        setDialogState(() => includeCredentials = v),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: const Text('Encrypt with a passphrase'),
-                    value: usePassphrase,
-                    onChanged: (v) => setDialogState(() => usePassphrase = v),
-                  ),
-                  if (usePassphrase) ...[
-                    TvTextField(
-                      controller: passphraseController,
-                      focusNode: passphraseFocus,
-                      obscureText: true,
-                      autofocus: true,
-                      textInputAction: TextInputAction.next,
-                      keyboardSubmitLabel: 'Next',
-                      decoration: const InputDecoration(
-                        labelText: 'Passphrase',
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                      onSubmitted: (_) => confirmFocus.requestFocus(),
-                    ),
-                    const SizedBox(height: 8),
-                    TvTextField(
-                      controller: confirmController,
-                      focusNode: confirmFocus,
-                      obscureText: true,
-                      textInputAction: TextInputAction.done,
-                      keyboardSubmitLabel: 'Save backup',
-                      decoration: const InputDecoration(
-                        labelText: 'Confirm passphrase',
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                      onSubmitted: (_) {
-                        if (passphraseOk) Navigator.of(context).pop(true);
-                      },
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  if (usePassphrase)
-                    Text(
-                      'Encrypted with your passphrase — if you forget it, '
-                      'this backup cannot be opened.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: app.fade(app.core.tx, 0x99 / 0xFF),
-                      ),
-                    )
-                  else if (includeCredentials)
-                    const Text(
-                      'Credentials are stored in plain text. Keep this file '
-                      'private and treat it like a password.',
-                      style: TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
-                    ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: passphraseOk
-                    ? () => Navigator.of(context).pop(true)
-                    : null,
-                child: const Text('Save backup'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    final passphrase = usePassphrase ? passphraseController.text : null;
-    passphraseController.dispose();
-    confirmController.dispose();
-    passphraseFocus.dispose();
-    confirmFocus.dispose();
-    if (confirmed != true) return;
-    if (!mounted) return;
-
-    // The pre-dialog payload was only for the summary — rebuild honoring the
-    // include-credentials choice.
-    Map<String, dynamic> exportMap = includeCredentials
-        ? payload
-        : await BackupRestoreService.buildBackup(includeCredentials: false);
-
-    // The pre-dialog summary described the FULL payload — stripping
-    // credentials can leave nothing behind (a device configured with only
-    // accounts), and restore rejects an empty backup anyway.
-    if (!includeCredentials &&
-        BackupRestoreService.summarize(exportMap).isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Nothing left to back up without credentials — everything on '
-            'this device is account data.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (passphrase != null && passphrase.isNotEmpty) {
-      if (!mounted) return;
-      // Captured BEFORE the await: the modal lives on the root navigator and
-      // must be popped even if this screen unmounts while Argon2id runs —
-      // a mounted-check first would strand an undismissable dialog.
-      final rootNavigator = Navigator.of(context, rootNavigator: true);
-      // Argon2id takes seconds on TV hardware — show progress.
-      showSettingsDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const AlertDialog(
-          content: Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 16),
-                Expanded(child: Text('Encrypting backup…')),
-              ],
-            ),
-          ),
-        ),
-      );
-      try {
-        exportMap = await BackupRestoreService.encryptBackup(
-          exportMap,
-          passphrase,
-        );
-      } catch (_) {
-        rootNavigator.pop();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to encrypt the backup')),
-        );
-        return;
-      }
-      rootNavigator.pop();
-      if (!mounted) return;
-    }
-
-    final jsonContent = const JsonEncoder.withIndent('  ').convert(exportMap);
-    final bytes = Uint8List.fromList(utf8.encode(jsonContent));
-    final ts = DateTime.now();
-    final fileName =
-        'debrify-backup-${ts.year.toString().padLeft(4, '0')}${ts.month.toString().padLeft(2, '0')}${ts.day.toString().padLeft(2, '0')}-${ts.hour.toString().padLeft(2, '0')}${ts.minute.toString().padLeft(2, '0')}.json';
-
-    try {
-      final savedPath = await ProfileBackupFlows(
-        context,
-      ).saveBackupFile(fileName: fileName, bytes: bytes);
-      if (!mounted || savedPath == null) return;
-      // On Android, savedPath may be a content:// URI from the Storage
-      // Access Framework — show it raw so the user has at least a
-      // breadcrumb of where the backup went.
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Backup saved to $savedPath'),
-          duration: const Duration(seconds: 5),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to save the backup')),
-      );
-    }
-  }
-
-  Future<void> _exportDiagnosticLogs() async {
-    if (_summaries.exportingDiagnostics) return;
-    if (!await _activeProfileMayExportDiagnostics()) {
-      if (!mounted) return;
-      setState(() => _summaries.diagnosticExportVisible = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Only an admin can export diagnostic logs.'),
-        ),
-      );
-      return;
-    }
-    if (!mounted) return;
-    setState(() => _summaries.exportingDiagnostics = true);
-
-    try {
-      DiagnosticLog.instance.recordEvent(
-        source: 'settings',
-        event: 'diagnostic_export_requested',
-      );
-      final exported = await DiagnosticLog.instance.exportLastWindow();
-      if (!mounted) return;
-
-      if (kIsWeb) {
-        final savedReference = await FilePicker.platform.saveFile(
-          dialogTitle: 'Save diagnostic logs',
-          fileName: exported.fileName,
-          type: FileType.custom,
-          allowedExtensions: const <String>['jsonl'],
-          bytes: exported.bytes,
-        );
-        if (!mounted || savedReference == null) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Saved ${exported.entryCount} privacy-filtered diagnostic entries.',
-            ),
-          ),
-        );
-      } else {
-        await ProfileBackupFlows(context).saveBackupFile(
-          fileName: exported.fileName,
-          bytes: exported.bytes,
-          mimeType: 'application/x-ndjson',
-          artifactLabel: 'diagnostic log',
-        );
-      }
-      DiagnosticLog.instance.recordEvent(
-        source: 'settings',
-        event: 'diagnostic_export_saved',
-        fields: <String, Object?>{'entries': exported.entryCount},
-      );
-    } catch (error, stackTrace) {
-      DiagnosticLog.instance.recordError(
-        source: 'settings',
-        event: 'diagnostic_export_failed',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to export diagnostic logs.')),
-      );
-    } finally {
-      if (mounted) setState(() => _summaries.exportingDiagnostics = false);
-    }
-  }
-
-  /// Passphrase prompt loop for an encrypted backup envelope. Returns the
-  /// decrypted inner payload, or null when the user cancels. A wrong
-  /// passphrase re-shows the prompt with an inline error instead of aborting.
-  Future<Map<String, dynamic>?> _promptAndDecryptBackup(
-    Map<String, dynamic> envelope,
-  ) async {
-    String? errorText;
-    while (true) {
-      if (!mounted) return null;
-      final controller = TextEditingController();
-      final entered = await showSettingsDialog<String>(
-        context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Backup is encrypted'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (envelope['createdAt'] is String)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      'Created: ${envelope['createdAt']}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                TvTextField(
-                  controller: controller,
-                  obscureText: true,
-                  autofocus: true,
-                  textInputAction: TextInputAction.done,
-                  keyboardSubmitLabel: 'Unlock',
-                  decoration: InputDecoration(
-                    labelText: 'Passphrase',
-                    errorText: errorText,
-                  ),
-                  onSubmitted: (value) => Navigator.of(context).pop(value),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(null),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(controller.text),
-                child: const Text('Unlock'),
-              ),
-            ],
-          ),
-        ),
-      );
-      controller.dispose();
-      if (entered == null || entered.isEmpty) return null;
-      if (!mounted) return null;
-
-      // Captured BEFORE the await so the modal is popped even if this screen
-      // unmounts while the KDF runs (see _createBackup's encrypt block).
-      final rootNavigator = Navigator.of(context, rootNavigator: true);
-      showSettingsDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const AlertDialog(
-          content: Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 16),
-                Expanded(child: Text('Unlocking backup…')),
-              ],
-            ),
-          ),
-        ),
-      );
-      try {
-        final inner = await BackupRestoreService.decryptBackup(
-          envelope,
-          entered,
-        );
-        rootNavigator.pop();
-        if (!mounted) return null;
-        return inner;
-      } on BackupPassphraseException {
-        rootNavigator.pop();
-        if (!mounted) return null;
-        errorText = 'Wrong passphrase — try again';
-      } on FormatException {
-        rootNavigator.pop();
-        if (!mounted) return null;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('The backup format is invalid')),
-        );
-        return null;
-      }
-    }
-  }
-
-  Future<void> _restoreBackup() async {
-    if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) {
-      await _restoreProfileBackup();
-      return;
-    }
-    final app = AppThemeScope.of(context);
-    final t = app.settings;
-    final FilePickerResult? pick;
-    try {
-      // FileType.any instead of custom: Android's MIME mapping for `json` is
-      // unreliable and throws PlatformException("Unsupported filter") on many
-      // devices, leaving the backup unselectable. The contents are validated by
-      // BackupRestoreService.parse below, so no extension filter is needed.
-      pick = await FilePicker.platform.pickFiles(
-        dialogTitle: 'Choose Debrify backup file',
-        type: FileType.any,
-        withData: false,
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open the file picker')),
-      );
-      return;
-    }
-
-    if (pick == null || pick.files.isEmpty) return;
-    final file = pick.files.first;
-
-    // FileType.any lets the user pick anything. Reject an implausibly large
-    // file before opening it so a stray huge selection cannot be allocated.
-    // Sized so the app always accepts what its own export can produce: a
-    // passphrase-encrypted envelope base64-inflates the payload by ~4/3, so an
-    // IPTV-heavy ~20 MiB backup arrives here at ~27 MiB.
-    if (file.size > 40 * 1024 * 1024) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('That file is too large to be a Debrify backup.'),
-        ),
-      );
-      return;
-    }
-
-    final String content;
-    try {
-      if (file.path == null) {
-        throw Exception('Could not read backup file contents');
-      }
-      final selected = File(file.path!);
-      content = await PortableProfilePackage.readBoundedUtf8(
-        selected.openRead(),
-        maxBytes: 40 * 1024 * 1024,
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to read the backup file')),
-      );
-      return;
-    }
-
-    Map<String, dynamic> payload;
-    try {
-      payload = BackupRestoreService.parse(content);
-    } on FormatException catch (error) {
-      if (!mounted) return;
-      final looksLikeProfilePackage =
-          content.contains('"format":"debrify-profile-package"') ||
-          content.contains('"format": "debrify-profile-package"');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            looksLikeProfilePackage
-                ? 'This is a profile backup. Enable profiles or update to a build that supports profile restore.'
-                : error.message,
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (BackupRestoreService.isEncrypted(payload)) {
-      final inner = await _promptAndDecryptBackup(payload);
-      if (inner == null) return; // Cancelled or unrecoverable.
-      payload = inner;
-    }
-
-    final summary = BackupRestoreService.summarize(payload);
-    if (summary.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Backup contains no data to restore.')),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    final confirmed = await showSettingsDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Restore backup'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (summary.createdAt != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'Created: ${summary.createdAt}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: app.fade(app.core.tx, 0x99 / 0xFF),
-                  ),
-                ),
-              ),
-            const Text('This backup contains:'),
-            const SizedBox(height: 8),
-            ..._backupSummaryLines(summary).map((line) => Text('• $line')),
-            const SizedBox(height: 12),
-            const Text(
-              'Saved credentials (Real-Debrid, Torbox, Premiumize, AllDebrid, PikPak, Trakt, Simkl) will '
-              'be overwritten. Addons, search engines, WebDAV servers, '
-              'indexer managers, and IPTV providers you already have are kept '
-              'as-is. IPTV favorites and lists merge into what\'s here — '
-              'nothing is removed.',
-              style: TextStyle(fontSize: 12),
-            ),
-            if (summary.addonCount > 0 || summary.searchEngineCount > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'Restoring addons and search engines needs a network '
-                  'connection.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: app.fade(app.core.tx, 0x99 / 0xFF),
-                  ),
-                ),
-              ),
-            if (summary.webDavServerCount > 0 ||
-                summary.indexerManagerCount > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'WebDAV and Jackett/Prowlarr URLs may be local-network '
-                  'only — they won\'t work on a different network.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: app.fade(app.core.tx, 0x99 / 0xFF),
-                  ),
-                ),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Restore'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-    if (!mounted) return;
-
-    // Run the restore. Show a non-dismissible progress dialog while it runs
-    // — search engines and addons require network and can take a while.
-    showSettingsDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              SizedBox(width: 16),
-              Expanded(child: Text('Restoring backup…')),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    RestoreReport report;
-    try {
-      report = await BackupRestoreService.applyBackup(payload);
-    } catch (_) {
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Restore failed')));
-      return;
-    }
-
-    if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pop();
-
-    final msg = _formatRestoreReport(report);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: report.hasAnyFailure ? t.warning : null,
-        duration: const Duration(seconds: 5),
-      ),
-    );
-
-    // Drop any cached account info from a previous session so the cards
-    // don't briefly show stale identity while Phase 2 of _loadSummaries
-    // re-fetches it for the newly-restored keys.
-    if (report.realDebrid) AccountService.clearUserInfo();
-    if (report.torbox) TorboxAccountService.clearUserInfo();
-    if (report.premiumize) PremiumizeAccountService.clearUserInfo();
-    if (report.allDebrid) AllDebridAccountService.clearUserInfo();
-
-    // Re-run the summary loader so the connection cards reflect the newly
-    // restored services (and kick off background account refresh).
-    await _loadSummaries();
-
-    // Tell the rest of the app — navbar, home tabs, search surfaces — that
-    // integrations changed so they rebuild against the restored services
-    // (same hook the individual settings pages use after a credential edit).
-    MainPageBridge.notifyIntegrationChanged();
-  }
-
-  List<String> _backupSummaryLines(BackupSummary s) {
-    final lines = <String>[];
-    if (s.hasRealDebrid) lines.add('Real-Debrid');
-    if (s.hasTorbox) lines.add('Torbox');
-    if (s.hasPremiumize) lines.add('Premiumize');
-    if (s.hasAllDebrid) lines.add('AllDebrid');
-    if (s.hasPikpak) lines.add('PikPak');
-    if (s.hasTrakt) lines.add('Trakt');
-    if (s.hasSimkl) lines.add('Simkl');
-    if (s.hasMdblist) lines.add('MDBList');
-    if (s.searchEngineCount > 0) {
-      lines.add('Search engines (${s.searchEngineCount})');
-    }
-    if (s.addonCount > 0) lines.add('Stremio addons (${s.addonCount})');
-    if (s.webDavServerCount > 0) {
-      lines.add('WebDAV servers (${s.webDavServerCount})');
-    }
-    if (s.indexerManagerCount > 0) {
-      lines.add('Jackett/Prowlarr (${s.indexerManagerCount})');
-    }
-    if (s.iptvPlaylistCount > 0) {
-      lines.add('IPTV providers (${s.iptvPlaylistCount})');
-    }
-    if (s.iptvFavoriteCount > 0) {
-      lines.add('IPTV favorites (${s.iptvFavoriteCount} channels)');
-    }
-    if (s.iptvListCount > 0) {
-      lines.add(
-        'IPTV lists (${s.iptvListCount}, '
-        '${s.iptvListChannelCount} channels)',
-      );
-    }
-    if (s.homeCollectionCount > 0) {
-      lines.add('Collections (${s.homeCollectionCount})');
-    }
-    if (s.streamBadgeSourceCount > 0) {
-      lines.add('Stream badge rulesets (${s.streamBadgeSourceCount})');
-    }
-    return lines;
-  }
-
-  String _formatRestoreReport(RestoreReport r) {
-    final parts = <String>[];
-    if (r.realDebrid) parts.add('Real-Debrid');
-    if (r.torbox) parts.add('Torbox');
-    if (r.premiumize) parts.add('Premiumize');
-    if (r.allDebrid) parts.add('AllDebrid');
-    if (r.pikpak) parts.add('PikPak');
-    if (r.trakt) parts.add('Trakt');
-    if (r.simkl) parts.add('Simkl');
-    if (r.mdblist) parts.add('MDBList');
-    if (r.searchEnginesImported > 0) {
-      parts.add('${r.searchEnginesImported} new engine(s)');
-    }
-    if (r.addonsImported > 0) {
-      parts.add('${r.addonsImported} new addon(s)');
-    }
-    if (r.webDavServersImported > 0) {
-      parts.add('${r.webDavServersImported} WebDAV server(s)');
-    }
-    if (r.indexerManagersImported > 0) {
-      parts.add('${r.indexerManagersImported} indexer manager(s)');
-    }
-    if (r.iptvPlaylistsImported > 0) {
-      parts.add('${r.iptvPlaylistsImported} IPTV provider(s)');
-    }
-    if (r.iptvFavoritesImported > 0) {
-      parts.add('${r.iptvFavoritesImported} favorite channel(s)');
-    }
-    if (r.iptvListsCreated > 0) {
-      parts.add('${r.iptvListsCreated} IPTV list(s)');
-    }
-    if (r.iptvListChannelsImported > 0) {
-      parts.add('${r.iptvListChannelsImported} list channel(s)');
-    }
-    if (r.homeCollectionsImported > 0) {
-      parts.add('${r.homeCollectionsImported} collection(s)');
-    }
-    if (r.streamBadgeSourcesImported > 0) {
-      parts.add('${r.streamBadgeSourcesImported} badge ruleset(s)');
-    }
-
-    if (parts.isEmpty && !r.hasAnyFailure) {
-      return 'Nothing new to restore — everything was already present';
-    }
-    final base = parts.isEmpty
-        ? 'Restore finished'
-        : 'Restored: ${parts.join(', ')}';
-    final notes = <String>[];
-    if (r.searchEnginesAlreadyPresent > 0) {
-      notes.add('${r.searchEnginesAlreadyPresent} engine(s) already present');
-    }
-    if (r.addonsAlreadyPresent > 0) {
-      notes.add('${r.addonsAlreadyPresent} addon(s) already present');
-    }
-    if (r.webDavServersAlreadyPresent > 0) {
-      notes.add(
-        '${r.webDavServersAlreadyPresent} WebDAV server(s) already present',
-      );
-    }
-    if (r.indexerManagersAlreadyPresent > 0) {
-      notes.add(
-        '${r.indexerManagersAlreadyPresent} indexer manager(s) already present',
-      );
-    }
-    if (r.iptvPlaylistsAlreadyPresent > 0) {
-      notes.add(
-        '${r.iptvPlaylistsAlreadyPresent} IPTV provider(s) already present',
-      );
-    }
-    if (r.iptvFavoritesAlreadyPresent > 0) {
-      notes.add('${r.iptvFavoritesAlreadyPresent} favorite(s) already present');
-    }
-    if (r.iptvListsMerged > 0) {
-      notes.add('${r.iptvListsMerged} existing list(s) topped up');
-    }
-    final withNotes = notes.isEmpty ? base : '$base (${notes.join(', ')})';
-
-    if (!r.hasAnyFailure) return withNotes;
-    final failed = <String>[];
-    if (r.pikpakLoginFailed) {
-      failed.add(
-        'PikPak login (credentials saved — retry from PikPak settings)',
-      );
-    }
-    if (r.searchEnginesFailed > 0) {
-      failed.add('${r.searchEnginesFailed} engine(s)');
-    }
-    if (r.addonsFailed > 0) failed.add('${r.addonsFailed} addon(s)');
-    if (r.webDavServersFailed > 0) {
-      failed.add('${r.webDavServersFailed} WebDAV server(s)');
-    }
-    if (r.indexerManagersFailed > 0) {
-      failed.add('${r.indexerManagersFailed} indexer manager(s)');
-    }
-    if (r.iptvPlaylistsFailed > 0) {
-      failed.add('${r.iptvPlaylistsFailed} IPTV provider(s)');
-    }
-    if (r.iptvFavoritesFailed > 0) {
-      failed.add('${r.iptvFavoritesFailed} favorite(s)');
-    }
-    if (r.iptvListsFailed > 0) {
-      failed.add('${r.iptvListsFailed} IPTV list entr(ies)');
-    }
-    failed.addAll(r.errors);
-    return '$withNotes — failed: ${failed.join(', ')}';
-  }
-
-  // Android uses SAF; Windows/Linux use a plain picked path. macOS is
-  // deliberately excluded: the sandbox grants read-only user-selected access,
-  // so a writable custom folder needs security-scoped bookmarks (own feature).
-  bool get _downloadLocationSupported =>
-      !kIsWeb && (Platform.isAndroid || Platform.isWindows || Platform.isLinux);
-
-  bool get _downloadLocationUsesSaf => !kIsWeb && Platform.isAndroid;
-
-  String get _defaultDownloadLocationLabel {
-    if (_downloadLocationUsesSaf || Platform.isWindows) {
-      return 'Downloads/Debrify (default)';
-    }
-    // Linux: getDownloadsDirectory isn't used there — the app writes under
-    // its documents dir (see DownloadService._appDownloadsSubdir fallback).
-    return 'App folder (default)';
-  }
 
   Future<void> _loadDownloadLocation() async {
-    if (!_downloadLocationSupported) return;
-    final String? name = _downloadLocationUsesSaf
+    if (!_downloadLocation.downloadLocationSupported) return;
+    final String? name = _downloadLocation.downloadLocationUsesSaf
         ? await DeviceStorage.getDownloadTreeDisplayName()
         : await DeviceStorage.getDownloadDirPath();
     if (!mounted) return;
     setState(() {
       _summaries.downloadLocationSubtitle = name == null
-          ? _defaultDownloadLocationLabel
+          ? _downloadLocation.defaultDownloadLocationLabel
           : 'Custom: $name';
-    });
-  }
-
-  Future<void> _openDownloadLocationSettings() async {
-    final String? currentTree = _downloadLocationUsesSaf
-        ? await DeviceStorage.getDownloadTreeUri()
-        : await DeviceStorage.getDownloadDirPath();
-    if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppThemeScope.of(context).settings.sheetBg,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF334155),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-              const SizedBox(height: 8),
-              ListTile(
-                leading: const Icon(Icons.folder_rounded),
-                title: const Text('Download location'),
-                subtitle: Text(_summaries.downloadLocationSubtitle),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                autofocus: true,
-                leading: const Icon(Icons.drive_folder_upload_rounded),
-                title: const Text('Choose folder…'),
-                subtitle: Text(
-                  _downloadLocationUsesSaf
-                      ? 'Pick any folder, including an SD card. New downloads go there.'
-                      : 'Pick any folder, including another drive. New downloads go there.',
-                ),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  _chooseDownloadFolder();
-                },
-              ),
-              if (currentTree != null)
-                ListTile(
-                  leading: const Icon(Icons.restart_alt_rounded),
-                  title: const Text('Reset to default'),
-                  subtitle: Text(
-                    'Save to ${_defaultDownloadLocationLabel.replaceAll(' (default)', '')} again',
-                  ),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _resetDownloadFolder();
-                  },
-                ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _chooseDownloadFolder() async {
-    if (!_downloadLocationUsesSaf) {
-      await _chooseDownloadFolderDesktop();
-      return;
-    }
-    final res = await AndroidNativeDownloader.pickDownloadDirectory();
-    if (res == null) return; // user backed out of the picker
-    final newTree = (res['treeUri'] ?? '').toString();
-    final name = (res['displayName'] ?? 'Custom folder').toString();
-    if (newTree.isEmpty) return;
-    final old = await DeviceStorage.getDownloadTreeUri();
-    if (old != null && old.isNotEmpty && old != newTree) {
-      // Release the previous grant — persisted-permission slots are limited.
-      await AndroidNativeDownloader.releaseDownloadDirectory(old);
-    }
-    await DeviceStorage.setDownloadTreeUri(newTree, name);
-    await _loadDownloadLocation();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('New downloads will be saved to "$name"')),
-    );
-  }
-
-  /// Windows/Linux: a picked folder is a plain path — no grants to manage,
-  /// but verify it's writable before persisting so the pref can't be born
-  /// pointing at a read-only location.
-  Future<void> _chooseDownloadFolderDesktop() async {
-    String? dir;
-    try {
-      dir = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: 'Choose download folder',
-      );
-    } catch (e) {
-      // file_picker shells out to zenity/qarma/kdialog on Linux and throws
-      // when none is installed — surface it instead of failing silently.
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Couldn't open a folder picker on this system (a dialog tool like zenity may be missing).",
-          ),
-        ),
-      );
-      return;
-    }
-    if (dir == null || dir.trim().isEmpty) return; // user backed out
-    // Normalize (also drops any trailing separator, so a drive-root pick
-    // like "C:\" can't render doubled separators downstream).
-    dir = path.normalize(dir.trim());
-    // UNC network shares break background_downloader's task construction
-    // (its Task constructor strips the leading backslash) — refuse rather
-    // than accept a folder downloads can't actually reach.
-    if (Platform.isWindows && dir.startsWith(r'\\')) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Network shares aren\'t supported yet — map the share to a drive letter or pick a local folder.',
-          ),
-        ),
-      );
-      return;
-    }
-    bool writable = false;
-    try {
-      final probe = File(
-        path.join(
-          dir,
-          '.debrify_write_probe_${DateTime.now().millisecondsSinceEpoch}',
-        ),
-      );
-      await probe.writeAsString('probe', flush: true);
-      // Write success alone proves writability; delete is best-effort (a
-      // Windows AV/indexer lock on the fresh file must not fail the pick).
-      try {
-        await probe.delete();
-      } catch (_) {}
-      writable = true;
-    } catch (_) {}
-    if (!writable) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("That folder isn't writable — pick another one."),
-        ),
-      );
-      return;
-    }
-    await DeviceStorage.setDownloadDirPath(dir);
-    await _loadDownloadLocation();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('New downloads will be saved to "$dir"')),
-    );
-  }
-
-  Future<void> _resetDownloadFolder() async {
-    if (_downloadLocationUsesSaf) {
-      final old = await DeviceStorage.getDownloadTreeUri();
-      if (old != null && old.isNotEmpty) {
-        await AndroidNativeDownloader.releaseDownloadDirectory(old);
-      }
-      await DeviceStorage.clearDownloadTreeUri();
-    } else {
-      await DeviceStorage.clearDownloadDirPath();
-    }
-    await _loadDownloadLocation();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Downloads will be saved to ${_defaultDownloadLocationLabel.replaceAll(' (default)', '')}',
-        ),
-      ),
-    );
-  }
-
-  Future<void> _clearDownloadData() async {
-    final confirmed = await showSettingsDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear download data?'),
-        content: const Text(
-          'This removes queued entries and download history. Files already saved to disk stay untouched.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await DownloadService.instance.clearDownloadDatabase();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Download data cleared')));
-    }
-  }
-
-  Future<void> _clearPlaybackData() async {
-    final confirmed = await showSettingsDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear playback data?'),
-        content: const Text(
-          'This resets resume positions and cached playback preferences.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await PlaybackCleanupStorage.clearAllPlaybackData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Playback data cleared')));
-    }
-  }
-
-  Future<void> _resetAppData() async {
-    final profileMode =
-        ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted;
-    ProfileAuthorizationContext? authorization;
-    UserProfile? actor;
-    if (profileMode) {
-      authorization = await ProfileAuthorizationContext.capture(
-        ProfileBootstrap.registry,
-      );
-      actor = await authorization.validate(ProfileBootstrap.registry);
-    }
-    final mayResetDevice =
-        actor?.role == UserProfileRole.admin &&
-        actor!.allows(ProfileFeature.manageProfiles) &&
-        actor.allows(ProfileFeature.backupRestore);
-    final action = await showSettingsDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(profileMode ? 'Reset this profile?' : 'Reset Debrify?'),
-        content: Text(
-          profileMode
-              ? 'This clears this profile\'s settings, history, playlists, and private app data. The profile, PIN, shared connections, active jobs, downloads, and recordings remain untouched.'
-              : 'This removes saved connections, playback history, download queue, and onboarding completion. Files already saved to disk remain untouched.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          if (mayResetDevice)
-            TextButton(
-              onPressed: () => Navigator.of(context).pop('device'),
-              child: const Text('Reset device…'),
-            ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop('profile'),
-            child: Text(profileMode ? 'Reset profile' : 'Reset app'),
-          ),
-        ],
-      ),
-    );
-
-    if (action == null) return;
-
-    if (profileMode && action == 'device') {
-      if (!await ProfileBackupFlows(
-        context,
-      ).reauthenticateSensitiveProfile(actor!)) {
-        return;
-      }
-      final typed = TextEditingController();
-      final confirmed = await showSettingsDialog<bool>(
-        context: context,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Reset this Debrify installation?'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'All profiles, connections, jobs, schedules, private data, remote pairings, and device keys will be removed. Downloaded and recorded files remain on disk. The app will close and start fresh next launch.',
-                ),
-                const SizedBox(height: 16),
-                TvTextField(
-                  controller: typed,
-                  autofocus: true,
-                  textInputAction: TextInputAction.done,
-                  keyboardSubmitLabel: 'Reset device',
-                  decoration: const InputDecoration(
-                    labelText: 'Type RESET to continue',
-                  ),
-                  onChanged: (_) => setDialogState(() {}),
-                  onSubmitted: (_) {
-                    if (typed.text == 'RESET') {
-                      Navigator.of(dialogContext).pop(true);
-                    }
-                  },
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: typed.text == 'RESET'
-                    ? () => Navigator.of(dialogContext).pop(true)
-                    : null,
-                child: const Text('Reset device'),
-              ),
-            ],
-          ),
-        ),
-      );
-      typed
-        ..clear()
-        ..dispose();
-      if (confirmed != true) return;
-      await ProfileDeviceResetService.reset(
-        registry: ProfileBootstrap.registry,
-        authorization: authorization!,
-      );
-      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-        exit(0);
-      }
-      await SystemNavigator.pop();
-      return;
-    }
-
-    if (profileMode && action == 'profile') {
-      await ProfileResetService(
-        registry: ProfileBootstrap.registry,
-        lifecycleParticipants: <ProfileLifecycleParticipant>[
-          ProfileAppLifecycleParticipant(),
-        ],
-      ).resetActiveProfile();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile data reset. Connections and files were kept.'),
-        ),
-      );
-      await _loadSummaries();
-      return;
-    }
-
-    await RealDebridStorage.deleteApiKey();
-    AccountService.clearUserInfo();
-    await TorboxStorage.deleteTorboxApiKey();
-    TorboxAccountService.clearUserInfo();
-    await PremiumizeStorage.deletePremiumizeApiKey();
-    await AllDebridStorage.deleteAllDebridApiKey();
-    AllDebridAccountService.clearUserInfo();
-    await PikpakStorage.clearPikPakAuth();
-    await WebdavStorage.clearWebDav();
-    await TraktStorage.clearTraktAuth();
-    // Clears the token + username AND the in-memory library cache.
-    await SimklService.instance.logout();
-    // Clears the key + username AND the in-memory list/items cache.
-    await MdblistService.instance.logout();
-    await DownloadService.instance.clearDownloadDatabase();
-    // Reset is a device-local wipe: none of these clears may record synced
-    // deletions, or reconnecting sync later replays them circle-wide.
-    await PlaybackCleanupStorage.clearAllPlaybackData(recordSyncDeletions: false);
-    await ContinueWatchingStorage.clearContinueWatching(recordSyncDeletions: false);
-    await PlaylistStorage.clearPlaylist(recordSyncDeletions: false);
-    await PlaylistStorage.clearAllPlaylistMetadata(recordSyncDeletions: false);
-    await WatchlistStorage.clearMyWatchlist();
-    await TorrentHistoryStorage.clearTorrentSearchHistory();
-    await StartupStorage.clearAllStartupSettings();
-    await HomePageStorage.clearAllHomePageSettings();
-    await ProviderCredentialStorage.clearAllIntegrationStates();
-    await DebrifyTvStorage.clearDebrifyTvProviderAndLegacy();
-    await TorrentSearchStorage.clearAllFilterSettings();
-    await TorrentProviderStorage.clearAllTorrentEngineSettings();
-    await ProviderCredentialStorage.clearAllPostTorrentActions();
-    await DebrifyTvStorage.clearAllDebrifyTvSettings();
-    // A device-local reset must never mint circle-wide channel deletions:
-    // rejoining a sync circle later means adopting its data, not erasing it.
-    await DebrifyTvRepository.instance.clearAll(
-      origin: WebDavSyncMutationOrigin.maintenance,
-    );
-    await StremioService.instance.clearAllAddons();
-    await ProviderCredentialStorage.setInitialSetupComplete(false);
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('App data reset. You can reconnect services anytime.'),
-      ),
-    );
-
-    await _loadSummaries();
-  }
-
-  Future<void> _checkForAppUpdates() async {
-    if (!await _ensureProfileFeature(ProfileFeature.appUpdates)) return;
-    if (!mounted) return;
-    if (_summaries.checkingUpdates) return;
-    if (_summaries.currentVersionName.isEmpty) return;
-    await DeviceStorage.setIgnoredUpdateVersion(null);
-
-    setState(() {
-      _summaries.checkingUpdates = true;
-      _summaries.updateSubtitle = 'Checking GitHub releases...';
-    });
-
-    try {
-      final summary = await UpdateService.checkForUpdates(
-        currentVersion: _summaries.currentVersionName,
-        includePrereleases: _summaries.includeAlphaUpdates,
-      );
-      if (!mounted) return;
-      setState(() {
-        _summaries.updateSubtitle = summary.updateAvailable
-            ? 'Update available (${summary.release.versionLabel})'
-            : 'You are on the latest build';
-        _summaries.checkingUpdates = false;
-      });
-      await _showReleaseDetails(summary);
-    } on UpdateException catch (err) {
-      _showSnack(err.message);
-      if (mounted) {
-        setState(() {
-          _summaries.updateSubtitle = 'Unable to reach GitHub releases';
-          _summaries.checkingUpdates = false;
-        });
-      }
-    } catch (_) {
-      _showSnack('Could not check for updates. Please try again later.');
-      if (mounted) {
-        setState(() {
-          _summaries.updateSubtitle = 'Unable to reach GitHub releases';
-          _summaries.checkingUpdates = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _showReleaseDetails(UpdateSummary summary) async {
-    final app = AppThemeScope.of(context);
-    if (!mounted) return;
-    final release = summary.release;
-    final theme = Theme.of(context);
-    final bool isAndroidDevice = !kIsWeb && Platform.isAndroid;
-    final bool canInstallDirectly =
-        summary.updateAvailable &&
-        isAndroidDevice &&
-        release.androidApkAsset != null;
-    final String latestLabel = release.versionLabel.isNotEmpty
-        ? release.versionLabel
-        : 'Latest release';
-    final String notes = release.body.trim().isNotEmpty
-        ? release.body.trim()
-        : 'Release notes will appear here once published.';
-    final String? publishedLabel = release.publishedAt != null
-        ? DateFormat.yMMMd().format(release.publishedAt!.toLocal())
-        : null;
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: theme.colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) {
-        final baseTheme = Theme.of(sheetContext);
-        final textTheme = baseTheme.textTheme;
-        final Color bodyColor = app.fade(app.core.tx, 0.85);
-        final markdownStyle = MarkdownStyleSheet.fromTheme(baseTheme).copyWith(
-          h1: textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: app.core.tx,
-          ),
-          h2: textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: app.core.tx,
-          ),
-          h3: textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: app.core.tx,
-          ),
-          p: textTheme.bodyMedium?.copyWith(color: bodyColor, height: 1.45),
-          strong: const TextStyle(fontWeight: FontWeight.w700),
-          listBullet: textTheme.bodyMedium?.copyWith(color: bodyColor),
-          blockquote: textTheme.bodyMedium?.copyWith(
-            color: app.fade(app.core.tx, 0.7),
-          ),
-        );
-        return FractionallySizedBox(
-          heightFactor: 0.9,
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: app.fade(app.core.tx, 0.2),
-                        borderRadius: app.shape.br(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    summary.updateAvailable
-                        ? 'Update available'
-                        : 'You are up to date',
-                    style: textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Installed: ${_summaries.appVersion}',
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: app.fade(app.core.tx, 0.6),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Latest: $latestLabel',
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: app.fade(app.core.tx, 0.6),
-                    ),
-                  ),
-                  if (publishedLabel != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Published $publishedLabel',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: app.fade(app.core.tx, 0.5),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Text(
-                    'Release notes',
-                    style: textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: MarkdownBody(
-                        data: notes,
-                        selectable: true,
-                        onTapLink: (text, href, title) {
-                          if (href == null) return;
-                          final uri = Uri.tryParse(href);
-                          if (uri != null) {
-                            launchUrl(
-                              uri,
-                              mode: LaunchMode.externalApplication,
-                            );
-                          }
-                        },
-                        styleSheet: markdownStyle,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      if (canInstallDirectly)
-                        FilledButton.icon(
-                          onPressed: () {
-                            Navigator.of(sheetContext).pop();
-                            _startAndroidUpdateDownload(release);
-                          },
-                          icon: const Icon(Icons.system_update_alt_rounded),
-                          label: const Text('Download & Install'),
-                        ),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(sheetContext).pop();
-                          _openReleasesPage(release.htmlUrl);
-                        },
-                        icon: const Icon(Icons.open_in_new_rounded),
-                        label: const Text('Open Releases Page'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _toggleAutoUpdateChecks(bool enabled) async {
-    if (!await _ensureProfileFeature(ProfileFeature.appUpdates)) return;
-    if (!mounted) return;
-    setState(() {
-      _summaries.autoUpdateChecksEnabled = enabled;
-    });
-    await DeviceStorage.setUpdateAutoCheckEnabled(enabled);
-  }
-
-  Future<void> _toggleIncludeAlphaUpdates(bool enabled) async {
-    if (!await _ensureProfileFeature(ProfileFeature.appUpdates)) return;
-    if (!mounted) return;
-    setState(() {
-      _summaries.includeAlphaUpdates = enabled;
-      _summaries.updateSubtitle = enabled
-          ? 'Check for alpha and beta builds'
-          : 'Check for beta updates';
-    });
-    await DeviceStorage.setUpdateIncludeAlphaEnabled(enabled);
-  }
-
-  Future<void> _toggleTvKeyboard(bool enabled) async {
-    setState(() {
-      _summaries.tvKeyboardEnabled = enabled;
-    });
-    await TvDisplayStorage.setTvKeyboardEnabled(enabled);
-  }
-
-  /// The page writes the pref itself (and says a restart is needed — the
-  /// engine is built with the factor in MainActivity.onCreate); re-read it on
-  /// the way back so the rail row's caption matches.
-  Future<void> _openTvScreenSize() async {
-    await pushSettingsPage(context, const TvScreenSizePage());
-    if (!mounted) return;
-    final percent = await TvDisplayStorage.getTvUiScalePercent();
-    if (!mounted) return;
-    setState(() {
-      _summaries.tvUiScalePercent = percent;
-    });
-  }
-
-  /// Same contract as [_openTvScreenSize] — MainActivity reads the render
-  /// pref in `onCreate` too, so the page owns the write and the restart
-  /// notice; we only re-read for the row's caption.
-  Future<void> _openTvRenderQuality() async {
-    await pushSettingsPage(context, const TvRenderQualityPage());
-    if (!mounted) return;
-    final quality = await TvDisplayStorage.getTvRenderQuality();
-    if (!mounted) return;
-    setState(() {
-      _summaries.tvRenderQuality = quality;
-    });
-  }
-
-  Future<void> _openTvHeroArtworkQuality() async {
-    await pushSettingsPage(context, const TvHeroArtworkQualityPage());
-    if (!mounted) return;
-    final quality = await TvDisplayStorage.getTvHeroArtworkQuality();
-    if (!mounted) return;
-    setState(() {
-      _summaries.tvHeroArtworkQuality = quality;
-    });
-  }
-
-  /// The page writes the pref and live-applies via MainPageBridge; re-read it
-  /// on the way back so the rail row's caption matches.
-  Future<void> _openTvHomeStyle() async {
-    await pushSettingsPage(context, const TvHomeStylePage());
-    if (!mounted) return;
-    final style = await HomeAppearanceStorage.getTvHomeStyle();
-    if (!mounted) return;
-    setState(() {
-      _summaries.tvHomeStyle = style;
-    });
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the Discover layout picker.
-  Future<void> _openCollectionListStyle() async {
-    await pushSettingsPage(context, const TvCollectionListStylePage());
-  }
-
-  Future<void> _openDiscoverLayout() async {
-    await pushSettingsPage(context, const DiscoverLayoutPage());
-    if (!mounted) return;
-    final layout = await DiscoverStorage.getDiscoverLayout();
-    if (!mounted) return;
-    setState(() {
-      _summaries.discoverLayout = layout;
-    });
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the sidebar chrome picker.
-  Future<void> _openTvSidebarStyle() async {
-    await pushSettingsPage(context, const TvSidebarStylePage());
-    if (!mounted) return;
-    final style = await SidebarStorage.getTvSidebarStyle();
-    if (!mounted) return;
-    setState(() {
-      _summaries.tvSidebarStyle = style;
-    });
-  }
-
-  /// Same contract, for the desktop/tablet sidebar picker.
-  Future<void> _openDesktopSidebarStyle() async {
-    await pushSettingsPage(context, const DesktopSidebarStylePage());
-    if (!mounted) return;
-    final style = await SidebarStorage.getDesktopSidebarStyle();
-    if (!mounted) return;
-    setState(() {
-      _summaries.desktopSidebarStyle = style;
-    });
-  }
-
-  Future<void> _openSidebarCustomization() async {
-    await pushSettingsPage(context, const SidebarCustomizationPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openProfileAppearance() async {
-    await pushSettingsPage(context, const ProfileAppearancePage());
-    if (!mounted) return;
-    await ProfileGateStyle.warm();
-    if (mounted) setState(() {});
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the IPTV page look picker.
-  Future<void> _openIptvStylePage() async {
-    await pushSettingsPage(context, const IptvStylePage());
-    if (!mounted) return;
-    final style = await IptvAppearanceStorage.getIptvStyle();
-    if (!mounted) return;
-    setState(() {
-      _summaries.iptvStyle = style;
-    });
-  }
-
-  Future<void> _openDebrifyTvStylePage() async {
-    await pushSettingsPage(context, const DebrifyTvStylePage());
-    if (!mounted) return;
-    final style = await DebrifyTvStorage.getDebrifyTvStyle();
-    if (!mounted) return;
-    setState(() {
-      _summaries.debrifyTvStyle = style;
-    });
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the in-player guide picker.
-  Future<void> _openPlayerGuideStylePage() async {
-    await pushSettingsPage(context, const PlayerGuideStylePage());
-    if (!mounted) return;
-    final style = await IptvAppearanceStorage.getIptvPlayerGuideStyle();
-    if (!mounted) return;
-    setState(() {
-      _summaries.playerGuideStyle = style;
-    });
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the play loader look. Also
-  /// re-warms the synchronous mirror the play path reads, so a change picked
-  /// here applies to the very next play.
-  Future<void> _openPlayLoaderStylePage() async {
-    await pushSettingsPage(context, const PlayLoaderStylePage());
-    if (!mounted) return;
-    await PlayLoaderStyleController.warm();
-    if (!mounted) return;
-    setState(() {
-      _summaries.playLoaderStyle = PlayLoaderStyleController.cached;
-    });
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the native TV control skin.
-  Future<void> _openTvPlayerControlsStylePage() async {
-    await pushSettingsPage(context, const TvPlayerControlsStylePage());
-    if (!mounted) return;
-    final style = await PlayerAppearanceStorage.getTvPlayerControlsStyle();
-    if (!mounted) return;
-    setState(() {
-      _summaries.tvPlayerControlsStyle = style;
-    });
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the Debrify TV playback screen.
-  Future<void> _openDebrifyTvPlayerStylePage() async {
-    await pushSettingsPage(context, const DebrifyTvPlayerStylePage());
-    if (!mounted) return;
-    final style = await DebrifyTvStorage.getDebrifyTvPlayerStyle();
-    if (!mounted) return;
-    setState(() {
-      _summaries.debrifyTvPlayerStyle = style;
-    });
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the player control dock.
-  Future<void> _openPlayerDockPage() async {
-    await pushSettingsPage(context, const PlayerDockPage());
-    if (!mounted) return;
-    final style = await PlayerAppearanceStorage.getPlayerDockStyle();
-    final palette = await PlayerAppearanceStorage.getPlayerDockPalette();
-    final size = await PlayerAppearanceStorage.getPlayerDockSize();
-    if (!mounted) return;
-    setState(() {
-      _summaries.playerDockStyle = style;
-      _summaries.playerDockPalette = palette;
-      _summaries.playerDockSize = size;
-    });
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the details-page layout picker.
-  Future<void> _openDetailPageStylePage() async {
-    await pushSettingsPage(context, const DetailPageStylePage());
-    if (!mounted) return;
-    final style = await DetailPageStorage.getDetailPageStyle();
-    if (!mounted) return;
-    setState(() {
-      _summaries.detailPageStyle = style;
-    });
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the details-page theme picker.
-  Future<void> _openDetailThemePage() async {
-    await pushSettingsPage(context, const DetailThemePage());
-    if (!mounted) return;
-    final theme = await DetailPageStorage.getDetailTheme();
-    if (!mounted) return;
-    setState(() {
-      _summaries.detailTheme = theme;
-    });
-  }
-
-  /// Appearance → Theme Lab. The setState on return covers the feedback
-  /// toggles the lab hosts — their values are read from the synchronous
-  /// mirrors, so one rebuild is the whole refresh.
-  Future<void> _openThemeLab() async {
-    await pushSettingsPage(context, const ThemeLabPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  /// Appearance → Looks. Re-reads nothing on return: the row's subtitle is
-  /// COMPUTED from the live prefs (`AppLooks.active()`), so one setState is
-  /// the whole refresh — there is no stored "current Look" that could drift.
-  Future<void> _openLooksPage() async {
-    await pushSettingsPage(context, const LooksPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> _openThemeTokensPage() async {
-    await pushSettingsPage(context, const ThemeTokensPage());
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  /// How many tokens have been taken over, or the invitation when none have.
-  ///
-  /// Computed from the live overrides rather than stored, for the same reason
-  /// `AppLooks.active()` is: there is nothing to keep in sync and no way for a
-  /// remembered answer to go stale.
-  String get _themeTokensLabel {
-    final n = AppThemeController.instance.overrides.count;
-    if (n == 0) return 'Colour, shape, motion — one token at a time';
-    return '$n ${n == 1 ? "token" : "tokens"} changed';
-  }
-
-  Future<void> _openAppThemePage() async {
-    await pushSettingsPage(context, const AppThemePage());
-    if (!mounted) return;
-    final theme = await DetailPageStorage.getDetailTheme();
-    if (!mounted) return;
-    setState(() {
-      _summaries.detailTheme = theme;
-    });
-  }
-
-  Future<void> _openParentsGuideStylePage() async {
-    await pushSettingsPage(context, const ParentsGuideStylePage());
-    if (!mounted) return;
-    final style = await DetailPageStorage.getParentsGuideStyle();
-    if (!mounted) return;
-    setState(() {
-      _summaries.parentsGuideStyle = style;
-    });
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the text brightness picker.
-  Future<void> _openTextBrightnessPage() async {
-    await pushSettingsPage(context, const TextBrightnessPage());
-    if (!mounted) return;
-    final value = await ThemeStorage.getTextBrightness();
-    if (!mounted) return;
-    setState(() {
-      _summaries.textBrightness = value;
-    });
-  }
-
-  /// Same contract as [_openTvHomeStyle], for the launch ident picker.
-  Future<void> _openLaunchAnimationPage() async {
-    await pushSettingsPage(context, const LaunchAnimationPage());
-    if (!mounted) return;
-    final value = await LaunchIdentStorage.getLaunchAnimation();
-    if (!mounted) return;
-    setState(() {
-      _summaries.launchAnimation = value;
     });
   }
 
@@ -7062,146 +4816,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _summaries.playerDockPalette = playerDockPalette;
       _summaries.playerDockSize = playerDockSize;
     });
-  }
-
-  Future<void> _startAndroidUpdateDownload(AppRelease release) async {
-    if (kIsWeb) {
-      await _openReleasesPage(release.htmlUrl);
-      return;
-    }
-    if (!Platform.isAndroid) {
-      await _openReleasesPage(release.htmlUrl);
-      return;
-    }
-    if (_updateDownloadTaskId != null) {
-      _showSnack('An update download is already running.');
-      return;
-    }
-    final asset = release.androidApkAsset;
-    if (asset == null) {
-      _showSnack('No Android APK is attached to this release yet.');
-      await _openReleasesPage(release.htmlUrl);
-      return;
-    }
-    final hasPermission = await _ensureInstallPermission();
-    if (!hasPermission) return;
-
-    if (mounted) {
-      setState(() {
-        _summaries.updateSubtitle = 'Downloading ${release.versionLabel}...';
-      });
-    }
-
-    String? taskId;
-    const mime = 'application/vnd.android.package-archive';
-    try {
-      taskId = await AndroidNativeDownloader.startUpdate(
-        url: asset.downloadUrl.toString(),
-        fileName: asset.name.isNotEmpty
-            ? asset.name
-            : 'Debrify-${release.versionLabel}.apk',
-        subDir: 'Debrify/Updates',
-        mimeType: mime,
-      );
-    } catch (_) {
-      taskId = null;
-    }
-
-    if (taskId == null) {
-      _showSnack(
-        'Could not start the update download. Please try again later.',
-      );
-      if (mounted) {
-        setState(() {
-          _summaries.updateSubtitle = 'Download failed to start';
-        });
-      }
-      return;
-    }
-
-    _updateDownloadTaskId = taskId;
-    _updateDownloadSub?.cancel();
-    _updateDownloadSub = AndroidNativeDownloader.events.listen((event) async {
-      final String eventTaskId = (event['taskId'] ?? '').toString();
-      if (eventTaskId != _updateDownloadTaskId) return;
-      final type = event['type']?.toString();
-      if (type == 'complete') {
-        final contentUri = (event['contentUri'] ?? '').toString();
-        final eventMime = (event['mimeType'] ?? '').toString().isNotEmpty
-            ? (event['mimeType'] ?? '').toString()
-            : mime;
-        try {
-          _showSnack('Update downloaded. Opening installer...');
-          if (contentUri.isNotEmpty) {
-            final ok = await AndroidNativeDownloader.openContentUri(
-              contentUri,
-              eventMime,
-            );
-            if (!ok) {
-              _showSnack('Installer was opened from Downloads instead.');
-            }
-          }
-        } catch (_) {
-          _showSnack(
-            'Could not launch the installer. Check your Downloads app.',
-          );
-        } finally {
-          _clearUpdateDownloadListener();
-          if (mounted) {
-            setState(() {
-              _summaries.updateSubtitle = 'Installer ready for ${release.versionLabel}';
-            });
-          }
-        }
-      } else if (type == 'error' || type == 'canceled') {
-        _showSnack('Update download did not finish. Please try again.');
-        _clearUpdateDownloadListener();
-        if (mounted) {
-          setState(() {
-            _summaries.updateSubtitle = 'Download failed';
-          });
-        }
-      }
-    });
-
-    _showSnack(
-      'Downloading the update in the background. Check notifications for progress.',
-    );
-  }
-
-  Future<bool> _ensureInstallPermission() async {
-    if (kIsWeb || !Platform.isAndroid) return false;
-    final currentStatus = await Permission.requestInstallPackages.status;
-    if (currentStatus.isGranted) return true;
-    final result = await Permission.requestInstallPackages.request();
-    if (result.isGranted) return true;
-    if (result.isPermanentlyDenied || result.isRestricted) {
-      _showSnack('Allow Debrify to install apps from your settings.');
-      unawaited(openAppSettings());
-    } else {
-      _showSnack('Permission required to install the downloaded update.');
-    }
-    return false;
-  }
-
-  Future<void> _openReleasesPage(Uri url) async {
-    final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
-    if (!ok) {
-      _showSnack('Unable to open the releases page right now.');
-    }
-  }
-
-  void _clearUpdateDownloadListener() {
-    _updateDownloadSub?.cancel();
-    _updateDownloadSub = null;
-    _updateDownloadTaskId = null;
-  }
-
-  void _showSnack(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   DateTime? _tryParseDate(String value) {

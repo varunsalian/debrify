@@ -14,10 +14,75 @@ ALLOWED = {'unchanged', 'rename', 'receiver', 'state_callback', 'context_guard',
            'lifecycle_wiring', 'layout_body', 'layout_first_param',
            'layout_legacy_param', 'live_service_getter', 'partition',
            'summary_accessor', 'production_api_annotation',
-           'classic_update_indicator_const', 'public_widget_key'}
+           'classic_update_indicator_const', 'public_widget_key',
+           'context_confirmation', 'formatter_if_braces'}
+
+CONTEXT_EXCEPTION_DIFFERENCE = ('context_confirmation/formatter_if_braces: '
+    'only exact sites in dev/tool/settings_context_exceptions.json; '
+    'existing State mounted guard and context acquisition, no intervening await')
+CONTEXT_ACQUISITION = ['final', 'context', '=', '_deps', '.', 'context', '(', ')', ';']
+
+
+def without_offsets(node, offsets):
+    """Remove only validated exception tokens, retaining original AST offsets."""
+    return dict(node, tokens=[t for t in node['tokens'] if t['offset'] not in offsets],
+                references=[r for r in node['references'] if r['offset'] not in offsets])
+
+
+def remove_context_exceptions(node, sites, rows, row):
+    """Validate each recorded addition before the ordinary verbatim/context checks.
+
+    Ordinal acquisitions and complete canonical prefixes pin the additions to
+    their approved sites. All original statements still compare to the baseline.
+    This never canonicalizes an unregistered guard or a general pair of braces.
+    """
+    code = [t for t in node['tokens'] if not t['comment']]
+    values = [t['text'] for t in code]
+    acquisitions = [i for i in range(len(code))
+                    if values[i:i + len(CONTEXT_ACQUISITION)] == CONTEXT_ACQUISITION]
+    removed, anchors = set(), []
+    for site in sites:
+        if site['kind'] == 'context_confirmation':
+            ordinal = site['acquisition']
+            if ordinal >= len(acquisitions):
+                raise ValueError('Missing recorded context acquisition')
+            i = acquisitions[ordinal]
+            start = i + len(CONTEXT_ACQUISITION)
+            check = ['if', '(', '!', 'context', '.', 'mounted', ')', 'return']
+            check += [site['return_value']] if site['return_value'] is not None else []
+            check += [';']
+            if values[start:start + len(check)] != check:
+                raise ValueError('Recorded context confirmation changed or is not immediately after acquisition')
+            removed.update(t['offset'] for t in code[start:start + len(check)])
+            anchors.append((site, code[i]['offset']))
+        elif site['kind'] == 'formatter_if_braces':
+            pattern = ['{', *site['body_tokens'], '}']
+            matches = [i for i in range(len(code)) if values[i:i + len(pattern)] == pattern]
+            if len(matches) != 1:
+                raise ValueError('Recorded formatter if body changed or is not wrapped exactly once')
+            i = matches[0]
+            removed.update((code[i]['offset'], code[i + len(pattern) - 1]['offset']))
+            anchors.append((site, code[i]['offset']))
+        else:
+            raise ValueError('Unknown context exception kind')
+    result = without_offsets(node, removed)
+    for site, offset in anchors:
+        prefix = normalize(tokens(result, end=offset), rows, row)
+        if prefix != site['prefix_tokens']:
+            raise ValueError('Recorded context/formatter exception moved across an original statement')
+        if site['kind'] == 'context_confirmation':
+            # The pinned approved prefix includes the passing State guard.
+            # Also prove that no suspension has appeared after that guard.
+            guards = [i for i, value in enumerate(prefix) if value == 'mounted']
+            if not guards or 'await' in prefix[guards[-1] + 1:]:
+                raise ValueError('Context confirmation requires an existing mounted guard with no intervening await')
+    return result
 
 PUBLIC_WIDGET_KEY_DIFFERENCE = 'public_widget_key: add optional super.key only; no caller passes a key'
-RECEIVERS = {'_deps', '_summaries', 'layout', '_connections'}
+RECEIVERS = {'_deps', '_summaries', 'layout', '_connections', '_updates',
+             '_diagnostics', '_pageNavigation', '_connectionNavigation',
+             '_profileActions', '_backup', '_restore', '_downloadLocation',
+             '_maintenance', '_releaseDetails', '_appearanceNavigation', '_snacks'}
 
 NAMED_EXCEPTIONS = {
     'production_api_annotation': (
@@ -187,6 +252,13 @@ def declaration_tokens(node, rows, row, *, original=False):
         sequence = ['ProfileBootstrap', '.', 'legacyReasonSummary']
         index = next(i for i in range(len(values)) if values[i:i + 3] == sequence)
         values[index:index + 3] = ['legacyReasonSummary', '(', ')']
+    if key == '_SettingsScreenState.dispose' and row.get('expected_difference', '').startswith('update_subscription_dispose:'):
+        sequence = ['_updateDownloadSub', '?.', 'cancel', '(', ')', ';']
+        matches = [i for i in range(len(values)) if values[i:i + len(sequence)] == sequence]
+        if len(matches) != 1:
+            raise ValueError('Update disposal edit requires the original single cancellation')
+        index = matches[0]
+        values[index:index + len(sequence)] = ['dispose', '(', ')', ';']
     return named_exception_tokens(values, row)
 
 
@@ -258,6 +330,20 @@ def check_context(before, after, rows=None, row=None):
     errors = [] if expected == actual else [f'Context/guard scope or first-use position changed: {expected} -> {actual}']
     if context_prefixes(before, rows or [], row) != context_prefixes(after, rows or [], row):
         errors.append('First owned context acquisition moved across an original statement/guard')
+    # A later lexical branch can acquire a new local context after another
+    # branch already used context. It still must follow that branch's original
+    # guards; checking only the callback's first context would miss a hoist.
+    expected_prefixes = [normalize(tokens(before, end=r['statementOffset']), rows or [], row)
+                         for r in before['references'] if r['name'] == 'context'
+                         and not r['contextParameter']]
+    code = [t for t in after['tokens'] if not t['comment']]
+    pattern = ['final', 'context', '=', '_deps', '.', 'context', '(', ')', ';']
+    for i, token in enumerate(code):
+        if [t['text'] for t in code[i:i + len(pattern)]] != pattern:
+            continue
+        prefix = normalize(tokens(after, end=token['offset']), rows or [], row)
+        if prefix not in expected_prefixes:
+            errors.append('Owned context acquisition moved across its original lexical-branch statement/guard')
     return errors
 
 
@@ -351,7 +437,12 @@ def check_partition(before, current, spec, lookup, rows, package=None):
         errors.extend(compare_elements(before, [current], rows))
         a = before['returnedList']['preamble']
         b = current['returnedList']['preamble']
-        if [x['text'] for x in a] != [x['text'] for x in b]:
+        def preamble_units(declarations):
+            from check_verbatim_moves import parse
+            return [(d['kind'], d['names'], normalize(tokens(parse(
+                {'local': 'class Local { ' + d['text'] + ' }'}, package)['local']['declarations'][0]['members'][0]), rows))
+                    for d in declarations]
+        if preamble_units(a) != preamble_units(b):
             errors.append('Unmoved partition preamble changed')
         return errors
     actual_slices = []
@@ -456,6 +547,22 @@ def check(original_source, sources, rows, source_path, package=None,
                  if source_path == 'lib/screens/settings_screen.dart' and scaffold_path.exists() else [])
     errors.extend(check_scaffolds(lookup, scaffolds))
     errors.extend(destination_ownership(parsed, rows, source_path, scaffolds))
+    exception_path = ROOT / 'dev/tool/settings_context_exceptions.json'
+    exception_sites = (json.loads(exception_path.read_text())['sites']
+                       if source_path == 'lib/screens/settings_screen.dart' and exception_path.exists() else [])
+    registered_sites = {}
+    site_identities = set()
+    for site in exception_sites:
+        key = (site['file'], site['owner'], site['method'])
+        identity = (*key, site['kind'], site.get('acquisition'),
+                    tuple(site.get('prefix_tokens', [])))
+        if identity in site_identities:
+            errors.append('Duplicate registered context exception: ' + str(key))
+        site_identities.add(identity)
+        registered_sites.setdefault(key, []).append(site)
+    row_keys = {(r['destination_file'], r['destination_class'], r['new_name']) for r in rows}
+    if set(registered_sites) - row_keys:
+        errors.append('Context exception registered outside the manifest')
     mapping = names(rows)
     # Retained/moved widget class headers are also part of the contract. New
     # section classes have no original header; original widget headers do.
@@ -496,6 +603,18 @@ def check(original_source, sources, rows, source_path, package=None,
             errors.append('Missing settings declaration: ' + key); continue
         if destination is not None and in_place is not None and destination is not in_place:
             errors.append('Duplicate settings owner: ' + key)
+        sites = registered_sites.get((row['destination_file'], row['destination_class'], row['new_name']), [])
+        exception_flags = set(row['allowed_edits'].split(',')) & {'context_confirmation', 'formatter_if_braces'}
+        if exception_flags != {site['kind'] for site in sites}:
+            errors.append('Context exception manifest/site coverage differs: ' + key)
+        if sites:
+            if row['expected_difference'] != CONTEXT_EXCEPTION_DIFFERENCE:
+                errors.append('Context exception description widened: ' + key)
+            try:
+                actual = remove_context_exceptions(actual, sites, rows, row)
+            except ValueError as error:
+                errors.append(key + ': ' + str(error))
+                continue
         if partition and key in partitions:
             errors.extend(key + ': ' + e for e in check_partition(before, actual, partitions[key], lookup, rows, package))
         elif declaration_tokens(before, rows, row, original=destination is not None or (key == '_SettingsScreenState._buildLayout' and 'lib/features/settings/presentation/settings_layout.dart' in sources)) != declaration_tokens(actual, rows, row):
@@ -507,7 +626,9 @@ def check(original_source, sources, rows, source_path, package=None,
     leaves = original_leaves(parsed[source_path]['declarations'], split_names(rows))
     registered_facade = {s['owner'] + '.' + s['name'] for s in scaffolds
                          if s['file'] == source_path}
-    extras = set(leaves) - known - {'settingsScreenTestAccess'} - registered_facade
+    retained_renames = {r['destination_class'] + '.' + r['new_name'] for r in rows
+                       if r['destination_file'] == source_path}
+    extras = set(leaves) - known - retained_renames - {'settingsScreenTestAccess'} - registered_facade
     if extras:
         errors.append('Unregistered facade declarations: ' + str(sorted(extras)))
     layout_path = 'lib/features/settings/presentation/settings_layout.dart'
@@ -535,6 +656,68 @@ def self_test(package=None):
     from check_verbatim_moves import parse
     def method(source):
         return parse({'test': 'class Test { ' + source + ' }'}, package)['test']['declarations'][0]['members'][0]
+    confirmation_row = dict(original_name='Test.action', new_name='action',
+                            allowed_edits='context_guard,context_confirmation')
+    confirmation_original = method('Future<void> action() async { if (!await allowed()) return; if (!mounted) return; show(context); }')
+    unconfirmed_text = 'Future<void> action() async { if (!await allowed()) return; if (!_deps.mounted()) return; final context = _deps.context(); show(context); }'
+    unconfirmed = method(unconfirmed_text)
+    acquisition = next(t['offset'] for t in unconfirmed['tokens'] if t['text'] == 'final')
+    confirmation_site = dict(kind='context_confirmation', acquisition=0, return_value=None,
+                             prefix_tokens=normalize(tokens(unconfirmed, end=acquisition), [confirmation_row]))
+    confirmed_text = unconfirmed_text.replace('show(context);', 'if (!context.mounted) return; show(context);')
+    def confirmation_valid(text):
+        try:
+            stripped = remove_context_exceptions(method(text), [confirmation_site], [confirmation_row], confirmation_row)
+        except ValueError:
+            return False
+        return (declaration_tokens(confirmation_original, [confirmation_row], confirmation_row)
+                == declaration_tokens(stripped, [confirmation_row], confirmation_row)
+                and not check_context(confirmation_original, stripped, [confirmation_row], confirmation_row))
+    if not confirmation_valid(confirmed_text):
+        raise AssertionError('Exact context confirmation exception rejected')
+    for label, text in {
+        'missing context confirmation': unconfirmed_text,
+        'changed context confirmation condition': confirmed_text.replace('!context.mounted', 'context.mounted'),
+        'changed context confirmation return': confirmed_text.replace('if (!context.mounted) return;', 'if (!context.mounted) return false;'),
+        'context confirmation before acquisition': confirmed_text.replace('final context = _deps.context(); if (!context.mounted) return;', 'if (!context.mounted) return; final context = _deps.context();'),
+        'await between State guard and acquisition': confirmed_text.replace('final context', 'await work(); final context'),
+        'changed existing State guard': confirmed_text.replace('!_deps.mounted()', '_deps.mounted()'),
+        'context moved above permission': confirmed_text.replace('final context = _deps.context(); if (!context.mounted) return; ', '').replace('async { ', 'async { final context = _deps.context(); if (!context.mounted) return; '),
+        'additional unregistered context guard': confirmed_text.replace('show(context);', 'show(context); if (!context.mounted) return;'),
+    }.items():
+        if confirmation_valid(text):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
+    boolean_original = method('Future<bool> action() async { if (!mounted) return false; show(context); return false; }')
+    boolean_text = 'Future<bool> action() async { if (!_deps.mounted()) return false; final context = _deps.context(); if (!context.mounted) return false; show(context); return false; }'
+    boolean_node = method(boolean_text)
+    boolean_offset = next(t['offset'] for t in boolean_node['tokens'] if t['text'] == 'final')
+    boolean_site = dict(confirmation_site, return_value='false', prefix_tokens=normalize(tokens(boolean_node, end=boolean_offset), [confirmation_row]))
+    boolean_stripped = remove_context_exceptions(boolean_node, [boolean_site], [confirmation_row], confirmation_row)
+    if declaration_tokens(boolean_original, [confirmation_row], confirmation_row) != declaration_tokens(boolean_stripped, [confirmation_row], confirmation_row):
+        raise AssertionError('Exact boolean context confirmation rejected')
+    print('Settings self-test exact boolean context confirmation: passed')
+    braced_original = method('void action() { if (denied) return; work(); }')
+    brace_offset = next(t['offset'] for t in braced_original['tokens'] if t['text'] == 'return')
+    brace_site = dict(kind='formatter_if_braces', body_tokens=['return', ';'],
+                      prefix_tokens=normalize(tokens(braced_original, end=brace_offset), []))
+    def braces_valid(text):
+        try:
+            stripped = remove_context_exceptions(method(text), [brace_site], [], None)
+        except ValueError:
+            return False
+        return tokens(braced_original) == tokens(stripped)
+    if not braces_valid('void action() { if (denied) { return; } work(); }'):
+        raise AssertionError('Exact formatter braces exception rejected')
+    for label, text in {
+        'changed braced if condition': 'void action() { if (allowed) { return; } work(); }',
+        'changed braced if body': 'void action() { if (denied) { return false; } work(); }',
+        'braces around a different if': 'void action() { if (denied) return; if (other) { return; } work(); }',
+        'additional unregistered braces': 'void action() { if (denied) { return; } { work(); } }',
+    }.items():
+        if braces_valid(text):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
     before = method('List<Object> entries() { final x = 1; return [x, if (true) ...[2, 3], for (final n in [4]) n]; }')
     good = [method('List<Object> one() { return [x]; }'),
             method('List<Object> two() { return [if (true) ...[2, 3], for (final n in [4]) n]; }')]
@@ -688,6 +871,12 @@ def self_test(package=None):
     if not check_context(delayed, hoisted):
         raise AssertionError('Accepted context hoisted out of deferred callback')
     print('Settings self-test context hoisted before deferred guard: rejected')
+    branches = method('void action() { show(context); if (done) { if (!mounted) return; show(context); } }')
+    branches_good = method('void action() { final context = _deps.context(); show(context); if (done) { if (!_deps.mounted()) return; final context = _deps.context(); show(context); } }')
+    branches_bad = method('void action() { final context = _deps.context(); show(context); if (done) { final context = _deps.context(); if (!_deps.mounted()) return; show(context); } }')
+    if check_context(branches, branches_good) or not check_context(branches, branches_bad):
+        raise AssertionError('Later lexical-branch context guard self-test failed')
+    print('Settings self-test later-branch context hoisted before guard: rejected')
     shadow = method('void snack() { if (!mounted) return; show(context, builder: (context) => show(context)); }')
     shadow_good = method('void snack() { if (!_deps.mounted()) return; final context = _deps.context(); show(context, builder: (context) => show(context)); }')
     if check_context(shadow, shadow_good):

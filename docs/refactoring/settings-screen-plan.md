@@ -599,6 +599,65 @@ the named files under "Size" below.
   ratchet and diff checks pass. State shrinks 7438 → 7218 lines. Gates 1/2
   and private CI remain pending.
 
+### Step 3 — action sections (verified)
+
+- Step 2 commit: `447ef585`. Actions now use the single summaries owner.
+  Twelve State-owned presentation sections separate updates, release details,
+  backup, restore, diagnostics, downloads, maintenance and related navigation/
+  profile actions. Pure backup/report formatting lives in application code.
+  Every destination is below 500 lines; State shrinks 7218 → 4832 lines.
+- Section dependencies are narrow typed records. Deferred cross-section calls
+  avoid construction cycles; connection views retain moved navigation tear-offs.
+  The State still owns focus; `focusFirstCard` drops only its underscore for
+  the borrowed callback. Updates owns the subscription/task ID, with the exact
+  cancel statement registered in its disposer. State teardown retains handler
+  unregistration → focus disposal → update cancellation.
+- Context acquisition stays at the original first-use statement, with the
+  original preceding guards/services intact. A dominating acquisition is reused
+  inside nested blocks; otherwise acquisition remains local to that branch.
+  Builder/dialog contexts are unchanged. The single expression-only context
+  use stays inline after its original passing guard. The move/context checks
+  validate all 316 declarations; new scaffolds are registered exactly.
+- Permission, tvOS visibility and theme source assertions point at their new
+  owners. Update permission guards remain the first statements. Theme residue
+  moves as 1 to download location and 0 to release details; the facade is in
+  the extracted map at 0, and the token floor remains 488.
+- `settings/step3`: 87 success, 2 failure, 1 error. Comparisons against both
+  the observed full baseline and step 1 pass with no new failures, missing
+  tests or skips. The same three pre-existing focused failures/errors remain.
+  Formatting, architecture/size checks and move/partition/context self-tests
+  pass. Two additional update-permission boundary tests pass: denied actions
+  cannot even read mounted/state or write preferences; a permission result
+  arriving after State retirement cannot publish or persist a setting. The
+  new test files analyze cleanly.
+- The user approved `context-confirmation-proposal.diff` as written. The named
+  exception class `context_confirmation` adds exactly 37 local checks immediately
+  after the injected context acquisition, after an existing State-mounted guard
+  with no intervening await. One boolean method returns `false`, as in the
+  approved patch and its existing denied branch. `formatter_if_braces` wraps
+  exactly the three flagged if bodies without changing condition or body.
+  These patterns are pre-approved for the remaining steps and must be recorded
+  per site; any other new diagnostic still requires approval. No lint ignore
+  was added.
+- Each affected manifest row names the exception class and points to
+  `dev/tool/settings_context_exceptions.json`. The checker validates the exact
+  acquisition ordinal, immediately following condition/return, full preceding
+  token sequence and absence of an intervening await. It removes only those
+  validated additions for the original verbatim/context comparison. Registered
+  brace bodies and their preceding conditions are exact. New self-tests reject
+  missing/changed/moved confirmations, changed State guards, intervening awaits,
+  extra guards and changed/moved/extra brace pairs.
+- Final analyzer (`analyze-step3-context.txt`): all 832 diagnostic identities
+  match both step 2 and the original baseline under the Settings-only relocation
+  rule; no additions or removals. The four original context infos remain.
+  `settings/step3-confirmed` reruns the complete affected batch, including the
+  two permission tests: 89 success, 2 failure, 1 error. Comparisons against the
+  observed baseline and step 1 pass, with no missing tests or new skips. Move/
+  partition/context self-tests, architecture, size, formatting and diff checks
+  pass. State is 4832 lines; every extracted destination remains below 500.
+- Gates 1/2 and private pushes/CI remain pending. Continue with the summary
+  loader and gate 1; the full original objective remains unchanged.
+
 ## Found, not fixed
 
 (none yet)

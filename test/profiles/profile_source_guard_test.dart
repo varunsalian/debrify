@@ -411,11 +411,11 @@ void main() {
 
   test('diagnostic export is hidden on tvOS until Remote transfer owns it', () {
     final settings = File(
-      'lib/screens/settings_screen.dart',
+      'lib/features/settings/presentation/legacy_settings/settings_diagnostics.dart',
     ).readAsStringSync();
     final authorizationCheck = settings.substring(
-      settings.indexOf('Future<bool> _activeProfileMayExportDiagnostics()'),
-      settings.indexOf('Future<void> _loadSummariesForCurrentProfile()'),
+      settings.indexOf('Future<bool> activeProfileMayExportDiagnostics()'),
+      settings.indexOf('Future<void> exportDiagnosticLogs()'),
     );
     expect(
       authorizationCheck,
