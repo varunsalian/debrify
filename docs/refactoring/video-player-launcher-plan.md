@@ -238,6 +238,15 @@ next-episode ordering (3566).
     - Checked at `204b1011`: the native payload uses `contentType.name`
       (5311), which the rename doesn't change. Only logs use the full text
       (3883, 3891, 5889). The step 0 report re-confirms this.
+- **User-approved amendment (2026-10-02):** remove `@visibleForTesting`
+  only from the moved implementations of `debugNativeResumePositions`,
+  `debugNativePlaybackSession`, `externalPlaybackUrlFor`,
+  `shouldEnableMdblistTracking`, `normalizeScrobbleFlags` and
+  `showAuthenticatedWebDavPlayerNotice`. Retain the original annotations on
+  their facade forwarders. Cross-library calls otherwise introduce
+  `invalid_use_of_visible_for_testing_member`. The manifest/checker verify
+  each exact removal and retained facade annotation; no suppression or other
+  annotation change is permitted.
 - **Not allowed:**
   - reordering `await`s, guards, timer starts or cancels, bridge calls or map
     insertions in payloads;
@@ -445,9 +454,36 @@ failures, no missing tests, no new skips.
 
 | Step | Commit | Launcher lines | Result |
 | --- | --- | --- | --- |
-| 0 | `cfe1e2cd` | 6,594 | Baseline, dependency report, 154-leaf manifest and checker/self-tests committed before any move. |
+| 0 | `cfe1e2cd` | 6,594 | Baseline, dependency report, manifest/checker/self-tests committed before any move. |
+| 1 | `fb19821d` | 5,783 | Models/extension and single session/cache owners wired; comparisons PASS. |
+| 2 | Step-2 commit (recorded by step 3) | 3,358 | Context-free resume, payload, metadata and progress owners wired; comparisons PASS. |
 
-| 1 | Step-1 commit (recorded by step 2) | 5,783 | Models, borrowed argument bundle/extension, payload data and shared single state/cache owners wired. |
+### Step 2 evidence
+
+- `check_verbatim_moves.py --self-test`: 154 leaves/all facade forwarders
+  pass, including exact user-approved annotation removal and its fixtures.
+- `analyze-step2.txt` vs step 1: PASS, no added diagnostic; removed exactly
+  the two null-comparison warnings and one null-aware warning specified in
+  the plan. Imports alone remove unused/newly redundant wiring.
+- `vpl/step2` vs base: PASS, 128 success / 6 existing failures, no missing
+  tests or new skips; four added heartbeat lifecycle tests pass. These use
+  fake clocks through the existing progress/finish handlers, cover both
+  Trakt/Simkl starts and two-minute cadence, pause/completion cancellation
+  and finish cleanup, with no production hook or logic change.
+- The facade forwards both resume helpers directly to `MovieResumeState`.
+  Data owners never call through the facade. `_stateFromRecord` remains
+  inside the whole builder, as the declaration-splitting prohibition requires.
+- Size exceptions: `data/android_tv_payload_builder.dart` **924** lines
+  and `data/native_progress_handler.dart` **584** lines, exact caps in
+  the architecture guard. The builder's over-800 size is registered by hand
+  in the ratchet. Exit milestone for each: split the whole declaration in a
+  later control-flow change. The builder has an external formatter off/on
+  block because formatting an originally unformatted conditional adds a
+  comma even with preservation mode; its original complete declaration and
+  blank lines are retained. `dart format` still verifies the file.
+- Source-text payload/builder references follow their new owners; remaining
+  resolver/metadata/Flutter source guards are repaired at their inventory
+  port steps, preserving their assertions.
 
 ### Step 1 evidence
 

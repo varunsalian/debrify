@@ -151,6 +151,12 @@ def apply_exact_exceptions(original, rows, package=None):
             text = text.replace(before, after)
             owner = original[key]['owner']
             changed[key] = f'class {owner} {{\n{text}\n}}' if owner else text
+        if note.startswith('annotation removal:'):
+            text = original[key]['text']
+            if text.count('@visibleForTesting') != 1:
+                raise ValueError('Annotation exception baseline differs: ' + key)
+            text = text.replace('@visibleForTesting', '')
+            changed[key] = 'class ' + original[key]['owner'] + ' {\n' + text + '\n}'
     if not changed:
         return {}
     parsed = parse(changed, package)
@@ -242,7 +248,8 @@ def self_test(package=None):
     cases = json.loads((fixtures / 'cases.json').read_text())
     for name, case in cases.items():
         sources = {SOURCE: case['facade'], 'owner.dart': case['owner']}
-        errors = check(original, sources, rows, package=package)
+        case_rows = [dict(r, expected_difference=case.get('exception', r['expected_difference'])) for r in rows]
+        errors = check(case.get('original', original), sources, case_rows, package=package)
         if bool(errors) == case['passes']:
             raise AssertionError(f'Self-test {name}: {errors}')
         print(f'Self-test {name}: {"PASS" if not errors else "rejected"}')

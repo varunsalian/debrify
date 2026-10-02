@@ -372,6 +372,17 @@ All 14 original public launcher methods retain signatures, annotations, defaults
 
 All full-enum interpolations are logs: original lines 3883 and 3891 in `_fetchAndPushMetadataAsync` interpolate `payload.contentType`; line 5889 in builder `build` interpolates `contentType`. No full-enum `toString()` call exists. Original lines 5311 (payload map) and 5998 (diagnostic) use `contentType.name`; comparisons/switches use enum values. No full-enum text reaches persistence, a payload, comparison or native call. Accepted exception to unchanged logs: `_PlaybackContentType.*` becomes `PlaybackContentType.*` in those three log messages only.
 
+## Approved annotation amendment
+
+The user approved removing `@visibleForTesting` from exactly six moved
+implementations on 2026-10-02: `debugNativeResumePositions`,
+`debugNativePlaybackSession`, `externalPlaybackUrlFor`,
+`shouldEnableMdblistTracking`, `normalizeScrobbleFlags`, and
+`showAuthenticatedWebDavPlayerNotice`. Their facade annotations stay intact.
+Without the amendment, splitting libraries introduces analyzer warnings at
+unchanged production/facade calls. The checker verifies each exact removal
+and the retained facade annotation, with positive and negative fixtures.
+
 ## Exact expected differences
 
 In addition to imports, registered owner qualifiers and dropping a leading underscore: static ownership of the ten session fields, two caches and cache functions; `toWidget` becomes an extension with identical signature/body; builder debug helper becomes public; the progress warning at 4849 removes only the proven-true null condition (the similar condition at 4879 remains); resolver warnings at 5599 replace the proven-true log comparison by `true` and remove `?.` in the same log interpolation. Each is recorded in `vpl_manifest.tsv` and the checker compares its exact expected baseline substitution.

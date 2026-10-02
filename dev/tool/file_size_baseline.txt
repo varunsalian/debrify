@@ -9,7 +9,6 @@
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 6445 lib/screens/debrid_downloads_screen.dart
-5783 lib/services/video_player_launcher.dart
 5532 lib/screens/merged_series_detail_screen.dart
 5475 lib/services/remote_control/remote_command_router.dart
 4700 lib/services/webdav_sync/webdav_sync_engine.dart
@@ -27,6 +26,7 @@
 3442 lib/screens/pikpak/pikpak_files_screen.dart
 3415 lib/screens/addons/addon_hub_screen.dart
 3394 lib/widgets/detail/showcase_parts.dart
+3358 lib/services/video_player_launcher.dart
 3112 lib/widgets/episodes_panel.dart
 3076 lib/widgets/trakt/trakt_results_view.dart
 3035 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
@@ -147,6 +147,7 @@
 953 lib/screens/settings/quick_play_settings_page.dart
 942 lib/widgets/metadata_explore_spotlight.dart
 925 lib/services/xmltv_epg_source.dart
+924 lib/features/player_launch/data/android_tv_payload_builder.dart
 915 lib/services/magnet_link_handler.dart
 913 lib/services/collection_native_source_service.dart
 903 lib/screens/debrify_tv/layouts/spotlight_stage.dart

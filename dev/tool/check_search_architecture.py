@@ -261,9 +261,9 @@ PLAYER_LAUNCH_SIZE_EXCEPTIONS = {
     # Whole native launch: split during a later control-flow change.
     "lib/features/player_launch/data/android_tv_native_launch.dart": 0,
     # Whole payload builder: split during a later control-flow change.
-    "lib/features/player_launch/data/android_tv_payload_builder.dart": 0,
+    "lib/features/player_launch/data/android_tv_payload_builder.dart": 924,
     # Whole progress/completion handlers: split in a later control-flow change.
-    "lib/features/player_launch/data/native_progress_handler.dart": 0,
+    "lib/features/player_launch/data/native_progress_handler.dart": 584,
     # Whole router: split during a later control-flow change.
     "lib/features/player_launch/presentation/legacy_launch/launch_router.dart": 0,
 }

@@ -207,7 +207,7 @@ void main() {
   test('initial native playlist carries explicit local completion', () {
     final builder = _between(
       source,
-      'class _AndroidTvPlaybackPayloadBuilder',
+      'class AndroidTvPlaybackPayloadBuilder',
       '/// Fetch movie IMDB ID from Cinemeta',
     );
 

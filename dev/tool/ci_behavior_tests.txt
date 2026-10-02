@@ -49,3 +49,4 @@ test/native_player_settings_wiring_test.dart
 test/native_tracker_player_regression_test.dart
 test/theme/source_guard_test.dart
 test/video_player_launcher_settings_rejection_test.dart
+test/features/player_launch/data/native_heartbeat_lifecycle_test.dart

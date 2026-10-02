@@ -53,5 +53,26 @@
     "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n\nint unexpected = 1;\n",
     "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
     "passes": false
+  },
+  "approved_annotation": {
+    "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+    "exception": "annotation removal: @visibleForTesting on moved implementation only",
+    "passes": true
+  },
+  "lost_facade_annotation": {
+    "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+    "exception": "annotation removal: @visibleForTesting on moved implementation only",
+    "passes": false
+  },
+  "annotation_not_removed": {
+    "original": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "owner": "/// Class documentation.\nclass Owner {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) async {\n    print('keep $label');\n    await Future<void>.value();\n    return value;\n  }\n}\n",
+    "facade": "/// Class documentation.\nclass VideoPlayerLauncher {\n  /// Method documentation.\n  @visibleForTesting\n  static Future<int> run(int value, {String label = 'old'}) => Owner.run(value, label: label);\n}\n",
+    "exception": "annotation removal: @visibleForTesting on moved implementation only",
+    "passes": false
   }
 }

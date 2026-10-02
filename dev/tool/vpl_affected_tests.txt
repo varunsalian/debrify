@@ -13,3 +13,4 @@ test/theme/source_guard_test.dart
 test/tracking_source_policy_test.dart
 test/video_player_launcher_external_url_test.dart
 test/video_player_launcher_settings_rejection_test.dart
+test/features/player_launch/data/native_heartbeat_lifecycle_test.dart
