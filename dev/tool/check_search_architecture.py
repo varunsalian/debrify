@@ -25,8 +25,8 @@ SETTINGS_FACADE = "lib/screens/settings_screen.dart"
 SETTINGS_COMPLETE = False
 SETTINGS_BRIDGE = "lib/features/settings/presentation/legacy_settings/"
 SETTINGS_SIZE_EXCEPTIONS = {
-    # Set to its measured size when the original 588-line loader moves at step 4.
-    SETTINGS_BRIDGE + "settings_summary_loader.dart": 0,
+    # Original 588-line loader plus typed dependencies/imports, measured at step 4.
+    SETTINGS_BRIDGE + "settings_summary_loader.dart": 658,
     "lib/features/settings/presentation/settings_classic_layout.dart": 420,
 }
 # Verbatim playback extraction source set; exceptions and exit milestones are

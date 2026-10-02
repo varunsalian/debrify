@@ -63,6 +63,22 @@ class References extends RecursiveAstVisitor<void> {
   }
 
   @override
+  void visitSetOrMapLiteral(SetOrMapLiteral node) {
+    if (node.endToken.previous?.lexeme == ',') {
+      formatCommas.add(node.endToken.previous!.offset);
+    }
+    super.visitSetOrMapLiteral(node);
+  }
+
+  @override
+  void visitListLiteral(ListLiteral node) {
+    if (node.endToken.previous?.lexeme == ',') {
+      formatCommas.add(node.endToken.previous!.offset);
+    }
+    super.visitListLiteral(node);
+  }
+
+  @override
   void visitFunctionExpression(FunctionExpression node) {
     scopes.add('${callbacks.length}');
     parameters.add({

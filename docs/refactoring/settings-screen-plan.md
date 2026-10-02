@@ -658,6 +658,48 @@ the named files under "Size" below.
 - Gates 1/2 and private pushes/CI remain pending. Continue with the summary
   loader and gate 1; the full original objective remains unchanged.
 
+
+### Step 4 — summary loading (gate 1 verified; private CI pending)
+
+- Step 3 commit: `2f859a55`. The summaries loader, refresh orchestration and
+  account-caption helpers now have separate State-owned bridge classes. All
+  production callbacks use the new owners; no duplicate implementation remains.
+  The facade shrinks 4832 → 4044 lines and retains indexes, platform gates,
+  layout composition, focus and lifecycle until steps 5/6.
+- `settings_summary_loader.dart` measures 658 lines, including imports and its
+  narrow typed dependency record; the named size exception is capped at 658
+  (below 800). Refresh orchestration measures 146 lines and account captions 81.
+  The loader's original cached/local reads, initial scope check, captured scopes,
+  error/finally guards, background refresh timing and mounted checks stay exact.
+- `summaryReadOverrides` is read through `() => widget.summaryReadOverrides`
+  at the original call-time position. The three download-location getters use
+  narrow typed callbacks at their original read positions, registered as the
+  plan's `live_getter_callback` edit on that method only. Constructors do no
+  work; deferred callbacks avoid loader/refresh construction cycles.
+- Five new boundary tests pass: a retained loader reads replacement overrides
+  on reload; error/finally publication works in the current session and is
+  rejected after disposal, lock or a same-profile epoch change. Existing
+  production summary/profile-remount tests remain part of gate 1.
+- The analyzer (`analyze-step4-final.txt`) retains all 832 diagnostic identities
+  from step 3, with no additions or removals. Imports were pruned at their new
+  owners. Formatter-inserted trailing list/set/map commas are identified by AST
+  node kind; positional record commas remain significant. Self-tests cover
+  unchanged literal values and strict record/callback edits.
+- Gate 1 (`settings/gate1.jsonl`), Flutter 3.44.8: 10315 success, 14 failure,
+  29 error, 20 skipped. Identity comparisons against both the original full
+  baseline and the observed step 1 full run pass: no new failures, missing tests
+  or new skips; all nine subsequently added boundary tests pass. The unchanged
+  historical `test_baseline.py` comparison was replayed against both completed
+  saved runner outputs, without rerunning tests or rewriting its allowlist. It
+  reports the same 54 identities outside its historical nine-entry list in both
+  runs (including skips); the observed identity comparisons establish parity.
+- Move/partition/context self-tests pass all 316 declarations; the launcher
+  verifier/self-tests also pass all 154. Formatting (30 files), architecture
+  (796 migrated files), size, storage-key/reference and diff checks pass.
+  Analyzer comparison against the original baseline also passes with no removed
+  diagnostics. Step 4 is ready to commit and push to `private`; its exact-head
+  Ubuntu CI remains pending. Steps 5/6 and gate 2 remain required.
+
 ## Found, not fixed
 
 (none yet)

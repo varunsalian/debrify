@@ -15,7 +15,7 @@ ALLOWED = {'unchanged', 'rename', 'receiver', 'state_callback', 'context_guard',
            'layout_legacy_param', 'live_service_getter', 'partition',
            'summary_accessor', 'production_api_annotation',
            'classic_update_indicator_const', 'public_widget_key',
-           'context_confirmation', 'formatter_if_braces'}
+           'context_confirmation', 'formatter_if_braces', 'live_getter_callback'}
 
 CONTEXT_EXCEPTION_DIFFERENCE = ('context_confirmation/formatter_if_braces: '
     'only exact sites in dev/tool/settings_context_exceptions.json; '
@@ -82,7 +82,10 @@ PUBLIC_WIDGET_KEY_DIFFERENCE = 'public_widget_key: add optional super.key only; 
 RECEIVERS = {'_deps', '_summaries', 'layout', '_connections', '_updates',
              '_diagnostics', '_pageNavigation', '_connectionNavigation',
              '_profileActions', '_backup', '_restore', '_downloadLocation',
-             '_maintenance', '_releaseDetails', '_appearanceNavigation', '_snacks'}
+             '_maintenance', '_releaseDetails', '_appearanceNavigation', '_snacks',
+             '_summaryRefresh', '_summaryLoader', '_accountCaptions'}
+LIVE_GETTER_CALLBACKS = {'downloadLocationSupported', 'downloadLocationUsesSaf',
+                         'defaultDownloadLocationLabel'}
 
 NAMED_EXCEPTIONS = {
     'production_api_annotation': (
@@ -93,6 +96,10 @@ NAMED_EXCEPTIONS = {
         '_SettingsLayout.build',
         'lib/features/settings/presentation/settings_classic_layout.dart',
         'classic_update_indicator_const: add const only to checkingUpdates trailing SizedBox; child CircularProgressIndicator inherits const context'),
+    'live_getter_callback': (
+        '_SettingsScreenState._loadDownloadLocation',
+        'lib/features/settings/presentation/legacy_settings/settings_summary_refresh.dart',
+        'live_getter_callback: read downloadLocationSupported, downloadLocationUsesSaf and defaultDownloadLocationLabel through typed callbacks at the original positions'),
 }
 
 
@@ -194,6 +201,8 @@ def normalize(values, rows, row=None):
         if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
             if target in mapped or target in {'mounted', 'setState', 'context', 'summaryReadOverrides'}:
+                if row and 'live_getter_callback' in row['allowed_edits'].split(',') and value == '_deps' and target in LIVE_GETTER_CALLBACKS and values[i + 3:i + 5] == ['(', ')']:
+                    out.append(target); i += 5; continue
                 if target in {'mounted', 'context', 'summaryReadOverrides'} and values[i + 3:i + 5] == ['(', ')']:
                     out.extend(['widget', '.', target] if target == 'summaryReadOverrides' else [target])
                     i += 5; continue
@@ -215,8 +224,9 @@ def declaration_tokens(node, rows, row, *, original=False):
     """Apply ONLY the plan's named structural edits to the expected baseline.
 
     Actual signatures, defaults, widgets, tear-offs and bodies still compare
-    completely. Commas are normalized only at AST argument/parameter-list ends;
-    a record comma (which changes its type/value) is never removed.
+    completely. Only optional trailing commas in arguments, parameters, named
+    record types and list/set/map literals are formatting punctuation. A
+    positional record comma (which changes its type/value) is never removed.
     """
     values = normalize(tokens(node), rows, row)
     if not original:
@@ -656,6 +666,30 @@ def self_test(package=None):
     from check_verbatim_moves import parse
     def method(source):
         return parse({'test': 'class Test { ' + source + ' }'}, package)['test']['declarations'][0]['members'][0]
+    for literal in ('[1, 2]', '{1, 2}', "{'a': 1, 'b': 2}"):
+        plain = method('Object value() => ' + literal + ';')
+        formatted = method('Object value() => ' + literal[:-1] + ',' + literal[-1] + ';')
+        if tokens(plain) != tokens(formatted):
+            raise AssertionError('Optional literal trailing comma rejected')
+        changed = method('Object value() => ' + literal.replace('2', '3') + ';')
+        if tokens(plain) == tokens(changed):
+            raise AssertionError('Changed literal value accepted')
+    print('Settings self-test literal formatting commas only: passed')
+    live_row = dict(original_name='_SettingsScreenState._loadDownloadLocation',
+                    new_name='loadDownloadLocation', allowed_edits='live_getter_callback')
+    getter_rows = [dict(original_name='_SettingsScreenState._' + name, new_name=name)
+                   for name in LIVE_GETTER_CALLBACKS]
+    live_rows = [live_row, *getter_rows]
+    live_expected = normalize(['_defaultDownloadLocationLabel'], live_rows, live_row)
+    if live_expected != normalize(['_deps', '.', 'defaultDownloadLocationLabel', '(', ')'], live_rows, live_row):
+        raise AssertionError('Exact live getter callback rejected')
+    for values in (['_deps', '.', 'defaultDownloadLocationLabel', '(', '1', ')'],
+                   ['_deps', '.', 'downloadLocationUsesSaf', '(', ')']):
+        if live_expected == normalize(values, live_rows, live_row):
+            raise AssertionError('Changed live getter callback accepted')
+    if live_expected == normalize(['_deps', '.', 'defaultDownloadLocationLabel', '(', ')'], live_rows):
+        raise AssertionError('Live getter callback accepted without the named edit')
+    print('Settings self-test unregistered/changed live getter callback: rejected')
     confirmation_row = dict(original_name='Test.action', new_name='action',
                             allowed_edits='context_guard,context_confirmation')
     confirmation_original = method('Future<void> action() async { if (!await allowed()) return; if (!mounted) return; show(context); }')

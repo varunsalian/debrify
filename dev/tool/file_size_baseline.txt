@@ -10,7 +10,6 @@
 6445 lib/screens/debrid_downloads_screen.dart
 5532 lib/screens/merged_series_detail_screen.dart
 5475 lib/services/remote_control/remote_command_router.dart
-4832 lib/screens/settings_screen.dart
 4700 lib/services/webdav_sync/webdav_sync_engine.dart
 4685 lib/services/download_service.dart
 4480 lib/screens/settings/iptv_settings_page.dart
@@ -18,6 +17,7 @@
 4182 lib/main.dart
 4140 lib/screens/playlist_content_view_screen.dart
 4086 lib/services/iptv_catalog_db.dart
+4044 lib/screens/settings_screen.dart
 3957 lib/screens/stremio_tv/stremio_tv_screen.dart
 3858 lib/services/stremio_service.dart
 3724 lib/widgets/home/spotlight_board.dart
