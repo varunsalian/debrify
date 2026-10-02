@@ -1,0 +1,420 @@
+# Settings screen refactor — plan
+
+Drafted 2026-10-02 and reviewed by Codex in four rounds (verdict: "No P1s —
+executable"). The line numbers were written against `3bf55ea4` and re-checked
+at `6d6676cc`, where the launcher refactor ended: `settings_screen.dart` and
+the other cited files are unchanged, apart from `theme_rendered_set.py`,
+whose glob moved one line, to 73–75. Execute from `6d6676cc` or later. The
+guard, size baseline, CI and `check_verbatim_moves.py` now include the
+launcher refactor's additions; extend them, don't replace them. Follow
+[AGENTS.md](../../AGENTS.md).
+
+Work on the existing `refactor/codebase` branch. Commit after every step.
+Never push to `origin`; push to `private` only if the goal you were given
+says so.
+
+## Goal
+
+`lib/screens/settings_screen.dart` is 8,757 lines: the Settings hub. The 73
+individual settings pages already live in `lib/screens/settings/`. Split the
+hub into `lib/features/settings/`, **moving code verbatim**. The widget tree,
+keys, focus nodes and build order don't change. `settings_screen.dart` keeps
+the public `SettingsScreen` widget and the State's lifecycle, wiring in the
+extracted sections.
+
+**Architectural status:** this is a bounded legacy-extraction stage, not the
+finished architecture.
+- **Temporary exceptions to AGENTS.md,** recorded in Progress:
+  - **Riverpod:** state stays State-driven and constructor-wired (AGENTS.md
+    wants Riverpod for migrated feature state);
+  - **bridge folder:** `legacy_settings/` calls services directly.
+- **Exit milestone,** after this plan:
+  - move the summaries into a Riverpod `Notifier`;
+  - put service calls behind settings data contracts, then dissolve the
+    bridge folder.
+
+## What it contains (line numbers at `3bf55ea4`; step 0 re-derives them)
+
+| Lines | Area | Key symbols |
+| --- | --- | --- |
+| 1–173 | Imports | |
+| 174–179 | **Public pure helper** | `shouldApplyPendingCredentialOverride`. `test/profiles/settings_pending_credential_override_test.dart:2` imports the screen to reach it. |
+| 180–189 | Widget | `SettingsScreen`, including `summaryReadOverrides` |
+| 190–333 | State fields | 76 fields plus `_mediaServerCount` (1224), 77 in all. These are summary scalars **and resources**: `_firstCardFocusNode` (198), `_tvContentFocusHandler` (249), `_updateDownloadSub`/`_updateDownloadTaskId` (297–298). There are also computed getters (`_isAndroid`, `_isTelevision`, `_iptvAppearanceSearchable`, ...). |
+| 334–370 | Lifecycle | `initState` order: analytics, `_loadSummaries`, `_loadSupportConfig`, `_loadDownloadLocation`, recording probe, TV focus handler (tab 8). `dispose` order: unregister the handler, dispose the focus node, cancel `_updateDownloadSub`. |
+| 371–1008 | Summary loading | `_loadSummaries` (380–397: captures the starting scope and guards error/finally publication), `_loadSummariesForCurrentProfile` (421–1008, **588 lines**). It reads `widget.summaryReadOverrides` at call time (425–426); its initial publication guard is at 671; background account refreshes check `mounted` (970–1004). |
+| 1010–1121 | Helpers | pending-credential, support and account-caption helpers |
+| 1123–1160 | `build` | |
+| 1161–1310 | Connection getters | combine summary values with navigation callbacks |
+| 1312–1573 | Layouts and search entry | `_buildTvLayout`, `_buildLayout`, `_openSettingsSearch` |
+| 1574–2944 | `_buildSearchIndex` (**1,371 lines**) | helpers `conn` and `nav`; the list returned at 1611–2936; Appearance block 1924–2573 (**650 lines**) |
+| 2945–4969 | `_leafSearchEntries` (**2,025 lines**) | preamble locals (`pageIcons`, `pageOpeners` at 2975, `leaf`, `optionLabels`, `externalPlayerLabels`, label consts, `advancedAppearanceOptions`); the list returned at 3261–4967 |
+| 4970–5456 | Navigation and profile actions | `_open*Settings`, `_editActiveProfile`, `_ensureProfileFeature` |
+| 5457–6309 | Backup, restore, diagnostics | `_createBackup`, `_restoreBackup`, `_promptAndDecryptBackup`, `_exportDiagnosticLogs` (diagnostic visibility writes at 5725–5727), `_backupSummaryLines`, `_formatRestoreReport` |
+| 6310–6730 | Downloads and maintenance | download location and folder, clear data, `_resetAppData` |
+| 6731–7426 | Updates and the rest of the State | `_checkForAppUpdates` (6731), `_toggleAutoUpdateChecks` (6936), `_toggleIncludeAlphaUpdates` (6945), `_showReleaseDetails`, `_startAndroidUpdateDownload`, `_reloadAppearanceSummaries`, `_showSnack` (7408: checks `mounted` before using `context`). The State ends at **7426**. |
+| 7428–7594 | **Top-level constant** | `_kAdaptiveSettingsCategories`, used by the layout (7823) |
+| 7596–8693 | `_SettingsLayout` | `const` constructor (7694). Declaration, fields and constructor run 7596–7774; helpers include `_buildSpotlight` (7799) and `_buildSpotlightCategory` (7873); the classic `build` is at 8277–8688 (412 lines); playback keys at 8037 and 8470. |
+| 8694–8757 | `_SettingsSearchBar`, `_SettingsSearchBarState` | own `FocusNode` |
+
+## Facts that shape the plan
+
+- **Shared state is written in several places.**
+  - Update settings are written by the loader (939–940) **and** the update
+    actions (6939–6954).
+  - Diagnostic visibility is written by the loader (964), profile navigation
+    (5245–5247) **and** diagnostic export (5725–5727).
+
+  So the shared owner must exist **before** any action section moves.
+- **Resources are not summaries.** The focus node, focus handler and update
+  subscription each keep an explicit owner, and teardown keeps its order:
+  unregister the handler, dispose the focus node, cancel the subscription.
+- **`mounted` before `context`.** Helpers like `_showSnack` (7408) check
+  `mounted` before touching `context`, and they run after `await`s. Moved code
+  must never fetch `context` ahead of the original guard.
+- **The permission guard is a contract.** `test/update_service_test.dart:154–160`
+  requires each update action's **first statement** to be
+  `if (!await _ensureProfileFeature(ProfileFeature.appUpdates)) return;`.
+- **TV input is a contract.** `test/settings_tv_input_source_guard_test.dart`
+  forbids raw `TextField(` and requires `TvTextField(`.
+- **Search order is a contract.** `lib/screens/settings/settings_search.dart:196–205`
+  groups results by first appearance, so the index's order decides category
+  order. Existing grouping tests
+  (`test/settings_search_grouping_test.dart:34–40`, `:54–60`) use synthetic
+  entries, not these builders.
+- **Profile lifetime:** coordinators live exactly as long as the State. The
+  profile gate remounts the subtree on a switch
+  (`lib/screens/profiles/profile_gate.dart:589–592`), and the background
+  refreshes rely on that.
+
+## Destination layout
+
+`lib/features/settings/`:
+- **`application/`**: pure helpers with no services and no context:
+  `shouldApplyPendingCredentialOverride` (`settings_screen.dart` re-exports
+  it, so the test's import keeps working; extracted code imports it from
+  here, never from the screen); `_formatRestoreReport` and
+  `_backupSummaryLines` if the report confirms they're pure.
+- **`presentation/legacy_settings/`**: a named bridge for sections that take
+  a `BuildContext` and call legacy services: the summaries owner, the summary
+  loader, connection getters, navigation and profile actions,
+  backup/restore/diagnostics, downloads/maintenance, updates, and the search
+  index builders.
+- **`presentation/`**, outside the bridge, for UI without service imports:
+  the layout, the search bar, and `_kAdaptiveSettingsCategories` (with the
+  layout).
+
+The step 0 report decides files. Each file is at most **500 lines**, except
+the named files under "Size" below.
+
+## Technique: move-only section coordinators
+
+1. **Sections are plain presentation classes** that own their moved methods
+   and any state only they use. They're constructed by the State and live
+   exactly as long as it does.
+2. **The summaries owner is created first (step 2)** and holds every summary
+   scalar the hub reads or writes, with the same initializers. Sections and
+   the State read and write through it (`_x` → `_summaries.x`). Resources
+   stay explicit:
+   - `_firstCardFocusNode` and `_tvContentFocusHandler` stay in the State;
+   - `_updateDownloadSub` and `_updateDownloadTaskId` move to the update
+     section, which exposes `void dispose()`. The State calls it at exactly
+     the original position, so dispose keeps unregister → focus dispose →
+     cancel.
+3. **Deps records** are typed and narrow. Values read at call time stay live:
+   - `summaryReadOverrides: () => widget.summaryReadOverrides` (a getter,
+     never a captured value);
+   - `setState: setState`;
+   - `mounted: () => mounted`;
+   - `context: () => context`;
+   - deferred callbacks where a section calls a method that's still in the
+     State.
+4. **`mounted`/`context` rule** (from the search-screen refactor):
+   - `setState(fn)` → `_deps.setState(fn)`, so the mutation stays inside the
+     callback;
+   - `mounted` → `_deps.mounted()`, at the original position;
+   - fetch `context` (`final context = _deps.context();`) only at the
+     original first use of `context`, or right after the original passing
+     `mounted` check. Never before a guard that preceded it in the original;
+   - after `await`s, check `context.mounted` exactly where the original
+     checked `mounted`;
+   - dialog, sheet and builder contexts (`builder: (ctx) ...`) are their own
+     parameters, unchanged;
+   - delayed entries (timers, listeners, `.then`, post-frame callbacks) keep
+     the original guard order;
+   - an update action's first statement stays the permission guard.
+5. **Allowed edits:** the ones above, field and method qualifiers, imports,
+   dropping `_` where another file needs a symbol, and the named structural
+   edits below.
+6. **Not allowed:**
+   - reordering `await`s, guards or `setState` contents;
+   - changing a widget, key, `FocusNode`, constructor default, `const`
+     capability or the build order;
+   - merging look-alike helpers;
+   - changing user-facing text. Moved text keeps a documented
+     legacy-localization exception (AGENTS.md), recorded in Progress with
+     the localization milestone.
+7. **`_SettingsLayout` structural edits** (no widget is added or removed):
+   - **Helpers to top-level functions:** the State's private build helpers
+     become top-level functions in sibling files, taking the layout as their
+     first argument.
+   - **Calls and fields:** helper calls become function calls. Private
+     getters and fields read through the layout get public names inside the
+     feature.
+   - **Constant:** `_kAdaptiveSettingsCategories` moves with the layout.
+   - **Tear-offs:** a method passed as a tear-off (for example at 7837)
+     **stays a method on the class**, so the tear-off is identical. Don't
+     replace it with a closure.
+   - **Classic `build` body:** `build` (8277–8688) becomes a one-line
+     dispatcher, `return buildClassicSettingsLayout(this, context);`, and the
+     body moves verbatim (apart from receiver qualifiers) into that
+     top-level function.
+   - **`_buildSpotlightCategory` (7869–8275, 407 lines)** gets the same
+     treatment. Its body moves into the top-level
+     `buildSpotlightCategory(layout, ...)` (in `settings_spotlight_category.dart`),
+     and the method stays as a one-line forwarder with the same signature,
+     so calls and any tear-offs are identical. With both large bodies moved
+     out, the layout class (declaration, fields, constructor, small helpers,
+     forwarders) must be under 500 lines. The report measures it; if it
+     isn't, move the next-largest helper body the same way.
+   - **One service read:** the category renderer reads
+     `ProfileBootstrap.legacyReasonSummary` (8123–8125), a service the layout
+     may not import outside the bridge.
+     - Add one required named constructor parameter,
+       `String Function() legacyReasonSummary`: non-nullable, matching the
+       getter (`profile_bootstrap.dart:67`, `static String get` with a
+       fallback), so the renderer's `.split('\n').first` compiles unchanged.
+       The State (bridge side) passes
+       `() => ProfileBootstrap.legacyReasonSummary`.
+     - The renderer calls `layout.legacyReasonSummary()` at the original
+       position, so the value is still read live, at the same moment.
+     - The constructor stays `const`, and other parameters and defaults are
+       unchanged. Every construction site is in this file. The manifest
+       records it.
+   - **Unchanged:** the `const` constructor, defaults, keys (8037, 8470) and
+     focus ownership.
+8. **List partition** (only for `_buildSearchIndex` and `_leafSearchEntries`):
+   - **Builder, fresh on every call.** The method creates a new builder
+     object each time it runs:
+     - the preamble locals become the builder's `final` fields, initialised
+       in its constructor in the original order (so `pageOpeners` is still
+       built once per call, before the list);
+     - local functions (`conn`, `nav`, `leaf`, `optionLabels`,
+       `externalPlayerLabels`) become methods;
+     - local `const`s become `static const`;
+     - nothing is retained between calls.
+   - **Partition units** are complete top-level elements of the returned
+     list literal. A collection `if`/`for` element (1612, 3946, 3984, 4745,
+     4791) is never split. Closures, including ones capturing loop
+     variables (3990) and toggles reading live State (2758, 2876, 2885), are
+     unchanged.
+   - **Slices** are cut at existing section comments and are at most about
+     300 lines. The Appearance block (1924–2573) is cut at its inner comments
+     into several slices. The manifest records every cut line.
+   - **Joining:** the method returns `[...b.slice1(), ...b.slice2(), ...]` in
+     the original order.
+   - **Partition check:**
+     - the joined slices' elements equal the original elements token for
+       token, in order;
+     - the preamble declarations equal the builder's fields and methods;
+     - the join order matches the manifest.
+9. **Temporary cross-calls** (`TEMP(settings)`) are allowed only from
+   `legacy_settings/` files, and none may remain at the end.
+
+## Size
+
+- **Default:** every new file is at most **500 lines**.
+- **Named exceptions** (AGENTS.md: 501–800 is acceptable with one clear
+  responsibility):
+
+  | File | Holds | Cap |
+  | --- | --- | --- |
+  | `legacy_settings/settings_summary_loader.dart` | `_loadSummariesForCurrentProfile` (588 lines), one responsibility | measured size, ≤ 800 |
+  | `presentation/settings_classic_layout.dart` | `buildClassicSettingsLayout` (the 412-line classic build) | measured size, ≤ 800 |
+
+  `settings_spotlight_category.dart` (the 407-line body, plus imports) should
+  fit in 500. If its measured size doesn't, it becomes a third named
+  exception, capped at that size.
+
+  Nothing else is over 500.
+- **The facade** (`settings_screen.dart`) is at most **400 lines at the
+  end**.
+- **Staged enforcement.** The screen stays large until step 6, so the final
+  rules switch on at the end:
+  - **From step 1:** the guard registers `lib/features/settings/` and checks
+    every **destination** file against its cap (500, or its named
+    exception) at every step. CI's format and analyze steps cover
+    `lib/features/settings/`.
+  - **Steps 1–5:** `settings_screen.dart` is **not** registered with the
+    facade cap. It is only held by the repo size ratchet, which must shrink
+    at each step (`check_file_sizes.py --update`). It is also not in CI's
+    format scope (it has pre-existing unformatted regions); CI's analyze step
+    may include it from step 1.
+  - **Step 6:** format `settings_screen.dart` whole, register it with the
+    400-line facade cap, add it to CI's format scope, and turn on the
+    guard's `TEMP(settings)` rejection. `TEMP(settings)` markers are allowed
+    in intermediate steps only in `legacy_settings/`.
+
+## Steps
+
+| # | Work | Notes |
+| --- | --- | --- |
+| 0 | Baseline, dependency report, checks, source-text inventory, production-index order test | Nothing moves. Run after the launcher refactor ends. |
+| 1 | Guard and CI registration, staged (see Size). Pure UI: search bar, layout (helpers, the classic `build` body, the `_buildSpotlightCategory` body, `_kAdaptiveSettingsCategories`, the `legacyReasonSummary` parameter). `shouldApplyPendingCredentialOverride` to `application/`, with a re-export. | |
+| 2 | **Summaries owner** (every summary scalar) and connection getters | Resources keep their owners. |
+| 3 | Action sections: updates (takes the update subscription), backup/restore/diagnostics, maintenance/downloads, profile actions, navigation openers | The permission guard stays first. |
+| 4 | Summary loader (`_loadSummaries`, `_loadSummariesForCurrentProfile`, `_loadSupportConfig`, `_loadDownloadLocation`, `_reloadAppearanceSummaries`, helpers 1010–1121) | The profile-scope guards move verbatim. **Full-suite gate 1.** |
+| 5 | Search index and leaf entries, by list partition | The order test must pass. |
+| 6 | Final State, guards, CI, **full-suite gate 2** | See "Definition of done". |
+
+### Step 0
+
+1. **Baseline,** at `6d6676cc` or later:
+   `python3 dev/tool/suite_evidence.py run settings/base`, and
+   `flutter analyze > <E>/settings/analyze-base.txt`. `<E>` is
+   `$(git rev-parse --git-common-dir)/refactor-evidence`. The SDK must be
+   Flutter 3.44.8.
+2. **Dependency report** (`docs/refactoring/settings-screen-deps.md`):
+   - every top-level declaration and every member of the State,
+     `_SettingsLayout`, `_SettingsSearchBar` and `_SettingsSearchBarState`;
+   - each one's destination, step and layer;
+   - which fields each section reads and writes;
+   - every cross-section call, every tear-off, every deferred callback.
+
+   Nothing may be unresolved.
+3. **Checks:**
+   - `dev/tool/check_verbatim_moves.py` (from the launcher refactor), with
+     `dev/tool/settings_manifest.tsv` recording each member's allowed edit
+     kinds;
+   - its **partition mode** (above);
+   - a **context-guard check**: for each moved method, the position of the
+     first `context` use relative to `mounted` guards is unchanged;
+   - self-tests: a reordered slice, a dropped element, a duplicated element,
+     a split collection-`if`, and `context` fetched before a guard must
+     each fail.
+4. **Production-index order test** (`test/settings_search_index_order_test.dart`):
+   - It asserts the ordered `(category, title)` list from the **real**
+     `_buildSearchIndex` and `_leafSearchEntries`. Record it at baseline; it
+     must pass unchanged at every step.
+   - **Host-aware:** some entries depend on the platform, for example
+     Download Location (2777–2796), gated by 6280–6284, which shows on Linux
+     but not macOS. CI runs on Ubuntu, local runs are on macOS. So keep one
+     reviewed expected list per host platform the tests run on (macOS,
+     Linux), each in exact order. A platform-gated entry must be covered in
+     at least one of them. Never weaken it to an unordered or subset
+     comparison.
+   - Reach the builders through the existing search UI if possible.
+     Otherwise add one minimal `@visibleForTesting` accessor; it's
+     test-only, and the manifest records it.
+   - Also add a **disposal regression test**: an update or snack helper
+     that completes after the screen is disposed must not throw.
+5. **Source-text inventory** (`dev/tool/settings_source_text.txt`):
+   - `test/update_service_test.dart:148–160`;
+   - `test/settings_tv_input_source_guard_test.dart`;
+   - `test/settings_sync_and_migrate_source_guard_test.dart`;
+   - the diagnostic-visibility guard in
+     `test/profiles/profile_source_guard_test.dart:414`;
+   - `test/theme/shape_manifest_test.dart:97`;
+   - `dev/tool/theme_surface_manifest.txt:6`, read by
+     `dev/tool/theme_rendered_set.py` and `dev/tool/measure_theme_surface.sh`.
+
+   Grep for more. Each entry gets the step that ports it.
+
+### Per step
+
+- **Move:** verbatim, with the allowed edits only.
+- **Format** every changed project-owned Dart file (AGENTS.md), with one
+  exception: `settings_screen.dart` has pre-existing unformatted regions, so
+  format it only in step 6, once they have moved out. Don't format
+  unrelated files.
+- **Analyzer:** compare the whole repo with the previous step,
+  `--relocate lib/screens/settings_screen.dart=lib/features/settings/`.
+- **Checks:** `check_verbatim_moves.py` (partition mode in step 5), the
+  architecture guard and the size ratchet.
+- **Tests:** the settings tests, the source-text inventory, the order and
+  disposal tests, and `test/profiles/isolation_suite`. Record them with
+  `suite_evidence.py run settings/stepN <paths>` and compare with
+  `settings/base`.
+- **Then** self-check with `git diff --color-moved`, and commit.
+
+### Source-text tests
+
+- **Permission guard:** point the regex at the update section's file. It
+  still requires the guard as each action's first statement. If the call
+  becomes `_profile.ensureProfileFeature(...)` or similar, match that exact
+  spelling; never loosen it to "contains".
+- **TV text field:** scan the remaining `settings_screen.dart` and every file
+  under `lib/features/settings/`. No raw `TextField(` anywhere, and
+  `TvTextField(` still present.
+- **Shape manifest** (`test/theme/shape_manifest_test.dart`): keep both kinds
+  of coverage.
+  - **Bare radii:** the screen's four (6333, 8722, 8725, 8733) go to their
+    new owners in `kExtractedShapeResidue`: the download-sheet owner with 1,
+    the search bar with 3.
+  - **Token call:** the release-details owner, which takes the only
+    `app.shape.br` call (6840), goes in `kShapeResidue` with residue 0.
+    `kShapeResidue` files must contain `app.shape.` (241–247), and the
+    token-call floor (261–270) must still be met.
+  - **The screen itself** moves to the right map once its token call has
+    left.
+- **Theme surface:** `theme_rendered_set.py` (73–75) uses non-recursive
+  `glob` and `measure_theme_surface.sh` (11–16) expands with `ls`. List exact
+  per-directory patterns both accept, such as
+  `lib/features/settings/presentation/*.dart`,
+  `lib/features/settings/presentation/legacy_settings/*.dart` and the
+  search-index directory. Verify every new file is included.
+- **Sync/Migrate and diagnostic-visibility guards:** point them at the new
+  owners. Replace substring boundaries that no longer hold, keep every
+  assertion, and make negative guards scan every possible destination.
+- Never delete an assertion to make a move pass.
+
+## Definition of done
+
+1. **The screen file.** `settings_screen.dart` (at most 400 lines, formatted)
+   holds `SettingsScreen`, the re-export of
+   `shouldApplyPendingCredentialOverride`, the State's section wiring,
+   `initState`, `dispose`, `build` and the layout choice.
+2. **Guard.**
+   - `lib/features/settings/` is in `FEATURES`.
+   - The exact `presentation/legacy_settings/` path is a bridge; service
+     exemptions are confined to it, and the application layer keeps its UI
+     prohibitions.
+   - The Settings rule applies the 500 default, the two named exceptions and
+     the 400-line facade, and rejects `TEMP(settings)`.
+3. **Checks:** `check_verbatim_moves.py` passes, including the partition and
+   context-guard modes and their self-tests. The order and disposal tests
+   pass.
+4. **Analyzer and tests:** no added diagnostics. Gate 2 passes against
+   `settings/base.jsonl` and `settings/gate1.jsonl`.
+5. **CI.**
+   - Format and analyze cover `lib/features/settings` **and**
+     `lib/screens/settings_screen.dart`.
+   - `dev/tool/ci_behavior_tests.txt` gains concrete paths, not globs (the
+     manifest isn't glob-expanded): every `test/settings_*` file found with
+     `ls`, the order and disposal tests, the source-text inventory,
+     `test/profiles/settings_pending_credential_override_test.dart` and
+     `test/settings_search_grouping_test.dart`.
+   - The allowlist is seeded from failures that still fail at gate 2.
+   - CI passes on `private`.
+6. **Progress records:**
+   - the step commits, and every section with what it owns;
+   - the partition evidence;
+   - the two size exceptions;
+   - the Riverpod and bridge exceptions, with their exit milestones;
+   - the legacy-localization exception.
+7. Stop after gate 2 and report.
+
+## Explicitly not in scope
+
+- The 73 pages in `lib/screens/settings/`.
+- The Riverpod migration of the summaries (the exit milestone above).
+- Changing settings text, ordering, search grouping, focus or navigation.
+- Bug fixes. Record any you find under "Found, not fixed".
+
+## Progress
+
+(empty)
+
+## Found, not fixed
+
+(none yet)
