@@ -271,6 +271,11 @@ Map<String, Object?> describe(
     body = node.functionExpression.body;
   }
   if (node is ConstructorDeclaration) parameters = node.parameters;
+  final variableType = node is FieldDeclaration
+      ? node.fields.type
+      : node is TopLevelVariableDeclaration
+      ? node.variables.type
+      : null;
   return {
     'name': nameOf(node),
     'owner': owner,
@@ -303,6 +308,13 @@ Map<String, Object?> describe(
     ],
     'bodyOffset': body == null ? null : pos(body.offset),
     'bodyText': body?.toSource(),
+    'recordTypeFields': variableType is RecordTypeAnnotation
+        ? [
+            for (final field in variableType.namedFields?.fields ??
+                <RecordTypeAnnotationNamedField>[])
+              field.name.lexeme,
+          ]
+        : null,
     'variables': node is FieldDeclaration || node is TopLevelVariableDeclaration
         ? [
             for (final v

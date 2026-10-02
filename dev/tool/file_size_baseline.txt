@@ -17,7 +17,6 @@
 4182 lib/main.dart
 4140 lib/screens/playlist_content_view_screen.dart
 4086 lib/services/iptv_catalog_db.dart
-4044 lib/screens/settings_screen.dart
 3957 lib/screens/stremio_tv/stremio_tv_screen.dart
 3858 lib/services/stremio_service.dart
 3724 lib/widgets/home/spotlight_board.dart

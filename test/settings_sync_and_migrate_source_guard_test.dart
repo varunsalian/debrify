@@ -4,6 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final adaptive = File('lib/screens/settings_screen.dart').readAsStringSync();
+  final index = File(
+    'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_09.dart',
+  ).readAsStringSync();
   final categories = File(
     'lib/features/settings/presentation/settings_categories.dart',
   ).readAsStringSync();
@@ -23,7 +26,7 @@ void main() {
   test('adaptive, TV, and search surfaces all register Sync and Migrate', () {
     expect(categories, contains("label: 'Sync and Migrate'"));
     expect(
-      adaptive,
+      index,
       contains("SettingsRows.syncAndMigrate,\n        'Sync and Migrate'"),
     );
     expect(classic, contains("title: 'Sync and Migrate'"));

@@ -15,12 +15,19 @@ ALLOWED = {'unchanged', 'rename', 'receiver', 'state_callback', 'context_guard',
            'layout_legacy_param', 'live_service_getter', 'partition',
            'summary_accessor', 'production_api_annotation',
            'classic_update_indicator_const', 'public_widget_key',
-           'context_confirmation', 'formatter_if_braces', 'live_getter_callback'}
+           'context_confirmation', 'formatter_if_braces', 'live_getter_callback',
+           'index_live_getter_callbacks'}
 
 CONTEXT_EXCEPTION_DIFFERENCE = ('context_confirmation/formatter_if_braces: '
     'only exact sites in dev/tool/settings_context_exceptions.json; '
     'existing State mounted guard and context acquisition, no intervening await')
 CONTEXT_ACQUISITION = ['final', 'context', '=', '_deps', '.', 'context', '(', ')', ';']
+
+
+def is_context_acquisition(values, index):
+    return (values[index:index + 3] == ['final', 'context', '=']
+            and values[index + 3:index + 4] in (['_deps'], ['deps'])
+            and values[index + 4:index + 9] == ['.', 'context', '(', ')', ';'])
 
 
 def without_offsets(node, offsets):
@@ -38,8 +45,7 @@ def remove_context_exceptions(node, sites, rows, row):
     """
     code = [t for t in node['tokens'] if not t['comment']]
     values = [t['text'] for t in code]
-    acquisitions = [i for i in range(len(code))
-                    if values[i:i + len(CONTEXT_ACQUISITION)] == CONTEXT_ACQUISITION]
+    acquisitions = [i for i in range(len(code)) if is_context_acquisition(values, i)]
     removed, anchors = set(), []
     for site in sites:
         if site['kind'] == 'context_confirmation':
@@ -67,7 +73,8 @@ def remove_context_exceptions(node, sites, rows, row):
             raise ValueError('Unknown context exception kind')
     result = without_offsets(node, removed)
     for site, offset in anchors:
-        prefix = normalize(tokens(result, end=offset), rows, row)
+        prefix = (tokens(result, end=offset) if site.get('prefix_mode') == 'raw'
+                  else normalize(tokens(result, end=offset), rows, row))
         if prefix != site['prefix_tokens']:
             raise ValueError('Recorded context/formatter exception moved across an original statement')
         if site['kind'] == 'context_confirmation':
@@ -83,9 +90,14 @@ RECEIVERS = {'_deps', '_summaries', 'layout', '_connections', '_updates',
              '_diagnostics', '_pageNavigation', '_connectionNavigation',
              '_profileActions', '_backup', '_restore', '_downloadLocation',
              '_maintenance', '_releaseDetails', '_appearanceNavigation', '_snacks',
-             '_summaryRefresh', '_summaryLoader', '_accountCaptions'}
+             '_summaryRefresh', '_summaryLoader', '_accountCaptions',
+             '_platformGates', '_searchNavigation', '_searchIndex', 'deps',
+             'summaries', 'SettingsIndexBuilder', 'SettingsLeafBuilder'}
 LIVE_GETTER_CALLBACKS = {'downloadLocationSupported', 'downloadLocationUsesSaf',
                          'defaultDownloadLocationLabel'}
+_INDEX_GETTERS_PATH = Path(__file__).with_name('settings_partition_live_getters.json')
+INDEX_GETTER_CALLBACKS = (json.loads(_INDEX_GETTERS_PATH.read_text())['methods']
+                          if _INDEX_GETTERS_PATH.exists() else {})
 
 NAMED_EXCEPTIONS = {
     'production_api_annotation': (
@@ -175,6 +187,13 @@ def names(rows):
 def normalize(values, rows, row=None):
     mapping = names(rows)
     mapped = set(mapping.values()) | {r['new_name'] for r in rows}
+    if row:
+        mapped.update(row.get('_partition_preamble_names', []))
+    live_getters = set()
+    if row and 'live_getter_callback' in row['allowed_edits'].split(','):
+        live_getters = LIVE_GETTER_CALLBACKS
+    if row and 'index_live_getter_callbacks' in row['allowed_edits'].split(','):
+        live_getters = set(INDEX_GETTER_CALLBACKS.get(row['original_name'], []))
     if row and 'live_service_getter' in row['allowed_edits']:
         mapped.add('legacyReasonSummary')
     out = []
@@ -191,7 +210,7 @@ def normalize(values, rows, row=None):
                 out.extend(['$', mapping[values[i + 1]]])
                 i += 3; continue
         # Injected context acquisition is checked separately BEFORE removing it.
-        if values[i:i + 9] == ['final', 'context', '=', '_deps', '.', 'context', '(', ')', ';']:
+        if is_context_acquisition(values, i):
             i += 9
             continue
         if values[i:i + 4] == ['context', '.', 'mounted', '(']:
@@ -201,7 +220,7 @@ def normalize(values, rows, row=None):
         if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
             if target in mapped or target in {'mounted', 'setState', 'context', 'summaryReadOverrides'}:
-                if row and 'live_getter_callback' in row['allowed_edits'].split(',') and value == '_deps' and target in LIVE_GETTER_CALLBACKS and values[i + 3:i + 5] == ['(', ')']:
+                if value in {'_deps', 'deps'} and target in live_getters and values[i + 3:i + 5] == ['(', ')']:
                     out.append(target); i += 5; continue
                 if target in {'mounted', 'context', 'summaryReadOverrides'} and values[i + 3:i + 5] == ['(', ')']:
                     out.extend(['widget', '.', target] if target == 'summaryReadOverrides' else [target])
@@ -347,9 +366,9 @@ def check_context(before, after, rows=None, row=None):
                          for r in before['references'] if r['name'] == 'context'
                          and not r['contextParameter']]
     code = [t for t in after['tokens'] if not t['comment']]
-    pattern = ['final', 'context', '=', '_deps', '.', 'context', '(', ')', ';']
+    values = [t['text'] for t in code]
     for i, token in enumerate(code):
-        if [t['text'] for t in code[i:i + len(pattern)]] != pattern:
+        if not is_context_acquisition(values, i):
             continue
         prefix = normalize(tokens(after, end=token['offset']), rows or [], row)
         if prefix not in expected_prefixes:
@@ -364,17 +383,17 @@ def partition_elements(node):
     return result['elements']
 
 
-def compare_elements(before, after, rows):
+def compare_elements(before, after, rows, row=None):
     # Compare the AST partition units individually, not just flattened text.
     # Splitting if/for into spread/condition fragments cannot preserve this list.
-    a = [(e['kind'], normalize(tokens(before, e['offset'], e['end']), rows))
+    a = [(e['kind'], normalize(tokens(before, e['offset'], e['end']), rows, row))
          for e in partition_elements(before)]
-    b = [(e['kind'], normalize(tokens(node, e['offset'], e['end']), rows))
+    b = [(e['kind'], normalize(tokens(node, e['offset'], e['end']), rows, row))
          for node in after for e in partition_elements(node)]
     return [] if a == b else ['Partition elements changed, reordered, dropped, duplicated or split']
 
 
-def check_preamble(before, spec, lookup, rows, package=None):
+def check_preamble(before, spec, lookup, rows, package=None, row=None):
     """Local functions/consts stay exact; final initializers run in the ctor.
 
     Field type annotations are structural. The initializer expression, local
@@ -383,6 +402,9 @@ def check_preamble(before, spec, lookup, rows, package=None):
     from check_verbatim_moves import parse
     errors = []
     owner, path = spec['builder_class'], spec['builder_file']
+    original_names = [declaration['names'][0] for declaration in before['returnedList']['preamble']]
+    if spec['preamble_names'] != original_names:
+        errors.append('Manifest must name every original preamble declaration in order')
     constructor = lookup.get((path, owner, owner))
     finals = []
     for declaration in before['returnedList']['preamble']:
@@ -392,8 +414,8 @@ def check_preamble(before, spec, lookup, rows, package=None):
             errors.append('Missing builder preamble member: ' + name); continue
         text = declaration['text']
         parsed = parse({'local': 'class Local { ' + text + ' }'}, package)['local']['declarations'][0]['members'][0]
-        expected = normalize(tokens(parsed), rows)
-        actual = normalize(tokens(member), rows)
+        expected = normalize(tokens(parsed), rows, row)
+        actual = normalize(tokens(member), rows, row)
         if declaration['kind'].startswith('FunctionDeclaration'):
             if expected != actual:
                 errors.append('Builder preamble function changed: ' + name)
@@ -409,7 +431,7 @@ def check_preamble(before, spec, lookup, rows, package=None):
                 errors.append('Builder final must be initialized once in constructor: ' + name); continue
             initializer = matches[0]
             old = parsed['variables'][0]
-            if normalize(tokens(parsed, old['initializerOffset'], old['initializerEnd']), rows) != normalize(tokens(constructor, initializer['expressionOffset'], initializer['expressionEnd']), rows):
+            if normalize(tokens(parsed, old['initializerOffset'], old['initializerEnd']), rows, row) != normalize(tokens(constructor, initializer['expressionOffset'], initializer['expressionEnd']), rows, row):
                 errors.append('Builder initializer changed: ' + name)
         else:
             errors.append('Unsupported builder preamble declaration: ' + name)
@@ -426,7 +448,59 @@ def check_preamble(before, spec, lookup, rows, package=None):
     return errors
 
 
-def check_partition(before, current, spec, lookup, rows, package=None):
+def partition_virtual(current, spec, lookup, sources, package=None):
+    """Reconstruct the executed list/preamble solely for full-scope comparison.
+
+    This is parser input, never production code. The physical dispatcher and
+    initializer order are independently checked. Re-parsing restores original
+    callback scope numbering across slice files and local-to-member functions.
+    """
+    from check_verbatim_moves import parse
+    path, owner = spec['builder_file'], spec['builder_class']
+    constructor = lookup[(path, owner, owner)]
+    dependency = lookup[(path, owner, 'deps')]
+    members = [lookup[(path, owner, name)] for name in spec['preamble_names']]
+    unit_source = sources[path]
+    # The frozen constructor/borrowed fields precede every moved local. Taking
+    # the physical tail retains intervening section comments as well as bodies.
+    opening = dependency['end']
+    closing = unit_source.rfind('}')
+    preamble = unit_source[opening:closing]
+    edits = []
+    for member in members:
+        code = [t for t in member['tokens'] if not t['comment']]
+        if code[0]['text'] == 'static':
+            token = code[0]
+            edits.append((token['offset'] - opening,
+                          token['offset'] + len(token['text']) - opening, ''))
+        elif code[0]['text'] == 'final':
+            initializer = next(i for i in constructor['initializers'] if i['name'] == member['name'])
+            expression = unit_source[initializer['expressionOffset']:initializer['expressionEnd']]
+            edits.append((member['start'] - opening, member['end'] - opening,
+                          'final ' + member['name'] + ' = ' + expression + ';'))
+    for start, end, value in sorted(edits, reverse=True):
+        preamble = preamble[:start] + value + preamble[end:]
+    interiors = []
+    for item in spec['slices']:
+        node = lookup[(item['file'], item.get('owner', ''), item['name'])]
+        raw = sources[item['file']]
+        result = node['returnedList']
+        start, end = result['offset'] + 1, result['end'] - 1
+        interior = raw[start:end]
+        # Only offsets removed by the exact physical-site exception validator
+        # can disappear here; all original tokens/comments remain in place.
+        for token in sorted(node.get('_validated_removed_tokens', []),
+                            key=lambda token: token['offset'], reverse=True):
+            if start <= token['offset'] < end:
+                offset = token['offset'] - start
+                interior = interior[:offset] + interior[offset + len(token['text']):]
+        interiors.append(interior)
+    header = current['text'][:current['bodyOffset'] - current['start']]
+    text = header + '{' + preamble + '\nreturn [' + '\n'.join(interiors) + '];\n}'
+    return parse({'virtual': 'class Virtual { ' + text + ' }'}, package)['virtual']['declarations'][0]['members'][0]
+
+
+def check_partition(before, current, spec, lookup, rows, package=None, row=None):
     errors = []
     original = partition_elements(before)
     slices = spec['slices']
@@ -444,13 +518,13 @@ def check_partition(before, current, spec, lookup, rows, package=None):
     # Before step 5, the real original method remains and the proposed cuts
     # are checked against its complete AST elements.
     if current.get('returnedList') and len(partition_elements(current)) == len(original):
-        errors.extend(compare_elements(before, [current], rows))
+        errors.extend(compare_elements(before, [current], rows, row))
         a = before['returnedList']['preamble']
         b = current['returnedList']['preamble']
         def preamble_units(declarations):
             from check_verbatim_moves import parse
             return [(d['kind'], d['names'], normalize(tokens(parse(
-                {'local': 'class Local { ' + d['text'] + ' }'}, package)['local']['declarations'][0]['members'][0]), rows))
+                {'local': 'class Local { ' + d['text'] + ' }'}, package)['local']['declarations'][0]['members'][0]), rows, row))
                     for d in declarations]
         if preamble_units(a) != preamble_units(b):
             errors.append('Unmoved partition preamble changed')
@@ -466,12 +540,31 @@ def check_partition(before, current, spec, lookup, rows, package=None):
         if len(partition_elements(node)) != len(expected):
             errors.append('Slice boundary/count changed: ' + item['name'])
     if len(actual_slices) == len(slices):
-        errors.extend(compare_elements(before, actual_slices, rows))
+        errors.extend(compare_elements(before, actual_slices, rows, row))
     # The dispatcher MUST construct a new builder every call and join each
     # slice exactly once in the manifest order; it cannot cache a result.
-    code = normalize(tokens(current, current['bodyOffset']), rows)
+    code = normalize(tokens(current, current['bodyOffset']), rows, row)
     expected = ['{', 'final', 'b', '=', spec['builder_class'], '(']
-    expected += spec.get('constructor_arguments', ['_deps'])
+    arguments = spec.get('constructor_arguments', ['_deps'])
+    dependency = lookup.get((spec['builder_file'], spec['builder_class'], 'deps'))
+    if dependency is not None:
+        fields = dependency.get('recordTypeFields')
+        if not fields or len(fields) != len(set(fields)):
+            errors.append('Fresh builder must declare its exact typed callback fields')
+        else:
+            # An argument fingerprint alone could bless an incorrectly rewired
+            # callback. Derive the subset record from its declared field names;
+            # values are matching borrowed functions, never invoked snapshots.
+            wired = ['_summaries', ',', '(']
+            for field in fields:
+                wired += [field, ':']
+                wired += ([field] if field == 'leafSearchEntries'
+                          else ['_deps', '.', field])
+                wired += [',']
+            wired += [')']
+            if arguments != wired:
+                errors.append('Fresh builder callbacks must preserve their matching function bindings')
+    expected += normalize(arguments, rows, row)
     expected += [')', ';', 'return', '[']
     for item in slices:
         expected += ['...', 'b', '.', item['name'], '(', ')', ',']
@@ -481,7 +574,7 @@ def check_partition(before, current, spec, lookup, rows, package=None):
         code.insert(len(code) - 3, ',')
     if code != expected:
         errors.append('Partition dispatcher must construct a fresh builder and join exactly in manifest order')
-    errors.extend(check_preamble(before, spec, lookup, rows, package))
+    errors.extend(check_preamble(before, spec, lookup, rows, package, row))
     return errors
 
 
@@ -499,7 +592,7 @@ def all_nodes(parsed):
     return found
 
 
-def destination_ownership(parsed, rows, source_path, scaffolds=()):
+def destination_ownership(parsed, rows, source_path, scaffolds=(), partition_specs=()):
     """No unregistered original copy or extra feature helper can hide in a move.
 
     The three extra layout leaves are exactly the structural additions named
@@ -509,6 +602,11 @@ def destination_ownership(parsed, rows, source_path, scaffolds=()):
     known = {(r['destination_file'], r['destination_class'], r['new_name'])
              for r in rows}
     known.update((s['file'], s['owner'], s['name']) for s in scaffolds)
+    for spec in partition_specs:
+        known.update((spec['builder_file'], spec['builder_class'], name)
+                     for name in spec['preamble_names'])
+        known.update((item['file'], item.get('owner', ''), item['name'])
+                     for item in spec['slices'])
     layout = 'lib/features/settings/presentation/settings_layout.dart'
     known.update((layout, 'SettingsLayout', name)
                  for name in ('legacyReasonSummary', 'build', 'buildSpotlightCategory'))
@@ -552,14 +650,58 @@ def check(original_source, sources, rows, source_path, package=None,
     if set(original) != known:
         return ['Settings manifest coverage differs: ' + str(sorted(set(original) ^ known))]
     lookup = all_nodes(parsed)
+    partitions = json.loads((ROOT / 'dev/tool/settings_partitions.json').read_text())['partitions']
     scaffold_path = ROOT / 'dev/tool/settings_scaffolding.json'
     scaffolds = (json.loads(scaffold_path.read_text())['scaffolds']
                  if source_path == 'lib/screens/settings_screen.dart' and scaffold_path.exists() else [])
     errors.extend(check_scaffolds(lookup, scaffolds))
-    errors.extend(destination_ownership(parsed, rows, source_path, scaffolds))
+    active_partitions = [partitions[r['original_name']] for r in rows
+                         if r['original_name'] in partitions
+                         and (r['destination_file'], r['destination_class'], r['new_name']) in lookup]
+    errors.extend(destination_ownership(parsed, rows, source_path, scaffolds, active_partitions))
     exception_path = ROOT / 'dev/tool/settings_context_exceptions.json'
     exception_sites = (json.loads(exception_path.read_text())['sites']
                        if source_path == 'lib/screens/settings_screen.dart' and exception_path.exists() else [])
+    partition_exception_path = ROOT / 'dev/tool/settings_partition_context_exceptions.json'
+    partition_sites = (json.loads(partition_exception_path.read_text())['sites']
+                       if source_path == 'lib/screens/settings_screen.dart' and partition_exception_path.exists() else [])
+    partition_sites_by_original = {}
+    physical_lookup = dict(lookup)
+    physical_identities = set()
+    for site in partition_sites:
+        original_name = site['original_name']
+        spec = partitions.get(original_name)
+        key = (site['file'], site['owner'], site['method'])
+        identity = (*key, site['kind'], site.get('acquisition'))
+        if identity in physical_identities:
+            errors.append('Duplicate physical partition exception: ' + str(key))
+        physical_identities.add(identity)
+        if site.get('prefix_mode') != 'raw' or site.get('return_value') is not None:
+            errors.append('Partition confirmation must preserve its exact void-return physical site: ' + str(key))
+        if spec is None or key not in {(item['file'], item.get('owner', ''), item['name']) for item in spec['slices']}:
+            errors.append('Partition context exception registered outside its exact slice: ' + str(key))
+            continue
+        partition_sites_by_original.setdefault(original_name, []).append(site)
+    for original_name, sites in partition_sites_by_original.items():
+        row = next((r for r in rows if r['original_name'] == original_name), None)
+        if row is None:
+            errors.append('Partition context exception has no manifest row: ' + original_name)
+            continue
+        by_physical = {}
+        for site in sites:
+            key = (site['file'], site['owner'], site['method'])
+            by_physical.setdefault(key, []).append(site)
+        for key, registered in by_physical.items():
+            node = lookup.get(key)
+            if node is None:
+                errors.append('Missing registered partition context site: ' + str(key)); continue
+            try:
+                filtered = remove_context_exceptions(node, registered, rows, row)
+            except ValueError as error:
+                errors.append(str(key) + ': ' + str(error)); continue
+            retained = {token['offset'] for token in filtered['tokens']}
+            filtered['_validated_removed_tokens'] = [token for token in node['tokens'] if token['offset'] not in retained]
+            physical_lookup[key] = filtered
     registered_sites = {}
     site_identities = set()
     for site in exception_sites:
@@ -598,9 +740,29 @@ def check(original_source, sources, rows, source_path, package=None,
             return normalize(values[:values.index('{')], rows)
         if header(declaration) != header(headers[0]):
             errors.append('Widget class header changed: ' + name)
-    partitions = json.loads((ROOT / 'dev/tool/settings_partitions.json').read_text())['partitions']
     for row in rows:
         key = row['original_name']
+        if key in partitions:
+            row = dict(row, _partition_preamble_names=partitions[key]['preamble_names'])
+        if 'index_live_getter_callbacks' in row['allowed_edits'].split(','):
+            difference = ('index_live_getter_callbacks: only declared original getters in '
+                          'dev/tool/settings_partition_live_getters.json, called at original read positions')
+            if partition_sites_by_original.get(key):
+                difference += '; context_confirmation: exact physical partition site in dev/tool/settings_partition_context_exceptions.json'
+            if row['expected_difference'] != difference:
+                errors.append('Partition named edit description widened: ' + key)
+            targets = INDEX_GETTER_CALLBACKS.get(key, [])
+            if key not in partitions or not targets or len(targets) != len(set(targets)):
+                errors.append('Index getter callbacks must name exact partition getters: ' + key)
+            for target in targets:
+                candidates = [r for r in rows if r['new_name'] == target and r['original_name'].startswith('_SettingsScreenState.')]
+                if len(candidates) != 1:
+                    errors.append('Ambiguous/missing original partition getter: ' + target); continue
+                declaration = original[candidates[0]['original_name']]
+                values = tokens(declaration)
+                old_name = candidates[0]['original_name'].split('.')[-1]
+                if 'get' not in values[:values.index(old_name)] or not any(ref['name'] == old_name for ref in original[key]['references']):
+                    errors.append('Partition callback is not a referenced original getter: ' + target)
         if set(row['allowed_edits'].split(',')) - ALLOWED:
             errors.append('Unknown allowed edit: ' + key)
         old_owner, _, old_name = key.rpartition('.')
@@ -614,8 +776,9 @@ def check(original_source, sources, rows, source_path, package=None,
         if destination is not None and in_place is not None and destination is not in_place:
             errors.append('Duplicate settings owner: ' + key)
         sites = registered_sites.get((row['destination_file'], row['destination_class'], row['new_name']), [])
+        physical_sites = partition_sites_by_original.get(key, [])
         exception_flags = set(row['allowed_edits'].split(',')) & {'context_confirmation', 'formatter_if_braces'}
-        if exception_flags != {site['kind'] for site in sites}:
+        if exception_flags != {site['kind'] for site in sites + physical_sites}:
             errors.append('Context exception manifest/site coverage differs: ' + key)
         if sites:
             if row['expected_difference'] != CONTEXT_EXCEPTION_DIFFERENCE:
@@ -626,7 +789,18 @@ def check(original_source, sources, rows, source_path, package=None,
                 errors.append(key + ': ' + str(error))
                 continue
         if partition and key in partitions:
-            errors.extend(key + ': ' + e for e in check_partition(before, actual, partitions[key], lookup, rows, package))
+            spec = partitions[key]
+            errors.extend(key + ': ' + e for e in check_partition(before, actual, spec, physical_lookup, rows, package, row))
+            if destination is not None and destination is not in_place:
+                try:
+                    virtual = partition_virtual(actual, spec, physical_lookup, sources, package)
+                except (KeyError, StopIteration, ValueError) as error:
+                    errors.append('Cannot reconstruct partition scopes: ' + key + ': ' + str(error))
+                    continue
+                if declaration_tokens(before, rows, row, original=True) != declaration_tokens(virtual, rows, row):
+                    diff = '\n'.join(list(difflib.unified_diff(declaration_tokens(before, rows, row, original=True), declaration_tokens(virtual, rows, row)))[:45])
+                    errors.append('Non-verbatim reconstructed partition: ' + key + '\n' + diff)
+                actual = virtual
         elif declaration_tokens(before, rows, row, original=destination is not None or (key == '_SettingsScreenState._buildLayout' and 'lib/features/settings/presentation/settings_layout.dart' in sources)) != declaration_tokens(actual, rows, row):
             diff = '\n'.join(list(difflib.unified_diff(declaration_tokens(before, rows, row, original=destination is not None or (key == '_SettingsScreenState._buildLayout' and 'lib/features/settings/presentation/settings_layout.dart' in sources)), declaration_tokens(actual, rows, row)))[:45])
             errors.append('Non-verbatim settings declaration: ' + key + '\n' + diff)
@@ -791,6 +965,70 @@ def self_test(package=None):
     if not check_partition(before, reordered, spec, lookup, [], package):
         raise AssertionError('Accepted reordered dispatcher')
     print('Settings self-test reordered dispatcher: rejected')
+    scoped_before = method('List<Object> entries() { final x = 1; return [x, () async { if (!await allowed()) return; if (!mounted) return; show(context); }, () async { if (!mounted) return; show(context); }]; }')
+    scoped_sources = {
+        'builder': 'class B { B(this.deps) : x = 1; final Object deps; final int x; }',
+        'one': 'extension One on B { List<Object> one() { return [x, () async { if (!await allowed()) return; if (!deps.mounted()) return; final context = deps.context(); if (!context.mounted) return; show(context); },]; } }',
+        'two': 'extension Two on B { List<Object> two() { return [() async { if (!deps.mounted()) return; final context = deps.context(); show(context); },]; } }',
+    }
+    scoped_spec = dict(spec, slices=[
+        dict(file='one', owner='One', name='one', first_element=0, end_element=2),
+        dict(file='two', owner='Two', name='two', first_element=2, end_element=3)])
+    scoped_row = dict(original_name='Test.entries', new_name='entries', allowed_edits='partition,context_guard,context_confirmation')
+    scoped_node = all_nodes(parse(scoped_sources, package))[('one', 'One', 'one')]
+    scoped_offset = next(t['offset'] for t in scoped_node['tokens'] if t['text'] == 'final')
+    scoped_site = dict(kind='context_confirmation', acquisition=0, return_value=None,
+                       prefix_mode='raw', prefix_tokens=tokens(scoped_node, end=scoped_offset))
+    def scoped_valid(sources):
+        lookup = all_nodes(parse(sources, package))
+        node = lookup[('one', 'One', 'one')]
+        try:
+            filtered = remove_context_exceptions(node, [scoped_site], [scoped_row], scoped_row)
+        except ValueError:
+            return False
+        retained = {t['offset'] for t in filtered['tokens']}
+        lookup[('one', 'One', 'one')] = dict(filtered, _validated_removed_tokens=[
+            t for t in node['tokens'] if t['offset'] not in retained])
+        virtual = partition_virtual(dispatch, scoped_spec, lookup, sources, package)
+        return (declaration_tokens(scoped_before, [scoped_row], scoped_row, original=True)
+                == declaration_tokens(virtual, [scoped_row], scoped_row)
+                and not check_context(scoped_before, virtual, [scoped_row], scoped_row))
+    if not scoped_valid(scoped_sources):
+        raise AssertionError('Exact public-deps confirmation and reconstructed slice scopes rejected')
+    print('Settings self-test reconstructed slice context scopes: passed')
+    for label, file, changed in (
+        ('missing physical slice confirmation', 'one', scoped_sources['one'].replace('if (!context.mounted) return;', '')),
+        ('changed physical slice return', 'one', scoped_sources['one'].replace('if (!context.mounted) return;', 'if (!context.mounted) return false;')),
+        ('slice context hoisted above permission', 'one', scoped_sources['one'].replace('final context = deps.context(); if (!context.mounted) return; ', '').replace('async { ', 'async { final context = deps.context(); if (!context.mounted) return; ')),
+        ('slice await between guard and acquisition', 'one', scoped_sources['one'].replace('final context', 'await work(); final context')),
+        ('later slice context hoisted above guard', 'two', scoped_sources['two'].replace('if (!deps.mounted()) return; final context = deps.context();', 'final context = deps.context(); if (!deps.mounted()) return;')),
+        ('unregistered later slice confirmation', 'two', scoped_sources['two'].replace('show(context);', 'if (!context.mounted) return; show(context);')),
+    ):
+        if scoped_valid(dict(scoped_sources, **{file: changed})):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
+    callback_builder = builder.replace('B() :', 'B(Object summaries, this.deps) :').replace(
+        'final int x;', 'final ({void Function() first, void Function() second}) deps; final int x;')
+    callback_lookup = all_nodes(parse({'builder': callback_builder}, package))
+    callback_args = ['_summaries', ',', '(', 'first', ':', '_deps', '.', 'first', ',',
+                     'second', ':', '_deps', '.', 'second', ',', ')']
+    callback_spec = dict(spec, constructor_arguments=callback_args)
+    callback_dispatch_text = 'List<Object> entries() { final b = B(_summaries, (first: _deps.first, second: _deps.second,)); return [...b.one(), ...b.two()]; }'
+    if check_partition(before, method(callback_dispatch_text), callback_spec, callback_lookup, [], package):
+        raise AssertionError('Exact fresh callback subset rejected')
+    poisoned_args = list(callback_args)
+    poisoned_args[8] = 'second'
+    poisoned_dispatch = method(callback_dispatch_text.replace('first: _deps.first', 'first: _deps.second'))
+    if not check_partition(before, poisoned_dispatch, dict(callback_spec, constructor_arguments=poisoned_args), callback_lookup, [], package):
+        raise AssertionError('Accepted a matching fingerprint with a rewired callback')
+    print('Settings self-test callback rewired in both dispatcher and manifest: rejected')
+    for label, changed in {
+        'callback snapshot instead of borrowed function': callback_dispatch_text.replace('first: _deps.first', 'first: _deps.first()'),
+        'cached builder instead of fresh constructor': callback_dispatch_text.replace('B(_summaries, (first: _deps.first, second: _deps.second,))', 'cachedBuilder'),
+    }.items():
+        if not check_partition(before, method(changed), callback_spec, callback_lookup, [], package):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
     layout_row = {'original_name': '_SettingsLayout._buildSpotlight',
                   'new_name': 'buildSpotlightLayout',
                   'allowed_edits': 'rename,receiver,layout_first_param'}

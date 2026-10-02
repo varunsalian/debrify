@@ -659,7 +659,7 @@ the named files under "Size" below.
   loader and gate 1; the full original objective remains unchanged.
 
 
-### Step 4 — summary loading (gate 1 verified; private CI pending)
+### Step 4 — summary loading (gate 1 complete)
 
 - Step 3 commit: `2f859a55`. The summaries loader, refresh orchestration and
   account-caption helpers now have separate State-owned bridge classes. All
@@ -691,14 +691,70 @@ the named files under "Size" below.
   or new skips; all nine subsequently added boundary tests pass. The unchanged
   historical `test_baseline.py` comparison was replayed against both completed
   saved runner outputs, without rerunning tests or rewriting its allowlist. It
-  reports the same 54 identities outside its historical nine-entry list in both
-  runs (including skips); the observed identity comparisons establish parity.
+  reports the same 34 failures/errors outside its historical nine-entry list in
+  both runs; the observed identity comparisons establish parity.
 - Move/partition/context self-tests pass all 316 declarations; the launcher
   verifier/self-tests also pass all 154. Formatting (30 files), architecture
   (796 migrated files), size, storage-key/reference and diff checks pass.
   Analyzer comparison against the original baseline also passes with no removed
-  diagnostics. Step 4 is ready to commit and push to `private`; its exact-head
-  Ubuntu CI remains pending. Steps 5/6 and gate 2 remain required.
+  diagnostics. Step 4 commit: `2c565186`, pushed only to `private`.
+  Ubuntu CI run `37012013439` completed successfully at the exact commit
+  `2c565186a1455f64cbcd714b3908166badb14f8b`: formatting/analyzer/architecture,
+  size/storage and behavior jobs all pass.
+  https://github.com/varunsalian/debrify-refactor/actions/runs/37012013439
+  Steps 5/6 and gate 2 remain required.
+
+
+### Step 5 — production search index (verified)
+
+- Gate 1's exact-commit private CI is green. The seven platform getters and
+  search navigation now have State-owned bridge classes; computed gates still
+  read the shared summaries/service values when called. Search navigation
+  acquires context at its original first awaited push and preserves the refresh
+  after returning. The record borrows the live production index callback.
+- The shell move checker passes all 316 declarations. The order/grouping/focus/
+  disposal run (`settings/step5-shell`) passes all nine tests and compares cleanly
+  against gate 1. One newly unused facade import was removed; no lint suppressions
+  or additional diagnostic exceptions were introduced.
+- Both production lists are now wired to `SettingsSearchIndex`, which creates
+  fresh index/leaf builders and joins 11 slices for each list in manifest order.
+  `pageOpeners` is initialized once in each fresh leaf constructor; local helpers
+  become methods and local constants become static constants. Slices qualify
+  those constants through their builder. All 25 new index files are below 500
+  lines, with slice files below about 300. The approved original-line-4166 cut
+  stays at the complete collection-if boundary.
+- Index context reads stay inline at the original MediaQuery expression
+  positions, so acquisition is not hoisted above preceding entry evaluation.
+  The Subtitle Priority callback retains permission → State mounted guard →
+  context acquisition. Its one new redundant context confirmation follows the
+  standing approval and is recorded in the manifest and
+  `dev/tool/settings_partition_context_exceptions.json`; `deps` is the public
+  builder's typed borrowed record. No await intervenes. Live getter callbacks
+  are enumerated in `settings_partition_live_getters.json` and the two manifest
+  rows. Nothing else is suppressed or changed to remove a diagnostic.
+- `analyze-step5-index-clean.txt` matches all 832 step 4 diagnostic identities,
+  with no additions/removals. Imports were pruned at their new owners. The
+  production-index order/disposal run passes both tests unchanged, exercising
+  both real builders twice. The checker passes all 316 declarations and its
+  self-tests, comparing complete reconstructed preambles/lists and callback
+  scopes to the original. It independently checks constructor initializer order,
+  matching borrowed callback bindings, fresh construction, exact physical context
+  confirmations and complete collection elements. New negative cases reject
+  rewired callbacks, cached builders and misplaced context/guards across slices.
+- The affected batch initially found the planned Sync and Migrate source assertion
+  still reading the facade. It now reads slice 09, keeping its exact registration
+  assertion and all negative guards. Both theme consumers include all 51 Settings
+  presentation files through their exact directory patterns. Formatting and the
+  architecture guard pass; State shrinks 4044 → 684 lines and leaves the >800
+  repository ratchet. Every destination is within its named cap; the largest
+  index file is the 367-line leaf builder, and the largest slice is 262 lines.
+- Final affected batch (`settings/step5-final`): 94 success, 2 failure, 1 error.
+  Identity comparisons against the original baseline and gate 1 both pass: no
+  new failures, missing tests or new skips. The three remaining identities are
+  the same observed shape/profile-source failures. Move/partition/context checks
+  and all self-tests, formatting (57 files), architecture (823 migrated files),
+  size (1892 tracked app files), theme expansion and diff review pass.
+  Step 6, its final facade cap/formatting, CI expansion and gate 2 remain required.
 
 ## Found, not fixed
 

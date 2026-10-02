@@ -1,0 +1,182 @@
+import 'package:debrify/screens/settings/settings_search.dart';
+import 'settings_leaf_builder.dart';
+
+extension SettingsLeafSlice03 on SettingsLeafBuilder {
+  List<SettingsSearchEntry> leafSlice3() {
+    return [
+      // Search / Filter / Provider
+      leaf(
+        'Engines',
+        'Search engine defaults',
+        'Which torrent engines searches use by default',
+        const ['engine', 'engines', 'default engines', 'torrent', 'sources'],
+      ),
+      leaf(
+        'Engines',
+        'Indexer managers',
+        'Jackett & Prowlarr connections for extra engines',
+        const ['jackett', 'prowlarr', 'torznab', 'indexer', 'indexers'],
+      ),
+      leaf(
+        'Filters',
+        'Quality filter',
+        'Default resolution filter for results',
+        const ['quality', 'resolution', '4k', '2160p', '1080p', '720p', '480p'],
+      ),
+      leaf(
+        'Filters',
+        'Rip / Source filter',
+        'Default release type filter',
+        const [
+          'rip',
+          'source',
+          'web-dl',
+          'bluray',
+          'remux',
+          'brrip',
+          'bdrip',
+          'hdrip',
+          'hdtv',
+          'cam',
+          'hdcam',
+          'telesync',
+          'dvdrip',
+          'scene',
+          'other',
+        ],
+      ),
+      leaf(
+        'Filters',
+        'Language filter',
+        'Default audio-language filter',
+        const [
+          'language',
+          'audio',
+          'english',
+          'hindi',
+          'spanish',
+          'french',
+          'german',
+          'russian',
+          'chinese',
+          'japanese',
+          'korean',
+          'italian',
+          'portuguese',
+          'arabic',
+          'multi-audio',
+        ],
+      ),
+      leaf(
+        'Filters',
+        'Dynamic range',
+        'Choose SDR and/or HDR torrent results',
+        const [
+          'sdr',
+          'hdr',
+          'hdr10',
+          'hdr10+',
+          'dolby vision',
+          'dv',
+          'hlg',
+          'exclude hdr',
+          'display',
+        ],
+      ),
+      leaf('Filters', 'Size filter', 'Default file/pack size filter', const [
+        'size',
+        'gb',
+        'mb',
+        'file size',
+        'tiny',
+        'small',
+        'high bitrate',
+        'very large',
+        'remux',
+        'huge',
+        'under 500 mb',
+        'over 40 gb',
+      ]),
+      leaf(
+        'Filters',
+        'Clear All',
+        'Remove every saved torrent-search filter',
+        const ['clear filters', 'reset filters', 'remove filters', 'defaults'],
+      ),
+      leaf(
+        'Default Provider',
+        'Default Torrent Provider',
+        'Which service torrents are added to',
+        const [
+          'default provider',
+          'ask every time',
+          'torbox',
+          'real-debrid',
+          'premiumize',
+          'alldebrid',
+          'pikpak',
+        ],
+      ),
+
+      // Quick Play
+      leaf(
+        'Quick Play',
+        'Play button opens',
+        'Play instantly, or pick the source yourself',
+        // The users who want this arrive searching for the behavior they hate,
+        // not for its name — "auto play", "quick play off", "choose source".
+        const [
+          'auto play',
+          'autoplay',
+          'quick play',
+          'turn off quick play',
+          'choose source',
+          'pick source',
+          'source list',
+          'always show sources',
+          'always ask',
+          'smart',
+        ],
+      ),
+      leaf(
+        'Quick Play',
+        'Addon Priority',
+        'Order engines and addons are tried',
+        const ['priority', 'order', 'addons', 'engines', 'reorder', 'sources'],
+      ),
+      leaf(
+        'Quick Play',
+        'Prefer torrents',
+        'Torrents first, or addon direct links first',
+        const ['torrents', 'direct links', 'addons', 'prefer'],
+      ),
+      leaf(
+        'Quick Play',
+        'Streams to try',
+        'How many sources Quick Play tries before giving up',
+        // People search for the count they saw in the player, not its name.
+        const [
+          'attempts',
+          'retries',
+          'checking stream',
+          'stream count',
+          'try next',
+          'failover',
+          'fallback',
+        ],
+      ),
+      leaf(
+        'Quick Play',
+        'Prefer season packs',
+        'Grab whole seasons, or fetch one episode',
+        const ['series', 'packs', 'season pack', 'episode'],
+      ),
+      leaf(
+        'Quick Play',
+        'Restore defaults',
+        'Reset movie and series rules, switches and priority order',
+        const ['reset', 'restore', 'default', 'undo', 'priority'],
+      ),
+    ];
+  }
+}
