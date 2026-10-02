@@ -344,16 +344,32 @@ def main():
     parser.add_argument('--feature', default=FEATURE)
     parser.add_argument('--parser-package', type=Path)
     parser.add_argument('--self-test', action='store_true')
+    parser.add_argument('--partition', action='store_true',
+                        help='Check Settings whole-list-element partitions and join order')
+    parser.add_argument('--context-guard', action='store_true',
+                        help='Check Settings first context acquisition against mounted guards')
     args = parser.parse_args()
     package = args.parser_package or parser_package()
-    if args.self_test: self_test(package)
+    settings = Path(args.manifest).name == 'settings_manifest.tsv'
+    if args.self_test:
+        self_test(package)
+        if settings:
+            from check_settings_moves import self_test as settings_self_test
+            settings_self_test(package)
+    if (args.partition or args.context_guard) and not settings:
+        parser.error('partition/context-guard modes require settings_manifest.tsv')
     rows = read_manifest(ROOT / args.manifest)
     original = subprocess.run(['git', 'show', f'{args.baseline}:{args.source}'],
                               cwd=ROOT, text=True, capture_output=True, check=True).stdout
     sources = {args.source: (ROOT / args.source).read_text()}
     sources.update({p.relative_to(ROOT).as_posix(): p.read_text()
                     for p in (ROOT / args.feature).rglob('*.dart')})
-    errors = check(original, sources, rows, args.source, package)
+    if settings:
+        from check_settings_moves import check as settings_check
+        errors = settings_check(original, sources, rows, args.source, package,
+                                args.partition, args.context_guard)
+    else:
+        errors = check(original, sources, rows, args.source, package)
     if errors:
         print('\n'.join(errors)); return 1
     print(f'Verbatim moves: {len(rows)} leaves and all present facade forwarders passed.')

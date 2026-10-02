@@ -1,0 +1,1454 @@
+{
+  "index": [
+    [
+      "Connections",
+      "Real Debrid"
+    ],
+    [
+      "Connections",
+      "Torbox"
+    ],
+    [
+      "Connections",
+      "Premiumize"
+    ],
+    [
+      "Connections",
+      "AllDebrid"
+    ],
+    [
+      "Connections",
+      "PikPak"
+    ],
+    [
+      "Connections",
+      "WebDAV"
+    ],
+    [
+      "Connections",
+      "Jellyfin & Emby"
+    ],
+    [
+      "Connections",
+      "IPTV"
+    ],
+    [
+      "Live TV & DVR",
+      "IPTV lists"
+    ],
+    [
+      "Live TV & DVR",
+      "Startup channel"
+    ],
+    [
+      "Live TV & DVR",
+      "IPTV continue watching"
+    ],
+    [
+      "Connections",
+      "Jackett & Prowlarr"
+    ],
+    [
+      "Trackers",
+      "Trakt"
+    ],
+    [
+      "Trackers",
+      "Tracking"
+    ],
+    [
+      "Trackers",
+      "Simkl"
+    ],
+    [
+      "Trackers",
+      "MDBList"
+    ],
+    [
+      "Home & Display",
+      "Home Screen"
+    ],
+    [
+      "Badges",
+      "Badges"
+    ],
+    [
+      "Collections",
+      "Collections"
+    ],
+    [
+      "Metadata",
+      "Metadata"
+    ],
+    [
+      "Appearance",
+      "Text Brightness"
+    ],
+    [
+      "Appearance",
+      "Launch Animation"
+    ],
+    [
+      "Appearance",
+      "Home Layout"
+    ],
+    [
+      "Appearance",
+      "Profile Picker"
+    ],
+    [
+      "Appearance",
+      "Collection list style"
+    ],
+    [
+      "Appearance",
+      "Sidebar Style"
+    ],
+    [
+      "Appearance",
+      "IPTV Appearance"
+    ],
+    [
+      "Appearance",
+      "Debrify TV"
+    ],
+    [
+      "Appearance",
+      "Player Guide"
+    ],
+    [
+      "Appearance",
+      "Play Loader"
+    ],
+    [
+      "Appearance",
+      "Player Controls"
+    ],
+    [
+      "Appearance",
+      "Advanced"
+    ],
+    [
+      "Appearance",
+      "Looks"
+    ],
+    [
+      "Appearance",
+      "Parents Guide"
+    ],
+    [
+      "Appearance",
+      "Details Page"
+    ],
+    [
+      "Appearance",
+      "Navigation"
+    ],
+    [
+      "Playback",
+      "Playback"
+    ],
+    [
+      "Devices",
+      "Remote"
+    ],
+    [
+      "Search",
+      "Engines"
+    ],
+    [
+      "Search",
+      "Filters"
+    ],
+    [
+      "Search",
+      "Default Provider"
+    ],
+    [
+      "Search",
+      "Quick Play"
+    ],
+    [
+      "Discover",
+      "Default View"
+    ],
+    [
+      "Addons",
+      "Addons"
+    ],
+    [
+      "Live TV & DVR",
+      "Debrify TV"
+    ],
+    [
+      "Live TV & DVR",
+      "Recordings"
+    ],
+    [
+      "Live TV & DVR",
+      "IPTV Playlists"
+    ],
+    [
+      "Stremio TV",
+      "Stremio TV"
+    ],
+    [
+      "Home & Display",
+      "Debrify Keyboard"
+    ],
+    [
+      "Sync and Migrate",
+      "Sync and Migrate"
+    ],
+    [
+      "Data & Backup",
+      "Clear Download Data"
+    ],
+    [
+      "Data & Backup",
+      "Clear Playback Data"
+    ],
+    [
+      "Data & Backup",
+      "Create Backup"
+    ],
+    [
+      "Data & Backup",
+      "Restore from Backup"
+    ],
+    [
+      "Data & Backup",
+      "Export Diagnostic Logs"
+    ],
+    [
+      "About",
+      "Auto Check for Updates"
+    ],
+    [
+      "About",
+      "Include Alpha Builds"
+    ],
+    [
+      "About",
+      "Check for Updates"
+    ],
+    [
+      "About",
+      "Reddit Community"
+    ],
+    [
+      "About",
+      "Discord"
+    ],
+    [
+      "About",
+      "GitHub"
+    ],
+    [
+      "Danger Zone",
+      "Reset Debrify"
+    ],
+    [
+      "Torbox",
+      "Check Torbox cache during searches"
+    ],
+    [
+      "Torbox",
+      "Post-Torrent Action"
+    ],
+    [
+      "Torbox",
+      "Hide Torbox from Navigation"
+    ],
+    [
+      "Torbox",
+      "Enable Torbox"
+    ],
+    [
+      "Premiumize",
+      "Check Premiumize cache during searches"
+    ],
+    [
+      "Premiumize",
+      "Post-Torrent Action"
+    ],
+    [
+      "Premiumize",
+      "Hide Premiumize from Navigation"
+    ],
+    [
+      "Premiumize",
+      "Enable Premiumize"
+    ],
+    [
+      "Real Debrid",
+      "File Selection"
+    ],
+    [
+      "Real Debrid",
+      "Post-Torrent Action"
+    ],
+    [
+      "Real Debrid",
+      "Skip blocked torrents"
+    ],
+    [
+      "Real Debrid",
+      "Hide Real Debrid from Navigation"
+    ],
+    [
+      "Real Debrid",
+      "Enable Real Debrid"
+    ],
+    [
+      "AllDebrid",
+      "Post-Torrent Action"
+    ],
+    [
+      "AllDebrid",
+      "Hide AllDebrid from Navigation"
+    ],
+    [
+      "AllDebrid",
+      "Enable AllDebrid"
+    ],
+    [
+      "PikPak",
+      "Show Only Video Files"
+    ],
+    [
+      "PikPak",
+      "Ignore Videos Under 100MB"
+    ],
+    [
+      "PikPak",
+      "Post-Torrent Action"
+    ],
+    [
+      "PikPak",
+      "Restrict Access to Folder"
+    ],
+    [
+      "PikPak",
+      "Hide PikPak from Navigation"
+    ],
+    [
+      "PikPak",
+      "Enable PikPak Integration"
+    ],
+    [
+      "PikPak",
+      "Reset Device ID"
+    ],
+    [
+      "WebDAV",
+      "WebDAV server"
+    ],
+    [
+      "WebDAV",
+      "Enable WebDAV"
+    ],
+    [
+      "WebDAV",
+      "Hide from navigation"
+    ],
+    [
+      "WebDAV",
+      "Show videos only"
+    ],
+    [
+      "Indexer Managers",
+      "Add or edit an indexer manager"
+    ],
+    [
+      "Indexer Managers",
+      "Categories"
+    ],
+    [
+      "Indexer Managers",
+      "Max results"
+    ],
+    [
+      "Indexer Managers",
+      "Timeout seconds"
+    ],
+    [
+      "Indexer Managers",
+      "Enabled"
+    ],
+    [
+      "Indexer Managers",
+      "Test connection"
+    ],
+    [
+      "Engines",
+      "Search engine defaults"
+    ],
+    [
+      "Engines",
+      "Indexer managers"
+    ],
+    [
+      "Filters",
+      "Quality filter"
+    ],
+    [
+      "Filters",
+      "Rip / Source filter"
+    ],
+    [
+      "Filters",
+      "Language filter"
+    ],
+    [
+      "Filters",
+      "Dynamic range"
+    ],
+    [
+      "Filters",
+      "Size filter"
+    ],
+    [
+      "Filters",
+      "Clear All"
+    ],
+    [
+      "Default Provider",
+      "Default Torrent Provider"
+    ],
+    [
+      "Quick Play",
+      "Play button opens"
+    ],
+    [
+      "Quick Play",
+      "Addon Priority"
+    ],
+    [
+      "Quick Play",
+      "Prefer torrents"
+    ],
+    [
+      "Quick Play",
+      "Streams to try"
+    ],
+    [
+      "Quick Play",
+      "Prefer season packs"
+    ],
+    [
+      "Quick Play",
+      "Restore defaults"
+    ],
+    [
+      "Home Screen",
+      "Home Rows"
+    ],
+    [
+      "Home Screen",
+      "Hero Source"
+    ],
+    [
+      "Home Screen",
+      "Landscape Cards"
+    ],
+    [
+      "Home Screen",
+      "Continue Watching"
+    ],
+    [
+      "Home Screen",
+      "Hold to Quick Play"
+    ],
+    [
+      "Home Screen",
+      "Hide Provider Cards"
+    ],
+    [
+      "Home Screen",
+      "Hide Titles and Ratings"
+    ],
+    [
+      "Tracking",
+      "Hide watched titles"
+    ],
+    [
+      "Home Screen",
+      "Hide Catalog Add-on Names"
+    ],
+    [
+      "Home Screen",
+      "Default view"
+    ],
+    [
+      "Home Screen",
+      "Trailer on Home Spotlight"
+    ],
+    [
+      "Home Screen",
+      "Trailer on Detail Page"
+    ],
+    [
+      "Home Screen",
+      "Trailer Sound"
+    ],
+    [
+      "Home Screen",
+      "Trailer volume"
+    ],
+    [
+      "Launch Animation",
+      "Match the app theme"
+    ],
+    [
+      "Sidebar",
+      "Order & Names"
+    ],
+    [
+      "Advanced",
+      "Accent"
+    ],
+    [
+      "Advanced",
+      "Focus"
+    ],
+    [
+      "Advanced",
+      "Progress"
+    ],
+    [
+      "Advanced",
+      "Callout"
+    ],
+    [
+      "Advanced",
+      "Background"
+    ],
+    [
+      "Advanced",
+      "Text"
+    ],
+    [
+      "Advanced",
+      "Corners"
+    ],
+    [
+      "Advanced",
+      "Buttons"
+    ],
+    [
+      "Advanced",
+      "Titles"
+    ],
+    [
+      "Advanced",
+      "Body"
+    ],
+    [
+      "Advanced",
+      "Cursor"
+    ],
+    [
+      "Advanced",
+      "Character"
+    ],
+    [
+      "Advanced",
+      "Entrances"
+    ],
+    [
+      "Advanced",
+      "When idle"
+    ],
+    [
+      "Advanced",
+      "Separation"
+    ],
+    [
+      "Advanced",
+      "Scrims"
+    ],
+    [
+      "Advanced",
+      "Frames"
+    ],
+    [
+      "Advanced",
+      "Grade"
+    ],
+    [
+      "Advanced",
+      "Room colour"
+    ],
+    [
+      "Advanced",
+      "Accent from artwork"
+    ],
+    [
+      "Advanced",
+      "Film grain"
+    ],
+    [
+      "Advanced",
+      "Sheen"
+    ],
+    [
+      "Advanced",
+      "Vignette"
+    ],
+    [
+      "Advanced",
+      "Focus glow"
+    ],
+    [
+      "Advanced",
+      "Sound and haptics"
+    ],
+    [
+      "Advanced",
+      "While loading"
+    ],
+    [
+      "Advanced",
+      "Reset appearance overrides"
+    ],
+    [
+      "Playback",
+      "Player"
+    ],
+    [
+      "Playback",
+      "Video"
+    ],
+    [
+      "Playback",
+      "Audio"
+    ],
+    [
+      "Playback",
+      "Subtitles"
+    ],
+    [
+      "Playback",
+      "Subtitle priority"
+    ],
+    [
+      "Playback",
+      "Default Player"
+    ],
+    [
+      "Playback",
+      "Default Subtitle language"
+    ],
+    [
+      "Playback",
+      "Default Audio language"
+    ],
+    [
+      "Playback",
+      "Subtitle Appearance"
+    ],
+    [
+      "Playback",
+      "Default Aspect Ratio"
+    ],
+    [
+      "Playback",
+      "Watch completion thresholds"
+    ],
+    [
+      "Playback",
+      "Skip intros & credits"
+    ],
+    [
+      "Playback",
+      "Timestamp provider"
+    ],
+    [
+      "Playback",
+      "Network & Buffering"
+    ],
+    [
+      "Playback",
+      "Auto-sync addon subtitles"
+    ],
+    [
+      "Playback",
+      "Preferred external player"
+    ],
+    [
+      "Playback",
+      "Custom player command"
+    ],
+    [
+      "Playback",
+      "Import Custom Font"
+    ],
+    [
+      "Debrify TV",
+      "Keyword Threshold"
+    ],
+    [
+      "Debrify TV",
+      "Batch Size"
+    ],
+    [
+      "Debrify TV",
+      "Min Torrents Per Keyword"
+    ],
+    [
+      "Debrify TV",
+      "Max Keywords (Quick Play)"
+    ],
+    [
+      "Debrify TV",
+      "Avoid NSFW Content"
+    ],
+    [
+      "Debrify TV",
+      "Prepare Torrents in Background"
+    ],
+    [
+      "Debrify TV",
+      "Engine TV Mode"
+    ],
+    [
+      "Debrify TV",
+      "Small Channel Limit"
+    ],
+    [
+      "Debrify TV",
+      "Large Channel Limit"
+    ],
+    [
+      "Debrify TV",
+      "Quick Play Limit"
+    ],
+    [
+      "Debrify TV",
+      "Reset to Defaults"
+    ],
+    [
+      "Stremio TV",
+      "Rotation Interval"
+    ],
+    [
+      "Stremio TV",
+      "Series Rotation Interval"
+    ],
+    [
+      "Stremio TV",
+      "Preferred Quality"
+    ],
+    [
+      "Stremio TV",
+      "Debrid Provider"
+    ],
+    [
+      "Stremio TV",
+      "Try torrents first"
+    ],
+    [
+      "Stremio TV",
+      "Random Episodes"
+    ],
+    [
+      "Stremio TV",
+      "Start Position"
+    ],
+    [
+      "Stremio TV",
+      "Hide Currently Playing"
+    ],
+    [
+      "Stremio TV",
+      "Auto-refresh"
+    ],
+    [
+      "IPTV Playlists",
+      "Add a source"
+    ],
+    [
+      "IPTV Playlists",
+      "Edit source"
+    ],
+    [
+      "IPTV Playlists",
+      "Remove source"
+    ],
+    [
+      "IPTV Playlists",
+      "Guide (EPG) source"
+    ],
+    [
+      "IPTV Playlists",
+      "Hidden categories"
+    ],
+    [
+      "IPTV Playlists",
+      "Create list"
+    ],
+    [
+      "IPTV Playlists",
+      "Manage channel lists"
+    ],
+    [
+      "IPTV Playlists",
+      "Channel order"
+    ],
+    [
+      "IPTV Playlists",
+      "Default playlist"
+    ],
+    [
+      "IPTV Playlists",
+      "Refresh now"
+    ],
+    [
+      "IPTV Playlists",
+      "Start on a channel"
+    ],
+    [
+      "IPTV Playlists",
+      "Startup channel choice"
+    ],
+    [
+      "IPTV Playlists",
+      "Track movies and series"
+    ],
+    [
+      "Recordings",
+      "Schedule a recording"
+    ],
+    [
+      "Recordings",
+      "Recordings library"
+    ],
+    [
+      "Tracking",
+      "Scrobble"
+    ],
+    [
+      "Tracking",
+      "Progress source"
+    ],
+    [
+      "Tracking",
+      "Watched ticks"
+    ],
+    [
+      "MDBList",
+      "MDBList API Key"
+    ],
+    [
+      "Remote",
+      "Control another device"
+    ],
+    [
+      "Remote",
+      "Receive from another device"
+    ]
+  ],
+  "leaves": [
+    [
+      "Torbox",
+      "Check Torbox cache during searches"
+    ],
+    [
+      "Torbox",
+      "Post-Torrent Action"
+    ],
+    [
+      "Torbox",
+      "Hide Torbox from Navigation"
+    ],
+    [
+      "Torbox",
+      "Enable Torbox"
+    ],
+    [
+      "Premiumize",
+      "Check Premiumize cache during searches"
+    ],
+    [
+      "Premiumize",
+      "Post-Torrent Action"
+    ],
+    [
+      "Premiumize",
+      "Hide Premiumize from Navigation"
+    ],
+    [
+      "Premiumize",
+      "Enable Premiumize"
+    ],
+    [
+      "Real Debrid",
+      "File Selection"
+    ],
+    [
+      "Real Debrid",
+      "Post-Torrent Action"
+    ],
+    [
+      "Real Debrid",
+      "Skip blocked torrents"
+    ],
+    [
+      "Real Debrid",
+      "Hide Real Debrid from Navigation"
+    ],
+    [
+      "Real Debrid",
+      "Enable Real Debrid"
+    ],
+    [
+      "AllDebrid",
+      "Post-Torrent Action"
+    ],
+    [
+      "AllDebrid",
+      "Hide AllDebrid from Navigation"
+    ],
+    [
+      "AllDebrid",
+      "Enable AllDebrid"
+    ],
+    [
+      "PikPak",
+      "Show Only Video Files"
+    ],
+    [
+      "PikPak",
+      "Ignore Videos Under 100MB"
+    ],
+    [
+      "PikPak",
+      "Post-Torrent Action"
+    ],
+    [
+      "PikPak",
+      "Restrict Access to Folder"
+    ],
+    [
+      "PikPak",
+      "Hide PikPak from Navigation"
+    ],
+    [
+      "PikPak",
+      "Enable PikPak Integration"
+    ],
+    [
+      "PikPak",
+      "Reset Device ID"
+    ],
+    [
+      "WebDAV",
+      "WebDAV server"
+    ],
+    [
+      "WebDAV",
+      "Enable WebDAV"
+    ],
+    [
+      "WebDAV",
+      "Hide from navigation"
+    ],
+    [
+      "WebDAV",
+      "Show videos only"
+    ],
+    [
+      "Indexer Managers",
+      "Add or edit an indexer manager"
+    ],
+    [
+      "Indexer Managers",
+      "Categories"
+    ],
+    [
+      "Indexer Managers",
+      "Max results"
+    ],
+    [
+      "Indexer Managers",
+      "Timeout seconds"
+    ],
+    [
+      "Indexer Managers",
+      "Enabled"
+    ],
+    [
+      "Indexer Managers",
+      "Test connection"
+    ],
+    [
+      "Engines",
+      "Search engine defaults"
+    ],
+    [
+      "Engines",
+      "Indexer managers"
+    ],
+    [
+      "Filters",
+      "Quality filter"
+    ],
+    [
+      "Filters",
+      "Rip / Source filter"
+    ],
+    [
+      "Filters",
+      "Language filter"
+    ],
+    [
+      "Filters",
+      "Dynamic range"
+    ],
+    [
+      "Filters",
+      "Size filter"
+    ],
+    [
+      "Filters",
+      "Clear All"
+    ],
+    [
+      "Default Provider",
+      "Default Torrent Provider"
+    ],
+    [
+      "Quick Play",
+      "Play button opens"
+    ],
+    [
+      "Quick Play",
+      "Addon Priority"
+    ],
+    [
+      "Quick Play",
+      "Prefer torrents"
+    ],
+    [
+      "Quick Play",
+      "Streams to try"
+    ],
+    [
+      "Quick Play",
+      "Prefer season packs"
+    ],
+    [
+      "Quick Play",
+      "Restore defaults"
+    ],
+    [
+      "Home Screen",
+      "Home Rows"
+    ],
+    [
+      "Home Screen",
+      "Hero Source"
+    ],
+    [
+      "Home Screen",
+      "Landscape Cards"
+    ],
+    [
+      "Home Screen",
+      "Continue Watching"
+    ],
+    [
+      "Home Screen",
+      "Hold to Quick Play"
+    ],
+    [
+      "Home Screen",
+      "Hide Provider Cards"
+    ],
+    [
+      "Home Screen",
+      "Hide Titles and Ratings"
+    ],
+    [
+      "Tracking",
+      "Hide watched titles"
+    ],
+    [
+      "Home Screen",
+      "Hide Catalog Add-on Names"
+    ],
+    [
+      "Home Screen",
+      "Default view"
+    ],
+    [
+      "Home Screen",
+      "Trailer on Home Spotlight"
+    ],
+    [
+      "Home Screen",
+      "Trailer on Detail Page"
+    ],
+    [
+      "Home Screen",
+      "Trailer Sound"
+    ],
+    [
+      "Home Screen",
+      "Trailer volume"
+    ],
+    [
+      "Launch Animation",
+      "Match the app theme"
+    ],
+    [
+      "Sidebar",
+      "Order & Names"
+    ],
+    [
+      "Advanced",
+      "Accent"
+    ],
+    [
+      "Advanced",
+      "Focus"
+    ],
+    [
+      "Advanced",
+      "Progress"
+    ],
+    [
+      "Advanced",
+      "Callout"
+    ],
+    [
+      "Advanced",
+      "Background"
+    ],
+    [
+      "Advanced",
+      "Text"
+    ],
+    [
+      "Advanced",
+      "Corners"
+    ],
+    [
+      "Advanced",
+      "Buttons"
+    ],
+    [
+      "Advanced",
+      "Titles"
+    ],
+    [
+      "Advanced",
+      "Body"
+    ],
+    [
+      "Advanced",
+      "Cursor"
+    ],
+    [
+      "Advanced",
+      "Character"
+    ],
+    [
+      "Advanced",
+      "Entrances"
+    ],
+    [
+      "Advanced",
+      "When idle"
+    ],
+    [
+      "Advanced",
+      "Separation"
+    ],
+    [
+      "Advanced",
+      "Scrims"
+    ],
+    [
+      "Advanced",
+      "Frames"
+    ],
+    [
+      "Advanced",
+      "Grade"
+    ],
+    [
+      "Advanced",
+      "Room colour"
+    ],
+    [
+      "Advanced",
+      "Accent from artwork"
+    ],
+    [
+      "Advanced",
+      "Film grain"
+    ],
+    [
+      "Advanced",
+      "Sheen"
+    ],
+    [
+      "Advanced",
+      "Vignette"
+    ],
+    [
+      "Advanced",
+      "Focus glow"
+    ],
+    [
+      "Advanced",
+      "Sound and haptics"
+    ],
+    [
+      "Advanced",
+      "While loading"
+    ],
+    [
+      "Advanced",
+      "Reset appearance overrides"
+    ],
+    [
+      "Playback",
+      "Player"
+    ],
+    [
+      "Playback",
+      "Video"
+    ],
+    [
+      "Playback",
+      "Audio"
+    ],
+    [
+      "Playback",
+      "Subtitles"
+    ],
+    [
+      "Playback",
+      "Subtitle priority"
+    ],
+    [
+      "Playback",
+      "Default Player"
+    ],
+    [
+      "Playback",
+      "Default Subtitle language"
+    ],
+    [
+      "Playback",
+      "Default Audio language"
+    ],
+    [
+      "Playback",
+      "Subtitle Appearance"
+    ],
+    [
+      "Playback",
+      "Default Aspect Ratio"
+    ],
+    [
+      "Playback",
+      "Watch completion thresholds"
+    ],
+    [
+      "Playback",
+      "Skip intros & credits"
+    ],
+    [
+      "Playback",
+      "Timestamp provider"
+    ],
+    [
+      "Playback",
+      "Network & Buffering"
+    ],
+    [
+      "Playback",
+      "Auto-sync addon subtitles"
+    ],
+    [
+      "Playback",
+      "Preferred external player"
+    ],
+    [
+      "Playback",
+      "Custom player command"
+    ],
+    [
+      "Playback",
+      "Import Custom Font"
+    ],
+    [
+      "Debrify TV",
+      "Keyword Threshold"
+    ],
+    [
+      "Debrify TV",
+      "Batch Size"
+    ],
+    [
+      "Debrify TV",
+      "Min Torrents Per Keyword"
+    ],
+    [
+      "Debrify TV",
+      "Max Keywords (Quick Play)"
+    ],
+    [
+      "Debrify TV",
+      "Avoid NSFW Content"
+    ],
+    [
+      "Debrify TV",
+      "Prepare Torrents in Background"
+    ],
+    [
+      "Debrify TV",
+      "Engine TV Mode"
+    ],
+    [
+      "Debrify TV",
+      "Small Channel Limit"
+    ],
+    [
+      "Debrify TV",
+      "Large Channel Limit"
+    ],
+    [
+      "Debrify TV",
+      "Quick Play Limit"
+    ],
+    [
+      "Debrify TV",
+      "Reset to Defaults"
+    ],
+    [
+      "Stremio TV",
+      "Rotation Interval"
+    ],
+    [
+      "Stremio TV",
+      "Series Rotation Interval"
+    ],
+    [
+      "Stremio TV",
+      "Preferred Quality"
+    ],
+    [
+      "Stremio TV",
+      "Debrid Provider"
+    ],
+    [
+      "Stremio TV",
+      "Try torrents first"
+    ],
+    [
+      "Stremio TV",
+      "Random Episodes"
+    ],
+    [
+      "Stremio TV",
+      "Start Position"
+    ],
+    [
+      "Stremio TV",
+      "Hide Currently Playing"
+    ],
+    [
+      "Stremio TV",
+      "Auto-refresh"
+    ],
+    [
+      "IPTV Playlists",
+      "Add a source"
+    ],
+    [
+      "IPTV Playlists",
+      "Edit source"
+    ],
+    [
+      "IPTV Playlists",
+      "Remove source"
+    ],
+    [
+      "IPTV Playlists",
+      "Guide (EPG) source"
+    ],
+    [
+      "IPTV Playlists",
+      "Hidden categories"
+    ],
+    [
+      "IPTV Playlists",
+      "Create list"
+    ],
+    [
+      "IPTV Playlists",
+      "Manage channel lists"
+    ],
+    [
+      "IPTV Playlists",
+      "Channel order"
+    ],
+    [
+      "IPTV Playlists",
+      "Default playlist"
+    ],
+    [
+      "IPTV Playlists",
+      "Refresh now"
+    ],
+    [
+      "IPTV Playlists",
+      "Start on a channel"
+    ],
+    [
+      "IPTV Playlists",
+      "Startup channel choice"
+    ],
+    [
+      "IPTV Playlists",
+      "Track movies and series"
+    ],
+    [
+      "Recordings",
+      "Schedule a recording"
+    ],
+    [
+      "Recordings",
+      "Recordings library"
+    ],
+    [
+      "Tracking",
+      "Scrobble"
+    ],
+    [
+      "Tracking",
+      "Progress source"
+    ],
+    [
+      "Tracking",
+      "Watched ticks"
+    ],
+    [
+      "MDBList",
+      "MDBList API Key"
+    ],
+    [
+      "Remote",
+      "Control another device"
+    ],
+    [
+      "Remote",
+      "Receive from another device"
+    ]
+  ]
+}

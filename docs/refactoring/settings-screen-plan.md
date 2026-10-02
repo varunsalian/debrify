@@ -413,7 +413,60 @@ the named files under "Size" below.
 
 ## Progress
 
-(empty)
+### Step 0 — extraction prerequisites
+
+- Starting revision: `17db33f2` on `refactor/codebase`; Flutter 3.44.8
+  (`058e0af2c2`, Dart 3.12.2). No original declaration moved or changed.
+- `settings-screen-deps.md` resolves all seven top-level declarations, 316
+  declaration leaves and 277 callbacks. `settings_manifest.tsv` records the
+  destinations, steps, layers and permitted edit kinds. Resources and live
+  getters are distinguished from summary scalars.
+- `check_verbatim_moves.py` now dispatches to Settings-specific partition and
+  context-guard checks. It preserves the launcher mode and self-tests. The
+  Settings self-tests reject reordered/dropped/duplicated elements, split
+  collection-if/for elements, preamble changes, reordered joins, and context
+  acquisition above guards or outside a delayed callback. Builder contexts
+  remain independent. Preamble declarations, constructor initializer order,
+  whole AST elements and exact fresh-builder dispatch are checked.
+- `settings_partitions.json` records every complete-element cut. The user
+  approved the cut at original line 4166 inside the otherwise 376-line Player
+  Settings block; all other cuts use existing section comments. This is the
+  only extra partition boundary beyond the plan's original technique.
+- The single `settingsScreenTestAccess` accessor exposes real builder and
+  snack-helper tear-offs. macOS expected lists contain 212 index / 150 leaf
+  pairs; the reviewed Linux lists contain 213 / 150, adding Download Location
+  at the original position. Linux execution remains pending Ubuntu CI.
+- Scope/size exception for step 0: `settings_screen.dart` retains all original
+  responsibilities until steps 1–6. The authorized test accessor adds 15
+  lines (8757 → 8772); its ratchet is raised by exactly those lines in this
+  commit. Step 1 begins shrinking the ratchet; step 6 exits at ≤400 lines.
+- Observed full baseline: `suite_evidence.py run settings/base`: 10,304
+  success, 14 failure, 29 error, 20 skipped. Evidence lives under the git
+  common directory's `refactor-evidence/settings/`, including SDK/HEAD metadata.
+  Whole-repo analyzer baseline: 832 diagnostics. Analyzer used `--no-pub`
+  after concurrent pub regeneration hit an ephemeral iOS package-directory
+  deletion race; no dependency/SDK change was made.
+- Focused `settings/step0`: 85 success, 2 failure, 1 error. Comparison against
+  `settings/base.jsonl` passes: no new failures, missing tests or new skips;
+  two added passing identities are the production-order and disposal tests.
+  The three still-failing identities are shape residue, direct SharedPreferences
+  source guard, and device-reset diagnostic cleanup source guard; each fails
+  in the observed full baseline too. The order test runs both real builders
+  twice; disposal verifies the snack works while mounted and safely completes
+  after the State has been retired.
+- Analyzer comparison `analyze-step0.txt` vs `analyze-base.txt`, with the
+  settings relocation rule: no added or removed diagnostics. Move checks in
+  both modes with all self-tests, the architecture guard, the size ratchet,
+  changed-test formatting and diff checks pass. `settings_source_text.txt`
+  records every executable source consumer and its porting step.
+- Temporary architecture exceptions for this bounded extraction: sections
+  retain State-driven, constructor-wired state instead of Riverpod; only the
+  named `presentation/legacy_settings/` bridge may retain legacy service
+  calls. Exit after this plan: introduce the summary Notifier, add settings
+  data contracts, and dissolve the bridge. Moved app text keeps the legacy
+  localization exception until that later settings localization migration.
+- Gate 1 and gate 2 pushes/Ubuntu CI are pending; nothing has been pushed for
+  this prerequisite step.
 
 ## Found, not fixed
 

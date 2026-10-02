@@ -16,6 +16,118 @@ class Identifiers extends RecursiveAstVisitor<void> {
   }
 }
 
+// Additional evidence for the Settings extraction. This is syntax analysis,
+// not type resolution: consumers restrict references to the declared owner.
+class References extends RecursiveAstVisitor<void> {
+  final List<Map<String, Object?>> values = [];
+  final List<Map<String, Object?>> callbacks = [];
+  final List<String> scopes = [];
+  final List<Set<String>> parameters = [];
+
+  @override
+  void visitFunctionExpression(FunctionExpression node) {
+    scopes.add('${callbacks.length}');
+    parameters.add({
+      for (final p in node.parameters?.parameters ?? <FormalParameter>[])
+        p.name!.lexeme,
+    });
+    callbacks.add({
+      'offset': node.offset,
+      'end': node.end,
+      'scope': scopes.join('/'),
+      'parent': node.parent.runtimeType.toString(),
+      'parameters': parameters.last.toList(),
+    });
+    super.visitFunctionExpression(node);
+    parameters.removeLast();
+    scopes.removeLast();
+  }
+
+  @override
+  void visitSimpleIdentifier(SimpleIdentifier node) {
+    final parent = node.parent;
+    if (parent is Label || node.inDeclarationContext()) return;
+    final invoked = parent is MethodInvocation && parent.methodName == node;
+    final assigned =
+        parent is AssignmentExpression && parent.leftHandSide == node;
+    final updated =
+        parent is PostfixExpression ||
+        parent is PrefixExpression &&
+            (parent.operator.lexeme == '++' || parent.operator.lexeme == '--');
+    values.add({
+      'name': node.name,
+      'offset': node.offset,
+      'end': node.end,
+      'role': invoked
+          ? 'call'
+          : assigned
+          ? (parent.operator.lexeme == '=' ? 'write' : 'read/write')
+          : updated
+          ? 'read/write'
+          : 'read',
+      'scope': scopes.join('/'),
+      'contextParameter': parameters.any((p) => p.contains('context')),
+      'parent': parent.runtimeType.toString(),
+    });
+    super.visitSimpleIdentifier(node);
+  }
+}
+
+Map<String, Object?> listEvidence(
+  ListLiteral list,
+  String source,
+  List<int> positions,
+) => {
+  'offset': positions[list.offset],
+  'end': positions[list.end],
+  'elements': [
+    for (final e in list.elements)
+      {
+        'kind': e.runtimeType.toString(),
+        'offset': positions[e.offset],
+        'end': positions[e.end],
+        'text': source.substring(e.offset, e.end),
+        'line': '\n'.allMatches(source.substring(0, e.offset)).length + 1,
+        'endLine': '\n'.allMatches(source.substring(0, e.end)).length + 1,
+      },
+  ],
+};
+
+// Inspect only the owning function's block. A returned list in a callback is
+// not the builder's result, and collection if/for nodes remain whole elements.
+Map<String, Object?>? returnedList(
+  FunctionBody? body,
+  String source,
+  List<int> positions,
+) {
+  if (body is! BlockFunctionBody) return null;
+  for (final statement in body.block.statements) {
+    if (statement is ReturnStatement && statement.expression is ListLiteral) {
+      return {
+        ...listEvidence(statement.expression as ListLiteral, source, positions),
+        'statementOffset': positions[statement.offset],
+        'preamble': [
+          for (final s in body.block.statements.takeWhile(
+            (s) => s != statement,
+          ))
+            {
+              'kind': s.runtimeType.toString(),
+              'offset': positions[s.offset],
+              'end': positions[s.end],
+              'text': source.substring(s.offset, s.end),
+              'names': s is VariableDeclarationStatement
+                  ? [for (final v in s.variables.variables) v.name.lexeme]
+                  : s is FunctionDeclarationStatement
+                  ? [s.functionDeclaration.name.lexeme]
+                  : [],
+            },
+        ],
+      };
+    }
+  }
+  return null;
+}
+
 String nameOf(AstNode node) {
   if (node is ClassDeclaration) return node.namePart.typeName.lexeme;
   if (node is EnumDeclaration) return node.namePart.typeName.lexeme;
@@ -23,57 +135,150 @@ String nameOf(AstNode node) {
   if (node is FunctionDeclaration) return node.name.lexeme;
   if (node is MethodDeclaration) return node.name.lexeme;
   if (node is ConstructorDeclaration) {
-    return node.typeName2!.lexeme + (node.name == null ? '' : '.${node.name!.lexeme}');
+    return node.typeName2!.lexeme +
+        (node.name == null ? '' : '.${node.name!.lexeme}');
   }
   if (node is FieldDeclaration) return node.fields.variables.single.name.lexeme;
-  if (node is TopLevelVariableDeclaration) return node.variables.variables.single.name.lexeme;
-  throw StateError('Unsupported declaration ${node.runtimeType}: ${node.toSource()}');
+  if (node is TopLevelVariableDeclaration)
+    return node.variables.variables.single.name.lexeme;
+  throw StateError(
+    'Unsupported declaration ${node.runtimeType}: ${node.toSource()}',
+  );
 }
 
-Map<String, Object?> describe(AstNode node, String source, {String owner = '', required List<int> positions}) {
+Map<String, Object?> describe(
+  AstNode node,
+  String source, {
+  String owner = '',
+  required List<int> positions,
+}) {
   int pos(int offset) => positions[offset];
   final ids = Identifiers();
   node.accept(ids);
+  final refs = References();
+  node.accept(refs);
   final start = node is AnnotatedNode
       ? node.documentationComment?.offset ?? node.offset
       : node.offset;
   final tokens = <Map<String, Object>>[];
   var token = node is AnnotatedNode
-      ? (node.metadata.isEmpty ? node.firstTokenAfterCommentAndMetadata : node.metadata.first.beginToken)
+      ? (node.metadata.isEmpty
+            ? node.firstTokenAfterCommentAndMetadata
+            : node.metadata.first.beginToken)
       : node.beginToken;
   while (true) {
     Token? comment = token.precedingComments;
     while (comment != null) {
       if (comment.offset >= start) {
-        tokens.add({'text': comment.lexeme, 'offset': pos(comment.offset), 'comment': true});
+        tokens.add({
+          'text': comment.lexeme,
+          'offset': pos(comment.offset),
+          'comment': true,
+        });
       }
       comment = comment.next;
     }
-    tokens.add({'text': token.lexeme, 'offset': pos(token.offset), 'comment': false});
+    tokens.add({
+      'text': token.lexeme,
+      'offset': pos(token.offset),
+      'comment': false,
+    });
     if (token.offset >= node.endToken.offset || token.next == null) break;
     token = token.next!;
   }
-  final members = node is ClassDeclaration ? node.body.members
-      : node is ExtensionDeclaration ? node.body.members : <ClassMember>[];
+  final members = node is ClassDeclaration
+      ? node.body.members
+      : node is ExtensionDeclaration
+      ? node.body.members
+      : <ClassMember>[];
   FormalParameterList? parameters;
   FunctionBody? body;
-  if (node is MethodDeclaration) { parameters = node.parameters; body = node.body; }
+  if (node is MethodDeclaration) {
+    parameters = node.parameters;
+    body = node.body;
+  }
   if (node is FunctionDeclaration) {
     parameters = node.functionExpression.parameters;
     body = node.functionExpression.body;
   }
   if (node is ConstructorDeclaration) parameters = node.parameters;
   return {
-    'name': nameOf(node), 'owner': owner, 'kind': node.runtimeType.toString(),
-    'offset': pos(node.offset), 'start': pos(start), 'end': pos(node.end),
-    'text': source.substring(start, node.end), 'tokens': tokens,
-    'identifiers': [for (final id in ids.values) {...id, 'offset': pos(id['offset'] as int), 'end': pos(id['end'] as int)}],
-    'members': [for (final m in members) describe(m, source, owner: nameOf(node), positions: positions)],
+    'name': nameOf(node),
+    'owner': owner,
+    'kind': node.runtimeType.toString(),
+    'offset': pos(node.offset),
+    'start': pos(start),
+    'end': pos(node.end),
+    'text': source.substring(start, node.end),
+    'tokens': tokens,
+    'identifiers': [
+      for (final id in ids.values)
+        {
+          ...id,
+          'offset': pos(id['offset'] as int),
+          'end': pos(id['end'] as int),
+        },
+    ],
+    'members': [
+      for (final m in members)
+        describe(m, source, owner: nameOf(node), positions: positions),
+    ],
     'endTokenText': node.endToken.lexeme,
     'parameters': parameters?.toSource(),
-    'parameterNames': [for (final p in parameters?.parameters ?? <FormalParameter>[]) p.name?.lexeme],
-    'namedParameters': [for (final p in parameters?.parameters ?? <FormalParameter>[]) p.isNamed],
-    'bodyOffset': body == null ? null : pos(body.offset), 'bodyText': body?.toSource(),
+    'parameterNames': [
+      for (final p in parameters?.parameters ?? <FormalParameter>[])
+        p.name?.lexeme,
+    ],
+    'namedParameters': [
+      for (final p in parameters?.parameters ?? <FormalParameter>[]) p.isNamed,
+    ],
+    'bodyOffset': body == null ? null : pos(body.offset),
+    'bodyText': body?.toSource(),
+    'variables': node is FieldDeclaration || node is TopLevelVariableDeclaration
+        ? [
+            for (final v
+                in (node is FieldDeclaration
+                        ? node.fields
+                        : (node as TopLevelVariableDeclaration).variables)
+                    .variables)
+              {
+                'name': v.name.lexeme,
+                'initializerOffset': v.initializer == null
+                    ? null
+                    : pos(v.initializer!.offset),
+                'initializerEnd': v.initializer == null
+                    ? null
+                    : pos(v.initializer!.end),
+              },
+          ]
+        : null,
+    'initializers': node is ConstructorDeclaration
+        ? [
+            for (final i in node.initializers)
+              {
+                'offset': pos(i.offset),
+                'end': pos(i.end),
+                'name': i is ConstructorFieldInitializer
+                    ? i.fieldName.name
+                    : null,
+                'expressionOffset': i is ConstructorFieldInitializer
+                    ? pos(i.expression.offset)
+                    : null,
+                'expressionEnd': i is ConstructorFieldInitializer
+                    ? pos(i.expression.end)
+                    : null,
+              },
+          ]
+        : null,
+    'references': [
+      for (final r in refs.values)
+        {...r, 'offset': pos(r['offset'] as int), 'end': pos(r['end'] as int)},
+    ],
+    'callbacks': [
+      for (final c in refs.callbacks)
+        {...c, 'offset': pos(c['offset'] as int), 'end': pos(c['end'] as int)},
+    ],
+    'returnedList': returnedList(body, source, positions),
   };
 }
 
@@ -93,7 +298,10 @@ void main() {
       positions.add(++point);
     }
     output[entry.key] = {
-      'declarations': [for (final d in parsed.unit.declarations) describe(d, source, positions: positions)],
+      'declarations': [
+        for (final d in parsed.unit.declarations)
+          describe(d, source, positions: positions),
+      ],
       'directives': [for (final d in parsed.unit.directives) d.toSource()],
     };
   }

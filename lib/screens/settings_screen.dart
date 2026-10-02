@@ -177,6 +177,21 @@ bool shouldApplyPendingCredentialOverride({
   required bool ownCredentialPresent,
 }) => !ownCredentialPresent && pendingTypes.any(providerTypes.contains);
 
+/// Test access to the production builders and a delayed completion helper.
+@visibleForTesting
+({
+  List<SettingsSearchEntry> Function() index,
+  List<SettingsSearchEntry> Function() leaves,
+  void Function(String) snack,
+}) settingsScreenTestAccess(State<SettingsScreen> state) {
+  final settings = state as _SettingsScreenState;
+  return (
+    index: settings._buildSearchIndex,
+    leaves: settings._leafSearchEntries,
+    snack: settings._showSnack,
+  );
+}
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, this.summaryReadOverrides = const {}});
 
