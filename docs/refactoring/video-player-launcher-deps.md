@@ -1,6 +1,6 @@
 # VideoPlayerLauncher dependency and ownership report
 
-Original: `204b1011:lib/services/video_player_launcher.dart` (6,594 physical lines). The current application source is identical to that revision. Dart AST inventory: **154 ownership leaves**; split classes are `VideoPlayerLauncher` and `VideoPlayerLaunchArgs`. Whole classes retain all their members. The table below also lists every nested member for dependency review.
+Original: `204b1011:lib/services/video_player_launcher.dart` (6,594 physical lines). At step 0, application source and dependencies were identical to that revision. Dart AST inventory: **154 ownership leaves**; split classes are `VideoPlayerLauncher` and `VideoPlayerLaunchArgs`. Whole classes retain all their members. The table below also lists every nested member for dependency review.
 
 Every manifest row has one destination and step. Members crossing files become public by dropping the leading underscore, or use their single static owner. The only additional member rename is `_AndroidTvPlaybackPayloadBuilder._fetchPerItemPlaybackState` → `fetchPerItemPlaybackState`, used by the debug resume harness. `_stateFromRecord` stays inside the whole builder: extracting it would violate the explicit prohibition on splitting the builder.
 

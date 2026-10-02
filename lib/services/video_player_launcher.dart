@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:debrify/features/player_launch/data/launch_tracking_policy.dart';
 import 'package:debrify/features/player_launch/data/movie_resume_state.dart';
 import 'package:debrify/features/player_launch/data/native_playback_debug.dart';
@@ -6,41 +8,15 @@ import 'package:debrify/features/player_launch/presentation/legacy_launch/extern
 import 'package:debrify/features/player_launch/presentation/legacy_launch/external_player_launch.dart';
 import 'package:debrify/features/player_launch/presentation/legacy_launch/launch_router.dart';
 import 'package:debrify/features/player_launch/presentation/legacy_launch/webdav_player_notice.dart';
-export 'package:debrify/features/player_launch/models/video_player_launch_args.dart';
-export 'package:debrify/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart';
-import 'profiles/profile_session_memory.dart';
-import 'dart:async';
-
-import 'package:android_intent_plus/android_intent.dart';
+import 'package:debrify/models/playback_resume_policy.dart';
+import 'package:debrify/models/playlist_entry.dart';
+import 'package:debrify/services/mdblist/mdblist_service.dart';
+import 'package:debrify/services/profiles/profile_session_memory.dart';
+import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:flutter/material.dart';
 
-import '../screens/video_player_screen.dart';
-import '../services/local_playback_resume_resolver.dart';
-import '../services/mdblist/mdblist_service.dart';
-import 'tracking_source_policy.dart';
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+export 'package:debrify/features/player_launch/models/video_player_launch_args.dart';
+export 'package:debrify/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart';
 
 class VideoPlayerLauncher {
   @visibleForTesting
@@ -55,11 +31,17 @@ class VideoPlayerLauncher {
     List<Map<String, dynamic>> updates, {
     MdblistService? mdblistService,
     bool Function()? canContinue,
-  }) => NativePlaybackDebug.debugNativePlaybackSession(args, updates, mdblistService: mdblistService, canContinue: canContinue);
+  }) => NativePlaybackDebug.debugNativePlaybackSession(
+    args,
+    updates,
+    mdblistService: mdblistService,
+    canContinue: canContinue,
+  );
 
   /// The external app needs its own temporary grant for this exact document.
   /// Debrify's persisted folder/file permission is not shared across apps.
-  static AndroidIntent androidExternalVideoIntent(String url) => ExternalPlayerLaunch.androidExternalVideoIntent(url);
+  static AndroidIntent androidExternalVideoIntent(String url) =>
+      ExternalPlayerLaunch.androidExternalVideoIntent(url);
 
   /// Select the single URL handed to an external player.
   ///
@@ -68,7 +50,8 @@ class VideoPlayerLauncher {
   /// the primary stream needs that separate audio track, prefer the muxed
   /// fallback so external playback is never silent.
   @visibleForTesting
-  static String externalPlaybackUrlFor(VideoPlayerLaunchArgs args) => ExternalPlayerLaunch.externalPlaybackUrlFor(args);
+  static String externalPlaybackUrlFor(VideoPlayerLaunchArgs args) =>
+      ExternalPlayerLaunch.externalPlaybackUrlFor(args);
 
   /// Generate a resume key for a playlist entry.
   /// Used to pre-populate playback state (e.g., from Trakt progress).
@@ -95,13 +78,12 @@ class VideoPlayerLauncher {
     required String? imdbId,
     String fallbackTitle = '',
     PlaybackResumePolicy policy = PlaybackResumePolicy.sourceSpecific,
-  }) => MovieResumeState.readMovieResumeState(entry: entry, imdbId: imdbId, fallbackTitle: fallbackTitle, policy: policy);
-
-
-
-
-
-
+  }) => MovieResumeState.readMovieResumeState(
+    entry: entry,
+    imdbId: imdbId,
+    fallbackTitle: fallbackTitle,
+    policy: policy,
+  );
 
   /// Resolves the one MDBList ownership decision used by every playback
   /// surface. A launch originating from an MDBList row is still only a
@@ -115,7 +97,14 @@ class VideoPlayerLauncher {
     required bool identityAvailable,
     required bool syncEnabled,
     required bool authenticated,
-  }) => LaunchTrackingPolicy.shouldEnableMdblistTracking(requested: requested, autoEligible: autoEligible, featureEnabled: featureEnabled, identityAvailable: identityAvailable, syncEnabled: syncEnabled, authenticated: authenticated);
+  }) => LaunchTrackingPolicy.shouldEnableMdblistTracking(
+    requested: requested,
+    autoEligible: autoEligible,
+    featureEnabled: featureEnabled,
+    identityAvailable: identityAvailable,
+    syncEnabled: syncEnabled,
+    authenticated: authenticated,
+  );
 
   @visibleForTesting
   static VideoPlayerLaunchArgs normalizeScrobbleFlags(
@@ -130,7 +119,10 @@ class VideoPlayerLauncher {
   static bool shouldExplainExternalPlayerFallback(
     VideoPlayerLaunchArgs args,
     String defaultPlayerMode,
-  ) => ExternalDisclosure.shouldExplainExternalPlayerFallback(args, defaultPlayerMode);
+  ) => ExternalDisclosure.shouldExplainExternalPlayerFallback(
+    args,
+    defaultPlayerMode,
+  );
 
   @visibleForTesting
   static Future<bool> showAuthenticatedWebDavPlayerNotice(
@@ -153,18 +145,22 @@ class VideoPlayerLauncher {
     VoidCallback Function()? retainSourceSession,
     ProfileSessionOwner? sourceOwner,
     bool Function()? canContinue,
-  }) => LaunchRouter.push(context, originalArgs, onQuickPlayNextEpisode: onQuickPlayNextEpisode, isTrailer: isTrailer, onPlayerHandoff: onPlayerHandoff, retainSourceSession: retainSourceSession, sourceOwner: sourceOwner, canContinue: canContinue);
-
-
-
-
-
-
+  }) => LaunchRouter.push(
+    context,
+    originalArgs,
+    onQuickPlayNextEpisode: onQuickPlayNextEpisode,
+    isTrailer: isTrailer,
+    onPlayerHandoff: onPlayerHandoff,
+    retainSourceSession: retainSourceSession,
+    sourceOwner: sourceOwner,
+    canContinue: canContinue,
+  );
 
   /// Whether playback should leave the app entirely, per the user's default
   /// player setting. Screens that build their own player route ask this before
   /// spending work on in-app-only setup.
-  static Future<bool> isExternalPlayerDefault() => ExternalPlayerLaunch.isExternalPlayerDefault();
+  static Future<bool> isExternalPlayerDefault() =>
+      ExternalPlayerLaunch.isExternalPlayerDefault();
 
   /// Hand a single already-resolved stream to the user's configured external
   /// player, if — and only if — they set one as their default.
@@ -182,57 +178,9 @@ class VideoPlayerLauncher {
     BuildContext context, {
     required String videoUrl,
     required String title,
-  }) => ExternalPlayerLaunch.launchExternalIfConfigured(context, videoUrl: videoUrl, title: title);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  }) => ExternalPlayerLaunch.launchExternalIfConfigured(
+    context,
+    videoUrl: videoUrl,
+    title: title,
+  );
 }

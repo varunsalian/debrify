@@ -175,6 +175,16 @@ def forwarding_source(node, row):
     return prefix + '=> ' + row['destination_class'] + '.' + row['new_name'] + '(' + ', '.join(args) + ');'
 
 
+def forwarding_tokens(node, rows):
+    # The facade's expression body is new wiring. A formatter-added trailing
+    # comma in that call does not change its arguments. Keep the complete
+    # original signature/default tokens and exact dispatch owner untouched.
+    tokens = canonical(node, rows, normalize_qualifiers=False)
+    if tokens[-3:] == [',', ')', ';']:
+        del tokens[-3]
+    return tokens
+
+
 def check(original_source, sources, rows, source_path=SOURCE, package=None):
     errors = []
     parsed = parse({'<original>': original_source, **sources}, package)
@@ -251,7 +261,7 @@ def check(original_source, sources, rows, source_path=SOURCE, package=None):
         expected = parse(forwarders, package)
         current_all = original_leaves(parsed[source_path]['declarations'], splits)
         for key, unit in expected.items():
-            if canonical(unit['declarations'][0]['members'][0], rows, normalize_qualifiers=False) != canonical(current_all[key], rows, normalize_qualifiers=False):
+            if forwarding_tokens(unit['declarations'][0]['members'][0], rows) != forwarding_tokens(current_all[key], rows):
                 errors.append('Forwarder signature/default/arguments changed: ' + key)
     return errors
 

@@ -1,3 +1,3 @@
-# Exact failures observed at ss/base (Flutter 3.44.8, 072407c3 code).
+# Exact failures still observed in vpl/gate2 (Flutter 3.44.8).
 # Remove entries when they pass; no new regression may enter this list.
 test/services/webdav_sync/webdav_sync_hot_merge_test.dart::appearance stays local through build, legacy merge and materialization

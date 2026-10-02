@@ -147,12 +147,12 @@ is static. Record the result in Progress.
 **Size exceptions.** Some declarations are too large to fit the caps when
 moved whole, and splitting them is out of scope:
 
-| Destination | Holds | Approx. size | Cap |
+| Destination | Holds | Approx. size | Measured cap |
 | --- | --- | --- | --- |
-| `data/android_tv_native_launch.dart` | `_launchOnAndroidTv` (1,317-line method) | ~1,380 | measured size, over 800 |
-| `data/android_tv_payload_builder.dart` | `_AndroidTvPlaybackPayloadBuilder` (894-line class) | ~940 | measured size, over 800 |
-| `data/native_progress_handler.dart` | `_handleProgressUpdate` (527 lines) and `_handlePlaybackFinished` | ~650 | 800 |
-| `presentation/legacy_launch/launch_router.dart` | `_push` (483 lines) | ~550 | 800 |
+| `data/android_tv_native_launch.dart` | `_launchOnAndroidTv` (1,317-line method) | ~1,380 | 1,302 |
+| `data/android_tv_payload_builder.dart` | `_AndroidTvPlaybackPayloadBuilder` (894-line class) | ~940 | 924 |
+| `data/native_progress_handler.dart` | `_handleProgressUpdate` (527 lines) and `_handlePlaybackFinished` | ~650 | 584 |
+| `presentation/legacy_launch/launch_router.dart` | Whole `_push`, public `push`, platform check | ~550 | 592 |
 
 - **Guard:** `check_search_architecture.py` rejects every file under
   `lib/features` over 800 lines, and new files over 500 per plan.
@@ -464,7 +464,42 @@ failures, no missing tests, no new skips.
 | 1 | `fb19821d` | 5,783 | Models/extension and single session/cache owners wired; comparisons PASS. |
 | 2 | `5468465e` | 3,358 | Context-free resume, payload, metadata and progress owners wired; comparisons PASS. |
 | 3 | `03420c5e` | 1,855 | Native/IPTV launch owners wired; full-suite gate 1 PASS. |
-| 4 | (this step commit) | 238 | Presentation bridge owners wired; all 134 affected tests pass. |
+| 4 | `6c813b3b` | 238 | Presentation bridge owners wired; all 134 affected tests pass. |
+| 5 | (gate 2 commit) | 186 | Forwarding-only facade, final guards/CI; gate 2 PASS against base and gate 1. |
+
+### Step 5 / gate 2 evidence
+
+- The formatted facade is **186 lines**, exports args and the widget extension,
+  forwards all **13** original public methods, and holds no state. Its imports
+  use the direct playlist/resume contracts. Production caller expressions remain
+  unchanged. The architecture guard registers it with a **300-line cap** and
+  rejects `TEMP(vpl)` throughout the feature and facade; none remain.
+- **31** feature Dart files; only the four named size exceptions exceed 500.
+  All caps equal moved sizes: native launch **1302**, builder **924**, progress
+  **584**, router **592**. No other exception is introduced. Original session
+  fields/caches retain their single owners and initializers documented above.
+- `check_verbatim_moves.py --self-test`: all **154 leaves** and all forwarders
+  pass; **23** self-tests pass/reject as expected. Forwarder checking preserves
+  signatures/defaults and the actual owner/argument order; only a new call body's
+  optional trailing comma is ignored. Original moved declarations still compare
+  every punctuation token. Architecture and repo-wide size guards pass.
+- Whole-repo `analyze-step5.txt` vs step 4 and the original baseline: **PASS**,
+  no added diagnostics. Exactly the three planned warnings are removed, plus
+  one formatting-only flow-control info. All remaining moved diagnostics are
+  pre-existing infos. The final CI format scope (1,112 files) and scoped analyzer
+  both pass locally, including the facade; no diagnostic is suppressed.
+- `vpl/step5` vs base: **PASS**, all **134 affected tests succeed**.
+- `vpl/gate2` vs **both** `vpl/base` and `vpl/gate1`: **PASS**,
+  **10,304 success / 14 failure / 29 error / 20 skipped**. No new failures,
+  missing tests or new skips. The six repaired guards and four heartbeat tests
+  pass. Existing full-suite failures/errors are retained as evidence, not
+  accepted by recording a new baseline.
+- CI's failure list is seeded from exact gate 2 failures within its test scope:
+  only the existing WebDAV appearance identity remains. No failure was added.
+  The behavior scope is retained (gate 1 private job 8m05s). The gate 2 private
+  CI run and final commit are reported at review handoff after pushing this commit.
+- Real Android TV enrichment/finish/disposal/next-episode sequence checks remain
+  **pending**. This host-only extraction evidence does not establish device parity.
 
 ### Step 4 evidence
 

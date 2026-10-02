@@ -18,6 +18,7 @@ FACADE = "lib/screens/search_screen.dart"
 STORAGE_SOURCE_DIR = 'lib/services/storage'
 STORAGE_ENUM_FILES = ('lib/models/ambient_trailer_surface.dart', 'lib/models/tv_render_quality.dart')
 PLAYBACK_FACADE = "lib/services/torrent_playback_service.dart"
+PLAYER_LAUNCH_FACADE = "lib/services/video_player_launcher.dart"
 # Verbatim playback extraction source set; exceptions and exit milestones are
 # recorded in docs/refactoring/torrent-playback-plan.md.
 TORRENT_PLAYBACK_SOURCE_FILES = {
@@ -73,6 +74,7 @@ COMPOSITION_ROOTS = {
     FACADE,
     # Temporary forwarding-only bridge, with its own 400-line cap.
     PLAYBACK_FACADE,
+    PLAYER_LAUNCH_FACADE,
     f"{COMPOSITION}/search_screen_composer.dart",
     f"{COMPOSITION}/search_screen_search_composition.dart",
     f"{COMPOSITION}/search_screen_home_composition.dart",
@@ -82,6 +84,7 @@ COMPOSITION_ROOTS = {
 # Retained facades join this source set when their migration reaches its final checks.
 EXTRACTED_ELSEWHERE: tuple[str, ...] = (
     PLAYBACK_FACADE,
+    PLAYER_LAUNCH_FACADE,
     "lib/ui/core/trailer_indicators.dart",
     "lib/ui/core/spotlight_search_button.dart",
     "lib/ui/core/retry_message.dart",
@@ -285,6 +288,8 @@ def violations(path: Path) -> list[str]:
     lines = len(source.splitlines())
     if relative == FACADE and lines > 300:
         problems.append(f"{lines} lines exceeds the 300-line facade limit")
+    if relative == PLAYER_LAUNCH_FACADE and lines > 300:
+        problems.append(f"{lines} lines exceeds the 300-line launcher facade limit")
     if relative == PLAYBACK_FACADE and lines > 400:
         problems.append(f"{lines} lines exceeds the 400-line playback facade limit")
     if relative in TORRENT_PLAYBACK_SOURCE_FILES:
@@ -297,6 +302,9 @@ def violations(path: Path) -> list[str]:
     if relative.startswith(STORAGE_SOURCE_DIR + '/') or relative in STORAGE_ENUM_FILES:
         if lines > 500:
             problems.append(f'{lines} lines exceeds the 500-line storage limit')
+    if relative.startswith("lib/features/player_launch/") or relative == PLAYER_LAUNCH_FACADE:
+        if "TEMP(vpl)" in source:
+            problems.append("temporary VideoPlayerLauncher cross-call remains")
     if relative.startswith("lib/features/player_launch/"):
         limit = PLAYER_LAUNCH_SIZE_EXCEPTIONS.get(relative, 500)
         if lines > limit:
