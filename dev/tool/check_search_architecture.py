@@ -259,7 +259,7 @@ LEGACY_PLAYBACK_BRIDGES = (
 # No further player-launch size exception is authorized by this plan.
 PLAYER_LAUNCH_SIZE_EXCEPTIONS = {
     # Whole native launch: split during a later control-flow change.
-    "lib/features/player_launch/data/android_tv_native_launch.dart": 0,
+    "lib/features/player_launch/data/android_tv_native_launch.dart": 1302,
     # Whole payload builder: split during a later control-flow change.
     "lib/features/player_launch/data/android_tv_payload_builder.dart": 924,
     # Whole progress/completion handlers: split in a later control-flow change.

@@ -1,5 +1,3 @@
 # Exact failures observed at ss/base (Flutter 3.44.8, 072407c3 code).
 # Remove entries when they pass; no new regression may enter this list.
-test/manual_source_validation_contract_test.dart::delayed startup recovery waits for the exact player route
-test/manual_source_validation_contract_test.dart::recovery uses automatic probes without changing manual source resolution
 test/services/webdav_sync/webdav_sync_hot_merge_test.dart::appearance stays local through build, legacy merge and materialization

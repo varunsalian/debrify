@@ -21,11 +21,11 @@ void main() {
   test('Android TV source switch carries MDBList episode resume progress', () {
     final resolver = _between(
       source,
-      'sourcePlaylistResolverForTv = (int sourceIndex) async {',
+      'sourcePlaylistResolverForTv = (int sourceIndex, {bool automaticRecovery = false}) async {',
       '// "Load more sources" for the series source tabs',
     );
 
-    expect(resolver, contains('getEpisodeMdblistProgress'));
+    expect(resolver, contains('getConnectedEpisodeMdblistProgress'));
     expect(resolver, contains('sourceMdblistProgress[episodeKey]'));
     expect(resolver, contains('getMergedFinishedEpisodes'));
     expect(resolver, contains('resolveEpisodeLocalWatchState'));
@@ -42,7 +42,7 @@ void main() {
         'Future<Map<String, dynamic>?> tryRange(',
       );
 
-      expect(fetcher, contains('getEpisodeMdblistProgress'));
+      expect(fetcher, contains('getConnectedEpisodeMdblistProgress'));
       expect(fetcher, contains('trackerMaps[2][episodeKey]'));
       expect(fetcher, contains('getMergedFinishedEpisodes'));
       expect(fetcher, contains("row['watched']"));
@@ -63,7 +63,7 @@ void main() {
       expect(guideBuilder, contains('getMergedFinishedEpisodes'));
       expect(guideBuilder, contains('getEpisodeTraktProgress'));
       expect(guideBuilder, contains('getEpisodeSimklProgress'));
-      expect(guideBuilder, contains('getEpisodeMdblistProgress'));
+      expect(guideBuilder, contains('getConnectedEpisodeMdblistProgress'));
       expect(
         guideBuilder,
         contains("'resumePositionMs': localState.positionMs"),
@@ -137,7 +137,7 @@ void main() {
     ).readAsStringSync();
     final sourceSwitch = _between(
       player,
-      'Future<void> _switchToSourcePlaylist(',
+      'Future<bool> _switchToSourcePlaylist(',
       '// Resume the SAME episode from the new source',
     );
     final resumeGetters = _between(

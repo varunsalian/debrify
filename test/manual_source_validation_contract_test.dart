@@ -38,6 +38,9 @@ void main() {
   final launcher = File(
     'lib/services/video_player_launcher.dart',
   ).readAsStringSync();
+  final nativeLauncher = File(
+    'lib/features/player_launch/data/android_tv_native_launch.dart',
+  ).readAsStringSync();
 
   test('both automatic tracker launch copies retain saved-source recovery', () {
     final copies = launcher
@@ -79,14 +82,14 @@ void main() {
         contains('_startupSourcePlaylistResolver ?? _sourcePlaylistResolver'),
       );
       expect(
-        launcher,
-        contains('automaticRecovery && !await recoveryPreflight.allows'),
+        nativeLauncher,
+        matches(RegExp(r'automaticRecovery\s*&&\s*!await recoveryPreflight\.allows')),
       );
       expect(
-        launcher,
-        contains('TorrentPlaybackService.resolveRecoverySource(torrent,'),
+        nativeLauncher,
+        matches(RegExp(r'TorrentPlaybackService\.resolveRecoverySource\(\s*torrent,')),
       );
-      expect(launcher, contains(': await resolveSourceToPlaylist(torrent)'));
+      expect(nativeLauncher, contains(': await resolveSourceToPlaylist(torrent, canContinue: active)'));
       final automaticProbe = _between(
         recoveryResolution,
         'static Future<List<PlaylistEntry>?> resolveRecoverySource(',
@@ -149,7 +152,7 @@ void main() {
   test(
     'native recovery reports candidate production before merging duplicates',
     () {
-      expect(launcher, contains("'recoveryCandidateCount': automatic.length"));
+      expect(nativeLauncher, contains("'recoveryCandidateCount': automatic.length"));
       expect(nativePlayer, contains('map["recoveryCandidateCount"]'));
       expect(nativePlayer, contains('startupRecoveryIsConsumed('));
     },
@@ -488,10 +491,18 @@ void main() {
       flutterPlayer,
       contains('final playerRoute = ModalRoute.of(context)'),
     );
-    expect(flutterPlayer, contains('mounted && playerRoute?.isActive == true'));
+    // Mount/retirement checking moved into the local current() guard; follow
+    // that indirection while still requiring this exact captured route.
+    final failure = _between(
+      flutterPlayer,
+      'Future<void> _reportStartupFailure(',
+      'void _bindPlayerInstanceSubscriptions(',
+    );
+    expect(failure, contains('bool current() => mounted && !_screenDisposed'));
+    expect(failure, contains('current() && playerRoute?.isActive == true'));
     expect(
       flutterPlayer,
-      contains('mounted && playerRoute?.isCurrent == true'),
+      contains('if (!mounted || !current() || playerRoute?.isCurrent != true) return;'),
     );
   });
 }

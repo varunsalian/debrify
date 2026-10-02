@@ -10,7 +10,10 @@ void main() {
   ).readAsStringSync();
   final launcher = File(
     'lib/services/video_player_launcher.dart',
-  ).readAsStringSync();
+  ).readAsStringSync() + Directory('lib/features/player_launch')
+      .listSync(recursive: true).whereType<File>()
+      .where((file) => file.path.endsWith('.dart'))
+      .map((file) => file.readAsStringSync()).join('\n');
   final magic = File('lib/screens/magic_tv_screen.dart').readAsStringSync();
 
   test(

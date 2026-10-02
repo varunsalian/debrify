@@ -15,7 +15,7 @@ void main() {
     'lib/screens/video_player_screen.dart',
   ).readAsStringSync();
   final native = File(
-    'lib/services/video_player_launcher.dart',
+    'lib/features/player_launch/data/android_tv_native_launch.dart',
   ).readAsStringSync();
   final bridge = File(
     'lib/services/android_tv_player_bridge.dart',

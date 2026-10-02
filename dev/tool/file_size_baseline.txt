@@ -26,7 +26,6 @@
 3442 lib/screens/pikpak/pikpak_files_screen.dart
 3415 lib/screens/addons/addon_hub_screen.dart
 3394 lib/widgets/detail/showcase_parts.dart
-3358 lib/services/video_player_launcher.dart
 3112 lib/widgets/episodes_panel.dart
 3076 lib/widgets/trakt/trakt_results_view.dart
 3035 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
@@ -61,6 +60,7 @@
 1937 lib/services/remote_control/remote_control_state.dart
 1928 lib/screens/profiles/profile_gate_looks.dart
 1864 lib/screens/collections/collection_folder_screen.dart
+1855 lib/services/video_player_launcher.dart
 1844 lib/screens/video_player/widgets/player_menu_panel.dart
 1829 lib/screens/settings/settings_tv_layout.dart
 1826 lib/utils/series_parser.dart
@@ -96,6 +96,7 @@
 1325 lib/screens/profiles/profile_setup_flow.dart
 1313 lib/screens/video_player/widgets/source_sheet.dart
 1307 lib/services/external_player_service.dart
+1302 lib/features/player_launch/data/android_tv_native_launch.dart
 1286 lib/services/backup_restore_service.dart
 1272 lib/services/webdav_sync/webdav_sync_activation.dart
 1263 lib/widgets/hero_trailer_backdrop.dart

@@ -456,7 +456,32 @@ failures, no missing tests, no new skips.
 | --- | --- | --- | --- |
 | 0 | `cfe1e2cd` | 6,594 | Baseline, dependency report, manifest/checker/self-tests committed before any move. |
 | 1 | `fb19821d` | 5,783 | Models/extension and single session/cache owners wired; comparisons PASS. |
-| 2 | Step-2 commit (recorded by step 3) | 3,358 | Context-free resume, payload, metadata and progress owners wired; comparisons PASS. |
+| 2 | `5468465e` | 3,358 | Context-free resume, payload, metadata and progress owners wired; comparisons PASS. |
+| 3 | Step-3 commit (recorded by step 4) | 1,855 | Native/IPTV launch owners wired; full-suite gate 1 PASS. |
+
+### Step 3 / gate 1 evidence
+
+- `check_verbatim_moves.py`: 154 leaves/all forwarders pass. Architecture and
+  repo-wide size ratchet pass. Native launch is capped at its measured
+  **1302 lines**, including imports; its over-800 baseline was added by
+  hand. Exit: split the whole method during a later control-flow change.
+- `analyze-step3.txt` vs step 2: PASS; no added diagnostics. Normal formatting
+  removed one flow-control info without changing any declaration token.
+- `vpl/step3` vs base: PASS, all **134 affected tests succeed**. The four
+  stale MDBList guards and two manual-source guards now reach all assertions
+  and pass: signature/connected-progress getter markers follow actual code;
+  manual-source resolution preserves the cancellation argument; route
+  checking follows the existing mounted/retirement `current()` guard and
+  exact captured route. No production logic changes. Passing identities were
+  removed from CI's historical failure list in this commit.
+- `vpl/gate1` vs `vpl/base`: **PASS**, 10,304 success / 14 failure /
+  29 error / 20 skipped; zero new failures, missing tests or new skips;
+  six repaired source guards and four added heartbeat tests pass.
+- Local CI behavior command: PASS, 2,060 success and the one known WebDAV
+  appearance failure. The current CI scope is retained; remote duration will
+  be measured after pushing this gate to `private`.
+- Android TV device sequence checks remain pending; host evidence is limited
+  to the contracts documented above.
 
 ### Step 2 evidence
 
