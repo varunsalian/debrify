@@ -32,10 +32,11 @@ facade. Callers don't change.
 | 2384–3700 | Android TV native launch | `_launchOnAndroidTv` (**1,317 lines**) | no (native bridge) |
 | 3701–3866 | IPTV on Android TV | `_launchIptvOnAndroidTv` | no |
 | 3867–4415 | Metadata push and MDBList native session | `_fetchAndPushMetadataAsync` (421), `_saveSeriesPosterToPlaylist`, `_initializeNativeMdblist`, `_ensureNativeMdblistSession`, `_closeNativeMdblist`, `_nativeMdblistTarget`, `_simklSeriesSEUnresolved` | no |
-| 4416–5002 | Native progress and completion | `_handleProgressUpdate` (528), `_handlePlaybackFinished` | no |
+| 4416–5002 | Native progress and completion | `_handleProgressUpdate` (**527 lines**, 4416–4942), `_handlePlaybackFinished` | no |
 | 5003–5196 | Entry URL resolution | `_resolveEntryUrl`, enum `_PlaybackContentType` | no |
-| 5197–6269 | Android TV payload model and builder | `_AndroidTvPlaybackPayload`, `_AndroidTvPlaybackItem`, `_AndroidTvSeriesSeason`, `_AndroidTvSeriesEpisode`, `_LauncherEntry`, `_AndroidTvPlaylistResolver`, `_AndroidTvPlaybackPayloadBuilder` (625) | no |
-| 6270–6594 | Resume record parsing, observers | `_stateFromRecord` (270), `_PerItemState`, `_NavigationMaps`, `_AppCoverObserver`, `_AppReturnObserver` (`WidgetsBindingObserver`) | observers only |
+| 5197–5644 | Android TV payload classes | `_AndroidTvPlaybackPayload` (includes mutable MDBList session objects and factories, 5232), `_AndroidTvPlaybackItem`, `_AndroidTvSeriesSeason`, `_AndroidTvSeriesEpisode`, `_LauncherEntry`, `_AndroidTvPlaylistResolver` | no |
+| 5645–6538 | Payload builder | `_AndroidTvPlaybackPayloadBuilder`: **one 894-line class**, including the 10-line static `_stateFromRecord` (6270) | no |
+| 6539–6594 | Small types and observers | `_PerItemState`, `_NavigationMaps`, `_AppCoverObserver`, `_AppReturnObserver` (`WidgetsBindingObserver`) | observers only |
 
 **Public API (production and tests):** `push` (66 uses), `readMovieResumeState`,
 `debugNativePlaybackSession`, `debugNativeResumePositions`, `resumeIdForEntry`,
@@ -69,8 +70,8 @@ decides.
   `_LauncherEntry`) are used by the Android TV launch, metadata push and
   progress handling. They move together to `models/`, or to `data/` where they
   carry behaviour such as the playlist resolver and the builder.
-- **`_stateFromRecord`, `_PerItemState` and `_NavigationMaps`** are used by
-  the payload builder.
+- **`_PerItemState` and `_NavigationMaps`** are used by the payload builder.
+  `_stateFromRecord` is a static method inside the builder and moves with it.
 - **The observers** (`_AppCoverObserver`, `_AppReturnObserver`) are used by
   the external-player code and import Flutter widgets, so they go in the
   bridge folder.
@@ -87,9 +88,14 @@ decides.
 
 `lib/features/player_launch/`:
 - **`models/`**: `VideoPlayerLaunchArgs` (without `toWidget`, see below),
-  `PlaybackContentType`, the payload data classes, `PerItemState`,
-  `NavigationMaps`, `LauncherEntry`. Only pure data, under the guard's model
-  rules.
+  `PlaybackContentType`, `PerItemState`, `NavigationMaps`, and the payload
+  data classes that are plain data. Only immutable data, under the guard's
+  model rules (AGENTS.md: models are immutable at boundaries).
+  - The payload's **mutable MDBList session objects and factories** (5232)
+    stay in `data/`, with the payload type that holds them. Metadata push
+    mutates their identity (4011), and teardown clears the factory before
+    awaiting close (4408), so reference identity must be kept. The step 0
+    report decides each class's layer.
 - **`data/`**: everything with no `BuildContext` and no widget or UI import:
   - session state (`native_scrobble_session.dart`);
   - the redirect resolver and caches;
@@ -130,11 +136,44 @@ doing it, confirm that nothing subclasses or implements
 `VideoPlayerLaunchArgs` and that `toWidget` isn't torn off; extension dispatch
 is static. Record the result in Progress.
 
-**Size exception.** `_launchOnAndroidTv` is one 1,317-line method. Move it
-whole into `data/android_tv_native_launch.dart`, which will be about 1,400
-lines. That breaks the 800-line ceiling, so it is a documented temporary
-exception. Its exit milestone is splitting the method in a later control-flow
-change, and Progress records it. Every other file follows the normal caps.
+**Size exceptions.** Some declarations are too large to fit the caps when
+moved whole, and splitting them is out of scope:
+
+| Destination | Holds | Approx. size | Cap |
+| --- | --- | --- | --- |
+| `data/android_tv_native_launch.dart` | `_launchOnAndroidTv` (1,317-line method) | ~1,380 | measured size, over 800 |
+| `data/android_tv_payload_builder.dart` | `_AndroidTvPlaybackPayloadBuilder` (894-line class) | ~940 | measured size, over 800 |
+| `data/native_progress_handler.dart` | `_handleProgressUpdate` (527 lines) and `_handlePlaybackFinished` | ~650 | 800 |
+| `presentation/legacy_launch/launch_router.dart` | `_push` (483 lines) | ~550 | 800 |
+
+- **Guard:** `check_search_architecture.py` rejects every file under
+  `lib/features` over 800 lines, and new files over 500 per plan.
+  - In **step 1**, before any move needs it, add a named exception table to
+    the guard (`PLAYER_LAUNCH_SIZE_EXCEPTIONS = {path: cap}`), with a reason
+    comment each.
+  - Exactly these four paths get exceptions. Each cap is its measured
+    formatted size, set in the commit that creates the file. Every other
+    feature file keeps the 500 target and the 800 ceiling.
+- **Size ratchet:** `check_file_sizes.py --update` only lowers counts, so the
+  commit creating each of the two over-800 files adds its baseline line by
+  hand. That is the documented way to record an exception.
+- Progress records all four, each with its exit milestone: split the method
+  or class in a later control-flow change.
+
+## What host tests can't prove
+
+The native bridge returns immediately on non-Android hosts
+(`lib/services/android_tv_player_bridge.dart:1866`). The debug harness
+(`debugNativePlaybackSession`, 635) returns the builder's initial map, but
+production adds fields afterwards (3442) and runs the finish, disposal and
+next-episode ordering (3566).
+- **Covered by host tests:** the builder's payload and resume positions,
+  through the existing debug harness tests.
+- **Add if possible without changing production code:** fake-clock tests
+  (`fake_async`) of the Trakt and Simkl heartbeat timers' start and
+  cancellation, through the existing handlers.
+- **Pending:** the rest of the launch and finish sequence on a real Android TV
+  device. Record it as pending in Progress. Don't claim parity for it.
 
 ## Invariants (every step)
 
@@ -160,7 +199,8 @@ change, and Progress records it. Every other file follows the normal caps.
 ## Technique: move-only
 
 - **Move declarations verbatim** into top-level functions or small `final`
-  classes with static members. Allowed edits:
+  classes with static members. Allowed edits (each recorded in the ownership
+  manifest, below):
   - qualifiers at call sites;
   - imports;
   - dropping a leading `_` when another file now uses the symbol (for
@@ -168,7 +208,25 @@ change, and Progress records it. Every other file follows the normal caps.
   - turning the file-private session globals and caches into static members
     of their single owner class, with the same names minus `_` and the same
     initializers;
-  - the `toWidget` extension above.
+  - the `toWidget` extension above;
+  - **exactly three warning fixes.** These analyzer warnings would fail CI
+    once the code is under `lib/features`, because CI's analyze is fatal on
+    warnings:
+    - `unnecessary_null_comparison` at 4849:25 and 5599:62;
+    - `invalid_null_aware_operator` at 5599:87.
+
+    Fix each in the smallest way the analyzer's message proposes. The
+    analyzer proves these conditions always hold, so behaviour is unchanged.
+    Record each one in the manifest as an expected difference. Don't fix,
+    or suppress, any other diagnostic;
+  - **the enum rename's log text.** Renaming `_PlaybackContentType` to
+    `PlaybackContentType` changes its `toString()`, which logs interpolate
+    (for example 3883).
+    - The step 0 report must list every `toString()` or interpolation use of
+      the enum. If any reaches a payload, persistence, a comparison or a
+      native call, stop and ask.
+    - If they are all logs, record the label change as an accepted, logged
+      exception to Invariant 5.
 - **Not allowed:**
   - reordering `await`s, guards, timer starts or cancels, bridge calls or map
     insertions in payloads;
@@ -191,7 +249,7 @@ change, and Progress records it. Every other file follows the normal caps.
 | # | Work | Notes |
 | --- | --- | --- |
 | 0 | Baseline, dependency report, verbatim checker, source-text inventory | Nothing moves. |
-| 1 | Create the feature, register it in the guard and CI. Move `models/` (`PlaybackContentType`, `VideoPlayerLaunchArgs` and the `toWidget` extension, payload data classes, `PerItemState`, `NavigationMaps`, `LauncherEntry`) and the shared `data/` cores (`native_scrobble_session.dart`, `stream_redirect_resolver.dart`). | Ports the theme source guard (see Source-text tests). |
+| 1 | Create the feature, register it in the guard (with the size-exception table) and CI. Move `models/` (`PlaybackContentType`, `VideoPlayerLaunchArgs` and the `toWidget` extension, payload data classes, `PerItemState`, `NavigationMaps`, `LauncherEntry`) and the shared `data/` cores (`native_scrobble_session.dart`, `stream_redirect_resolver.dart`). | Ports the theme source guard (see Source-text tests). |
 | 2 | `data/`: resume-record parsing, entry-URL resolution, payload builder and playlist resolver, MDBList native session, metadata push, progress and completion handling | All context-free. |
 | 3 | `data/`: IPTV on Android TV, then `_launchOnAndroidTv` (size exception) | **Full-suite gate 1** after this step. |
 | 4 | `presentation/legacy_launch/`: observers, external players, DeoVR, disclosure, analytics labels, external launch commit and seeding, progress-seeding helpers, WebDAV notice, `_push` | One commit per cohesive group is fine. |
@@ -216,22 +274,33 @@ change, and Progress records it. Every other file follows the normal caps.
    Nothing may be unresolved before step 1.
 3. **Generic verbatim checker: `dev/tool/check_verbatim_moves.py`**, reusable
    for later refactors (the player screen is next).
-   - **Inputs:** an original file at a git revision, a set of destination
-     files, and a small rename table (TSV, for example
-     `dev/tool/vpl_renames.tsv`).
-   - **What it does:** for every declaration in the original (top-level
-     members, classes, and class members including static fields and their
-     initializers), it finds exactly one destination declaration. It compares
-     their complete text: modifiers, types, parameters **and their
-     defaults**, annotations and bodies. Normalisation is only whitespace
-     outside string literals, qualifiers, and the renames listed in the
-     table.
-   - **What it reports:** missing, duplicated and changed declarations. The
-     `toWidget` extension and the session-state owner are listed as expected
-     differences, each with its own exact check.
+   - **Ownership manifest** (`dev/tool/vpl_manifest.tsv`): one row per
+     **leaf declaration** of the original: top-level variables, functions,
+     enums and classes that move whole, and every member of a class that is
+     split, `VideoPlayerLauncher` in particular. Columns: original name,
+     destination file, destination class (or top level), new name, and an
+     `expected_difference` note for the listed exceptions.
+   - **Comparison:** each leaf is compared with its single destination
+     declaration as complete text: modifiers, types, parameters **and their
+     defaults**, annotations, initializers and body. Normalisation is only
+     whitespace outside string literals, qualifiers, and the manifest's
+     renames.
+   - **Split classes:** a class being split, `VideoPlayerLauncher` above all,
+     is never compared as a whole. Its members are leaves. The facade's
+     forwarders are checked separately: each forwards to the manifest's
+     owner with the same parameters, defaults and argument order.
+   - **Intermediate steps:** unmoved declarations are compared in place in
+     the shrinking original file, so every step covers every leaf.
+   - **Expected differences:** each has its own exact check: the `toWidget`
+     extension, the session-state owner (fields and initializers), the three
+     warning fixes, and the enum rename.
+   - **No vacuous passes:** it fails on an empty or incomplete parse (leaf
+     count below the manifest's), and on a destination declaration the
+     manifest doesn't know.
    - **Self-tests:** negative fixtures must fail for a changed parameter
      default, a changed string literal, a reordered statement, a dropped
-     `await`, and a duplicated declaration.
+     `await`, a duplicated declaration, a missing declaration, and empty
+     input. A positive fixture must pass for a correctly split class.
    - Commit it with its fixtures. It reads the original with
      `git show 204b1011:...`, so it runs locally, not in CI.
 4. **Source-text inventory: `dev/tool/vpl_source_text.txt`.** List every test
@@ -278,8 +347,12 @@ failures, no missing tests, no new skips.
 - **`test/theme/source_guard_test.dart`**, ported in step 1 with the
   extension:
   - "VideoPlayerScreen is constructed only where the freeze exists": replace
-    the launcher in its `allowed` set with the extension file. Exactly one
-    shared factory remains.
+    the launcher in its `allowed` set with the extension file.
+    - The guard skips allowed files entirely, so also assert that the
+      extension file contains **exactly one** `VideoPlayerScreen(`
+      construction.
+    - Mutation-check both cases: zero constructions fail, and a second
+      construction fails.
   - "video_player_launcher pushes via FrozenLegacyPageRoute": in step 4,
     point it at the file containing the push (`launch_router.dart`). It still
     requires `videoPlayerRoute(` and still forbids `MaterialPageRoute`, in
@@ -287,6 +360,15 @@ failures, no missing tests, no new skips.
   - The line-184 entry keeps its meaning.
 - **`dev/tool/theme_rendered_set.py`**: point it at the files that now hold
   the moved rendering-relevant code.
+- **Stale guards.** `test/android_tv_mdblist_progress_source_test.dart:21`
+  searches for a resolver signature that no longer exists (the real code is
+  at 2524), so it fails before checking anything. Repair its markers to the
+  real code at its new location, so it exercises its assertions.
+  - Any repaired test that now passes is removed from
+    `ci_behavior_known_failures.txt` in the same commit; `check` fails on a
+    listed test that passes.
+  - Every ported source guard must reach its assertions; a guard that fails
+    on a missing marker hasn't been ported.
 - **The other inventory entries** are ported in the step that moves the code
   they read. Positive and negative guards keep their meaning. A negative
   guard must scan every file that could now contain the forbidden text (the
@@ -312,7 +394,8 @@ failures, no missing tests, no new skips.
 3. **Checks.** `check_verbatim_moves.py` passes for every original
    declaration, with its self-tests. No `TEMP(vpl)` markers remain.
 4. **Analyzer and tests.** The whole-repo analyzer chain adds no
-   diagnostics. Gate 2 passes against `vpl/base.jsonl` and `vpl/gate1.jsonl`.
+   diagnostics. It removes exactly the three fixed warnings, and the moved
+   code has no warnings, so CI's analyze step passes. Gate 2 passes against `vpl/base.jsonl` and `vpl/gate1.jsonl`.
 5. **CI.**
    - The format and analyze scopes cover `lib/features/player_launch` and the
      facade.
