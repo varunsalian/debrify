@@ -1,3 +1,6 @@
-# Exact failures still observed in vpl/gate2 (Flutter 3.44.8).
+# Exact failures still observed in settings/gate2 and its baseline (Flutter 3.44.8).
 # Remove entries when they pass; no new regression may enter this list.
+test/profiles/profile_source_guard_test.dart::device reset stops and deletes Dart and native diagnostics
+test/profiles/profile_source_guard_test.dart::direct SharedPreferences opens stay inside reviewed adapters/stores
 test/services/webdav_sync/webdav_sync_hot_merge_test.dart::appearance stays local through build, legacy merge and materialization
+test/theme/shape_manifest_test.dart::no swept file grows a new bare radius

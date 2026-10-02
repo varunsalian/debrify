@@ -22,7 +22,7 @@ PLAYER_LAUNCH_FACADE = "lib/services/video_player_launcher.dart"
 SETTINGS_FACADE = "lib/screens/settings_screen.dart"
 # Step 6 enables the facade cap and rejects remaining temporary cross-calls.
 # Until then, the facade is measured only by the repo-wide shrinking ratchet.
-SETTINGS_COMPLETE = False
+SETTINGS_COMPLETE = True
 SETTINGS_BRIDGE = "lib/features/settings/presentation/legacy_settings/"
 SETTINGS_SIZE_EXCEPTIONS = {
     # Original 588-line loader plus typed dependencies/imports, measured at step 4.
@@ -306,6 +306,8 @@ def violations(path: Path) -> list[str]:
         problems.append(f"{lines} lines exceeds the 400-line playback facade limit")
     if SETTINGS_COMPLETE and relative == SETTINGS_FACADE and lines > 400:
         problems.append(f"{lines} lines exceeds the 400-line settings facade limit")
+    if SETTINGS_COMPLETE and relative == SETTINGS_FACADE and "TEMP(settings)" in source:
+        problems.append("temporary settings cross-call remains in the facade")
     if relative.startswith("lib/features/settings/"):
         limit = SETTINGS_SIZE_EXCEPTIONS.get(relative, 500)
         if lines > limit:

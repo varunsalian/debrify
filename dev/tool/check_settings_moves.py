@@ -91,7 +91,7 @@ RECEIVERS = {'_deps', '_summaries', 'layout', '_connections', '_updates',
              '_profileActions', '_backup', '_restore', '_downloadLocation',
              '_maintenance', '_releaseDetails', '_appearanceNavigation', '_snacks',
              '_summaryRefresh', '_summaryLoader', '_accountCaptions',
-             '_platformGates', '_searchNavigation', '_searchIndex', 'deps',
+             '_platformGates', '_searchNavigation', '_searchIndex', '_layoutComposition', 'deps',
              'summaries', 'SettingsIndexBuilder', 'SettingsLeafBuilder'}
 LIVE_GETTER_CALLBACKS = {'downloadLocationSupported', 'downloadLocationUsesSaf',
                          'defaultDownloadLocationLabel'}

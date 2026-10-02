@@ -707,7 +707,7 @@ the named files under "Size" below.
 
 ### Step 5 — production search index (verified)
 
-- Gate 1's exact-commit private CI is green. The seven platform getters and
+- Step 5 commit: `2676e16b`. Gate 1's exact-commit private CI is green. The seven platform getters and
   search navigation now have State-owned bridge classes; computed gates still
   read the shared summaries/service values when called. Search navigation
   acquires context at its original first awaited push and preserves the refresh
@@ -755,6 +755,57 @@ the named files under "Size" below.
   and all self-tests, formatting (57 files), architecture (823 migrated files),
   size (1892 tracked app files), theme expansion and diff review pass.
   Step 6, its final facade cap/formatting, CI expansion and gate 2 remain required.
+
+
+### Step 6 — final State and full-suite gate 2
+
+- `SettingsLayoutComposition` owns the two original TV/adaptive construction
+  methods (334 lines). It borrows the same summaries and focus node and resolves
+  lazy section getters at their original reads. Widget arguments, keys, values,
+  tear-offs and conditional order compare verbatim to the original manifest.
+- `SettingsSections` is the State-lifetime constructor wiring (245 lines);
+  `SettingsIndexComposition` holds index wiring (156 lines). Existing initializers
+  stay late/final and perform no actions. A separate token review against step 5
+  checks all 19 initializers after normal formatting, allowing only the five
+  borrowed context/mounted/setState/override/focus substitutions. Every new DI
+  constructor, field and getter is recorded exactly in `settings_scaffolding.json`.
+- The facade measures 162 formatted lines. It retains the public widget/helper
+  re-export and test accessor, eager summaries/focus resources, State lifecycle,
+  loading/error surface and layout choice. Teardown remains unregister handler →
+  focus disposal → update subscription cancellation. Live override reads remain
+  `() => widget.summaryReadOverrides`; no summary snapshots or new state owner.
+- The completed architecture guard includes the facade's 400-line cap and rejects
+  `TEMP(settings)` in every Settings destination and the facade. There are none.
+  Every destination meets its default cap or the existing named loader/classic
+  cap. Both theme consumers cover all 54 presentation files.
+- CI now formats the entire facade and includes 19 additional concrete Settings
+  test paths: every top-level settings test, the source inventory, pure helper and
+  four extracted boundary files. The exact failure list contains only selected
+  identities still failing in completed gate 2, gate 1 and the observed baseline.
+- `settings/step6`: 94 success, 2 failure, 1 error; comparison against gate 1
+  passes with no new failures, missing tests or skips. Analyzer retains all 832
+  original/step-5 diagnostic identities; no additions/removals or new exceptions.
+  All 316 Settings and 154 launcher declarations/self-tests pass. CI formatting
+  covers 1173 files with no changes; architecture covers 827 migrated files.
+  Storage-key/reference self-tests and diff review pass. The final guard also
+  rejects an oversized facade and temporary markers in both facade and bridge.
+- Gate 2 (`settings/gate2.jsonl`, Flutter 3.44.8): 10315 success, 14 failure,
+  29 error, 20 skipped. Full identity comparisons against the original baseline
+  and gate 1 both pass: no new failures, missing tests or newly skipped identities.
+  The unchanged historical helper, replayed against the completed saved runner,
+  reports the same 34 failures/errors outside its historical nine-entry list.
+  That list was not rewritten; observed-run comparisons establish parity.
+- Final size check covers 1895 tracked app files, with 177 existing over-limit
+  files ratcheted; the Settings facade is outside that list. No dependency or
+  SDK change. The bounded Riverpod, bridge and localization exceptions retain
+  their recorded exit milestones. Step 6 commit, private push and exact-commit
+  Ubuntu CI follow these local checks.
+- The exact local CI behavior command passes: 2142 success, three observed
+  failures and one observed error, all covered by the unchanged-or-newly-seeded
+  exact identity list. Its 2146 identities match completed gate 2. No failing
+  identity that passed in an observed run was allowed. Whole-repo and scoped
+  formatting/analyzer evidence, storage/size/architecture guards and both move
+  checkers are complete before the private push.
 
 ## Found, not fixed
 

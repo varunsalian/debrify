@@ -50,3 +50,24 @@ test/native_tracker_player_regression_test.dart
 test/theme/source_guard_test.dart
 test/video_player_launcher_settings_rejection_test.dart
 test/features/player_launch/data/native_heartbeat_lifecycle_test.dart
+
+# Settings hub: rendering, live summaries, production order, disposal and source contracts.
+test/settings_appearance_groups_test.dart
+test/settings_disposal_test.dart
+test/settings_page_loading_test.dart
+test/settings_search_grouping_test.dart
+test/settings_search_index_order_test.dart
+test/settings_single_focus_test.dart
+test/settings_spotlight_shell_test.dart
+test/settings_summary_reads_test.dart
+test/settings_sync_and_migrate_source_guard_test.dart
+test/settings_tv_input_source_guard_test.dart
+test/settings_tv_spotlight_layout_test.dart
+test/update_service_test.dart
+test/profiles/profile_source_guard_test.dart
+test/theme/shape_manifest_test.dart
+test/profiles/settings_pending_credential_override_test.dart
+test/features/settings/presentation/legacy_settings/settings_connections_test.dart
+test/features/settings/presentation/legacy_settings/settings_summary_loader_test.dart
+test/features/settings/presentation/legacy_settings/settings_summary_refresh_test.dart
+test/features/settings/presentation/legacy_settings/settings_updates_permission_test.dart
