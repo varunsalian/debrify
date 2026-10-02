@@ -249,7 +249,9 @@ void main() {
   });
 
   test('disabled Trakt does not even resolve a Simkl identity', () async {
-    await TrackingSourceStorage.setTrackingScrobbleTargets({TrackingSource.local});
+    await TrackingSourceStorage.setTrackingScrobbleTargets({
+      TrackingSource.local,
+    });
     await http.runWithClient(() async {
       expect(
         await trakt.scrobbleStop('simkl:990010', 95, season: 4, episode: 6),

@@ -93,7 +93,9 @@ void main() {
           await service.scrobbleStart('tt1234567', 5, season: 1, episode: 2),
           isTrue,
         );
-        await TrackingSourceStorage.setTrackingScrobbleTargets({TrackingSource.local});
+        await TrackingSourceStorage.setTrackingScrobbleTargets({
+          TrackingSource.local,
+        });
 
         expect(
           await service.scrobbleStart('tt1234567', 35, season: 1, episode: 2),
@@ -176,7 +178,9 @@ void main() {
   test(
     'explicit Trakt history actions still work with scrobbling off',
     () async {
-      await TrackingSourceStorage.setTrackingScrobbleTargets({TrackingSource.local});
+      await TrackingSourceStorage.setTrackingScrobbleTargets({
+        TrackingSource.local,
+      });
       final paths = <String>[];
       final client = MockClient((request) async {
         paths.add(request.url.path);

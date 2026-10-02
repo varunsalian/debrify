@@ -103,7 +103,9 @@ void main() {
     'preference persists as portable native-projected profile data and is not excluded from sync',
     () async {
       SharedPreferences.setMockInitialValues({});
-      expect(await SubtitleSettingsStorage.getSubtitleSourcePriority(), ['embedded']);
+      expect(await SubtitleSettingsStorage.getSubtitleSourcePriority(), [
+        'embedded',
+      ]);
       await SubtitleSettingsStorage.setSubtitleSourcePriority([
         'addon:b',
         'embedded',

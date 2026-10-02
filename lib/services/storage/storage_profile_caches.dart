@@ -11,6 +11,8 @@ import 'package:debrify/services/storage/theme_storage.dart';
 import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:debrify/services/storage/ui_feedback_storage.dart';
 
+/// Clears synchronous mirrors before a profile activation is published.
+/// The target bootstrap immediately warms them from its captured scope.
 void resetStorageProfileCaches() {
   TvDisplayStorage.resetProfileCaches();
   HomeAppearanceStorage.resetProfileCaches();

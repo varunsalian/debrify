@@ -326,9 +326,10 @@ void main() {
       );
     }
 
-    expect(await TrackingSourceStorage.getTrackingScrobbleTargets(), <TrackingSource>{
-      TrackingSource.local,
-    });
+    expect(
+      await TrackingSourceStorage.getTrackingScrobbleTargets(),
+      <TrackingSource>{TrackingSource.local},
+    );
     await activate(memberId, 4);
     expect(
       await TrackingSourceStorage.getTrackingScrobbleTargets(),

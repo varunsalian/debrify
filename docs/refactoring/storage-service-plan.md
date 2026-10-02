@@ -564,6 +564,32 @@ run the relevant analyzer/tests and `check_storage_keys.py`. Local clones
 with `072407c3` available also run `check_storage_bodies.py`. Plain literals
 and comments are intentionally preserved for review.
 
+## Review follow-up
+
+A five-agent review of `dfdf2d4a..2a33d6a6` found no behaviour change. Fixed
+afterwards:
+- The tombstone audit's forbidden-removal check scans every file under
+  `lib/services/storage/` again. After the split it scanned only the audited
+  owners, which missed `playback_state_store.dart`, the file that declares the
+  playback-state key. Mutation-checked.
+- `stale_runtime_guard_test.dart` lists the storage folder recursively with
+  normalised paths, so a mirror in a future subfolder is checked.
+  Mutation-checked.
+- `check_storage_keys.py` fails when a storage file that has no member-map
+  rows declares a constant, instead of skipping it. Checked with a planted
+  file.
+- The reset entry point has the original `resetProfileCaches` doc comment
+  back.
+- The 14 caller files that were `dart format`-clean before the split are
+  formatted again (only the repointed lines changed).
+
+Kept on purpose: `lib/services/storage/analysis_options.yaml` (120-column
+width, preserved trailing commas), the `width=160` marker and the one
+`format off` region. At the repo's default width the formatter adds trailing
+commas, which `check_storage_bodies.py` must treat as changes because `(x,)`
+is a record in Dart. Keeping this one documented folder exception is safer
+than loosening that check.
+
 ## Found, not fixed
 
 (none found)

@@ -51,7 +51,9 @@ void main() {
         FocusManager.instance.primaryFocus?.debugLabel,
         'subtitle-priority-embedded',
       );
-      expect(await SubtitleSettingsStorage.getSubtitleSourcePriority(), ['embedded']);
+      expect(await SubtitleSettingsStorage.getSubtitleSourcePriority(), [
+        'embedded',
+      ]);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(await SubtitleSettingsStorage.getSubtitleSourcePriority(), [

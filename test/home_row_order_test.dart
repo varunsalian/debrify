@@ -82,7 +82,10 @@ void main() {
           'fav:iptv',
         ]),
       });
-      expect(await HomeRowsStorage.getHomeRowOrder(), ['cw:series', 'fav:iptv']);
+      expect(await HomeRowsStorage.getHomeRowOrder(), [
+        'cw:series',
+        'fav:iptv',
+      ]);
     },
   );
 

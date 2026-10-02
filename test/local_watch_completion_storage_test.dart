@@ -65,7 +65,10 @@ void main() {
   });
 
   test('100 percent persists independently for movies and episodes', () async {
-    expect(LocalCompletionStorage.localCompletionThresholdOptions, contains(100));
+    expect(
+      LocalCompletionStorage.localCompletionThresholdOptions,
+      contains(100),
+    );
     await LocalCompletionStorage.setMovieCompletionThreshold(100);
     await LocalCompletionStorage.setEpisodeCompletionThreshold(95);
     expect(await LocalCompletionStorage.getMovieCompletionThreshold(), 100);
@@ -102,10 +105,15 @@ void main() {
 
     expect(await MovieProgressStorage.isMovieFinished('tt001'), isTrue);
     expect(
-      await VideoProgressStorage.getVideoPlaybackState(videoTitle: 'Example Movie'),
+      await VideoProgressStorage.getVideoPlaybackState(
+        videoTitle: 'Example Movie',
+      ),
       isNull,
     );
-    expect(await VideoProgressStorage.getVideoPlaybackStateByImdbId('tt001'), isNull);
+    expect(
+      await VideoProgressStorage.getVideoPlaybackStateByImdbId('tt001'),
+      isNull,
+    );
     expect(await ContinueWatchingStorage.getContinueWatchingItems(), isEmpty);
 
     await MovieProgressStorage.unmarkMovieAsFinished('tt001');
@@ -141,7 +149,10 @@ void main() {
       ),
       isFalse,
     );
-    expect(LocalCompletionStorage.localCompletionRevision.value, revisionBefore + 1);
+    expect(
+      LocalCompletionStorage.localCompletionRevision.value,
+      revisionBefore + 1,
+    );
   });
 
   test(
@@ -167,7 +178,9 @@ void main() {
           );
           expect(failures, ['Trakt']);
           expect(
-            await MergedEpisodeProgressStorage.getEpisodeProgressByImdbId('tt001'),
+            await MergedEpisodeProgressStorage.getEpisodeProgressByImdbId(
+              'tt001',
+            ),
             isEmpty,
           );
         },
@@ -245,7 +258,9 @@ void main() {
         isEmpty,
       );
       expect(
-        await EpisodeProgressStorage.getFinishedEpisodesByImdbId(imdbId: 'tt002'),
+        await EpisodeProgressStorage.getFinishedEpisodesByImdbId(
+          imdbId: 'tt002',
+        ),
         {
           '1': {1},
         },
@@ -261,7 +276,8 @@ void main() {
         season: 1,
         episode: 2,
       );
-      final index = await EpisodeProgressStorage.getFinishedSeriesEpisodeIndex();
+      final index =
+          await EpisodeProgressStorage.getFinishedSeriesEpisodeIndex();
       expect(index['title:legacy show'], {
         '1': {2},
       });
@@ -377,7 +393,10 @@ void main() {
         );
       }
       await SeriesProgressStorage.clearSeriesWatchProgress('tt001', 'tt001');
-      expect(await MergedEpisodeProgressStorage.getEpisodeProgressByImdbId('tt001'), isEmpty);
+      expect(
+        await MergedEpisodeProgressStorage.getEpisodeProgressByImdbId('tt001'),
+        isEmpty,
+      );
       expect(
         await EpisodeProgressStorage.getFinishedEpisodesByImdbId(
           imdbId: 'tt001',
@@ -386,15 +405,21 @@ void main() {
         isEmpty,
       );
       expect(
-        await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(imdbId: 'tt001'),
+        await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
+          imdbId: 'tt001',
+        ),
         isEmpty,
       );
       expect(
-        await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(imdbId: 'tt001'),
+        await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
+          imdbId: 'tt001',
+        ),
         isEmpty,
       );
       expect(
-        await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(imdbId: 'tt001'),
+        await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(
+          imdbId: 'tt001',
+        ),
         isEmpty,
       );
       expect(
@@ -402,7 +427,9 @@ void main() {
         isNotEmpty,
       );
       expect(
-        await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(imdbId: 'tt002'),
+        await TrackerEpisodeProgressStorage.getEpisodeSimklProgress(
+          imdbId: 'tt002',
+        ),
         isNotEmpty,
       );
       expect(prefs.getString('series_source_tt001'), 'keep source binding');
@@ -428,7 +455,10 @@ void main() {
       ),
       isFalse,
     );
-    expect(LocalCompletionStorage.localCompletionRevision.value, revisionBefore + 1);
+    expect(
+      LocalCompletionStorage.localCompletionRevision.value,
+      revisionBefore + 1,
+    );
   });
 
   test('finished episode index unions duplicate IMDb records', () async {
@@ -448,7 +478,9 @@ void main() {
     final index = await EpisodeProgressStorage.getFinishedSeriesEpisodeIndex();
     expect(index['tt-duplicate']?['1'], {1, 2});
     expect(
-      await EpisodeProgressStorage.getFinishedEpisodesByImdbId(imdbId: 'tt-duplicate'),
+      await EpisodeProgressStorage.getFinishedEpisodesByImdbId(
+        imdbId: 'tt-duplicate',
+      ),
       {
         '1': {1, 2},
       },
@@ -475,101 +507,108 @@ void main() {
     expect(await WatchlistStorage.getMyWatchlistItems(), isEmpty);
   });
 
-  test(
-    'existing playback is migrated once using separate thresholds',
-    () async {
-      await LocalCompletionStorage.setMovieCompletionThreshold(90);
-      await LocalCompletionStorage.setEpisodeCompletionThreshold(75);
+  test('existing playback is migrated once using separate thresholds', () async {
+    await LocalCompletionStorage.setMovieCompletionThreshold(90);
+    await LocalCompletionStorage.setEpisodeCompletionThreshold(75);
 
-      await ContinueWatchingStorage.saveContinueWatchingItem(
-        imdbId: 'tt-movie-done',
-        title: 'Done Movie',
-        contentType: 'movie',
-      );
-      await ContinueWatchingStorage.saveContinueWatchingItem(
-        imdbId: 'tt-movie-partial',
-        title: 'Partial Movie',
-        contentType: 'movie',
-      );
-      await VideoProgressStorage.saveVideoPlaybackState(
+    await ContinueWatchingStorage.saveContinueWatchingItem(
+      imdbId: 'tt-movie-done',
+      title: 'Done Movie',
+      contentType: 'movie',
+    );
+    await ContinueWatchingStorage.saveContinueWatchingItem(
+      imdbId: 'tt-movie-partial',
+      title: 'Partial Movie',
+      contentType: 'movie',
+    );
+    await VideoProgressStorage.saveVideoPlaybackState(
+      videoTitle: 'Done Movie',
+      videoUrl: 'https://example.com/done.m3u8',
+      positionMs: 900,
+      durationMs: 1000,
+      imdbId: 'tt-movie-done',
+    );
+    await VideoResumeStorage.upsertVideoResume('Done Movie', {
+      'positionMs': 900,
+      'durationMs': 1000,
+      'speed': 1.0,
+      'aspect': 'contain',
+      'updatedAt': 1,
+    });
+    await VideoProgressStorage.saveVideoPlaybackState(
+      videoTitle: 'Partial Movie',
+      videoUrl: 'https://example.com/partial.m3u8',
+      positionMs: 850,
+      durationMs: 1000,
+      imdbId: 'tt-movie-partial',
+    );
+    await SeriesProgressStorage.saveSeriesPlaybackState(
+      seriesTitle: 'Example Series',
+      season: 1,
+      episode: 1,
+      positionMs: 750,
+      durationMs: 1000,
+      imdbId: 'tt-series',
+    );
+    await SeriesProgressStorage.saveSeriesPlaybackState(
+      seriesTitle: 'Example Series',
+      season: 1,
+      episode: 2,
+      positionMs: 740,
+      durationMs: 1000,
+      imdbId: 'tt-series',
+    );
+
+    await CompletionMigrationStorage.migrateExistingPlaybackCompletionThresholds();
+
+    expect(await MovieProgressStorage.isMovieFinished('tt-movie-done'), isTrue);
+    expect(
+      await MovieProgressStorage.isMovieFinished('tt-movie-partial'),
+      isFalse,
+    );
+    expect(
+      await VideoProgressStorage.getVideoPlaybackState(
         videoTitle: 'Done Movie',
-        videoUrl: 'https://example.com/done.m3u8',
-        positionMs: 900,
-        durationMs: 1000,
-        imdbId: 'tt-movie-done',
-      );
-      await VideoResumeStorage.upsertVideoResume('Done Movie', {
-        'positionMs': 900,
-        'durationMs': 1000,
-        'speed': 1.0,
-        'aspect': 'contain',
-        'updatedAt': 1,
-      });
-      await VideoProgressStorage.saveVideoPlaybackState(
+      ),
+      isNull,
+    );
+    expect(await VideoResumeStorage.getVideoResume('Done Movie'), isNull);
+    expect(
+      await VideoProgressStorage.getVideoPlaybackState(
         videoTitle: 'Partial Movie',
-        videoUrl: 'https://example.com/partial.m3u8',
-        positionMs: 850,
-        durationMs: 1000,
-        imdbId: 'tt-movie-partial',
-      );
-      await SeriesProgressStorage.saveSeriesPlaybackState(
+      ),
+      isNotNull,
+    );
+    expect(
+      await EpisodeProgressStorage.isEpisodeFinished(
         seriesTitle: 'Example Series',
         season: 1,
         episode: 1,
-        positionMs: 750,
-        durationMs: 1000,
-        imdbId: 'tt-series',
-      );
-      await SeriesProgressStorage.saveSeriesPlaybackState(
+      ),
+      isTrue,
+    );
+    expect(
+      await EpisodeProgressStorage.isEpisodeFinished(
         seriesTitle: 'Example Series',
         season: 1,
         episode: 2,
-        positionMs: 740,
-        durationMs: 1000,
-        imdbId: 'tt-series',
-      );
+      ),
+      isFalse,
+    );
+    expect(
+      (await ContinueWatchingStorage.getContinueWatchingItems())
+          .map((item) => item['imdbId'])
+          .toList(),
+      ['tt-movie-partial'],
+    );
 
-      await CompletionMigrationStorage.migrateExistingPlaybackCompletionThresholds();
-
-      expect(await MovieProgressStorage.isMovieFinished('tt-movie-done'), isTrue);
-      expect(await MovieProgressStorage.isMovieFinished('tt-movie-partial'), isFalse);
-      expect(
-        await VideoProgressStorage.getVideoPlaybackState(videoTitle: 'Done Movie'),
-        isNull,
-      );
-      expect(await VideoResumeStorage.getVideoResume('Done Movie'), isNull);
-      expect(
-        await VideoProgressStorage.getVideoPlaybackState(videoTitle: 'Partial Movie'),
-        isNotNull,
-      );
-      expect(
-        await EpisodeProgressStorage.isEpisodeFinished(
-          seriesTitle: 'Example Series',
-          season: 1,
-          episode: 1,
-        ),
-        isTrue,
-      );
-      expect(
-        await EpisodeProgressStorage.isEpisodeFinished(
-          seriesTitle: 'Example Series',
-          season: 1,
-          episode: 2,
-        ),
-        isFalse,
-      );
-      expect(
-        (await ContinueWatchingStorage.getContinueWatchingItems())
-            .map((item) => item['imdbId'])
-            .toList(),
-        ['tt-movie-partial'],
-      );
-
-      // The generation marker makes this a one-time adoption: changing the
-      // threshold later must not retroactively migrate more old entries.
-      await LocalCompletionStorage.setMovieCompletionThreshold(80);
-      await CompletionMigrationStorage.migrateExistingPlaybackCompletionThresholds();
-      expect(await MovieProgressStorage.isMovieFinished('tt-movie-partial'), isFalse);
-    },
-  );
+    // The generation marker makes this a one-time adoption: changing the
+    // threshold later must not retroactively migrate more old entries.
+    await LocalCompletionStorage.setMovieCompletionThreshold(80);
+    await CompletionMigrationStorage.migrateExistingPlaybackCompletionThresholds();
+    expect(
+      await MovieProgressStorage.isMovieFinished('tt-movie-partial'),
+      isFalse,
+    );
+  });
 }

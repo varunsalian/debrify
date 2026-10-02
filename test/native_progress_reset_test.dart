@@ -45,7 +45,9 @@ void main() {
       expiryMs: 9000000000000,
     );
     // An explicit reset must still run with scrobbling disabled.
-    await TrackingSourceStorage.setTrackingScrobbleTargets({TrackingSource.local});
+    await TrackingSourceStorage.setTrackingScrobbleTargets({
+      TrackingSource.local,
+    });
   });
   tearDown(() {
     TraktService.instance.resetProfileScope();
@@ -134,13 +136,17 @@ void main() {
               ],
             });
             expect(
-              await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(imdbId: id),
+              await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
+                imdbId: id,
+              ),
               !movie && provider == TrackingSource.trakt
                   ? isEmpty
                   : {'4_6': 100},
             );
             expect(
-              await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(imdbId: id),
+              await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(
+                imdbId: id,
+              ),
               !movie && provider == TrackingSource.mdblist
                   ? isEmpty
                   : {'4_6': 100},
@@ -213,11 +219,15 @@ void main() {
           );
         }, () => client);
         expect(
-          await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(imdbId: 'tmdb:237243'),
+          await TrackerEpisodeProgressStorage.getEpisodeTraktProgress(
+            imdbId: 'tmdb:237243',
+          ),
           {'4_6': 100},
         );
         expect(
-          await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(imdbId: 'tmdb:237243'),
+          await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(
+            imdbId: 'tmdb:237243',
+          ),
           {'4_6': 100},
         );
       },

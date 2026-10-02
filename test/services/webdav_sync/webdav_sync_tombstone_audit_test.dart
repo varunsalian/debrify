@@ -85,16 +85,24 @@ void main() {
         );
       }
 
+      // The original scanned the whole of storage_service.dart; scan every
+      // file that replaced it, not only the audited owners.
       final forbiddenRemoval = RegExp(
         r'\bprefs\.remove\(\s*'
-        r'(?:(?:PlaybackStateStore|ContinueWatchingStorage|PlaylistStorage)\.)?'
+        r'(?:\w+\.)?'
         r'(?:_?playbackStateKey|_?continueWatchingKey|_?playlistKey)\s*\)',
       );
-      for (final entry in storageSources.entries) {
+      final storageFiles = Directory('lib/services/storage')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart'))
+          .toList();
+      expect(storageFiles, isNotEmpty);
+      for (final file in storageFiles) {
         expect(
-          forbiddenRemoval.hasMatch(entry.value),
+          forbiddenRemoval.hasMatch(file.readAsStringSync()),
           isFalse,
-          reason: entry.key,
+          reason: file.path,
         );
       }
     },

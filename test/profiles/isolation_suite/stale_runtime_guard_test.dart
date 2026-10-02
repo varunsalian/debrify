@@ -38,8 +38,9 @@ void main() {
   final storageSources = <String, String>{
     for (final file in Directory(
       'lib/services/storage',
-    ).listSync().whereType<File>())
-      if (file.path.endsWith('.dart')) file.path: file.readAsStringSync(),
+    ).listSync(recursive: true).whereType<File>())
+      if (file.path.endsWith('.dart'))
+        file.path.replaceAll('\\', '/'): file.readAsStringSync(),
   };
   final resetEntry = File(
     'lib/services/storage/storage_profile_caches.dart',

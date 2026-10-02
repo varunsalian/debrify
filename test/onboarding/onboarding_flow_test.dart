@@ -215,77 +215,75 @@ void main() {
     expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
   });
 
-  testWidgets(
-    'device-graph restore clears setup before handing off authority',
-    (tester) async {
-      SharedPreferences.setMockInitialValues(<String, Object>{});
-      await tester.binding.setSurfaceSize(const Size(800, 700));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      final report = ProfileGraphRestoreReport(
-        profilesImported: 2,
-        resourcesImported: 1,
-        grantsImported: 1,
-        bindingsImported: 0,
-        pinResetsRequired: 0,
-        importedProfileIds: const <String>[
-          'profile-imported-admin',
-          'profile-imported-member',
-        ],
-      );
-      var handoffCalls = 0;
-      bool? result;
+  testWidgets('device-graph restore clears setup before handing off authority', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    await tester.binding.setSurfaceSize(const Size(800, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final report = ProfileGraphRestoreReport(
+      profilesImported: 2,
+      resourcesImported: 1,
+      grantsImported: 1,
+      bindingsImported: 0,
+      pinResetsRequired: 0,
+      importedProfileIds: const <String>[
+        'profile-imported-admin',
+        'profile-imported-member',
+      ],
+    );
+    var handoffCalls = 0;
+    bool? result;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => FilledButton(
-              onPressed: () async {
-                result = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute(
-                    builder: (_) => OnboardingTheme.scope(
-                      InitialSetupFlow(
-                        isTelevisionOverride: false,
-                        engineManager: FakeRemoteEngineManager(
-                          const <RemoteEngineInfo>[],
-                        ),
-                        backupRestoreOverride: () async =>
-                            ProfileBackupRestoreResult.deviceGraph(
-                              authorizingProfileId:
-                                  ProfileBootstrap.freshAdminId,
-                              graphReport: report,
-                            ),
-                        backupHandoffOverride: (receivedReport) async {
-                          handoffCalls++;
-                          expect(receivedReport, same(report));
-                          expect(
-                            await ProviderCredentialStorage.isInitialSetupComplete(),
-                            isTrue,
-                            reason:
-                                'the bootstrap session must clear onboarding '
-                                'before switching profiles',
-                          );
-                        },
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => FilledButton(
+            onPressed: () async {
+              result = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => OnboardingTheme.scope(
+                    InitialSetupFlow(
+                      isTelevisionOverride: false,
+                      engineManager: FakeRemoteEngineManager(
+                        const <RemoteEngineInfo>[],
                       ),
+                      backupRestoreOverride: () async =>
+                          ProfileBackupRestoreResult.deviceGraph(
+                            authorizingProfileId: ProfileBootstrap.freshAdminId,
+                            graphReport: report,
+                          ),
+                      backupHandoffOverride: (receivedReport) async {
+                        handoffCalls++;
+                        expect(receivedReport, same(report));
+                        expect(
+                          await ProviderCredentialStorage.isInitialSetupComplete(),
+                          isTrue,
+                          reason:
+                              'the bootstrap session must clear onboarding '
+                              'before switching profiles',
+                        );
+                      },
                     ),
                   ),
-                );
-              },
-              child: const Text('Open'),
-            ),
+                ),
+              );
+            },
+            child: const Text('Open'),
           ),
         ),
-      );
+      ),
+    );
 
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Restore from a backup'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Restore from a backup'));
+    await tester.pumpAndSettle();
 
-      expect(handoffCalls, 1);
-      expect(result, isTrue);
-      expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
-    },
-  );
+    expect(handoffCalls, 1);
+    expect(result, isTrue);
+    expect(await ProviderCredentialStorage.isInitialSetupComplete(), isTrue);
+  });
 
   testWidgets('cancelled WebDAV login leaves unrelated staging untouched', (
     tester,

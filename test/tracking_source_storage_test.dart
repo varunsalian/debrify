@@ -36,18 +36,18 @@ void main() {
       'mdblist_sync_catalog_items': false,
     });
 
-    expect(await TrackingSourceStorage.getTrackingScrobbleTargets(), <TrackingSource>{
-      TrackingSource.local,
-      TrackingSource.simkl,
-    });
+    expect(
+      await TrackingSourceStorage.getTrackingScrobbleTargets(),
+      <TrackingSource>{TrackingSource.local, TrackingSource.simkl},
+    );
 
     await TraktStorage.setTraktSyncCatalogItems(true);
     await SimklStorage.setSimklSyncCatalogItems(false);
     await MdblistStorage.setMdblistSyncCatalogItems(true);
-    expect(await TrackingSourceStorage.getTrackingScrobbleTargets(), <TrackingSource>{
-      TrackingSource.local,
-      TrackingSource.simkl,
-    });
+    expect(
+      await TrackingSourceStorage.getTrackingScrobbleTargets(),
+      <TrackingSource>{TrackingSource.local, TrackingSource.simkl},
+    );
   });
 
   test('connecting a tracker re-enables only that scrobble target', () async {
@@ -76,13 +76,15 @@ void main() {
     });
     final revision = TrackingSourceStorage.trackingSourceRevision.value;
 
-    await TrackingSourceStorage.enableTrackingScrobbleTarget(TrackingSource.simkl);
+    await TrackingSourceStorage.enableTrackingScrobbleTarget(
+      TrackingSource.simkl,
+    );
 
     expect(TrackingSourceStorage.trackingSourceRevision.value, revision);
-    expect(await TrackingSourceStorage.getTrackingScrobbleTargets(), <TrackingSource>{
-      TrackingSource.local,
-      TrackingSource.simkl,
-    });
+    expect(
+      await TrackingSourceStorage.getTrackingScrobbleTargets(),
+      <TrackingSource>{TrackingSource.local, TrackingSource.simkl},
+    );
   });
 
   test('re-enabling a tracker preserves other scrobble choices', () async {
@@ -91,13 +93,18 @@ void main() {
       TrackingSource.trakt,
     });
 
-    await TrackingSourceStorage.enableTrackingScrobbleTarget(TrackingSource.simkl);
-
-    expect(await TrackingSourceStorage.getTrackingScrobbleTargets(), <TrackingSource>{
-      TrackingSource.local,
-      TrackingSource.trakt,
+    await TrackingSourceStorage.enableTrackingScrobbleTarget(
       TrackingSource.simkl,
-    });
+    );
+
+    expect(
+      await TrackingSourceStorage.getTrackingScrobbleTargets(),
+      <TrackingSource>{
+        TrackingSource.local,
+        TrackingSource.trakt,
+        TrackingSource.simkl,
+      },
+    );
   });
 
   test('simultaneous tracker connections merge every target', () async {
@@ -108,7 +115,9 @@ void main() {
     await Future.wait(<Future<void>>[
       TrackingSourceStorage.enableTrackingScrobbleTarget(TrackingSource.trakt),
       TrackingSourceStorage.enableTrackingScrobbleTarget(TrackingSource.simkl),
-      TrackingSourceStorage.enableTrackingScrobbleTarget(TrackingSource.mdblist),
+      TrackingSourceStorage.enableTrackingScrobbleTarget(
+        TrackingSource.mdblist,
+      ),
     ]);
 
     expect(
@@ -146,13 +155,16 @@ void main() {
   );
 
   test('tracking transfer payload round-trips all three preferences', () async {
-    await TrackingSourceStorage.applyTrackingPreferencesPayload(<String, dynamic>{
-      'scrobble_targets': <String>['trakt'],
-      'progress_source': 'trakt',
-      'home_tick_sources': <String>['local', 'simkl'],
-    });
+    await TrackingSourceStorage.applyTrackingPreferencesPayload(
+      <String, dynamic>{
+        'scrobble_targets': <String>['trakt'],
+        'progress_source': 'trakt',
+        'home_tick_sources': <String>['local', 'simkl'],
+      },
+    );
 
-    final payload = await TrackingSourceStorage.buildTrackingPreferencesPayload();
+    final payload =
+        await TrackingSourceStorage.buildTrackingPreferencesPayload();
     expect(
       payload['scrobble_targets'],
       containsAll(<String>['local', 'trakt']),
@@ -165,7 +177,9 @@ void main() {
   });
 
   test('a disconnected dedicated progress source falls back visibly', () async {
-    await TrackingSourceStorage.setWatchProgressSource(WatchProgressSource.trakt);
+    await TrackingSourceStorage.setWatchProgressSource(
+      WatchProgressSource.trakt,
+    );
 
     final policy = await TrackingSourcePolicy.load();
 
@@ -174,8 +188,14 @@ void main() {
       await TrackingSourceStorage.getWatchProgressSource(),
       WatchProgressSource.smart,
     );
-    expect(await TrackingSourceStorage.takeTrackingProgressFallbackNotice(), isTrue);
-    expect(await TrackingSourceStorage.takeTrackingProgressFallbackNotice(), isFalse);
+    expect(
+      await TrackingSourceStorage.takeTrackingProgressFallbackNotice(),
+      isTrue,
+    );
+    expect(
+      await TrackingSourceStorage.takeTrackingProgressFallbackNotice(),
+      isFalse,
+    );
   });
 
   test(
@@ -184,7 +204,9 @@ void main() {
       await TrackingSourceStorage.setTrackingScrobbleTargets(<TrackingSource>{
         TrackingSource.local,
       });
-      await TrackingSourceStorage.setWatchProgressSource(WatchProgressSource.local);
+      await TrackingSourceStorage.setWatchProgressSource(
+        WatchProgressSource.local,
+      );
       await TrackingSourceStorage.setHomeTickSources(<TrackingSource>{
         TrackingSource.local,
       });
@@ -239,10 +261,10 @@ void main() {
       },
     });
 
-    expect(await TrackingSourceStorage.getTrackingScrobbleTargets(), <TrackingSource>{
-      TrackingSource.local,
-      TrackingSource.simkl,
-    });
+    expect(
+      await TrackingSourceStorage.getTrackingScrobbleTargets(),
+      <TrackingSource>{TrackingSource.local, TrackingSource.simkl},
+    );
     expect(
       await TrackingSourceStorage.getWatchProgressSource(),
       WatchProgressSource.local,

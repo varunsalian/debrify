@@ -67,9 +67,10 @@ class _IptvChannelOrderPageState extends State<IptvChannelOrderPage> {
         title: list.name,
         description: 'This order is used on the IPTV page and Home.',
         items: items,
-        onSave: (ordered) => IptvFavoritesStorage.reorderIptvListChannels(list.id, [
-          for (final item in ordered) item.channel.url,
-        ]),
+        onSave: (ordered) => IptvFavoritesStorage.reorderIptvListChannels(
+          list.id,
+          [for (final item in ordered) item.channel.url],
+        ),
       ),
     );
   }

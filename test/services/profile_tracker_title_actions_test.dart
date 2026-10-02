@@ -62,7 +62,9 @@ void main() {
     );
     await SimklStorage.setSimklAccessToken('fixture');
     await MdblistStorage.saveMdblistApiKey('fixture');
-    await TrackingSourceStorage.setTrackingScrobbleTargets({TrackingSource.local});
+    await TrackingSourceStorage.setTrackingScrobbleTargets({
+      TrackingSource.local,
+    });
     await TrackingSourceStorage.setHomeTickSources({TrackingSource.local});
     TraktService.instance.resetProfileScope();
     SimklService.instance.resetProfileScope();

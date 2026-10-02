@@ -76,6 +76,10 @@ def declarations():
         elif candidates:
             cls = candidates[0]['target'].split('.')[0]
         else:
+            # A storage file the member map doesn't know must not hide a
+            # constant: an unmapped redeclared key would otherwise pass.
+            assert not re.search(r'\bstatic\s+const\b', p.read_text()), (
+                path, 'declares constants but has no member-map rows')
             continue
         names = {r['target'].split('.')[-1]: r['member'] for r in candidates}
         for m in members(p.read_text(), cls):

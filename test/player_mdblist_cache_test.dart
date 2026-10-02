@@ -16,11 +16,16 @@ void main() {
       imdbId: 'tt001',
       percents: {'1_1': 80},
     );
-    expect(await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(imdbId: 'tt001'), {
-      '1_1': 80.0,
-    });
     expect(
-      await TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(imdbId: 'tt001'),
+      await TrackerEpisodeProgressStorage.getEpisodeMdblistProgress(
+        imdbId: 'tt001',
+      ),
+      {'1_1': 80.0},
+    );
+    expect(
+      await TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(
+        imdbId: 'tt001',
+      ),
       isEmpty,
     );
   });
@@ -31,7 +36,9 @@ void main() {
       percents: {'1_1': 80},
     );
     expect(
-      await TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(imdbId: 'tt001'),
+      await TrackerEpisodeProgressStorage.getConnectedEpisodeMdblistProgress(
+        imdbId: 'tt001',
+      ),
       {'1_1': 80.0},
     );
   });
