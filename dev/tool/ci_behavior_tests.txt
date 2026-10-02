@@ -38,3 +38,14 @@ test/profiles/isolation_suite/live_switch_isolation_test.dart
 test/profiles/isolation_suite/stale_runtime_guard_test.dart
 test/rewatch_launch_routing_test.dart
 test/services/webdav_sync/webdav_sync_tombstone_audit_test.dart
+
+# VideoPlayerLauncher payload, resume, launch and source contracts.
+test/android_tv_mdblist_progress_source_test.dart
+test/features/sources/presentation/automatic_playback_retirement_test.dart
+test/iptv_channel_sheet_responsive_test.dart
+test/media_server_watch_player_wiring_test.dart
+test/movie_resume_source_independence_test.dart
+test/native_player_settings_wiring_test.dart
+test/native_tracker_player_regression_test.dart
+test/theme/source_guard_test.dart
+test/video_player_launcher_settings_rejection_test.dart

@@ -445,7 +445,19 @@ failures, no missing tests, no new skips.
 
 | Step | Commit | Launcher lines | Result |
 | --- | --- | --- | --- |
-| 0 | Step-0 commit (recorded by step 1) | 6,594 | Baseline, dependency report, 154-leaf manifest and checker/self-tests committed before any move. |
+| 0 | `cfe1e2cd` | 6,594 | Baseline, dependency report, 154-leaf manifest and checker/self-tests committed before any move. |
+
+| 1 | Step-1 commit (recorded by step 2) | 5,783 | Models, borrowed argument bundle/extension, payload data and shared single state/cache owners wired. |
+
+### Step 1 evidence
+
+- `check_verbatim_moves.py`: 154 leaves pass; architecture and file-size guards pass.
+- `analyze-step1.txt` vs `analyze-base.txt`: no added/removed diagnostics.
+- `vpl/step1` vs `vpl/base`: PASS, 124 success / 6 existing failures, no missing tests or new skips.
+- Theme construction guard now scans the extension and requires exactly one construction; zero/two mutations are rejected by that assertion. The route-boundary tool registers the legacy bridge.
+- Static state owner `NativeScrobbleSession`: all ten original Trakt/Simkl fields and heartbeat timers, unchanged initializers. `StreamRedirectResolver`: both caches and all three cache/redirect functions, unchanged initializers.
+- Feature-scoped formatter uses `trailing_commas: preserve` and 100-column width to keep original punctuation after qualifying/indenting code. The checker caught and rejected the default formatter's comma edits.
+- `SourcePlayerArgs` re-exports the facade extension for its indirect consumers; no existing call expression changes. MDBList source inventory starts scanning the original plus feature for moved payload fields.
 
 ### Step 0 evidence
 

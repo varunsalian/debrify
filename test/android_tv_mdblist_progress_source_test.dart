@@ -13,7 +13,10 @@ String _between(String source, String start, String end) {
 void main() {
   final source = File(
     'lib/services/video_player_launcher.dart',
-  ).readAsStringSync();
+  ).readAsStringSync() + Directory('lib/features/player_launch')
+      .listSync(recursive: true).whereType<File>()
+      .where((file) => file.path.endsWith('.dart'))
+      .map((file) => file.readAsStringSync()).join('\n');
 
   test('Android TV source switch carries MDBList episode resume progress', () {
     final resolver = _between(

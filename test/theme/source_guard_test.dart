@@ -48,8 +48,13 @@ void main() {
     const allowed = {
       'lib/screens/video_player_screen.dart', // itself
       'lib/screens/magic_tv_screen.dart', // 12 pushes, all FrozenLegacyPageRoute
-      'lib/services/video_player_launcher.dart', // the one shared factory
+      'lib/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart', // the shared factory
     };
+    final factory = _code(File(
+      'lib/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart',
+    ));
+    expect('VideoPlayerScreen('.allMatches(factory), hasLength(1),
+        reason: 'the shared extension must construct exactly one frozen player');
     final offenders = <String>[];
     for (final file in _libDartFiles()) {
       if (allowed.contains(_rel(file))) continue;

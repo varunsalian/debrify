@@ -1,3 +1,14 @@
+import 'package:debrify/features/player_launch/data/android_tv_playback_payload.dart';
+import 'package:debrify/features/player_launch/data/native_scrobble_session.dart';
+import 'package:debrify/features/player_launch/data/stream_redirect_resolver.dart';
+import 'package:debrify/features/player_launch/models/android_tv_playback_item.dart';
+import 'package:debrify/features/player_launch/models/launcher_entry.dart';
+import 'package:debrify/features/player_launch/models/native_playback_state.dart';
+import 'package:debrify/features/player_launch/models/playback_content_type.dart';
+import 'package:debrify/features/player_launch/models/video_player_launch_args.dart';
+import 'package:debrify/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart';
+export 'package:debrify/features/player_launch/models/video_player_launch_args.dart';
+export 'package:debrify/features/player_launch/presentation/legacy_launch/video_player_launch_widget.dart';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/continue_watching_storage.dart';
 import 'package:debrify/services/storage/episode_completion_storage.dart';
@@ -24,7 +35,6 @@ import 'package:debrify/services/storage/video_resume_storage.dart';
 import 'package:debrify/services/storage/watchlist_storage.dart';
 import 'profiles/profile_playback_preparation.dart';
 import 'profiles/profile_session_memory.dart';
-import '../models/source_playlist_resolver.dart';
 import '../utils/show_shuffle.dart';
 import 'failed_saved_source.dart';
 import 'torrent_playback_service.dart';
@@ -45,7 +55,6 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../models/iptv_playlist.dart';
 import '../screens/video_player/player_pip_route.dart';
 import '../models/movie_collection.dart';
 import '../models/torrent.dart';
@@ -53,7 +62,6 @@ import '../services/external_player_service.dart';
 import '../utils/deovr_utils.dart' as deovr;
 import '../models/playlist_view_mode.dart';
 import '../models/series_playlist.dart';
-import '../models/stremio_subtitle.dart';
 import '../screens/video_player_screen.dart';
 import '../services/android_native_downloader.dart';
 import '../services/android_tv_player_bridge.dart';
@@ -81,526 +89,28 @@ import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_policy_guard.dart';
 import 'tracking_source_policy.dart';
 
-/// Trakt scrobble dedup guard for Android TV player (mirrors _traktLastScrobbleAction in VideoPlayerScreen)
-String? _traktLastScrobbleAction;
-double _traktLastKnownProgress = 0.0;
-int? _traktLastKnownSeason;
-int? _traktLastKnownEpisode;
-Timer? _traktHeartbeatTimer;
 
-/// Simkl scrobble state — fully parallel mirror of the Trakt vars above
-/// (independent dedup guard + heartbeat; the two trackers never share state).
-String? _simklLastScrobbleAction;
-double _simklLastKnownProgress = 0.0;
-int? _simklLastKnownSeason;
-int? _simklLastKnownEpisode;
-Timer? _simklHeartbeatTimer;
 
-final Map<String, String> _resolvedStreamCache = <String, String>{};
-final Map<String, String> _redirectCache = <String, String>{};
 
-void _cacheResolvedStream(String? resumeId, String url) {
-  if (resumeId == null) return;
-  if (url.isEmpty) return;
-  _resolvedStreamCache[resumeId] = url;
-}
 
-/// Resolve redirects for a URL (for TV player HLS streams).
-/// Returns the final URL after following redirects, or original URL if no redirect.
-/// Only resolves URLs that look like they might be short redirect URLs.
-Future<String> _resolveRedirectUrl(
-  String url, {
-  bool Function()? canContinue,
-}) async {
-  if (canContinue?.call() == false) return '';
-  debugPrint('[RedirectResolver] Input URL: $url');
 
-  // Check cache first
-  if (_redirectCache.containsKey(url)) {
-    final cached = _redirectCache[url]!;
-    debugPrint('[RedirectResolver] Cache HIT: $url -> $cached');
-    return cached;
-  }
-  debugPrint('[RedirectResolver] Cache MISS, checking URL...');
 
-  // Skip resolution for URLs that are unlikely to be redirects:
-  // - Already have media extensions
-  // - Known debrid CDN domains
-  final uri = Uri.tryParse(url);
-  if (uri == null) {
-    debugPrint('[RedirectResolver] SKIP: Invalid URL, using original');
-    return url;
-  }
 
-  final path = uri.path.toLowerCase();
-  final host = uri.host.toLowerCase();
-  debugPrint('[RedirectResolver] Host: $host, Path: $path');
 
-  // Skip if already has a media extension
-  if (path.endsWith('.m3u8') ||
-      path.endsWith('.mp4') ||
-      path.endsWith('.mkv') ||
-      path.endsWith('.ts') ||
-      path.endsWith('.mpd')) {
-    debugPrint('[RedirectResolver] SKIP: Has media extension, using original');
-    return url;
-  }
 
-  // Skip known debrid CDN domains (they don't redirect)
-  if (host.contains('real-debrid') ||
-      host.contains('torbox') ||
-      host.contains('pikpak') ||
-      host.contains('1fichier') ||
-      host.contains('rapidgator')) {
-    debugPrint(
-      '[RedirectResolver] SKIP: Known debrid CDN domain, using original',
-    );
-    return url;
-  }
 
-  debugPrint(
-    '[RedirectResolver] Attempting HEAD request to resolve redirects...',
-  );
 
-  try {
-    // Use a client that doesn't follow redirects automatically
-    final client = http.Client();
-    try {
-      final request = http.Request('HEAD', uri);
-      request.followRedirects = false;
-      request.headers['User-Agent'] =
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
-      final response = await client
-          .send(request)
-          .timeout(const Duration(seconds: 5));
 
-      if (canContinue?.call() == false) return '';
-      debugPrint('[RedirectResolver] Response status: ${response.statusCode}');
-      debugPrint('[RedirectResolver] Response headers: ${response.headers}');
 
-      // Check if it's a redirect
-      if (response.statusCode == 301 ||
-          response.statusCode == 302 ||
-          response.statusCode == 303 ||
-          response.statusCode == 307 ||
-          response.statusCode == 308) {
-        final location = response.headers['location'];
-        debugPrint('[RedirectResolver] Redirect detected! Location: $location');
 
-        if (location != null && location.isNotEmpty) {
-          // Handle relative URLs
-          final resolvedUri = uri.resolve(location);
-          final resolvedUrl = resolvedUri.toString();
-          debugPrint(
-            '[RedirectResolver] SUCCESS: Resolved $url -> $resolvedUrl',
-          );
 
-          // Cache the result
-          _redirectCache[url] = resolvedUrl;
-          return resolvedUrl;
-        } else {
-          debugPrint(
-            '[RedirectResolver] WARNING: Redirect but no Location header',
-          );
-        }
-      } else {
-        debugPrint(
-          '[RedirectResolver] No redirect (status ${response.statusCode}), using original',
-        );
-      }
-    } finally {
-      client.close();
-    }
-  } catch (e) {
-    debugPrint('[RedirectResolver] ERROR: $e');
-    debugPrint('[RedirectResolver] Falling back to original URL');
-  }
 
-  // No redirect or error - use original URL
-  if (canContinue?.call() == false) return '';
-  _redirectCache[url] = url;
-  debugPrint('[RedirectResolver] Final URL (no change): $url');
-  return url;
-}
 
-void _clearResolvedStreams(Iterable<String?> resumeIds) {
-  for (final id in resumeIds) {
-    if (id == null) continue;
-    _resolvedStreamCache.remove(id);
-  }
-}
 
-class VideoPlayerLaunchArgs {
-  final String videoUrl;
 
-  /// Optional separate audio track to play alongside [videoUrl] (used for
-  /// high-res YouTube, where video and audio are served as separate streams).
-  final String? audioUrl;
 
-  /// Optional muxed stream (already has audio) used as a never-silent fallback
-  /// by players that can only accept one URL, where [videoUrl] may be a
-  /// video-only HD track.
-  final String? fallbackUrl;
-  final String title;
-  final String? subtitle;
-  final List<PlaylistEntry>? playlist;
-  final int? startIndex;
-  final String? rdTorrentId;
-  final String? torboxTorrentId;
-  final String? pikpakCollectionId;
-  final String? webDavServerId;
-  final String? webDavBaseUrl;
-  final String? webDavPath;
-  final Future<Map<String, String>?> Function()? requestMagicNext;
-  final Future<Map<String, dynamic>?> Function()? requestNextChannel;
-  final bool initialContinuousShuffle;
-  final bool startFromRandom;
-  final int randomStartMaxPercent;
-  final double? startAtPercent;
-  final bool hideSeekbar;
-  final bool showChannelName;
-  final String? channelName;
-  final int? channelNumber;
-  final bool showVideoTitle;
-  final bool hideOptions;
-  final bool hideBackButton;
-  final Map<String, String>? httpHeaders;
-  final bool disableExternalPlayer;
-  final bool Function()? isAndroidTvOverride;
-  final bool disableAutoResume;
-  final PlaylistViewMode? viewMode;
-  // Content metadata for fetching external subtitles from Stremio addons
-  final String? contentImdbId;
-  final String? contentType; // 'movie' or 'series'
-  final int? contentSeason;
-  final int? contentEpisode;
 
-  /// Whether local resume follows the exact source or canonical catalog
-  /// identity. Direct/generic launchers default to source-specific behavior.
-  final PlaybackResumePolicy resumePolicy;
-  // IPTV channel list for in-player channel switching
-  final List<IptvChannel>? iptvChannels;
-  final int? iptvStartIndex;
-
-  /// The source's FULL category list, in provider order. Without it the player
-  /// derived categories from the windowed (~1500) channel list, so the picker
-  /// only ever showed the handful of groups in that window.
-  final List<String>? iptvCategories;
-  final String? iptvSourceId;
-  final String? iptvSourceName;
-  final String? iptvSelectedCategory;
-  final String? iptvContentType;
-  final List<Map<String, dynamic>>? iptvSources;
-
-  /// The user's channel lists ({id, name, isBuiltin}), for the players'
-  /// "add to list" picker. Shipped once per launch rather than as a field on
-  /// every channel — the channel payload is already capped for size.
-  final List<Map<String, dynamic>>? iptvLists;
-  final Future<Map<String, dynamic>?> Function(Map<String, dynamic>)?
-  iptvBrowseProvider;
-  // Stremio sources for in-player source switching
-  final List<Torrent>? stremioSources;
-  final int? stremioCurrentSourceIndex;
-  final Future<String?> Function(Torrent)? resolveStremioSource;
-  // Torrent search source switching: resolves a Torrent to a full playlist
-  final SourcePlaylistResolve? resolveSourceToPlaylist;
-
-  /// Startup failover is an automatic Quick Play behavior. Explicit source
-  /// launches still validate their selected row, but must never advance.
-  final bool startupFailoverEnabled;
-
-  /// Provider used by the startup playlist resolver. PikPak needs this so the
-  /// automatic ladder cannot enqueue more than one cold-storage acquisition.
-  final String? startupResolverProvider;
-
-  /// Persist a source switch only after the player has validated and committed
-  /// the candidate. Resolution alone is deliberately side-effect free.
-  final Future<void> Function(Torrent)? onStremioSourceCommitted;
-
-  /// Invoked after the startup ladder is exhausted and the player surface has
-  /// closed. Bound-source launches use this to continue through the remaining
-  /// eligible pins, then perform a fresh search without replaying failed pins.
-  final Future<void> Function()? onStartupSourcesExhausted;
-  final bool startupHasRemainingSavedSources;
-  // Series source tabs: on-demand "Load more sources" fetcher for the
-  // pack/episode split. Non-null only for series plays with a searchable id.
-  final SeriesSourceFetcher? seriesSourceFetcher;
-  // Stremio TV in-player channel guide
-  final List<Map<String, dynamic>>? stremioTvChannels;
-  final String? stremioTvCurrentChannelId;
-  final int? stremioTvRotationMinutes;
-  final int? stremioTvSeriesRotationMinutes;
-  final int? stremioTvMixSalt;
-  final Future<Map<String, dynamic>?> Function(List<String>)?
-  stremioTvGuideDataProvider;
-  final Future<Map<String, dynamic>?> Function(String)?
-  stremioTvChannelSwitchProvider;
-  final Future<Map<String, dynamic>?> Function(String)? stremioTvNextProvider;
-  // Trakt scrobble: send playback progress to Trakt
-  final bool traktScrobble;
-  // Prevent launcher-level Trakt auto-sync upgrade for playlist-origin playback.
-  // Context-scoped, not Trakt-specific: contexts that suppress Trakt auto-sync
-  // (playlists, Stremio TV) suppress the Simkl auto-sync upgrade too.
-  final bool suppressTrackerAutoSync;
-  @Deprecated('Use suppressTrackerAutoSync')
-  bool get suppressTraktAutoSync => suppressTrackerAutoSync;
-  // Trakt progress: resume fallback when no local resume exists (0-100)
-  final double? traktProgressPercent;
-  // Simkl scrobble/progress — fully parallel to the Trakt pair above.
-  final bool simklScrobble;
-  final double? simklProgressPercent;
-  final bool mdblistScrobble;
-  final double? mdblistProgressPercent;
-
-  // Continue watching metadata (for home screen section)
-  final String? contentTitle; // Clean display name (IMDB title)
-  final String? posterUrl;
-  final String? contentYear;
-  final String? addonId; // Stremio addon used for playback
-
-  /// Subtitle tracks known at launch time, surfaced in the player's subtitle
-  /// menu as a pre-loaded provider group (no addon fetch needed). Used for
-  /// sources that carry their own captions — e.g. YouTube closed captions —
-  /// where the IMDb-keyed addon fetch never runs.
-  final List<StremioSubtitle>? initialSubtitles;
-
-  const VideoPlayerLaunchArgs({
-    required this.videoUrl,
-    this.audioUrl,
-    this.fallbackUrl,
-    required this.title,
-    this.subtitle,
-    this.playlist,
-    this.startIndex,
-    this.rdTorrentId,
-    this.torboxTorrentId,
-    this.pikpakCollectionId,
-    this.webDavServerId,
-    this.webDavBaseUrl,
-    this.webDavPath,
-    this.requestMagicNext,
-    this.requestNextChannel,
-    this.initialContinuousShuffle = false,
-    this.startFromRandom = false,
-    this.randomStartMaxPercent = 40,
-    this.startAtPercent,
-    this.hideSeekbar = false,
-    this.showChannelName = false,
-    this.channelName,
-    this.channelNumber,
-    this.showVideoTitle = true,
-    this.hideOptions = false,
-    this.hideBackButton = false,
-    this.httpHeaders,
-    this.disableExternalPlayer = false,
-    this.isAndroidTvOverride,
-    this.disableAutoResume = false,
-    this.viewMode,
-    this.contentImdbId,
-    this.contentType,
-    this.contentSeason,
-    this.contentEpisode,
-    this.resumePolicy = PlaybackResumePolicy.sourceSpecific,
-    this.iptvChannels,
-    this.iptvStartIndex,
-    this.iptvCategories,
-    this.iptvSourceId,
-    this.iptvSourceName,
-    this.iptvSelectedCategory,
-    this.iptvContentType,
-    this.iptvSources,
-    this.iptvLists,
-    this.iptvBrowseProvider,
-    this.stremioSources,
-    this.stremioCurrentSourceIndex,
-    this.resolveStremioSource,
-    this.resolveSourceToPlaylist,
-    this.startupFailoverEnabled = false,
-    this.startupResolverProvider,
-    this.onStremioSourceCommitted,
-    this.onStartupSourcesExhausted,
-    this.startupHasRemainingSavedSources = false,
-    this.seriesSourceFetcher,
-    this.stremioTvChannels,
-    this.stremioTvCurrentChannelId,
-    this.stremioTvRotationMinutes,
-    this.stremioTvSeriesRotationMinutes,
-    this.stremioTvMixSalt,
-    this.stremioTvGuideDataProvider,
-    this.stremioTvChannelSwitchProvider,
-    this.stremioTvNextProvider,
-    this.traktScrobble = false,
-    bool? suppressTrackerAutoSync,
-    bool suppressTraktAutoSync = false,
-    this.traktProgressPercent,
-    this.simklScrobble = false,
-    this.simklProgressPercent,
-    this.mdblistScrobble = false,
-    this.mdblistProgressPercent,
-    this.contentTitle,
-    this.posterUrl,
-    this.contentYear,
-    this.addonId,
-    this.initialSubtitles,
-  }) : suppressTrackerAutoSync =
-           suppressTrackerAutoSync ?? suppressTraktAutoSync;
-
-  VideoPlayerLaunchArgs copyWith({
-    bool? traktScrobble,
-    bool? simklScrobble,
-    bool? mdblistScrobble,
-    double? traktProgressPercent,
-    double? simklProgressPercent,
-    double? mdblistProgressPercent,
-    bool? suppressTrackerAutoSync,
-  }) => VideoPlayerLaunchArgs(
-    videoUrl: videoUrl,
-    audioUrl: audioUrl,
-    fallbackUrl: fallbackUrl,
-    title: title,
-    subtitle: subtitle,
-    playlist: playlist,
-    startIndex: startIndex,
-    rdTorrentId: rdTorrentId,
-    torboxTorrentId: torboxTorrentId,
-    pikpakCollectionId: pikpakCollectionId,
-    webDavServerId: webDavServerId,
-    webDavBaseUrl: webDavBaseUrl,
-    webDavPath: webDavPath,
-    requestMagicNext: requestMagicNext,
-    requestNextChannel: requestNextChannel,
-    initialContinuousShuffle: initialContinuousShuffle,
-    startFromRandom: startFromRandom,
-    randomStartMaxPercent: randomStartMaxPercent,
-    startAtPercent: startAtPercent,
-    hideSeekbar: hideSeekbar,
-    showChannelName: showChannelName,
-    channelName: channelName,
-    channelNumber: channelNumber,
-    showVideoTitle: showVideoTitle,
-    hideOptions: hideOptions,
-    hideBackButton: hideBackButton,
-    httpHeaders: httpHeaders,
-    disableExternalPlayer: disableExternalPlayer,
-    isAndroidTvOverride: isAndroidTvOverride,
-    disableAutoResume: disableAutoResume,
-    viewMode: viewMode,
-    contentImdbId: contentImdbId,
-    contentType: contentType,
-    contentSeason: contentSeason,
-    contentEpisode: contentEpisode,
-    resumePolicy: resumePolicy,
-    iptvChannels: iptvChannels,
-    iptvStartIndex: iptvStartIndex,
-    iptvCategories: iptvCategories,
-    iptvSourceId: iptvSourceId,
-    iptvSourceName: iptvSourceName,
-    iptvSelectedCategory: iptvSelectedCategory,
-    iptvContentType: iptvContentType,
-    iptvSources: iptvSources,
-    iptvLists: iptvLists,
-    iptvBrowseProvider: iptvBrowseProvider,
-    stremioSources: stremioSources,
-    stremioCurrentSourceIndex: stremioCurrentSourceIndex,
-    resolveStremioSource: resolveStremioSource,
-    resolveSourceToPlaylist: resolveSourceToPlaylist,
-    startupFailoverEnabled: startupFailoverEnabled,
-    startupResolverProvider: startupResolverProvider,
-    onStremioSourceCommitted: onStremioSourceCommitted,
-    onStartupSourcesExhausted: onStartupSourcesExhausted,
-    startupHasRemainingSavedSources: startupHasRemainingSavedSources,
-    seriesSourceFetcher: seriesSourceFetcher,
-    stremioTvChannels: stremioTvChannels,
-    stremioTvCurrentChannelId: stremioTvCurrentChannelId,
-    stremioTvRotationMinutes: stremioTvRotationMinutes,
-    stremioTvSeriesRotationMinutes: stremioTvSeriesRotationMinutes,
-    stremioTvMixSalt: stremioTvMixSalt,
-    stremioTvGuideDataProvider: stremioTvGuideDataProvider,
-    stremioTvChannelSwitchProvider: stremioTvChannelSwitchProvider,
-    stremioTvNextProvider: stremioTvNextProvider,
-    traktScrobble: traktScrobble ?? this.traktScrobble,
-    traktProgressPercent: traktProgressPercent ?? this.traktProgressPercent,
-    simklScrobble: simklScrobble ?? this.simklScrobble,
-    simklProgressPercent: simklProgressPercent ?? this.simklProgressPercent,
-    mdblistScrobble: mdblistScrobble ?? this.mdblistScrobble,
-    mdblistProgressPercent:
-        mdblistProgressPercent ?? this.mdblistProgressPercent,
-    suppressTrackerAutoSync:
-        suppressTrackerAutoSync ?? this.suppressTrackerAutoSync,
-    contentTitle: contentTitle,
-    posterUrl: posterUrl,
-    contentYear: contentYear,
-    addonId: addonId,
-    initialSubtitles: initialSubtitles,
-  );
-
-  VideoPlayerScreen toWidget() {
-    return VideoPlayerScreen(
-      videoUrl: videoUrl,
-      audioUrl: audioUrl,
-      title: title,
-      subtitle: subtitle,
-      playlist: playlist,
-      startIndex: startIndex,
-      rdTorrentId: rdTorrentId,
-      torboxTorrentId: torboxTorrentId,
-      pikpakCollectionId: pikpakCollectionId,
-      requestMagicNext: requestMagicNext,
-      requestNextChannel: requestNextChannel,
-      initialContinuousShuffle: initialContinuousShuffle,
-      startFromRandom: startFromRandom,
-      randomStartMaxPercent: randomStartMaxPercent,
-      startAtPercent: startAtPercent,
-      hideSeekbar: hideSeekbar,
-      showChannelName: showChannelName,
-      channelName: channelName,
-      channelNumber: channelNumber,
-      showVideoTitle: showVideoTitle,
-      hideOptions: hideOptions,
-      hideBackButton: hideBackButton,
-      httpHeaders: httpHeaders,
-      disableAutoResume: disableAutoResume,
-      viewMode: viewMode,
-      contentImdbId: contentImdbId,
-      contentType: contentType,
-      contentSeason: contentSeason,
-      contentEpisode: contentEpisode,
-      resumePolicy: resumePolicy,
-      contentTitle: contentTitle,
-      iptvChannels: iptvChannels,
-      iptvStartIndex: iptvStartIndex,
-      iptvCategories: iptvCategories,
-      iptvSourceId: iptvSourceId,
-      iptvSourceName: iptvSourceName,
-      iptvSelectedCategory: iptvSelectedCategory,
-      iptvContentType: iptvContentType,
-      iptvSources: iptvSources,
-      iptvBrowseProvider: iptvBrowseProvider,
-      stremioSources: stremioSources,
-      stremioCurrentSourceIndex: stremioCurrentSourceIndex,
-      resolveStremioSource: resolveStremioSource,
-      resolveSourceToPlaylist: resolveSourceToPlaylist,
-      startupFailoverEnabled: startupFailoverEnabled,
-      startupResolverProvider: startupResolverProvider,
-      onStremioSourceCommitted: onStremioSourceCommitted,
-      onStartupSourcesExhausted: onStartupSourcesExhausted,
-      seriesSourceFetcher: seriesSourceFetcher,
-      stremioTvChannels: stremioTvChannels,
-      stremioTvCurrentChannelId: stremioTvCurrentChannelId,
-      stremioTvGuideDataProvider: stremioTvGuideDataProvider,
-      stremioTvChannelSwitchProvider: stremioTvChannelSwitchProvider,
-      stremioTvNextProvider: stremioTvNextProvider,
-      traktScrobble: traktScrobble,
-      traktProgressPercent: traktProgressPercent,
-      simklScrobble: simklScrobble,
-      simklProgressPercent: simklProgressPercent,
-      mdblistScrobble: mdblistScrobble,
-      mdblistProgressPercent: mdblistProgressPercent,
-      initialSubtitles: initialSubtitles,
-    );
-  }
-}
 
 class VideoPlayerLauncher {
   @visibleForTesting
@@ -612,8 +122,8 @@ class VideoPlayerLauncher {
         ._fetchPerItemPlaybackState(
           entries,
           contentType: args.contentType == 'series'
-              ? _PlaybackContentType.series
-              : _PlaybackContentType.single,
+              ? PlaybackContentType.series
+              : PlaybackContentType.single,
           seriesPlaylist: null,
         );
     return states.map((state) => state.positionMs).toList();
@@ -633,10 +143,10 @@ class VideoPlayerLauncher {
     if (built == null) throw StateError('Native payload could not be built');
     final payload = built.payload;
     final initial = payload.toMap();
-    _traktLastScrobbleAction = null;
-    _traktLastKnownProgress = 0;
-    _traktLastKnownSeason = null;
-    _traktLastKnownEpisode = null;
+    NativeScrobbleSession.traktLastScrobbleAction = null;
+    NativeScrobbleSession.traktLastKnownProgress = 0;
+    NativeScrobbleSession.traktLastKnownSeason = null;
+    NativeScrobbleSession.traktLastKnownEpisode = null;
     try {
       await _initializeNativeMdblist(payload, service: mdblistService);
       for (final update in updates) {
@@ -644,7 +154,7 @@ class VideoPlayerLauncher {
       }
     } finally {
       await _handlePlaybackFinished(payload);
-      _clearResolvedStreams(built.entries.map((entry) => entry.resumeId));
+      StreamRedirectResolver.clearResolvedStreams(built.entries.map((entry) => entry.resumeId));
     }
     return initial;
   }
@@ -2400,22 +1910,22 @@ class VideoPlayerLauncher {
 
     if (!sessionActive()) return false;
     // Reset Trakt scrobble state for clean session
-    _traktHeartbeatTimer?.cancel();
-    _traktHeartbeatTimer = null;
-    _traktLastScrobbleAction = null;
-    _traktLastKnownProgress = 0.0;
-    _traktLastKnownSeason = null;
-    _traktLastKnownEpisode = null;
+    NativeScrobbleSession.traktHeartbeatTimer?.cancel();
+    NativeScrobbleSession.traktHeartbeatTimer = null;
+    NativeScrobbleSession.traktLastScrobbleAction = null;
+    NativeScrobbleSession.traktLastKnownProgress = 0.0;
+    NativeScrobbleSession.traktLastKnownSeason = null;
+    NativeScrobbleSession.traktLastKnownEpisode = null;
 
     // Reset Simkl scrobble state for clean session
-    _simklHeartbeatTimer?.cancel();
-    _simklHeartbeatTimer = null;
-    _simklLastScrobbleAction = null;
-    _simklLastKnownProgress = 0.0;
-    _simklLastKnownSeason = null;
-    _simklLastKnownEpisode = null;
+    NativeScrobbleSession.simklHeartbeatTimer?.cancel();
+    NativeScrobbleSession.simklHeartbeatTimer = null;
+    NativeScrobbleSession.simklLastScrobbleAction = null;
+    NativeScrobbleSession.simklLastKnownProgress = 0.0;
+    NativeScrobbleSession.simklLastKnownSeason = null;
+    NativeScrobbleSession.simklLastKnownEpisode = null;
 
-    _AndroidTvPlaybackPayload? builtPayload;
+    AndroidTvPlaybackPayload? builtPayload;
     final serverWatch = MediaServerWatchController();
     _AndroidTvPlaylistResolver? playbackResolver;
     try {
@@ -3603,7 +3113,7 @@ class VideoPlayerLauncher {
         },
         onRequestStream: resolver.handleRequest,
         onRequestMovieMetadata:
-            result.payload.contentType != _PlaybackContentType.series
+            result.payload.contentType != PlaybackContentType.series
             ? (index, filename) async {
                 debugPrint(
                   'MovieMetadataCallback: index=$index, filename=$filename',
@@ -3865,8 +3375,8 @@ class VideoPlayerLauncher {
   /// This doesn't block initial playback - updates are pushed when available
   /// The sessionId parameter ensures stale metadata from previous sessions is discarded
   static void _fetchAndPushMetadataAsync(
-    _AndroidTvPlaybackPayload payload,
-    List<_LauncherEntry> entries,
+    AndroidTvPlaybackPayload payload,
+    List<LauncherEntry> entries,
     String sessionId,
     PlaylistViewMode? viewMode, {
     String? rdTorrentId,
@@ -3886,7 +3396,7 @@ class VideoPlayerLauncher {
       'TVMazeAsync: entries.length=${entries.length}, viewMode=$viewMode, imdbId=$contentImdbId',
     );
 
-    if (payload.contentType != _PlaybackContentType.series) {
+    if (payload.contentType != PlaybackContentType.series) {
       debugPrint(
         'TVMazeAsync: SKIPPED - not series content (contentType=${payload.contentType})',
       );
@@ -4341,7 +3851,7 @@ class VideoPlayerLauncher {
   /// movie-shaped body, recording a bogus movie on the account. A movie
   /// legitimately reports (null, null), so this only blocks the series case.
   static bool _simklSeriesSEUnresolved(
-    _AndroidTvPlaybackPayload payload,
+    AndroidTvPlaybackPayload payload,
     Map<String, dynamic> progress,
   ) {
     if (payload.trackingContentType != 'series') return false;
@@ -4349,7 +3859,7 @@ class VideoPlayerLauncher {
   }
 
   static MdblistScrobbleTarget? _nativeMdblistTarget(
-    _AndroidTvPlaybackPayload payload, {
+    AndroidTvPlaybackPayload payload, {
     int? season,
     int? episode,
   }) {
@@ -4364,7 +3874,7 @@ class VideoPlayerLauncher {
   }
 
   static Future<void> _initializeNativeMdblist(
-    _AndroidTvPlaybackPayload payload, {
+    AndroidTvPlaybackPayload payload, {
     MdblistService? service,
   }) async {
     service ??= MdblistService.instance;
@@ -4390,7 +3900,7 @@ class VideoPlayerLauncher {
   }
 
   static MdblistScrobbleSession? _ensureNativeMdblistSession(
-    _AndroidTvPlaybackPayload payload,
+    AndroidTvPlaybackPayload payload,
     MdblistScrobbleTarget target,
   ) {
     if (payload.mdblistSession != null) return payload.mdblistSession;
@@ -4402,7 +3912,7 @@ class VideoPlayerLauncher {
   }
 
   static Future<void> _closeNativeMdblist(
-    _AndroidTvPlaybackPayload payload,
+    AndroidTvPlaybackPayload payload,
   ) async {
     // A late frame must not create another session after playback has ended.
     payload.mdblistSessionFactory = null;
@@ -4414,7 +3924,7 @@ class VideoPlayerLauncher {
   }
 
   static Future<void> _handleProgressUpdate(
-    _AndroidTvPlaybackPayload payload,
+    AndroidTvPlaybackPayload payload,
     Map<String, dynamic> progress,
   ) async {
     try {
@@ -4429,7 +3939,7 @@ class VideoPlayerLauncher {
       final progressUrl = progress['url'] as String?;
 
       if (resumeId != null && progressUrl != null && progressUrl.isNotEmpty) {
-        _cacheResolvedStream(resumeId, progressUrl);
+        StreamRedirectResolver.cacheResolvedStream(resumeId, progressUrl);
       }
 
       // Native TV uses this one-shot signal for locally tracked catalog
@@ -4439,7 +3949,7 @@ class VideoPlayerLauncher {
       final locallyTrackedMovie =
           payload.localCompletionTracking &&
           payload.trackingContentType == 'movie' &&
-          payload.contentType == _PlaybackContentType.single &&
+          payload.contentType == PlaybackContentType.single &&
           payload.imdbId != null &&
           payload.imdbId!.isNotEmpty;
       if (locallyTrackedMovie && !payload.localMovieCompletionRecorded) {
@@ -4488,37 +3998,37 @@ class VideoPlayerLauncher {
             : null;
 
         // Detect episode switch — scrobble stop for the old episode
-        if (_traktLastKnownSeason != null &&
-            _traktLastKnownEpisode != null &&
-            (season != _traktLastKnownSeason ||
-                episode != _traktLastKnownEpisode) &&
-            _traktLastScrobbleAction != 'stop') {
-          _traktHeartbeatTimer?.cancel();
-          _traktHeartbeatTimer = null;
+        if (NativeScrobbleSession.traktLastKnownSeason != null &&
+            NativeScrobbleSession.traktLastKnownEpisode != null &&
+            (season != NativeScrobbleSession.traktLastKnownSeason ||
+                episode != NativeScrobbleSession.traktLastKnownEpisode) &&
+            NativeScrobbleSession.traktLastScrobbleAction != 'stop') {
+          NativeScrobbleSession.traktHeartbeatTimer?.cancel();
+          NativeScrobbleSession.traktHeartbeatTimer = null;
           TraktService.instance.scrobbleStop(
             imdbId,
-            _traktLastKnownProgress,
-            season: _traktLastKnownSeason,
-            episode: _traktLastKnownEpisode,
+            NativeScrobbleSession.traktLastKnownProgress,
+            season: NativeScrobbleSession.traktLastKnownSeason,
+            episode: NativeScrobbleSession.traktLastKnownEpisode,
             contentType: payload.trackingContentType,
           );
-          _traktLastScrobbleAction = 'stop';
+          NativeScrobbleSession.traktLastScrobbleAction = 'stop';
         }
 
-        _traktLastKnownProgress = traktProgress;
-        _traktLastKnownSeason = season;
-        _traktLastKnownEpisode = episode;
+        NativeScrobbleSession.traktLastKnownProgress = traktProgress;
+        NativeScrobbleSession.traktLastKnownSeason = season;
+        NativeScrobbleSession.traktLastKnownEpisode = episode;
         // Recover session if stopped at >80% and user sought back under 80%
-        if (_traktLastScrobbleAction == 'stop' &&
+        if (NativeScrobbleSession.traktLastScrobbleAction == 'stop' &&
             isPlaying &&
             traktProgress <= 80 &&
             !completed) {
-          _traktLastScrobbleAction = null;
+          NativeScrobbleSession.traktLastScrobbleAction = null;
         }
-        if (completed && _traktLastScrobbleAction != 'stop') {
-          _traktLastScrobbleAction = 'stop';
-          _traktHeartbeatTimer?.cancel();
-          _traktHeartbeatTimer = null;
+        if (completed && NativeScrobbleSession.traktLastScrobbleAction != 'stop') {
+          NativeScrobbleSession.traktLastScrobbleAction = 'stop';
+          NativeScrobbleSession.traktHeartbeatTimer?.cancel();
+          NativeScrobbleSession.traktHeartbeatTimer = null;
           TraktService.instance.scrobbleStop(
             imdbId,
             traktProgress,
@@ -4527,11 +4037,11 @@ class VideoPlayerLauncher {
             contentType: payload.trackingContentType,
           );
         } else if (isPlaying &&
-            _traktLastScrobbleAction != 'start' &&
-            _traktLastScrobbleAction != 'stop') {
+            NativeScrobbleSession.traktLastScrobbleAction != 'start' &&
+            NativeScrobbleSession.traktLastScrobbleAction != 'stop') {
           // Trakt rejects start above 80% — send stop instead, no heartbeat needed
           if (traktProgress > 80) {
-            _traktLastScrobbleAction = 'stop';
+            NativeScrobbleSession.traktLastScrobbleAction = 'stop';
             TraktService.instance.scrobbleStop(
               imdbId,
               traktProgress,
@@ -4540,7 +4050,7 @@ class VideoPlayerLauncher {
               contentType: payload.trackingContentType,
             );
           } else {
-            _traktLastScrobbleAction = 'start';
+            NativeScrobbleSession.traktLastScrobbleAction = 'start';
             TraktService.instance.scrobbleStart(
               imdbId,
               traktProgress,
@@ -4549,52 +4059,52 @@ class VideoPlayerLauncher {
               contentType: payload.trackingContentType,
             );
             // Start heartbeat timer to checkpoint progress every 2 minutes
-            _traktHeartbeatTimer?.cancel();
-            _traktHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (
+            NativeScrobbleSession.traktHeartbeatTimer?.cancel();
+            NativeScrobbleSession.traktHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (
               _,
             ) {
               if (payload.imdbId == null) return;
               // Trakt rejects start/pause above 80% — send stop and end heartbeat
-              if (_traktLastKnownProgress > 80) {
-                _traktLastScrobbleAction = 'stop';
+              if (NativeScrobbleSession.traktLastKnownProgress > 80) {
+                NativeScrobbleSession.traktLastScrobbleAction = 'stop';
                 TraktService.instance.scrobbleStop(
                   payload.imdbId!,
-                  _traktLastKnownProgress,
-                  season: _traktLastKnownSeason,
-                  episode: _traktLastKnownEpisode,
+                  NativeScrobbleSession.traktLastKnownProgress,
+                  season: NativeScrobbleSession.traktLastKnownSeason,
+                  episode: NativeScrobbleSession.traktLastKnownEpisode,
                   contentType: payload.trackingContentType,
                 );
                 debugPrint(
-                  'Trakt: Heartbeat stop at ${_traktLastKnownProgress.toStringAsFixed(1)}% (>80%)',
+                  'Trakt: Heartbeat stop at ${NativeScrobbleSession.traktLastKnownProgress.toStringAsFixed(1)}% (>80%)',
                 );
-                _traktHeartbeatTimer?.cancel();
-                _traktHeartbeatTimer = null;
+                NativeScrobbleSession.traktHeartbeatTimer?.cancel();
+                NativeScrobbleSession.traktHeartbeatTimer = null;
                 return;
               }
               // Use latest known progress/season/episode
-              _traktLastScrobbleAction = 'start';
+              NativeScrobbleSession.traktLastScrobbleAction = 'start';
               TraktService.instance.scrobbleStart(
                 payload.imdbId!,
-                _traktLastKnownProgress,
-                season: _traktLastKnownSeason,
-                episode: _traktLastKnownEpisode,
+                NativeScrobbleSession.traktLastKnownProgress,
+                season: NativeScrobbleSession.traktLastKnownSeason,
+                episode: NativeScrobbleSession.traktLastKnownEpisode,
                 contentType: payload.trackingContentType,
               );
               debugPrint(
-                'Trakt: Heartbeat scrobble at ${_traktLastKnownProgress.toStringAsFixed(1)}%',
+                'Trakt: Heartbeat scrobble at ${NativeScrobbleSession.traktLastKnownProgress.toStringAsFixed(1)}%',
               );
             });
           }
         } else if (!isPlaying &&
             !completed &&
-            _traktLastScrobbleAction != null &&
-            _traktLastScrobbleAction != 'pause' &&
-            _traktLastScrobbleAction != 'stop') {
+            NativeScrobbleSession.traktLastScrobbleAction != null &&
+            NativeScrobbleSession.traktLastScrobbleAction != 'pause' &&
+            NativeScrobbleSession.traktLastScrobbleAction != 'stop') {
           // Trakt rejects pause when progress > 80% — send stop instead
-          _traktHeartbeatTimer?.cancel();
-          _traktHeartbeatTimer = null;
+          NativeScrobbleSession.traktHeartbeatTimer?.cancel();
+          NativeScrobbleSession.traktHeartbeatTimer = null;
           if (traktProgress > 80) {
-            _traktLastScrobbleAction = 'stop';
+            NativeScrobbleSession.traktLastScrobbleAction = 'stop';
             TraktService.instance.scrobbleStop(
               imdbId,
               traktProgress,
@@ -4603,7 +4113,7 @@ class VideoPlayerLauncher {
               contentType: payload.trackingContentType,
             );
           } else {
-            _traktLastScrobbleAction = 'pause';
+            NativeScrobbleSession.traktLastScrobbleAction = 'pause';
             TraktService.instance.scrobblePause(
               imdbId,
               traktProgress,
@@ -4636,36 +4146,36 @@ class VideoPlayerLauncher {
             : null;
 
         // Detect episode switch — scrobble stop for the old episode
-        if (_simklLastKnownSeason != null &&
-            _simklLastKnownEpisode != null &&
-            (season != _simklLastKnownSeason ||
-                episode != _simklLastKnownEpisode) &&
-            _simklLastScrobbleAction != 'stop') {
-          _simklHeartbeatTimer?.cancel();
-          _simklHeartbeatTimer = null;
+        if (NativeScrobbleSession.simklLastKnownSeason != null &&
+            NativeScrobbleSession.simklLastKnownEpisode != null &&
+            (season != NativeScrobbleSession.simklLastKnownSeason ||
+                episode != NativeScrobbleSession.simklLastKnownEpisode) &&
+            NativeScrobbleSession.simklLastScrobbleAction != 'stop') {
+          NativeScrobbleSession.simklHeartbeatTimer?.cancel();
+          NativeScrobbleSession.simklHeartbeatTimer = null;
           SimklService.instance.scrobbleStop(
             imdbId,
-            _simklLastKnownProgress,
-            season: _simklLastKnownSeason,
-            episode: _simklLastKnownEpisode,
+            NativeScrobbleSession.simklLastKnownProgress,
+            season: NativeScrobbleSession.simklLastKnownSeason,
+            episode: NativeScrobbleSession.simklLastKnownEpisode,
           );
-          _simklLastScrobbleAction = 'stop';
+          NativeScrobbleSession.simklLastScrobbleAction = 'stop';
         }
 
-        _simklLastKnownProgress = simklProgress;
-        _simklLastKnownSeason = season;
-        _simklLastKnownEpisode = episode;
+        NativeScrobbleSession.simklLastKnownProgress = simklProgress;
+        NativeScrobbleSession.simklLastKnownSeason = season;
+        NativeScrobbleSession.simklLastKnownEpisode = episode;
         // Recover session if stopped at >80% and user sought back under 80%
-        if (_simklLastScrobbleAction == 'stop' &&
+        if (NativeScrobbleSession.simklLastScrobbleAction == 'stop' &&
             isPlaying &&
             simklProgress <= 80 &&
             !completed) {
-          _simklLastScrobbleAction = null;
+          NativeScrobbleSession.simklLastScrobbleAction = null;
         }
-        if (completed && _simklLastScrobbleAction != 'stop') {
-          _simklLastScrobbleAction = 'stop';
-          _simklHeartbeatTimer?.cancel();
-          _simklHeartbeatTimer = null;
+        if (completed && NativeScrobbleSession.simklLastScrobbleAction != 'stop') {
+          NativeScrobbleSession.simklLastScrobbleAction = 'stop';
+          NativeScrobbleSession.simklHeartbeatTimer?.cancel();
+          NativeScrobbleSession.simklHeartbeatTimer = null;
           SimklService.instance.scrobbleStop(
             imdbId,
             simklProgress,
@@ -4673,11 +4183,11 @@ class VideoPlayerLauncher {
             episode: episode,
           );
         } else if (isPlaying &&
-            _simklLastScrobbleAction != 'start' &&
-            _simklLastScrobbleAction != 'stop') {
+            NativeScrobbleSession.simklLastScrobbleAction != 'start' &&
+            NativeScrobbleSession.simklLastScrobbleAction != 'stop') {
           // ≥80% would just finalize server-side — send stop, no heartbeat
           if (simklProgress > 80) {
-            _simklLastScrobbleAction = 'stop';
+            NativeScrobbleSession.simklLastScrobbleAction = 'stop';
             SimklService.instance.scrobbleStop(
               imdbId,
               simklProgress,
@@ -4691,26 +4201,26 @@ class VideoPlayerLauncher {
             // checkpoints it. 'start' is kept only as an in-play state marker
             // (no POST sent) so this isPlaying branch doesn't re-enter on every
             // progress tick.
-            _simklLastScrobbleAction = 'start';
+            NativeScrobbleSession.simklLastScrobbleAction = 'start';
             // 2-minute checkpoint — comfortably above Simkl's 20s rate lock
-            _simklHeartbeatTimer?.cancel();
-            _simklHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (
+            NativeScrobbleSession.simklHeartbeatTimer?.cancel();
+            NativeScrobbleSession.simklHeartbeatTimer = Timer.periodic(const Duration(minutes: 2), (
               _,
             ) {
               if (payload.imdbId == null) return;
-              if (_simklLastKnownProgress > 80) {
-                _simklLastScrobbleAction = 'stop';
+              if (NativeScrobbleSession.simklLastKnownProgress > 80) {
+                NativeScrobbleSession.simklLastScrobbleAction = 'stop';
                 SimklService.instance.scrobbleStop(
                   payload.imdbId!,
-                  _simklLastKnownProgress,
-                  season: _simklLastKnownSeason,
-                  episode: _simklLastKnownEpisode,
+                  NativeScrobbleSession.simklLastKnownProgress,
+                  season: NativeScrobbleSession.simklLastKnownSeason,
+                  episode: NativeScrobbleSession.simklLastKnownEpisode,
                 );
                 debugPrint(
-                  'Simkl: Heartbeat stop at ${_simklLastKnownProgress.toStringAsFixed(1)}% (>80%)',
+                  'Simkl: Heartbeat stop at ${NativeScrobbleSession.simklLastKnownProgress.toStringAsFixed(1)}% (>80%)',
                 );
-                _simklHeartbeatTimer?.cancel();
-                _simklHeartbeatTimer = null;
+                NativeScrobbleSession.simklHeartbeatTimer?.cancel();
+                NativeScrobbleSession.simklHeartbeatTimer = null;
                 return;
               }
               // Checkpoint a RESUMABLE position via pause. Simkl's /scrobble/start
@@ -4723,27 +4233,27 @@ class VideoPlayerLauncher {
               // on the next tick, re-sending start and wiping the position we just
               // saved. 'start' keeps that branch inert while pause refreshes the
               // resume point each interval.
-              _simklLastScrobbleAction = 'start';
+              NativeScrobbleSession.simklLastScrobbleAction = 'start';
               SimklService.instance.scrobblePause(
                 payload.imdbId!,
-                _simklLastKnownProgress,
-                season: _simklLastKnownSeason,
-                episode: _simklLastKnownEpisode,
+                NativeScrobbleSession.simklLastKnownProgress,
+                season: NativeScrobbleSession.simklLastKnownSeason,
+                episode: NativeScrobbleSession.simklLastKnownEpisode,
               );
               debugPrint(
-                'Simkl: Heartbeat pause checkpoint at ${_simklLastKnownProgress.toStringAsFixed(1)}%',
+                'Simkl: Heartbeat pause checkpoint at ${NativeScrobbleSession.simklLastKnownProgress.toStringAsFixed(1)}%',
               );
             });
           }
         } else if (!isPlaying &&
             !completed &&
-            _simklLastScrobbleAction != null &&
-            _simklLastScrobbleAction != 'pause' &&
-            _simklLastScrobbleAction != 'stop') {
-          _simklHeartbeatTimer?.cancel();
-          _simklHeartbeatTimer = null;
+            NativeScrobbleSession.simklLastScrobbleAction != null &&
+            NativeScrobbleSession.simklLastScrobbleAction != 'pause' &&
+            NativeScrobbleSession.simklLastScrobbleAction != 'stop') {
+          NativeScrobbleSession.simklHeartbeatTimer?.cancel();
+          NativeScrobbleSession.simklHeartbeatTimer = null;
           if (simklProgress > 80) {
-            _simklLastScrobbleAction = 'stop';
+            NativeScrobbleSession.simklLastScrobbleAction = 'stop';
             SimklService.instance.scrobbleStop(
               imdbId,
               simklProgress,
@@ -4751,7 +4261,7 @@ class VideoPlayerLauncher {
               episode: episode,
             );
           } else {
-            _simklLastScrobbleAction = 'pause';
+            NativeScrobbleSession.simklLastScrobbleAction = 'pause';
             SimklService.instance.scrobblePause(
               imdbId,
               simklProgress,
@@ -4809,7 +4319,7 @@ class VideoPlayerLauncher {
       // must still receive the threshold frame and all later progress/exit data.
       if (locallyTrackedMovie && payload.localMovieCompletionRecorded) return;
 
-      if (payload.contentType == _PlaybackContentType.series) {
+      if (payload.contentType == PlaybackContentType.series) {
         final season = progress['season'] as int?;
         final episode = progress['episode'] as int?;
         final seriesTitle = payload.seriesTitle ?? payload.title;
@@ -4846,7 +4356,7 @@ class VideoPlayerLauncher {
           );
           final persistedUrl =
               progressUrl ??
-              (resumeId != null ? _resolvedStreamCache[resumeId] : null) ??
+              (resumeId != null ? StreamRedirectResolver.resolvedStreamCache[resumeId] : null) ??
               item.url;
 
           await VideoProgressStorage.saveVideoPlaybackState(
@@ -4876,7 +4386,7 @@ class VideoPlayerLauncher {
       final videoTitle = item.resumeId ?? item.title;
       final persistedUrl =
           progressUrl ??
-          (resumeId != null ? _resolvedStreamCache[resumeId] : null) ??
+          (resumeId != null ? StreamRedirectResolver.resolvedStreamCache[resumeId] : null) ??
           item.url;
 
       await VideoProgressStorage.saveVideoPlaybackState(
@@ -4889,7 +4399,7 @@ class VideoPlayerLauncher {
         imdbId: payload.imdbId,
       );
 
-      if (payload.contentType == _PlaybackContentType.single) {
+      if (payload.contentType == PlaybackContentType.single) {
         await VideoResumeStorage.upsertVideoResume(videoTitle, {
           'positionMs': positionMs,
           'durationMs': durationMs,
@@ -4901,7 +4411,7 @@ class VideoPlayerLauncher {
 
       // ALSO save in collection format for Android TV playlist progress tracking
       // This allows the playlist screen to display progress indicators for collections
-      if (payload.contentType == _PlaybackContentType.collection &&
+      if (payload.contentType == PlaybackContentType.collection &&
           payload.seriesTitle != null) {
         debugPrint(
           '📺 AndroidTV Collection Save Check: seriesTitle="${payload.seriesTitle}", itemIndex=$fallbackIndex',
@@ -4942,7 +4452,7 @@ class VideoPlayerLauncher {
   }
 
   static Future<void> _handlePlaybackFinished(
-    _AndroidTvPlaybackPayload payload,
+    AndroidTvPlaybackPayload payload,
   ) async {
     debugPrint(
       'VideoPlayerLauncher: Android TV playback finished for "${payload.title}"',
@@ -4950,24 +4460,24 @@ class VideoPlayerLauncher {
     // Final Trakt scrobble stop on playback exit
     // Skip if last action was 'stop' (already stopped) or 'pause' (pause already
     // created the playback entry — sending stop would create a duplicate)
-    _traktHeartbeatTimer?.cancel();
-    _traktHeartbeatTimer = null;
+    NativeScrobbleSession.traktHeartbeatTimer?.cancel();
+    NativeScrobbleSession.traktHeartbeatTimer = null;
     if (payload.traktScrobble &&
         payload.imdbId != null &&
-        _traktLastScrobbleAction != 'stop' &&
-        _traktLastScrobbleAction != 'pause') {
+        NativeScrobbleSession.traktLastScrobbleAction != 'stop' &&
+        NativeScrobbleSession.traktLastScrobbleAction != 'pause') {
       TraktService.instance.scrobbleStop(
         payload.imdbId!,
-        _traktLastKnownProgress,
-        season: _traktLastKnownSeason,
-        episode: _traktLastKnownEpisode,
+        NativeScrobbleSession.traktLastKnownProgress,
+        season: NativeScrobbleSession.traktLastKnownSeason,
+        episode: NativeScrobbleSession.traktLastKnownEpisode,
         contentType: payload.trackingContentType,
       );
     }
-    _traktLastScrobbleAction = null;
-    _traktLastKnownProgress = 0.0;
-    _traktLastKnownSeason = null;
-    _traktLastKnownEpisode = null;
+    NativeScrobbleSession.traktLastScrobbleAction = null;
+    NativeScrobbleSession.traktLastKnownProgress = 0.0;
+    NativeScrobbleSession.traktLastKnownSeason = null;
+    NativeScrobbleSession.traktLastKnownEpisode = null;
 
     // Final Simkl scrobble stop on playback exit — parallel to the Trakt
     // cleanup above, including the same skip-after-pause nuance (a pause
@@ -4976,27 +4486,27 @@ class VideoPlayerLauncher {
     // stop isn't gated by _simklSeriesSEUnresolved, so a series whose S/E
     // never resolved (every frame was skipped, last-known stays null) would
     // otherwise be finalized as a bogus movie. Skip it in that case.
-    _simklHeartbeatTimer?.cancel();
-    _simklHeartbeatTimer = null;
+    NativeScrobbleSession.simklHeartbeatTimer?.cancel();
+    NativeScrobbleSession.simklHeartbeatTimer = null;
     final simklSeriesUnresolved =
         payload.trackingContentType == 'series' &&
-        (_simklLastKnownSeason == null || _simklLastKnownEpisode == null);
+        (NativeScrobbleSession.simklLastKnownSeason == null || NativeScrobbleSession.simklLastKnownEpisode == null);
     if (payload.simklScrobble &&
         payload.imdbId != null &&
-        _simklLastScrobbleAction != 'stop' &&
-        _simklLastScrobbleAction != 'pause' &&
+        NativeScrobbleSession.simklLastScrobbleAction != 'stop' &&
+        NativeScrobbleSession.simklLastScrobbleAction != 'pause' &&
         !simklSeriesUnresolved) {
       SimklService.instance.scrobbleStop(
         payload.imdbId!,
-        _simklLastKnownProgress,
-        season: _simklLastKnownSeason,
-        episode: _simklLastKnownEpisode,
+        NativeScrobbleSession.simklLastKnownProgress,
+        season: NativeScrobbleSession.simklLastKnownSeason,
+        episode: NativeScrobbleSession.simklLastKnownEpisode,
       );
     }
-    _simklLastScrobbleAction = null;
-    _simklLastKnownProgress = 0.0;
-    _simklLastKnownSeason = null;
-    _simklLastKnownEpisode = null;
+    NativeScrobbleSession.simklLastScrobbleAction = null;
+    NativeScrobbleSession.simklLastKnownProgress = 0.0;
+    NativeScrobbleSession.simklLastKnownSeason = null;
+    NativeScrobbleSession.simklLastKnownEpisode = null;
     await _closeNativeMdblist(payload);
   }
 
@@ -5020,7 +4530,7 @@ class VideoPlayerLauncher {
       }
       // For direct stream URLs, resolve redirects to get final URL
       // (needed for HLS streams behind short URL redirects like USATV)
-      return await _resolveRedirectUrl(entry.url, canContinue: canContinue);
+      return await StreamRedirectResolver.resolveRedirectUrl(entry.url, canContinue: canContinue);
     }
 
     final provider = entry.provider?.toLowerCase();
@@ -5192,328 +4702,24 @@ class VideoPlayerLauncher {
   }
 }
 
-enum _PlaybackContentType { single, collection, series }
 
-class _AndroidTvPlaybackPayload {
-  final _PlaybackContentType contentType;
-  final String? declaredContentType;
-  String get trackingContentType =>
-      declaredContentType ??
-      (contentType == _PlaybackContentType.series ? 'series' : 'movie');
-  final String title;
-  final String? subtitle;
-  final List<_AndroidTvPlaybackItem> items;
-  final int startIndex;
-  final String? seriesTitle;
-  final List<_AndroidTvSeriesSeason> seasons;
-  final Map<int, int> nextEpisodeMap;
-  final Map<int, int> prevEpisodeMap;
-  final List<_AndroidTvCollectionGroup>? collectionGroups;
-  String? imdbId;
-  final Map<String, String>? httpHeaders;
 
-  final double? startAtPercent;
-  final List<Map<String, dynamic>>? stremioSources;
-  final int? stremioCurrentSourceIndex;
-  final bool hasPlaylistResolver;
-  final bool hasAdjacentEpisodeResolver;
-  final bool startupTryNextOnFailure;
-  final int startupMaxAttempts;
-  final String? startupResolverProvider;
-  final bool startupRecoveryAvailable;
-  final bool traktScrobble;
-  final double? traktProgressPercent;
-  // Simkl parallel pair. Only the scrobble flag matters Dart-side (the
-  // progress percent folds into the native resume seed via toMap below).
-  final bool simklScrobble;
-  final double? simklProgressPercent;
-  final bool mdblistScrobble;
-  final double? mdblistProgressPercent;
-  MdblistScrobbleSession? mdblistSession;
-  MdblistScrobbleSession Function(MdblistScrobbleTarget)? mdblistSessionFactory;
-  int? mdblistSeason;
-  int? mdblistEpisode;
 
-  /// Local completion can coexist with scrobbling. Its threshold controls
-  /// local resume persistence; trackers keep their own completion rules.
-  final bool localCompletionTracking;
-  final int movieCompletionThreshold;
-  final int episodeCompletionThreshold;
-  // Session-only guards; the native activity emits local threshold crossing
-  // once per item, while these prevent later progress pings from rebuilding a
-  // completed movie's local resume state.
-  bool localMovieCompletionRecorded = false;
-  bool localMovieRewatchStarted = false;
-  // Subtitle tracks known at launch (e.g. YouTube captions), surfaced natively
-  // as a pre-loaded provider group without an addon fetch.
-  final List<StremioSubtitle>? initialSubtitles;
 
-  _AndroidTvPlaybackPayload({
-    required this.contentType,
-    this.declaredContentType,
-    required this.title,
-    required this.subtitle,
-    required this.items,
-    required this.startIndex,
-    required this.seriesTitle,
-    required this.seasons,
-    this.nextEpisodeMap = const {},
-    this.prevEpisodeMap = const {},
-    this.collectionGroups,
-    this.imdbId,
-    this.httpHeaders,
-    this.startAtPercent,
-    this.stremioSources,
-    this.stremioCurrentSourceIndex,
-    this.hasPlaylistResolver = false,
-    this.hasAdjacentEpisodeResolver = false,
-    this.startupTryNextOnFailure = false,
-    this.startupMaxAttempts = 1,
-    this.startupResolverProvider,
-    this.startupRecoveryAvailable = false,
-    this.traktScrobble = false,
-    this.traktProgressPercent,
-    this.simklScrobble = false,
-    this.simklProgressPercent,
-    this.mdblistScrobble = false,
-    this.mdblistProgressPercent,
-    this.localCompletionTracking = false,
-    this.movieCompletionThreshold =
-        LocalCompletionStorage.defaultLocalCompletionThreshold,
-    this.episodeCompletionThreshold =
-        LocalCompletionStorage.defaultLocalCompletionThreshold,
-    this.initialSubtitles,
-  });
 
-  /// The effective cross-tracker launch resume percent: the FURTHEST of the
-  /// Trakt, Simkl, and MDBList promises (each 0-100, exclusive). Native only
-  /// knows one launch-resume input (`traktProgressPercent` in the map below),
-  /// so the three-way merge happens here — native then reconciles this
-  /// explicit percent against its local position as before.
-  double? get _effectiveLaunchPercent {
-    double? best;
-    for (final pct in [
-      traktProgressPercent,
-      simklProgressPercent,
-      mdblistProgressPercent,
-    ]) {
-      if (pct == null || pct <= 0 || pct >= 100) continue;
-      if (best == null || pct > best) best = pct;
-    }
-    return best;
-  }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'version': 1,
-      'title': title,
-      'subtitle': subtitle,
-      'contentType': contentType.name,
-      'startIndex': startIndex,
-      'seriesTitle': seriesTitle,
-      'items': items.map((e) => e.toMap()).toList(),
-      'seasons': seasons.map((e) => e.toMap()).toList(),
-      'nextEpisodeMap': nextEpisodeMap.map((k, v) => MapEntry(k.toString(), v)),
-      'prevEpisodeMap': prevEpisodeMap.map((k, v) => MapEntry(k.toString(), v)),
-      'collectionGroups': collectionGroups?.map((e) => e.toMap()).toList(),
-      'imdbId': imdbId,
-      if (httpHeaders != null && httpHeaders!.isNotEmpty)
-        'httpHeaders': httpHeaders,
-      if (startAtPercent != null && startAtPercent! > 0)
-        'startAtPercent': startAtPercent,
-      if (stremioSources != null && stremioSources!.isNotEmpty)
-        'stremioSources': stremioSources,
-      if (stremioCurrentSourceIndex != null)
-        'stremioCurrentSourceIndex': stremioCurrentSourceIndex,
-      if (hasPlaylistResolver) 'hasPlaylistResolver': true,
-      if (hasAdjacentEpisodeResolver) 'hasAdjacentEpisodeResolver': true,
-      if (stremioSources != null && stremioSources!.isNotEmpty) ...{
-        'startupTryNextOnFailure': startupTryNextOnFailure,
-        'startupMaxAttempts': startupMaxAttempts.clamp(1, 10),
-        if (startupResolverProvider != null)
-          'startupResolverProvider': startupResolverProvider,
-        if (startupRecoveryAvailable) 'startupRecoveryAvailable': true,
-      },
-      // Keyed 'traktProgressPercent' for the native side's existing resume
-      // input, but carries the furthest of the Trakt/Simkl launch percents.
-      if (_effectiveLaunchPercent != null)
-        'traktProgressPercent': _effectiveLaunchPercent,
-      if (localCompletionTracking) ...{
-        'localCompletionTracking': true,
-        'movieCompletionThreshold': movieCompletionThreshold,
-        'episodeCompletionThreshold': episodeCompletionThreshold,
-      },
-      if (initialSubtitles != null && initialSubtitles!.isNotEmpty)
-        'initialSubtitles': [
-          for (final s in initialSubtitles!)
-            {
-              'id': s.id,
-              'url': s.url,
-              'lang': s.lang,
-              if (s.label != null) 'label': s.label,
-              'source': s.source,
-            },
-        ],
-    };
-  }
-}
 
-class _AndroidTvPlaybackItem {
-  final String id;
-  final String title;
-  final String url;
-  final Map<String, String>? httpHeaders;
-  final String? hdVideoUrl;
-  final String? audioUrl;
-  final int index;
-  final int? season;
-  final int? episode;
-  final String? artwork;
-  final String? description;
-  final int? sizeBytes;
-  final int resumePositionMs;
-  final int durationMs;
-  final int updatedAt;
-  final String? resumeId;
-  final String? provider;
-  // Cross-device progress for this episode (0-100), or null. The legacy field
-  // name is retained for the Kotlin payload, but the value is the furthest of
-  // Trakt, Simkl, and MDBList.
-  final double? traktProgressPercent;
-  final bool watched;
-  final bool allowLocalProgressDisplay;
 
-  const _AndroidTvPlaybackItem({
-    required this.id,
-    required this.title,
-    required this.url,
-    this.httpHeaders,
-    this.hdVideoUrl,
-    this.audioUrl,
-    required this.index,
-    required this.season,
-    required this.episode,
-    required this.artwork,
-    required this.description,
-    required this.sizeBytes,
-    required this.resumePositionMs,
-    required this.durationMs,
-    required this.updatedAt,
-    required this.resumeId,
-    required this.provider,
-    this.traktProgressPercent,
-    this.watched = false,
-    this.allowLocalProgressDisplay = true,
-  });
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'title': title,
-      'url': url,
-      'httpHeaders': httpHeaders ?? const <String, String>{},
-      if (hdVideoUrl != null) 'hdVideoUrl': hdVideoUrl,
-      if (audioUrl != null) 'audioUrl': audioUrl,
-      'index': index,
-      'season': season,
-      'episode': episode,
-      'artwork': artwork,
-      'description': description,
-      'sizeBytes': sizeBytes,
-      'resumePositionMs': resumePositionMs,
-      'durationMs': durationMs,
-      'updatedAt': updatedAt,
-      'resumeId': resumeId,
-      'provider': provider,
-      if (traktProgressPercent != null)
-        'traktProgressPercent': traktProgressPercent,
-      'watched': watched,
-      'allowLocalProgressDisplay': allowLocalProgressDisplay,
-    };
-  }
-}
 
-class _AndroidTvSeriesSeason {
-  final int seasonNumber;
-  final List<_AndroidTvSeriesEpisode> episodes;
 
-  const _AndroidTvSeriesSeason({
-    required this.seasonNumber,
-    required this.episodes,
-  });
 
-  Map<String, dynamic> toMap() {
-    return {
-      'seasonNumber': seasonNumber,
-      'episodes': episodes.map((e) => e.toMap()).toList(),
-    };
-  }
-}
 
-class _AndroidTvCollectionGroup {
-  final String name;
-  final List<int> fileIndices;
 
-  const _AndroidTvCollectionGroup({
-    required this.name,
-    required this.fileIndices,
-  });
 
-  Map<String, dynamic> toMap() {
-    return {'name': name, 'fileIndices': fileIndices};
-  }
-}
-
-class _AndroidTvSeriesEpisode {
-  final String title;
-  final int? season;
-  final int? episode;
-  final String? description;
-  final String? artwork;
-
-  const _AndroidTvSeriesEpisode({
-    required this.title,
-    required this.season,
-    required this.episode,
-    required this.description,
-    required this.artwork,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'title': title,
-      'season': season,
-      'episode': episode,
-      'description': description,
-      'artwork': artwork,
-    };
-  }
-}
-
-class _AndroidTvPlaybackPayloadResult {
-  final _AndroidTvPlaybackPayload payload;
-  final List<_LauncherEntry> entries;
-
-  const _AndroidTvPlaybackPayloadResult({
-    required this.payload,
-    required this.entries,
-  });
-}
-
-class _LauncherEntry {
-  final PlaylistEntry entry;
-  final String resumeId;
-  final int index;
-
-  const _LauncherEntry({
-    required this.entry,
-    required this.resumeId,
-    required this.index,
-  });
-}
 
 class _AndroidTvPlaylistResolver {
-  List<_LauncherEntry> entries;
+  List<LauncherEntry> entries;
   final Future<String> Function(
     PlaylistEntry entry, {
     bool Function()? canContinue,
@@ -5549,12 +4755,12 @@ class _AndroidTvPlaylistResolver {
       return;
     }
     // Clear cached URLs for old entries before replacing
-    _clearResolvedStreams(entries.map((e) => e.resumeId));
+    StreamRedirectResolver.clearResolvedStreams(entries.map((e) => e.resumeId));
 
     entries = playlistEntries.asMap().entries.map((e) {
       final i = e.key;
       final entry = e.value;
-      return _LauncherEntry(
+      return LauncherEntry(
         entry: entry,
         index: i,
         resumeId: '${entry.title}_$i',
@@ -5576,7 +4782,7 @@ class _AndroidTvPlaylistResolver {
     );
     debugPrint('AndroidTvPlaylistResolver: total entries: ${entries.length}');
 
-    _LauncherEntry? target;
+    LauncherEntry? target;
     final resumeId = request['resumeId'] as String?;
     final index = request['index'] as int?;
 
@@ -5624,7 +4830,7 @@ class _AndroidTvPlaylistResolver {
       return null;
     }
 
-    _cacheResolvedStream(target.resumeId, url);
+    StreamRedirectResolver.cacheResolvedStream(target.resumeId, url);
     debugPrint(
       'AndroidTvPlaylistResolver: returning success - url length: ${url.length}',
     );
@@ -5638,7 +4844,7 @@ class _AndroidTvPlaylistResolver {
 
   void dispose() {
     _disposed = true;
-    _clearResolvedStreams(entries.map((e) => e.resumeId));
+    StreamRedirectResolver.clearResolvedStreams(entries.map((e) => e.resumeId));
   }
 }
 
@@ -5648,7 +4854,7 @@ class _AndroidTvPlaybackPayloadBuilder {
   final bool Function()? canContinue;
   const _AndroidTvPlaybackPayloadBuilder(this.args, {this.canContinue});
 
-  Future<_AndroidTvPlaybackPayloadResult?> build() async {
+  Future<AndroidTvPlaybackPayloadResult?> build() async {
     if (canContinue?.call() == false) return null;
     final playlistEntries = _normalizePlaylist();
     final seriesPlaylist = await _buildSeriesPlaylist(playlistEntries);
@@ -5657,7 +4863,7 @@ class _AndroidTvPlaybackPayloadBuilder {
     final startupRules =
         args.startupFailoverEnabled && args.stremioSources?.isNotEmpty == true
         ? await QuickPlayStorage.getQuickPlayRules(
-            isMovie: contentType != _PlaybackContentType.series,
+            isMovie: contentType != PlaybackContentType.series,
           )
         : null;
     if (canContinue?.call() == false) return null;
@@ -5691,7 +4897,7 @@ class _AndroidTvPlaybackPayloadBuilder {
     if (canContinue?.call() == false) return null;
     final stableSeriesTitle =
         args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
-    final locallyFinished = contentType == _PlaybackContentType.series
+    final locallyFinished = contentType == PlaybackContentType.series
         ? await MergedEpisodeProgressStorage.getMergedFinishedEpisodes(
             seriesTitle: stableSeriesTitle,
             imdbId: args.contentImdbId,
@@ -5734,19 +4940,19 @@ class _AndroidTvPlaybackPayloadBuilder {
     if (canContinue?.call() == false) return null;
     final seasons = _buildSeriesSeasons(seriesPlaylist);
 
-    final launcherEntries = <_LauncherEntry>[];
-    final items = <_AndroidTvPlaybackItem>[];
+    final launcherEntries = <LauncherEntry>[];
+    final items = <AndroidTvPlaybackItem>[];
 
     for (int i = 0; i < preparedEntries.length; i++) {
       final entry = preparedEntries[i];
       final resumeId = _resumeIdForEntry(entry);
       launcherEntries.add(
-        _LauncherEntry(entry: entry, resumeId: resumeId, index: i),
+        LauncherEntry(entry: entry, resumeId: resumeId, index: i),
       );
 
       final resumeInfo = i < perItemStates.length
           ? perItemStates[i]
-          : const _PerItemState();
+          : const PerItemState();
 
       SeriesEpisode? episodeInfo;
       if (seriesPlaylist != null) {
@@ -5828,7 +5034,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       );
 
       items.add(
-        _AndroidTvPlaybackItem(
+        AndroidTvPlaybackItem(
           id: entry.url.isNotEmpty ? entry.url : '${entry.title}_$i',
           title: displayTitle,
           url: entry.url,
@@ -5875,8 +5081,8 @@ class _AndroidTvPlaybackPayloadBuilder {
     final navigationMaps = _buildNavigationMaps(seriesPlaylist, items);
 
     // Build collection groups for movie collections
-    List<_AndroidTvCollectionGroup>? collectionGroups;
-    if (contentType == _PlaybackContentType.collection &&
+    List<AndroidTvCollectionGroup>? collectionGroups;
+    if (contentType == PlaybackContentType.collection &&
         launcherEntries.isNotEmpty) {
       // Extract PlaylistEntry objects from _LauncherEntry wrappers
       final playlistEntries = launcherEntries.map((e) => e.entry).toList();
@@ -5917,7 +5123,7 @@ class _AndroidTvPlaybackPayloadBuilder {
             (group) => group.fileIndices.isNotEmpty,
           ) // Only include non-empty groups
           .map(
-            (group) => _AndroidTvCollectionGroup(
+            (group) => AndroidTvCollectionGroup(
               name: group.name,
               fileIndices: group.fileIndices,
             ),
@@ -5934,17 +5140,17 @@ class _AndroidTvPlaybackPayloadBuilder {
 
     // For non-series content without IMDB ID, try to fetch from Cinemeta
     String? effectiveImdbId = args.contentImdbId;
-    if (effectiveImdbId == null && contentType != _PlaybackContentType.series) {
+    if (effectiveImdbId == null && contentType != PlaybackContentType.series) {
       effectiveImdbId = await _fetchMovieImdbId(items, startIndex);
     }
 
     if (canContinue?.call() == false) return null;
     for (final entry in launcherEntries) {
       if (entry.entry.url.isNotEmpty) {
-        _cacheResolvedStream(entry.resumeId, entry.entry.url);
+        StreamRedirectResolver.cacheResolvedStream(entry.resumeId, entry.entry.url);
       }
     }
-    final payload = _AndroidTvPlaybackPayload(
+    final payload = AndroidTvPlaybackPayload(
       contentType: contentType,
       declaredContentType: args.contentType,
       title: args.title,
@@ -5953,7 +5159,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       startIndex: startIndex,
       // Always carry the stable catalog title for series so local writes use
       // the same key regardless of which release wins Quick Play or a switch.
-      seriesTitle: contentType == _PlaybackContentType.series
+      seriesTitle: contentType == PlaybackContentType.series
           ? stableSeriesTitle
           : seriesPlaylist?.seriesTitle,
       seasons: seasons,
@@ -6002,7 +5208,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       'playlistResolver=${args.resolveSourceToPlaylist != null}',
     );
 
-    return _AndroidTvPlaybackPayloadResult(
+    return AndroidTvPlaybackPayloadResult(
       payload: payload,
       entries: launcherEntries,
     );
@@ -6011,7 +5217,7 @@ class _AndroidTvPlaybackPayloadBuilder {
   /// Fetch movie IMDB ID from Cinemeta for Android TV playback
   /// Returns IMDB ID if found, null otherwise
   Future<String?> _fetchMovieImdbId(
-    List<_AndroidTvPlaybackItem> items,
+    List<AndroidTvPlaybackItem> items,
     int startIndex,
   ) async {
     // Get the title to parse - prefer the starting item, fall back to args.title
@@ -6067,9 +5273,9 @@ class _AndroidTvPlaybackPayloadBuilder {
   /// Build navigation maps based on SeriesPlaylist.allEpisodes ordering
   /// Maps originalIndex -> nextOriginalIndex and originalIndex -> prevOriginalIndex
   /// This mirrors exactly how mobile video_player_screen.dart navigates episodes
-  _NavigationMaps _buildNavigationMaps(
+  NavigationMaps _buildNavigationMaps(
     SeriesPlaylist? seriesPlaylist,
-    List<_AndroidTvPlaybackItem> items,
+    List<AndroidTvPlaybackItem> items,
   ) {
     final nextMap = <int, int>{};
     final prevMap = <int, int>{};
@@ -6084,7 +5290,7 @@ class _AndroidTvPlaybackPayloadBuilder {
           prevMap[i] = i - 1;
         }
       }
-      return _NavigationMaps(nextMap: nextMap, prevMap: prevMap);
+      return NavigationMaps(nextMap: nextMap, prevMap: prevMap);
     }
 
     // For series content, use SeriesPlaylist.allEpisodes ordering
@@ -6108,7 +5314,7 @@ class _AndroidTvPlaybackPayloadBuilder {
     debugPrint(
       'VideoPlayerLauncher: Built navigation maps - next: ${nextMap.length}, prev: ${prevMap.length}',
     );
-    return _NavigationMaps(nextMap: nextMap, prevMap: prevMap);
+    return NavigationMaps(nextMap: nextMap, prevMap: prevMap);
   }
 
   List<PlaylistEntry> _normalizePlaylist() {
@@ -6190,20 +5396,20 @@ class _AndroidTvPlaybackPayloadBuilder {
     return prepared;
   }
 
-  Future<List<_PerItemState>> _fetchPerItemPlaybackState(
+  Future<List<PerItemState>> _fetchPerItemPlaybackState(
     List<PlaylistEntry> entries, {
-    required _PlaybackContentType contentType,
+    required PlaybackContentType contentType,
     required SeriesPlaylist? seriesPlaylist,
   }) async {
     final stableSeriesTitle =
         args.contentTitle ?? seriesPlaylist?.seriesTitle ?? args.title;
-    final seriesProgress = contentType == _PlaybackContentType.series
+    final seriesProgress = contentType == PlaybackContentType.series
         ? await MergedEpisodeProgressStorage.getMergedEpisodeProgress(
             seriesTitle: stableSeriesTitle,
             imdbId: args.contentImdbId,
           )
         : const <String, Map<String, dynamic>>{};
-    final result = <_PerItemState>[];
+    final result = <PerItemState>[];
     for (var i = 0; i < entries.length; i++) {
       final entry = entries[i];
       SeriesEpisode? parsedEpisode;
@@ -6226,7 +5432,7 @@ class _AndroidTvPlaybackPayloadBuilder {
           : null;
       if (seriesState != null) {
         result.add(
-          _PerItemState(
+          PerItemState(
             positionMs: (seriesState['positionMs'] as num?)?.toInt() ?? 0,
             durationMs: (seriesState['durationMs'] as num?)?.toInt() ?? 0,
             updatedAt: (seriesState['updatedAt'] as num?)?.toInt() ?? 0,
@@ -6244,7 +5450,7 @@ class _AndroidTvPlaybackPayloadBuilder {
       //    carrying the SERIES imdbId (see the series branch of
       //    `_handleProgressUpdate`), so scanning by id there would hand back
       //    whichever episode was watched most recently.
-      if (contentType == _PlaybackContentType.single &&
+      if (contentType == PlaybackContentType.single &&
           args.contentType != 'series' &&
           entries.length == 1) {
         result.add(
@@ -6262,23 +5468,23 @@ class _AndroidTvPlaybackPayloadBuilder {
       final resumeId = _resumeIdForEntry(entry);
       result.add((CustomSeriesIdentity.isCustom(args.contentImdbId) ||
               (args.contentImdbId?.startsWith('medialibrary:') ?? false))
-          ? const _PerItemState() : await _readVideoState(resumeId));
+          ? const PerItemState() : await _readVideoState(resumeId));
     }
     return result;
   }
 
-  static _PerItemState _stateFromRecord(Map<String, dynamic>? data) {
+  static PerItemState _stateFromRecord(Map<String, dynamic>? data) {
     if (data == null) {
-      return const _PerItemState();
+      return const PerItemState();
     }
-    return _PerItemState(
+    return PerItemState(
       positionMs: (data['positionMs'] as num?)?.toInt() ?? 0,
       durationMs: (data['durationMs'] as num?)?.toInt() ?? 0,
       updatedAt: (data['updatedAt'] as num?)?.toInt() ?? 0,
     );
   }
 
-  Future<_PerItemState> _readVideoState(String resumeId) async {
+  Future<PerItemState> _readVideoState(String resumeId) async {
     return _stateFromRecord(
       await VideoProgressStorage.getVideoPlaybackState(videoTitle: resumeId),
     );
@@ -6313,12 +5519,12 @@ class _AndroidTvPlaybackPayloadBuilder {
     }
   }
 
-  _PlaybackContentType _determineContentType(
+  PlaybackContentType _determineContentType(
     SeriesPlaylist? seriesPlaylist,
     List<PlaylistEntry> entries,
   ) {
     if (seriesPlaylist != null && seriesPlaylist.isSeries) {
-      return _PlaybackContentType.series;
+      return PlaybackContentType.series;
     }
     // Caller explicitly declared a series episode with full context
     // (imdbId + season + episode). Quick Play from TorrentSearchScreen hits
@@ -6329,30 +5535,30 @@ class _AndroidTvPlaybackPayloadBuilder {
         args.contentImdbId != null &&
         args.contentSeason != null &&
         args.contentEpisode != null) {
-      return _PlaybackContentType.series;
+      return PlaybackContentType.series;
     }
     if (entries.length > 1) {
-      return _PlaybackContentType.collection;
+      return PlaybackContentType.collection;
     }
-    return _PlaybackContentType.single;
+    return PlaybackContentType.single;
   }
 
   Future<int> _determineStartIndex(
-    _PlaybackContentType contentType,
+    PlaybackContentType contentType,
     SeriesPlaylist? seriesPlaylist,
     List<PlaylistEntry> entries,
-    List<_PerItemState> perItemState,
+    List<PerItemState> perItemState,
     TrackingSourcePolicy trackingPolicy,
   ) async {
     switch (contentType) {
-      case _PlaybackContentType.series:
+      case PlaybackContentType.series:
         return await _determineSeriesStartIndex(seriesPlaylist, trackingPolicy);
-      case _PlaybackContentType.collection:
+      case PlaybackContentType.collection:
         if (!trackingPolicy.progressFrom(TrackingSource.local)) {
           return args.startIndex ?? 0;
         }
         return _determineCollectionStartIndex(entries, perItemState);
-      case _PlaybackContentType.single:
+      case PlaybackContentType.single:
         return args.startIndex ?? 0;
     }
   }
@@ -6428,7 +5634,7 @@ class _AndroidTvPlaybackPayloadBuilder {
 
   int _determineCollectionStartIndex(
     List<PlaylistEntry> entries,
-    List<_PerItemState> perItemState,
+    List<PerItemState> perItemState,
   ) {
     // If auto-resume is disabled, use explicit start index
     if (args.disableAutoResume) {
@@ -6466,14 +5672,14 @@ class _AndroidTvPlaybackPayloadBuilder {
     return args.startIndex ?? 0;
   }
 
-  List<_AndroidTvSeriesSeason> _buildSeriesSeasons(SeriesPlaylist? playlist) {
+  List<AndroidTvSeriesSeason> _buildSeriesSeasons(SeriesPlaylist? playlist) {
     if (playlist == null) {
       return const [];
     }
-    final seasons = <_AndroidTvSeriesSeason>[];
+    final seasons = <AndroidTvSeriesSeason>[];
     for (final season in playlist.seasons) {
       final episodes = season.episodes.map((episode) {
-        return _AndroidTvSeriesEpisode(
+        return AndroidTvSeriesEpisode(
           title: episode.displayTitle,
           season: episode.seriesInfo.season,
           episode: episode.seriesInfo.episode,
@@ -6482,7 +5688,7 @@ class _AndroidTvPlaybackPayloadBuilder {
         );
       }).toList();
       seasons.add(
-        _AndroidTvSeriesSeason(
+        AndroidTvSeriesSeason(
           seasonNumber: season.seasonNumber,
           episodes: episodes,
         ),
@@ -6537,26 +5743,9 @@ class _AndroidTvPlaybackPayloadBuilder {
   }
 }
 
-class _PerItemState {
-  final int positionMs;
-  final int durationMs;
-  final int updatedAt;
 
-  const _PerItemState({
-    this.positionMs = 0,
-    this.durationMs = 0,
-    this.updatedAt = 0,
-  });
-}
 
-/// Navigation maps for series playback
-/// Maps originalIndex -> next/prev originalIndex based on SeriesPlaylist.allEpisodes order
-class _NavigationMaps {
-  final Map<int, int> nextMap;
-  final Map<int, int> prevMap;
 
-  const _NavigationMaps({required this.nextMap, required this.prevMap});
-}
 
 /// Fires [onCovered] on the first lifecycle change away from resumed — i.e.
 /// when the launched activity (native TV player / external app) takes the

@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -250,7 +250,23 @@ PRESENTATION_BRIDGE_IMPORTS = {
 # still call legacy services directly, so files here may import lib/services/;
 # http, shared_preferences and sqflite stay forbidden. Exit milestone: those
 # calls move behind Sources data contracts and this folder is dissolved.
-LEGACY_PLAYBACK_BRIDGE = "lib/features/sources/presentation/legacy_playback/"
+LEGACY_PLAYBACK_BRIDGES = (
+    "lib/features/sources/presentation/legacy_playback/",
+    # Move-only launcher bridge; exit: data contracts replace service calls.
+    "lib/features/player_launch/presentation/legacy_launch/",
+)
+# Each pending cap is zero until measured in the file's creation commit.
+# No further player-launch size exception is authorized by this plan.
+PLAYER_LAUNCH_SIZE_EXCEPTIONS = {
+    # Whole native launch: split during a later control-flow change.
+    "lib/features/player_launch/data/android_tv_native_launch.dart": 0,
+    # Whole payload builder: split during a later control-flow change.
+    "lib/features/player_launch/data/android_tv_payload_builder.dart": 0,
+    # Whole progress/completion handlers: split in a later control-flow change.
+    "lib/features/player_launch/data/native_progress_handler.dart": 0,
+    # Whole router: split during a later control-flow change.
+    "lib/features/player_launch/presentation/legacy_launch/launch_router.dart": 0,
+}
 GENERATED_SUFFIXES = (".g.dart", ".freezed.dart")
 DIRECTIVES = re.compile(r"^\s*(?:import|export)\s+([^;]+);", re.MULTILINE)
 URIS = re.compile(r"['\"]([^'\"]+)['\"]")
@@ -275,7 +291,14 @@ def violations(path: Path) -> list[str]:
     if relative.startswith(STORAGE_SOURCE_DIR + '/') or relative in STORAGE_ENUM_FILES:
         if lines > 500:
             problems.append(f'{lines} lines exceeds the 500-line storage limit')
-    if lines > 800:
+    if relative.startswith("lib/features/player_launch/"):
+        limit = PLAYER_LAUNCH_SIZE_EXCEPTIONS.get(relative, 500)
+        if lines > limit:
+            problems.append(f"{lines} lines exceeds the {limit}-line launcher extraction limit")
+        if layer_hint := next((x for x in ("data", "models") if x in path.parts), None):
+            if re.search(r"\bBuildContext\b", source):
+                problems.append(f"{layer_hint} references BuildContext")
+    if lines > max(800, PLAYER_LAUNCH_SIZE_EXCEPTIONS.get(relative, 0)):
         problems.append(f"{lines} lines exceeds the 800-line ceiling")
     if re.search(r"^\s*part\s+of\b", source, re.MULTILINE):
         problems.append("handwritten part of a shared library")
@@ -317,7 +340,7 @@ def violations(path: Path) -> list[str]:
                 names = set(re.findall(r"\w+", shown.group(1))) if shown else set()
                 if not names or not names <= bridge[target]:
                     problems.append(f"legacy presentation import must show only allowed declarations: {uri}")
-            legacy_bridge = (relative.startswith(LEGACY_PLAYBACK_BRIDGE)
+            legacy_bridge = (relative.startswith(LEGACY_PLAYBACK_BRIDGES)
                              and target.startswith("lib/services/"))
             if layer == "presentation" and target.startswith((
                     "lib/services/", "package:http/", "package:shared_preferences/",
@@ -337,6 +360,8 @@ def violations(path: Path) -> list[str]:
                         # COMPOSITION, outside lib/features.
                         problems.append(
                             f"cross-feature import outside {other}/models: {uri}")
+                if own == "player_launch" and layer in ("data", "models") and target == "lib/services/video_player_launcher.dart":
+                    problems.append("launcher data/models call back through the facade")
                 if target.startswith(COMPOSITION + "/") or target == FACADE:
                     problems.append(f"feature imports the composition layer: {uri}")
     return [f"{relative}: {problem}" for problem in problems]

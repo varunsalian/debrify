@@ -56,6 +56,7 @@ ROUTE_BOUNDARIES = (
     "lib/screens/video_player/",
     "lib/screens/video_player_screen.dart",
     "lib/services/video_player_launcher.dart",
+    "lib/features/player_launch/presentation/legacy_launch/",
     "lib/screens/catalog_item_detail_screen.dart",
     "lib/screens/episodes_screen.dart",
     "lib/widgets/episodes_panel.dart",

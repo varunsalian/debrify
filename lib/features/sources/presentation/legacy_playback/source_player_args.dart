@@ -12,6 +12,9 @@ import 'package:debrify/services/video_player_launcher.dart';
 import 'package:debrify/utils/series_parser.dart';
 import 'package:flutter/material.dart';
 
+export 'package:debrify/services/video_player_launcher.dart'
+    show VideoPlayerLaunchArgsWidget;
+
 final class SourcePlayerArgs {
   const SourcePlayerArgs._();
 
