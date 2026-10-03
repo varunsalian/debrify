@@ -695,5 +695,69 @@
         }
       }
     }
+  },
+  "formatted public named constructor": {
+    "original": "class _Tint extends StatelessWidget { const _Tint({required Color shade}); }",
+    "sources": {
+      "source": "",
+      "feature/tint.dart": "class Tint extends StatelessWidget { const Tint({super.key, required Color shade,}); }"
+    },
+    "rows": [
+      {
+        "original_name": "_Tint._Tint",
+        "destination_file": "feature/tint.dart",
+        "destination_class": "Tint",
+        "new_name": "Tint",
+        "allowed_edits": "rename,public_widget_key",
+        "expected_difference": "public_widget_key: add optional super.key only; no caller passes a key"
+      }
+    ],
+    "config": {
+      "allowed_edits": [
+        "context_confirmation",
+        "context_guard",
+        "formatter_if_braces",
+        "production_api_annotation",
+        "public_widget_key",
+        "receiver",
+        "rename",
+        "state_callback",
+        "unchanged",
+        "retained_forwarder"
+      ]
+    },
+    "passes": true
+  },
+  "named constructor parameter changed": {
+    "original": "class _Tint extends StatelessWidget { const _Tint({required Color shade}); }",
+    "sources": {
+      "source": "",
+      "feature/tint.dart": "class Tint extends StatelessWidget { const Tint({super.key, Color shade,}); }"
+    },
+    "rows": [
+      {
+        "original_name": "_Tint._Tint",
+        "destination_file": "feature/tint.dart",
+        "destination_class": "Tint",
+        "new_name": "Tint",
+        "allowed_edits": "rename,public_widget_key",
+        "expected_difference": "public_widget_key: add optional super.key only; no caller passes a key"
+      }
+    ],
+    "config": {
+      "allowed_edits": [
+        "context_confirmation",
+        "context_guard",
+        "formatter_if_braces",
+        "production_api_annotation",
+        "public_widget_key",
+        "receiver",
+        "rename",
+        "state_callback",
+        "unchanged",
+        "retained_forwarder"
+      ]
+    },
+    "passes": false
   }
 }

@@ -50,6 +50,13 @@ class References extends RecursiveAstVisitor<void> {
     if (node.endToken.previous?.lexeme == ',') {
       formatCommas.add(node.endToken.previous!.offset);
     }
+    // Named/optional parameters close with } or ] before the final ). Their
+    // trailing comma is formatting punctuation too, never a parameter separator.
+    final optionalEnd = node.endToken.previous;
+    if ((optionalEnd?.lexeme == '}' || optionalEnd?.lexeme == ']') &&
+        optionalEnd?.previous?.lexeme == ',') {
+      formatCommas.add(optionalEnd!.previous!.offset);
+    }
     super.visitFormalParameterList(node);
   }
 

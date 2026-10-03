@@ -364,10 +364,10 @@ _IptvStageChipState.didUpdateWidget	lib/features/iptv/presentation/iptv_stage_ch
 _IptvStageChipState._syncAnimation	lib/features/iptv/presentation/iptv_stage_chip.dart	_IptvStageChipState	_syncAnimation	1	presentation	rename	verbatim; plan-named edits only
 _IptvStageChipState.dispose	lib/features/iptv/presentation/iptv_stage_chip.dart	_IptvStageChipState	dispose	1	presentation	rename	verbatim; plan-named edits only
 _IptvStageChipState.build	lib/features/iptv/presentation/iptv_stage_chip.dart	_IptvStageChipState	build	1	presentation	rename	verbatim; plan-named edits only
-_TuningBarsPainter.t	lib/features/iptv/presentation/tuning_bars_painter.dart	TuningBarsPainter	t	1	presentation	rename	verbatim; plan-named edits only
-_TuningBarsPainter._TuningBarsPainter	lib/features/iptv/presentation/tuning_bars_painter.dart	TuningBarsPainter	TuningBarsPainter	1	presentation	rename	verbatim; plan-named edits only
-_TuningBarsPainter.paint	lib/features/iptv/presentation/tuning_bars_painter.dart	TuningBarsPainter	paint	1	presentation	rename	verbatim; plan-named edits only
-_TuningBarsPainter.shouldRepaint	lib/features/iptv/presentation/tuning_bars_painter.dart	TuningBarsPainter	shouldRepaint	1	presentation	rename	verbatim; plan-named edits only
+_TuningBarsPainter.t	lib/features/iptv/presentation/iptv_stage_chip.dart	TuningBarsPainter	t	1	presentation	rename	verbatim; plan-named edits only
+_TuningBarsPainter._TuningBarsPainter	lib/features/iptv/presentation/iptv_stage_chip.dart	TuningBarsPainter	TuningBarsPainter	1	presentation	rename	verbatim; plan-named edits only
+_TuningBarsPainter.paint	lib/features/iptv/presentation/iptv_stage_chip.dart	TuningBarsPainter	paint	1	presentation	rename	verbatim; plan-named edits only
+_TuningBarsPainter.shouldRepaint	lib/features/iptv/presentation/iptv_stage_chip.dart	TuningBarsPainter	shouldRepaint	1	presentation	rename	verbatim; plan-named edits only
 _IptvFocusStageInfo.channel	lib/features/iptv/presentation/legacy_iptv/iptv_focus_stage_info.dart	IptvFocusStageInfo	channel	1	legacy	rename	verbatim; plan-named edits only
 _IptvFocusStageInfo.hasLists	lib/features/iptv/presentation/legacy_iptv/iptv_focus_stage_info.dart	IptvFocusStageInfo	hasLists	1	legacy	rename	verbatim; plan-named edits only
 _IptvFocusStageInfo._IptvFocusStageInfo	lib/features/iptv/presentation/legacy_iptv/iptv_focus_stage_info.dart	IptvFocusStageInfo	IptvFocusStageInfo	1	legacy	rename,public_widget_key	public_widget_key: add optional super.key only; no caller passes a key

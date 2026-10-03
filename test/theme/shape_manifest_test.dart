@@ -35,6 +35,10 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/features/iptv/presentation/legacy_iptv/iptv_rail_info.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_focus_stage_info.dart': 0,
+  'lib/features/iptv/presentation/key_cap.dart': 0,
+  'lib/features/iptv/presentation/iptv_stage_chip.dart': 0,
   // Search presentation extracted from search_screen.dart (tokens moved, not lost).
   'lib/features/search/presentation/catalog_search_prompt.dart': 0,
   'lib/features/search/presentation/keyword_search_page.dart': 0,
@@ -120,7 +124,7 @@ const Map<String, int> kShapeResidue = {
   'lib/widgets/iptv/iptv_filters.dart': 4,
   'lib/widgets/iptv/iptv_list_name_dialog.dart': 0,
   'lib/widgets/iptv/iptv_list_picker_dialog.dart': 0,
-  'lib/widgets/iptv/iptv_results_view.dart': 7,
+  'lib/widgets/iptv/iptv_results_view.dart': 6,
   'lib/widgets/iptv/iptv_stage_panel.dart': 2,
   'lib/widgets/mobile_classic_nav.dart': 0,
   'lib/widgets/mobile_floating_nav.dart': 0,
@@ -143,6 +147,16 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/iptv/presentation/tuning_waves_painter.dart': 0,
+  'lib/features/iptv/presentation/spotlight_category_picker_dialog.dart': 1,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_tablet_identity.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_stage_floor.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_landing_policy.dart': 0,
+  'lib/features/iptv/presentation/iptv_rail_hints.dart': 0,
+  'lib/features/iptv/application/iptv_status_chip_types.dart': 0,
+  'lib/features/iptv/application/iptv_rail_resolution.dart': 0,
+  'lib/features/iptv/application/iptv_load_status_policy.dart': 0,
+  'lib/features/iptv/application/iptv_layout_policy.dart': 0,
   'lib/screens/settings_screen.dart': 0,
   'lib/features/settings/presentation/legacy_settings/settings_download_location.dart':
       1,

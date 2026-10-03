@@ -23,7 +23,7 @@ The 9,149-line step-0 facade is retained only for the two test seams and charact
 | `_TuningWavesPainter` | 8539–8601 | `lib/features/iptv/presentation/tuning_waves_painter.dart` |
 | `_IptvStageChip` | 8603–8621 | `lib/features/iptv/presentation/iptv_stage_chip.dart` |
 | `_IptvStageChipState` | 8623–8724 | `lib/features/iptv/presentation/iptv_stage_chip.dart` |
-| `_TuningBarsPainter` | 8726–8753 | `lib/features/iptv/presentation/tuning_bars_painter.dart` |
+| `_TuningBarsPainter` | 8726–8753 | `lib/features/iptv/presentation/iptv_stage_chip.dart` |
 | `_IptvFocusStageInfo` | 8755–8896 | `lib/features/iptv/presentation/legacy_iptv/iptv_focus_stage_info.dart` |
 | `_IptvRailInfo` | 8898–9019 | `lib/features/iptv/presentation/legacy_iptv/iptv_rail_info.dart` |
 | `_IptvRailHints` | 9021–9058 | `lib/features/iptv/presentation/iptv_rail_hints.dart` |
@@ -75,7 +75,7 @@ All widget fields, constructor defaults, `createState`, the State class header, 
 | `_TuningWavesPainter` | —; no service import | `lib/features/iptv/presentation/tuning_waves_painter.dart` |
 | `_IptvStageChip` | —; no service import | `lib/features/iptv/presentation/iptv_stage_chip.dart` |
 | `_IptvStageChipState` | `AppThemeScope`; no service import | `lib/features/iptv/presentation/iptv_stage_chip.dart` |
-| `_TuningBarsPainter` | —; no service import | `lib/features/iptv/presentation/tuning_bars_painter.dart` |
+| `_TuningBarsPainter` | —; no service import | `lib/features/iptv/presentation/iptv_stage_chip.dart` |
 | `_IptvFocusStageInfo` | `AppThemeScope`, `CachedNetworkImage`, `DebrifyImageCache`, `IptvEpgService`; service imports required | `lib/features/iptv/presentation/legacy_iptv/iptv_focus_stage_info.dart` |
 | `_IptvRailInfo` | `AppThemeScope`, `CachedNetworkImage`, `DebrifyImageCache`; service imports required | `lib/features/iptv/presentation/legacy_iptv/iptv_rail_info.dart` |
 | `_IptvRailHints` | `AppThemeScope`; no service import | `lib/features/iptv/presentation/iptv_rail_hints.dart` |
@@ -486,10 +486,10 @@ All remaining State scalar/list/map assignments appear in the per-leaf write inv
 | `_IptvStageChipState._syncAnimation` / 8647–8653 | `lib/features/iptv/presentation/iptv_stage_chip.dart::_IptvStageChipState._syncAnimation` (1, presentation) | R: `_IptvStageChipState._ctrl`, `_IptvStageChipState._tuning`; W: — | T _IptvStageChipState._tuning → _IptvStageChipState._tuning (step 1); contracts 1,6,9 |
 | `_IptvStageChipState.dispose` / 8655–8659 | `lib/features/iptv/presentation/iptv_stage_chip.dart::_IptvStageChipState.dispose` (1, presentation) | R: `_IptvStageChipState._ctrl`, `_IptvStageChipState.dispose`; W: — | C _IptvStageChipState.dispose → _IptvStageChipState.dispose (step 1); contracts 1,6,9 |
 | `_IptvStageChipState.build` / 8661–8723 | `lib/features/iptv/presentation/iptv_stage_chip.dart::_IptvStageChipState.build` (1, presentation) | R: `_IptvStageChipState._ctrl`, `_IptvStageChipState._tuning`; W: — | T _IptvStageChipState._tuning → _IptvStageChipState._tuning (step 1); contracts 1,6,9 |
-| `_TuningBarsPainter.t` / 8729–8729 | `lib/features/iptv/presentation/tuning_bars_painter.dart::TuningBarsPainter.t` (1, presentation) | Readers: `_TuningBarsPainter._TuningBarsPainter`, `_TuningBarsPainter.paint`; writers: —; initializer reads: — | contracts 1,6,9 |
-| `_TuningBarsPainter._TuningBarsPainter` / 8730–8730 | `lib/features/iptv/presentation/tuning_bars_painter.dart::TuningBarsPainter.TuningBarsPainter` (1, presentation) | R: `_TuningBarsPainter._TuningBarsPainter`, `_TuningBarsPainter.t`; W: — | contracts 1,6,9 |
-| `_TuningBarsPainter.paint` / 8732–8749 | `lib/features/iptv/presentation/tuning_bars_painter.dart::TuningBarsPainter.paint` (1, presentation) | R: `_TuningBarsPainter.paint`, `_TuningBarsPainter.t`; W: — | T _TuningBarsPainter.paint → TuningBarsPainter.paint (step 1); contracts 1,6,9 |
-| `_TuningBarsPainter.shouldRepaint` / 8751–8752 | `lib/features/iptv/presentation/tuning_bars_painter.dart::TuningBarsPainter.shouldRepaint` (1, presentation) | R: —; W: — | contracts 1,6,9 |
+| `_TuningBarsPainter.t` / 8729–8729 | `lib/features/iptv/presentation/iptv_stage_chip.dart::TuningBarsPainter.t` (1, presentation) | Readers: `_TuningBarsPainter._TuningBarsPainter`, `_TuningBarsPainter.paint`; writers: —; initializer reads: — | contracts 1,6,9 |
+| `_TuningBarsPainter._TuningBarsPainter` / 8730–8730 | `lib/features/iptv/presentation/iptv_stage_chip.dart::TuningBarsPainter.TuningBarsPainter` (1, presentation) | R: `_TuningBarsPainter._TuningBarsPainter`, `_TuningBarsPainter.t`; W: — | contracts 1,6,9 |
+| `_TuningBarsPainter.paint` / 8732–8749 | `lib/features/iptv/presentation/iptv_stage_chip.dart::TuningBarsPainter.paint` (1, presentation) | R: `_TuningBarsPainter.paint`, `_TuningBarsPainter.t`; W: — | T _TuningBarsPainter.paint → TuningBarsPainter.paint (step 1); contracts 1,6,9 |
+| `_TuningBarsPainter.shouldRepaint` / 8751–8752 | `lib/features/iptv/presentation/iptv_stage_chip.dart::TuningBarsPainter.shouldRepaint` (1, presentation) | R: —; W: — | contracts 1,6,9 |
 | `_IptvFocusStageInfo.channel` / 8758–8758 | `lib/features/iptv/presentation/legacy_iptv/iptv_focus_stage_info.dart::IptvFocusStageInfo.channel` (1, legacy) | Readers: `_IptvFocusStageInfo.build`; writers: —; initializer reads: — | contracts 1,6,9 |
 | `_IptvFocusStageInfo.hasLists` / 8759–8759 | `lib/features/iptv/presentation/legacy_iptv/iptv_focus_stage_info.dart::IptvFocusStageInfo.hasLists` (1, legacy) | Readers: `_IptvFocusStageInfo.build`; writers: —; initializer reads: — | contracts 1,6,9 |
 | `_IptvFocusStageInfo._IptvFocusStageInfo` / 8761–8761 | `lib/features/iptv/presentation/legacy_iptv/iptv_focus_stage_info.dart::IptvFocusStageInfo.IptvFocusStageInfo` (1, legacy) | R: `_IptvFocusStageInfo._IptvFocusStageInfo`; W: — | contracts 1,6,9 |

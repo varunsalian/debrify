@@ -1,8 +1,18 @@
+import 'package:debrify/features/iptv/application/iptv_layout_policy.dart';
+import 'package:debrify/features/iptv/application/iptv_load_status_policy.dart';
+import 'package:debrify/features/iptv/application/iptv_rail_resolution.dart';
+import 'package:debrify/features/iptv/application/iptv_status_chip_types.dart';
+import 'package:debrify/features/iptv/presentation/iptv_stage_chip.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_focus_stage_info.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_landing_policy.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_rail_info.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_stage_floor.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_tablet_identity.dart';
+import 'package:debrify/features/iptv/presentation/spotlight_category_picker_dialog.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:debrify/services/storage/iptv_appearance_storage.dart';
@@ -77,30 +87,13 @@ import '../../services/profiles/profile_preferences.dart';
 import '../../services/live_recording_service.dart';
 import '../recording_limit_dialogs.dart';
 
-typedef _TabletChannelIdentity = ({
-  int? channelNumber,
-  String name,
-  String url,
-  String? group,
-  String? contentType,
-});
 
-/// Matches a trailing resolution the M3U names embed, e.g. "(1080p)" / "(576i)"
-/// — pulled out of the rail's big title into its sub-line (the channel rows do
-/// the same split for themselves).
-final RegExp _railResExp = RegExp(r'\((\d{3,4}[pi])\)', caseSensitive: false);
 
-/// State of the bottom-right background-refresh chip.
-enum _CatalogChipState { hidden, updating, success, failure }
 
-/// Who currently owns the single status chip, in priority order.
-///
-/// Background jobs overlap — the guide download starts when the list is
-/// presented, the maintenance pipeline two seconds later, and a refresh after
-/// that — so without a rank the last writer wins and the chip flickers between
-/// unrelated messages. News about the LIST itself outranks news about the
-/// guide, and a stage only clears the chip if it still holds it.
-enum _ChipOwner { none, guide, maintenance, refresh }
+
+
+
+
 
 /// Main view for IPTV M3U results, to be embedded in TorrentSearchScreen
 class IptvResultsView extends StatefulWidget {
@@ -215,23 +208,15 @@ class IptvResultsViewState extends State<IptvResultsView>
   bool get _spotlightRequestedForDevice =>
       _iptvStyle == IptvStyle.spotlight && (widget.isTelevision || _isDesktop);
 
-  static const double tabletTwoPaneMinWidth = 900;
-  static const double tabletTwoPaneMinHeight = 500;
+  static const double tabletTwoPaneMinWidth = IptvLayoutPolicy.tabletTwoPaneMinWidth;
+  static const double tabletTwoPaneMinHeight = IptvLayoutPolicy.tabletTwoPaneMinHeight;
 
   static bool shouldUseTouchTabletTwoPane({
     required bool isTelevision,
     required bool isWeb,
     required TargetPlatform platform,
     required Size availableSize,
-  }) {
-    final touchPlatform =
-        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
-    return !isTelevision &&
-        !isWeb &&
-        touchPlatform &&
-        availableSize.width >= tabletTwoPaneMinWidth &&
-        availableSize.height >= tabletTwoPaneMinHeight;
-  }
+  }) => IptvLayoutPolicy.shouldUseTouchTabletTwoPane(isTelevision: isTelevision, isWeb: isWeb, platform: platform, availableSize: availableSize);
 
   /// Mount the parent-owned Browse search field in the shipped position. The
   /// Spotlight shell takes the same widget as a rail slot instead, so each
@@ -317,7 +302,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   // Background catalog refresh (stale-while-revalidate) status chip.
   // `updating` appears only when the revalidate is genuinely slow (a real
   // network fetch), so instant in-memory-cache revalidates never flash it.
-  _CatalogChipState _chipState = _CatalogChipState.hidden;
+  CatalogChipState _chipState = CatalogChipState.hidden;
   String _chipMessage = '';
   // ── Blocking-load status ────────────────────────────────────────────────
   // A first load of a big panel is several seconds behind a spinner, and
@@ -338,7 +323,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// normal rather than left guessing.
   static const _slowLoadHint = Duration(seconds: 10);
 
-  _ChipOwner _chipOwner = _ChipOwner.none;
+  ChipOwner _chipOwner = ChipOwner.none;
   Timer? _chipShowTimer;
   Timer? _maintenanceChipTimer;
   Timer? _chipHideTimer;
@@ -621,7 +606,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// retaining its rows; keeping both identity and the last index makes the
   /// common append-only update O(1), while still finding a moved row.
   int _tabletSelectedIndex = 0;
-  _TabletChannelIdentity? _tabletSelectedIdentity;
+  TabletChannelIdentity? _tabletSelectedIdentity;
 
   /// The schedule action for a row, or null when the channel can't have
   /// guide data (no RIGHT-key handling, no calendar icon).
@@ -1255,8 +1240,8 @@ class IptvResultsViewState extends State<IptvResultsView>
       // playlist's explicit pick doesn't carry over.
       _categoryManuallyChosen = false;
       _landingSeedArmed = true;
-      _chipState = _CatalogChipState.hidden;
-      _chipOwner = _ChipOwner.none;
+      _chipState = CatalogChipState.hidden;
+      _chipOwner = ChipOwner.none;
       _dbSnapshot = null;
       _dbGroupCounts = const {};
       // The outgoing catalog's instances are no use to the incoming one.
@@ -1888,9 +1873,9 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (mb == 0) return; // nothing worth announcing for a small guide
     final label = loadBytesLabel(bytes, totalBytes);
     _showChip(
-      _CatalogChipState.updating,
+      CatalogChipState.updating,
       label == null ? 'Loading TV guide…' : 'Loading TV guide… $label',
-      owner: _ChipOwner.guide,
+      owner: ChipOwner.guide,
     );
   }
 
@@ -1905,9 +1890,9 @@ class IptvResultsViewState extends State<IptvResultsView>
     _maintenanceChipTimer = Timer(const Duration(milliseconds: 400), () {
       if (!mounted || ticket != _loadTicket) return;
       _showChip(
-        _CatalogChipState.updating,
+        CatalogChipState.updating,
         'Preparing channel numbers…',
-        owner: _ChipOwner.maintenance,
+        owner: ChipOwner.maintenance,
       );
     });
   }
@@ -1926,14 +1911,14 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (!narrate) return;
     if (numbersMoved) {
       _showChip(
-        _CatalogChipState.success,
+        CatalogChipState.success,
         'Channel numbers ready',
         autoHide: const Duration(milliseconds: 2200),
-        owner: _ChipOwner.maintenance,
+        owner: ChipOwner.maintenance,
       );
       return;
     }
-    _hideChipIfOwned(_ChipOwner.maintenance);
+    _hideChipIfOwned(ChipOwner.maintenance);
   }
 
   /// Apply any pending catalog-DB upgrade in the background, then show the
@@ -2105,7 +2090,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     _chipShowTimer?.cancel();
     _chipShowTimer = Timer(const Duration(milliseconds: 400), () {
       if (!_revalidateSuperseded(playlist, contentType, ticket)) {
-        _showChip(_CatalogChipState.updating, 'Updating list…');
+        _showChip(CatalogChipState.updating, 'Updating list…');
       }
     });
 
@@ -2136,14 +2121,14 @@ class IptvResultsViewState extends State<IptvResultsView>
       );
     }
     _chipShowTimer?.cancel();
-    final chipWasVisible = _chipState == _CatalogChipState.updating;
+    final chipWasVisible = _chipState == CatalogChipState.updating;
 
     if (_revalidateSuperseded(playlist, contentType, ticket)) return;
 
     final receipt = result.ingest;
     if (result.hasError || (receipt == null && result.channels.isEmpty)) {
       _showChip(
-        _CatalogChipState.failure,
+        CatalogChipState.failure,
         'Couldn\'t refresh — showing saved list',
         autoHide: const Duration(milliseconds: 3500),
       );
@@ -2203,7 +2188,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       }
       if (chipWasVisible) {
         _showChip(
-          _CatalogChipState.success,
+          CatalogChipState.success,
           'Up to date',
           autoHide: const Duration(milliseconds: 1800),
         );
@@ -2322,7 +2307,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
 
     _showChip(
-      _CatalogChipState.success,
+      CatalogChipState.success,
       added > 0 ? 'Updated • $added new' : 'List updated',
       autoHide: const Duration(milliseconds: 2200),
     );
@@ -2547,64 +2532,46 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   @visibleForTesting
-  static String formatLoadBytes(int bytes) {
-    if (bytes >= 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
-    return '$bytes B';
-  }
+  static String formatLoadBytes(int bytes) => IptvLoadStatusPolicy.formatLoadBytes(bytes);
 
   @visibleForTesting
-  static String formatLoadElapsed(Duration d) {
-    final minutes = d.inMinutes;
-    final seconds = d.inSeconds % 60;
-    return '$minutes:${seconds.toString().padLeft(2, '0')}';
-  }
+  static String formatLoadElapsed(Duration d) => IptvLoadStatusPolicy.formatLoadElapsed(d);
 
   /// "12.4 / 50.0 MB" when the transfer is observable, "42.1 MB" when only the
   /// landed size is known, null when there is no honest number to show — a
   /// buffered fetch that has not landed yet must not imply progress it cannot
   /// measure.
   @visibleForTesting
-  static String? loadBytesLabel(int? bytes, int? totalBytes) {
-    if (bytes == null) return null;
-    if (totalBytes != null && totalBytes > 0) {
-      return '${formatLoadBytes(bytes)} / ${formatLoadBytes(totalBytes)}';
-    }
-    if (bytes == 0) return null;
-    return formatLoadBytes(bytes);
-  }
+  static String? loadBytesLabel(int? bytes, int? totalBytes) => IptvLoadStatusPolicy.loadBytesLabel(bytes, totalBytes);
 
   String? get _loadBytesLabel => loadBytesLabel(_loadBytes, _loadTotalBytes);
 
   /// Whether a stage owning [incoming] may take the chip from [current].
   /// Pure, so the priority rule is testable without pumping the page.
   @visibleForTesting
-  static bool chipClaimAllowed(int current, int incoming) =>
-      incoming >= current;
+  static bool chipClaimAllowed(int current, int incoming) => IptvLoadStatusPolicy.chipClaimAllowed(current, incoming);
 
   /// Priority ranks, exposed for the same reason.
   @visibleForTesting
-  static int get chipRankNone => _ChipOwner.none.index;
+  static int get chipRankNone => IptvLoadStatusPolicy.chipRankNone;
   @visibleForTesting
-  static int get chipRankGuide => _ChipOwner.guide.index;
+  static int get chipRankGuide => IptvLoadStatusPolicy.chipRankGuide;
   @visibleForTesting
-  static int get chipRankMaintenance => _ChipOwner.maintenance.index;
+  static int get chipRankMaintenance => IptvLoadStatusPolicy.chipRankMaintenance;
   @visibleForTesting
-  static int get chipRankRefresh => _ChipOwner.refresh.index;
+  static int get chipRankRefresh => IptvLoadStatusPolicy.chipRankRefresh;
 
   void _showChip(
-    _CatalogChipState state,
+    CatalogChipState state,
     String message, {
     Duration? autoHide,
-    _ChipOwner owner = _ChipOwner.refresh,
+    ChipOwner owner = ChipOwner.refresh,
   }) {
     if (!mounted) return;
     // Every catalog ingestion that completes narrates a success chip — the
     // one choke point where a first-time source (or a background refresh)
     // has just written the snapshot the rail's counts read from.
-    if (state == _CatalogChipState.success) _recomputeSourceCounts();
+    if (state == CatalogChipState.success) _recomputeSourceCounts();
     // Outranked by whatever is already speaking: stay quiet rather than
     // stomping it.
     if (!chipClaimAllowed(_chipOwner.index, owner.index)) return;
@@ -2616,22 +2583,22 @@ class IptvResultsViewState extends State<IptvResultsView>
     });
     if (autoHide != null) {
       _chipHideTimer = Timer(autoHide, () {
-        if (mounted && _chipState != _CatalogChipState.hidden) {
-          setState(() => _chipState = _CatalogChipState.hidden);
+        if (mounted && _chipState != CatalogChipState.hidden) {
+          setState(() => _chipState = CatalogChipState.hidden);
         }
-        _chipOwner = _ChipOwner.none;
+        _chipOwner = ChipOwner.none;
       });
     }
   }
 
   /// Clear the chip only if [owner] still holds it — a stage that has been
   /// superseded must not blank the message that replaced it.
-  void _hideChipIfOwned(_ChipOwner owner) {
+  void _hideChipIfOwned(ChipOwner owner) {
     if (_chipOwner != owner) return;
     _chipHideTimer?.cancel();
-    _chipOwner = _ChipOwner.none;
-    if (mounted && _chipState != _CatalogChipState.hidden) {
-      setState(() => _chipState = _CatalogChipState.hidden);
+    _chipOwner = ChipOwner.none;
+    if (mounted && _chipState != CatalogChipState.hidden) {
+      setState(() => _chipState = CatalogChipState.hidden);
     }
   }
 
@@ -2665,7 +2632,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     final service = IptvEpgService.instance;
     _lastGuideMb = -1;
     if (playlist.isFavorites || playlist.isCustomList) {
-      _hideChipIfOwned(_ChipOwner.guide);
+      _hideChipIfOwned(ChipOwner.guide);
       unawaited(
         Zone.root.run(() => service.setListEpgContext(
           channels: result.channels,
@@ -2680,7 +2647,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         playlist.isXtreamCodes && _selectedContentType == 'live';
     if (!isPlainM3u && !isXtreamLive) {
       service.clearM3uEpgContext();
-      _hideChipIfOwned(_ChipOwner.guide);
+      _hideChipIfOwned(ChipOwner.guide);
       return;
     }
     // A user-configured guide URL beats every derived source.
@@ -2741,7 +2708,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         .then((status) {
           // The guide is done one way or another — drop its chip if it is
           // still the one speaking.
-          _hideChipIfOwned(_ChipOwner.guide);
+          _hideChipIfOwned(ChipOwner.guide);
           if (!mounted || ticket != _loadTicket) return;
           // Failure hints only for a guide the user configured themselves.
           // Header-derived url-tvg URLs are routinely dead in wild playlists —
@@ -2788,7 +2755,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         // status-carrying failures above.
         .catchError((Object e) {
           debugPrint('IPTV: guide context update failed: $e');
-          _hideChipIfOwned(_ChipOwner.guide);
+          _hideChipIfOwned(ChipOwner.guide);
           if (!mounted || ticket != _loadTicket) return;
           if (!quiet && hasManualUrl) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -3198,14 +3165,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     required List<String> categories,
     required bool manuallyChosen,
     required bool searching,
-  }) {
-    if (manuallyChosen || searching || orderKey == null || categories.isEmpty) {
-      return null;
-    }
-    final stored = IptvCatalogDb.defaultCategory(orderKey);
-    if (stored != null && categories.contains(stored)) return stored;
-    return categories.first;
-  }
+  }) => IptvLandingPolicy.landingCategoryFor(orderKey: orderKey, categories: categories, manuallyChosen: manuallyChosen, searching: searching);
 
   /// Whether categories can be customized in the current view.
   ///
@@ -3280,13 +3240,13 @@ class IptvResultsViewState extends State<IptvResultsView>
       case 'setDefault':
         if (IptvCatalogDb.setDefaultCategory(snap.catalogKey, category)) {
           _showChip(
-            _CatalogChipState.success,
+            CatalogChipState.success,
             'Opens on "$category" from now on',
             autoHide: const Duration(milliseconds: 2500),
           );
         } else {
           _showChip(
-            _CatalogChipState.failure,
+            CatalogChipState.failure,
             'Couldn\'t save the default — try again',
             autoHide: const Duration(milliseconds: 3500),
           );
@@ -3294,13 +3254,13 @@ class IptvResultsViewState extends State<IptvResultsView>
       case 'clearDefault':
         if (IptvCatalogDb.setDefaultCategory(snap.catalogKey, null)) {
           _showChip(
-            _CatalogChipState.success,
+            CatalogChipState.success,
             'Default category cleared',
             autoHide: const Duration(milliseconds: 2500),
           );
         } else {
           _showChip(
-            _CatalogChipState.failure,
+            CatalogChipState.failure,
             'Couldn\'t clear the default — try again',
             autoHide: const Duration(milliseconds: 3500),
           );
@@ -3354,7 +3314,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (confirmed != true || !mounted) return;
     if (!IptvCatalogDb.setGroupHidden(snap.catalogKey, category, true)) {
       _showChip(
-        _CatalogChipState.failure,
+        CatalogChipState.failure,
         'Couldn\'t hide "$category" — try again',
         autoHide: const Duration(milliseconds: 3500),
       );
@@ -3363,7 +3323,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     await _refreshAfterHiddenChange();
     if (!mounted) return;
     _showChip(
-      _CatalogChipState.success,
+      CatalogChipState.success,
       'Hid "$category"',
       autoHide: const Duration(milliseconds: 2600),
     );
@@ -5625,11 +5585,11 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// through. Snap show/hide, no tween (TV GPU rule).
   Widget _buildCatalogChip() {
     final app = AppThemeScope.of(context);
-    if (_chipState == _CatalogChipState.hidden) {
+    if (_chipState == CatalogChipState.hidden) {
       return const SizedBox.shrink();
     }
     final Widget leading = switch (_chipState) {
-      _CatalogChipState.updating => SizedBox(
+      CatalogChipState.updating => SizedBox(
         width: 13,
         height: 13,
         child: CircularProgressIndicator(
@@ -5637,17 +5597,17 @@ class IptvResultsViewState extends State<IptvResultsView>
           color: app.seeAll.accent2,
         ),
       ),
-      _CatalogChipState.success => const Icon(
+      CatalogChipState.success => const Icon(
         Icons.check_circle_rounded,
         size: 15,
         color: Color(0xFF4ADE80),
       ),
-      _CatalogChipState.failure => const Icon(
+      CatalogChipState.failure => const Icon(
         Icons.cloud_off_rounded,
         size: 15,
         color: Color(0xFFFBBF24),
       ),
-      _CatalogChipState.hidden => const SizedBox.shrink(),
+      CatalogChipState.hidden => const SizedBox.shrink(),
     };
     return Positioned(
       right: 16,
@@ -6688,7 +6648,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     final picked = await showDialog<String>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.68),
-      builder: (_) => _SpotlightCategoryPickerDialog(
+      builder: (_) => SpotlightCategoryPickerDialog(
         categories: List<String>.of(_categories, growable: false),
         selectedCategory: _effectiveCategory,
         categoryCounts: Map<String, int>.of(_categoryCounts),
@@ -6903,7 +6863,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                   ? DesktopRecordingService.instance.captures.length
                   : 0,
               schedCount: _scheduledCount,
-              statusText: _chipState == _CatalogChipState.hidden
+              statusText: _chipState == CatalogChipState.hidden
                   ? null
                   : _chipMessage,
               // The Android url→task map refreshes on selected events only;
@@ -7083,7 +7043,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     final isConsole = _iptvStyle == IptvStyle.console;
     // Styled looks never paint the brand color.
     final brand = t == null ? brandAccentFor(channel.name) : Colors.transparent;
-    final resMatch = _railResExp.firstMatch(channel.name);
+    final resMatch = railResExp.firstMatch(channel.name);
     final resolution = resMatch?.group(1)?.toLowerCase();
     final displayName = resMatch == null
         ? channel.name
@@ -7547,7 +7507,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                 children: [
                   _buildPreviewStage(ch, epoch),
                   const SizedBox(height: 16),
-                  Expanded(child: _IptvRailInfo(channel: ch)),
+                  Expanded(child: IptvRailInfo(channel: ch)),
                   if (touchSelector) ...[
                     SizedBox(
                       width: double.infinity,
@@ -7649,7 +7609,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             Expanded(
               child: ch == null
                   ? const SizedBox.shrink()
-                  : _IptvFocusStageInfo(
+                  : IptvFocusStageInfo(
                       channel: ch,
                       hasLists: _customLists.isNotEmpty,
                     ),
@@ -7677,7 +7637,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             // repainting under a playing video.
             ValueListenableBuilder<bool>(
               valueListenable: _previewShowing,
-              builder: (context, showing, _) => _IptvStageFloor(
+              builder: (context, showing, _) => IptvStageFloor(
                 channel: ch,
                 tuning: _channelPreviewEnabled && ch != null && !showing,
               ),
@@ -7732,7 +7692,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               top: 10,
               child: ValueListenableBuilder<bool>(
                 valueListenable: _previewShowing,
-                builder: (context, showing, _) => _IptvStageChip(
+                builder: (context, showing, _) => IptvStageChip(
                   channel: ch,
                   showing: showing,
                   previewEnabled: _channelPreviewEnabled,
@@ -8157,7 +8117,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     );
   }
 
-  _TabletChannelIdentity _tabletIdentityOf(IptvChannel channel) => (
+  TabletChannelIdentity _tabletIdentityOf(IptvChannel channel) => (
     channelNumber: channel.channelNumber,
     name: channel.name,
     url: channel.url,
@@ -8165,7 +8125,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     contentType: channel.contentType,
   );
 
-  ({int index, _TabletChannelIdentity identity}) _reconcileTabletSelection(
+  ({int index, TabletChannelIdentity identity}) _reconcileTabletSelection(
     List<IptvChannel> channels,
   ) {
     assert(channels.isNotEmpty);
@@ -8211,884 +8171,31 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 }
 
-/// Lazily renders Spotlight's category choices while restoring the current
-/// selection on every open. The dialog owns both navigation objects because a
-/// route can remain mounted during its reverse transition after `pop`.
-class _SpotlightCategoryPickerDialog extends StatefulWidget {
-  final List<String> categories;
-  final String? selectedCategory;
-  final Map<String, int> categoryCounts;
-  final int allChannelCount;
-  final bool showOptionsHint;
-  final String allCategoryValue;
 
-  const _SpotlightCategoryPickerDialog({
-    required this.categories,
-    required this.selectedCategory,
-    required this.categoryCounts,
-    required this.allChannelCount,
-    required this.showOptionsHint,
-    required this.allCategoryValue,
-  });
 
-  @override
-  State<_SpotlightCategoryPickerDialog> createState() =>
-      _SpotlightCategoryPickerDialogState();
-}
 
-class _SpotlightCategoryPickerDialogState
-    extends State<_SpotlightCategoryPickerDialog> {
-  static const double _itemExtent = 56;
-
-  late final int _selectedIndex;
-  late final ScrollController _scrollController;
-  late final FocusNode _selectedFocusNode;
-
-  @override
-  void initState() {
-    super.initState();
-    final categoryIndex = widget.selectedCategory == null
-        ? -1
-        : widget.categories.indexOf(widget.selectedCategory!);
-    _selectedIndex = categoryIndex < 0 ? 0 : categoryIndex + 1;
-    _scrollController = ScrollController(
-      initialScrollOffset: _selectedIndex * _itemExtent,
-    );
-    _selectedFocusNode = FocusNode(
-      debugLabel: 'iptv-spotlight-selected-category',
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _selectedFocusNode.canRequestFocus) {
-        _selectedFocusNode.requestFocus();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    _selectedFocusNode.dispose();
-    super.dispose();
-  }
-
-  void _pick(String value) => Navigator.of(context).pop(value);
-
-  @override
-  Widget build(BuildContext context) {
-    final t = IptvStyleTokens.spotlight;
-    final size = MediaQuery.sizeOf(context);
-    return TvHeldKeyGuard(
-      child: Dialog(
-        key: const ValueKey<String>('spotlight-category-picker'),
-        backgroundColor: t.panel,
-        surfaceTintColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: t.hairline2),
-        ),
-        child: SizedBox(
-          width: math.min(440, size.width - 32),
-          height: math.min(620, size.height - 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 14),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Choose category',
-                        style: TextStyle(
-                          color: t.fg,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    CloseButton(onPressed: () => Navigator.of(context).pop()),
-                  ],
-                ),
-              ),
-              Divider(height: 1, color: t.hairline),
-              Expanded(
-                child: ListView.builder(
-                  key: const ValueKey<String>('spotlight-category-list'),
-                  controller: _scrollController,
-                  itemExtent: _itemExtent,
-                  itemCount: 1 + widget.categories.length,
-                  itemBuilder: (context, index) {
-                    if (index == 0) {
-                      final selected = _selectedIndex == 0;
-                      return ListTile(
-                        key: selected
-                            ? const ValueKey<String>(
-                                'spotlight-selected-category-tile',
-                              )
-                            : null,
-                        focusNode: selected ? _selectedFocusNode : null,
-                        autofocus: selected,
-                        selected: selected,
-                        selectedTileColor: t.selectedTint,
-                        leading: Icon(Icons.apps_rounded, color: t.accent),
-                        title: Text(
-                          'All channels',
-                          style: TextStyle(color: t.fg),
-                        ),
-                        trailing: Text(
-                          '${widget.allChannelCount}',
-                          style: TextStyle(color: t.fgDim),
-                        ),
-                        onTap: () => _pick(widget.allCategoryValue),
-                      );
-                    }
-                    final category = widget.categories[index - 1];
-                    final selected = index == _selectedIndex;
-                    return ListTile(
-                      key: selected
-                          ? const ValueKey<String>(
-                              'spotlight-selected-category-tile',
-                            )
-                          : null,
-                      focusNode: selected ? _selectedFocusNode : null,
-                      autofocus: selected,
-                      selected: selected,
-                      selectedTileColor: t.selectedTint,
-                      leading: Icon(
-                        selected
-                            ? Icons.check_circle_rounded
-                            : Icons.folder_outlined,
-                        color: selected ? t.accent : t.fgDim,
-                      ),
-                      title: Text(
-                        category,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: t.fg),
-                      ),
-                      trailing: Text(
-                        '${widget.categoryCounts[category] ?? 0}',
-                        style: TextStyle(color: t.fgDim),
-                      ),
-                      onTap: () => _pick(category),
-                    );
-                  },
-                ),
-              ),
-              if (widget.showOptionsHint) ...[
-                Divider(height: 1, color: t.hairline),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 10),
-                  child: Text(
-                    'Select a category, then use ••• to set it as the default '
-                    'or hide it.',
-                    style: TextStyle(color: t.fgFaint, fontSize: 11),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 // ── TV preview rail widgets ─────────────────────────────────────────────────
 
-/// The stage's resting surface: a brand-tinted glass slab with the channel's
-/// logo (or a placeholder mark). Sits UNDER the embedded player — the video
-/// covers/wipes it once frames arrive, so it needs no fade of its own.
-///
-/// While [tuning] (a channel is focused but no frames yet) it runs a light
-/// broadcast ambience: signal rings rippling out from the logo, a breathing
-/// brand glow, a diagonal sheen sweep and a gentle logo breathe. Everything is
-/// direct canvas paint / matrix transform — this widget shares a layer with
-/// the underlay's punched hole, so Opacity/saveLayer wrappers stay banned.
-/// The controller stops the moment frames arrive (or focus clears), so
-/// nothing keeps repainting under a playing video.
-class _IptvStageFloor extends StatefulWidget {
-  final IptvChannel? channel;
-  final bool tuning;
-  const _IptvStageFloor({required this.channel, required this.tuning});
 
-  @override
-  State<_IptvStageFloor> createState() => _IptvStageFloorState();
-}
 
-class _IptvStageFloorState extends State<_IptvStageFloor>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2600),
-  );
 
-  @override
-  void initState() {
-    super.initState();
-    _syncAnimation();
-  }
 
-  @override
-  void didUpdateWidget(_IptvStageFloor oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncAnimation();
-  }
 
-  void _syncAnimation() {
-    final animate = widget.tuning && widget.channel != null;
-    if (animate) {
-      if (!_ctrl.isAnimating) _ctrl.repeat();
-    } else if (_ctrl.isAnimating || _ctrl.value != 0) {
-      _ctrl.stop();
-      _ctrl.value = 0;
-    }
-  }
 
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final ch = widget.channel;
-    final brand = ch != null ? brandAccentFor(ch.name) : app.seeAll.accent;
-    final logo = ch?.logoUrl;
-    final animate = widget.tuning && ch != null;
 
-    Widget mark = ch == null
-        ? Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.live_tv_rounded,
-                size: 42,
-                color: app.core.tx.withValues(alpha: 0.22),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Browse channels to preview',
-                style: TextStyle(
-                  color: app.core.tx.withValues(alpha: 0.45),
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          )
-        : (logo != null && logo.isNotEmpty)
-        ? Padding(
-            padding: const EdgeInsets.all(38),
-            child: CachedNetworkImage(
-              imageUrl: logo,
-              cacheManager: DebrifyImageCache.iptvLogos,
-              fit: BoxFit.contain,
-              // Cap the decode — see the row logo chip's rationale.
-              memCacheHeight: 240,
-              fadeInDuration: Duration.zero,
-              fadeOutDuration: Duration.zero,
-              errorWidget: (_, __, ___) => Icon(
-                Icons.live_tv_rounded,
-                size: 42,
-                color: brand.withValues(alpha: 0.75),
-              ),
-            ),
-          )
-        : Icon(
-            Icons.live_tv_rounded,
-            size: 42,
-            color: brand.withValues(alpha: 0.75),
-          );
 
-    if (animate) {
-      // Transform is a canvas matrix, not a compositing layer — hole-safe.
-      mark = AnimatedBuilder(
-        animation: _ctrl,
-        builder: (context, child) => Transform.scale(
-          scale: 1 + 0.015 * math.sin(2 * math.pi * _ctrl.value),
-          child: child,
-        ),
-        child: mark,
-      );
-    }
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color.alphaBlend(
-              brand.withValues(alpha: 0.18),
-              const Color(0xFF171430),
-            ),
-            const Color(0xFF0F0D20),
-          ],
-        ),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (animate)
-            CustomPaint(
-              painter: _TuningWavesPainter(brand: brand, t: _ctrl),
-            ),
-          Center(child: mark),
-        ],
-      ),
-    );
-  }
-}
 
-/// The tuning ambience: staggered signal rings expanding from the stage
-/// centre, a soft breathing glow behind the logo, and a slow diagonal sheen
-/// sweeping the slab. Plain canvas paints only — this layer is the one the
-/// video punch-through wipes, so no saveLayer/Opacity is allowed here.
-class _TuningWavesPainter extends CustomPainter {
-  final Color brand;
-  final Animation<double> t;
-  _TuningWavesPainter({required this.brand, required this.t})
-    : super(repaint: t);
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final v = t.value;
-    final center = size.center(Offset.zero);
 
-    // Breathing glow behind the logo.
-    final glowAlpha = 0.10 + 0.05 * math.sin(2 * math.pi * v);
-    final glowRadius = size.shortestSide * 0.42;
-    canvas.drawCircle(
-      center,
-      glowRadius,
-      Paint()
-        ..shader = ui.Gradient.radial(center, glowRadius, [
-          brand.withValues(alpha: glowAlpha),
-          brand.withValues(alpha: 0),
-        ]),
-    );
 
-    // Signal rings rippling outward from behind the logo.
-    final ringColor = Color.lerp(brand, Colors.white, 0.35)!;
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4;
-    final maxGrow = size.shortestSide * 0.62;
-    for (int i = 0; i < 3; i++) {
-      final phase = (v + i / 3) % 1.0;
-      final eased = Curves.easeOut.transform(phase);
-      final fade = (1 - phase) * (1 - phase);
-      ring.color = ringColor.withValues(alpha: 0.16 * fade);
-      canvas.drawCircle(center, 30 + eased * maxGrow, ring);
-    }
 
-    // Diagonal sheen sweeping across the slab once per cycle.
-    final sweep = Curves.easeInOut.transform(v);
-    final x = size.width * (-0.35 + 1.7 * sweep);
-    final band = Paint()
-      ..shader = ui.Gradient.linear(
-        Offset(x - 70, 0),
-        Offset(x + 70, size.height),
-        [
-          Colors.white.withValues(alpha: 0),
-          Colors.white.withValues(alpha: 0.06),
-          Colors.white.withValues(alpha: 0),
-        ],
-        const [0.0, 0.5, 1.0],
-      );
-    canvas.drawRect(Offset.zero & size, band);
-  }
 
-  @override
-  bool shouldRepaint(_TuningWavesPainter oldDelegate) =>
-      oldDelegate.brand != brand;
-}
 
-/// Status chip on the stage: LIVE (emerald dot) once the preview has frames,
-/// TUNING (tiny animated amber signal bars) while a channel is selected but
-/// the stream hasn't opened yet, PREVIEW for on-demand items, or PREVIEW OFF
-/// when automatic tuning is disabled. Conditional swaps and direct paint only
-/// — no fades over the stage, and only the TUNING state animates so nothing
-/// repaints while video is playing.
-class _IptvStageChip extends StatefulWidget {
-  final IptvChannel? channel;
-  final bool showing;
-  final bool previewEnabled;
-  const _IptvStageChip({
-    required this.channel,
-    required this.showing,
-    required this.previewEnabled,
-  });
 
-  @override
-  State<_IptvStageChip> createState() => _IptvStageChipState();
-}
 
-class _IptvStageChipState extends State<_IptvStageChip>
-    with SingleTickerProviderStateMixin {
-  static const Color _amber = Color(0xFFFBBF24);
-
-  late final AnimationController _ctrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
-  );
-
-  bool get _tuning =>
-      widget.previewEnabled && widget.channel != null && !widget.showing;
-
-  @override
-  void initState() {
-    super.initState();
-    _syncAnimation();
-  }
-
-  @override
-  void didUpdateWidget(_IptvStageChip oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncAnimation();
-  }
-
-  void _syncAnimation() {
-    if (_tuning) {
-      if (!_ctrl.isAnimating) _ctrl.repeat();
-    } else if (_ctrl.isAnimating) {
-      _ctrl.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final ch = widget.channel;
-    if (ch == null) return const SizedBox.shrink();
-    final isLive = ch.isLive;
-    final label = !widget.previewEnabled
-        ? 'PREVIEW OFF'
-        : widget.showing
-        ? (isLive ? 'LIVE' : 'PREVIEW')
-        : 'TUNING';
-    final dot = !widget.previewEnabled
-        ? app.iptv.inkFaint
-        : isLive
-        ? app.iptv.liveDot
-        : app.seeAll.accent2;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 4, 9, 4),
-      decoration: BoxDecoration(
-        // Deliberately NOT iptv.chipSurface: this chip floats over LIVE
-        // VIDEO, so it must stay black glass and legible over an arbitrary
-        // picture rather than follow the page (see the token's doc).
-        color: const Color(0xB00B0918),
-        borderRadius: app.shape.brPill,
-        // `onGlass`, not `core.tx`: the fill above is black on EVERY theme by
-        // design, so its ink must be what reads on black — a paper theme's
-        // near-black page ink would draw an invisible edge here. Same reason
-        // the label below uses it.
-        border: Border.all(color: app.onGlass.withValues(alpha: 0.10)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 9,
-            height: 9,
-            child: _tuning
-                ? CustomPaint(painter: _TuningBarsPainter(t: _ctrl))
-                : Center(
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: dot,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: app.onGlass,
-              fontSize: 9.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.0,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Tiny equalizer-style signal bars for the TUNING chip — direct paint over
-/// the stage (same no-saveLayer rule as everything else on it).
-class _TuningBarsPainter extends CustomPainter {
-  final Animation<double> t;
-  _TuningBarsPainter({required this.t}) : super(repaint: t);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = _IptvStageChipState._amber;
-    const barW = 2.0;
-    const gap = 1.5;
-    for (int i = 0; i < 3; i++) {
-      final v = 0.5 + 0.5 * math.sin(2 * math.pi * (t.value + i * 0.32));
-      final h = 3.0 + (size.height - 3.0) * v;
-      final x = i * (barW + gap);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(x, size.height - h, barW, h),
-          const Radius.circular(1),
-        ),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_TuningBarsPainter oldDelegate) => false;
-}
-
-/// TV focus-stage identity and programme overlay. The solid lower stop keeps
-/// text legible on bright channels without a blur/filter pass.
-class _IptvFocusStageInfo extends StatelessWidget {
-  final IptvChannel channel;
-  final bool hasLists;
-
-  const _IptvFocusStageInfo({required this.channel, this.hasLists = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final brand = brandAccentFor(channel.name);
-    final resMatch = _railResExp.firstMatch(channel.name);
-    final resolution = resMatch?.group(1)?.toLowerCase();
-    final displayName = resMatch == null
-        ? channel.name
-        : channel.name
-              .replaceRange(resMatch.start, resMatch.end, '')
-              .replaceAll(RegExp(r'\s+'), ' ')
-              .trim();
-    final group = channel.group?.trim();
-    final subParts = <String>[
-      if (group != null && group.isNotEmpty) group,
-      if (resolution != null) resolution,
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final dense = constraints.maxHeight < 250;
-        final logoSize = dense ? 32.0 : 44.0;
-        return ColoredBox(
-          color: app.iptv.stageBg,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              dense ? 18 : 24,
-              dense ? 8 : 18,
-              dense ? 18 : 24,
-              dense ? 7 : 18,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: logoSize,
-                      height: logoSize,
-                      decoration: BoxDecoration(
-                        borderRadius: app.shape.brImg(8),
-                        border: Border.all(color: app.iptv.hairline),
-                        color: Color.alphaBlend(
-                          brand.withValues(alpha: 0.18),
-                          const Color(0xFF171B19),
-                        ),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Padding(
-                        padding: const EdgeInsets.all(6),
-                        child:
-                            (channel.logoUrl != null &&
-                                channel.logoUrl!.isNotEmpty)
-                            ? CachedNetworkImage(
-                                imageUrl: channel.logoUrl!,
-                                cacheManager: DebrifyImageCache.iptvLogos,
-                                fit: BoxFit.contain,
-                                memCacheHeight: 96,
-                                fadeInDuration: Duration.zero,
-                                fadeOutDuration: Duration.zero,
-                                errorWidget: (_, __, ___) => Icon(
-                                  Icons.live_tv_rounded,
-                                  size: dense ? 16 : 20,
-                                  color: brand.withValues(alpha: 0.85),
-                                ),
-                              )
-                            : Icon(
-                                Icons.live_tv_rounded,
-                                size: dense ? 16 : 20,
-                                color: brand.withValues(alpha: 0.85),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            channel.channelNumber == null
-                                ? displayName
-                                : 'CH ${channel.channelNumber}  $displayName',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: app.core.tx,
-                              fontSize: dense ? 15 : 19,
-                              fontWeight: FontWeight.w800,
-                              height: 1.1,
-                            ),
-                          ),
-                          if (subParts.isNotEmpty) ...[
-                            const SizedBox(height: 3),
-                            Text(
-                              subParts.join('  •  '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: app.core.tx.withValues(alpha: 0.52),
-                                fontSize: dense ? 10.5 : 11.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: dense ? 5 : 13),
-                Container(
-                  width: double.infinity,
-                  height: 1,
-                  color: app.core.tx.withValues(alpha: 0.13),
-                ),
-                SizedBox(height: dense ? 5 : 12),
-                IptvRailEpgCard(
-                  channel: channel,
-                  stageOverlay: true,
-                  dense: dense,
-                ),
-                const Spacer(),
-                _IptvRailHints(
-                  showGuide: IptvEpgService.isEpgCapable(channel),
-                  hasLists: hasLists,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Identity block under the stage: logo chip, channel name (resolution pulled
-/// out into the sub-line), group. Empty when nothing is focused yet.
-class _IptvRailInfo extends StatelessWidget {
-  final IptvChannel? channel;
-  const _IptvRailInfo({required this.channel});
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final ch = channel;
-    if (ch == null) return const SizedBox.shrink();
-    final brand = brandAccentFor(ch.name);
-
-    final resMatch = _railResExp.firstMatch(ch.name);
-    final resolution = resMatch?.group(1)?.toLowerCase();
-    final cleanName = resMatch == null
-        ? ch.name
-        : ch.name
-              .replaceRange(resMatch.start, resMatch.end, '')
-              .replaceAll(RegExp(r'\s+'), ' ')
-              .trim();
-    final displayName = ch.channelNumber == null
-        ? cleanName
-        : 'CH ${ch.channelNumber}  $cleanName';
-    final group = ch.group?.trim();
-    final subParts = <String>[
-      if (group != null && group.isNotEmpty) group,
-      if (resolution != null) resolution,
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                borderRadius: app.shape.br(11),
-                border: Border.all(color: app.core.tx.withValues(alpha: 0.06)),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color.alphaBlend(
-                      brand.withValues(alpha: 0.16),
-                      app.iptv.logoPlate,
-                    ),
-                    // The plate's lower stop — value-equal to iptv.modalBg,
-                    // but that role is a dialog ground and must not repaint
-                    // logos when a theme moves its sheets.
-                    const Color(0xFF14141D),
-                  ],
-                ),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: (ch.logoUrl != null && ch.logoUrl!.isNotEmpty)
-                    ? CachedNetworkImage(
-                        imageUrl: ch.logoUrl!,
-                        cacheManager: DebrifyImageCache.iptvLogos,
-                        fit: BoxFit.contain,
-                        // Cap the decode — see the row logo chip's rationale.
-                        memCacheHeight: 96,
-                        errorWidget: (_, __, ___) => Icon(
-                          Icons.live_tv_rounded,
-                          size: 20,
-                          color: brand.withValues(alpha: 0.85),
-                        ),
-                      )
-                    : Icon(
-                        Icons.live_tv_rounded,
-                        size: 20,
-                        color: brand.withValues(alpha: 0.85),
-                      ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    displayName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: app.core.tx,
-                      fontSize: 16.5,
-                      fontWeight: FontWeight.w800,
-                      height: 1.15,
-                    ),
-                  ),
-                  if (subParts.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      subParts.join('  •  '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: app.core.tx.withValues(alpha: 0.52),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-        // What's on: now/next for the focused channel. Renders nothing for
-        // channels without guide data, so the rail is unchanged for those.
-        const SizedBox(height: 14),
-        Flexible(child: IptvRailEpgCard(channel: ch)),
-      ],
-    );
-  }
-}
-
-/// Bottom-of-rail key hints: OK to watch fullscreen, hold OK to favourite (or
-/// to pick a list, once the user has any), and — when the focused channel has
-/// guide data — RIGHT for its schedule.
-class _IptvRailHints extends StatelessWidget {
-  final bool showGuide;
-  final bool hasLists;
-  const _IptvRailHints({this.showGuide = false, this.hasLists = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const _KeyCap('OK'),
-        const SizedBox(width: 6),
-        _hint(context, 'Watch'),
-        const SizedBox(width: 16),
-        const _KeyCap('HOLD OK'),
-        const SizedBox(width: 6),
-        _hint(context, hasLists ? 'Add to list' : 'Favorite'),
-        if (showGuide) ...[
-          const SizedBox(width: 16),
-          const _KeyCap('▶'),
-          const SizedBox(width: 6),
-          _hint(context, 'Guide'),
-        ],
-      ],
-    );
-  }
-
-  Widget _hint(BuildContext context, String text) => Text(
-    text,
-    style: TextStyle(
-      color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.45),
-      fontSize: 11,
-      fontWeight: FontWeight.w600,
-    ),
-  );
-}
-
-class _KeyCap extends StatelessWidget {
-  final String label;
-  const _KeyCap(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-      decoration: BoxDecoration(
-        borderRadius: app.shape.br(5),
-        border: Border.all(color: app.core.tx.withValues(alpha: 0.22)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: app.home.focus.withValues(alpha: 0.95),
-          fontSize: 8.5,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.7,
-        ),
-      ),
-    );
-  }
-}
 
 /// Real production tear-offs and borrowed identities for characterization.
 @visibleForTesting

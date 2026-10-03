@@ -564,3 +564,32 @@ Technique), with these IPTV rules:
   clock seam exposes the existing layout issue. No production layout fix is
   included. Navigation fixtures use the shipped 90-minute window and keep
   every assertion.
+
+### Step 1 — complete
+
+- Step-0 checkpoint: `a28cd8fe`; no extraction preceded it.
+- The bars painter references the chip State's private `_amber` constant.
+  Both are co-located in `iptv_stage_chip.dart` so that the existing State and
+  constant keep their privacy and ownership; the manifest/report now identify
+  that cohesive destination. No initializer or paint expression changes.
+- Moved 79 manifest leaves into 14 files; the bars painter and chip share
+  their cohesive file. The facade ratchets **9,149 → 8,256** and the largest
+  new file is 189 lines. Public constants/getters/methods remain exact checked
+  forwarders; the State lifecycle and widget trees remain in place.
+- Registered IPTV's exact bridge and 500-line feature caps, the pure-helper
+  service-import rejection and no-facade-import rule. Shape registrations cover
+  every new file and preserve all seven radii and the token floor. Expanded
+  `p2_iptv` globs; the theme measurement and import walk pass, and an explicit
+  reachability check confirms all 14 new files from facade/Browse roots.
+- Fixed parser formatting metadata for the comma before a named/optional
+  parameter-list closing delimiter. Two fixtures accept only formatting/key
+  addition and reject a changed parameter. The accessor token sidecar was
+  regenerated from committed `a28cd8fe`, not the changed source: only its two
+  now-recognized formatting commas disappear; its contract is unchanged.
+- Checks: `step1-verbatim-verified.txt` (384 leaves, 27 IPTV fixtures plus
+  settings/launcher fixtures), `step1-settings-verbatim.txt` (316 leaves),
+  architecture/size/format/diff checks pass. Whole analyzer: 832 diagnostics,
+  zero added after relocation (`step1-analyzer-verified-comparison.txt`).
+  `suite_evidence.py run iptv/step1 @dev/tool/ci_behavior_tests.txt`: 2,786
+  successes, the same two known failures, zero missing/new skips, PASS against
+  `base3` (`step1-test-comparison.txt`). No golden or payload fixture changed.
