@@ -451,7 +451,7 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 - step3-accepted: all four manifest/self-tests, architecture, size, storage, shape, format and diff pass; 127 success / the one observed theme failure, PASS versus base5. Original 23 radii / 23 tokens retained.
 - Conservative analyzer decision: lib/features/analysis_options.yaml adds stricter style rules than the original screen. Reproduced ORIGINAL cc950ed9 method/field tokens under that unchanged destination configuration in the original worktree (package imports only). The observed original strict diagnostics add 18 const-style and 11 directive-style records to the original analyzer evidence; base5-relocation-analyze combines observed counts by maximum, never by summing duplicate source diagnostics. No const widgets, suppressions or runtime fixes were added. A separate per-symbol checker verifies every current Debrid diagnostic maps to the same original method/rule/message; step 3 has 15 current / 42 original strict, zero additions. Test gates still use base5.
 - Five exact formatter brace sites preserve each original predicate, statement and ordering. Two cancellation-refresh statements repeat elsewhere; improved the checker to select the unique complete recorded prefix while leaving other bodies in the verbatim comparison. Added positive and four negative repeated-body fixtures; every existing assertion remains. These fixtures first passed in the ORIGINAL cc950ed9 worktree. The initial site script omitted comments from two raw prefixes; corrected them before adoption. All four real-config self-tests pass with the final helper.
-- Gate 1 ran on committed source 06c67593: 10,489 success / 13 failure / 28 error / 20 skipped, PASS versus base5 with no additions, missing identities or newly skipped tests. suite_evidence records HEAD/index/tested tree 9f7322e87ce8480db0f535377d5154b7fc0a7281, no tracked changes or changes during the run. Only five reserved Linux PNGs are untracked and unused by macOS. Historical helper reports the same 32 unlisted pre-existing failure/error identities as base5; no historical list changed.
+- Gate 1 ran on committed source 06c67593: 10,489 success / 13 failure / 28 error / 20 skipped, PASS versus base5 with no additions, missing identities or newly skipped tests. suite_evidence records HEAD 06c67593 and index/tested tree 9f7322e87ce8480db0f535377d5154b7fc0a7281, no tracked changes or changes during the run. Only five reserved Linux PNGs are untracked and unused by macOS. Historical helper reports the same 32 unlisted pre-existing failure/error identities as base5; no historical list changed.
 
 ### Step 4 — complete; navigation, view modes and search
 
@@ -476,7 +476,7 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 - step6: all four manifest/self-tests, structure/storage/shape/format/diff checks and focused/analyzer comparisons pass. 127 successes / the observed theme failure, PASS versus base5; no added analyzer symbols. Original 23 radii / 23 tokens, trailing-comma residue and every zero-budget destination remain registered. Post-move Linux pixels and device/account checks remain pending on this macOS host.
 
 
-### Step 7 — final composition complete; gate 2 pending
+### Step 7 — complete; gate 2 PASS
 
 - Moved the factory into three typed presentation composition functions in its original assignment order. The State still constructs the same nine owners; the composition API re-exports only their constructor types. Live context/mounted/widget closures and deferred cross-section calls retain their original evaluation and receiver. Reviewed all 282 bindings again against frozen signatures/defaults/named arguments/receiver paths before pinning. All 173 leaves and 53 fields have their recorded destinations.
 - Moved every orphan field/group comment verbatim beside its concern; a comment-multiset comparison confirms no previous comment was deleted. Facade 809 → 397 normally formatted physical lines, including the frozen test accessor; feature maximum remains 437. Activated the exact 400-line facade cap, final TEMP(debrid) rejection and lowering-only 397-line size ratchet. CI formats/analyzes the facade, destinations and concrete Debrid fixture/picker files. Every new zero-budget composition file is registered; original 23 radii / 23 tokens and trailing-comma rule remain unchanged.
@@ -485,6 +485,26 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 - Re-run the final focused evidence with every new composition file staged: preliminary suite_evidence listed five untracked production files, so that tested-tree snapshot was incomplete for source provenance. Its results are provisional; the final staged run and committed-source gate 2 supply complete tree evidence. No assertion/test body changed.
 - Final step7-final: all four manifests/self-tests and structure/storage/shape/format/diff checks PASS. Focused 127 success / one observed theme failure PASS against base5, no added/missing/skipped identities; all production files are in stable staged tested tree 50f1d231437931b11d4fde96246e2e43ad5bb167, with no untracked paths. Whole analyzer 839 records, zero additions against the observed original destination-lint baseline; per-symbol 27 current / 42 original strict, zero additions. CI-equivalent format (1,413 files), scoped analyze and strict warning inventory PASS. All ten original PNG hashes remain unchanged.
 - No push is authorized. Local CI-equivalent checks replace the plan's private-push requirement; remote CI, extracted-code Linux pixels, physical Android TV focus, six launcher handoffs and real-account operations remain pending.
+
+
+- Gate 2 ran on committed source 41f02d52, with HEAD 41f02d52 and index/tested tree 510ac86fd79ffd6254d24314f77e7bbd72df0dcd, no worktree snapshot, no untracked paths and no change during the run. `python3 dev/tool/suite_evidence.py run debrid/gate2` records Flutter 3.44.8 / Dart 3.12.2. Comparisons against both base5 and gate1 PASS: 10,489 success / 13 failure / 28 error / 20 skipped, zero added/missing/newly skipped identities and zero new failures.
+- Evidence is retained in the common git directory under refactor-evidence/debrid: gate2.jsonl, gate2.env.json, gate2-vs-base5.txt, gate2-vs-gate1.txt and gate2-final-proof.json (evidence SHA-256 fingerprints). The historical helper reused this completed JSON without another runner or --record; its 32 unlisted pre-existing failure/error identities are byte-identical to base5 and gate1. No historical test failure list changed.
+- Steps 0–7 and both local full-suite gates are complete. Final evidence commit is identified by the exact subject `test(debrid): step 7 gate 2 committed-tree evidence`. Stop here; no push. Linux originals/hash provenance are verified and strict missing-original failure is enabled, but extracted-code Linux execution, remote CI, Android TV D-pad, six real launcher handoffs and real-account workflows remain pending.
+
+### Commit checkpoints
+
+| Checkpoint | Commit |
+| --- | --- |
+| Step 0 original code | cc950ed9 |
+| Step 0b original-code review cases | ec298bea |
+| Step 1 helpers/models | aca693d4 |
+| Step 2 owners | 06df3926 |
+| Step 3 source / gate 1 evidence | 06c67593 / 949db24b |
+| Step 4 navigation/search | 2e98025a |
+| Step 5 workflows/dormant | c64dc573 |
+| Original Linux artifacts/provenance | 48d55dee |
+| Step 6 builders/root | dd9be17b |
+| Step 7 source / gate 2 | 41f02d52; evidence in this commit |
 
 ## Found, not fixed
 

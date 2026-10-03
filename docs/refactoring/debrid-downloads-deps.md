@@ -186,7 +186,7 @@ Torrent/download lists clear and refill in place on reset; pagination appends in
 
 ## Contracts and temporary exceptions
 
-Contracts 1/6/8/9: navigation/loading/listeners; 2/6/7: search and row layouts; 3/4/10: playback/download/playlist/add/copy; 5: all destructive flows and selections; 7: focus and builders. Every temporary deferred cross-call has its final destination in the manifest; no concrete widget type crosses into the feature. State-driven bridge exits with later Riverpod/data-contract migration; unchanged text exits with app localization; duplicate TorBox helpers exit with the future cloud-library shared plan. No cross-feature import. The 6,445-line facade is temporarily retained for its original responsibilities until each scheduled step; final composition exits at step 7 under 400 lines.
+Contracts 1/6/8/9: navigation/loading/listeners; 2/6/7: search and row layouts; 3/4/10: playback/download/playlist/add/copy; 5: all destructive flows and selections; 7: focus and builders. Every temporary deferred cross-call has its final destination in the manifest; no concrete widget type crosses into the feature. State-driven bridge exits with later Riverpod/data-contract migration; unchanged text exits with app localization; duplicate TorBox helpers exit with the future cloud-library shared plan. No cross-feature import. The original 6,445-line facade was retained through its scheduled extraction checkpoints; step 7 completes that exception with a 397-line normally formatted facade.
 
 ## Per-entry wiring review before scaffold pinning
 
