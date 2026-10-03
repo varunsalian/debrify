@@ -8,7 +8,7 @@ const captureLinux = bool.fromEnvironment('DEBRID_CAPTURE_ORIGINAL_LINUX');
 const captureMac = bool.fromEnvironment('DEBRID_CAPTURE_ORIGINAL_MACOS');
 const requireLinux = bool.fromEnvironment(
   'DEBRID_REQUIRE_ORIGINAL_LINUX',
-  defaultValue: false,
+  defaultValue: true,
 );
 void main() {
   testWidgets(

@@ -21,7 +21,13 @@
     "scaffolding": "dev/tool/debrid_scaffolding.json",
     "context_exceptions": "dev/tool/debrid_context_exceptions.json"
   },
-  "named_exceptions": {},
+  "named_exceptions": {
+    "root_build_forwarder": [
+      "_DebridDownloadsScreenState.build",
+      "lib/features/debrid_downloads/presentation/legacy_debrid/debrid_root_layout.dart",
+      "root_build_forwarder: plan-approved plain DebridRootLayout; move build verbatim except deps/receivers and removal of its @override; retain exact annotated State single-expression forwarder"
+    ]
+  },
   "annotation_exceptions": {},
   "live_getter_callbacks": [
     "activeSelectedIds",
@@ -37,10 +43,25 @@
     "selectSourceMode",
     "onSourceSelected"
   ],
-  "token_rules": [],
+  "token_rules": [
+    {
+      "original_name": "_DebridDownloadsScreenState.build",
+      "allowed_edit": "root_build_forwarder",
+      "difference_prefix": "root_build_forwarder:",
+      "before": [
+        "@",
+        "override"
+      ],
+      "after": []
+    }
+  ],
   "additional_owners": [],
   "required_nodes": [],
-  "forwarders": {},
+  "forwarders": {
+    "_DebridDownloadsScreenState.build": {
+      "receiver": "_sections.rootLayout"
+    }
+  },
   "lifecycle": [
     "_DebridDownloadsScreenState.initState",
     "_DebridDownloadsScreenState.dispose"
@@ -589,7 +610,12 @@
     "_addInput": "DebridAddInputState",
     "_downloadState": "DebridDownloadState"
   },
-  "plain_sections": [],
+  "plain_sections": [
+    {
+      "file": "lib/features/debrid_downloads/presentation/legacy_debrid/debrid_root_layout.dart",
+      "owner": "DebridRootLayout"
+    }
+  ],
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in debrid_context_exceptions.json; original guards and statement order unchanged",
   "callback_identities": [
     {

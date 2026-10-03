@@ -469,6 +469,12 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 - Verified all five supplied original PNGs against linux-original-sha256.txt, exact cc950ed9 revision, 1,000×800 dimensions, and capture/strict logs (five successes each). Recorded hashes, evidence fingerprints and full run provenance in test/goldens/debrid_downloads/provenance.json. Run: https://github.com/varunsalian/debrify-refactor/actions/runs/37147126217 . The evidence URL includes a branch-deletion annotation; parsed its URL and retained the full note.
 - Separate artifact commit after step 5. Held the step-6 candidate aside while completing provenance metadata, then restored it. No moved-code recording. Strict-default views first passed all 14 tests in the ORIGINAL cc950ed9 worktree; user's real Ubuntu strict run also passed all five originals. Local post-move Linux comparison remains pending on this macOS host.
 
+### Step 6 — complete; builders and plain root
+
+- Moved the twelve reachable builder sections and root build; State has the exact annotated single-expression forwarder to plain DebridRootLayout. Builder-local contexts remain lexical. Reviewed all 282 bindings before scaffold pinning; facade 2,032 → 809, with composition wiring exiting at step 7.
+- Strict Linux default is now true (missing originals fail rather than skip), copied byte-for-byte from the original-cc950-step6-strict proof, which passed all 14 views before this move. Five verified original Linux PNGs/provenance are already in their own preceding commit 48d55dee; no golden update performed during extraction.
+- step6: all four manifest/self-tests, structure/storage/shape/format/diff checks and focused/analyzer comparisons pass. 127 successes / the observed theme failure, PASS versus base5; no added analyzer symbols. Original 23 radii / 23 tokens, trailing-comma residue and every zero-budget destination remain registered. Post-move Linux pixels and device/account checks remain pending on this macOS host.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
