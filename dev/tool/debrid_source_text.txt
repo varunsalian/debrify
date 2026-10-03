@@ -8,3 +8,5 @@ step 0: test/support/debrid_downloads_source.dart — manifest-resolved source g
 step 1 and final: generic profile/theme/stale-runtime/source/storage reference guards — scan recursive lib roots; verify without path rewrites.
 step 6: original Linux PNG prerequisite + strict missing-original failure; provenance and hashes reviewed, never generated from moved code.
 step 7: .github/workflows/checks.yml — facade format/analyze scope and final composition guard.
+
+Shape rule: token-bearing destinations use kShapeResidue; radius-only and zero-budget destinations use kExtractedShapeResidue. The final facade leaves kShapeResidue. Preserve 23 counted radii total and 23 app.shape.br calls; the modern card's trailing-comma radius remains uncounted.

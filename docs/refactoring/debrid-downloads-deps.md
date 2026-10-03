@@ -476,3 +476,5 @@ Actual bindings are reviewed against original reads/signatures and this inventor
 | `download_row` | `toggleDownloadSelection` (`void Function(String id)`) | DebridSelectionActions.toggleDownloadSelection at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 6 actual binding pending |
 | `download_row` | `selectSourceMode` (`bool Function()`) | () => widget.selectSourceMode: live getter, never a snapshot | [ ] Step 6 actual binding pending |
 | `download_row` | `onSourceSelected` (`void Function(SeriesSource)? Function()`) | () => widget.onSourceSelected: live getter, never a snapshot | [ ] Step 6 actual binding pending |
+
+The reset-during-scroll characterization drives ScrollPosition.correctPixels to establish an offset. The remove → jump → add listener order is pinned by the full original source guard and the AST/callback checker, rather than by that behavior test.

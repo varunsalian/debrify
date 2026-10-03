@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:debrify/models/rd_file_node.dart';
 import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/download_service.dart';
 import 'package:debrify/screens/debrid_downloads_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -119,6 +120,24 @@ void main() {
       expect(f.member('handleBackNavigation')(), isTrue);
       expect(tabs, [MainTab.legacyTorrentSearch]);
       expect(MainPageBridge.returnToTorrentSearchOnBack, isFalse);
+      expect(f.member('currentTorrentId'), 'z9');
+    }),
+  );
+  testWidgets(
+    'deep-link root pop wins over return-to-search flag',
+    (t) => debridCase(t, (f) async {
+      await f.mount(t, pushed: true, initial: f.torrent('z9'));
+      await f.until(t, () => f.member('currentTorrentId') == 'z9');
+      await t.pumpAndSettle();
+      final tabs = <int>[];
+      MainPageBridge.switchTab = tabs.add;
+      MainPageBridge.returnToTorrentSearchOnBack = true;
+      expect(f.member('handleBackNavigation')(), isTrue);
+      await t.pumpAndSettle();
+      expect(f.key.currentState, isNull);
+      expect(find.text('Caller'), findsOneWidget);
+      expect(tabs, isEmpty);
+      expect(MainPageBridge.returnToTorrentSearchOnBack, isTrue);
     }),
   );
   for (final copy in [false, true]) {
@@ -127,6 +146,7 @@ void main() {
       (t) => debridCase(t, (f) async {
         f.rar = true;
         await f.mount(t);
+        expect(DownloadService.instance.allRecordDetailsSnapshot(), isEmpty);
         final before = f.requests.length;
         final action =
             f.member('navigateIntoTorrent')(f.torrent('z9')) as Future<void>;
@@ -160,6 +180,7 @@ void main() {
         expect(f.member('currentTorrentId'), isNull);
         expect(f.member('isLoadingFolder'), isFalse);
         expect(f.deletes, isEmpty);
+        expect(DownloadService.instance.allRecordDetailsSnapshot(), isEmpty);
       }),
     );
   }

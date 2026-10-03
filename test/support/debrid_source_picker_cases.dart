@@ -30,6 +30,23 @@ void debridSelectionCharacterization() {
           );
           expect(f.member('torrentSearchQuery'), 'Library');
           expect(f.member('isTorrentSearchActive'), isTrue);
+          expect(
+            f.requests
+                .where(
+                  (r) =>
+                      r.method == 'GET' &&
+                      r.url.path == '/rest/1.0/torrents' &&
+                      r.url.queryParameters['limit'] == '2000',
+                )
+                .map((r) => r.url.queryParameters['page']),
+            ['1'],
+          );
+          expect(
+            (f.member('filteredSearchTorrents') as List).map(
+              (dynamic row) => row.id,
+            ),
+            contains('z9'),
+          );
           f.member('toggleTorrentSearch')();
           expect(f.member('isTorrentSearchActive'), isTrue);
         }
@@ -70,6 +87,25 @@ void debridSelectionCharacterization() {
       await t.pumpAndSettle();
       expect(count, 0);
       expect(f.key.currentState, isNotNull);
+    }),
+  );
+  testWidgets(
+    'streamable zero mkv DDL picker remains enabled by extension',
+    (t) => debridCase(t, (f) async {
+      f.downloads = [debridDownload('w8')..['streamable'] = 0];
+      final selected = <dynamic>[];
+      await f.mount(t, pushed: true, picker: true, selected: selected.add);
+      await f.ddl(t);
+      expect(
+        t.widget<CloudFileRow>(find.byType(CloudFileRow)).onTap,
+        isNotNull,
+      );
+      await t.tap(find.text('Download w8.mkv'));
+      await t.pumpAndSettle();
+      expect(selected.length, 1);
+      expect(selected.single.debridTorrentId, 'w8');
+      expect(f.key.currentState, isNull);
+      expect(find.text('Caller'), findsOneWidget);
     }),
   );
   testWidgets(

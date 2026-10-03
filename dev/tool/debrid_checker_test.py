@@ -142,34 +142,34 @@ def self_test(package=None):
     # conceal a broken callback checker. Every scroll/back/TV pair gets both
     # negatives, including a second receiver of the SAME owning class.
     for spec in config['callback_identities']:
-        site = spec['sites'][1]
-        key, node = located(site['member'])
-        calls = arguments(tokens(node), site['call'])
-        argument = calls[site.get('occurrence', 0)][site['argument']]
-        for label, replacement in [('wrapping closure', ['(', ')', '=>', *argument, '(', ')']),
-                                   ('same-class receiver swap', ['secondInstance', '.', argument[-2] if argument[-1] == '!' else argument[-1]])]:
-            mutated = copy.deepcopy(lookup)
-            values = tokens(mutated[key])
-            # Replace precisely the callback argument in the selected call.
-            occurrence = site.get('occurrence', 0)
-            count = 0
-            for i, value in enumerate(values):
-                if value != site['call'] or values[i + 1:i + 2] != ['(']:
-                    continue
-                if count != occurrence:
-                    count += 1
-                    continue
-                a = i + 2
-                for _ in range(site['argument']):
-                    a = values.index(',', a) + 1
-                b = a + len(argument)
-                values[a:b] = replacement
-                mutated[key]['tokens'] = [{'text': t, 'offset': i} for i, t in enumerate(values)]
-                mutated[key]['formatCommas'] = []
-                break
-            identity_errors = check_callback_identities(mutated, rows, source, config)
-            assert identity_errors, f"Accepted {spec['name']} {label}"
-            print(f"Real-Debrid callback {spec['name']} {label}: rejected")
+        for site in spec['sites']:
+            key, node = located(site['member'])
+            calls = arguments(tokens(node), site['call'])
+            argument = calls[site.get('occurrence', 0)][site['argument']]
+            for label, replacement in [('wrapping closure', ['(', ')', '=>', *argument, '(', ')']),
+                                       ('same-class receiver swap', ['secondInstance', '.', argument[-2] if argument[-1] == '!' else argument[-1]])]:
+                mutated = copy.deepcopy(lookup)
+                values = tokens(mutated[key])
+                # Replace precisely the callback argument in the selected call.
+                occurrence = site.get('occurrence', 0)
+                count = 0
+                for i, value in enumerate(values):
+                    if value != site['call'] or values[i + 1:i + 2] != ['(']:
+                        continue
+                    if count != occurrence:
+                        count += 1
+                        continue
+                    a = i + 2
+                    for _ in range(site['argument']):
+                        a = values.index(',', a) + 1
+                    b = a + len(argument)
+                    values[a:b] = replacement
+                    mutated[key]['tokens'] = [{'text': t, 'offset': i} for i, t in enumerate(values)]
+                    mutated[key]['formatCommas'] = []
+                    break
+                identity_errors = check_callback_identities(mutated, rows, source, config)
+                assert identity_errors, f"Accepted {spec['name']} {site} {label}"
+                print(f"Real-Debrid callback {spec['name']} {site['member']} {site['call']} #{site.get('occurrence', 0)} {label}: rejected")
 
 
 if __name__ == '__main__':

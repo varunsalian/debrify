@@ -13,6 +13,7 @@ void main() {
         (t) => debridCase(t, (f) async {
           await f.mount(t);
           if (ddl) await f.ddl(t);
+          final before = f.requests.length;
           final id = ddl ? 'w8' : 'z9';
           final action =
               f.member(ddl ? 'handleDeleteDownload' : 'handleDeleteTorrent')(
@@ -27,6 +28,12 @@ void main() {
           await t.pumpAndSettle();
           await action;
           expect(f.deletes.length, confirm ? 1 : 0);
+          expect(
+            f.requests.skip(before).map((r) => '${r.method} ${r.url.path}'),
+            confirm
+                ? ['DELETE /rest/1.0/${ddl ? 'downloads' : 'torrents'}/delete/$id']
+                : [],
+          );
           if (confirm) {
             expect(
               f.deletes.single.url.path,
@@ -63,6 +70,7 @@ void main() {
             f.holdDelete = true;
             f.pending = Completer<http.Response>();
           }
+          final before = f.requests.length;
           var done = false;
           final action = f.member('handleDeleteSelected')() as Future<void>;
           action.then((_) => done = true);
@@ -83,6 +91,7 @@ void main() {
           if (scenario == 'decline') {
             await action;
             expect(f.deletes, isEmpty);
+            expect(f.requests.skip(before), isEmpty);
             expect(f.member('isSelectionMode'), isTrue);
             expect((f.member(active) as Set).toList(), ids);
             return;
@@ -122,6 +131,13 @@ void main() {
             scenario == 'cancel' ? [ids.first] : ids,
           );
           expect(f.deletes.every((r) => r.body.isEmpty), isTrue);
+          expect(
+            f.requests.skip(before).map((r) => '${r.method} ${r.url.path}'),
+            (scenario == 'cancel' ? [ids.first] : ids).map(
+              (id) =>
+                  'DELETE /rest/1.0/${ddl ? 'downloads' : 'torrents'}/delete/$id',
+            ),
+          );
           expect(
             (f.member(ddl ? 'downloads' : 'torrents') as List).map(
               (dynamic r) => r.id,
@@ -237,7 +253,14 @@ void main() {
             await t.tap(find.widgetWithText(TextButton, 'Cancel'));
             await t.pumpAndSettle();
             expect(done, isFalse);
-            f.pending!.complete(http.Response(jsonEncode(originalRows), 200));
+            expect(f.deletes, isEmpty);
+            final fullPage = [
+              ...originalRows,
+              for (var i = 0; i < 997; i++)
+                ddl ? debridDownload('extra-$i') : debridTorrent('extra-$i'),
+            ];
+            expect(fullPage.length, 1000);
+            f.pending!.complete(http.Response(jsonEncode(fullPage), 200));
             await f.until(t, () => done);
             expect(f.deletes, isEmpty);
           } else {

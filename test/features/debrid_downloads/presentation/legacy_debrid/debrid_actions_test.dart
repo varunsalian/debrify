@@ -15,6 +15,7 @@ void main() {
     'video',
     'all',
     'uncached',
+    'uncached-advanced',
   ]) {
     testWidgets(
       'magnet $mode exact selected values request order flags and cleanup',
@@ -23,7 +24,8 @@ void main() {
         if (mode == 'default' || mode == 'uncached') {
           await RealDebridStorage.saveFileSelection('largest');
         }
-        f.noLinks = mode == 'uncached';
+        final uncached = mode.startsWith('uncached');
+        f.noLinks = uncached;
         f.member('showAddMagnetDialog')();
         await t.pumpAndSettle();
         (f.member('magnetController') as TextEditingController).text = magnet;
@@ -32,7 +34,10 @@ void main() {
         final action =
             (mode == 'default' || mode == 'uncached'
                     ? f.member('addMagnetWithDefaultSelection')()
-                    : f.member('addMagnetWithSelection')(magnet, mode))
+                    : f.member('addMagnetWithSelection')(
+                        magnet,
+                        mode == 'uncached-advanced' ? 'video' : mode,
+                      ))
                 as Future<void>;
         action.then((_) => done = true);
         await f.until(
@@ -49,7 +54,7 @@ void main() {
         final req = f.requests.skip(before).toList();
         expect(
           req.map((r) => '${r.method} ${r.url.path}'),
-          mode == 'uncached'
+          uncached
               ? [
                   'POST /rest/1.0/torrents/addMagnet',
                   'GET /rest/1.0/torrents/info/new-torrent',
@@ -73,13 +78,13 @@ void main() {
               : '71,4,39',
         });
         expect(f.member('isAddingMagnet'), isFalse);
-        if (mode != 'uncached') {
+        if (!uncached) {
           expect(
             (f.member('magnetController') as TextEditingController).text,
             '',
           );
         }
-        if (mode == 'uncached') {
+        if (uncached) {
           expect(req.last.body, '');
           expect(
             find.text('File is not readily available in Real Debrid'),

@@ -425,6 +425,14 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 - All four manifest/self-test runs pass, including original-code real-config negative fixtures. Architecture, strict sizes, storage reference fixtures and all 314 storage constants pass. Five original macOS hashes recorded; Linux capture script syntax passes. A preliminary expanded run named a nonexistent runtime-guard path; corrected to test/profiles/isolation_suite/stale_runtime_guard_test.dart and reran successfully against the observed baseline. No assertion removed/weakened and no allowlist/golden regression acceptance.
 - Concurrent user-owned CI-only commit 00bcf391 landed between base2 and base2a. Preserved unchanged; no application/test change. Base2a/base3/base4 record that HEAD and stable tested trees. Historical helper reports the same 32 failure/error identities missing from the nine-entry historical list, before extraction; observed-baseline identity comparisons establish parity.
 
+### Step 0b — complete; review coverage checkpoint
+
+- Preserved staged step-1 extraction in a path-scoped stash; Linux originals deliberately remain untracked until the pre-step-6 provenance commit. No application code changed in this checkpoint.
+- Strengthened the existing fetch-cancel cases with a held 1,000-row page and exact GET limits/pages/no DELETE; added advanced video-selection uncached cleanup, deep-link pop priority over the search flag, and streamable-zero MKV source selection. Retained every existing assertion and identity. Single/selected delete checks now assert the full request tail, picker search verifies its actual 2,000-limit GET and filtered row before tapping, and RAR Copy re-reads DownloadService records to prove no enqueue.
+- Every changed/new case first passed with ORIGINAL production code in the separate cc950ed9 worktree: original-cc950-step0b-final, 100 successes, stable tested tree. The first attempt had only a nonexistent home-source-editor path; corrected the command and reran the full affected set. Original fingerprints are recorded.
+- Callback negative fixtures now mutate every identity site (wrappers and same-class receiver swaps). Recorded the shape classification rule and the reset-scroll test's correctPixels limitation: listener remove/jump/add order is established by the source guard and checker.
+- Adopted base5: 10,489 success / 13 failure / 28 error / 20 skipped, PASS versus base4 with exactly three added passing identities and no missing/newly skipped identities. Analyzer 825 unchanged; all four manifest self-tests, architecture, size and diff checks pass. Stable tested tree is recorded; only the five pending Linux artifacts are untracked and unused by macOS runs. Use base5 for both gates. Linux artifacts were independently captured and strictly rerun by the user from cc950ed9; verify and commit their hashes/provenance only before step 6.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
