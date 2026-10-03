@@ -35,18 +35,30 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_bulk_delete.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selected_delete.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search_layout.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_bar.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_seasons_list.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_feedback.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search_layout.dart': 2,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_link_actions.dart': 1,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_bulk_delete.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_toolbar.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_series_browser.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_toolbar.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_bulk_delete.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selected_delete.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search_layout.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_bar.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_seasons_list.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_feedback.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search_layout.dart':
+      2,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_link_actions.dart':
+      1,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_bulk_delete.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_toolbar.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_series_browser.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_toolbar.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_options.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_options.dart':
@@ -110,7 +122,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/debrify_tv/widgets/tv_focusable_card.dart': 0,
   'lib/screens/downloads_screen.dart': 2,
   'lib/screens/magic_tv_screen.dart': 7,
-  'lib/screens/pikpak/pikpak_files_screen.dart': 9,
   'lib/screens/playlist_content_view_screen.dart': 0,
   'lib/screens/playlist_screen.dart': 0,
   'lib/screens/premiumize/premiumize_files_screen.dart': 6,
@@ -175,55 +186,99 @@ const Map<String, int> kShapeResidue = {
   'lib/widgets/tv_sidebar_nav.dart': 1,
   'lib/widgets/tvmaze_search_dialog.dart': 0,
   'lib/widgets/youtube/youtube_video_card.dart': 0,
+  'lib/screens/pikpak/pikpak_files_screen.dart': 9,
 };
 
 // Migration files with no remaining shape-token sites of their own. Keep their
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_workflows_composition.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_state.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_node_playlist_links.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_browsing_composition.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_state.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_navigation.dart': 2,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_navigation_state.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_layout.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_root_layout.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_add_input_state.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_file_actions.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search_state.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_focus_state.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_library_lists.dart': 2,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_playback.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_view_selector.dart': 1,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_single_delete_actions.dart': 2,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_row.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_node_row.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_multifile_playback.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_magnet_actions.dart': 1,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_loading.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_download_action.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_view_modes.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_row_actions.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_actions_composition.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_composition_bindings.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_composition.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search_state.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_delete_all_actions.dart': 2,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_state.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_back_navigation.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_focus_actions.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_playlist_actions.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_actions.dart': 1,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_row.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_sections.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_view_state.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_downloads.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_torrent_actions.dart': 0,
-  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_modern_file_card.dart': 9,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_workflows_composition.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_state.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_node_playlist_links.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_browsing_composition.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_state.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_navigation.dart':
+      2,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_navigation_state.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_layout.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_root_layout.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_add_input_state.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_file_actions.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search_state.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_focus_state.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_library_lists.dart':
+      2,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_playback.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_view_selector.dart':
+      1,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_single_delete_actions.dart':
+      2,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_row.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_node_row.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_multifile_playback.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_magnet_actions.dart':
+      1,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_loading.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_download_action.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_view_modes.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_row_actions.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_actions_composition.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_composition_bindings.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_composition.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search_state.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_delete_all_actions.dart':
+      2,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_state.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_back_navigation.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_focus_actions.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_playlist_actions.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_actions.dart':
+      1,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_row.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_sections.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_view_state.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_downloads.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_torrent_actions.dart':
+      0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_modern_file_card.dart':
+      9,
   'lib/features/debrid_downloads/application/debrid_input_policy.dart': 0,
   'lib/features/debrid_downloads/application/debrid_error_policy.dart': 0,
   'lib/features/debrid_downloads/application/debrid_folder_policy.dart': 0,
@@ -585,6 +640,12 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/discover/presentation/discover_stage_layout.dart': 0,
   'lib/features/discover/presentation/discover_content.dart': 0,
   'lib/features/sources/presentation/source_keyword_field.dart': 1,
+  'lib/features/pikpak_files/application/pikpak_link_policy.dart': 0,
+  'lib/features/pikpak_files/application/pikpak_playlist_titles.dart': 0,
+  'lib/features/pikpak_files/application/pikpak_sort_policy.dart': 0,
+  'lib/features/pikpak_files/models/folder_view_mode.dart': 0,
+  'lib/features/pikpak_files/models/pikpak_playlist_item.dart': 0,
+  'lib/features/pikpak_files/models/pikpak_search_result.dart': 0,
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(

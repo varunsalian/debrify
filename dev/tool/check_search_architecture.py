@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -25,6 +25,9 @@ SETTINGS_FACADE = "lib/screens/settings_screen.dart"
 SETTINGS_COMPLETE = True
 IPTV_COMPLETE = True
 TORBOX_COMPLETE = True
+PIKPAK_COMPLETE = False
+PIKPAK_FACADE = "lib/screens/pikpak/pikpak_files_screen.dart"
+PIKPAK_BRIDGE = "lib/features/pikpak_files/presentation/legacy_pikpak/"
 DEBRID_COMPLETE = True
 DEBRID_FACADE = "lib/screens/debrid_downloads_screen.dart"
 DEBRID_BRIDGE = "lib/features/debrid_downloads/presentation/legacy_debrid/"
@@ -284,6 +287,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     IPTV_BRIDGE,
     TORBOX_BRIDGE,
     DEBRID_BRIDGE,
+    PIKPAK_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -359,6 +363,16 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line Real-Debrid facade limit")
         if "TEMP(debrid)" in source:
             problems.append("temporary Real-Debrid cross-call remains in the facade")
+    if relative.startswith("lib/features/pikpak_files/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line PikPak extraction limit")
+        if "TEMP(pikpak)" in source and (PIKPAK_COMPLETE or not relative.startswith(PIKPAK_BRIDGE)):
+            problems.append("temporary PikPak cross-call outside the staged legacy bridge")
+    if PIKPAK_COMPLETE and relative == PIKPAK_FACADE:
+        if lines > 400:
+            problems.append(f"{lines} lines exceeds the 400-line PikPak facade limit")
+        if "TEMP(pikpak)" in source:
+            problems.append("temporary PikPak cross-call remains in the facade")
     if relative in TORRENT_PLAYBACK_SOURCE_FILES:
         limit = 800 if relative in TORRENT_PLAYBACK_PIPELINES else 500
         if lines > limit:
@@ -410,6 +424,8 @@ def violations(path: Path) -> list[str]:
                 problems.append("pure IPTV application helper imports a legacy service")
             if relative.startswith("lib/features/torbox_downloads/application/") and target.startswith("lib/services/"):
                 problems.append("pure TorBox application helper imports a legacy service")
+            if relative.startswith("lib/features/pikpak_files/application/") and target.startswith("lib/services/"):
+                problems.append("pure PikPak application helper imports a legacy service")
             if relative.startswith("lib/features/debrid_downloads/application/") and target.startswith("lib/services/"):
                 problems.append("pure Real-Debrid application helper imports a legacy service")
             if layer in ("application", "data", "models"):
@@ -451,6 +467,12 @@ def violations(path: Path) -> list[str]:
                     other = target.split("/")[2]
                     if {own, other} == {"debrid_downloads", "torbox_downloads"}:
                         problems.append("Real-Debrid/TorBox cross-feature import")
+                if own in ("debrid_downloads", "torbox_downloads", "pikpak_files") and target.startswith("lib/features/"):
+                    other = target.split("/")[2]
+                    if own != other and other in ("debrid_downloads", "torbox_downloads", "pikpak_files"):
+                        problems.append("PikPak/Real-Debrid/TorBox cross-feature import")
+                if own == "pikpak_files" and target == PIKPAK_FACADE:
+                    problems.append("PikPak feature imports the files facade")
                 if own == "debrid_downloads" and target == DEBRID_FACADE:
                     problems.append("Real-Debrid feature imports the downloads facade")
                 if own == "torbox_downloads" and target == TORBOX_FACADE:
@@ -471,6 +493,8 @@ def main() -> int:
         if not p.name.endswith(GENERATED_SUFFIXES)
     }
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)
+    if PIKPAK_COMPLETE:
+        paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:
         paths.add(ROOT / DEBRID_FACADE)
     if TORBOX_COMPLETE:

@@ -1,3 +1,9 @@
+import 'package:debrify/features/pikpak_files/models/folder_view_mode.dart';
+import 'package:debrify/features/pikpak_files/models/pikpak_playlist_item.dart';
+import 'package:debrify/features/pikpak_files/models/pikpak_search_result.dart';
+import 'package:debrify/features/pikpak_files/application/pikpak_sort_policy.dart';
+import 'package:debrify/features/pikpak_files/application/pikpak_playlist_titles.dart';
+import 'package:debrify/features/pikpak_files/application/pikpak_link_policy.dart';
 import 'package:debrify/services/storage/pikpak_storage.dart';
 import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:flutter/material.dart';
@@ -44,9 +50,6 @@ class PikPakFilesScreen extends StatefulWidget {
   State<PikPakFilesScreen> createState() => _PikPakFilesScreenState();
 }
 
-/// View modes for folder display
-enum _FolderViewMode { raw, sortedAZ, seriesArrange }
-
 class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<Map<String, dynamic>> _files = [];
@@ -80,7 +83,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   bool _isAtRestrictedRoot = false;
 
   // View mode state (per-folder persistence during session)
-  final Map<String, _FolderViewMode> _folderViewModes = {};
+  final Map<String, FolderViewMode> _folderViewModes = {};
 
   // Virtual folder navigation for Series Arrange mode
   bool _isInVirtualFolder = false;
@@ -135,7 +138,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   final FocusNode _searchClearFocusNode = FocusNode(
     debugLabel: 'pikpak-search-clear',
   );
-  List<_PikPakSearchResult> _searchResults = [];
+  List<PikPakSearchResult> _searchResults = [];
 
   @override
   void initState() {
@@ -537,7 +540,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
       // Apply current view mode transformation
       final mode = _getCurrentViewMode();
-      final transformedFiles = mode == _FolderViewMode.seriesArrange
+      final transformedFiles = mode == FolderViewMode.seriesArrange
           ? filteredFiles // Series Arrange is handled separately in _setViewMode
           : _applyViewMode(mode, filteredFiles);
 
@@ -601,8 +604,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
         // Re-apply current view mode to maintain consistency
         final mode = _getCurrentViewMode();
-        if (mode != _FolderViewMode.raw &&
-            mode != _FolderViewMode.seriesArrange) {
+        if (mode != FolderViewMode.raw &&
+            mode != FolderViewMode.seriesArrange) {
           final transformed = _applyViewMode(mode, _files);
           _files.clear();
           _files.addAll(transformed);
@@ -1427,22 +1430,22 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   // ========== VIEW MODE TRANSFORMATION METHODS ==========
 
   /// Get current view mode for the active folder
-  _FolderViewMode _getCurrentViewMode() {
+  FolderViewMode _getCurrentViewMode() {
     // Virtual folders don't have their own view modes
-    if (_isInVirtualFolder) return _FolderViewMode.seriesArrange;
+    if (_isInVirtualFolder) return FolderViewMode.seriesArrange;
 
     // Root level (no folder selected) defaults to Raw
-    if (_currentFolderId == null) return _FolderViewMode.raw;
+    if (_currentFolderId == null) return FolderViewMode.raw;
 
-    return _folderViewModes[_currentFolderId!] ?? _FolderViewMode.raw;
+    return _folderViewModes[_currentFolderId!] ?? FolderViewMode.raw;
   }
 
   /// Set view mode and refresh display
-  Future<void> _setViewMode(_FolderViewMode mode) async {
+  Future<void> _setViewMode(FolderViewMode mode) async {
     if (_currentFolderId == null) return;
 
     // If user selected Series Arrange, we need to fetch all files recursively
-    if (mode == _FolderViewMode.seriesArrange) {
+    if (mode == FolderViewMode.seriesArrange) {
       // Show loading indicator
       setState(() {
         _isLoading = true;
@@ -1533,10 +1536,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     );
 
     setState(() {
-      _folderViewModes[_currentFolderId!] = _FolderViewMode.sortedAZ;
+      _folderViewModes[_currentFolderId!] = FolderViewMode.sortedAZ;
       // Use allFiles if provided (preserves full recursive fetch), otherwise use _files
       final filesToTransform = allFiles ?? _files;
-      final transformed = _applySortedView(filesToTransform);
+      final transformed = applySortedView(filesToTransform);
       _files.clear();
       _files.addAll(transformed);
       _isLoading = false;
@@ -1545,116 +1548,17 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   /// Apply view mode transformation to a list of files
   List<Map<String, dynamic>> _applyViewMode(
-    _FolderViewMode mode,
+    FolderViewMode mode,
     List<Map<String, dynamic>> items,
   ) {
     switch (mode) {
-      case _FolderViewMode.raw:
+      case FolderViewMode.raw:
         return items;
-      case _FolderViewMode.sortedAZ:
-        return _applySortedView(items);
-      case _FolderViewMode.seriesArrange:
+      case FolderViewMode.sortedAZ:
+        return applySortedView(items);
+      case FolderViewMode.seriesArrange:
         return _applySeriesArrangeView(items);
     }
-  }
-
-  /// Apply sorted view (folders first A-Z, then files A-Z) with numerical sorting
-  List<Map<String, dynamic>> _applySortedView(
-    List<Map<String, dynamic>> items,
-  ) {
-    final folders = items.where((item) {
-      final kind = item['kind'] ?? '';
-      return kind == 'drive#folder';
-    }).toList();
-
-    final files = items.where((item) {
-      final kind = item['kind'] ?? '';
-      return kind != 'drive#folder';
-    }).toList();
-
-    // Sort folders with numerical handling
-    folders.sort((a, b) {
-      final aName = a['name'] as String? ?? '';
-      final bName = b['name'] as String? ?? '';
-
-      final aNum = _extractSeasonNumber(aName);
-      final bNum = _extractSeasonNumber(bName);
-
-      // If both have numbers, sort numerically
-      if (aNum != null && bNum != null) {
-        return aNum.compareTo(bNum);
-      }
-
-      // If only one has a number, numbered folders come first
-      if (aNum != null) return -1;
-      if (bNum != null) return 1;
-
-      // Otherwise sort alphabetically
-      return aName.toLowerCase().compareTo(bName.toLowerCase());
-    });
-
-    // Sort files with numerical handling
-    files.sort((a, b) {
-      final aName = a['name'] as String? ?? '';
-      final bName = b['name'] as String? ?? '';
-
-      final aNum = _extractLeadingNumber(aName);
-      final bNum = _extractLeadingNumber(bName);
-
-      // If both start with numbers, sort numerically
-      if (aNum != null && bNum != null) {
-        return aNum.compareTo(bNum);
-      }
-
-      // If only one starts with a number, numbered files come first
-      if (aNum != null) return -1;
-      if (bNum != null) return 1;
-
-      // Otherwise sort alphabetically
-      return aName.toLowerCase().compareTo(bName.toLowerCase());
-    });
-
-    return [...folders, ...files];
-  }
-
-  /// Extract number from folder name for numerical sorting
-  /// Handles: "1. Introduction", "10. Chapter", "Season 10", "Chapter_12", "Episode 5", "Part 3", etc.
-  int? _extractSeasonNumber(String folderName) {
-    final patterns = [
-      // Leading numbers: "1. ", "10-", "5_", etc.
-      RegExp(r'^(\d+)[\s._-]'),
-      // Season/Chapter/Episode/Part keywords: "Season 10", "Chapter_12", etc.
-      RegExp(r'season[\s_-]*(\d+)', caseSensitive: false),
-      RegExp(r'chapter[\s_-]*(\d+)', caseSensitive: false),
-      RegExp(r'episode[\s_-]*(\d+)', caseSensitive: false),
-      RegExp(r'part[\s_-]*(\d+)', caseSensitive: false),
-      // Generic word followed by number: "Lesson_5", "Module-3"
-      RegExp(r'^[a-z]+[\s_-]*(\d+)', caseSensitive: false),
-    ];
-
-    final lowerName = folderName.toLowerCase();
-
-    for (final pattern in patterns) {
-      final match = pattern.firstMatch(lowerName);
-      if (match != null && match.groupCount >= 1) {
-        return int.tryParse(match.group(1)!);
-      }
-    }
-
-    return null;
-  }
-
-  /// Extract leading number from filename for numerical sorting
-  /// Handles: "10. Video.mp4", "9 - Title.mkv", "05_Episode.mp4", etc.
-  int? _extractLeadingNumber(String filename) {
-    final pattern = RegExp(r'^(\d+)[\s._-]');
-    final match = pattern.firstMatch(filename);
-
-    if (match != null && match.groupCount >= 1) {
-      return int.tryParse(match.group(1)!);
-    }
-
-    return null;
   }
 
   /// Apply series arranged view (create virtual Season folders)
@@ -1745,7 +1649,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       return [...folders, ...seasonFolders, ...nonVideoFiles];
     } catch (e) {
       print('Series arrangement failed: $e');
-      return _applySortedView(items); // Fallback to sorted view
+      return applySortedView(items); // Fallback to sorted view
     }
   }
 
@@ -1776,7 +1680,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           }
           return KeyEventResult.ignored;
         },
-        child: DropdownButtonFormField<_FolderViewMode>(
+        child: DropdownButtonFormField<FolderViewMode>(
           focusNode: _viewModeDropdownFocusNode,
           autofocus: true,
           isExpanded: true,
@@ -1784,9 +1688,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           decoration: InputDecoration(
             labelText: 'View Mode',
             prefixIcon: Icon(
-              mode == _FolderViewMode.raw
+              mode == FolderViewMode.raw
                   ? Icons.view_list
-                  : mode == _FolderViewMode.sortedAZ
+                  : mode == FolderViewMode.sortedAZ
                   ? Icons.sort_by_alpha
                   : Icons.video_library,
               color: theme.colorScheme.primary,
@@ -1802,9 +1706,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             ),
           ),
           items: const [
-            DropdownMenuItem(value: _FolderViewMode.raw, child: Text('Raw')),
+            DropdownMenuItem(value: FolderViewMode.raw, child: Text('Raw')),
             DropdownMenuItem(
-              value: _FolderViewMode.sortedAZ,
+              value: FolderViewMode.sortedAZ,
               child: Text('Sort (A-Z)'),
             ),
           ],
@@ -1841,7 +1745,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
 
     final lowerQuery = query.toLowerCase();
-    final results = <_PikPakSearchResult>[];
+    final results = <PikPakSearchResult>[];
 
     // Get cached recursive files or fetch them
     final folderId = _currentFolderId ?? '';
@@ -1862,7 +1766,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       if (isVideo && name.toLowerCase().contains(lowerQuery)) {
         // Get path from file data if available
         final parentPath = file['parent_name'] as String? ?? '';
-        results.add(_PikPakSearchResult(file: file, path: parentPath));
+        results.add(PikPakSearchResult(file: file, path: parentPath));
       }
     }
 
@@ -1993,7 +1897,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   /// Build a card for a search result
-  Widget _buildSearchResultCard(_PikPakSearchResult result) {
+  Widget _buildSearchResultCard(PikPakSearchResult result) {
     final file = result.file;
     final name = file['name'] as String? ?? 'Unknown';
     final size = file['size'] as String? ?? '0';
@@ -2132,7 +2036,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     final currentMode = _getCurrentViewMode();
     final showSearch =
         showViewModeDropdown &&
-        currentMode != _FolderViewMode.seriesArrange &&
+        currentMode != FolderViewMode.seriesArrange &&
         !_isInVirtualFolder;
 
     final bool isCompactActions = MediaQuery.sizeOf(context).width < 500;
@@ -2814,13 +2718,13 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
 
     // Multiple videos - build playlist
-    final entries = <_PikPakPlaylistItem>[];
+    final entries = <PikPakPlaylistItem>[];
     for (int i = 0; i < videoFiles.length; i++) {
       final file = videoFiles[i];
-      final displayName = _pikpakDisplayName(file);
+      final displayName = pikpakDisplayName(file);
       final info = SeriesParser.parseFilename(displayName);
       entries.add(
-        _PikPakPlaylistItem(
+        PikPakPlaylistItem(
           file: file,
           originalIndex: i,
           seriesInfo: info,
@@ -2860,7 +2764,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // Find first episode to start from
     final seriesInfos = sortedEntries.map((e) => e.seriesInfo).toList();
     int startIndex = isSeriesCollection
-        ? _findFirstEpisodeIndex(seriesInfos)
+        ? findFirstEpisodeIndex(seriesInfos)
         : 0;
     if (startIndex < 0 || startIndex >= sortedEntries.length) {
       startIndex = 0;
@@ -2887,12 +2791,12 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     for (int i = 0; i < sortedEntries.length; i++) {
       final entry = sortedEntries[i];
       final seriesInfo = entry.seriesInfo;
-      final episodeLabel = _formatPikPakPlaylistTitle(
+      final episodeLabel = formatPikPakPlaylistTitle(
         info: seriesInfo,
         fallback: entry.displayName,
         isSeriesCollection: isSeriesCollection,
       );
-      final combinedTitle = _combineSeriesAndEpisodeTitle(
+      final combinedTitle = combineSeriesAndEpisodeTitle(
         seriesTitle: seriesInfo.title,
         episodeLabel: episodeLabel,
         isSeriesCollection: isSeriesCollection,
@@ -3107,88 +3011,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
   }
 
-  String _pikpakDisplayName(Map<String, dynamic> file) {
-    final name = file['name']?.toString() ?? '';
-    if (name.isNotEmpty) {
-      return FileUtils.getFileName(name);
-    }
-    return 'File ${file['id']}';
-  }
-
-  String _formatPikPakPlaylistTitle({
-    required SeriesInfo info,
-    required String fallback,
-    required bool isSeriesCollection,
-  }) {
-    if (!isSeriesCollection) {
-      return fallback;
-    }
-
-    final season = info.season;
-    final episode = info.episode;
-    if (info.isSeries && season != null && episode != null) {
-      final seasonLabel = season.toString().padLeft(2, '0');
-      final episodeLabel = episode.toString().padLeft(2, '0');
-      final description = info.episodeTitle?.trim().isNotEmpty == true
-          ? info.episodeTitle!.trim()
-          : info.title?.trim().isNotEmpty == true
-          ? info.title!.trim()
-          : fallback;
-      return 'S${seasonLabel}E$episodeLabel · $description';
-    }
-
-    return fallback;
-  }
-
-  String _combineSeriesAndEpisodeTitle({
-    required String? seriesTitle,
-    required String episodeLabel,
-    required bool isSeriesCollection,
-    required String fallback,
-  }) {
-    if (!isSeriesCollection) {
-      return fallback;
-    }
-
-    final cleanSeriesTitle = seriesTitle
-        ?.replaceAll(RegExp(r'[._\-]+$'), '')
-        .trim();
-    if (cleanSeriesTitle != null && cleanSeriesTitle.isNotEmpty) {
-      return '$cleanSeriesTitle $episodeLabel';
-    }
-
-    return fallback;
-  }
-
-  int _findFirstEpisodeIndex(List<SeriesInfo> infos) {
-    int startIndex = 0;
-    int? bestSeason;
-    int? bestEpisode;
-
-    for (int i = 0; i < infos.length; i++) {
-      final info = infos[i];
-      final season = info.season;
-      final episode = info.episode;
-      if (!info.isSeries || season == null || episode == null) {
-        continue;
-      }
-
-      final bool isBetterSeason = bestSeason == null || season < bestSeason;
-      final bool isBetterEpisode =
-          bestSeason != null &&
-          season == bestSeason &&
-          (bestEpisode == null || episode < bestEpisode);
-
-      if (isBetterSeason || isBetterEpisode) {
-        bestSeason = season;
-        bestEpisode = episode;
-        startIndex = i;
-      }
-    }
-
-    return startIndex;
-  }
-
   // ============================================================================
   // Add Link Dialog
   // ============================================================================
@@ -3323,13 +3145,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
   }
 
-  bool _isValidPikPakLink(String link) {
-    final trimmedLink = link.trim();
-    return trimmedLink.startsWith('http://') ||
-        trimmedLink.startsWith('https://') ||
-        trimmedLink.startsWith('magnet:');
-  }
-
   Future<void> _addLink() async {
     final link = _linkController.text.trim();
     if (link.isEmpty) {
@@ -3337,7 +3152,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       return;
     }
 
-    if (!_isValidPikPakLink(link)) {
+    if (!isValidPikPakLink(link)) {
       _showSnackBar('Please enter a valid URL or magnet link', isError: true);
       return;
     }
@@ -3416,29 +3231,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       }
     }
   }
-}
-
-/// Helper class for building PikPak playlists
-class _PikPakPlaylistItem {
-  final Map<String, dynamic> file;
-  final int originalIndex;
-  final SeriesInfo seriesInfo;
-  final String displayName;
-
-  const _PikPakPlaylistItem({
-    required this.file,
-    required this.originalIndex,
-    required this.seriesInfo,
-    required this.displayName,
-  });
-}
-
-/// Helper class to hold search result with its folder path
-class _PikPakSearchResult {
-  final Map<String, dynamic> file;
-  final String path;
-
-  const _PikPakSearchResult({required this.file, required this.path});
 }
 
 /// Original-code characterization seam: fresh state and real action tear-offs.
@@ -3522,9 +3314,9 @@ Map<String, Object?> pikpakFilesTestAccess(State<PikPakFilesScreen> state) {
     'setViewMode': s._setViewMode,
     'showFallbackToSorted': s._showFallbackToSorted,
     'applyViewMode': s._applyViewMode,
-    'applySortedView': s._applySortedView,
-    'extractSeasonNumber': s._extractSeasonNumber,
-    'extractLeadingNumber': s._extractLeadingNumber,
+    'applySortedView': applySortedView,
+    'extractSeasonNumber': extractSeasonNumber,
+    'extractLeadingNumber': extractLeadingNumber,
     'applySeriesArrangeView': s._applySeriesArrangeView,
     'toggleSearch': s._toggleSearch,
     'performSearch': s._performSearch,
@@ -3535,16 +3327,16 @@ Map<String, Object?> pikpakFilesTestAccess(State<PikPakFilesScreen> state) {
     'handleAddToPlaylist': s._handleAddToPlaylist,
     'addSingleFileToPlaylist': s._addSingleFileToPlaylist,
     'addFolderToPlaylist': s._addFolderToPlaylist,
-    'pikpakDisplayName': s._pikpakDisplayName,
-    'formatPikPakPlaylistTitle': s._formatPikPakPlaylistTitle,
-    'combineSeriesAndEpisodeTitle': s._combineSeriesAndEpisodeTitle,
-    'findFirstEpisodeIndex': s._findFirstEpisodeIndex,
+    'pikpakDisplayName': pikpakDisplayName,
+    'formatPikPakPlaylistTitle': formatPikPakPlaylistTitle,
+    'combineSeriesAndEpisodeTitle': combineSeriesAndEpisodeTitle,
+    'findFirstEpisodeIndex': findFirstEpisodeIndex,
     'showAddLinkDialog': s._showAddLinkDialog,
     'autoPasteLink': s._autoPasteLink,
-    'isValidPikPakLink': s._isValidPikPakLink,
+    'isValidPikPakLink': isValidPikPakLink,
     'addLink': s._addLink,
-    'rawMode': _FolderViewMode.raw,
-    'sortedMode': _FolderViewMode.sortedAZ,
-    'seriesMode': _FolderViewMode.seriesArrange,
+    'rawMode': FolderViewMode.raw,
+    'sortedMode': FolderViewMode.sortedAZ,
+    'seriesMode': FolderViewMode.seriesArrange,
   };
 }

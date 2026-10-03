@@ -397,6 +397,13 @@ Real-Debrid, PikPak) with self-tests, and gates against the latest PikPak base.
 
 - Step 0 is `2b93c520`. The staged diff check exposed CRLF from the TSV writer after the earlier unstaged check passed. Corrected the manifest to LF and proved parsed rows identical before/after; no application or characterization change. The original Linux capture continues resolving `2b93c520` by its exact subject, and latest test base remains `pikpak/base3`. All subsequent staged diff checks must pass before committing.
 
+### Step 1 — complete
+
+- Step 0a is `e5a1b6b6`. Moved eight pure helpers, FolderViewMode and both plain data classes; production callers and frozen accessor use the actual destinations. Facade 3,550 → 3,342; largest destination 96 lines. No production scaffold is needed or pinned yet.
+- Registered PikPak, exact legacy_pikpak bridge, application service ban, facade back-import ban and bidirectional cross-cloud bans, with 500-line destination caps. The facade 400-line cap/TEMP rejection stays staged until step 7. Theme and complete shape inventory preserve exactly nine bare radii / five token calls.
+- All five manifest/self-test runs PASS; PikPak validates all 128 leaves and callback wrapper/same-class-receiver negatives. Initial concurrent runs encountered a shared cached parser-kernel rebuild (exit 253); reran all five successfully with the existing --parser-package option and an isolated evidence-directory cache. Checker/source rules were unchanged.
+- `pikpak/step1`: 111 success / one observed pre-existing theme failure, PASS versus base3 (zero added/missing/newly skipped identities or new failures); all 83 characterization tests and five strict macOS originals unchanged. Stable staged tested tree d311f67b1088347ea04e49520f153d900a1473ab recorded. Whole analyzer 839, zero additions/removals. Architecture, sizes, storage references/self-tests/314 keys, format and staged diff checks PASS.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
