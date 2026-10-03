@@ -94,8 +94,11 @@ Each has the coverage given in the step 0 testability matrix below.
    - Revalidation re-presents never seed.
 3. **Catalog refresh focus behaviour**, as it exists today. There are two
    paths:
-   - **Unchanged digest:** existing facades are re-pinned, and instances and
-     focus are retained (2166).
+   - **Unchanged digest and no numbering added** (`!numberingAdded`, 2166):
+     existing facades are re-pinned, and instances and focus are retained.
+     Exception: if the selected category disappeared, that branch still calls
+     `_applyFilters` (2185, 2197), which replaces the filtered facade (3006).
+   - **Numbering newly adopted:** the digest-unchanged branch doesn't apply.
    - **Changed digest:** it captures the old index, then tries the clamped
      same index, then any attached row, then the filter node (2258).
    - **Both paths** return early when `!mounted`. New generations clear the
@@ -222,10 +225,19 @@ Technique), with these IPTV rules:
    - **A registered test accessor,** like settings' `settingsScreenTestAccess`,
      that exposes the private payload provider and other unreachable
      internals as real tear-offs for characterization tests.
-   - **An optional clock** on the Spotlight timeline path, defaulting to
-     `DateTime.now`. The view forwards it, which it doesn't today (6534;
-     `spotlight_live_timeline.dart:276`), so goldens are deterministic.
-     Production behaviour is unchanged.
+   - **An optional clock** (`DateTime Function()`, defaulting to
+     `DateTime.now`) for every Spotlight paint path that reads the time:
+     - the timeline constructor parameter the view will forward
+       (6534; `spotlight_live_timeline.dart:276`);
+     - the timeline's direct `DateTime.now()` reads for programme styling,
+       the playhead and the "Today" heading
+       (`spotlight_live_timeline.dart:1863, 2034, 2108`);
+     - the hero metadata (`spotlight_programme_hero.dart:173`).
+
+     Each read becomes `now()` with the same default, so production behaviour
+     is unchanged. These two files are touched only for this seam. Step 0
+     lists every remaining `DateTime.now` reached by a golden; any it can't
+     cover must be avoided by the fixture, with the limit recorded.
 7. **Not allowed:**
    - reordering `await`s, guards, `setState` contents, timer starts or
      cancels, or listener adds and removes;
@@ -309,16 +321,25 @@ Technique), with these IPTV rules:
      - duplicate ownership;
      - wrong callback wiring;
      - a lifecycle statement moved out of the State.
-4. **Test seams:** add the registered test accessor and the optional clock
-   (Technique 6), then record a **second baseline** (`iptv/base2`) with the
-   seams in place.
+4. **Test seams.** Add the registered test accessor and the optional clock
+   (Technique 6).
+   - **Size ratchet:** the facade is exactly at its recorded limit
+     (`file_size_baseline.txt:6`: 9,084), and `--update` only lowers limits.
+     So the seam commit raises that one entry **by hand** by exactly the
+     measured seam lines, using the documented manual mechanism
+     (`check_file_sizes.py:11`). Record the scope (seam only) and its exit:
+     step 1's moves bring the file well under 9,084, and `--update` locks
+     that in.
+   - **Second baseline** (`iptv/base2`), recorded with the seams in place.
+   - **Compare it** with `iptv/base` (same SDK). `PASS` is required: no new
+     failures, missing tests or new skips.
 5. **Characterization tests,** per this matrix:
 
    | Contract | Coverage |
    | --- | --- |
    | 1 Preview layering | Layout goldens of all four layouts, preview disabled, fixed clock, real temporary SQL catalog. **Source guards** on the preview subtree's widget order and decorations. Native punch-through: **pending device verification**. |
    | 2 Landing seed | Widget tests through stored local M3U or a temporary SQL catalog: seed on first present; no seed after a manual pick; no seed on a revalidation triggered through `IptvCatalogRefreshService.instance.revision`. Source guards on the arm and disarm sites (1252, 1553, 1655). |
-   | 3 Focus repair | A real temporary SQL catalog plus revision notification. Unchanged digest: instance and focus retained. Changed digest: same-index repair, attached-row fallback, focus elsewhere left alone. Source guards for branches the fixture can't reach. |
+   | 3 Focus repair | A real temporary SQL catalog plus revision notification. Unchanged digest without numbering: instance and focus retained. Unchanged digest with the selected category gone: `_applyFilters` replaces the facade (existing behaviour). Numbering newly adopted: the changed path. Changed digest: same-index repair, attached-row fallback, focus elsewhere left alone. Source guards for branches the fixture can't reach. |
    | 4 Playback identity | Source guards on resident-instance lookup, SQL window materialization and launcher arguments (4151, 4489, 4507), plus the catch-up and origin-copy paths. Launch itself: **source plus pending device verification** (no injectable launcher). |
    | 5 Catalog safety | Reuse the service and DB tests. A view refresh with real SQL, where a stale ticket's result is dropped. Source guards on ticket checks not drivable from a test. |
    | 6 D-pad | Widget tests for row key handling and both Browse focus handoffs (extend `iptv_channel_row_key_test.dart` and `iptv_spotlight_results_view_test.dart`). Goldens don't cover key handling. |
@@ -334,8 +355,12 @@ Technique), with these IPTV rules:
        37099639922), then deleted;
      - **comparison:** exact, with the host chosen deterministically.
    - Record a **characterization baseline** (`iptv/base3`) after adding
-     these tests. Later steps compare against it, so the new tests are
-     baseline identities, not "added".
+     these tests.
+   - **Compare it** with `iptv/base2`: `PASS`, and **every added
+     characterization identity must pass**. A failing new test is a step 0
+     bug, never a baseline outcome.
+   - Later steps compare against `base3`, so the new tests are baseline
+     identities, not "added".
 6. **CI test list.** Add every affected test as a concrete path, nested ones
    included, to `dev/tool/ci_behavior_tests.txt` **now**, so gate 1 runs them.
    The allowlist gains nothing.
