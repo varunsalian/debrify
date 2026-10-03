@@ -113,6 +113,10 @@ class IptvResultsView extends StatefulWidget {
   @visibleForTesting
   final ValueChanged<int>? debugOnSpotlightStartupFocus;
 
+  /// Clock for deterministic Spotlight paint characterization.
+  @visibleForTesting
+  final DateTime Function() debugSpotlightNow;
+
   /// Callback when up arrow is pressed from filters (to go back to source dropdown)
   final VoidCallback? onUpArrowFromFilters;
 
@@ -123,6 +127,7 @@ class IptvResultsView extends StatefulWidget {
     this.onUpArrowFromFilters,
     this.searchHeader,
     this.debugOnSpotlightStartupFocus,
+    this.debugSpotlightNow = DateTime.now,
   });
 
   @override
@@ -6055,6 +6060,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               ValueListenableBuilder<EpgProgramme?>(
                 valueListenable: _spotlightProgrammeShown,
                 builder: (context, programme, _) => SpotlightProgrammeHero(
+                  now: widget.debugSpotlightNow,
                   channel: channel,
                   selectedProgramme: programme,
                   // TV uses short/held OK on the guide row for these actions.
@@ -6533,6 +6539,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         valueListenable: IptvEpgService.instance.contextVersion,
         builder: (context, epgVersion, _) => SpotlightLiveTimeline(
           key: _spotlightTimelineKey,
+          now: widget.debugSpotlightNow,
           channels: _filteredChannels,
           sourceId: selected.id,
           loadGeneration: Object.hash(_loadTicket, _spotlightViewGeneration),
@@ -9082,3 +9089,61 @@ class _KeyCap extends StatelessWidget {
     );
   }
 }
+
+/// Real production tear-offs and borrowed identities for characterization.
+@visibleForTesting
+({
+  Future<Map<String, dynamic>?> Function(Map<String, dynamic>) browse,
+  Future<void> Function(IptvPlaylist) loadPlaylist,
+  void Function(String?) chooseCategory,
+  Future<void> Function(
+    IptvPlaylist,
+    String,
+    String,
+    int, {
+    bool usePublishedSnapshot,
+  }) refreshCatalog,
+  Future<void> Function(
+    IptvPlaylist,
+    int,
+    CatalogSnapshot, {
+    String? warning,
+    bool migrateFavorites,
+  }) presentDbCatalog,
+  FocusNode Function(IptvChannel) focusNodeFor,
+  bool Function(IptvChannel) rowAttached,
+  List<IptvChannel> allChannels,
+  List<IptvChannel> filteredChannels,
+  List<IptvPlaylist> playlists,
+  IptvPlaylist? selectedPlaylist,
+  String? selectedCategory,
+  CatalogSnapshot? snapshot,
+  Map<IptvChannel, FocusNode> focusNodes,
+  Set<IptvChannel> detachedRows,
+  ValueNotifier<IptvChannel?> previewShown,
+  ValueNotifier<EpgProgramme?> programmeShown,
+  int loadTicket,
+  bool landingSeedArmed,
+  bool categoryManuallyChosen,
+}) iptvResultsViewTestAccess(IptvResultsViewState state) => (
+  browse: state._providePlayerIptvBrowse,
+  loadPlaylist: state._loadPlaylist,
+  chooseCategory: state._onCategoryChanged,
+  refreshCatalog: state._applyDbCatalogRefresh,
+  presentDbCatalog: state._presentDbCatalog,
+  focusNodeFor: state._focusNodeFor,
+  rowAttached: state._rowAttached,
+  allChannels: state._allChannels,
+  filteredChannels: state._filteredChannels,
+  playlists: state._playlists,
+  selectedPlaylist: state._selectedPlaylist,
+  selectedCategory: state._selectedCategory,
+  snapshot: state._dbSnapshot,
+  focusNodes: state._cardFocusNodes,
+  detachedRows: state._detachedRows,
+  previewShown: state._previewShown,
+  programmeShown: state._spotlightProgrammeShown,
+  loadTicket: state._loadTicket,
+  landingSeedArmed: state._landingSeedArmed,
+  categoryManuallyChosen: state._categoryManuallyChosen,
+);

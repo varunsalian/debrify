@@ -1,0 +1,18 @@
+{
+  "application_baseline": "d93428fb",
+  "seams": "dev/tool/iptv_checker_config.json",
+  "flutter": "3.44.8",
+  "linux_capture_revision": "f7729406",
+  "linux_run": "https://github.com/varunsalian/debrify-refactor/actions/runs/37106832940",
+  "comparison": "exact host-selected golden comparison",
+  "sha256": {
+    "test/goldens/iptv_results/linux/classic.png": "81de59e10062b15c5a0349e0ec519522e6bd09173b30779e70b28e3fd98d7145",
+    "test/goldens/iptv_results/linux/cockpit.png": "cb121616d827f4fb6a62da094e344d8f60dbaa8ff2179bae5b4e6e1b7a9a8b58",
+    "test/goldens/iptv_results/linux/spotlight.png": "5761427a7e03563c9d7f2f0cec4e417347318ff44ac032829ec990831f48cb00",
+    "test/goldens/iptv_results/linux/tv_two_pane.png": "cd479a00361812f277e5a0b92f706b75b626fa495f7876594d06ba8146311a13",
+    "test/goldens/iptv_results/macos/classic.png": "d55b85616f261b8b33b2ff998a6acfb935eee773f6a93804f67094fdd87cfa51",
+    "test/goldens/iptv_results/macos/cockpit.png": "a5ce2ad254e8d079efbddd4f86ab21f8d94d7b041bbf38fe07a2617fa4b27c11",
+    "test/goldens/iptv_results/macos/spotlight.png": "eaf1d4816cb0c89be0393aa02c572d2394f16b5c7c8117c58bf70013c3227865",
+    "test/goldens/iptv_results/macos/tv_two_pane.png": "f1252e36cc703437036bcf7f6d436b629294217aeb06ccc903cc40715cc9cddb"
+  }
+}

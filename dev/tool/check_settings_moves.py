@@ -1,26 +1,50 @@
 #!/usr/bin/env python3
-"""Settings-specific named transformations, partition and context-guard evidence.
+"""Manifest-configured section moves, partitions and context-guard evidence.
 
-Called by check_verbatim_moves.py for settings_manifest.tsv. Uses the same
+Called by check_verbatim_moves.py for configured manifests. Uses the same
 analyzer token adapter; the launcher verifier and its fixtures remain intact.
 """
 from collections import Counter
+from contextlib import contextmanager
 import difflib
 import json
 import re
+import subprocess
 from pathlib import Path
 
-ALLOWED = {'unchanged', 'rename', 'receiver', 'state_callback', 'context_guard',
-           'lifecycle_wiring', 'layout_body', 'layout_first_param',
-           'layout_legacy_param', 'live_service_getter', 'partition',
-           'summary_accessor', 'production_api_annotation',
-           'classic_update_indicator_const', 'public_widget_key',
-           'context_confirmation', 'formatter_if_braces', 'live_getter_callback',
-           'index_live_getter_callbacks'}
+ROOT = Path(__file__).resolve().parents[2]
+CONFIG = json.loads((ROOT / 'dev/tool/settings_checker_config.json').read_text())
 
-CONTEXT_EXCEPTION_DIFFERENCE = ('context_confirmation/formatter_if_braces: '
-    'only exact sites in dev/tool/settings_context_exceptions.json; '
-    'existing State mounted guard and context acquisition, no intervening await')
+
+def sidecar(name, key, default, *, config=None):
+    path = (config or CONFIG).get('sidecars', {}).get(name)
+    return json.loads((ROOT / path).read_text())[key] if path else default
+
+
+def configure(config):
+    global CONFIG, ALLOWED, RECEIVERS, LIVE_GETTER_CALLBACKS
+    global INDEX_GETTER_CALLBACKS, NAMED_EXCEPTIONS, CONTEXT_EXCEPTION_DIFFERENCE
+    CONFIG = config
+    ALLOWED = set(config['allowed_edits'])
+    RECEIVERS = set(config['receivers'])
+    LIVE_GETTER_CALLBACKS = set(config.get('live_getter_callbacks', []))
+    INDEX_GETTER_CALLBACKS = sidecar('index_getters', 'methods', {})
+    NAMED_EXCEPTIONS = config.get('named_exceptions', {})
+    CONTEXT_EXCEPTION_DIFFERENCE = config.get('context_exception_difference', '')
+
+
+@contextmanager
+def configured(config):
+    previous = CONFIG
+    configure(config)
+    try:
+        yield
+    finally:
+        configure(previous)
+
+
+configure(CONFIG)
+
 CONTEXT_ACQUISITION = ['final', 'context', '=', '_deps', '.', 'context', '(', ')', ';']
 
 
@@ -86,58 +110,38 @@ def remove_context_exceptions(node, sites, rows, row):
     return result
 
 PUBLIC_WIDGET_KEY_DIFFERENCE = 'public_widget_key: add optional super.key only; no caller passes a key'
-RECEIVERS = {'_deps', '_summaries', 'layout', '_connections', '_updates',
-             '_diagnostics', '_pageNavigation', '_connectionNavigation',
-             '_profileActions', '_backup', '_restore', '_downloadLocation',
-             '_maintenance', '_releaseDetails', '_appearanceNavigation', '_snacks',
-             '_summaryRefresh', '_summaryLoader', '_accountCaptions',
-             '_platformGates', '_searchNavigation', '_searchIndex', '_layoutComposition', 'deps',
-             'summaries', 'SettingsIndexBuilder', 'SettingsLeafBuilder'}
-LIVE_GETTER_CALLBACKS = {'downloadLocationSupported', 'downloadLocationUsesSaf',
-                         'defaultDownloadLocationLabel'}
-_INDEX_GETTERS_PATH = Path(__file__).with_name('settings_partition_live_getters.json')
-INDEX_GETTER_CALLBACKS = (json.loads(_INDEX_GETTERS_PATH.read_text())['methods']
-                          if _INDEX_GETTERS_PATH.exists() else {})
-
-NAMED_EXCEPTIONS = {
-    'production_api_annotation': (
-        'shouldApplyPendingCredentialOverride',
-        'lib/features/settings/application/settings_pending_credentials.dart',
-        'production_api_annotation: remove only @visibleForTesting; production API'),
-    'classic_update_indicator_const': (
-        '_SettingsLayout.build',
-        'lib/features/settings/presentation/settings_classic_layout.dart',
-        'classic_update_indicator_const: add const only to checkingUpdates trailing SizedBox; child CircularProgressIndicator inherits const context'),
-    'live_getter_callback': (
-        '_SettingsScreenState._loadDownloadLocation',
-        'lib/features/settings/presentation/legacy_settings/settings_summary_refresh.dart',
-        'live_getter_callback: read downloadLocationSupported, downloadLocationUsesSaf and defaultDownloadLocationLabel through typed callbacks at the original positions'),
-}
 
 
 def named_exception_tokens(values, row):
     """User-authorized edits, at exact baseline token sequences only."""
     values = list(values)
     if 'production_api_annotation' in row['allowed_edits'].split(','):
-        if values[:2] != ['@', 'visibleForTesting']:
+        start = next((i for i, value in enumerate(values)
+                      if not value.startswith(('//', '/*'))), len(values))
+        if values[start:start + 2] != ['@', 'visibleForTesting']:
             raise ValueError('Production API exception requires the original annotation')
-        del values[:2]
-    if 'classic_update_indicator_const' in row['allowed_edits'].split(','):
-        sequence = ['trailing', ':', 'checkingUpdates', '?', 'SizedBox', '(',
-                    'width', ':', '20', ',', 'height', ':', '20', ',',
-                    'child', ':', 'CircularProgressIndicator', '(',
-                    'strokeWidth', ':', '2.5', ')', ')', ':', 'null']
-        matches = [i for i in range(len(values))
-                   if values[i:i + len(sequence)] == sequence]
+        del values[start:start + 2]
+    for rule in CONFIG.get('token_rules', []):
+        if rule.get('original_name', row['original_name']) != row['original_name']:
+            continue
+        if rule.get('allowed_edit') and rule['allowed_edit'] not in row['allowed_edits'].split(','):
+            continue
+        if rule.get('difference_prefix') and not row.get('expected_difference', '').startswith(rule['difference_prefix']):
+            continue
+        sequence = rule['before']
+        matches = [i for i in range(len(values)) if values[i:i + len(sequence)] == sequence]
         if len(matches) != 1:
-            raise ValueError('Classic const exception must match exactly one original update indicator')
-        values.insert(matches[0] + 4, 'const')
+            raise ValueError('Exact token rule must match once: ' + row['original_name'])
+        i = matches[0]
+        values[i:i + len(sequence)] = rule['after']
     if 'public_widget_key' in row['allowed_edits'].split(','):
         opening = values.index('(')
-        named = values.index('{', opening)
-        if named != opening + 1 or 'key' in values[opening:named]:
-            raise ValueError('Public widget key exception requires the original named parameters')
-        values[named + 1:named + 1] = ['super', '.', 'key', ',']
+        if '{' in values[opening:]:
+            named = values.index('{', opening)
+            values[named + 1:named + 1] = ['super', '.', 'key', ',']
+        else:
+            closing = values.index(')', opening)
+            values[closing:closing] = [',', '{', 'super', '.', 'key', '}', ]
     return values
 
 
@@ -155,6 +159,12 @@ def check_named_exceptions(rows):
             original, destination, difference = NAMED_EXCEPTIONS[name]
             if (row['original_name'], row['destination_file'], row['expected_difference']) != (original, destination, difference):
                 errors.append('Named exception registered outside its exact declaration: ' + name)
+        if ('production_api_annotation' in row['allowed_edits'].split(',')
+                and 'production_api_annotation' not in NAMED_EXCEPTIONS):
+            spec = CONFIG.get('annotation_exceptions', {}).get(row['original_name'])
+            if (not spec or spec['file'] != row['destination_file']
+                    or spec['difference'] != row['expected_difference']):
+                errors.append('Annotation exception must name its exact declaration and destination')
     return errors
 
 
@@ -195,7 +205,7 @@ def normalize(values, rows, row=None):
     if row and 'index_live_getter_callbacks' in row['allowed_edits'].split(','):
         live_getters = set(INDEX_GETTER_CALLBACKS.get(row['original_name'], []))
     if row and 'live_service_getter' in row['allowed_edits']:
-        mapped.add('legacyReasonSummary')
+        mapped.add(CONFIG['live_service_getter'])
     out = []
     i = 0
     while i < len(values):
@@ -219,11 +229,11 @@ def normalize(values, rows, row=None):
             out.append('mounted'); i += 3; continue
         if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
-            if target in mapped or target in {'mounted', 'setState', 'context', 'summaryReadOverrides'}:
+            if target in mapped or target in {'mounted', 'setState', 'context'} | set(CONFIG.get('live_widget_getters', [])):
                 if value in {'_deps', 'deps'} and target in live_getters and values[i + 3:i + 5] == ['(', ')']:
                     out.append(target); i += 5; continue
-                if target in {'mounted', 'context', 'summaryReadOverrides'} and values[i + 3:i + 5] == ['(', ')']:
-                    out.extend(['widget', '.', target] if target == 'summaryReadOverrides' else [target])
+                if target in {'mounted', 'context'} | set(CONFIG.get('live_widget_getters', [])) and values[i + 3:i + 5] == ['(', ')']:
+                    out.extend(['widget', '.', target] if target in CONFIG.get('live_widget_getters', []) else [target])
                     i += 5; continue
                 i += 2; continue
         if value.startswith(('//', '/*')):
@@ -259,35 +269,16 @@ def declaration_tokens(node, rows, row, *, original=False):
         values[index] = row['new_name']
     if 'layout_first_param' in row['allowed_edits']:
         opening = values.index('(')
-        values[opening + 1:opening + 1] = ['SettingsLayout', 'layout', ',']
+        values[opening + 1:opening + 1] = [CONFIG['layout_first_parameter_type'], 'layout', ',']
         # Calls get the layout argument; method tear-offs remain class methods.
         i = opening + 4
         while i < len(values) - 1:
-            if values[i] in {'buildConnectionGrid', 'buildSpotlightLayout'} and values[i + 1] == '(':
+            if values[i] in set(CONFIG.get('layout_first_parameter_calls', [])) and values[i + 1] == '(':
                 values[i + 2:i + 2] = ['layout', ',']
                 i += 2
             i += 1
     if 'layout_body' in row['allowed_edits'] and values[:2] == ['@', 'override']:
         del values[:2]
-    if key == '_SettingsLayout._SettingsLayout':
-        sequence = ['required', 'this', '.', 'connections', ',']
-        index = next(i for i in range(len(values)) if values[i:i + 5] == sequence) + 5
-        values[index:index] = ['required', 'this', '.', 'legacyReasonSummary', ',']
-    if key == '_SettingsScreenState._buildLayout':
-        index = values.index('SettingsLayout') + 2
-        values[index:index] = ['legacyReasonSummary', ':', '(', ')', '=>',
-                              'ProfileBootstrap', '.', 'legacyReasonSummary', ',']
-    if key == '_SettingsLayout._buildSpotlightCategory':
-        sequence = ['ProfileBootstrap', '.', 'legacyReasonSummary']
-        index = next(i for i in range(len(values)) if values[i:i + 3] == sequence)
-        values[index:index + 3] = ['legacyReasonSummary', '(', ')']
-    if key == '_SettingsScreenState.dispose' and row.get('expected_difference', '').startswith('update_subscription_dispose:'):
-        sequence = ['_updateDownloadSub', '?.', 'cancel', '(', ')', ';']
-        matches = [i for i in range(len(values)) if values[i:i + len(sequence)] == sequence]
-        if len(matches) != 1:
-            raise ValueError('Update disposal edit requires the original single cancellation')
-        index = matches[0]
-        values[index:index + len(sequence)] = ['dispose', '(', ')', ';']
     return named_exception_tokens(values, row)
 
 
@@ -589,11 +580,11 @@ def check_partition(before, current, spec, lookup, rows, package=None, row=None)
             # An argument fingerprint alone could bless an incorrectly rewired
             # callback. Derive the subset record from its declared field names;
             # values are matching borrowed functions, never invoked snapshots.
-            wired = ['_summaries', ',', '(']
+            wired = [CONFIG.get('partition_summary_receiver', '_summaries'), ',', '(']
             for field in fields:
                 wired += [field, ':']
-                wired += ([field] if field == 'leafSearchEntries'
-                          else ['_deps', '.', field])
+                wired += ([field] if field in CONFIG.get('partition_direct_callbacks', [])
+                          else [CONFIG.get('partition_dependency_receiver', '_deps'), '.', field])
                 wired += [',']
             wired += [')']
             if arguments != wired:
@@ -641,9 +632,8 @@ def destination_ownership(parsed, rows, source_path, scaffolds=(), partition_spe
                      for name in spec['preamble_names'])
         known.update((item['file'], item.get('owner', ''), item['name'])
                      for item in spec['slices'])
-    layout = 'lib/features/settings/presentation/settings_layout.dart'
-    known.update((layout, 'SettingsLayout', name)
-                 for name in ('legacyReasonSummary', 'build', 'buildSpotlightCategory'))
+    for extra in CONFIG.get('additional_owners', []):
+        known.update((extra['file'], extra['owner'], name) for name in extra['names'])
     owners = {(path, owner) for path, owner, _ in known if owner}
     errors = []
     for path, unit in parsed.items():
@@ -672,8 +662,88 @@ def check_scaffolds(lookup, scaffolds):
     return errors
 
 
-def check(original_source, sources, rows, source_path, package=None,
-          partition=False, context_guard=False):
+def check_seams(original_source, sources, config, baseline, package=None):
+    """Apply registered additions to the baseline; sidecar files stay exact.
+
+    The main declaration comparison then checks every patched leaf, so a
+    registered seam never excuses a second edit to a method. Auxiliary files
+    are checked in full against their patched baseline, including directives.
+    """
+    from check_verbatim_moves import parse
+    errors = []
+    for spec in config.get('seams', []):
+        path = spec['file']
+        expected = original_source if path == config['source'] else subprocess.run(
+            ['git', 'show', f'{baseline}:{path}'], cwd=ROOT, text=True,
+            capture_output=True, check=True).stdout
+        for patch in spec['patches']:
+            if expected.count(patch['before']) != 1:
+                raise ValueError('Seam baseline must match exactly once: ' + path)
+            expected = expected.replace(patch['before'], patch['after'], 1)
+        if path == config['source']:
+            original_source = expected
+            continue
+        actual = (ROOT / path).read_text()
+        units = parse({'expected': expected, 'actual': actual}, package)
+        def fingerprint(unit):
+            return (unit['directives'], [(d['name'], tokens(d)) for d in unit['declarations']])
+        if fingerprint(units['expected']) != fingerprint(units['actual']):
+            errors.append('Auxiliary clock seam changed outside its exact edits: ' + path)
+    return original_source, errors
+
+
+def check_forwarder(before, actual, row, spec, package=None):
+    """Retain the exact facade signature and dispatch each argument in order."""
+    from check_verbatim_moves import parse
+    if before['bodyOffset'] is not None:
+        prefix = before['text'][:before['bodyOffset'] - before['start']]
+        getter = before['parameters'] is None
+        arguments = [f'{name}: {name}' if named else name for name, named in
+                     zip(before['parameterNames'], before['namedParameters'])]
+        target = spec.get('receiver', row['destination_class']) + '.' + row['new_name']
+        text = prefix + '=> ' + target + ('' if getter else '(' + ', '.join(arguments) + ')') + ';'
+    elif before['variables'] and len(before['variables']) == 1:
+        # A retained const/static field keeps its modifiers and type. Only its
+        # initializer becomes a reference to the registered implementation.
+        variable = before['variables'][0]
+        start, end = variable['initializerOffset'], variable['initializerEnd']
+        if start is None:
+            return ['Forwarded constant must have an original initializer']
+        text = (before['text'][:start - before['start']]
+                + spec.get('receiver', row['destination_class']) + '.' + row['new_name']
+                + before['text'][end - before['start']:])
+    else:
+        return ['Forwarder must be a method, getter or initialized constant']
+    node = parse({'forwarder': 'class Facade { ' + text + ' }'}, package)['forwarder']['declarations'][0]['members'][0]
+    return [] if tokens(node) == tokens(actual) else ['Forwarder signature/default/dispatch/argument order changed']
+
+
+def lifecycle_tokens(node, rows):
+    """Only registered owner receivers and their leaf renames may change."""
+    mapping = names(rows)
+    owner_for = {r['new_name']: r['destination_class'] for r in rows}
+    receivers = CONFIG.get('receiver_owners', {})
+    result = []
+    values = tokens(node)
+    i = 0
+    while i < len(values):
+        value = values[i]
+        if (value in receivers and values[i + 1:i + 2] == ['.']
+                and owner_for.get(values[i + 2]) == receivers[value]):
+            i += 2
+            continue
+        if value.startswith(('//', '/*')):
+            for old, new in mapping.items():
+                value = re.sub(r'\b' + re.escape(old) + r'\b', new, value)
+            result.append(re.sub(r'\s+', '', value))
+        else:
+            result.append(mapping.get(value, value))
+        i += 1
+    return result
+
+
+def _check(original_source, sources, rows, source_path, package=None,
+           partition=False, context_guard=False):
     from check_verbatim_moves import parse, original_leaves, split_names, missing_line_comments, ROOT
     parsed = parse({'<original>': original_source, **sources}, package)
     original = original_leaves(parsed['<original>']['declarations'], split_names(rows))
@@ -684,21 +754,15 @@ def check(original_source, sources, rows, source_path, package=None,
     if set(original) != known:
         return ['Settings manifest coverage differs: ' + str(sorted(set(original) ^ known))]
     lookup = all_nodes(parsed)
-    partitions = json.loads((ROOT / 'dev/tool/settings_partitions.json').read_text())['partitions']
-    scaffold_path = ROOT / 'dev/tool/settings_scaffolding.json'
-    scaffolds = (json.loads(scaffold_path.read_text())['scaffolds']
-                 if source_path == 'lib/screens/settings_screen.dart' and scaffold_path.exists() else [])
+    partitions = sidecar('partitions', 'partitions', {})
+    scaffolds = sidecar('scaffolding', 'scaffolds', []) if source_path == CONFIG['source'] else []
     errors.extend(check_scaffolds(lookup, scaffolds))
     active_partitions = [partitions[r['original_name']] for r in rows
                          if r['original_name'] in partitions
                          and (r['destination_file'], r['destination_class'], r['new_name']) in lookup]
     errors.extend(destination_ownership(parsed, rows, source_path, scaffolds, active_partitions))
-    exception_path = ROOT / 'dev/tool/settings_context_exceptions.json'
-    exception_sites = (json.loads(exception_path.read_text())['sites']
-                       if source_path == 'lib/screens/settings_screen.dart' and exception_path.exists() else [])
-    partition_exception_path = ROOT / 'dev/tool/settings_partition_context_exceptions.json'
-    partition_sites = (json.loads(partition_exception_path.read_text())['sites']
-                       if source_path == 'lib/screens/settings_screen.dart' and partition_exception_path.exists() else [])
+    exception_sites = sidecar('context_exceptions', 'sites', []) if source_path == CONFIG['source'] else []
+    partition_sites = sidecar('partition_context_exceptions', 'sites', []) if source_path == CONFIG['source'] else []
     partition_sites_by_original = {}
     physical_lookup = dict(lookup)
     physical_identities = set()
@@ -779,17 +843,16 @@ def check(original_source, sources, rows, source_path, package=None,
         if key in partitions:
             row = dict(row, _partition_preamble_names=partitions[key]['preamble_names'])
         if 'index_live_getter_callbacks' in row['allowed_edits'].split(','):
-            difference = ('index_live_getter_callbacks: only declared original getters in '
-                          'dev/tool/settings_partition_live_getters.json, called at original read positions')
+            difference = CONFIG['index_getter_difference']
             if partition_sites_by_original.get(key):
-                difference += '; context_confirmation: exact physical partition site in dev/tool/settings_partition_context_exceptions.json'
+                difference += CONFIG['partition_confirmation_difference']
             if row['expected_difference'] != difference:
                 errors.append('Partition named edit description widened: ' + key)
             targets = INDEX_GETTER_CALLBACKS.get(key, [])
             if key not in partitions or not targets or len(targets) != len(set(targets)):
                 errors.append('Index getter callbacks must name exact partition getters: ' + key)
             for target in targets:
-                candidates = [r for r in rows if r['new_name'] == target and r['original_name'].startswith('_SettingsScreenState.')]
+                candidates = [r for r in rows if r['new_name'] == target and r['original_name'].startswith(key.split('.')[0] + '.')]
                 if len(candidates) != 1:
                     errors.append('Ambiguous/missing original partition getter: ' + target); continue
                 declaration = original[candidates[0]['original_name']]
@@ -808,7 +871,17 @@ def check(original_source, sources, rows, source_path, package=None,
         if actual is None:
             errors.append('Missing settings declaration: ' + key); continue
         if destination is not None and in_place is not None and destination is not in_place:
-            errors.append('Duplicate settings owner: ' + key)
+            forwarder = CONFIG.get('forwarders', {}).get(key)
+            if forwarder is None:
+                errors.append('Duplicate settings owner: ' + key)
+            else:
+                errors.extend(key + ': ' + e for e in check_forwarder(before, in_place, row, forwarder, package))
+        if key in CONFIG.get('lifecycle', []):
+            if (in_place is None or actual is not in_place
+                    or row['destination_file'] != source_path):
+                errors.append('Lifecycle must remain in the facade State: ' + key)
+            if lifecycle_tokens(before, rows) != lifecycle_tokens(actual, rows):
+                errors.append('Lifecycle statement order or receiver ownership changed: ' + key)
         sites = registered_sites.get((row['destination_file'], row['destination_class'], row['new_name']), [])
         physical_sites = partition_sites_by_original.get(key, [])
         exception_flags = set(row['allowed_edits'].split(',')) & {'context_confirmation', 'formatter_if_braces'}
@@ -835,8 +908,8 @@ def check(original_source, sources, rows, source_path, package=None,
                     diff = '\n'.join(list(difflib.unified_diff(declaration_tokens(before, rows, row, original=True), declaration_tokens(virtual, rows, row)))[:45])
                     errors.append('Non-verbatim reconstructed partition: ' + key + '\n' + diff)
                 actual = virtual
-        elif declaration_tokens(before, rows, row, original=destination is not None or (key == '_SettingsScreenState._buildLayout' and 'lib/features/settings/presentation/settings_layout.dart' in sources)) != declaration_tokens(actual, rows, row):
-            diff = '\n'.join(list(difflib.unified_diff(declaration_tokens(before, rows, row, original=destination is not None or (key == '_SettingsScreenState._buildLayout' and 'lib/features/settings/presentation/settings_layout.dart' in sources)), declaration_tokens(actual, rows, row)))[:45])
+        elif declaration_tokens(before, rows, row, original=destination is not None or CONFIG.get('original_activation', {}).get(key) in sources) != declaration_tokens(actual, rows, row):
+            diff = '\n'.join(list(difflib.unified_diff(declaration_tokens(before, rows, row, original=destination is not None or CONFIG.get('original_activation', {}).get(key) in sources), declaration_tokens(actual, rows, row)))[:45])
             errors.append('Non-verbatim settings declaration: ' + key + '\n' + diff)
         if builder_context_signature(before) != builder_context_signature(actual):
             errors.append(key + ': builder/dialog context or guard swapped with the '
@@ -850,28 +923,32 @@ def check(original_source, sources, rows, source_path, package=None,
                          if s['file'] == source_path}
     retained_renames = {r['destination_class'] + '.' + r['new_name'] for r in rows
                        if r['destination_file'] == source_path}
-    extras = set(leaves) - known - retained_renames - {'settingsScreenTestAccess'} - registered_facade
+    extras = set(leaves) - known - retained_renames - {a['name'] for a in CONFIG.get('test_accessors', [])} - registered_facade
     if extras:
         errors.append('Unregistered facade declarations: ' + str(sorted(extras)))
-    layout_path = 'lib/features/settings/presentation/settings_layout.dart'
-    if layout_path in sources:
-        required_field = lookup.get((layout_path, 'SettingsLayout', 'legacyReasonSummary'))
-        if required_field is None or tokens(required_field) != ['final', 'String', 'Function', '(', ')', 'legacyReasonSummary', ';']:
-            errors.append('Live legacyReasonSummary constructor field differs from the named edit')
-        forwarders = {
-            'build': ['@', 'override', 'Widget', 'build', '(', 'BuildContext', 'context', ')', '=>', 'buildClassicSettingsLayout', '(', 'this', ',', 'context', ')', ';'],
-            'buildSpotlightCategory': ['Widget', 'buildSpotlightCategory', '(', 'BuildContext', 'context', ',', 'int', 'category', ')', '=>', 'spotlight', '.', 'buildSpotlightCategory', '(', 'this', ',', 'context', ',', 'category', ')', ';'],
-        }
-        for name, expected in forwarders.items():
-            forwarder = lookup.get((layout_path, 'SettingsLayout', name))
-            if forwarder is None or tokens(forwarder) != expected:
-                errors.append('Layout forwarder signature or dispatch changed: ' + name)
-    accessor = lookup.get((source_path, '', 'settingsScreenTestAccess'))
-    if accessor is not None:
-        expected = json.loads((ROOT / 'dev/tool/settings_test_accessor.json').read_text())
+    for rule in CONFIG.get('required_nodes', []):
+        if rule['file'] not in sources:
+            continue
+        node = lookup.get((rule['file'], rule['owner'], rule['name']))
+        if node is None or tokens(node) != rule['tokens']:
+            errors.append('Required composition signature or dispatch changed: ' + str(rule))
+    for spec in CONFIG.get('test_accessors', []):
+        accessor = lookup.get((source_path, '', spec['name']))
+        if accessor is None:
+            if spec.get('required'):
+                errors.append('Missing registered test accessor: ' + spec['name'])
+            continue
+        expected = json.loads((ROOT / spec['tokens_file']).read_text())
         if normalize(tokens(accessor), rows) != normalize(expected, rows):
             errors.append('Test accessor changed outside its registered receiver edits')
     return errors
+
+
+def check(original_source, sources, rows, source_path, package=None,
+          partition=False, context_guard=False, config=None):
+    with configured(config or CONFIG):
+        return _check(original_source, sources, rows, source_path, package,
+                      partition, context_guard)
 
 
 def self_test(package=None):

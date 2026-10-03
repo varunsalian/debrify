@@ -202,6 +202,7 @@ String nameOf(AstNode node) {
   if (node is EnumDeclaration) return node.namePart.typeName.lexeme;
   if (node is ExtensionDeclaration) return node.name?.lexeme ?? '<unnamed>';
   if (node is FunctionDeclaration) return node.name.lexeme;
+  if (node is GenericTypeAlias) return node.name.lexeme;
   if (node is MethodDeclaration) return node.name.lexeme;
   if (node is ConstructorDeclaration) {
     return node.typeName2!.lexeme +

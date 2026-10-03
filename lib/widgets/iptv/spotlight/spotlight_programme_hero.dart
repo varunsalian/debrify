@@ -20,6 +20,7 @@ class SpotlightProgrammeHero extends StatefulWidget {
   final EpgProgramme? selectedProgramme;
   final Widget previewSlot;
   final SpotlightHeroActionsBuilder? actionsBuilder;
+  final DateTime Function() now;
 
   const SpotlightProgrammeHero({
     super.key,
@@ -27,6 +28,7 @@ class SpotlightProgrammeHero extends StatefulWidget {
     this.selectedProgramme,
     required this.previewSlot,
     this.actionsBuilder,
+    this.now = DateTime.now,
   });
 
   @override
@@ -147,7 +149,7 @@ class _SpotlightProgrammeHeroState extends State<SpotlightProgrammeHero> {
         titleSlot: Text(title),
         metadataSlot: programme == null
             ? Text(channel?.group ?? 'Select a row to preview')
-            : _ProgrammeMeta(programme: programme),
+            : _ProgrammeMeta(programme: programme, now: widget.now),
         descriptionSlot:
             programme == null || programme.description.trim().isEmpty
             ? null
@@ -166,11 +168,13 @@ class _SpotlightProgrammeHeroState extends State<SpotlightProgrammeHero> {
 class _ProgrammeMeta extends StatelessWidget {
   final EpgProgramme programme;
 
-  const _ProgrammeMeta({required this.programme});
+  final DateTime Function() now;
+
+  const _ProgrammeMeta({required this.programme, this.now = DateTime.now});
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
+    final now = this.now();
     final start = TimeOfDay.fromDateTime(programme.start).format(context);
     final stop = TimeOfDay.fromDateTime(programme.stop).format(context);
     final t = IptvStyleTokens.spotlight;

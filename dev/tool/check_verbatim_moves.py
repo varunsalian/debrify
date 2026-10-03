@@ -342,6 +342,8 @@ def main():
     parser.add_argument('--source')
     parser.add_argument('--manifest', default='dev/tool/vpl_manifest.tsv')
     parser.add_argument('--feature')
+    parser.add_argument('--config', type=Path,
+                        help='Per-manifest section checker configuration')
     parser.add_argument('--parser-package', type=Path)
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--partition', action='store_true',
@@ -350,34 +352,44 @@ def main():
                         help='Check Settings first context acquisition against mounted guards')
     args = parser.parse_args()
     package = args.parser_package or parser_package()
-    settings = Path(args.manifest).name == 'settings_manifest.tsv'
-    # Each manifest has one original and one destination; default them so a
-    # bare `--manifest dev/tool/settings_manifest.tsv` can't silently compare
-    # the wrong files. Settings always runs both partition and context checks.
-    defaults = (('17db33f2', 'lib/screens/settings_screen.dart', 'lib/features/settings')
-                if settings else ('204b1011', SOURCE, FEATURE))
+    config_path = args.config or Path(args.manifest).with_name(
+        Path(args.manifest).stem.replace('_manifest', '') + '_checker_config.json')
+    config = json.loads((ROOT / config_path).read_text()) if (ROOT / config_path).exists() else None
+    if args.config and config is None:
+        parser.error('Missing checker config: ' + str(config_path))
+    sections = config is not None
+    defaults = ((config['baseline'], config['source'], config['feature'])
+                if sections else ('204b1011', SOURCE, FEATURE))
     args.baseline = args.baseline or defaults[0]
     args.source = args.source or defaults[1]
     args.feature = args.feature or defaults[2]
-    if settings:
-        args.partition = args.context_guard = True
+    if sections:
+        args.partition = config.get('partition', False)
+        args.context_guard = config.get('context_guard', True)
     if args.self_test:
         self_test(package)
-        if settings:
-            from check_settings_moves import self_test as settings_self_test
+        if sections:
+            from check_settings_moves import self_test as settings_self_test, configured
+            # The existing settings fixtures run unchanged against their config.
             settings_self_test(package)
-    if (args.partition or args.context_guard) and not settings:
-        parser.error('partition/context-guard modes require settings_manifest.tsv')
+            if config.get('self_test_module'):
+                import importlib
+                with configured(config):
+                    importlib.import_module(config['self_test_module']).self_test(package)
+    if (args.partition or args.context_guard) and not sections:
+        parser.error('partition/context-guard modes require a section checker config')
     rows = read_manifest(ROOT / args.manifest)
     original = subprocess.run(['git', 'show', f'{args.baseline}:{args.source}'],
                               cwd=ROOT, text=True, capture_output=True, check=True).stdout
     sources = {args.source: (ROOT / args.source).read_text()}
     sources.update({p.relative_to(ROOT).as_posix(): p.read_text()
                     for p in (ROOT / args.feature).rglob('*.dart')})
-    if settings:
-        from check_settings_moves import check as settings_check
+    if sections:
+        from check_settings_moves import check as settings_check, check_seams
+        original, seam_errors = check_seams(original, sources, config, args.baseline, package)
         errors = settings_check(original, sources, rows, args.source, package,
-                                args.partition, args.context_guard)
+                                args.partition, args.context_guard, config)
+        errors = seam_errors + errors
     else:
         errors = check(original, sources, rows, args.source, package)
     if errors:

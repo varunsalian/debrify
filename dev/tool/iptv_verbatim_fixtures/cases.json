@@ -1,0 +1,699 @@
+{
+  "static method forwarder": {
+    "original": "class Facade { static int method(int left, {int right = 2}) => left + right; }",
+    "sources": {
+      "source": "class Facade { static int method(int left, {int right = 2}) => Policy.method(left, right: right); }",
+      "owner": "class Policy { static int method(int left, {int right = 2}) => left + right; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.method",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "method",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver,retained_forwarder",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": true,
+    "config": {
+      "forwarders": {
+        "Facade.method": {}
+      }
+    }
+  },
+  "wrong argument order": {
+    "original": "class Facade { static int method(int left, {int right = 2}) => left + right; }",
+    "sources": {
+      "source": "class Facade { static int method(int left, {int right = 2}) => Policy.method(right, right: left); }",
+      "owner": "class Policy { static int method(int left, {int right = 2}) => left + right; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.method",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "method",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver,retained_forwarder",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "forwarders": {
+        "Facade.method": {}
+      }
+    }
+  },
+  "changed default": {
+    "original": "class Facade { static int method(int left, {int right = 2}) => left + right; }",
+    "sources": {
+      "source": "class Facade { static int method(int left, {int right = 3}) => Policy.method(left, right: right); }",
+      "owner": "class Policy { static int method(int left, {int right = 2}) => left + right; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.method",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "method",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver,retained_forwarder",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "forwarders": {
+        "Facade.method": {}
+      }
+    }
+  },
+  "wrong dispatch": {
+    "original": "class Facade { static int method(int left, {int right = 2}) => left + right; }",
+    "sources": {
+      "source": "class Facade { static int method(int left, {int right = 2}) => Other.method(left, right: right); }",
+      "owner": "class Policy { static int method(int left, {int right = 2}) => left + right; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.method",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "method",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver,retained_forwarder",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "forwarders": {
+        "Facade.method": {}
+      }
+    }
+  },
+  "static getter forwarder": {
+    "original": "class Facade { static int get rank => 2; }",
+    "sources": {
+      "source": "class Facade { static int get rank => Policy.rank; }",
+      "owner": "class Policy { static int get rank => 2; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.rank",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "rank",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": true,
+    "config": {
+      "forwarders": {
+        "Facade.rank": {}
+      }
+    }
+  },
+  "changed static getter": {
+    "original": "class Facade { static int get rank => 2; }",
+    "sources": {
+      "source": "class Facade { static int get rank => Policy.other; }",
+      "owner": "class Policy { static int get rank => 2; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.rank",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "rank",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "forwarders": {
+        "Facade.rank": {}
+      }
+    }
+  },
+  "static constant forwarder": {
+    "original": "class Facade { static const double width = 900; }",
+    "sources": {
+      "source": "class Facade { static const double width = Policy.width; }",
+      "owner": "class Policy { static const double width = 900; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.width",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "width",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": true,
+    "config": {
+      "forwarders": {
+        "Facade.width": {}
+      }
+    }
+  },
+  "changed static constant type": {
+    "original": "class Facade { static const double width = 900; }",
+    "sources": {
+      "source": "class Facade { static const int width = Policy.width; }",
+      "owner": "class Policy { static const double width = 900; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.width",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "width",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "forwarders": {
+        "Facade.width": {}
+      }
+    }
+  },
+  "duplicate ownership": {
+    "original": "class Facade { int value = 1; }",
+    "sources": {
+      "source": "class Facade { int value = 1; }",
+      "owner": "class Filters { int value = 1; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.value",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "value",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false
+  },
+  "unregistered duplicate method": {
+    "original": "class Facade { static int method(int left, {int right = 2}) => left + right; }",
+    "sources": {
+      "source": "class Facade { static int method(int left, {int right = 2}) => left + right; }",
+      "owner": "class Policy { static int method(int left, {int right = 2}) => left + right; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.method",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "method",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver,retained_forwarder",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false
+  },
+  "interleaved disposal": {
+    "original": "class Facade { Timer? first; Timer? second; @override void dispose() { first?.cancel(); source.removeListener(listener); second?.cancel(); super.dispose(); } }",
+    "sources": {
+      "source": "class Facade { @override void dispose() { _filters.first?.cancel(); source.removeListener(listener); _filters.second?.cancel(); super.dispose(); } }",
+      "owner": "class Filters { Timer? first; Timer? second; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.first",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "first",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      },
+      {
+        "original_name": "Facade.second",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "second",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      },
+      {
+        "original_name": "Facade.dispose",
+        "destination_file": "source",
+        "destination_class": "Facade",
+        "new_name": "dispose",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": true,
+    "config": {
+      "lifecycle": [
+        "Facade.dispose"
+      ]
+    }
+  },
+  "reordered cancel": {
+    "original": "class Facade { Timer? first; Timer? second; @override void dispose() { first?.cancel(); source.removeListener(listener); second?.cancel(); super.dispose(); } }",
+    "sources": {
+      "source": "class Facade { @override void dispose() { source.removeListener(listener); _filters.first?.cancel(); _filters.second?.cancel(); super.dispose(); } }",
+      "owner": "class Filters { Timer? first; Timer? second; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.first",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "first",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      },
+      {
+        "original_name": "Facade.second",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "second",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      },
+      {
+        "original_name": "Facade.dispose",
+        "destination_file": "source",
+        "destination_class": "Facade",
+        "new_name": "dispose",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "lifecycle": [
+        "Facade.dispose"
+      ]
+    }
+  },
+  "wrong lifecycle receiver": {
+    "original": "class Facade { Timer? first; Timer? second; @override void dispose() { first?.cancel(); source.removeListener(listener); second?.cancel(); super.dispose(); } }",
+    "sources": {
+      "source": "class Facade { @override void dispose() { _filters.first?.cancel(); source.removeListener(listener); Policy.second?.cancel(); super.dispose(); } }",
+      "owner": "class Filters { Timer? first; Timer? second; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.first",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "first",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      },
+      {
+        "original_name": "Facade.second",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "second",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      },
+      {
+        "original_name": "Facade.dispose",
+        "destination_file": "source",
+        "destination_class": "Facade",
+        "new_name": "dispose",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "lifecycle": [
+        "Facade.dispose"
+      ]
+    }
+  },
+  "lifecycle moved out of State": {
+    "original": "class Facade { Timer? first; Timer? second; @override void dispose() { first?.cancel(); source.removeListener(listener); second?.cancel(); super.dispose(); } }",
+    "sources": {
+      "source": "class Facade {}",
+      "owner": "class Filters { Timer? first; Timer? second; @override void dispose() { first?.cancel(); source.removeListener(listener); second?.cancel(); super.dispose(); } }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.first",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "first",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      },
+      {
+        "original_name": "Facade.second",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "second",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      },
+      {
+        "original_name": "Facade.dispose",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "dispose",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "lifecycle": [
+        "Facade.dispose"
+      ]
+    }
+  },
+  "lifecycle statement delegated": {
+    "original": "class Facade { Timer? first; Timer? second; @override void dispose() { first?.cancel(); source.removeListener(listener); second?.cancel(); super.dispose(); } }",
+    "sources": {
+      "source": "class Facade { @override void dispose() { _filters.cleanup(); super.dispose(); } }",
+      "owner": "class Filters { Timer? first; Timer? second; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.first",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "first",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      },
+      {
+        "original_name": "Facade.second",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "second",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      },
+      {
+        "original_name": "Facade.dispose",
+        "destination_file": "source",
+        "destination_class": "Facade",
+        "new_name": "dispose",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "lifecycle": [
+        "Facade.dispose"
+      ]
+    }
+  },
+  "live widget read": {
+    "original": "class Facade { String _work() => widget.searchQuery; }",
+    "sources": {
+      "source": "class Facade {}",
+      "owner": "class Filters { String work() => _deps.searchQuery(); }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade._work",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "work",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": true
+  },
+  "snapshot widget read": {
+    "original": "class Facade { String _work() => widget.searchQuery; }",
+    "sources": {
+      "source": "class Facade {}",
+      "owner": "class Filters { String work() => _deps.searchQuery; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade._work",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "work",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false
+  },
+  "wrong live getter": {
+    "original": "class Facade { String _work() => widget.searchQuery; }",
+    "sources": {
+      "source": "class Facade {}",
+      "owner": "class Filters { String work() => _deps.searchHeader(); }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade._work",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "work",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false
+  },
+  "builder context retained": {
+    "original": "class Facade { void _work() { showDialog(builder: (context) => Button(onPressed: () { if (!mounted) return; Navigator.of(context).pop(); })); } }",
+    "sources": {
+      "source": "class Facade {}",
+      "owner": "class Filters { void work() { showDialog(builder: (context) => Button(onPressed: () { if (!_deps.mounted()) return; Navigator.of(context).pop(); })); } }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade._work",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "work",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "rename,receiver,context_guard",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": true
+  },
+  "builder context substituted": {
+    "original": "class Facade { void _work() { showDialog(builder: (context) => Button(onPressed: () { if (!mounted) return; Navigator.of(context).pop(); })); } }",
+    "sources": {
+      "source": "class Facade {}",
+      "owner": "class Filters { void work() { showDialog(builder: (context) => Button(onPressed: () { if (!_deps.mounted()) return; Navigator.of(_deps.context()).pop(); })); } }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade._work",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "work",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "rename,receiver,context_guard",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false
+  },
+  "builder mounted substituted": {
+    "original": "class Facade { void _work() { showDialog(builder: (context) => Button(onPressed: () { if (!mounted) return; Navigator.of(context).pop(); })); } }",
+    "sources": {
+      "source": "class Facade {}",
+      "owner": "class Filters { void work() { showDialog(builder: (context) => Button(onPressed: () { if (!context.mounted) return; Navigator.of(context).pop(); })); } }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade._work",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "work",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "rename,receiver,context_guard",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false
+  },
+  "matching callbacks": {
+    "original": "class Facade { int value = 1; }",
+    "sources": {
+      "source": "class Facade { final Filters filters = Filters((first: first, second: second)); }",
+      "owner": "class Filters { Filters(this.deps); final ({void Function() first, void Function() second}) deps; int value = 1; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.value",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "value",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": true,
+    "config": {
+      "sidecars": {
+        "scaffolding": "dev/tool/iptv_verbatim_fixtures/scaffolding.json"
+      }
+    }
+  },
+  "wrong callback wiring": {
+    "original": "class Facade { int value = 1; }",
+    "sources": {
+      "source": "class Facade { final Filters filters = Filters((first: second, second: second)); }",
+      "owner": "class Filters { Filters(this.deps); final ({void Function() first, void Function() second}) deps; int value = 1; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.value",
+        "destination_file": "owner",
+        "destination_class": "Filters",
+        "new_name": "value",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "sidecars": {
+        "scaffolding": "dev/tool/iptv_verbatim_fixtures/scaffolding.json"
+      }
+    }
+  },
+  "annotated method with documentation": {
+    "original": "class Facade { /// Public signature.\n@visibleForTesting static int method(int left, {int right = 2}) => left + right; }",
+    "sources": {
+      "source": "class Facade { /// Public signature.\n@visibleForTesting static int method(int left, {int right = 2}) => Policy.method(left, right: right); }",
+      "owner": "class Policy { /// Public signature.\nstatic int method(int left, {int right = 2}) => left + right; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.method",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "method",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver,retained_forwarder,production_api_annotation",
+        "expected_difference": "production_api_annotation: remove only @visibleForTesting from implementation"
+      }
+    ],
+    "passes": true,
+    "config": {
+      "forwarders": {
+        "Facade.method": {}
+      },
+      "annotation_exceptions": {
+        "Facade.method": {
+          "file": "owner",
+          "difference": "production_api_annotation: remove only @visibleForTesting from implementation"
+        }
+      }
+    }
+  },
+  "facade annotation dropped": {
+    "original": "class Facade { /// Public signature.\n@visibleForTesting static int method(int left, {int right = 2}) => left + right; }",
+    "sources": {
+      "source": "class Facade { /// Public signature.\nstatic int method(int left, {int right = 2}) => Policy.method(left, right: right); }",
+      "owner": "class Policy { /// Public signature.\nstatic int method(int left, {int right = 2}) => left + right; }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.method",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "method",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver,retained_forwarder,production_api_annotation",
+        "expected_difference": "production_api_annotation: remove only @visibleForTesting from implementation"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "forwarders": {
+        "Facade.method": {}
+      },
+      "annotation_exceptions": {
+        "Facade.method": {
+          "file": "owner",
+          "difference": "production_api_annotation: remove only @visibleForTesting from implementation"
+        }
+      }
+    }
+  }
+}

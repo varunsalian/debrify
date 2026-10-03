@@ -151,13 +151,15 @@ Each has the coverage given in the step 0 testability matrix below.
 `lib/features/iptv/` (a new feature):
 - **`application/`:** pure helpers with no services and no context:
   `formatLoadBytes`, `formatLoadElapsed`, `loadBytesLabel`,
-  `chipClaimAllowed`, the `chipRank*` values, `landingCategoryFor`,
+  `chipClaimAllowed`, the `chipRank*` values,
   `shouldUseTouchTabletTwoPane`, `_railResExp` and its parsing. The State
   keeps public forwarders with identical signatures, including static getters
   and constants.
 - **`presentation/legacy_iptv/`:** a named bridge, with its exact path in the
   guard. It holds:
   - the state owners;
+  - `landingCategoryFor`, whose original implementation reads
+    `IptvCatalogDb.defaultCategory` despite its legacy "Pure decision" comment;
   - every section that takes a `BuildContext` or calls services;
   - the layout builders;
   - **the private widgets that use services:** `_IptvStageFloor` and
@@ -453,8 +455,112 @@ Technique), with these IPTV rules:
 
 ## Progress
 
-(empty)
+### Step 0 — complete; original-code checkpoint
+
+- Starting branch/revision: clean `refactor/codebase` at `e1d99a29`.
+  Original application baseline: detached checkout of `d93428fb` at
+  `/tmp/debrify-iptv-baseline-d93428fb`, Flutter 3.44.8 / Dart 3.12.2.
+- `python3 dev/tool/suite_evidence.py run iptv/base` completed: 10,317
+  successes, 13 failures, 28 errors, 20 skips. These are observed identities;
+  no allowlist was changed. Evidence lives in the git common directory,
+  `refactor-evidence/iptv/`.
+- [Dependency report](iptv-results-view-deps.md) and
+  [declaration manifest](../../dev/tool/iptv_manifest.tsv): 383 original
+  leaves, 113 State fields and 14 class headers. The named clock field adds
+  one manifest leaf. Original members have assigned destinations and steps;
+  the report supplements direct assignments with mutation/alias/resource
+  ownership and records cross-call destinations.
+- The shared checker now loads per-manifest settings/IPTV configs. The
+  parser additionally handles the original record typedef. Existing settings
+  fixtures and the 316-leaf settings manifest passed after generalization;
+  the IPTV check passed with all 384 leaves and 25 positive/negative fixtures.
+  Outputs: `settings-check-generalized.txt`,
+  `iptv-check-with-seams-final.txt`. The launcher fixture run is retained.
+- Registered test accessor: real production tear-offs plus borrowed
+  snapshots/identities. Clock: the view forwards its default `DateTime.now`
+  function to timeline paint and hero metadata; timeline refresh bookkeeping
+  also reads that function, and the day-heading helper becomes an instance
+  method to reach it. Exact patches are pinned in
+  [iptv_checker_config.json](../../dev/tool/iptv_checker_config.json).
+  No widget, decoration, focus node or lifecycle statement moved.
+- Seam-only size exception: facade **9,084 → 9,149**, exactly **65 added
+  physical lines**. Raised only that ratchet entry by hand. Exit: step 1
+  removes the private widgets/pure helpers and ratchets below 9,084.
+- First seam full-suite comparison found two timeline fixture overflows:
+  the clock now paints current programmes consistently. Both fixtures retain
+  every assertion and use the shipped 90-minute window; all 43 timeline
+  tests passed. The corrected full run
+  matches all baseline identities: 10,317 successes, the same 41 failures/errors,
+  20 skips; no new failures, missing tests or newly skipped identities. PASS
+  (`base2-verified-comparison.txt`). It is the canonical `iptv/base2`; the
+  first failed attempt is retained as `base2-first`. No failing comparison
+  is accepted.
+- Whole-repo analyzer baseline initially differed because the detached
+  checkout lacked local generated build pubspec inputs and nested vendor
+  package configs. Those untracked inputs were copied into the baseline
+  checkout; no tracked source changed. `analyze-base-normalized.txt` versus
+  `analyze-base2.txt` passes with zero added diagnostics. Extra missing assets
+  in the copied generated build directories account for removed baseline
+  diagnostics; app/test diagnostic identities are identical.
+- Source consumers are listed in
+  [iptv_source_text.txt](../../dev/tool/iptv_source_text.txt). Added 59
+  concrete IPTV/dependency test paths (nested tests included) to the CI test
+  list; the failure allowlist gains nothing.
+- Characterization: real temporary SQL view tests cover landing/manual All,
+  revision-driven revalidation, identity retention, vanished categories,
+  numbering adoption, same-index focus repair, external focus, stale tickets,
+  query debounce replacement/disposal, and pending completion after unmount.
+  Exact source guards cover all ten contracts, including preview order,
+  startup/launcher identity, interleaved lifecycle and lazy read boundaries.
+  The attached-row fallback cannot be isolated through this fixture's normal
+  frame sequence: the replacement row at the clamped index is attached before
+  the post-frame repair. Its complete same-index/attached/filter branch is
+  source-guarded and independently pinned by the verbatim checker; no internal
+  focus-map mutation or timing override is used to manufacture that branch.
+- Extended row key coverage preserves quick-select, focus-loss disarming,
+  repeat/hold favorite dispatch and no release playback. Spotlight checks both
+  Browse interfaces and untyped GlobalKey dispatch. The startup hook verifies
+  exact identity, corroborated number fallback and first-available focus,
+  cancelling before native launch. Native launch/return, preview punch-through,
+  Android TV D-pad and first-open performance remain pending device checks.
+- Payload JSON fixtures compare unsorted encoded maps through the real accessor
+  for browse, zap-page, end paging, channel-number/miss and both episode paths.
+  A local HTTP panel warms the real Xtream episode cache. Only its variable
+  loopback address is substituted; key/array order and every other value stay
+  exact. Payload capture output: `payload-capture-third.txt` (7 passing tests).
+- Original-code goldens: four macOS captures passed locally, then strict
+  comparisons passed in the characterization run. Linux capture and strict
+  comparison passed on Ubuntu at temporary revision `f7729406`, based on
+  `d93428fb` plus only the approved clock seam and golden harness. Evidence:
+  https://github.com/varunsalian/debrify-refactor/actions/runs/37106832940.
+  The remote temporary branch was deleted. PNG hashes and provenance are in
+  `test/goldens/iptv_results/provenance.json`; goldens select the host explicitly.
+- Dependency review corrected `landingCategoryFor`'s destination to the exact
+  legacy bridge: it reads `IptvCatalogDb.defaultCategory`. No implementation
+  change or data contract is introduced; the public static forwarder stays.
+  The declaration manifest/report govern this source-derived classification.
+- `iptv/base3` completed: 10,351 successes, the same 13 failures/28 errors
+  and 20 skips. Comparison against `base2` is PASS: no new failures, missing
+  tests or new skips; **all 34 added identities pass**
+  (`base3-comparison.txt`, `base3-added-identities.txt`). These are now the
+  required baseline identities for every extraction/gate.
+- Final whole-repo analyzer compared with `base2`: 832 diagnostics, identical
+  identities, PASS (`analyzer-step0-comparison.txt`). Both manifest self-test
+  runs pass (`iptv-check-step0-final.txt`, `settings-check-step0-review.txt`),
+  architecture and file-size checks pass, changed Dart files are formatted,
+  and the diff check passes. Shared checker review retains the settings
+  partition/context checks; exact forwarder, lifecycle and accessor checks
+  apply to the IPTV config. CI formats the new support helpers and includes
+  all four characterization test files. The allowlist remains unchanged.
+- This checkpoint commits the dependency report, manifest, checker/configs,
+  frozen seams and original-code characterization before any extraction.
 
 ## Found, not fixed
 
-(none yet)
+- Timeline programme badges can overflow when a current programme is
+  partially visible in a four-hour window (`spotlight_live_timeline.dart`:
+  programme Row / duration-based `itemCanFitBadge`). The old injected-clock
+  tests never painted their future-dated programmes as current; the complete
+  clock seam exposes the existing layout issue. No production layout fix is
+  included. Navigation fixtures use the shipped 90-minute window and keep
+  every assertion.

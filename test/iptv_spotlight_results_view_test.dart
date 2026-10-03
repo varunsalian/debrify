@@ -17,6 +17,7 @@ import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/utils/app_storage.dart';
 import 'package:debrify/widgets/browse/browse_search_header.dart';
+import 'package:debrify/widgets/browse/browse_results_focus.dart';
 import 'package:debrify/widgets/iptv/iptv_filters.dart';
 import 'package:debrify/widgets/iptv/iptv_results_view.dart';
 import 'package:debrify/widgets/iptv/spotlight/spotlight_live_timeline.dart';
@@ -1045,62 +1046,136 @@ https://example.com/live/two.ts
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('Spotlight startup hands a nonzero row to the timeline', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(896, 540);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-
-    final content = StringBuffer('#EXTM3U\n');
-    for (var index = 0; index < 24; index++) {
-      content
-        ..writeln('#EXTINF:-1 group-title="News",Startup $index')
-        ..writeln('https://example.com/startup/$index.ts');
-    }
-    await tester.runAsync(
-      () => IptvPlaylistStorage.setIptvPlaylists([
-        IptvPlaylist(
-          id: 'local-guide',
-          name: 'Startup provider',
-          url: '',
-          content: content.toString(),
-          addedAt: DateTime(2026),
-        ),
-      ]),
-    );
-    MainPageBridge.setIptvStartupChannel({
-      'playlistId': 'local-guide',
-      'url': 'https://example.com/startup/17.ts',
-      'name': 'Startup 17',
-    });
-    final handedIndices = <int>[];
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: IptvResultsView(
-            searchQuery: '',
-            isTelevision: true,
-            debugOnSpotlightStartupFocus: (index) {
-              handedIndices.add(index);
-              MainPageBridge.cancelIptvStartupChannel();
-            },
+  testWidgets(
+    'Spotlight preserves both Browse focus interfaces and GlobalKey dispatch',
+    (tester) async {
+      tester.view.physicalSize = const Size(896, 540);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final GlobalKey key = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: IptvResultsView(
+              key: key,
+              searchQuery: '',
+              isTelevision: true,
+            ),
           ),
         ),
-      ),
-    );
-    for (var attempt = 0; attempt < 80 && handedIndices.isEmpty; attempt++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 25)),
       );
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+      await _pumpUntil(tester, find.byType(SpotlightLiveTimeline));
+      final results = key.currentState!;
+      expect(results, isA<BrowseResultsFocusController>());
+      expect(results, isA<BrowseSearchResultsFocusController>());
+      (results as BrowseResultsFocusController).focusFirstFilter();
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'iptv-playlist-filter',
+      );
+      (results as BrowseSearchResultsFocusController).focusSearchResults();
+      await tester.pumpAndSettle();
+      var timeline = tester.widget<SpotlightLiveTimeline>(
+        find.byType(SpotlightLiveTimeline),
+      );
+      expect(timeline.controller!.hasFocus, isTrue);
+      // main.dart also dispatches this entry point through an untyped key.
+      (key.currentState as dynamic).focusFirstFilter();
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'iptv-playlist-filter',
+      );
+      (key.currentState as dynamic).focusSearchResults();
+      await tester.pumpAndSettle();
+      timeline = tester.widget<SpotlightLiveTimeline>(
+        find.byType(SpotlightLiveTimeline),
+      );
+      expect(timeline.controller!.hasFocus, isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 3));
+    },
+  );
 
-    expect(handedIndices, [17]);
-    expect(find.text('Startup 17'), findsWidgets);
-    expect(tester.takeException(), isNull);
-  });
+  for (final startup in [
+    (
+      label: 'Spotlight startup hands a nonzero row to the timeline',
+      payload: <String, dynamic>{
+        'playlistId': 'local-guide',
+        'url': 'https://example.com/startup/17.ts',
+        'name': 'Startup 17',
+      },
+      index: 17,
+    ),
+    (
+      label: 'Spotlight startup number fallback corroborates the row name',
+      payload: <String, dynamic>{
+        'playlistId': 'local-guide',
+        'url': 'https://example.com/old/17.ts',
+        'name': ' Startup 17 ',
+        'channelNumber': 18,
+      },
+      index: 17,
+    ),
+    (
+      label: 'Spotlight first-available startup focuses the landing row',
+      payload: <String, dynamic>{'firstAvailable': true},
+      index: 0,
+    ),
+  ]) {
+    testWidgets(startup.label, (tester) async {
+      tester.view.physicalSize = const Size(896, 540);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final content = StringBuffer('#EXTM3U\n');
+      for (var index = 0; index < 24; index++) {
+        content
+          ..writeln('#EXTINF:-1 group-title="News",Startup $index')
+          ..writeln('https://example.com/startup/$index.ts');
+      }
+      await tester.runAsync(
+        () => IptvPlaylistStorage.setIptvPlaylists([
+          IptvPlaylist(
+            id: 'local-guide',
+            name: 'Startup provider',
+            url: '',
+            content: content.toString(),
+            addedAt: DateTime(2026),
+          ),
+        ]),
+      );
+      MainPageBridge.setIptvStartupChannel(startup.payload);
+      final handedIndices = <int>[];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: IptvResultsView(
+              searchQuery: '',
+              isTelevision: true,
+              debugOnSpotlightStartupFocus: (index) {
+                handedIndices.add(index);
+                MainPageBridge.cancelIptvStartupChannel();
+              },
+            ),
+          ),
+        ),
+      );
+      for (var attempt = 0; attempt < 80 && handedIndices.isEmpty; attempt++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 25)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(handedIndices, [startup.index]);
+      expect(find.text('Startup ${startup.index}'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }
 
 Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {

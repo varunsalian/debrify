@@ -13,6 +13,7 @@ void main() {
   Future<(FocusNode row, FocusNode sibling)> pumpRow(
     WidgetTester tester, {
     required VoidCallback onTap,
+    ValueChanged<bool>? onFavorite,
   }) async {
     final node = FocusNode(debugLabel: 'row');
     final sibling = FocusNode(debugLabel: 'sibling');
@@ -33,7 +34,7 @@ void main() {
                 isTelevision: true,
                 focusNode: node,
                 // Non-null ⇒ favoritable ⇒ the play-on-key-up path.
-                onFavoriteToggle: (_) {},
+                onFavoriteToggle: onFavorite ?? (_) {},
                 onTap: onTap,
               ),
             ],
@@ -46,25 +47,27 @@ void main() {
     return (node, sibling);
   }
 
-  testWidgets('a key-up delivered after focus arrives mid-press does not play',
-      (tester) async {
-    var taps = 0;
-    final (row, sibling) = await pumpRow(tester, onTap: () => taps++);
+  testWidgets(
+    'a key-up delivered after focus arrives mid-press does not play',
+    (tester) async {
+      var taps = 0;
+      final (row, sibling) = await pumpRow(tester, onTap: () => taps++);
 
-    // OK pressed while the rail chip (sibling) is focused...
-    sibling.requestFocus();
-    await tester.pump();
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
-    await tester.pump();
-    // ...selection collapses the rail and moves focus onto the row...
-    row.requestFocus();
-    await tester.pump();
-    // ...then OK is released, now delivered to the row.
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
-    await tester.pump();
+      // OK pressed while the rail chip (sibling) is focused...
+      sibling.requestFocus();
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+      await tester.pump();
+      // ...selection collapses the rail and moves focus onto the row...
+      row.requestFocus();
+      await tester.pump();
+      // ...then OK is released, now delivered to the row.
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+      await tester.pump();
 
-    expect(taps, 0, reason: 'a key-up this row did not start must not play');
-  });
+      expect(taps, 0, reason: 'a key-up this row did not start must not play');
+    },
+  );
 
   testWidgets('a real down→up press still plays', (tester) async {
     var taps = 0;
@@ -76,6 +79,33 @@ void main() {
     await tester.pump();
 
     expect(taps, 1, reason: 'a genuine quick press plays');
+  });
+
+  testWidgets('holding and repeating OK favorites once without playing', (
+    tester,
+  ) async {
+    var taps = 0;
+    final favorites = <bool>[];
+    final (row, sibling) = await pumpRow(
+      tester,
+      onTap: () => taps++,
+      onFavorite: favorites.add,
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(favorites, [true]);
+    expect(taps, 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(taps, 1);
+    await tester.pumpWidget(const SizedBox.shrink());
+    row.dispose();
+    sibling.dispose();
   });
 
   testWidgets('losing focus mid-press disarms the row', (tester) async {

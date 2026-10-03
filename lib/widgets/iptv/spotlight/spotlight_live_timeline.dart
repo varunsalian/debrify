@@ -451,7 +451,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       _holdOk.reset();
       _guides.clear();
       _pendingLoads.clear();
-      _lastGuideRefreshAt = DateTime.now();
+      _lastGuideRefreshAt = widget.now();
     }
 
     _cursorRow = _cursorRow.clamp(0, math.max(0, widget.channels.length - 1));
@@ -1860,7 +1860,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
         _cursorLane == _CursorLane.programme &&
         _selectedProgrammeStartMs == startMs;
     final selected = _hasFocus && !_nowFocusNode.hasFocus && current;
-    final now = DateTime.now();
+    final now = widget.now();
     final isNow = programme.airsAt(now);
     final isPast = !programme.stop.isAfter(now);
     final foreground = selected
@@ -2031,7 +2031,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     double timelineWidth,
     IptvStyleTokens tokens,
   ) {
-    final now = DateTime.now();
+    final now = widget.now();
     final nowMs = now.millisecondsSinceEpoch;
     final startMs = _windowStart.millisecondsSinceEpoch;
     final endMs = startMs + widget.windowDuration.inMilliseconds;
@@ -2089,7 +2089,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
     return '$hour:$minute';
   }
 
-  static String _dayHeading(DateTime time) {
+  String _dayHeading(DateTime time) {
     const months = <String>[
       'Jan',
       'Feb',
@@ -2105,7 +2105,7 @@ class _SpotlightLiveTimelineState extends State<SpotlightLiveTimeline> {
       'Dec',
     ];
     final local = time.toLocal();
-    final now = DateTime.now();
+    final now = widget.now();
     final sameDay =
         local.year == now.year &&
         local.month == now.month &&

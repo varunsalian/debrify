@@ -359,6 +359,9 @@ void main() {
           channels: channels,
           height: 246,
           now: () => start,
+          // The injected clock also paints the NOW badge. Use the shipped
+          // window so this navigation fixture keeps current cells readable.
+          windowDuration: const Duration(minutes: 90),
           loader: (_) async => [
             _programme('Current', start, const Duration(hours: 1)),
             _programme(
@@ -1339,6 +1342,8 @@ void main() {
         autofocus: true,
         now: () => now,
         loader: (_) async => [early, current],
+        // Paint now follows this clock too; retain the shipped cell width.
+        windowDuration: const Duration(minutes: 90),
         onSelection: selections.add,
       ),
     );
