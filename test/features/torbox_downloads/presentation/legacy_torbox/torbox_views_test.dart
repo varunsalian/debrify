@@ -199,16 +199,6 @@ void main() {
         await t.pump(const Duration(milliseconds: 600));
         await t.pump();
         expect(t.takeException(), isNull);
-        if (Platform.isLinux &&
-            !File(
-              'test/goldens/torbox_downloads/linux/$view.png',
-            ).existsSync() &&
-            !const bool.fromEnvironment('TORBOX_CAPTURE_ORIGINAL_LINUX')) {
-          markTestSkipped(
-            'Pending original-code Ubuntu capture; no push authorized',
-          );
-          return;
-        }
         await expectLater(
           find.byKey(const ValueKey('torbox-canvas')),
           matchesGoldenFile(

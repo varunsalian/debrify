@@ -1,0 +1,24 @@
+{
+  "application_baseline": "191ab849",
+  "original_capture_revision": "c4f5375a8c7a4250e2aee5eb38d0870c88f5a34b",
+  "seams": "dev/tool/torbox_checker_config.json",
+  "flutter": "3.44.8",
+  "linux_workflow_base": "f511e2bd",
+  "linux_run": "https://github.com/varunsalian/debrify-refactor/actions/runs/37141433555",
+  "linux_host": "GitHub Actions ubuntu-latest",
+  "temporary_remote_branch": "deleted (user-reported)",
+  "comparison": "exact host-selected golden comparison; original capture and strict re-run each passed four tests",
+  "evidence": "common git directory/refactor-evidence/torbox/linux-original-{capture,strict,sha256,revision}.txt",
+  "sha256": {
+    "test/goldens/torbox_downloads/linux/folder.png": "da44b0744393e96fbf5c05395d268f9873170861423c89895f79531df56e6fc2",
+    "test/goldens/torbox_downloads/linux/selection.png": "f8027fdf69ac3a6e37924a4c1f086e445a322e4372153f4cc9ab00a905910fcb",
+    "test/goldens/torbox_downloads/linux/torrents.png": "24c8db249f323a9311e880f21a9a66f359e3251629dec6a248e7150fdc71284f",
+    "test/goldens/torbox_downloads/linux/web_downloads.png": "ca36dce2b381af85cfa8b6244d0390e5046b6c4872fc0cf508e82e2a084b02a1",
+    "test/goldens/torbox_downloads/macos/selection.png": "20dab5e4ede550fa5823b5a607c7270f81815700981caf72bbe6e3ca4e36e20f",
+    "test/goldens/torbox_downloads/macos/folder.png": "dce62c23c08f0ef35d2c5fb485865e96b1ab0e2a5936bf164c187c2b06c722f4",
+    "test/goldens/torbox_downloads/macos/torrents.png": "303964b8c849be99a0cf41b3e44e1eff31f51185d11cd98e2e4f4fa584714786",
+    "test/goldens/torbox_downloads/macos/web_downloads.png": "eab7f74c12f0c202b4e740995c771f705622d50b2f1a640283c57474af944f41"
+  },
+  "linux_capture_revision": "c20d138624d9e9facda36b018cfe78871041cd52",
+  "linux_run_conclusion": "success"
+}
