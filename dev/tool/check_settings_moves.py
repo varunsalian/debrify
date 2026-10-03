@@ -354,6 +354,40 @@ def context_prefixes(node, rows, row):
     return list(prefixes.values())
 
 
+def builder_context_signature(node):
+    """Screen context/guards used inside closures that take their own context.
+
+    The owned-context checks skip these closures (their `context` is a
+    builder/dialog parameter), and `normalize` maps `_deps.context()` and
+    `context.mounted` onto plain `context`/`mounted`, so a swap there would be
+    invisible. This returns what must not change: how many times the State's
+    context is fetched inside such closures (`_deps.context()`, never present
+    in the original), and how many guards there are of each kind: the
+    closure's own `context.mounted`, or the State's `mounted`. Plain uses of a
+    parameter named `context` are not compared: a method's parameter and the
+    same parameter on its top-level function form are equivalent.
+    """
+    code = [t for t in node['tokens'] if not t['comment']]
+    indexes = {t['offset']: i for i, t in enumerate(code)}
+    counts = Counter()
+    for ref in node.get('references', []):
+        if not ref['contextParameter'] or ref['name'] not in {'context', 'mounted'}:
+            continue
+        i = indexes.get(ref['offset'])
+        if i is None:
+            continue
+        before = [t['text'] for t in code[max(0, i - 2):i]]
+        owned = before[-1:] == ['.'] and before[:1] in (['_deps'], ['deps'])
+        if ref['name'] == 'context':
+            if owned:
+                counts['state-context'] += 1
+            elif [t['text'] for t in code[i:i + 3]] == ['context', '.', 'mounted']:
+                counts['builder-mounted'] += 1
+        elif owned or before[-1:] != ['.']:
+            counts['state-mounted'] += 1
+    return dict(sorted(counts.items()))
+
+
 def check_context(before, after, rows=None, row=None):
     expected, actual = context_events(before), context_events(after)
     errors = [] if expected == actual else [f'Context/guard scope or first-use position changed: {expected} -> {actual}']
@@ -804,6 +838,10 @@ def check(original_source, sources, rows, source_path, package=None,
         elif declaration_tokens(before, rows, row, original=destination is not None or (key == '_SettingsScreenState._buildLayout' and 'lib/features/settings/presentation/settings_layout.dart' in sources)) != declaration_tokens(actual, rows, row):
             diff = '\n'.join(list(difflib.unified_diff(declaration_tokens(before, rows, row, original=destination is not None or (key == '_SettingsScreenState._buildLayout' and 'lib/features/settings/presentation/settings_layout.dart' in sources)), declaration_tokens(actual, rows, row)))[:45])
             errors.append('Non-verbatim settings declaration: ' + key + '\n' + diff)
+        if builder_context_signature(before) != builder_context_signature(actual):
+            errors.append(key + ': builder/dialog context or guard swapped with the '
+                          "State's: " + str(builder_context_signature(before)) + ' -> '
+                          + str(builder_context_signature(actual)))
         if context_guard and 'context_guard' in row['allowed_edits']:
             errors.extend(key + ': ' + e for e in check_context(before, actual, rows, row))
     # Only the registered single test accessor is new in the facade at step 0.
@@ -1119,6 +1157,22 @@ def self_test(package=None):
     if check_context(original, good_context) or not check_context(original, bad_context):
         raise AssertionError('Context guard self-test failed')
     print('Settings self-test context fetched before guard: rejected')
+    dialog = method('Future<void> ask() async { await showDialog(builder: (context) => TextButton(onPressed: () { if (!mounted) return; Navigator.of(context).pop(false); })); }')
+    same = method('Future<void> ask() async { await showDialog(builder: (context) => TextButton(onPressed: () { if (!_deps.mounted()) return; Navigator.of(context).pop(false); })); }')
+    if builder_context_signature(dialog) != builder_context_signature(same):
+        raise AssertionError('Unchanged builder context rejected')
+    print('Settings self-test unchanged builder context: passed')
+    for label, text in {
+        'State context inside a builder': 'Future<void> ask() async { await showDialog(builder: (context) => TextButton(onPressed: () { if (!_deps.mounted()) return; Navigator.of(_deps.context()).pop(false); })); }',
+        'builder mounted for State mounted': 'Future<void> ask() async { await showDialog(builder: (context) => TextButton(onPressed: () { if (!context.mounted) return; Navigator.of(context).pop(false); })); }',
+    }.items():
+        if builder_context_signature(dialog) == builder_context_signature(method(text)):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
+    guarded = method('Future<void> ask() async { await showDialog(builder: (context) => TextButton(onPressed: () { if (!context.mounted) return; Navigator.of(context).pop(false); })); }')
+    if builder_context_signature(guarded) == builder_context_signature(method('Future<void> ask() async { await showDialog(builder: (context) => TextButton(onPressed: () { if (!_deps.mounted()) return; Navigator.of(context).pop(false); })); }')):
+        raise AssertionError('Accepted State mounted for builder mounted')
+    print('Settings self-test State mounted for builder mounted: rejected')
     permission = method('void action() async { if (!await allowed()) return; show(context); }')
     permission_hoist = method('void action() async { final context = _deps.context(); if (!await allowed()) return; show(context); }')
     if not check_context(permission, permission_hoist):

@@ -256,6 +256,10 @@ blank lines, for handwritten application code in Dart and native languages.
 - Keep progress evidence concise: batch outcome, revision, check commands/results,
   material risks, and remaining deliverables. Reuse evidence and fixtures rather
   than duplicating logs or rebuilding old/new harnesses for covered behavior.
+- CI's behaviour-test job runs on `refactor/**` pushes only when the commit
+  message contains `gate` (for full-suite gate commits) or `[full-ci]`; the
+  size, architecture, format and analyzer jobs run on every push. Push gates
+  with such a message so CI covers them.
 - The full-suite comparison helper is `python3 dev/tool/test_baseline.py`. Never
   use `--record` to accept new regressions. Investigate failures and distinguish
   pre-existing issues, environment limitations, and changes introduced by the work.

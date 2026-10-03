@@ -2,8 +2,17 @@ name: Code health checks
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
     branches: [main, 'refactor/**']
+    # Docs-only pushes need no app checks.
+    paths-ignore: ['docs/**', '**/*.md']
+
+# A newer push to the same branch supersedes an in-progress run (private-repo
+# Actions minutes are metered).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -37,6 +46,15 @@ jobs:
       - run: flutter analyze --no-fatal-infos lib/features lib/screens/settings_screen.dart lib/screens/search_screen.dart lib/screens/search_screen lib/services/torrent_playback_service.dart lib/services/video_player_launcher.dart lib/services/storage lib/models/ambient_trailer_surface.dart lib/models/tv_render_quality.dart
 
   sources-behavior:
+    # The ~8-minute behaviour suite runs on PRs, main, manual runs, and on
+    # refactor pushes whose commit message marks a full-suite gate ("gate") or
+    # asks for it explicitly ("[full-ci]"). Every push still gets the cheap
+    # size, architecture, format and analyzer jobs above.
+    if: >-
+      github.event_name != 'push' ||
+      github.ref == 'refs/heads/main' ||
+      contains(github.event.head_commit.message, 'gate') ||
+      contains(github.event.head_commit.message, '[full-ci]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

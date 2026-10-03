@@ -338,10 +338,10 @@ def self_test(package=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--baseline', default='204b1011')
-    parser.add_argument('--source', default=SOURCE)
+    parser.add_argument('--baseline')
+    parser.add_argument('--source')
     parser.add_argument('--manifest', default='dev/tool/vpl_manifest.tsv')
-    parser.add_argument('--feature', default=FEATURE)
+    parser.add_argument('--feature')
     parser.add_argument('--parser-package', type=Path)
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--partition', action='store_true',
@@ -351,6 +351,16 @@ def main():
     args = parser.parse_args()
     package = args.parser_package or parser_package()
     settings = Path(args.manifest).name == 'settings_manifest.tsv'
+    # Each manifest has one original and one destination; default them so a
+    # bare `--manifest dev/tool/settings_manifest.tsv` can't silently compare
+    # the wrong files. Settings always runs both partition and context checks.
+    defaults = (('17db33f2', 'lib/screens/settings_screen.dart', 'lib/features/settings')
+                if settings else ('204b1011', SOURCE, FEATURE))
+    args.baseline = args.baseline or defaults[0]
+    args.source = args.source or defaults[1]
+    args.feature = args.feature or defaults[2]
+    if settings:
+        args.partition = args.context_guard = True
     if args.self_test:
         self_test(package)
         if settings:

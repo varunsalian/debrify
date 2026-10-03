@@ -841,6 +841,53 @@ the named files under "Size" below.
   report links that run. Production checks from `8381bfa5` remain valid because
   the host reference follow-up changes no production Dart or move/check manifests.
 
+## Review follow-up
+
+A three-agent review of `3fe409a1..43f1d4ad` found no behaviour change. Fixed
+afterwards:
+- **Exact move-check command:**
+  `python3 dev/tool/check_verbatim_moves.py --manifest dev/tool/settings_manifest.tsv`
+  (add `--self-test` for the self-tests). The settings manifest now defaults
+  `--baseline 17db33f2`, `--source lib/screens/settings_screen.dart` and
+  `--feature lib/features/settings`, and always enables the partition and
+  context-guard modes, so a bare run can't compare the wrong files or skip a
+  mode.
+- **Builder/dialog contexts:** `check_settings_moves.py` now rejects the
+  State's context (`_deps.context()`) inside a closure that has its own
+  `context`, and a swap between a builder's `context.mounted` and the State's
+  `mounted` there. Four new self-tests cover this. Re-running the reviewer's
+  experiment (the maintenance dialog's Cancel button switched to
+  `_deps.context()`) is now rejected.
+- **Shape manifest:** all 53 previously unlisted `lib/features/settings` files
+  are registered at their measured counts (0). The guard's message no longer
+  escapes `$`, so it names offending files again.
+- **Guards repaired and removed from the CI known-failure list:**
+  - `shape_manifest_test` "no swept file grows a new bare radius": its four
+    grown entries are reset to their current counts (see "Found, not fixed"),
+    so it is armed against further growth;
+  - `profile_source_guard_test` "device reset stops and deletes Dart and
+    native diagnostics": its end marker `trimSegment` no longer exists, so
+    it now uses `pruneExpired`, and its windows fail with a named missing
+    marker instead of a `RangeError`.
+- **Linux search-order golden** run against the original code: one-off CI
+  run 37099639922 executed `test/settings_search_index_order_test.dart` at
+  `3fe409a1` (the original settings code plus the test accessor) on Ubuntu,
+  and it passed. Download Location's position is proven, not only reviewed.
+- **The orphaned "Platform gates" banner** moved from the screen to
+  `SettingsPlatformGates`, and the stale `_focusFirstCard` row in the
+  dependency report is fixed.
+- **CI minutes:** `checks.yml` cancels superseded runs, skips docs-only
+  pushes, and runs the behaviour-test job on refactor pushes only for commits
+  whose message contains `gate` or `[full-ci]` (AGENTS.md records this).
+
 ## Found, not fixed
 
-(none yet)
+- Ten bare `BorderRadius.circular` radii arrived with feature work after the
+  shape sweep, and the manifest now records them as current counts:
+  - `external_player_settings_page.dart`, 18 → 20;
+  - `iptv_results_view.dart`, 1 → 7;
+  - `stremio_dropdown.dart`, 0 → 2;
+  - `tv_sidebar_nav.dart`, 0 → 1.
+
+  Converting them to `app.shape` tokens changes corners under non-default
+  Looks, so it needs a visual review.

@@ -65,11 +65,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Focus node for the first connection card (Real-Debrid) for TV navigation
   final FocusNode _firstCardFocusNode = FocusNode(debugLabel: 'firstCardFocus');
 
-  // ── Platform gates for search entries ───────────────────────────────────
-  // A search result must never open a page that has no matching control, so
-  // any indexed row whose page renders it conditionally is gated on the SAME
-  // condition the page uses.
-
   // TV content focus handler (stored for proper unregistration)
   VoidCallback? _tvContentFocusHandler;
 

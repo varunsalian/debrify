@@ -9,6 +9,11 @@ class SettingsPlatformGates {
   SettingsPlatformGates(this._summaries);
   final SettingsSummaries _summaries;
 
+  // ── Platform gates for search entries ───────────────────────────────────
+  // A search result must never open a page that has no matching control, so
+  // any indexed row whose page renders it conditionally is gated on the SAME
+  // condition the page uses.
+
   bool get isAndroid => !kIsWeb && Platform.isAndroid;
 
   bool get isTelevision => PlatformUtil.isTelevision;

@@ -386,16 +386,27 @@ void main() {
       'android/app/src/main/kotlin/com/debrify/app/diagnostics/'
       'DiagnosticFileLog.kt',
     ).readAsStringSync();
-    final nativeClear = nativeLog.substring(
-      nativeLog.indexOf('fun clearForDeviceReset'),
-      nativeLog.indexOf('fun recordPreviousProcessExit'),
+    String window(String source, String start, String end) {
+      final from = source.indexOf(start);
+      final to = from < 0 ? -1 : source.indexOf(end, from);
+      expect(from, greaterThanOrEqualTo(0), reason: 'marker gone: $start');
+      expect(to, greaterThan(from), reason: 'marker gone: $end');
+      return source.substring(from, to);
+    }
+
+    final nativeClear = window(
+      nativeLog,
+      'fun clearForDeviceReset',
+      'fun recordPreviousProcessExit',
     );
     expect(nativeClear, contains('accepting = false'));
     expect(nativeClear, contains('directory.deleteRecursively()'));
     expect(nativeClear, contains('.clear()'));
-    final nativeAppend = nativeLog.substring(
-      nativeLog.indexOf('private fun append('),
-      nativeLog.indexOf('private fun trimSegment('),
+    // `append` is followed by `pruneExpired`; `trimSegment` no longer exists.
+    final nativeAppend = window(
+      nativeLog,
+      'private fun append(',
+      'private fun pruneExpired(',
     );
     expect(
       nativeAppend.indexOf('if (!accepting) return'),

@@ -82,7 +82,10 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/settings/app_theme_page.dart': 1,
   'lib/screens/settings/debrify_tv_settings_page.dart': 0,
   'lib/screens/settings/detail_theme_page.dart': 1,
-  'lib/screens/settings/external_player_settings_page.dart': 18,
+  // Raised 2026-10-03 to the counts found at refactor/codebase 17db33f2: these
+  // radii arrived with feature work after the sweep (see the settings plan's
+  // "Found, not fixed"). The guard stays armed against further growth.
+  'lib/screens/settings/external_player_settings_page.dart': 20,
   'lib/screens/settings/filter_settings_page.dart': 2,
   'lib/screens/settings/iptv_hidden_categories_page.dart': 1,
   'lib/screens/settings/iptv_settings_page.dart': 2,
@@ -117,7 +120,7 @@ const Map<String, int> kShapeResidue = {
   'lib/widgets/iptv/iptv_filters.dart': 4,
   'lib/widgets/iptv/iptv_list_name_dialog.dart': 0,
   'lib/widgets/iptv/iptv_list_picker_dialog.dart': 0,
-  'lib/widgets/iptv/iptv_results_view.dart': 1,
+  'lib/widgets/iptv/iptv_results_view.dart': 7,
   'lib/widgets/iptv/iptv_stage_panel.dart': 2,
   'lib/widgets/mobile_classic_nav.dart': 0,
   'lib/widgets/mobile_floating_nav.dart': 0,
@@ -129,9 +132,9 @@ const Map<String, int> kShapeResidue = {
   'lib/widgets/see_all/see_all_filter_bar.dart': 0,
   'lib/widgets/see_all/see_all_header.dart': 0,
   'lib/widgets/see_all/see_all_random_button.dart': 0,
-  'lib/widgets/see_all/stremio_dropdown.dart': 0,
+  'lib/widgets/see_all/stremio_dropdown.dart': 2,
   'lib/widgets/trakt_calendar_day_sheet.dart': 0,
-  'lib/widgets/tv_sidebar_nav.dart': 0,
+  'lib/widgets/tv_sidebar_nav.dart': 1,
   'lib/widgets/tvmaze_search_dialog.dart': 0,
   'lib/widgets/youtube/youtube_video_card.dart': 0,
 };
@@ -144,6 +147,101 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/settings/presentation/legacy_settings/settings_download_location.dart':
       1,
   'lib/features/settings/presentation/settings_search_bar.dart': 3,
+  // Every other Settings hub file, at its measured count (0 unless noted).
+  'lib/features/settings/application/settings_backup_formatting.dart': 0,
+  'lib/features/settings/application/settings_pending_credentials.dart': 0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_builder.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_01.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_02.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_03.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_04.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_05.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_06.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_07.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_08.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_09.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_10.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_index_slice_11.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_builder.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_slice_01.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_slice_02.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_slice_03.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_slice_04.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_slice_05.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_slice_06.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_slice_07.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_slice_08.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_slice_09.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_slice_10.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_leaf_slice_11.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/search_index/settings_search_index.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_account_captions.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_appearance_navigation.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_backup.dart': 0,
+  'lib/features/settings/presentation/legacy_settings/settings_connection_navigation.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_connections.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_diagnostics.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_index_composition.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_layout_composition.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_maintenance.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_page_navigation.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_platform_gates.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_profile_actions.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_restore.dart': 0,
+  'lib/features/settings/presentation/legacy_settings/settings_search_navigation.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_sections.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_snacks.dart': 0,
+  'lib/features/settings/presentation/legacy_settings/settings_summaries.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_summary_loader.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_summary_refresh.dart':
+      0,
+  'lib/features/settings/presentation/legacy_settings/settings_updates.dart': 0,
+  'lib/features/settings/presentation/settings_categories.dart': 0,
+  'lib/features/settings/presentation/settings_classic_layout.dart': 0,
+  'lib/features/settings/presentation/settings_connection_grid.dart': 0,
+  'lib/features/settings/presentation/settings_layout.dart': 0,
+  'lib/features/settings/presentation/settings_spotlight_category.dart': 0,
+  'lib/features/settings/presentation/settings_spotlight_layout.dart': 0,
   'lib/screens/search_screen/home_saved_composition.dart': 0,
   'lib/screens/search_screen/discover_panel_composition.dart': 0,
   'lib/screens/search_screen/search_input_composition.dart': 0,
@@ -224,13 +322,13 @@ void main() {
       final file = File(entry.key);
       if (!file.existsSync()) {
         fail(
-          '\${entry.key} is in the shape manifest but no longer exists — '
+          '${entry.key} is in the shape manifest but no longer exists — '
           'remove its entry if the file was deleted',
         );
       }
       final found = _radius.allMatches(file.readAsStringSync()).length;
       if (found > entry.value) {
-        grew.add('\${entry.key}: \${entry.value} → \$found');
+        grew.add('${entry.key}: ${entry.value} → $found');
       }
     }
     expect(
@@ -240,7 +338,7 @@ void main() {
           'these files are on the shape tokens; a new bare '
           'BorderRadius.circular in one is a site that will not follow the '
           'theme. Use app.shape.br()/brImg()/brPill, or lower the manifest '
-          'entry if you genuinely removed radii: \$grew',
+          'entry if you genuinely removed radii: $grew',
     );
   });
 
