@@ -10,7 +10,7 @@ typedef IptvStatusChipDeps = ({
   IptvCatalogState catalogState,
   IptvStatusState statusState,
   bool Function() mounted,
-  // TEMP(iptv): _recomputeSourceCounts -> IptvSourceCounts.recomputeSourceCounts (step 5).
+
   void Function() recomputeSourceCounts,
   StateSetter setState,
 });

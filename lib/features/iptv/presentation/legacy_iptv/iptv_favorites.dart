@@ -20,7 +20,7 @@ typedef IptvFavoritesDeps = ({
   bool Function() mounted,
 
   void Function(IptvPlaylist? playlist, {bool focusContent}) onPlaylistChanged,
-  // TEMP(iptv): _refreshListShelfPresence -> IptvPlaybackRefresh.refreshListShelfPresence (step 5).
+
   void Function() refreshListShelfPresence,
   StateSetter setState,
 });

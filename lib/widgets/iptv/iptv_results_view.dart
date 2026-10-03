@@ -1,3 +1,17 @@
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_android_recording.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_catchup.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_desktop_recording.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_navigation.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_playback.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_playback_actions.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_playback_refresh.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_preview_handoff.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_record_now.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_recording_support.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_schedule_actions.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_source_counts.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_startup_launch.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_startup_resolution.dart';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_categories.dart';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_filters.dart';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_guide_context.dart';
@@ -40,16 +54,7 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:debrify/services/storage/iptv_favorites_storage.dart';
-import 'package:debrify/services/storage/iptv_history_storage.dart';
-import 'package:debrify/services/storage/startup_iptv_storage.dart';
-import 'package:flutter/foundation.dart'
-    show
-        TargetPlatform,
-        defaultTargetPlatform,
-        kIsWeb,
-        mapEquals,
-        setEquals;
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
@@ -57,7 +62,6 @@ import '../../services/debrify_image_cache.dart';
 import '../browse/brand_accent.dart';
 import '../browse/browse_results_focus.dart';
 import '../browse/browse_search_header.dart';
-import '../../models/playlist_view_mode.dart';
 import '../../services/iptv_channel_order.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/iptv_catalog_db.dart';
@@ -65,12 +69,8 @@ import '../../services/iptv_catalog_refresh_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_iptv_service.dart';
 import '../../services/stremio_service.dart';
-import '../../services/video_player_launcher.dart';
 import '../../utils/tv_keys.dart' show TvHeldKeyGuard, isActivateOrSpaceKey;
-import '../../screens/iptv/xtream_series_detail.dart';
-import '../../screens/settings/iptv_settings_page.dart';
 import '../hero_trailer_backdrop.dart';
-import '../home/cw_card_menu.dart';
 import '../../theme/app_theme_scope.dart';
 import '../see_all/see_all_filter_bar.dart';
 import '../see_all/stremio_dropdown.dart';
@@ -93,14 +93,10 @@ import 'spotlight/spotlight_live_timeline.dart';
 import 'spotlight/spotlight_programme_hero.dart';
 import 'spotlight/spotlight_rail.dart';
 import 'spotlight/spotlight_shell.dart';
-import '../../screens/settings/recordings_page.dart';
 import '../../services/desktop_recording_service.dart';
-import '../../services/desktop_schedule_service.dart';
-import '../../services/iptv_source_stats.dart';
 import '../../services/profiles/profile_preferences.dart';
 
 import '../../services/live_recording_service.dart';
-import '../recording_limit_dialogs.dart';
 
 
 
@@ -147,6 +143,157 @@ class IptvResultsViewState extends State<IptvResultsView>
     implements
         BrowseResultsFocusController,
         BrowseSearchResultsFocusController {
+  late final IptvScheduleActions _scheduleActions = IptvScheduleActions((
+    focusState: _focusState,
+    recordingState: _recordingState,
+    selectionState: _selectionState,
+    context: () => context,
+    isTelevision: () => widget.isTelevision,
+    mounted: () => mounted,
+    playCatchup: (IptvChannel channel, EpgProgramme programme) => _catchup.playCatchup(channel, programme),
+    recordingResourceFor: (IptvChannel channel) => _recordNow.recordingResourceFor(channel),
+    refreshScheduledCount: () => _recordingSupport.refreshScheduledCount(),
+    setState: setState,
+  ));
+  late final IptvRecordingSupport _recordingSupport = IptvRecordingSupport((
+    recordingState: _recordingState,
+    context: () => context,
+    mounted: () => mounted,
+    refreshAndroidRecordingState: () => _androidRecording.refreshAndroidRecordingState(),
+    setState: setState,
+  ));
+  late final IptvRecordNow _recordNow = IptvRecordNow((
+    recordingState: _recordingState,
+    settingsState: _settingsState,
+    context: () => context,
+    mounted: () => mounted,
+    originPlaylistIdFor: (IptvChannel channel) => _favorites.originPlaylistIdFor(channel),
+    setState: setState,
+    stageRecordingFileName: (String channelName) => _recordingSupport.stageRecordingFileName(channelName),
+  ));
+  late final IptvPlayback _playback = IptvPlayback((
+    catalogState: _catalogState,
+    playerState: _playerState,
+    previewState: _previewState,
+    selectionState: _selectionState,
+    settingsState: _settingsState,
+    adoptStartupCategoryValue: (String? group) => _startupResolution.adoptStartupCategoryValue(group),
+    context: () => context,
+    effectiveCategory: () => _filtersSection.effectiveCategory,
+    flushPreviewRearm: () => _previewHandoff.flushPreviewRearm(),
+    fullCategoryList: () => _playerPayload.fullCategoryList(),
+    isTelevision: () => widget.isTelevision,
+    mounted: () => mounted,
+    normalizedName: (String value) => IptvStartupResolution.normalizedName(value),
+    openSeriesDetail: (IptvChannel channel) => _playbackActions.openSeriesDetail(channel),
+    originPlaylistIdFor: (IptvChannel channel) => _favorites.originPlaylistIdFor(channel),
+    playerChannelWithOrigin: (IptvChannel channel, IptvPlaylist source) => _playerPayload.playerChannelWithOrigin(channel, source),
+    playerListsPayload: () => _playerPayload.playerListsPayload(),
+    playerSourcePayload: () => _playerPayload.playerSourcePayload(),
+    providePlayerIptvBrowse: (Map<String, dynamic> request) => _playerBrowse.providePlayerIptvBrowse(request),
+    refreshAfterPlayback: () => _playbackRefresh.refreshAfterPlayback(),
+  ));
+  late final IptvStartupLaunch _startupLaunch = IptvStartupLaunch((
+    catalogState: _catalogState,
+    focusState: _focusState,
+    playerState: _playerState,
+    previewState: _previewState,
+    selectionState: _selectionState,
+    settingsState: _settingsState,
+    context: () => context,
+    debugOnSpotlightStartupFocus: () => widget.debugOnSpotlightStartupFocus,
+    mounted: () => mounted,
+    playChannel: (IptvChannel channel, {bool Function()? shouldCancel}) => _playback.playChannel(channel, shouldCancel: shouldCancel),
+    resolveStartupRow: (Map<String, dynamic> payload, bool Function() cancelled) => _startupResolution.resolveStartupRow(payload, cancelled),
+    selectTabletChannel: (int index, IptvChannel channel) => _selectTabletChannel(index, channel),
+    setState: setState,
+    spotlightRequestedForDevice: () => _spotlightRequestedForDevice,
+    spotlightUsesTimeline: () => _spotlightUsesTimeline,
+  ));
+  late final IptvStartupResolution _startupResolution = IptvStartupResolution((
+    catalogState: _catalogState,
+    settingsState: _settingsState,
+    applyFilters: () => _filtersSection.applyFilters(),
+    onPlaylistChanged: (IptvPlaylist? playlist, {bool focusContent = false}) => _filtersSection.onPlaylistChanged(playlist, focusContent: focusContent),
+    residentDbRow: (({int position, IptvChannel channel}) entry, String url, String name, int? storedNumber) => _playback.residentDbRow(entry, url, name, storedNumber),
+    setState: setState,
+    startupPlaylistFor: (Map<String, dynamic> payload) => _startupLaunch.startupPlaylistFor(payload),
+  ));
+  late final IptvCatchup _catchup = IptvCatchup((
+    catalogState: _catalogState,
+    playerState: _playerState,
+    previewState: _previewState,
+    selectionState: _selectionState,
+    context: () => context,
+    flushPreviewRearm: () => _previewHandoff.flushPreviewRearm(),
+    isTelevision: () => widget.isTelevision,
+    mounted: () => mounted,
+    originPlaylistIdFor: (IptvChannel channel) => _favorites.originPlaylistIdFor(channel),
+    refreshAfterPlayback: () => _playbackRefresh.refreshAfterPlayback(),
+  ));
+  late final IptvPlaybackActions _playbackActions = IptvPlaybackActions((
+    settingsState: _settingsState,
+    clearPreview: () => _clearPreview(),
+    context: () => context,
+    isTelevision: () => widget.isTelevision,
+    mounted: () => mounted,
+    originPlaylistIdFor: (IptvChannel channel) => _favorites.originPlaylistIdFor(channel),
+    playChannel: (IptvChannel channel, {bool Function()? shouldCancel}) => _playback.playChannel(channel, shouldCancel: shouldCancel),
+    refreshAfterPlayback: () => _playbackRefresh.refreshAfterPlayback(),
+  ));
+  late final IptvPlaybackRefresh _playbackRefresh = IptvPlaybackRefresh((
+    catalogState: _catalogState,
+    membershipState: _membershipState,
+    recordingState: _recordingState,
+    settingsState: _settingsState,
+    armAndroidRecStateRefresh: () => _androidRecording.armAndroidRecStateRefresh(),
+    customLists: () => _favorites.customLists,
+    loadFavorites: () => _favorites.loadFavorites(),
+    loadPlaylist: (IptvPlaylist playlist, {bool userRequested = false}) => _catalogLoading.loadPlaylist(playlist, userRequested: userRequested),
+    loadProgress: (int ticket, List<IptvChannel> channels) => _virtualResults.loadProgress(ticket, channels),
+    mounted: () => mounted,
+    onPlaylistChanged: (IptvPlaylist? playlist, {bool focusContent = false}) => _filtersSection.onPlaylistChanged(playlist, focusContent: focusContent),
+    setState: setState,
+  ));
+  late final IptvPreviewHandoff _previewHandoff = IptvPreviewHandoff((
+    playerState: _playerState,
+    previewState: _previewState,
+    clearPreview: () => _clearPreview(),
+    mounted: () => mounted,
+    refreshAfterPlayback: () => _playbackRefresh.refreshAfterPlayback(),
+    setSpotlightSourcesExpanded: (bool expanded) => _setSpotlightSourcesExpanded(expanded),
+  ));
+  late final IptvSourceCounts _sourceStatistics = IptvSourceCounts((
+    recordingState: _recordingState,
+    settingsState: _settingsState,
+    mounted: () => mounted,
+    setState: setState,
+  ));
+  late final IptvAndroidRecording _androidRecording = IptvAndroidRecording((
+    recordingState: _recordingState,
+    context: () => context,
+    mounted: () => mounted,
+    setState: setState,
+  ));
+  late final IptvDesktopRecording _desktopRecording = IptvDesktopRecording((
+    context: () => context,
+    mounted: () => mounted,
+    setState: setState,
+  ));
+  late final IptvNavigation _navigation = IptvNavigation((
+    catalogState: _catalogState,
+    focusState: _focusState,
+    selectionState: _selectionState,
+    settingsState: _settingsState,
+    context: () => context,
+    focusNodeFor: (IptvChannel channel) => _focusNodeFor(channel),
+    initRecordingSupport: () => _recordingSupport.initRecordingSupport(),
+    loadSettings: ({bool forceReload = false}) => _settingsLoading.loadSettings(forceReload: forceReload),
+    mounted: () => mounted,
+    refreshAfterHiddenChange: () => _categoryActions.refreshAfterHiddenChange(),
+    updateEpgContext: (IptvPlaylist playlist, IptvParseResult result, int ticket, {bool quiet = false}) => _guideContext.updateEpgContext(playlist, result, ticket, quiet: quiet),
+  ));
+
   late final IptvFiltersSection _filtersSection = IptvFiltersSection((
     catalogState: _catalogState,
     focusState: _focusState,
@@ -221,7 +368,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     loadPlaylist: (IptvPlaylist playlist, {bool userRequested = false}) => _catalogLoading.loadPlaylist(playlist, userRequested: userRequested),
     mounted: () => mounted,
     onPlaylistChanged: (IptvPlaylist? playlist, {bool focusContent = false}) => _filtersSection.onPlaylistChanged(playlist, focusContent: focusContent),
-    refreshListShelfPresence: () => _refreshListShelfPresence(),
+    refreshListShelfPresence: () => _playbackRefresh.refreshListShelfPresence(),
     setState: setState,
   ));
   late final IptvSettingsLoading _settingsLoading = IptvSettingsLoading((
@@ -271,7 +418,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     loadProgress: (int ticket, List<IptvChannel> channels) => _virtualResults.loadProgress(ticket, channels),
     makeDbList: (CatalogSnapshot snap, {String? group, String? search}) => _catalogFacades.makeDbList(snap, group: group, search: search),
     mounted: () => mounted,
-    recomputeSourceCounts: () => _recomputeSourceCounts(),
+    recomputeSourceCounts: () => _sourceStatistics.recomputeSourceCounts(),
     setState: setState,
     updateEpgContext: (IptvPlaylist playlist, IptvParseResult result, int ticket, {bool quiet = false}) => _guideContext.updateEpgContext(playlist, result, ticket, quiet: quiet),
   ));
@@ -297,7 +444,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     catalogState: _catalogState,
     statusState: _statusState,
     mounted: () => mounted,
-    recomputeSourceCounts: () => _recomputeSourceCounts(),
+    recomputeSourceCounts: () => _sourceStatistics.recomputeSourceCounts(),
     setState: setState,
   ));
   late final IptvCatalogRefresh _catalogRefresh = IptvCatalogRefresh((
@@ -637,49 +784,11 @@ class IptvResultsViewState extends State<IptvResultsView>
 
 
 
-  /// The schedule action for a row, or null when the channel can't have
-  /// guide data (no RIGHT-key handling, no calendar icon).
-  VoidCallback? _scheduleActionFor(
-    IptvChannel channel, {
-    bool inPlace = false,
-  }) {
-    if (!IptvEpgService.isEpgCapable(channel)) return null;
-    if (inPlace) {
-      return () => _openSchedulePane(channel);
-    }
-    return () => showIptvScheduleSheet(
-      context,
-      channel,
-      isTelevision: widget.isTelevision,
-      onPlayProgramme: (programme) => _playCatchup(channel, programme),
-      onRecordProgramme: _recordProgrammeActionFor(channel),
-    );
-  }
 
-  void _openSchedulePane(IptvChannel channel) {
-    setState(() => _selectionState.scheduleChannel = channel);
-  }
 
-  void _closeSchedulePane() {
-    final channel = _selectionState.scheduleChannel;
-    if (channel == null) return;
-    setState(() => _selectionState.scheduleChannel = null);
-    if (!widget.isTelevision &&
-        _selectionState.spotlightLayoutMode == IptvSpotlightLayoutMode.classic) {
-      return;
-    }
-    // Hand focus back to the row that opened the schedule. Post-frame: the
-    // grid (and the cached node's row) only exists again after this build.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_selectionState.spotlightLayoutMode != IptvSpotlightLayoutMode.classic &&
-          _focusState.spotlightTimelineController.restoreFocus()) {
-        return;
-      }
-      final node = _focusState.cardFocusNodes[channel];
-      if (node != null && node.canRequestFocus) node.requestFocus();
-    });
-  }
+
+
+
 
   @override
   void initState() {
@@ -689,7 +798,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       // returns from the native player (see _playChannel); the sidebar
       // listener stops the preview while the menu overlay is open.
       WidgetsBinding.instance.addObserver(this);
-      MainPageBridge.addTvSidebarFocusListener(_onTvSidebarFocusChanged);
+      MainPageBridge.addTvSidebarFocusListener(_previewHandoff.onTvSidebarFocusChanged);
     }
     // Virtual Stremio playlists come and go with the installed addon set.
     StremioService.instance.addAddonsChangedListener(_settingsLoading.onStremioAddonsChanged);
@@ -706,13 +815,13 @@ class IptvResultsViewState extends State<IptvResultsView>
     // would cancel a boot-to-channel request that Retry could still honour.
     _settingsLoading.loadSettings().then((_) {
       if (mounted && _settingsState.settingsError == null) {
-        unawaited(_maybeRunStartupLaunch());
+        unawaited(_startupLaunch.maybeRunStartupLaunch());
       }
     });
     _favorites.loadFavorites();
     // Stage cockpit: recording availability + the rail's Scheduled badge.
     // Off the critical path; only ever ENABLES affordances.
-    unawaited(_initRecordingSupport());
+    unawaited(_recordingSupport.initRecordingSupport());
     if (!kIsWeb && Platform.isIOS) {
       unawaited(
         DevicePreferences.instance().then((prefs) {
@@ -727,19 +836,12 @@ class IptvResultsViewState extends State<IptvResultsView>
     // (player sheet, manual timer, desktop scheduler firing) update the rail
     // badge, and desktop capture starts/ends flip the stage's Record↔Stop —
     // including a SCHEDULED capture starting while focus parks on its channel.
-    LiveRecordingService.schedulesRevision.addListener(_onSchedulesChanged);
+    LiveRecordingService.schedulesRevision.addListener(_recordingSupport.onSchedulesChanged);
     DesktopRecordingService.instance.revision.addListener(
-      _onDesktopRecordingChanged,
+      _recordingSupport.onDesktopRecordingChanged,
     );
   }
 
-  void _onSchedulesChanged() {
-    if (mounted) unawaited(_refreshScheduledCount());
-  }
-
-  void _onDesktopRecordingChanged() {
-    if (mounted) setState(() {});
-  }
 
 
 
@@ -749,16 +851,10 @@ class IptvResultsViewState extends State<IptvResultsView>
 
 
 
-  IptvPlaylist? _recordingResourceFor(IptvChannel channel) {
-    final originId = _favorites.originPlaylistIdFor(channel);
-    if (originId == null) return null;
-    for (final playlist in _settingsState.playlists) {
-      if (playlist.id == originId && playlist.connectionResourceId != null) {
-        return playlist;
-      }
-    }
-    return null;
-  }
+
+
+
+
 
 
 
@@ -803,13 +899,13 @@ class IptvResultsViewState extends State<IptvResultsView>
     );
     _recordingState.sourceCountsDebounce?.cancel();
     _recordingState.androidRecStateDebounce?.cancel();
-    LiveRecordingService.schedulesRevision.removeListener(_onSchedulesChanged);
+    LiveRecordingService.schedulesRevision.removeListener(_recordingSupport.onSchedulesChanged);
     DesktopRecordingService.instance.revision.removeListener(
-      _onDesktopRecordingChanged,
+      _recordingSupport.onDesktopRecordingChanged,
     );
     if (widget.isTelevision) {
       WidgetsBinding.instance.removeObserver(this);
-      MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
+      MainPageBridge.removeTvSidebarFocusListener(_previewHandoff.onTvSidebarFocusChanged);
     }
     StremioService.instance.removeAddonsChangedListener(
       _settingsLoading.onStremioAddonsChanged,
@@ -1010,18 +1106,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
 
 
-  Future<void> _playChannel(
-    IptvChannel channel, {
-    bool Function()? shouldCancel,
-  }) async {
-    if (_playerState.launchingChannel) return;
-    _playerState.launchingChannel = true;
-    try {
-      await _playChannelInner(channel, shouldCancel: shouldCancel);
-    } finally {
-      _playerState.launchingChannel = false;
-    }
-  }
+
 
   // ==========================================================================
   // Startup channel — boot straight into a live channel
@@ -1033,1427 +1118,103 @@ class IptvResultsViewState extends State<IptvResultsView>
 
 
 
-  void _cancelStartupLaunch() {
-    _playerState.startupAttempt++;
-    if (_playerState.startupLaunchActive) {
-      _playerState.startupLaunchActive = false;
-      if (mounted) setState(() {});
-    }
-  }
-
-  Future<void> _maybeRunStartupLaunch() async {
-    final payload = MainPageBridge.consumeIptvStartupChannel();
-    if (payload == null) return;
-    // The bootstrap sentinel carries no url/name by design — it means "start on
-    // whatever you land on" — so it must skip the stored-identity validation
-    // below, which would otherwise reject it and cancel the whole attempt.
-    final firstAvailable =
-        payload[StartupIptvStorage.startupIptvFirstAvailable] == true;
-    final url = payload['url'];
-    final name = payload['name'];
-    if (!firstAvailable && (url is! String || url.isEmpty || name is! String)) {
-      MainPageBridge.cancelIptvStartupChannel();
-      return;
-    }
-
-    final attempt = ++_playerState.startupAttempt;
-    // The epoch, not just the local attempt: cancellation can land in the gap
-    // between consuming the payload and registering the callback below, and
-    // would then find nothing to call. The epoch records it regardless.
-    final epoch = MainPageBridge.iptvStartupEpoch;
-    bool cancelled() =>
-        attempt != _playerState.startupAttempt ||
-        epoch != MainPageBridge.iptvStartupEpoch ||
-        !mounted;
-    if (cancelled()) return;
-    _playerState.startupLaunchActive = true;
-    MainPageBridge.cancelIptvStartup = _cancelStartupLaunch;
-    if (mounted) setState(() {});
-
-    try {
-      final row = await _resolveStartupRow(payload, cancelled);
-      if (cancelled()) return;
-      if (row == null) {
-        _failStartupLaunch(
-          firstAvailable
-              ? 'No live channels to start on yet'
-              : 'That channel is no longer available',
-        );
-        return;
-      }
-      await _scrollAndFocusStartupRow(row);
-      if (cancelled()) return;
-      await _playChannel(row, shouldCancel: cancelled);
-    } catch (e) {
-      debugPrint('IPTV startup launch failed: $e');
-      if (!cancelled()) _failStartupLaunch('Could not start that channel');
-    } finally {
-      // Do NOT drop the preview suppression just because push() returned.
-      //
-      // Focusing the target row above re-tuned the stage, so `_previewStreamUrl`
-      // is loaded and only this flag is holding the stage off. On TV push()
-      // returns while the native player is merely STARTING — clearing here
-      // would remount the stage and open a second live stream underneath it,
-      // which is the exact failure `_previewRearmPending` exists to prevent.
-      // On the parked-re-arm paths, `_flushPreviewRearm` clears this instead.
-      // Keyed on the parked re-arm itself, not on "we think we launched":
-      // `_playChannelInner` can also return early WITHOUT launching (a Stremio
-      // channel with no playable candidate, say), and treating that as parked
-      // would strand the suppression on forever, leaving the preview stage
-      // permanently dead until some unrelated playback flushed it.
-      final parked = _previewState.previewRearmPending;
-      if (attempt == _playerState.startupAttempt && !parked) {
-        _playerState.startupLaunchActive = false;
-        if (mounted) setState(() {});
-      }
-      MainPageBridge.cancelIptvStartup = null;
-    }
-  }
-
-  void _failStartupLaunch(String reason) {
-    MainPageBridge.notifyAutoLaunchFailed(reason);
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(reason)));
-    }
-  }
-
-  /// Locate the stored channel and return the *resident* row instance.
-  ///
-  /// Never returns a self-materialized [IptvChannel]: `_playChannelInner` looks
-  /// the row up by IDENTITY (`DbChannelList` is backed by a `HashMap.identity`),
-  /// so a foreign instance fails `contains`, falls through to `allChannels`,
-  /// resolves to null, and gets clamped to index 0 — silently launching the
-  /// first channel in the catalog.
-  Future<IptvChannel?> _resolveStartupRow(
-    Map<String, dynamic> payload,
-    bool Function() cancelled,
-  ) async {
-    // Bootstrap case: nothing has ever been watched, so there is no stored
-    // channel to look up. Start on whatever the page already landed on — their
-    // default provider, else Favourites when they have any (see
-    // `_loadSettings`). Deliberately NOT resolved as a stored identity:
-    // there is nothing to match, and no user expectation to get wrong.
-    if (payload[StartupIptvStorage.startupIptvFirstAvailable] == true) {
-      return _resolveFirstAvailableRow(cancelled);
-    }
-
-    final url = payload['url'] as String;
-    final name = payload['name'] as String;
-    final channelNumber = (payload['channelNumber'] as num?)?.toInt();
-
-    // 1. The target's own provider, resolved BEFORE anything is looked up — a
-    //    lookup against the landing playlist's catalog would answer about the
-    //    wrong provider entirely.
-    final target = _startupPlaylistFor(payload);
-    if (target == null) return null;
-    if (_settingsState.selectedPlaylist?.id != target.id) {
-      _filtersSection.onPlaylistChanged(target);
-    }
-
-    final deadline = DateTime.now().add(IptvPlayerState.startupResolveDeadline);
-
-    // 2. Do not read the catalog until the OUTGOING one is gone. `_loadPlaylist`
-    //    sets its in-flight ticket synchronously, but `_loadPlaylistInner`
-    //    clears `_allChannels`/`_dbSnapshot` only after its first awaits — so
-    //    for a window the previous provider's rows are still sitting there, and
-    //    matching against them would resolve a channel from the wrong account.
-    var ready = false;
-    while (!ready && !cancelled() && DateTime.now().isBefore(deadline)) {
-      if (_catalogState.inFlightLoadTicket == null) {
-        ready = true; // load finished (or a cached catalog was already present)
-      } else if (_catalogState.allChannels.isEmpty && _catalogState.dbSnapshot == null) {
-        ready = true; // cleared — anything arriving now belongs to the target
-      } else {
-        await Future<void>.delayed(const Duration(milliseconds: 30));
-      }
-    }
-
-    // 3. Wait for that provider's catalog. Stremio shelves arrive
-    //    progressively, so this waits for the row to APPEAR, not merely for a
-    //    load to finish.
-    while (!cancelled() && DateTime.now().isBefore(deadline)) {
-      // A load for a DIFFERENT playlist means something (a user action, an
-      // addon refresh) moved on from under us — the attempt is void.
-      if (_settingsState.selectedPlaylist?.id != target.id) return null;
-      final snap = _catalogState.dbSnapshot;
-      if (snap != null) {
-        final entry =
-            snap.entryForUrl(url: url, name: name) ??
-            (channelNumber != null
-                ? snap.entryForChannelNumber(channelNumber)
-                : null);
-        if (entry != null) {
-          return _residentDbRow(entry, url, name, channelNumber);
-        }
-      } else if (_catalogState.allChannels.isNotEmpty) {
-        final match = _materializedStartupMatch(url, name, channelNumber);
-        if (match != null) return _adoptStartupCategory(match);
-        // A finished load that still doesn't hold the channel is a real miss;
-        // an in-flight one may still deliver it.
-        if (_catalogState.inFlightLoadTicket == null) return null;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-    }
-    return null;
-  }
-
-  /// First live row of whatever the page is currently showing.
-  ///
-  /// Rows come straight off `filteredChannels`, so they are the facade's own
-  /// resident instances — the identity `_playChannelInner` needs — and no
-  /// category is adopted, because the landing view is exactly what we want.
-  ///
-  /// The walk is capped: a VOD-heavy catalog could otherwise page thousands of
-  /// rows looking for a live one, and if the first few hundred hold none, the
-  /// honest answer is "nothing to start on" rather than a long stall.
-  Future<IptvChannel?> _resolveFirstAvailableRow(
-    bool Function() cancelled,
-  ) async {
-    final deadline = DateTime.now().add(IptvPlayerState.startupResolveDeadline);
-    while (!cancelled() && DateTime.now().isBefore(deadline)) {
-      final channels = _catalogState.filteredChannels;
-      if (channels.isNotEmpty) {
-        final limit = channels.length < 300 ? channels.length : 300;
-        for (var i = 0; i < limit; i++) {
-          final channel = channels[i];
-          if (channel.isLive) return channel;
-        }
-        // A finished load with no live row in reach is a real answer; an
-        // in-flight one (progressive Stremio) may still deliver.
-        if (_catalogState.inFlightLoadTicket == null) return null;
-      } else if (_catalogState.inFlightLoadTicket == null && _settingsState.settingsLoaded) {
-        return null;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-    }
-    return null;
-  }
-
-  /// Convert a catalog position into the facade's filtered index, then read the
-  /// row back out of the live facade so it is a registered, resident instance.
-  Future<IptvChannel?> _residentDbRow(
-    ({int position, IptvChannel channel}) entry,
-    String url,
-    String name,
-    int? storedNumber,
-  ) async {
-    final channel = entry.channel;
-    // Live-only, enforced on the resolved row rather than by filtering — see
-    // the index contract below.
-    if (!channel.isLive) return null;
-    // A channel-number fallback must corroborate on NAME. Numbers are assigned
-    // per load on virtual catalogs, so a shifted numbering is exactly the
-    // condition that triggers this path — and "same group" is worthless
-    // corroboration when hundreds of channels share "Sports".
-    if (channel.url != url &&
-        storedNumber != null &&
-        _normalizedName(channel.name) != _normalizedName(name)) {
-      return null;
-    }
-
-    await _adoptStartupCategoryValue(channel.group);
-    final snap = _catalogState.dbSnapshot;
-    final list = _catalogState.filteredChannels;
-    if (snap == null || list is! DbChannelList) return null;
-
-    // The index MUST be counted under the facade's own filter set. DbChannelList
-    // filters on group + search only — it has no `live` parameter — so counting
-    // live-only rows here and indexing a facade holding live+VOD would land on
-    // a different channel entirely.
-    final index = snap.count(
-      group: list.group,
-      search: list.search,
-      beforePosition: entry.position,
-    );
-    if (index < 0 || index >= list.length) return null;
-    final row = list[index];
-    // Verify against what resolution actually returned, not against the stored
-    // blob: a successful number-fallback legitimately has a different URL, and
-    // checking the stale value would reject every one of them.
-    if (row.url != channel.url || row.name != channel.name) return null;
-    return row;
-  }
-
-  IptvChannel? _materializedStartupMatch(
-    String url,
-    String name,
-    int? storedNumber,
-  ) {
-    for (final channel in _catalogState.allChannels) {
-      if (channel.url == url && channel.name == name && channel.isLive) {
-        return channel;
-      }
-    }
-    if (storedNumber == null) return null;
-    for (final channel in _catalogState.allChannels) {
-      if (channel.channelNumber == storedNumber &&
-          channel.isLive &&
-          _normalizedName(channel.name) == _normalizedName(name)) {
-        return channel;
-      }
-    }
-    return null;
-  }
-
-  /// Materialized lists hand back the very instance the filtered list holds, so
-  /// identity already lines up — only the category needs adopting.
-  Future<IptvChannel?> _adoptStartupCategory(IptvChannel channel) async {
-    await _adoptStartupCategoryValue(channel.group);
-    return _catalogState.filteredChannels.contains(channel) ? channel : null;
-  }
-
-  /// Make the target's own group the active category. Without this the landing
-  /// category can simply exclude the target, and no amount of correct counting
-  /// inside it will ever materialize the row.
-  Future<void> _adoptStartupCategoryValue(String? group) async {
-    if (_catalogState.selectedCategory != group) {
-      setState(() => _catalogState.selectedCategory = group);
-      _filtersSection.applyFilters();
-      // Let the new facade/filtered list settle before it is indexed.
-      await WidgetsBinding.instance.endOfFrame;
-    }
-  }
-
-  static String _normalizedName(String value) =>
-      value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
-
-  /// The provider a stored startup channel belongs to.
-  ///
-  /// Falls back to an Xtream fingerprint (`serverUrl` + `username`) captured
-  /// when the channel was saved: re-adding an account mints a brand-new
-  /// playlist id, so an id-only lookup would lose the channel every time a user
-  /// re-entered their subscription.
-  IptvPlaylist? _startupPlaylistFor(Map<String, dynamic> payload) {
-    final playlistId = payload['playlistId'];
-    if (playlistId is String && playlistId.isNotEmpty) {
-      for (final playlist in _settingsState.playlists) {
-        if (playlist.id == playlistId) return playlist;
-      }
-    }
-    final serverUrl = payload['serverUrl'];
-    final username = payload['username'];
-    if (serverUrl is String && serverUrl.isNotEmpty && username is String) {
-      for (final playlist in _settingsState.playlists) {
-        if (playlist.isXtreamCodes &&
-            playlist.serverUrl == serverUrl &&
-            playlist.username == username) {
-          return playlist;
-        }
-      }
-    }
-    return null;
-  }
-
-  /// Scroll the target into view and focus it, so BACK out of the player lands
-  /// on the channel rather than at the top of the list.
-  ///
-  /// There is no existing scroll-to-index to reuse: the grid's only auto-scroll
-  /// is each row's own `ensureVisible`, fired once a BUILT row takes focus — and
-  /// a distant lazy row is never built and has no focus node.
-  Future<void> _scrollAndFocusStartupRow(IptvChannel row) async {
-    final index = _catalogState.filteredChannels is DbChannelList
-        ? (_catalogState.filteredChannels as DbChannelList).indexOfInstance(row)
-        : _catalogState.filteredChannels.indexOf(row);
-    if (index == null || index < 0) return;
-    // Spotlight has one logical cursor instead of per-row FocusNodes. Hand it
-    // the resolved index directly so a startup target outside the first
-    // viewport becomes the hero selection and the BACK landing before the
-    // player opens. Retry for a few frames if layout just mounted the timeline.
-    if (_spotlightRequestedForDevice && _spotlightUsesTimeline) {
-      for (var attempt = 0; attempt < 5; attempt++) {
-        if (_focusState.spotlightTimelineController.focusChannelAt(index)) {
-          widget.debugOnSpotlightStartupFocus?.call(index);
-          return;
-        }
-        await WidgetsBinding.instance.endOfFrame;
-        if (!mounted) return;
-      }
-    }
-    // The touch-tablet two-pane renders IptvCenteredSelector, which owns its
-    // OWN controller — `_scrollController` drives the grid only, so scrolling it
-    // here would be a no-op. Hand the selector the index through the selection
-    // it already reconciles against instead.
-    if (_selectionState.touchTabletTwoPaneActive) {
-      setState(() => _selectTabletChannel(index, row));
-      return;
-    }
-    if (_focusState.scrollController.hasClients) {
-      final target = (index ~/ _selectionState.gridColumns).toDouble() * (_selectionState.gridRowExtent + 4);
-      final position = _focusState.scrollController.position;
-      if (position.hasContentDimensions) {
-        _focusState.scrollController.jumpTo(
-          target.clamp(position.minScrollExtent, position.maxScrollExtent),
-        );
-      }
-    }
-    // The row has to build before it has a focus node to give focus to, and on
-    // a slow TV that can take more than the next frame.
-    for (var attempt = 0; attempt < 5; attempt++) {
-      await WidgetsBinding.instance.endOfFrame;
-      if (!mounted) return;
-      final node = _focusState.cardFocusNodes[row];
-      if (node != null) {
-        node.requestFocus();
-        return;
-      }
-    }
-  }
-
-  /// Replay an archived programme (Xtream catchup). The replay is launched
-  /// as a single-item on-demand payload rather than through [_playChannel]:
-  /// the timeshift URL is a finite VOD-style stream that isn't part of any
-  /// channel list, and the in-player guide would otherwise point at an
-  /// unrelated channel. Resume/continue-watching ride the normal VOD path —
-  /// the timeshift URL is stable for a given programme, so a half-watched
-  /// replay picks up where it left off.
-  Future<void> _playCatchup(IptvChannel channel, EpgProgramme programme) async {
-    if (_playerState.launchingChannel) return;
-    _playerState.launchingChannel = true;
-    try {
-      // Everything origin-dependent is captured BEFORE the first await: the
-      // first-use dialect probe can run for tens of seconds, and the user
-      // can switch playlists meanwhile — the widget stays mounted, so
-      // `mounted` guards don't cover it. Recording with the switched-to
-      // playlist's id would break the provider-deletion sweep (deleting B
-      // would purge A's replay; deleting A would strand the entry).
-      final originPlaylistId = _favorites.originPlaylistIdFor(channel);
-      final ticket = _catalogState.loadTicket;
-      final replayFromInPlaceSchedule = _selectionState.scheduleChannel?.url == channel.url;
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Preparing replay of "${programme.title}"…'),
-          // Covers the worst-case first-use probe (3 dialects × 10s timeout);
-          // hidden explicitly the moment the probe answers.
-          duration: const Duration(seconds: 30),
-        ),
-      );
-
-      final url = await IptvEpgService.instance.catchupUrl(
-        channel.url,
-        programme,
-      );
-      if (!mounted) return;
-      messenger.hideCurrentSnackBar();
-      // Stale: the playlist reloaded/switched, or the in-place schedule pane
-      // this replay was picked from is gone — a player appearing over
-      // whatever the user moved on to would read as the wrong programme
-      // launching itself. Bottom-sheet replays capture false and skip this
-      // guard because [_scheduleChannel] is never set in that flow.
-      if (ticket != _catalogState.loadTicket) return;
-      if (replayFromInPlaceSchedule && _selectionState.scheduleChannel?.url != channel.url) {
-        return;
-      }
-      if (url == null) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              'Replay not available — the panel did not answer for '
-              '"${programme.title}"',
-            ),
-          ),
-        );
-        return;
-      }
-
-      final replay = IptvChannel(
-        name: programme.title,
-        url: url,
-        logoUrl: channel.logoUrl,
-        group: channel.name, // reads as "on <channel>" in the player UI
-        contentType: 'vod',
-        httpHeaders: channel.httpHeaders,
-      );
-      await IptvHistoryStorage.recordIptvWatch(
-        replay.url,
-        channelName: replay.name,
-        logoUrl: replay.logoUrl,
-        group: replay.group,
-        playlistId: originPlaylistId,
-        httpHeaders: replay.httpHeaders,
-      );
-      if (!mounted) return;
-
-      await VideoPlayerLauncher.push(
-        context,
-        VideoPlayerLaunchArgs(
-          videoUrl: url,
-          title: programme.title,
-          subtitle: channel.name,
-          viewMode: PlaylistViewMode.sorted,
-          iptvChannels: [replay],
-          iptvStartIndex: 0,
-          httpHeaders: replay.playbackHeaders,
-        ),
-      );
-      // Same parked preview re-arm discipline as _playChannelInner.
-      if (mounted && (widget.isTelevision || _selectionState.tvTwoPaneActive)) {
-        _previewState.previewRearmPending = true;
-      }
-      if (!widget.isTelevision && mounted) {
-        if (_selectionState.touchTabletTwoPaneActive) {
-          _flushPreviewRearm();
-        } else {
-          await _refreshAfterPlayback();
-        }
-      }
-    } finally {
-      _playerState.launchingChannel = false;
-    }
-  }
-
-  /// [shouldCancel] is polled after the awaits below and immediately before the
-  /// player is pushed. Checking only before `_playChannel` is not enough: this
-  /// method still awaits a Stremio candidate resolve and a watch record, and a
-  /// BACK landing in either window would otherwise still end in a player.
-  Future<void> _playChannelInner(
-    IptvChannel channel, {
-    bool Function()? shouldCancel,
-  }) async {
-    // Series entries aren't playable — their sentinel URL routes to the
-    // merged series page, whose episode list does the actual playing.
-    if (channel.contentType == 'series') {
-      await _openSeriesDetail(channel);
-      return;
-    }
-    // Stremio channels have no stream URL yet — resolve the ladder now (the
-    // preview's winner cache usually makes this instant) and launch on the
-    // best candidate. The in-player guide still gets the full mixed list;
-    // both players resolve further stremio-keyed channels on switch.
-    var initialUrl = channel.url;
-    if (StremioIptvService.isStremioChannelUrl(channel.url)) {
-      // Explicit play intent: a cached "nothing playable" is re-checked
-      // fresh, and an empty answer explains itself (addon down vs. no
-      // streams) instead of a blanket "not playable".
-      final candidates = await StremioIptvService.instance.resolveCandidates(
-        channel.url,
-        refreshIfEmpty: true,
-      );
-      if (!mounted) return;
-      if (candidates.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              StremioIptvService.instance.unplayableMessage(
-                channel.url,
-                channel.name,
-              ),
-            ),
-          ),
-        );
-        return;
-      }
-      initialUrl = candidates.first.url;
-      if (shouldCancel != null && shouldCancel()) return;
-    }
-    // Remember on-demand plays so the Continue-watching shelf can rebuild the
-    // row later without re-fetching the panel. Recorded BEFORE the launch:
-    // the player process can be killed outright on TV, and a shelf entry with
-    // no saved position simply doesn't show up (the join drops it).
-    //
-    // Live channels are skipped — "62% through Sky Sports" is meaningless.
-    if (!channel.isLive) {
-      await IptvHistoryStorage.recordIptvWatch(
-        channel.url,
-        channelName: channel.name,
-        logoUrl: channel.logoUrl,
-        group: channel.group,
-        playlistId: _favorites.originPlaylistIdFor(channel),
-        httpHeaders: channel.httpHeaders,
-      );
-    }
-
-    // The in-player guide mirrors what the user was browsing: the current
-    // category/search filter, not the whole playlist. (Also what keeps the
-    // launch payload small when a filter is active.)
-    var channels = _catalogState.filteredChannels.contains(channel)
-        ? _catalogState.filteredChannels
-        : _catalogState.allChannels;
-    var channelIndex = channels is DbChannelList
-        // Identity lookup against resident pages — the tapped row is by
-        // definition resident; a paged indexOf would walk the catalog.
-        ? (channels.indexOfInstance(channel) ?? 0)
-        : channels.indexOf(channel);
-    if (channelIndex < 0) channelIndex = 0;
-    if (channels is DbChannelList) {
-      // Materialize exactly the launch window from SQL — the facade itself
-      // must never be handed to the launcher (serializing it would page the
-      // entire catalog).
-      final source = channels;
-      final total = source.length;
-      final lo = total > IptvPlayerState.kMaxPlayerChannels
-          ? (channelIndex - IptvPlayerState.kMaxPlayerChannels ~/ 2).clamp(
-              0,
-              total - IptvPlayerState.kMaxPlayerChannels,
-            )
-          : 0;
-      channels = source.effectiveSnapshot.page(
-        offset: lo,
-        limit: IptvPlayerState.kMaxPlayerChannels,
-        group: source.group,
-        search: source.search,
-      );
-      if (channels.isEmpty) {
-        // The pinned generation was swept between the row painting and OK
-        // landing (a background revalidate finished in that window). With an
-        // empty list, `clamp(0, -1)` throws ArgumentError in release — play
-        // the tapped channel alone instead; the guide simply has one row
-        // until the next open.
-        channels = [channel];
-      }
-      channelIndex = (channelIndex - lo).clamp(0, channels.length - 1);
-    } else if (channels.length > IptvPlayerState.kMaxPlayerChannels) {
-      final lo = (channelIndex - IptvPlayerState.kMaxPlayerChannels ~/ 2).clamp(
-        0,
-        channels.length - IptvPlayerState.kMaxPlayerChannels,
-      );
-      channels = channels.sublist(lo, lo + IptvPlayerState.kMaxPlayerChannels);
-      channelIndex -= lo;
-    }
-    final launchSource = _settingsState.selectedPlaylist;
-    final playerChannels = launchSource == null
-        ? channels
-        : [
-            for (final item in channels)
-              _playerPayload.playerChannelWithOrigin(item, launchSource),
-          ];
-    if (!mounted) return;
-    // Last gate before the player exists. Everything above may have taken
-    // seconds (Stremio ladder, catalog page, watch record).
-    if (shouldCancel != null && shouldCancel()) return;
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: initialUrl,
-        title: channel.name,
-        subtitle: channel.group ?? 'IPTV',
-        channelName: channel.name,
-        channelNumber: channel.channelNumber,
-        showChannelName: channel.isLive,
-        viewMode: PlaylistViewMode.sorted,
-        iptvChannels: playerChannels,
-        iptvStartIndex: channelIndex,
-        iptvCategories: _playerPayload.fullCategoryList(),
-        iptvSourceId: _settingsState.selectedPlaylist?.id,
-        iptvSourceName: _settingsState.selectedPlaylist?.name,
-        iptvSelectedCategory: _filtersSection.effectiveCategory,
-        iptvContentType: _settingsState.selectedPlaylist?.isXtreamCodes == true
-            ? _catalogState.selectedContentType
-            : (channel.isLive ? 'live' : 'vod'),
-        iptvSources: _playerPayload.playerSourcePayload(),
-        iptvLists: _playerPayload.playerListsPayload(),
-        iptvBrowseProvider: _playerBrowse.providePlayerIptvBrowse,
-        // Opening headers for the launch channel (later zaps read them off the
-        // channel they switch to). Stremio-addon links are already-resolved CDN
-        // URLs, so they keep the addon's own defaults.
-        httpHeaders: StremioIptvService.isStremioChannelUrl(channel.url)
-            ? null
-            : channel.playbackHeaders,
-      ),
-    );
-    // Re-arm the preview stage (see [_previewEpoch]) — but NOT yet. On TV,
-    // push() returns the moment the native player activity STARTS, while this
-    // activity is still resumed: remounting the stage now races the cover
-    // (the fresh backdrop's dwell can open a stream UNDER the real player).
-    // Park the re-arm; it completes on app resume (native path) or on the
-    // next row focus (in-app fallback, whose route is awaited to the pop).
-    // Desktop two-pane parks it too — push() can hand off to an EXTERNAL
-    // player app and return while it's still playing, so the next hover
-    // (a sign the user is back in the app) is the safe re-arm point.
-    if (mounted && (widget.isTelevision || _selectionState.tvTwoPaneActive)) {
-      _previewState.previewRearmPending = true;
-    }
-    // Off TV, push() is awaited to the pop — the position just written is
-    // already on disk, so refresh now. On TV push() can return while the
-    // native player is still starting, and rebuilding the list under a
-    // launching player is the worst possible moment for it; the parked
-    // re-arm below is the designated "we're back" hook and refreshes there.
-    if (!widget.isTelevision) {
-      if (_selectionState.touchTabletTwoPaneActive) {
-        _flushPreviewRearm();
-      } else {
-        await _refreshAfterPlayback();
-      }
-    }
-  }
-
-  /// Open the merged series page for an Xtream series entry. Playback happens
-  /// inside that page (episode list / Resume), so none of [_playChannelInner]'s
-  /// launch bookkeeping applies here.
-  Future<void> _openSeriesDetail(IptvChannel channel) async {
-    var playlist = _settingsState.selectedPlaylist;
-    if (playlist == null) return;
-    // Reached from a virtual shelf (Continue watching): the selected playlist
-    // is the shelf itself, not the provider — resolve the series' real Xtream
-    // provider from the origin id stored per row.
-    if (!playlist.isXtreamCodes) {
-      final originId = _favorites.originPlaylistIdFor(channel);
-      IptvPlaylist? origin;
-      for (final p in _settingsState.playlists) {
-        if (p.id == originId && p.isXtreamCodes) {
-          origin = p;
-          break;
-        }
-      }
-      if (origin == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("This series' provider is no longer available"),
-            ),
-          );
-        }
-        return;
-      }
-      playlist = origin;
-    }
-    // Empty the stage BEFORE the route covers it: the app-resume path after
-    // in-page playback flushes the parked re-arm, and a remounted backdrop
-    // must not open a stream underneath the detail route. With the shown
-    // channel cleared, an epoch bump remounts nothing.
-    _clearPreview();
-    await openXtreamSeries(
-      context,
-      playlist: playlist,
-      series: channel,
-      isTelevision: widget.isTelevision,
-    );
-    if (!mounted) return;
-    // Episodes watched inside the page entered the continue-watching shelf —
-    // reflect that (and any position changes) now. The preview re-arms itself
-    // on the next row focus.
-    await _refreshAfterPlayback();
-  }
-
-  /// Offer resume/removal for movies, series and catch-up on the CW shelf.
-  Future<void> _showContinueWatchingActions(IptvChannel channel) async {
-    // Capture the provider before opening a dialog: series IDs are only
-    // unique within their provider, and the selected shelf can change.
-    final playlistId = _favorites.originPlaylistIdFor(channel) ?? '';
-    final seriesId = channel.attributes['series_id'] ?? '';
-    final isSeries = channel.contentType == 'series';
-    final action = await showCwCardMenu(
-      context,
-      title: channel.name,
-      posterUrl: channel.logoUrl,
-      isTelevision: widget.isTelevision,
-      playLabel: isSeries ? 'Open series' : 'Resume',
-      playDescription: isSeries ? 'Choose an episode' : 'Continue playback',
-      removeDescription: isSeries
-          ? 'Clear saved progress for all episodes of this series.'
-          : 'Clear saved progress for this item.',
-    );
-    if (!mounted || action == null) return;
-    if (action == CwCardAction.play) {
-      await _playChannel(channel);
-      return;
-    }
-    try {
-      if (isSeries) {
-        if (seriesId.isEmpty) return;
-        await IptvHistoryStorage.removeIptvContinueWatchingSeries(
-          playlistId: playlistId,
-          seriesId: seriesId,
-        );
-      } else {
-        await IptvHistoryStorage.removeIptvContinueWatchingItem(channel.url);
-      }
-      if (!mounted) return;
-      await _refreshAfterPlayback();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Removed from Continue Watching')),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not remove item. Please try again.')),
-      );
-    }
-  }
-
-  /// Refresh progress and shelf membership without resetting source selection.
-  Future<void> _refreshAfterPlayback() async {
-    if (!mounted) return;
-    // Read the shelf ONCE and reuse it below. Each read decodes both the
-    // watch-history map and the (potentially large) shared resume map off the
-    // UI isolate, and this runs at the exact moment the user lands back on
-    // the list — the worst time to do it three times over.
-    final items = await IptvHistoryStorage.getIptvContinueWatching();
-    if (!mounted) return;
-    // A recording may have been started (or stopped) from inside the player —
-    // the header's record-dot must not lag until the next resume.
-    _armAndroidRecStateRefresh();
-    await _favorites.loadFavorites();
-    if (!mounted) return;
-    _refreshContinueShelfPresence(items.length);
-    if (!mounted) return;
-
-    // A list shelf can have changed under the user while the player was up —
-    // both players can add and remove memberships from their own guide. This
-    // covers Favorites AND custom lists; without the custom-list arm a
-    // channel removed in the native guide stays on screen until a full
-    // reload of the page.
-    final shelf = _settingsState.selectedPlaylist;
-    final shelfListId = (shelf?.isFavorites ?? false)
-        ? IptvFavoritesStorage.iptvFavoritesListId
-        : shelf?.customListId;
-    if (shelfListId != null) {
-      final stored = {
-        for (final entry in _membershipState.membership.entries)
-          if (entry.value.contains(shelfListId)) entry.key,
-      };
-      final current = {for (final channel in _catalogState.allChannels) channel.url};
-      if (!setEquals(stored, current)) {
-        await _catalogLoading.loadPlaylist(shelf!);
-        return;
-      }
-    }
-
-    // The shelf can empty out from under the user — they just finished its
-    // last item. Leaving it selected strands the picker: with no matching
-    // option the dropdown renders the FIRST option's label instead, so it
-    // would read "Favorites" above an empty shelf.
-    if (items.isEmpty && (_settingsState.selectedPlaylist?.isContinueWatching ?? false)) {
-      final remaining = [
-        for (final p in _settingsState.playlists)
-          if (!p.isContinueWatching) p,
-      ];
-      if (remaining.isNotEmpty) {
-        _filtersSection.onPlaylistChanged(remaining.first);
-        return;
-      }
-    }
-
-    if (_settingsState.selectedPlaylist?.isContinueWatching ?? false) {
-      // Rebuild only when the shelf's membership actually changed — an item
-      // finished and dropped off, or a newly watched one arrived. A reload
-      // disposes every row's focus node (see _loadPlaylist), so doing it for
-      // a mere position bump would scramble DPAD focus to redraw one bar.
-      // Compare against the SAME collapsed keys the shelf renders (a series'
-      // episodes fold to one sentinel row — see _buildContinueResult), or a
-      // series would read as changed on every return and force a reload.
-      final fresh = {
-        for (final item in items)
-          ((item['seriesId'] as String?)?.isNotEmpty ?? false)
-              ? 'xtream-series://${(item['playlistId'] as String?) ?? ''}'
-                    '/${item['seriesId']}'
-              : item['url'] as String,
-      };
-      final current = {for (final channel in _catalogState.allChannels) channel.url};
-      if (!setEquals(fresh, current)) {
-        await _catalogLoading.loadPlaylist(IptvMembershipState.continuePlaylist);
-        return;
-      }
-    }
-    await _virtualResults.loadProgress(_catalogState.loadTicket, _catalogState.allChannels);
-  }
-
-  /// Add or drop the Continue-watching entry in the picker to match whether
-  /// anything is actually half-watched — so the shelf appears after the very
-  /// first movie rather than on the next visit to the page, and disappears
-  /// once the last item is finished. Selection is left untouched.
-  void _refreshContinueShelfPresence(int itemCount) {
-    final hasContinue = itemCount > 0;
-    final present = _settingsState.playlists.any((p) => p.isContinueWatching);
-    if (hasContinue == present && itemCount == _recordingState.continueWatchingCount) return;
-
-    setState(() {
-      _recordingState.continueWatchingCount = itemCount;
-      if (hasContinue == present) return;
-      if (hasContinue) {
-        // Directly after Favorites, or first when there is no Favorites row.
-        final favoritesIndex = _settingsState.playlists.indexWhere((p) => p.isFavorites);
-        _settingsState.playlists = [..._settingsState.playlists]
-          ..insert(favoritesIndex + 1, IptvMembershipState.continuePlaylist);
-      } else {
-        _settingsState.playlists = [
-          for (final p in _settingsState.playlists)
-            if (!p.isContinueWatching) p,
-        ];
-      }
-    });
-  }
-
-  /// Re-sync the custom-list rows in the picker after the user created,
-  /// renamed, deleted or reordered one, without disturbing what they are
-  /// looking at. Same reasoning as [_refreshContinueShelfPresence]: going
-  /// through _loadSettings would re-derive the landing selection.
-  void _refreshListShelfPresence() {
-    if (!mounted) return;
-    final desired = [for (final list in _favorites.customLists) IptvFavorites.listPlaylist(list)];
-    final current = [
-      for (final p in _settingsState.playlists)
-        if (p.isCustomList) p,
-    ];
-    // Compare names too, not just ids — a rename has to reach the picker.
-    String signature(List<IptvPlaylist> entries) =>
-        entries.map((p) => '${p.id}\x00${p.name}').join('\x01');
-    if (signature(desired) == signature(current)) return;
-
-    // Rebuild in canonical order: Favorites, Continue, lists, real providers.
-    final keptVirtuals = [
-      for (final p in _settingsState.playlists)
-        if (p.isFavorites || p.isContinueWatching) p,
-    ];
-    final realPlaylists = [
-      for (final p in _settingsState.playlists)
-        if (!p.isFavorites && !p.isContinueWatching && !p.isCustomList) p,
-    ];
-    setState(() {
-      _settingsState.playlists = [...keptVirtuals, ...desired, ...realPlaylists];
-    });
-
-    // The list being viewed can have just been deleted. Leaving it selected
-    // strands the picker: with no matching option the dropdown renders the
-    // FIRST option's label, so it would read "Favorites" above the wrong grid.
-    final selected = _settingsState.selectedPlaylist;
-    if (selected != null && !_settingsState.playlists.any((p) => p.id == selected.id)) {
-      final fallback = _settingsState.playlists.isEmpty ? null : _settingsState.playlists.first;
-      if (fallback != null) _filtersSection.onPlaylistChanged(fallback);
-    }
-  }
 
 
 
-  /// Complete a parked preview re-arm (see [_playChannel]).
-  void _flushPreviewRearm() {
-    if (!_previewState.previewRearmPending || !mounted) return;
-    _previewState.previewRearmPending = false;
-    // The startup launch parks its preview suppression here too — this is the
-    // designated "we're actually back" hook, and the stage must not remount
-    // while the player it launched is still coming up.
-    _playerState.startupLaunchActive = false;
-    _previewState.previewEpoch.value++;
-    // This fires only after real playback, on both TV return paths (app
-    // resume for the native player, next row focus for the in-app fallback) —
-    // so it is also exactly when the position the player just saved should be
-    // pulled back into the bars and the shelf.
-    _refreshAfterPlayback();
-  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _flushPreviewRearm();
+      _previewHandoff.flushPreviewRearm();
       // Android schedules fire NATIVELY (alarm → service) — no in-process
       // revision bump can see that. Coming back to the foreground is the
       // one reliable moment to reconcile the rail's Scheduled badge and the
       // stage's Record↔Stop state.
-      unawaited(_refreshScheduledCount());
-      unawaited(_refreshAndroidRecordingState());
+      unawaited(_recordingSupport.refreshScheduledCount());
+      unawaited(_androidRecording.refreshAndroidRecordingState());
     }
   }
 
-  /// Sidebar enter = lights out for the preview (Home's grammar: the menu
-  /// never competes with a playing stage). Dropping the shown channel unmounts
-  /// the backdrop, which releases its engine synchronously; refocusing a
-  /// channel row re-arms the stage.
-  void _onTvSidebarFocusChanged(bool focused) {
-    if (focused) {
-      _setSpotlightSourcesExpanded(false);
-      _clearPreview();
-    }
-  }
-
-  /// Every route into IPTV settings from this page is an "Add playlist"
-  /// affordance — the source dropdown's entry, the filter bar's picker, the
-  /// empty state's button — so open settings ON the add form rather than
-  /// dropping the user at its default landing to go hunting for it.
-  // ── Command Center: recording plumbing ──────────────────────────────────
-
-  /// Recording availability for the stage. Deny-by-default: affordances only
-  /// ever appear after a positive answer.
-  Future<void> _initRecordingSupport() async {
-    var can = false;
-    if (!kIsWeb && Platform.isAndroid) {
-      // needs_permission counts as available — the affordances are how the
-      // pre-Q storage grant gets requested in the first place.
-      can =
-          await LiveRecordingService.engineEnabled() &&
-          (await LiveRecordingService.engineSupport()) != 'unsupported';
-    } else {
-      can = DesktopRecordingService.instance.isSupported;
-    }
-    if (!mounted) return;
-    if (can != _recordingState.pageCanRecord) setState(() => _recordingState.pageCanRecord = can);
-    unawaited(_refreshScheduledCount());
-    unawaited(_refreshAndroidRecordingState());
-  }
-
-
-
-  /// Re-read the rail's per-source counts from the catalog. Debounced: a
-  /// refresh sweep across several sources lands as ONE recompute, and the
-  /// reads themselves are a handful of indexed lookups.
-  void _recomputeSourceCounts() {
-    _recordingState.sourceCountsDebounce?.cancel();
-    _recordingState.sourceCountsDebounce = Timer(const Duration(milliseconds: 300), () {
-      if (!mounted || !IptvCatalogDb.isOpen) return;
-      final counts = <String, int>{};
-      for (final p in _settingsState.playlists) {
-        if (p.isVirtual) continue;
-        try {
-          final stats = IptvSourceStatsLoader.read(p);
-          if (stats.cached) counts[p.id] = stats.total;
-        } catch (_) {}
-      }
-      if (!mapEquals(counts, _recordingState.sourceCounts)) {
-        setState(() => _recordingState.sourceCounts = counts);
-      }
-    });
-  }
-
-  Future<void> _refreshScheduledCount() async {
-    var count = 0;
-    if (!kIsWeb && Platform.isAndroid) {
-      count = (await LiveRecordingService.listSchedules()).length;
-    } else if (DesktopScheduleService.instance.isSupported) {
-      count = (await DesktopScheduleService.instance.list()).length;
-    }
-    if (mounted && count != _recordingState.scheduledCount) {
-      setState(() => _recordingState.scheduledCount = count);
-    }
-  }
-
-  void _openScheduledRecordings() {
-    unawaited(
-      Navigator.of(context)
-          .push(MaterialPageRoute<void>(builder: (_) => const RecordingsPage()))
-          .then((_) {
-            unawaited(_refreshScheduledCount());
-            // A capture stopped inside the hub must flip the stage's
-            // Record button back too.
-            unawaited(_refreshAndroidRecordingState());
-          }),
-    );
-  }
-
-  /// LIVE channels with a capturable URL only. The URL-shape check alone
-  /// would also pass VOD movies (direct http, non-segmented) — and "Record"
-  /// on a movie is a broken duplicate of Download, spinning the engine on a
-  /// static file for up to 6 hours.
-  /// Any capture running right now, either backend — drives the classic
-  /// header's record-dot. Android state comes from the same url→task map the
-  /// stage uses (refreshed at init, on resume, and on hub/player returns);
-  /// desktop reads the service directly and repaints via its revision
-  /// listener.
-  bool get _anyRecordingLive =>
-      _recordingState.androidRecordingsByUrl.isNotEmpty ||
-      (DesktopRecordingService.instance.isSupported &&
-          DesktopRecordingService.instance.captures.isNotEmpty);
-
-  bool _channelEngineRecordable(IptvChannel channel) =>
-      channel.isLive &&
-      LiveRecordingService.engineRecordableUrl(channel.url) != null;
-
-  String _stageRecordingFileName(String channelName) {
-    final safeName = channelName
-        .replaceAll(RegExp(r'[^A-Za-z0-9 _-]'), '')
-        .trim()
-        .replaceAll(RegExp(r'\s+'), '_');
-    var base = safeName.isEmpty ? 'recording' : safeName;
-    if (base.length > 60) base = base.substring(0, 60);
-    final now = DateTime.now();
-    String two(int v) => v.toString().padLeft(2, '0');
-    return '${base}_${now.year}${two(now.month)}${two(now.day)}_'
-        '${two(now.hour)}${two(now.minute)}${two(now.second)}.ts';
-  }
 
 
 
 
-  void _armAndroidRecStateRefresh() {
-    if (kIsWeb || !Platform.isAndroid || !_recordingState.pageCanRecord) return;
-    _recordingState.androidRecStateDebounce?.cancel();
-    _recordingState.androidRecStateDebounce = Timer(const Duration(milliseconds: 700), () {
-      unawaited(_refreshAndroidRecordingState());
-    });
-  }
 
-  Future<void> _refreshAndroidRecordingState() async {
-    if (kIsWeb || !Platform.isAndroid || !_recordingState.pageCanRecord) return;
-    final recordings = await LiveRecordingService.query();
-    if (!mounted) return;
-    final fresh = <String, String>{
-      for (final r in recordings)
-        if (r.isRecording) r.url: r.taskId,
-    };
-    if (!mapEquals(fresh, _recordingState.androidRecordingsByUrl)) {
-      setState(() {
-        _recordingState.androidRecordingsByUrl
-          ..clear()
-          ..addAll(fresh);
-      });
-    }
-  }
 
-  /// The Android engine task recording [channel], if any (url or Xtream twin).
-  String? _androidEngineTaskFor(IptvChannel channel) {
-    final direct = _recordingState.androidRecordingsByUrl[channel.url];
-    if (direct != null) return direct;
-    final twin = LiveRecordingService.xtreamTsTwin(channel.url);
-    return twin != null ? _recordingState.androidRecordingsByUrl[twin] : null;
-  }
 
-  Future<void> _stageStopAndroidRecording(
-    IptvChannel channel,
-    String taskId,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final ok = await LiveRecordingService.stop(taskId);
-    if (!mounted) return;
-    setState(() {
-      _recordingState.androidRecordingsByUrl.removeWhere((_, id) => id == taskId);
-    });
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          ok
-              ? 'Recording stopped — saving to Downloads/Debrify/Recordings'
-              : "Couldn't stop recording",
-        ),
-      ),
-    );
-  }
 
-  /// The desktop capture currently recording [channel], if any — matched on
-  /// the channel's URL or its Xtream `.ts` twin. Drives the stage's
-  /// Record↔Stop button: with no notifications on desktop, that button is a
-  /// page-started capture's ONLY stop surface.
-  DesktopRecordingCapture? _desktopCaptureFor(IptvChannel channel) {
-    final service = DesktopRecordingService.instance;
-    final direct = service.captureForUrl(channel.url);
-    if (direct != null) return direct;
-    final twin = LiveRecordingService.xtreamTsTwin(channel.url);
-    return twin != null ? service.captureForUrl(twin) : null;
-  }
 
-  Future<void> _stageStopDesktopRecording(
-    DesktopRecordingCapture capture,
-  ) async {
-    final savedPath = capture.path;
-    final messenger = ScaffoldMessenger.of(context);
-    final bytes = await capture.stop();
-    if (!mounted) return;
-    setState(() {}); // flip the stage button back to Record
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          bytes > 0
-              ? 'Recording saved: $savedPath'
-              : 'Recording failed — nothing was captured',
-        ),
-      ),
-    );
-  }
 
-  /// Stage "Record": start a background capture of [channel] WITHOUT playing
-  /// it — the engine on Android, the desktop capture elsewhere.
-  Future<void> _stageRecordNow(IptvChannel channel) async {
-    final recordUrl = LiveRecordingService.engineRecordableUrl(channel.url);
-    if (recordUrl == null) return;
-    final messenger = ScaffoldMessenger.of(context);
-    // Both recorders behind this button are raw HTTP byte-copiers, and this
-    // is the one Record surface with NO player to probe the format. A URL
-    // that carries no extension can still answer with an HLS playlist — the
-    // engine then kills the capture at its first bytes, long after this code
-    // has told the user it started. Ask the server first; only an
-    // affirmative playlist answer blocks (see [servesPlaylist]).
-    if (!LiveRecordingService.isSchedulableUrl(recordUrl)) {
-      // The probe is capped at 3s but still long enough that a silent button
-      // reads as broken on a remote — say what's happening.
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Checking channel…'),
-          duration: Duration(seconds: 3),
-        ),
-      );
-      final playlist = await LiveRecordingService.servesPlaylist(
-        recordUrl,
-        headers: channel.playbackHeaders,
-      );
-      if (!mounted) return;
-      if (playlist) {
-        messenger.hideCurrentSnackBar();
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              "${channel.name} can't be recorded — it's an adaptive (HLS) "
-              'stream. Recording works on progressive/TS channels.',
-            ),
-          ),
-        );
-        return;
-      }
-      messenger.hideCurrentSnackBar();
-    }
-    if (!mounted) return;
-    if (!kIsWeb && Platform.isAndroid) {
-      if (!await LiveRecordingService.ensureEngineReady()) {
-        if (!mounted) return;
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Storage access is needed to save recordings'),
-          ),
-        );
-        return;
-      }
-      if (!mounted) return;
-      if (!await ensureRecordingCapacity(context)) return;
-      if (!mounted) return;
-      final result = await LiveRecordingService.start(
-        url: recordUrl,
-        fileName: _stageRecordingFileName(channel.name),
-        channelName: channel.name,
-        headers: channel.playbackHeaders,
-        connectionResourceId: _recordingResourceFor(
-          channel,
-        )?.connectionResourceId,
-        resourceAuthorizationRevision: _recordingResourceFor(
-          channel,
-        )?.connectionResourceRevision,
-      );
-      if (!mounted) return;
-      if (result.ok) {
-        // Optimistic: the stage flips to Stop immediately; the debounced
-        // query keeps it honest afterwards.
-        setState(() => _recordingState.androidRecordingsByUrl[recordUrl] = result.id!);
-      }
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            result.ok
-                ? 'Recording ${channel.name} — stop from here or the '
-                      'notification'
-                : switch (result.errorCode) {
-                    'recording_limit_reached' =>
-                      'Recording limit reached \u2014 free a slot or raise '
-                          'the limit in IPTV settings',
-                    _ => "Couldn't start recording",
-                  },
-          ),
-        ),
-      );
-      return;
-    }
-    if (!DesktopRecordingService.instance.isSupported) return;
-    if (!await ensureRecordingCapacity(context)) return;
-    if (!mounted) return;
-    final path = await DesktopScheduleService.buildRecordingPath(channel.name);
-    if (!mounted) return;
-    // No onFinished: the revision listener already flips Stop back to Record,
-    // and endings are announced app-wide by the reporter in main() — which,
-    // unlike this widget, is still around when the capture outlives the page.
-    final capture = await DesktopRecordingService.instance.start(
-      url: recordUrl,
-      path: path,
-      channelName: channel.name,
-      headers: channel.playbackHeaders,
-      connectionResourceId: _recordingResourceFor(
-        channel,
-      )?.connectionResourceId,
-      resourceAuthorizationRevision: _recordingResourceFor(
-        channel,
-      )?.connectionResourceRevision,
-    );
-    if (!mounted) return;
-    if (capture != null) setState(() {}); // show Stop immediately
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          capture == null
-              ? "Couldn't start recording"
-              : 'Recording ${channel.name} — stop from this Record button; '
-                    'runs while Debrify is open',
-        ),
-      ),
-    );
-  }
 
-  /// REC handler for the page's guide surfaces (row-opened sheet, full-day
-  /// pane), or null when recording is unavailable or the channel isn't
-  /// schedulable — a null hides the REC tags entirely.
-  void Function(EpgProgramme programme)? _recordProgrammeActionFor(
-    IptvChannel channel,
-  ) {
-    if (!_recordingState.pageCanRecord ||
-        !LiveRecordingService.isSchedulableUrl(channel.url)) {
-      return null;
-    }
-    return (programme) {
-      unawaited(() async {
-        final message = await _scheduleProgrammeFromStage(channel, programme);
-        if (message != null && mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(message)));
-        }
-      }());
-    };
-  }
 
-  /// Stage schedule row → REC. Same flow the channel sheet uses: confirm
-  /// dialog, platform-branched backend, honest result copy. Returns the
-  /// message the stage shows (null = dismissed).
-  Future<String?> _scheduleProgrammeFromStage(
-    IptvChannel channel,
-    EpgProgramme programme,
-  ) async {
-    if (!LiveRecordingService.isSchedulableUrl(channel.url)) {
-      return "This channel can't be scheduled — recording needs a direct TS "
-          'or Xtream stream';
-    }
-    final recordUrl = LiveRecordingService.engineRecordableUrl(channel.url);
-    if (recordUrl == null || !mounted) return null;
-    if (!kIsWeb &&
-        Platform.isAndroid &&
-        !await LiveRecordingService.ensureEngineReady()) {
-      return 'Storage access is needed to save recordings';
-    }
-    if (!mounted) return null;
-    if (!await ensureRecordingCapacity(
-      context,
-      startMs: programme.start.millisecondsSinceEpoch,
-      endMs: programme.stop.millisecondsSinceEpoch,
-      candidateUrl: recordUrl,
-    )) {
-      return null;
-    }
-    if (!mounted) return null;
-    String clock(DateTime t) => MaterialLocalizations.of(
-      context,
-    ).formatTimeOfDay(TimeOfDay.fromDateTime(t));
-    final airsNow =
-        !programme.start.isAfter(DateTime.now()) &&
-        programme.stop.isAfter(DateTime.now());
-    final app = AppThemeScope.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: app.iptv.modalBg,
-        title: Text(
-          'Record programme',
-          style: TextStyle(color: app.core.tx, fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          '${programme.title}\n'
-          '${channel.name} · ${clock(programme.start)} – '
-          '${clock(programme.stop)}'
-          '${airsNow ? '\n\nAlready airing — records the rest, '
-                    'from now until it ends.' : ''}',
-          style: TextStyle(color: app.core.tx.withAlpha(0xB3), height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            autofocus: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Record'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return null;
-    final resource = _recordingResourceFor(channel);
-    final result = (!kIsWeb && Platform.isAndroid)
-        ? await LiveRecordingService.schedule(
-            url: recordUrl,
-            channelName: channel.name,
-            programmeTitle: programme.title,
-            startMs: programme.start.millisecondsSinceEpoch,
-            endMs: programme.stop.millisecondsSinceEpoch,
-            headers: channel.playbackHeaders,
-            connectionResourceId: resource?.connectionResourceId,
-            resourceAuthorizationRevision: resource?.connectionResourceRevision,
-          )
-        : await DesktopScheduleService.instance.add(
-            url: recordUrl,
-            channelName: channel.name,
-            programmeTitle: programme.title,
-            startMs: programme.start.millisecondsSinceEpoch,
-            endMs: programme.stop.millisecondsSinceEpoch,
-            headers: channel.playbackHeaders,
-            connectionResourceId: resource?.connectionResourceId,
-            resourceAuthorizationRevision: resource?.connectionResourceRevision,
-          );
-    unawaited(_refreshScheduledCount());
-    if (result.errorCode == 'exact_alarms_required') {
-      return 'Allow "Alarms & reminders" for Debrify to schedule recordings';
-    }
-    return result.ok
-        ? (airsNow
-              ? 'Recording starts in a few seconds'
-              : 'Recording scheduled')
-        : switch (result.errorCode) {
-            'duplicate' => 'Already scheduled',
-            'overlap' => 'Overlaps another scheduled recording',
-            'bad_time' => 'This programme is already over',
-            _ => "Couldn't schedule recording",
-          };
-  }
 
-  void _navigateToSettings({bool openAddSource = true}) {
-    // Captured for the EPG-URL-edit case below: _loadSettings only reloads
-    // the playlist when the SELECTION changes, so an edit to the current
-    // playlist's guide URL would otherwise sit inert until a manual playlist
-    // switch — "EPG URL saved" with nothing happening.
-    final beforeId = _settingsState.selectedPlaylist?.id;
-    final beforeEpgUrl = _settingsState.selectedPlaylist?.epgUrl;
-    // Settings owns the hidden-categories manager, so a trip through it can
-    // reveal (or hide) a category behind this page's back. Captured here
-    // because _loadSettings only reloads the catalog when the SELECTION
-    // changes — otherwise the facades keep the row count and category list
-    // they were built with while the category was hidden.
-    final beforeHidden = _catalogState.hiddenCategories;
-    final beforeCatalogKey = _catalogState.dbSnapshot?.catalogKey;
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => IptvSettingsPage(openAddSource: openAddSource),
-          ),
-        )
-        .then((_) async {
-          // Reload settings when returning
-          await _settingsLoading.loadSettings();
-          if (!mounted) return;
-          // Only for the SAME catalog: a settings trip that changed the
-          // selection has already been re-presented from scratch, hidden set
-          // included, and comparing across two catalogs' rules is meaningless.
-          final snap = _catalogState.dbSnapshot;
-          if (snap != null &&
-              snap.catalogKey == beforeCatalogKey &&
-              !setEquals(
-                beforeHidden,
-                IptvCatalogDb.hiddenGroups(snap.catalogKey),
-              )) {
-            await _categoryActions.refreshAfterHiddenChange();
-            if (!mounted) return;
-          }
-          // Settings is where the recording-engine toggle lives: re-probe so
-          // enabling exposes the stage/rail affordances immediately, and
-          // disabling actually takes them away instead of leaving Record and
-          // scheduling active until the page remounts.
-          unawaited(_initRecordingSupport());
-          final current = _settingsState.selectedPlaylist;
-          final result = _catalogState.lastLoadResult;
-          if (current != null &&
-              current.id == beforeId &&
-              current.epgUrl != beforeEpgUrl &&
-              result != null) {
-            _guideContext.updateEpgContext(current, result, _catalogState.loadTicket);
-          }
-        });
-  }
 
-  void _navigateToManageSources() {
-    _navigateToSettings(openAddSource: false);
-  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   /// Focus the first filter (for DPAD navigation from search input)
   @override
@@ -2474,17 +1235,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
   }
 
-  /// Focus the first channel card (for DPAD navigation from filters)
-  void _focusFirstChannel() {
-    // Only focus if we have filtered channels
-    if (_catalogState.filteredChannels.isNotEmpty) {
-      if (_selectionState.spotlightLayoutMode != IptvSpotlightLayoutMode.classic &&
-          _focusState.spotlightTimelineController.focusFirstChannel()) {
-        return;
-      }
-      _focusNodeFor(_catalogState.filteredChannels.first).requestFocus();
-    }
-  }
+
 
   /// Refresh playlists from storage (call after settings change)
   Future<void> refreshPlaylists() async {
@@ -2948,7 +1699,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       if (key == LogicalKeyboardKey.arrowDown) {
         if (_selectionState.scheduleChannel == null &&
             !_focusState.spotlightTimelineController.restoreFocus()) {
-          _focusFirstChannel();
+          _navigation.focusFirstChannel();
         }
         return _selectionState.scheduleChannel == null
             ? KeyEventResult.handled
@@ -3032,7 +1783,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       continueWatchingCount: _recordingState.continueWatchingCount,
       recordingsCount: _recordingState.scheduledCount,
       showRecordings: _recordingState.pageCanRecord,
-      recordingActive: _anyRecordingLive,
+      recordingActive: _recordingSupport.anyRecordingLive,
       onSelectPlaylist:
           onSelectPlaylist ??
           (playlist) {
@@ -3041,11 +1792,11 @@ class IptvResultsViewState extends State<IptvResultsView>
           },
       onOpenRecordings:
           onOpenRecordings ??
-          (_recordingState.pageCanRecord ? _openScheduledRecordings : null),
+          (_recordingState.pageCanRecord ? _recordingSupport.openScheduledRecordings : null),
       onNewList: onNewList ?? () => unawaited(_favorites.promptCreateList()),
-      onAddPlaylist: onAddPlaylist ?? _navigateToSettings,
+      onAddPlaylist: onAddPlaylist ?? _navigation.navigateToSettings,
       onAddAddon: onAddAddon ?? _navigateToAddons,
-      onManageSources: onManageSources ?? _navigateToManageSources,
+      onManageSources: onManageSources ?? _navigation.navigateToManageSources,
       firstItemFocusNode: autofocusFirstItem ? null : _focusState.playlistFilterFocusNode,
       autofocusFirstItem: autofocusFirstItem,
       onUpFromFirstItem: autofocusFirstItem
@@ -3092,14 +1843,14 @@ class IptvResultsViewState extends State<IptvResultsView>
         return;
       }
       _setSpotlightSourcesExpanded(false);
-      _focusFirstChannel();
+      _navigation.focusFirstChannel();
     });
     WidgetsBinding.instance.scheduleFrame();
   }
 
   void _focusSpotlightContentEntry() {
     if (_catalogState.filteredChannels.isNotEmpty) {
-      if (!_focusState.spotlightTimelineController.restoreFocus()) _focusFirstChannel();
+      if (!_focusState.spotlightTimelineController.restoreFocus()) _navigation.focusFirstChannel();
       return;
     }
     if ((_settingsState.selectedPlaylist?.isXtreamCodes ?? false) &&
@@ -3162,7 +1913,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                       behavior: HitTestBehavior.opaque,
                       onTap: channel == null
                           ? null
-                          : () => unawaited(_playChannel(channel)),
+                          : () => unawaited(_playback.playChannel(channel)),
                       child: _buildPreviewStage(channel, epoch),
                     ),
                   ),
@@ -3303,7 +2054,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       return (
         label: 'Open',
         icon: Icons.open_in_new_rounded,
-        action: () => unawaited(_playChannel(channel)),
+        action: () => unawaited(_playback.playChannel(channel)),
       );
     }
     if (programme != null) {
@@ -3312,18 +2063,18 @@ class IptvResultsViewState extends State<IptvResultsView>
         return (
           label: 'Watch',
           icon: Icons.play_arrow_rounded,
-          action: () => unawaited(_playChannel(channel)),
+          action: () => unawaited(_playback.playChannel(channel)),
         );
       }
       if (IptvEpgService.isCatchupAvailable(channel, programme)) {
         return (
           label: 'Replay',
           icon: Icons.replay_rounded,
-          action: () => unawaited(_playCatchup(channel, programme)),
+          action: () => unawaited(_catchup.playCatchup(channel, programme)),
         );
       }
       if (programme.start.isAfter(now)) {
-        final recordProgramme = _recordProgrammeActionFor(channel);
+        final recordProgramme = _scheduleActions.recordProgrammeActionFor(channel);
         if (recordProgramme != null) {
           return (
             label: 'Record',
@@ -3335,43 +2086,43 @@ class IptvResultsViewState extends State<IptvResultsView>
       return (
         label: 'Guide',
         icon: Icons.calendar_month_rounded,
-        action: () => _openSchedulePane(channel),
+        action: () => _scheduleActions.openSchedulePane(channel),
       );
     }
     return (
       label: 'Watch',
       icon: Icons.play_arrow_rounded,
-      action: () => unawaited(_playChannel(channel)),
+      action: () => unawaited(_playback.playChannel(channel)),
     );
   }
 
   ({String label, IconData icon, VoidCallback action})? _spotlightRecordAction(
     IptvChannel channel,
   ) {
-    final desktopCapture = _desktopCaptureFor(channel);
+    final desktopCapture = _desktopRecording.desktopCaptureFor(channel);
     if (desktopCapture != null) {
       return (
         label: 'Stop',
         icon: Icons.stop_rounded,
-        action: () => unawaited(_stageStopDesktopRecording(desktopCapture)),
+        action: () => unawaited(_desktopRecording.stageStopDesktopRecording(desktopCapture)),
       );
     }
     final androidTask = !kIsWeb && Platform.isAndroid
-        ? _androidEngineTaskFor(channel)
+        ? _androidRecording.androidEngineTaskFor(channel)
         : null;
     if (androidTask != null) {
       return (
         label: 'Stop',
         icon: Icons.stop_rounded,
         action: () =>
-            unawaited(_stageStopAndroidRecording(channel, androidTask)),
+            unawaited(_androidRecording.stageStopAndroidRecording(channel, androidTask)),
       );
     }
-    if (_recordingState.pageCanRecord && _channelEngineRecordable(channel)) {
+    if (_recordingState.pageCanRecord && _recordingSupport.channelEngineRecordable(channel)) {
       return (
         label: 'Record',
         icon: Icons.fiber_manual_record_rounded,
-        action: () => unawaited(_stageRecordNow(channel)),
+        action: () => unawaited(_recordNow.stageRecordNow(channel)),
       );
     }
     return null;
@@ -3487,7 +2238,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                 nextTile(
                   icon: Icons.calendar_month_rounded,
                   label: 'Full guide',
-                  onPressed: () => _openSchedulePane(channel),
+                  onPressed: () => _scheduleActions.openSchedulePane(channel),
                 ),
             ],
           ),
@@ -3583,11 +2334,11 @@ class IptvResultsViewState extends State<IptvResultsView>
                 'spotlight-schedule-${scheduleChannel.url}-$epgVersion',
               ),
               channel: scheduleChannel,
-              onClose: _closeSchedulePane,
+              onClose: _scheduleActions.closeSchedulePane,
               isTelevision: widget.isTelevision,
               onPlayProgramme: (programme) =>
-                  _playCatchup(scheduleChannel, programme),
-              onRecordProgramme: _recordProgrammeActionFor(scheduleChannel),
+                  _catchup.playCatchup(scheduleChannel, programme),
+              onRecordProgramme: _scheduleActions.recordProgrammeActionFor(scheduleChannel),
             ),
           ),
       ],
@@ -3630,7 +2381,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             entry.channel,
             programme: _previewState.spotlightProgrammeShown.value,
           ),
-          onChannelActivate: (entry) => unawaited(_playChannel(entry.channel)),
+          onChannelActivate: (entry) => unawaited(_playback.playChannel(entry.channel)),
           onProgrammeActivate: _activateSpotlightProgramme,
           // Keep short programmes readable on a television: the preceding
           // half-hour ruler interval plus the following hour.
@@ -3671,15 +2422,15 @@ class IptvResultsViewState extends State<IptvResultsView>
   ) {
     final now = DateTime.now();
     if (programme.airsAt(now)) {
-      unawaited(_playChannel(entry.channel));
+      unawaited(_playback.playChannel(entry.channel));
       return;
     }
     if (IptvEpgService.isCatchupAvailable(entry.channel, programme)) {
-      unawaited(_playCatchup(entry.channel, programme));
+      unawaited(_catchup.playCatchup(entry.channel, programme));
       return;
     }
     if (programme.start.isAfter(now)) {
-      final record = _recordProgrammeActionFor(entry.channel);
+      final record = _scheduleActions.recordProgrammeActionFor(entry.channel);
       if (record != null) {
         record(programme);
         return;
@@ -3687,7 +2438,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
     // A programme without a direct replay/record action still opens the full
     // schedule, where the user can inspect the surrounding listings.
-    _openSchedulePane(entry.channel);
+    _scheduleActions.openSchedulePane(entry.channel);
   }
 
   Future<void> _showSpotlightSources() async {
@@ -3737,14 +2488,14 @@ class IptvResultsViewState extends State<IptvResultsView>
                               _filtersSection.onPlaylistChanged(playlist, focusContent: true),
                         ),
                         onOpenRecordings: _recordingState.pageCanRecord
-                            ? () => closeThen(_openScheduledRecordings)
+                            ? () => closeThen(_recordingSupport.openScheduledRecordings)
                             : null,
                         onNewList: () =>
                             closeThen(() => unawaited(_favorites.promptCreateList())),
-                        onAddPlaylist: () => closeThen(_navigateToSettings),
+                        onAddPlaylist: () => closeThen(_navigation.navigateToSettings),
                         onAddAddon: () => closeThen(_navigateToAddons),
                         onManageSources: () =>
-                            closeThen(_navigateToManageSources),
+                            closeThen(_navigation.navigateToManageSources),
                       ),
                     ),
                   ),
@@ -3794,7 +2545,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           isLoadingMore: _catalogState.isLoadingMore,
           onPlaylistChanged: _filtersSection.onPlaylistChanged,
           onCategoryChanged: _filtersSection.onCategoryChanged,
-          onAddPlaylist: _navigateToSettings,
+          onAddPlaylist: _navigation.navigateToSettings,
           playlistFocusNode: _focusState.playlistFilterFocusNode,
           categoryFocusNode: _focusState.categoryFilterFocusNode,
           showContentTypeFilter: _settingsState.selectedPlaylist?.isXtreamCodes ?? false,
@@ -3802,9 +2553,9 @@ class IptvResultsViewState extends State<IptvResultsView>
           onContentTypeChanged: _filtersSection.onContentTypeChanged,
           contentTypeFocusNode: _focusState.contentTypeFocusNode,
           onUpArrowPressed: widget.onUpArrowFromFilters,
-          onDownArrowPressed: _focusFirstChannel,
-          onOpenRecordings: _recordingState.pageCanRecord ? _openScheduledRecordings : null,
-          recordingLive: _anyRecordingLive,
+          onDownArrowPressed: _navigation.focusFirstChannel,
+          onOpenRecordings: _recordingState.pageCanRecord ? _recordingSupport.openScheduledRecordings : null,
+          recordingLive: _recordingSupport.anyRecordingLive,
           onCategoryOptions: _categoryActions.canShowCategoryOptions
               ? _categoryActions.promptCategoryOptions
               : null,
@@ -3891,14 +2642,14 @@ class IptvResultsViewState extends State<IptvResultsView>
         if (scheduleChannel != null)
           IptvSchedulePane(
             channel: scheduleChannel,
-            onClose: _closeSchedulePane,
+            onClose: _scheduleActions.closeSchedulePane,
             isTelevision: widget.isTelevision,
             onPlayProgramme: (programme) =>
-                _playCatchup(scheduleChannel, programme),
+                _catchup.playCatchup(scheduleChannel, programme),
             // The full-day guide records too — same gates and confirm flow
             // as the stage's compact list (it was the one schedule surface
             // that never got the callback).
-            onRecordProgramme: _recordProgrammeActionFor(scheduleChannel),
+            onRecordProgramme: _scheduleActions.recordProgrammeActionFor(scheduleChannel),
           ),
       ],
     );
@@ -3934,8 +2685,8 @@ class IptvResultsViewState extends State<IptvResultsView>
               // selected source.)
               onSelectPlaylist: (p) =>
                   _filtersSection.onPlaylistChanged(p, focusContent: true),
-              onOpenScheduled: _openScheduledRecordings,
-              onManageSources: _navigateToManageSources,
+              onOpenScheduled: _recordingSupport.openScheduledRecordings,
+              onManageSources: _navigation.navigateToManageSources,
               // Engine off / unsupported: don't advertise a scheduler that
               // would refuse to work (settings hides its row in this state).
               showScheduled: _recordingState.pageCanRecord,
@@ -3984,7 +2735,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               // The Android url→task map refreshes on selected events only;
               // the bar's tick reconciles it so REC can't sit stale while
               // focus is parked (no-op off Android / when recording is off).
-              onTick: () => unawaited(_refreshAndroidRecordingState()),
+              onTick: () => unawaited(_androidRecording.refreshAndroidRecordingState()),
             ),
             Expanded(child: cockpitRow),
           ],
@@ -4063,12 +2814,12 @@ class IptvResultsViewState extends State<IptvResultsView>
                                   valueListenable:
                                       IptvEpgService.instance.contextVersion,
                                   builder: (context, epgVersion, _) {
-                                    final desktopCapture = _desktopCaptureFor(
+                                    final desktopCapture = _desktopRecording.desktopCaptureFor(
                                       ch,
                                     );
                                     final androidTask =
                                         (!kIsWeb && Platform.isAndroid)
-                                        ? _androidEngineTaskFor(ch)
+                                        ? _androidRecording.androidEngineTaskFor(ch)
                                         : null;
                                     return IptvStagePanel(
                                       key: ValueKey('stage-${ch.url}'),
@@ -4084,23 +2835,23 @@ class IptvResultsViewState extends State<IptvResultsView>
                                           androidTask != null,
                                       epgContextVersion: epgVersion,
                                       onWatch: () =>
-                                          unawaited(_playChannel(ch)),
+                                          unawaited(_playback.playChannel(ch)),
                                       onExitLeft: _returnFocusFromStage,
                                       onRecordNow: desktopCapture != null
                                           ? () => unawaited(
-                                              _stageStopDesktopRecording(
+                                              _desktopRecording.stageStopDesktopRecording(
                                                 desktopCapture,
                                               ),
                                             )
                                           : androidTask != null
                                           ? () => unawaited(
-                                              _stageStopAndroidRecording(
+                                              _androidRecording.stageStopAndroidRecording(
                                                 ch,
                                                 androidTask,
                                               ),
                                             )
-                                          : _channelEngineRecordable(ch)
-                                          ? () => unawaited(_stageRecordNow(ch))
+                                          : _recordingSupport.channelEngineRecordable(ch)
+                                          ? () => unawaited(_recordNow.stageRecordNow(ch))
                                           : null,
                                       // _toggleFavorite takes the DESIRED state
                                       // (the row passes !isFavorited too) —
@@ -4119,7 +2870,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                                       // the pane could only say "No guide data".
                                       onOpenFullSchedule:
                                           IptvEpgService.isEpgCapable(ch)
-                                          ? () => _openSchedulePane(ch)
+                                          ? () => _scheduleActions.openSchedulePane(ch)
                                           : null,
                                       // Stricter than Record-now: scheduling has
                                       // no player probe at alarm time, so REC
@@ -4130,10 +2881,10 @@ class IptvResultsViewState extends State<IptvResultsView>
                                           LiveRecordingService.isSchedulableUrl(
                                             ch.url,
                                           )
-                                          ? _scheduleProgrammeFromStage
+                                          ? _scheduleActions.scheduleProgrammeFromStage
                                           : null,
                                       onPlayProgramme: (c, p) =>
-                                          unawaited(_playCatchup(c, p)),
+                                          unawaited(_catchup.playCatchup(c, p)),
                                     );
                                   },
                                 ),
@@ -4302,7 +3053,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           isTelevision: widget.isTelevision,
           focusNode: _focusState.playlistFilterFocusNode,
           onUpArrowPressed: widget.onUpArrowFromFilters,
-          onDownArrowPressed: _focusFirstChannel,
+          onDownArrowPressed: _navigation.focusFirstChannel,
           options: _sourceDropdownOptions(),
           onSelected: (id) {
             if (id == IptvSelectionState.kNewListSentinel) {
@@ -4310,7 +3061,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               return;
             }
             if (id == IptvSelectionState.kAddPlaylistSentinel) {
-              _navigateToSettings();
+              _navigation.navigateToSettings();
               return;
             }
             if (id == IptvSelectionState.kAddAddonSentinel) {
@@ -4333,7 +3084,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             isTelevision: widget.isTelevision,
             focusNode: _focusState.contentTypeFocusNode,
             onUpArrowPressed: widget.onUpArrowFromFilters,
-            onDownArrowPressed: _focusFirstChannel,
+            onDownArrowPressed: _navigation.focusFirstChannel,
             options: const [
               StremioDropdownOption('live', 'Live TV'),
               StremioDropdownOption('vod', 'Movies'),
@@ -4349,7 +3100,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             isTelevision: widget.isTelevision,
             focusNode: _focusState.categoryFilterFocusNode,
             onUpArrowPressed: widget.onUpArrowFromFilters,
-            onDownArrowPressed: _focusFirstChannel,
+            onDownArrowPressed: _navigation.focusFirstChannel,
             options: [
               StremioDropdownOption('', 'All · ${_catalogState.allChannels.length}'),
               for (final cat in _catalogState.categories)
@@ -4467,7 +3218,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       _focusNodeFor(channel).requestFocus();
       return;
     }
-    _focusFirstChannel();
+    _navigation.focusFirstChannel();
   }
 
 
@@ -4497,7 +3248,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     // The in-app player fallback never pauses the app, so a parked re-arm
     // wouldn't flush via the lifecycle observer — the focus restore after its
     // route pops (or the user's next move) lands here instead.
-    _flushPreviewRearm();
+    _previewHandoff.flushPreviewRearm();
     final shown = _previewState.previewShown.value;
     if (identical(shown, channel)) return;
     _previewState.spotlightProgrammeShown.value = null;
@@ -4509,7 +3260,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
     // Keep the stage's Record↔Stop honest for whichever channel is focused
     // now (debounced — zapping through rows costs nothing).
-    _armAndroidRecStateRefresh();
+    _androidRecording.armAndroidRecStateRefresh();
   }
 
   /// Point the stage at the focused channel's stream. M3U/Xtream channels
@@ -4628,7 +3379,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                         key: const ValueKey('iptv-tablet-watch-fullscreen'),
                         onPressed: ch == null
                             ? null
-                            : () => unawaited(_playChannel(ch)),
+                            : () => unawaited(_playback.playChannel(ch)),
                         style: FilledButton.styleFrom(
                           backgroundColor: app.seeAll.accent,
                           foregroundColor: app.inkOn(app.seeAll.accent),
@@ -4834,7 +3585,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     if (_settingsState.playlists.isEmpty) {
       return IptvEmptyState(
         hasPlaylists: false,
-        onAddPlaylist: _navigateToSettings,
+        onAddPlaylist: _navigation.navigateToSettings,
       );
     }
 
@@ -5068,9 +3819,9 @@ class IptvResultsViewState extends State<IptvResultsView>
                       key: ObjectKey(channel),
                       channel: channel,
                       isTelevision: widget.isTelevision,
-                      onTap: () => _playChannel(channel),
+                      onTap: () => _playback.playChannel(channel),
                       onLongPress: (_settingsState.selectedPlaylist?.isContinueWatching ?? false)
-                          ? () => _showContinueWatchingActions(channel)
+                          ? () => _playbackActions.showContinueWatchingActions(channel)
                           : null,
                       focusNode: _focusNodeFor(channel),
                       isFavorited: _membershipState.favoriteUrls.contains(channel.url),
@@ -5090,7 +3841,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                           ? () => _onChannelFocused(channel, fromPointer: true)
                           : null,
                       onDetached: () => _onRowDetached(channel),
-                      onSchedule: _scheduleActionFor(
+                      onSchedule: _scheduleActions.scheduleActionFor(
                         channel,
                         inPlace: widget.isTelevision && tvPane,
                       ),
@@ -5197,14 +3948,14 @@ class IptvResultsViewState extends State<IptvResultsView>
       },
       itemBuilder: (context, index, selected, centerItem) {
         final channel = channels[index];
-        final openSchedule = _scheduleActionFor(channel, inPlace: true);
+        final openSchedule = _scheduleActions.scheduleActionFor(channel, inPlace: true);
         return IptvChannelRow(
           key: ObjectKey(channel),
           channel: channel,
           isPreviewSelected: selected,
           onTap: centerItem,
           onLongPress: (_settingsState.selectedPlaylist?.isContinueWatching ?? false)
-              ? () => _showContinueWatchingActions(channel)
+              ? () => _playbackActions.showContinueWatchingActions(channel)
               : null,
           isFavorited: _membershipState.favoriteUrls.contains(channel.url),
           inAnyList: _membershipState.membership[channel.url]?.isNotEmpty ?? false,

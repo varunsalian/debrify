@@ -227,7 +227,6 @@
     "_selectionState": "IptvSelectionState",
     "_settingsLoading": "IptvSettingsLoading",
     "_settingsState": "IptvSettingsState",
-    "_sourceCounts": "IptvSourceCounts",
     "_spotlightActions": "IptvSpotlightActions",
     "_spotlightContent": "IptvSpotlightContent",
     "_spotlightFocus": "IptvSpotlightFocus",
@@ -312,7 +311,8 @@
     "_IptvStageChipState": "_IptvStageChipState",
     "_IptvStageFloorState": "_IptvStageFloorState",
     "_SpotlightCategoryPickerDialogState": "_SpotlightCategoryPickerDialogState",
-    "_categoryActions": "IptvCategories"
+    "_categoryActions": "IptvCategories",
+    "_sourceStatistics": "IptvSourceCounts"
   },
   "receivers": [
     "IptvAndroidRecording",
@@ -434,7 +434,7 @@
     "_selectionState",
     "_settingsLoading",
     "_settingsState",
-    "_sourceCounts",
+    "_sourceStatistics",
     "_spotlightActions",
     "_spotlightContent",
     "_spotlightFocus",

@@ -692,3 +692,31 @@ Technique), with these IPTV rules:
   `base3` (`step4-test-verified-comparison.txt`). Strict payload bytes/key
   order and goldens are unchanged. Architecture, size, format and diff checks
   pass. No new allowlist entry or lint suppression was added.
+
+### Step 5 — complete
+
+- Step-4 checkpoint: `5d5e0d15`. Moved 47 methods into fourteen owners:
+  playback, playback actions/refresh, startup resolution/launch, catch-up,
+  preview handoff, schedule actions, recording support, record-now, Android
+  and desktop recording, source counts and navigation. The public interface
+  entry points remain in the State, with their original signatures/bodies and
+  qualified member calls. Native launcher code and bridge payloads are untouched.
+- The facade ratchets **5,369 → 4,120**; the largest new file is 291 lines.
+  The source-counts section uses `_sourceStatistics` for wiring, avoiding
+  duplicate naming with the original `_sourceCounts` field, still owned only
+  by recording state. Resolved step-5 temporary callbacks are removed; layout/
+  preview callbacks retain their step-6 exit. Two exact formatter-braces sites
+  preserve their original guards/statements. Lifecycle order stays verbatim.
+- Both manifest/self-test runs pass: 384 IPTV leaves and 33 IPTV fixtures
+  plus settings/launcher fixtures, and 316 settings leaves
+  (`step5-verbatim-verified.txt`, `step5-settings.txt`). Whole analyzer retains
+  all 832 identities, zero added/removed, PASS (`step5-analyzer-comparison.txt`).
+- The verified CI list matches `base3`: 2,786 successes, the same two
+  failures, no missing/new skips, PASS (`step5-test-comparison.txt`). This
+  includes startup resolution/focus/pre-launch cancellation, both Browse
+  interfaces and untyped GlobalKey dispatch, payloads, source guards and
+  strict goldens. Native launch/return and preview punch-through still need
+  device verification; no device parity is claimed.
+- Architecture, size, format and diff checks pass. Shape registration covers
+  all 54 feature files and seven radii; theme measurement and facade/Browse
+  import reachability pass. No allowlist or golden/payload fixture changed.
