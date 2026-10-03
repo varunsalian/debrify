@@ -458,6 +458,12 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 - Moved folder navigation/RAR/source selection, view-mode decisions and both searches into four sections. All temporary step-3 callbacks now target the real owners; reviewed 101 bindings before pinning. Facade 5,085 → 4,562. Five exact formatter sites preserve single-statement bodies; no guard, timing, context or state change.
 - step4: all four manifest/self-tests and structure/storage/shape/format/diff checks pass; 127 successes / the observed theme failure, PASS against base5. Analyzer relocation and per-symbol original strict comparison both have zero additions (16 current / 42 original). All 23 radii and 23 tokens remain.
 
+### Step 5 — complete; workflows and dormant code
+
+- Moved the add/download/playback/playlist/TV/link workflows and all dormant code into thirteen sections. Reviewed 166 bindings; original private dormant entry points remain private and unreachable from production callers. Facade 4,562 → 2,032; destination maximum 437 (modern file card).
+- Used the TorBox read-only alias technique: borrowed catalog/navigation getters keep the original short return guards in file playback and node links; live mounted/callback getters keep the original single-statement payload guards in three action sections. No copied values or new braces in guarded payload bodies. A candidate context getter produced unrelated-mounted diagnostics; removed it and retained the original live context callbacks before adoption.
+- step5: all four manifest/self-tests and architecture/size/storage/shape/format/diff pass. 127 successes / the observed theme failure, PASS against base5; analyzer relocation and per-symbol comparisons show zero additions (25 current / 42 original strict). Every launcher/enqueue/playlist/clipboard body assertion remains unchanged. The modern card's trailing-comma radius stays uncounted; total 23 radii / 23 tokens.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

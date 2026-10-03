@@ -1,16 +1,29 @@
 import 'debrid_back_navigation.dart';
 import 'debrid_catalog_loading.dart';
 import 'debrid_delete_all_actions.dart';
+import 'debrid_dormant_file_actions.dart';
+import 'debrid_dormant_seasons_list.dart';
+import 'debrid_dormant_series_browser.dart';
+import 'debrid_dormant_torrent_actions.dart';
 import 'debrid_download_bulk_delete.dart';
 import 'debrid_download_row_actions.dart';
 import 'debrid_feedback.dart';
+import 'debrid_file_downloads.dart';
+import 'debrid_file_playback.dart';
 import 'debrid_focus_actions.dart';
 import 'debrid_folder_navigation.dart';
 import 'debrid_folder_search.dart';
+import 'debrid_link_actions.dart';
+import 'debrid_magnet_actions.dart';
+import 'debrid_modern_file_card.dart';
+import 'debrid_multifile_playback.dart';
+import 'debrid_node_playlist_links.dart';
 import 'debrid_selected_delete.dart';
 import 'debrid_selection_actions.dart';
 import 'debrid_single_delete_actions.dart';
 import 'debrid_torrent_bulk_delete.dart';
+import 'debrid_torrent_download_action.dart';
+import 'debrid_torrent_playlist_actions.dart';
 import 'debrid_torrent_search.dart';
 import 'debrid_view_modes.dart';
 
@@ -30,4 +43,17 @@ class DebridSections {
   late final DebridViewModes viewModes;
   late final DebridFolderSearch folderSearch;
   late final DebridTorrentSearch torrentSearch;
+  late final DebridTorrentDownloadAction torrentDownloadAction;
+  late final DebridTorrentPlaylistActions torrentPlaylistActions;
+  late final DebridMultifilePlayback multifilePlayback;
+  late final DebridMagnetActions magnetActions;
+  late final DebridLinkActions linkActions;
+  late final DebridFilePlayback filePlayback;
+  late final DebridFileDownloads fileDownloads;
+  late final DebridNodePlaylistLinks nodePlaylistLinks;
+  late final DebridDormantTorrentActions dormantTorrentActions;
+  late final DebridDormantFileActions dormantFileActions;
+  late final DebridModernFileCard modernFileCard;
+  late final DebridDormantSeriesBrowser dormantSeriesBrowser;
+  late final DebridDormantSeasonsList dormantSeasonsList;
 }
