@@ -218,7 +218,7 @@ Navigation/loading/initial action: 1, 6, 8, 9. Source-picker rows and torrent se
 
 ## Temporary architecture exceptions
 
-State-driven sections exit with later TorBox Riverpod migration; direct-service legacy bridge exits when TorBox data contracts replace these services; legacy text exits with app localization migration. Facade is retained oversized only until step 7; all remaining responsibilities follow the plan step table.
+State-driven sections exit with later TorBox Riverpod migration; direct-service legacy bridge exits when TorBox data contracts replace these services; legacy text exits with app localization migration. The facade is 364 lines after step 7, under its 400-line composition-root cap; every responsibility moved per the plan step table.
 
 ## Per-entry wiring review before scaffold pinning
 
