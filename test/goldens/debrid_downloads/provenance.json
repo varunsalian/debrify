@@ -10,5 +10,27 @@
     "test/goldens/debrid_downloads/macos/ddl.png": "67c3de2db6e88ba0d823eeb6658ab72304b6b21e534d7a187048fbf3b346bd6c",
     "test/goldens/debrid_downloads/macos/torrents.png": "50631826719e2ba9f0c769e4893196a43418397dd812d893f78cf783eacfee2a",
     "test/goldens/debrid_downloads/macos/select_source.png": "bc77e0591177da1c2bfe6eb1610e93cdee63e32ed736ff7faa7b2b5a80c72193"
+  },
+  "linux": {
+    "original_source_revision": "cc950ed97278ba74346c518d7e681ed43d973444",
+    "run_url": "https://github.com/varunsalian/debrify-refactor/actions/runs/37147126217",
+    "run_note": "https://github.com/varunsalian/debrify-refactor/actions/runs/37147126217 (temporary branch tmp/debrid-linux-goldens based on cc950ed9, deleted after capture)",
+    "flutter": "3.44.8",
+    "capture_tests_passed": 5,
+    "strict_tests_passed": 5,
+    "hashes": {
+      "test/goldens/debrid_downloads/linux/ddl.png": "775dd33bc01a9899c2a44f18d44bf4aad07909933fa62bf47c920ab4bb656c02",
+      "test/goldens/debrid_downloads/linux/folder.png": "d60004ff341056f4edddc6fd503c6dc10dc71eb34b64272a91924dbe80e2cd46",
+      "test/goldens/debrid_downloads/linux/select_source.png": "f10183eb41260adadd1a9762d485331017f6c1090caa0d373b20ae84eacc0f59",
+      "test/goldens/debrid_downloads/linux/selection.png": "0669c532a174adb0f13c08e9f5c16bc812cb9fb450c4daf1ac1adbebef57af10",
+      "test/goldens/debrid_downloads/linux/torrents.png": "f6166590673d3b502a201c091407933ea4af6beda8724e55ec1d84f4e51cf09d"
+    },
+    "evidence_sha256": {
+      "linux-original-capture.txt": "d8eee516c27939da266e6ace53eb08808a8f9315aa736ee5e8c5037ac517e112",
+      "linux-original-strict.txt": "d8eee516c27939da266e6ace53eb08808a8f9315aa736ee5e8c5037ac517e112",
+      "linux-original-sha256.txt": "b1257680ddf74ff9f6aa8305420889f6737ebb0e8e79f8e23810ef0a92f923da",
+      "linux-original-revision.txt": "b183252f690b7aaf806381578ce07262e414cc4f09f4d1553a9a2ae471d4d30c",
+      "linux-original-run-url.txt": "e0ac99c5134a8a332aa3ee15c322ed0f41348c39cc0f98d8a5c93738d5564f1a"
+    }
   }
 }

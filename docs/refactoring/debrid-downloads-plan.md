@@ -464,6 +464,11 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 - Used the TorBox read-only alias technique: borrowed catalog/navigation getters keep the original short return guards in file playback and node links; live mounted/callback getters keep the original single-statement payload guards in three action sections. No copied values or new braces in guarded payload bodies. A candidate context getter produced unrelated-mounted diagnostics; removed it and retained the original live context callbacks before adoption.
 - step5: all four manifest/self-tests and architecture/size/storage/shape/format/diff pass. 127 successes / the observed theme failure, PASS against base5; analyzer relocation and per-symbol comparisons show zero additions (25 current / 42 original strict). Every launcher/enqueue/playlist/clipboard body assertion remains unchanged. The modern card's trailing-comma radius stays uncounted; total 23 radii / 23 tokens.
 
+### Original Linux artifact checkpoint — verified before step 6
+
+- Verified all five supplied original PNGs against linux-original-sha256.txt, exact cc950ed9 revision, 1,000×800 dimensions, and capture/strict logs (five successes each). Recorded hashes, evidence fingerprints and full run provenance in test/goldens/debrid_downloads/provenance.json. Run: https://github.com/varunsalian/debrify-refactor/actions/runs/37147126217 . The evidence URL includes a branch-deletion annotation; parsed its URL and retained the full note.
+- Separate artifact commit after step 5. Held the step-6 candidate aside while completing provenance metadata, then restored it. No moved-code recording. Strict-default views first passed all 14 tests in the ORIGINAL cc950ed9 worktree; user's real Ubuntu strict run also passed all five originals. Local post-move Linux comparison remains pending on this macOS host.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
