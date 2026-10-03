@@ -1,3 +1,130 @@
 {
-  "scaffolds": []
+  "scaffolds": [
+    {
+      "file": "lib/screens/torbox/torbox_downloads_screen.dart",
+      "owner": "_TorboxDownloadsScreenState",
+      "name": "_catalog",
+      "tokens": [
+        "final",
+        "_catalog",
+        "=",
+        "TorboxCatalogState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/torbox/torbox_downloads_screen.dart",
+      "owner": "_TorboxDownloadsScreenState",
+      "name": "_web",
+      "tokens": [
+        "final",
+        "_web",
+        "=",
+        "TorboxWebState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/torbox/torbox_downloads_screen.dart",
+      "owner": "_TorboxDownloadsScreenState",
+      "name": "_nav",
+      "tokens": [
+        "final",
+        "_nav",
+        "=",
+        "TorboxNavigationState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/torbox/torbox_downloads_screen.dart",
+      "owner": "_TorboxDownloadsScreenState",
+      "name": "_view",
+      "tokens": [
+        "final",
+        "_view",
+        "=",
+        "TorboxViewState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/torbox/torbox_downloads_screen.dart",
+      "owner": "_TorboxDownloadsScreenState",
+      "name": "_focus",
+      "tokens": [
+        "final",
+        "_focus",
+        "=",
+        "TorboxFocusState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/torbox/torbox_downloads_screen.dart",
+      "owner": "_TorboxDownloadsScreenState",
+      "name": "_folderSearch",
+      "tokens": [
+        "final",
+        "_folderSearch",
+        "=",
+        "TorboxFolderSearchState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/torbox/torbox_downloads_screen.dart",
+      "owner": "_TorboxDownloadsScreenState",
+      "name": "_torrentSearch",
+      "tokens": [
+        "final",
+        "_torrentSearch",
+        "=",
+        "TorboxTorrentSearchState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/torbox/torbox_downloads_screen.dart",
+      "owner": "_TorboxDownloadsScreenState",
+      "name": "_selection",
+      "tokens": [
+        "final",
+        "_selection",
+        "=",
+        "TorboxSelectionState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/torbox/torbox_downloads_screen.dart",
+      "owner": "_TorboxDownloadsScreenState",
+      "name": "_addInput",
+      "tokens": [
+        "final",
+        "_addInput",
+        "=",
+        "TorboxAddInputState",
+        "(",
+        ")",
+        ";"
+      ]
+    }
+  ]
 }

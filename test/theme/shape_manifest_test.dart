@@ -149,6 +149,24 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_view_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_selection_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_catalog_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_search_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_search_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_navigation_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_add_input_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_focus_state.dart':
+      0,
   'lib/features/torbox_downloads/presentation/torbox_downloads_view.dart': 0,
   'lib/features/torbox_downloads/presentation/torbox_more_option.dart': 0,
   'lib/features/torbox_downloads/presentation/maybe_blur.dart': 0,

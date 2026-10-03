@@ -1,5 +1,3 @@
-
-
 bool isValidMagnetLink(String link) {
   final trimmed = link.trim();
   if (!trimmed.startsWith('magnet:?')) return false;

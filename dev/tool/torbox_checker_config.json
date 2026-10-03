@@ -191,7 +191,16 @@
     "TorboxTorrentSearchLayout",
     "_toolbar",
     "TorboxToolbar",
-    "s"
+    "s",
+    "_catalog",
+    "_web",
+    "_nav",
+    "_view",
+    "_focus",
+    "_folderSearch",
+    "_torrentSearch",
+    "_selection",
+    "_addInput"
   ],
   "receiver_paths": {
     "_deps.catalog_state": "TorboxCatalogState",
@@ -404,7 +413,16 @@
     "sections.view_selector": "TorboxViewSelector",
     "sections.selection_bar": "TorboxSelectionBar",
     "sections.torrent_search_layout": "TorboxTorrentSearchLayout",
-    "sections.toolbar": "TorboxToolbar"
+    "sections.toolbar": "TorboxToolbar",
+    "_catalog": "TorboxCatalogState",
+    "_web": "TorboxWebState",
+    "_view": "TorboxViewState",
+    "_focus": "TorboxFocusState",
+    "_folderSearch": "TorboxFolderSearchState",
+    "_torrentSearch": "TorboxTorrentSearchState",
+    "_selection": "TorboxSelectionState",
+    "_addInput": "TorboxAddInputState",
+    "_nav": "TorboxNavigationState"
   },
   "receiver_owners": {
     "_catalog_state": "TorboxCatalogState",
@@ -516,7 +534,16 @@
     "_torrent_search_layout": "TorboxTorrentSearchLayout",
     "TorboxTorrentSearchLayout": "TorboxTorrentSearchLayout",
     "_toolbar": "TorboxToolbar",
-    "TorboxToolbar": "TorboxToolbar"
+    "TorboxToolbar": "TorboxToolbar",
+    "_catalog": "TorboxCatalogState",
+    "_web": "TorboxWebState",
+    "_view": "TorboxViewState",
+    "_focus": "TorboxFocusState",
+    "_folderSearch": "TorboxFolderSearchState",
+    "_torrentSearch": "TorboxTorrentSearchState",
+    "_selection": "TorboxSelectionState",
+    "_addInput": "TorboxAddInputState",
+    "_nav": "TorboxNavigationState"
   },
   "plain_sections": [],
   "callback_identities": [
@@ -620,12 +647,27 @@
   "callback_instances": {
     "_TorboxDownloadsScreenState": "$State",
     "TorboxCatalogLoading": "$State._sections.catalog_loading",
-    "TorboxFocusState": "$State._owners.focus_state",
+    "TorboxFocusState": "$State._focus",
     "TorboxBackNavigation": "$State._sections.back_navigation"
   },
   "callback_receiver_aliases": {
-    "_deps.catalog_state": "$State._owners.catalog_state",
-    "_deps.web_state": "$State._owners.web_state",
-    "_deps.focus_state": "$State._owners.focus_state"
+    "_deps.catalog_state": "$State._catalog",
+    "_deps.web_state": "$State._web",
+    "_deps.focus_state": "$State._focus",
+    "_deps.navigation_state": "$State._nav",
+    "_deps.view_state": "$State._view",
+    "_deps.folder_search_state": "$State._folderSearch",
+    "_deps.torrent_search_state": "$State._torrentSearch",
+    "_deps.selection_state": "$State._selection",
+    "_deps.add_input_state": "$State._addInput",
+    "_catalog": "$State._catalog",
+    "_web": "$State._web",
+    "_nav": "$State._nav",
+    "_view": "$State._view",
+    "_focus": "$State._focus",
+    "_folderSearch": "$State._folderSearch",
+    "_torrentSearch": "$State._torrentSearch",
+    "_selection": "$State._selection",
+    "_addInput": "$State._addInput"
   }
 }

@@ -380,6 +380,13 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base4`.
 - Whole analyzer: 829 identities, zero added; one former private-option unused-parameter warning disappears when its class becomes public (`step1-analyzer-comparison-base4.txt`). All 79 affected tests pass against base4 (`step1-test-comparison-base4.txt`), including all 63 characterization/source-picker tests unchanged and four strict macOS goldens.
 - Architecture, lowering-only size ratchet, format and diff checks pass. Linux originals remain pending and block step 6. No push.
 
+### Step 2 — complete
+
+- Step 1 committed as `fc26a228`. All 57 original fields now have one of nine concern owners; each State constructs fresh owners before `initState`. All resource initializers, identities, lifecycle statements and disposal order remain verbatim apart from receiver qualification.
+- Conservative wiring decision: direct State bindings (`_catalog`, `_web`, `_nav`, `_view`, `_focus`, `_folderSearch`, `_torrentSearch`, `_selection`, `_addInput`) replace an uncommitted aggregate candidate. Longer qualifiers grew the facade to 6,908 lines; direct bindings bring it to **6,774**, below step 1's 6,795 ratchet, without raising a cap or deleting comments. The deps checklist records each actual owner binding before pinning nine constructor scaffolds.
+- 195 leaves and all real-config/identity/accessor fixtures pass (`step2-verbatim-final.txt`); settings/IPTV self-tests pass. Analyzer remains 829 identities with zero new diagnostics (`step2-analyzer-comparison.txt`). All 79 affected tests pass unchanged against base4 (`step2-test-comparison.txt`), including four strict macOS goldens.
+- Architecture, normal format, strict size check and lowering-only ratchet pass; original 14 radii / 23 token calls preserved. Initial candidate evidence caught a renamed original comment and a missing canonical alias in the new identity checker; restored the production comment and registered the actual owner instance path. No test/assertion was changed.
+
 ## Found, not fixed
 
 - **Startup `setState` after dispose.** With a pre-filled
