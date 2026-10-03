@@ -204,6 +204,19 @@ Map<String, Object?>? returnedList(
   return null;
 }
 
+Map<String, Object?> parameterDetails(FormalParameter parameter) {
+  return {
+    'name': parameter.name?.lexeme,
+    'type': parameter.type?.toSource(),
+    'syntax': parameter.toSource(),
+    'functionTypedSuffix': parameter.functionTypedSuffix?.toSource(),
+    'named': parameter.isNamed,
+    'requiredNamed': parameter.isRequiredNamed,
+    'optionalPositional': parameter.isOptionalPositional,
+    'default': parameter.defaultClause?.value2.toSource(),
+  };
+}
+
 String nameOf(AstNode node) {
   if (node is ClassDeclaration) return node.namePart.typeName.lexeme;
   if (node is EnumDeclaration) return node.namePart.typeName.lexeme;
@@ -307,6 +320,15 @@ Map<String, Object?> describe(
     ],
     'endTokenText': node.endToken.lexeme,
     'parameters': parameters?.toSource(),
+    'returnType': node is MethodDeclaration
+        ? node.returnType?.toSource()
+        : node is FunctionDeclaration
+        ? node.returnType?.toSource()
+        : null,
+    'parameterDetails': [
+      for (final p in parameters?.parameters ?? <FormalParameter>[])
+        parameterDetails(p),
+    ],
     'parameterNames': [
       for (final p in parameters?.parameters ?? <FormalParameter>[])
         p.name?.lexeme,
@@ -318,8 +340,9 @@ Map<String, Object?> describe(
     'bodyText': body?.toSource(),
     'recordTypeFields': variableType is RecordTypeAnnotation
         ? [
-            for (final field in variableType.namedFields?.fields ??
-                <RecordTypeAnnotationNamedField>[])
+            for (final field
+                in variableType.namedFields?.fields ??
+                    <RecordTypeAnnotationNamedField>[])
               field.name.lexeme,
           ]
         : null,

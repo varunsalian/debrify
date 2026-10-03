@@ -147,6 +147,18 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/iptv/presentation/legacy_iptv/iptv_status_chip.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_settings_loading.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_load_status.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_favorites.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_category_order.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_catalog_refresh.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_catalog_presentation.dart':
+      0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_catalog_network.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_catalog_maintenance.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_catalog_loading.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_catalog_facades.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_catalog_state.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_focus_state.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_membership_state.dart': 0,

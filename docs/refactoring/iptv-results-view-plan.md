@@ -622,3 +622,40 @@ Technique), with these IPTV rules:
   failures, no missing/new skips, PASS against `base3`
   (`step2-test-comparison.txt`). Architecture, size, formatting, import
   reachability/theme measurement and diff checks pass. No fixture changed.
+
+### Step 3 — complete; full-suite gate 1 passes
+
+- Step-2 checkpoint: `63ee65c3`. Moved 43 methods into eleven legacy bridge
+  owners: settings loading, favorites, category order, catalog loading,
+  presentation, facades, maintenance, refresh, network fetching, load status
+  and the status chip. Production callers and the registered test accessor
+  use them; no replaced implementation remains in the State.
+- The facade ratchets **8,085 → 6,528**. The largest new file is 400 lines.
+  Typed dependency records borrow the existing concern owners and use live
+  State/widget callbacks. Deferred cross-section closures preserve lazy
+  construction without a type-inference cycle. Listener add/remove sites
+  retain the same section method tear-offs. No resource or disposal statement
+  leaves its original lifecycle position.
+- Seven formatter-split `if` bodies receive only braces, at exact pinned
+  sites in `iptv_context_exceptions.json` and their manifest rows. These are
+  the plan's pre-approved formatter pattern; every original statement remains.
+  No context confirmation or lint suppression was added. Temporary callbacks
+  name their final destinations and exit in steps 4, 5 or 6.
+- The shared parser exposes return/parameter metadata for typed wiring;
+  comparison tokens are unchanged. Both manifest/self-test runs pass:
+  384 IPTV leaves and 29 IPTV fixtures plus existing settings/launcher
+  fixtures, and 316 settings leaves (`step3-verbatim-second.txt`,
+  `step3-settings.txt`).
+- Whole analyzer: the same 832 diagnostic identities, zero added/removed,
+  PASS against the verified step-2 run
+  (`step3-analyzer-verified-comparison.txt`). The complete CI list has 2,786
+  successes and the same two failures, no missing/new skips, PASS against
+  `base3` (`step3-test-comparison.txt`). Strict goldens and payload fixtures
+  remain unchanged. Architecture, size, formatting, diff and theme checks
+  pass; all 34 IPTV feature files are reached from facade/Browse imports.
+- Full-suite `iptv/gate1` matches `base3`: 10,351 successes, the same
+  13 failures/28 errors and 20 skips. No new failures, missing tests or newly
+  skipped identities; PASS (`gate1-comparison.txt`). Native preview, launch/
+  return, Android TV D-pad and first-open performance remain pending device
+  verification. This gate is committed before the next extraction step;
+  its push goes only to `private` and its CI must pass before step 4.

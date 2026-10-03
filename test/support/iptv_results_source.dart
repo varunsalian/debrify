@@ -49,6 +49,13 @@ String iptvOriginalMember(String originalName) {
   final config =
       jsonDecode(File('dev/tool/iptv_checker_config.json').readAsStringSync())
           as Map<String, dynamic>;
+  // These are exactly the registered live State callbacks. Builder/dialog
+  // contexts remain source text and the verbatim checker checks their scope.
+  for (final receiver in ['_deps', 'deps']) {
+    for (final name in ['mounted', 'context']) {
+      member = member.replaceAll('$receiver.$name()', name);
+    }
+  }
   for (final receiver in config['receivers'] as List<dynamic>) {
     member = member.replaceAll(
       RegExp(r'\b' + RegExp.escape(receiver as String) + r'\.'),
