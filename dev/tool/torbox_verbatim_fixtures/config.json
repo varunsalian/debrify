@@ -1,0 +1,64 @@
+{
+  "allowed_edits": [
+    "context_confirmation",
+    "context_guard",
+    "formatter_if_braces",
+    "production_api_annotation",
+    "public_widget_key",
+    "receiver",
+    "rename",
+    "state_callback",
+    "unchanged",
+    "retained_forwarder"
+  ],
+  "context_exception_difference": "context_confirmation/formatter_if_braces: only exact sites in dev/tool/settings_context_exceptions.json; existing State mounted guard and context acquisition, no intervening await",
+  "baseline": "d93428fb",
+  "source": "source",
+  "feature": "owner",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": true,
+  "sidecars": {},
+  "named_exceptions": {},
+  "annotation_exceptions": {},
+  "live_getter_callbacks": [],
+  "live_widget_getters": [
+    "searchQuery",
+    "isTelevision",
+    "searchHeader",
+    "onUpArrowFromFilters",
+    "debugOnSpotlightStartupFocus",
+    "debugSpotlightNow"
+  ],
+  "token_rules": [],
+  "additional_owners": [],
+  "required_nodes": [],
+  "forwarders": {
+    "TorboxFixtureState.tabletTwoPaneMinWidth": {},
+    "TorboxFixtureState.tabletTwoPaneMinHeight": {},
+    "TorboxFixtureState.shouldUseTouchTabletTwoPane": {},
+    "TorboxFixtureState.applyStoredLocalCategoryOrder": {},
+    "TorboxFixtureState.formatLoadBytes": {},
+    "TorboxFixtureState.formatLoadElapsed": {},
+    "TorboxFixtureState.loadBytesLabel": {},
+    "TorboxFixtureState.chipClaimAllowed": {},
+    "TorboxFixtureState.chipRankNone": {},
+    "TorboxFixtureState.chipRankGuide": {},
+    "TorboxFixtureState.chipRankMaintenance": {},
+    "TorboxFixtureState.chipRankRefresh": {},
+    "TorboxFixtureState.landingCategoryFor": {}
+  },
+  "lifecycle": [],
+  "test_accessors": [],
+  "seams": [],
+  "self_test_module": "iptv_checker_test",
+  "receiver_owners": {
+    "_filters": "Filters",
+    "Policy": "Policy"
+  },
+  "receivers": [
+    "_deps",
+    "_filters",
+    "Policy"
+  ]
+}

@@ -346,7 +346,17 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base3`.
 
 ## Progress
 
-(empty)
+### Step 0 — complete
+
+- Execution starts at requested `191ab849` on `refactor/codebase`; the original screen is unchanged from the plan's `40212b6c`. Flutter 3.44.8 / Dart 3.12.2.
+- `torbox/base` and seam-only `torbox/base2`: 10,351 successes, 13 failures, 28 errors, 20 skips. Identity comparison PASS (`base2-comparison.txt`). Evidence lives in `.git/refactor-evidence/torbox/` and streams runner output throughout long commands.
+- Registered original-code accessor exposes actual action tear-offs, collection/resource identities and snapshots on each invocation. No clock, service or widget-signature change. Seam-only facade ratchet raise: 7,070 → 7177 lines, by hand; exit in step 1. No extraction preceded characterization.
+- 51 new characterization tests plus the three existing source-picker tests pass on original code (`characterization-original-verified.jsonl`, strict identity comparison PASS against `base3`). Four macOS goldens captured only from original code, then compared strictly. Linux originals **pending** user-run Ubuntu capture; no workflow or remote push. Linux golden tests explicitly report pending when originals are absent.
+- Decision: preserve the observed folder-search null-root behavior and test it; accessor fixture additionally populates the existing borrowed navigation stack to characterize actual matching. No production fix. Lifecycle has 18 resource disposals plus `super.dispose()` (19 dispose invocations).
+- Pending device verification: all seven native playback handoffs, Android TV D-pad, real TorBox account download/delete/add/TV flows. TV UI handoff is source-guarded; unexercised device/UI paths remain pending.
+- `torbox/base3`: 10,402 successes, the same 13 failures / 28 errors / 20 skips, 51 added test identities; PASS against `base2`. Every new test passes. Final original-code source tests include complete playback/download argument-building bodies as well as all 14 call expressions.
+- Final analyzer: 830 diagnostics, zero added; accessor removes two unused-method warnings. All three manifest/self-test runs, architecture, size, storage reference/key, format and diff checks pass. IPTV/settings configs remain unchanged.
+- No push or remote CI is authorized; local CI-equivalent checks replace the plan's private-push requirement. Remote CI remains pending.
 
 ## Found, not fixed
 
@@ -358,3 +368,5 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base3`.
 - **Dormant code.** `_showTorboxFileSelectionSheet` (2503) has no callers,
   and the dropdown can't select Series Arrange (5688). Pre-existing; moved
   verbatim.
+
+- **Folder search null root.** Ordinary navigation pushes a root record whose node is null. `_performSearch` reads that first record and returns no results. Original behavior preserved; test fixture also covers matching with a populated original stack.

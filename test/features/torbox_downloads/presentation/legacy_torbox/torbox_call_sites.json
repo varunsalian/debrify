@@ -1,0 +1,72 @@
+[
+  {
+    "member": "_TorboxDownloadsScreenState._handlePlayTorrent",
+    "kind": "playback",
+    "source": "VideoPlayerLauncher.push(\n          context,\n          VideoPlayerLaunchArgs(\n            videoUrl: streamUrl,\n            title: torrent.name,\n            subtitle: Formatters.formatFileSize(file.size),\n          ),\n        )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._handlePlayTorrent",
+    "kind": "playback",
+    "source": "VideoPlayerLauncher.push(\n      context,\n      VideoPlayerLaunchArgs(\n        videoUrl: initialUrl,\n        title: torrent.name,\n        subtitle: subtitle,\n        playlist: playlistEntries,\n        startIndex: startIndex,\n      ),\n    )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._handlePlayWebDownload",
+    "kind": "playback",
+    "source": "VideoPlayerLauncher.push(\n          context,\n          VideoPlayerLaunchArgs(\n            videoUrl: streamUrl,\n            title: webDownload.name,\n            subtitle: Formatters.formatFileSize(file.size),\n          ),\n        )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._handlePlayWebDownload",
+    "kind": "playback",
+    "source": "VideoPlayerLauncher.push(\n                        context,\n                        VideoPlayerLaunchArgs(\n                          videoUrl: streamUrl,\n                          title: fileName,\n                          subtitle: Formatters.formatFileSize(file.size),\n                        ),\n                      )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._enqueueWebDownloadZipDownload",
+    "kind": "download",
+    "source": "DownloadService.instance.enqueueDownload(\n        credentialKey: 'torbox_api_key',\n        url: zipUrl,\n        fileName: zipFileName,\n        meta: meta,\n        torrentName: webDownload.name,\n      )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._downloadSelectedWebDownloadFiles",
+    "kind": "download",
+    "source": "DownloadService.instance.enqueueDownload(\n            credentialKey: 'torbox_api_key',\n            url: '',\n            fileName: fileName,\n            meta: meta,\n            torrentName: webDownload.name,\n            context: mounted ? context : null,\n          )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._enqueueTorboxDownloads",
+    "kind": "download",
+    "source": "DownloadService.instance.enqueueDownload(\n            credentialKey: 'torbox_api_key',\n            url: downloadUrl,\n            fileName: fileName,\n            meta: meta,\n            torrentName: torrent.name,\n          )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._enqueueTorboxZipDownload",
+    "kind": "download",
+    "source": "DownloadService.instance.enqueueDownload(\n        credentialKey: 'torbox_api_key',\n        url: zipUrl,\n        fileName: zipFileName,\n        meta: meta,\n        torrentName: torrent.name,\n      )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._playVideoFile",
+    "kind": "playback",
+    "source": "VideoPlayerLauncher.push(\n        context,\n        VideoPlayerLaunchArgs(\n          videoUrl: streamUrl,\n          title: fileNode.name,\n          subtitle: Formatters.formatFileSize(fileNode.bytes ?? 0),\n        ),\n      )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._downloadSelectedTorboxFiles",
+    "kind": "download",
+    "source": "DownloadService.instance.enqueueDownload(\n            credentialKey: 'torbox_api_key',\n            url: '', // Empty URL - will be fetched by download service\n            fileName: fileName,\n            meta: meta,\n            torrentName: folderName,\n            context: mounted ? context : null,\n          )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._downloadSingleFile",
+    "kind": "download",
+    "source": "DownloadService.instance.enqueueDownload(\n        credentialKey: 'torbox_api_key',\n        url: '', // Empty URL - will be fetched by download service\n        fileName: fileName,\n        meta: meta,\n        context: mounted ? context : null,\n      )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._downloadMultipleFiles",
+    "kind": "download",
+    "source": "DownloadService.instance.enqueueDownload(\n          credentialKey: 'torbox_api_key',\n          url: '', // Empty URL - will be fetched by download service\n          fileName: fileName,\n          meta: meta,\n          torrentName: folderName,\n          context: mounted ? context : null,\n        )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._playTorboxFiles",
+    "kind": "playback",
+    "source": "VideoPlayerLauncher.push(\n          context,\n          VideoPlayerLaunchArgs(\n            videoUrl: streamUrl,\n            title: collectionName,\n            subtitle: Formatters.formatFileSize(file.size),\n          ),\n        )"
+  },
+  {
+    "member": "_TorboxDownloadsScreenState._playTorboxFiles",
+    "kind": "playback",
+    "source": "VideoPlayerLauncher.push(\n      context,\n      VideoPlayerLaunchArgs(\n        videoUrl: initialUrl,\n        title: collectionName,\n        subtitle: subtitle,\n        playlist: playlistEntries,\n        startIndex: startIndex,\n      ),\n    )"
+  }
+]

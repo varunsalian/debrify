@@ -136,3 +136,9 @@ test/features/iptv/presentation/legacy_iptv/iptv_results_catalog_test.dart
 test/features/iptv/presentation/legacy_iptv/iptv_results_layout_golden_test.dart
 test/features/iptv/presentation/legacy_iptv/iptv_results_source_guard_test.dart
 test/features/iptv/presentation/legacy_iptv/iptv_results_payload_test.dart
+test/provider_source_picker_web_download_test.dart
+test/features/torbox_downloads/presentation/legacy_torbox/torbox_actions_test.dart
+test/features/torbox_downloads/presentation/legacy_torbox/torbox_navigation_test.dart
+test/features/torbox_downloads/presentation/legacy_torbox/torbox_source_contract_test.dart
+test/features/torbox_downloads/presentation/legacy_torbox/torbox_views_test.dart
+test/features/home/presentation/home_source_editor_test.dart
