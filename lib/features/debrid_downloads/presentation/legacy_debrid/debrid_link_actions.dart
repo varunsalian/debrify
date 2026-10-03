@@ -18,6 +18,7 @@ typedef DebridLinkActionsDeps = ({
   Future<void> Function(String apiKey, {bool reset}) fetchDownloads,
 });
 
+// Link input methods
 class DebridLinkActions {
   DebridLinkActions(this._deps);
   final DebridLinkActionsDeps _deps;

@@ -7,3 +7,10 @@
 
 # TorBox: originally torbox_downloads_screen.dart (c4f5375a), file-selection card copy button.
 warning | unnecessary_null_comparison | lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_selection_card.dart | The operand can't be 'null', so the condition is always 'true'. Remove the condition
+
+# Real-Debrid: original cc950ed9 private dormant entries retained by the plan.
+# Verified both in the original screen and under the destination lint configuration;
+# original-cc950-strict-analyze evidence and per-symbol relocation comparison.
+warning | unused_element | lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_series_browser.dart | The declaration '_buildSeriesFileBrowser' isn't referenced. Try removing the declaration of '_buildSeriesFileBrowser'
+warning | unused_element | lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_torrent_actions.dart | The declaration '_handlePlayVideo' isn't referenced. Try removing the declaration of '_handlePlayVideo'
+warning | unused_element | lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_torrent_actions.dart | The declaration '_copyDownloadLink' isn't referenced. Try removing the declaration of '_copyDownloadLink'

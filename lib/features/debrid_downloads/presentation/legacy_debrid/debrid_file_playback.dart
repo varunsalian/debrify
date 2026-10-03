@@ -19,6 +19,7 @@ typedef DebridFilePlaybackDeps = ({
   void Function(String message) showError,
 });
 
+// ========== File/Folder Action Methods ==========
 class DebridFilePlayback {
   DebridFilePlayback(this._deps);
   final DebridFilePlaybackDeps _deps;

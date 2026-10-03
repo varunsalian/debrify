@@ -17,6 +17,7 @@ typedef DebridSelectionActionsDeps = ({
   showDeleteSelectedProgressDialog,
 });
 
+// --- Multi-select helpers ---
 class DebridSelectionActions {
   DebridSelectionActions(this._deps);
   final DebridSelectionActionsDeps _deps;

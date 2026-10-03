@@ -4,6 +4,7 @@ import 'package:debrify/models/rd_torrent.dart';
 class DebridCatalogState {
   DebridDownloadsView selectedView = DebridDownloadsView.torrents;
 
+  // Torrent Downloads data
   final List<RDTorrent> torrents = [];
 
   bool isLoadingTorrents = false;

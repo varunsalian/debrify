@@ -17,6 +17,7 @@ typedef DebridDormantFileActionsDeps = ({
   void Function(String text) copyToClipboard,
 });
 
+// New on-demand action handlers
 class DebridDormantFileActions {
   DebridDormantFileActions(this._deps);
   final DebridDormantFileActionsDeps _deps;

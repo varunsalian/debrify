@@ -18,6 +18,7 @@ typedef DebridTorrentSearchDeps = ({
   DebridCatalogState catalogState,
 });
 
+// Torrent list search methods
 class DebridTorrentSearch {
   DebridTorrentSearch(this._deps);
   final DebridTorrentSearchDeps _deps;

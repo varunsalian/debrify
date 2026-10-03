@@ -18,6 +18,7 @@ typedef DebridDownloadRowActionsDeps = ({
   void Function(String message) showError,
 });
 
+// Download action methods
 class DebridDownloadRowActions {
   DebridDownloadRowActions(this._deps);
   final DebridDownloadRowActionsDeps _deps;

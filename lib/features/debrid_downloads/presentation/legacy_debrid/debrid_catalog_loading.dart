@@ -182,6 +182,7 @@ class DebridCatalogLoading {
     }
   }
 
+  // Downloads methods
   Future<void> fetchDownloads(String apiKey, {bool reset = false}) async {
     if (reset) {
       if (_deps.mounted()) {

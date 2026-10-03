@@ -1,6 +1,7 @@
 import 'package:debrify/models/debrid_download.dart';
 
 class DebridDownloadState {
+  // Downloads data
   final List<DebridDownload> downloads = [];
 
   bool isLoadingDownloads = false;

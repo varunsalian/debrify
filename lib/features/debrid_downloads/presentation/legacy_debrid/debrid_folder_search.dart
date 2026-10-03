@@ -14,6 +14,7 @@ typedef DebridFolderSearchDeps = ({
   DebridNavigationState navigationState,
 });
 
+// ============ Search Methods ============
 class DebridFolderSearch {
   DebridFolderSearch(this._deps);
   final DebridFolderSearchDeps _deps;

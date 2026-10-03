@@ -181,8 +181,10 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_workflows_composition.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_state.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_node_playlist_links.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_browsing_composition.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_state.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_navigation.dart': 2,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_navigation_state.dart': 0,
@@ -204,6 +206,9 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_download_action.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_view_modes.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_row_actions.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_actions_composition.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_composition_bindings.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_composition.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search_state.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_delete_all_actions.dart': 2,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search.dart': 0,

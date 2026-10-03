@@ -28,6 +28,7 @@ typedef DebridFolderNavigationDeps = ({
   FolderViewMode Function() getCurrentViewMode,
 });
 
+// ========== Folder Navigation Methods ==========
 class DebridFolderNavigation {
   DebridFolderNavigation(this._deps);
   final DebridFolderNavigationDeps _deps;
