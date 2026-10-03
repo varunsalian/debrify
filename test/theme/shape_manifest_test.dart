@@ -186,6 +186,7 @@ const Map<String, int> kShapeResidue = {
   'lib/widgets/tv_sidebar_nav.dart': 1,
   'lib/widgets/tvmaze_search_dialog.dart': 0,
   'lib/widgets/youtube/youtube_video_card.dart': 0,
+
   'lib/screens/pikpak/pikpak_files_screen.dart': 9,
 };
 
@@ -640,12 +641,27 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/discover/presentation/discover_stage_layout.dart': 0,
   'lib/features/discover/presentation/discover_content.dart': 0,
   'lib/features/sources/presentation/source_keyword_field.dart': 1,
+
   'lib/features/pikpak_files/application/pikpak_link_policy.dart': 0,
   'lib/features/pikpak_files/application/pikpak_playlist_titles.dart': 0,
   'lib/features/pikpak_files/application/pikpak_sort_policy.dart': 0,
   'lib/features/pikpak_files/models/folder_view_mode.dart': 0,
   'lib/features/pikpak_files/models/pikpak_playlist_item.dart': 0,
   'lib/features/pikpak_files/models/pikpak_search_result.dart': 0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_catalog_state.dart':
+      0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_focus_state.dart':
+      0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_link_state.dart':
+      0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_navigation_state.dart':
+      0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_search_state.dart':
+      0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_selection_state.dart':
+      0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_view_state.dart':
+      0,
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(

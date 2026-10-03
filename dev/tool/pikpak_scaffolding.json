@@ -1,3 +1,102 @@
 {
-  "scaffolds": []
+  "scaffolds": [
+    {
+      "file": "lib/screens/pikpak/pikpak_files_screen.dart",
+      "owner": "_PikPakFilesScreenState",
+      "name": "_catalog",
+      "tokens": [
+        "final",
+        "_catalog",
+        "=",
+        "PikpakCatalogState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/pikpak/pikpak_files_screen.dart",
+      "owner": "_PikPakFilesScreenState",
+      "name": "_nav",
+      "tokens": [
+        "final",
+        "_nav",
+        "=",
+        "PikpakNavigationState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/pikpak/pikpak_files_screen.dart",
+      "owner": "_PikPakFilesScreenState",
+      "name": "_view",
+      "tokens": [
+        "final",
+        "_view",
+        "=",
+        "PikpakViewState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/pikpak/pikpak_files_screen.dart",
+      "owner": "_PikPakFilesScreenState",
+      "name": "_focus",
+      "tokens": [
+        "final",
+        "_focus",
+        "=",
+        "PikpakFocusState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/pikpak/pikpak_files_screen.dart",
+      "owner": "_PikPakFilesScreenState",
+      "name": "_selection",
+      "tokens": [
+        "final",
+        "_selection",
+        "=",
+        "PikpakSelectionState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/pikpak/pikpak_files_screen.dart",
+      "owner": "_PikPakFilesScreenState",
+      "name": "_search",
+      "tokens": [
+        "final",
+        "_search",
+        "=",
+        "PikpakSearchState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/pikpak/pikpak_files_screen.dart",
+      "owner": "_PikPakFilesScreenState",
+      "name": "_link",
+      "tokens": [
+        "final",
+        "_link",
+        "=",
+        "PikpakLinkState",
+        "(",
+        ")",
+        ";"
+      ]
+    }
+  ]
 }

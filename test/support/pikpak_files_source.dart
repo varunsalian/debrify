@@ -54,6 +54,36 @@ String pikpakOriginalMember(String originalName) {
     memberStart = previousStart;
   }
   var member = source.substring(memberStart, start.end + end.end);
+  final formatting =
+      jsonDecode(
+            File('dev/tool/pikpak_context_exceptions.json').readAsStringSync(),
+          )
+          as Map<String, dynamic>;
+  for (final site in formatting['sites'] as List<dynamic>) {
+    if (site['file'] != row['destination_file'] ||
+        site['owner'] != row['destination_class'] ||
+        site['method'] != row['new_name'] ||
+        site['kind'] != 'formatter_if_braces') {
+      continue;
+    }
+    const gap = r'(?:\s|//[^\n]*\n|/\*[\s\S]*?\*/)*';
+    String pattern(List<dynamic> values) =>
+        values.map((value) => RegExp.escape(value as String)).join(gap);
+    final recorded = RegExp(
+      '(${pattern(site['prefix_tokens'] as List<dynamic>)}$gap)'
+      '\\{$gap${pattern(site['body_tokens'] as List<dynamic>)}$gap\\}',
+    );
+    final matches = recorded.allMatches(member).toList();
+    if (matches.length != 1) {
+      throw StateError('Recorded formatter site changed: $originalName');
+    }
+    final match = matches.single;
+    member = member.replaceRange(
+      match.start,
+      match.end,
+      '${match[1]}${(site['body_tokens'] as List<dynamic>).join(' ')}',
+    );
+  }
   final config =
       jsonDecode(File('dev/tool/pikpak_checker_config.json').readAsStringSync())
           as Map<String, dynamic>;

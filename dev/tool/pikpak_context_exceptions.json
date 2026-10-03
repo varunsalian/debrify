@@ -1,1 +1,44 @@
-{"sites": []}
+{
+  "sites": [
+    {
+      "file": "lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_catalog_loading.dart",
+      "owner": "PikpakCatalogLoading",
+      "method": "loadMoreFiles",
+      "kind": "formatter_if_braces",
+      "body_tokens": [
+        "return",
+        ";"
+      ],
+      "prefix_mode": "raw",
+      "prefix_tokens": [
+        "Future",
+        "<",
+        "void",
+        ">",
+        "_loadMoreFiles",
+        "(",
+        ")",
+        "async",
+        "{",
+        "// Don't load more if already loading, no more pages, or no page token",
+        "if",
+        "(",
+        "_catalog",
+        ".",
+        "isLoadingMore",
+        "||",
+        "!",
+        "_catalog",
+        ".",
+        "hasMore",
+        "||",
+        "_catalog",
+        ".",
+        "nextPageToken",
+        "==",
+        "null",
+        ")"
+      ]
+    }
+  ]
+}

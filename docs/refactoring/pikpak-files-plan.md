@@ -404,6 +404,12 @@ Real-Debrid, PikPak) with self-tests, and gates against the latest PikPak base.
 - All five manifest/self-test runs PASS; PikPak validates all 128 leaves and callback wrapper/same-class-receiver negatives. Initial concurrent runs encountered a shared cached parser-kernel rebuild (exit 253); reran all five successfully with the existing --parser-package option and an isolated evidence-directory cache. Checker/source rules were unchanged.
 - `pikpak/step1`: 111 success / one observed pre-existing theme failure, PASS versus base3 (zero added/missing/newly skipped identities or new failures); all 83 characterization tests and five strict macOS originals unchanged. Stable staged tested tree d311f67b1088347ea04e49520f153d900a1473ab recorded. Whole analyzer 839, zero additions/removals. Architecture, sizes, storage references/self-tests/314 keys, format and staged diff checks PASS.
 
+### Step 2 — complete
+
+- Step 1 is `35f1bccb`. Seven state/resource owners keep every original field initializer at its declaration, original list/set/map identity, focus debug labels and controller construction. `_email` remains private in the facade. Manually reviewed each owner and all facade/accessor receivers before pinning the seven owner-handle scaffolds. Full lifecycle and 14-disposal sequence remain unchanged.
+- Facade 3,342 → 3,318; largest owner 37 lines. Receiver expansion requires one named-record trailing comma in navigation and braces around the paging early return. Both are exact, manifest-listed formatting exceptions; the source reader reverses only the registered brace site with its entire prefix and body matched. Frozen characterization assertions and PNGs are unchanged.
+- `pikpak/step2`: 111 successes / one observed pre-existing theme failure; PASS versus latest base3, no added/missing/newly skipped identities or new failures. Stable staged tested tree 9ec23679db9b3390acffd64d6259e178a9db2620. Whole analyzer 839 diagnostics, zero additions/removals. All five manifest/self-tests, architecture, strict sizes, storage references/self-tests/314 keys, formatting and staged diff checks PASS.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
