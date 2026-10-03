@@ -393,6 +393,10 @@ Real-Debrid, PikPak) with self-tests, and gates against the latest PikPak base.
 - Whole analyzer: 839 diagnostics, zero additions/removals versus original. CI-equivalent format (1,423 files) and scoped analyze/strict warning allowlist (five original warnings) PASS. Original code was also analyzed under unchanged destination lint configuration in the detached worktree, with only relative-import URI qualification: 19 original diagnostics, including five directive-order infos; no const/runtime rewrite or suppression. This observed strict evidence is retained for any destination-only diagnostic relocation.
 - Architecture, strict sizes, storage reference/self-tests and all 314 storage constants PASS. All five manifest/self-test runs PASS; PikPak accounts for 128 leaves and rejects all wrapping/receiver callback negatives. No historical failure list changed. Evidence lives under the common git directory in `refactor-evidence/pikpak/`; source/checker/test additions are all staged in tree evidence. Remote CI remains pending; no push.
 
+### Step 0a — metadata correction
+
+- Step 0 is `2b93c520`. The staged diff check exposed CRLF from the TSV writer after the earlier unstaged check passed. Corrected the manifest to LF and proved parsed rows identical before/after; no application or characterization change. The original Linux capture continues resolving `2b93c520` by its exact subject, and latest test base remains `pikpak/base3`. All subsequent staged diff checks must pass before committing.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
