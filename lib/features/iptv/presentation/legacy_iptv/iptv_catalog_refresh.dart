@@ -20,7 +20,7 @@ typedef IptvCatalogRefreshDeps = ({
   IptvFocusState focusState,
   IptvSettingsState settingsState,
   IptvStatusState statusState,
-  // TEMP(iptv): _applyFilters -> IptvFiltersSection.applyFilters (step 4).
+
   void Function() applyFilters,
   List<String> Function(CatalogSnapshot snap, List<CatalogGroup> groups)
   deriveCategories,
@@ -48,7 +48,7 @@ typedef IptvCatalogRefreshDeps = ({
     ChipOwner owner,
   })
   showChip,
-  // TEMP(iptv): _updateEpgContext -> IptvGuideContext.updateEpgContext (step 4).
+
   void Function(
     IptvPlaylist playlist,
     IptvParseResult result,

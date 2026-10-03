@@ -859,5 +859,105 @@
       }
     },
     "passes": false
+  },
+  "formatted positional record": {
+    "original": "class Facade { static Object method(int left, {int right = 2}) => (left, right); }",
+    "sources": {
+      "source": "class Facade { static Object method(int left, {int right = 2}) => Policy.method(left, right: right); }",
+      "owner": "class Policy { static Object method(int left, {int right = 2}) => (left, right,); }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.method",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "method",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver,retained_forwarder",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": true,
+    "config": {
+      "forwarders": {
+        "Facade.method": {}
+      }
+    }
+  },
+  "changed positional record field": {
+    "original": "class Facade { static Object method(int left, {int right = 2}) => (left, right); }",
+    "sources": {
+      "source": "class Facade { static Object method(int left, {int right = 2}) => Policy.method(left, right: right); }",
+      "owner": "class Policy { static Object method(int left, {int right = 2}) => (right, left,); }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.method",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "method",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver,retained_forwarder",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "forwarders": {
+        "Facade.method": {}
+      }
+    }
+  },
+  "singleton record comma is semantic": {
+    "original": "class Facade { static Object method(int left, {int right = 2}) => (left); }",
+    "sources": {
+      "source": "class Facade { static Object method(int left, {int right = 2}) => Policy.method(left, right: right); }",
+      "owner": "class Policy { static Object method(int left, {int right = 2}) => (left,); }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.method",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "method",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver,retained_forwarder",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "forwarders": {
+        "Facade.method": {}
+      }
+    }
+  },
+  "singleton record becomes expression": {
+    "original": "class Facade { static Object method(int left, {int right = 2}) => (left,); }",
+    "sources": {
+      "source": "class Facade { static Object method(int left, {int right = 2}) => Policy.method(left, right: right); }",
+      "owner": "class Policy { static Object method(int left, {int right = 2}) => (left); }"
+    },
+    "rows": [
+      {
+        "original_name": "Facade.method",
+        "destination_file": "owner",
+        "destination_class": "Policy",
+        "new_name": "method",
+        "step": "1",
+        "layer": "presentation",
+        "allowed_edits": "receiver,retained_forwarder",
+        "expected_difference": "verbatim; plan-named edits only"
+      }
+    ],
+    "passes": false,
+    "config": {
+      "forwarders": {
+        "Facade.method": {}
+      }
+    }
   }
 }

@@ -5,11 +5,11 @@
 11271 lib/screens/magic_tv_screen.dart
 7070 lib/screens/torbox/torbox_downloads_screen.dart
 6919 lib/services/profiles/profile_registry.dart
-6528 lib/widgets/iptv/iptv_results_view.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 6445 lib/screens/debrid_downloads_screen.dart
 5532 lib/screens/merged_series_detail_screen.dart
 5475 lib/services/remote_control/remote_command_router.dart
+5369 lib/widgets/iptv/iptv_results_view.dart
 4700 lib/services/webdav_sync/webdav_sync_engine.dart
 4685 lib/services/download_service.dart
 4480 lib/screens/settings/iptv_settings_page.dart

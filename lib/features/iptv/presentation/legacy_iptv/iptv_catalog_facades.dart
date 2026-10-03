@@ -16,7 +16,7 @@ typedef IptvCatalogFacadesDeps = ({
   IptvFocusState focusState,
   IptvMembershipState membershipState,
   IptvSettingsState settingsState,
-  // TEMP(iptv): _applyFilters -> IptvFiltersSection.applyFilters (step 4).
+
   void Function() applyFilters,
   bool Function() mounted,
   StateSetter setState,

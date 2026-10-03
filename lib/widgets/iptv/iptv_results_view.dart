@@ -1,3 +1,9 @@
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_categories.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_filters.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_guide_context.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_player_browse.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_player_payload.dart';
+import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_virtual_results.dart';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_catalog_facades.dart';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_catalog_loading.dart';
 import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_catalog_maintenance.dart';
@@ -52,7 +58,6 @@ import '../browse/brand_accent.dart';
 import '../browse/browse_results_focus.dart';
 import '../browse/browse_search_header.dart';
 import '../../models/playlist_view_mode.dart';
-import '../../services/iptv_catalog_key.dart';
 import '../../services/iptv_channel_order.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/iptv_catalog_db.dart';
@@ -60,9 +65,7 @@ import '../../services/iptv_catalog_refresh_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_iptv_service.dart';
 import '../../services/stremio_service.dart';
-import '../../services/xtream_codes_service.dart';
 import '../../services/video_player_launcher.dart';
-import '../../utils/iptv_player_paging.dart';
 import '../../utils/tv_keys.dart' show TvHeldKeyGuard, isActivateOrSpaceKey;
 import '../../screens/iptv/xtream_series_detail.dart';
 import '../../screens/settings/iptv_settings_page.dart';
@@ -144,6 +147,72 @@ class IptvResultsViewState extends State<IptvResultsView>
     implements
         BrowseResultsFocusController,
         BrowseSearchResultsFocusController {
+  late final IptvFiltersSection _filtersSection = IptvFiltersSection((
+    catalogState: _catalogState,
+    focusState: _focusState,
+    membershipState: _membershipState,
+    previewState: _previewState,
+    selectionState: _selectionState,
+    settingsState: _settingsState,
+    beginLoadStatus: () => _loadStatus.beginLoadStatus(),
+    clearPreview: () => _clearPreview(),
+    focusNodeFor: (IptvChannel channel) => _focusNodeFor(channel),
+    focusSpotlightContentEntry: () => _focusSpotlightContentEntry(),
+    isTelevision: () => widget.isTelevision,
+    loadPlaylist: (IptvPlaylist playlist, {bool userRequested = false}) => _catalogLoading.loadPlaylist(playlist, userRequested: userRequested),
+    makeDbList: (CatalogSnapshot snap, {String? group, String? search}) => _catalogFacades.makeDbList(snap, group: group, search: search),
+    mounted: () => mounted,
+    searchQuery: () => widget.searchQuery,
+    setState: setState,
+  ));
+  late final IptvGuideContext _guideContext = IptvGuideContext((
+    catalogState: _catalogState,
+    settingsState: _settingsState,
+    statusState: _statusState,
+    context: () => context,
+    hideChipIfOwned: (ChipOwner owner) => _statusChip.hideChipIfOwned(owner),
+    mounted: () => mounted,
+    onGuidePhase: (int ticket, int? bytes, int? totalBytes) => _statusChip.onGuidePhase(ticket, bytes, totalBytes),
+    setState: setState,
+  ));
+  late final IptvVirtualResults _virtualResults = IptvVirtualResults((
+    catalogState: _catalogState,
+    membershipState: _membershipState,
+    applyFilters: () => _filtersSection.applyFilters(),
+    consumeContentFocusRequest: () => _filtersSection.consumeContentFocusRequest(),
+    endLoadStatus: () => _loadStatus.endLoadStatus(),
+    mounted: () => mounted,
+    setState: setState,
+  ));
+  late final IptvCategories _categoryActions = IptvCategories((
+    catalogState: _catalogState,
+    applyFilters: () => _filtersSection.applyFilters(),
+    categoryCounts: () => _categoryCounts,
+    context: () => context,
+    deriveCategories: (CatalogSnapshot snap, List<CatalogGroup> groups) => _catalogPresentation.deriveCategories(snap, groups),
+    makeDbList: (CatalogSnapshot snap, {String? group, String? search}) => _catalogFacades.makeDbList(snap, group: group, search: search),
+    mounted: () => mounted,
+    setState: setState,
+    showChip: (CatalogChipState state, String message, {Duration? autoHide, ChipOwner owner = ChipOwner.refresh}) => _statusChip.showChip(state, message, autoHide: autoHide, owner: owner),
+  ));
+  late final IptvPlayerPayload _playerPayload = IptvPlayerPayload((
+    catalogState: _catalogState,
+    membershipState: _membershipState,
+    settingsState: _settingsState,
+    withoutHidden: (String catalogKey, List<String> categories) => _catalogPresentation.withoutHidden(catalogKey, categories),
+  ));
+  late final IptvPlayerBrowse _playerBrowse = IptvPlayerBrowse((
+    catalogState: _catalogState,
+    playerState: _playerState,
+    settingsState: _settingsState,
+    fullCategoryList: () => _playerPayload.fullCategoryList(),
+    loadPlaylist: (IptvPlaylist playlist, {bool userRequested = false}) => _catalogLoading.loadPlaylist(playlist, userRequested: userRequested),
+    mounted: () => mounted,
+    playerChannelPayload: (List<({IptvChannel channel, IptvPlaylist source})> entries) => _playerPayload.playerChannelPayload(entries),
+    playerSourcePayload: () => _playerPayload.playerSourcePayload(),
+    setState: setState,
+  ));
+
   late final IptvFavorites _favorites = IptvFavorites((
     catalogState: _catalogState,
     membershipState: _membershipState,
@@ -151,7 +220,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     context: () => context,
     loadPlaylist: (IptvPlaylist playlist, {bool userRequested = false}) => _catalogLoading.loadPlaylist(playlist, userRequested: userRequested),
     mounted: () => mounted,
-    onPlaylistChanged: (IptvPlaylist? playlist, {bool focusContent = false}) => _onPlaylistChanged(playlist, focusContent: focusContent),
+    onPlaylistChanged: (IptvPlaylist? playlist, {bool focusContent = false}) => _filtersSection.onPlaylistChanged(playlist, focusContent: focusContent),
     refreshListShelfPresence: () => _refreshListShelfPresence(),
     setState: setState,
   ));
@@ -175,12 +244,12 @@ class IptvResultsViewState extends State<IptvResultsView>
     selectionState: _selectionState,
     settingsState: _settingsState,
     statusState: _statusState,
-    applyProgressiveBatch: (int ticket, List<IptvChannel> channels, List<String> categories) => _applyProgressiveBatch(ticket, channels, categories),
+    applyProgressiveBatch: (int ticket, List<IptvChannel> channels, List<String> categories) => _virtualResults.applyProgressiveBatch(ticket, channels, categories),
     beginLoadStatus: () => _loadStatus.beginLoadStatus(),
-    buildContinueResult: () => _buildContinueResult(),
-    buildListResult: (String listId) => _buildListResult(listId),
+    buildContinueResult: () => _virtualResults.buildContinueResult(),
+    buildListResult: (String listId) => _virtualResults.buildListResult(listId),
     clearPreview: () => _clearPreview(),
-    consumeContentFocusRequest: () => _consumeContentFocusRequest(),
+    consumeContentFocusRequest: () => _filtersSection.consumeContentFocusRequest(),
     endLoadStatus: () => _loadStatus.endLoadStatus(),
     fetchCatalogFromNetwork: (IptvPlaylist playlist, String contentType, int ticket) => _catalogNetwork.fetchCatalogFromNetwork(playlist, contentType, ticket),
     mounted: () => mounted,
@@ -193,25 +262,25 @@ class IptvResultsViewState extends State<IptvResultsView>
   ));
   late final IptvCatalogPresentation _catalogPresentation = IptvCatalogPresentation((
     catalogState: _catalogState,
-    applyFilters: () => _applyFilters(),
-    consumeContentFocusRequest: () => _consumeContentFocusRequest(),
+    applyFilters: () => _filtersSection.applyFilters(),
+    consumeContentFocusRequest: () => _filtersSection.consumeContentFocusRequest(),
     context: () => context,
     endLoadStatus: () => _loadStatus.endLoadStatus(),
-    landingCategory: (String? orderKey, List<String> categories) => _landingCategory(orderKey, categories),
+    landingCategory: (String? orderKey, List<String> categories) => _filtersSection.landingCategory(orderKey, categories),
     loadFavorites: () => _favorites.loadFavorites(),
-    loadProgress: (int ticket, List<IptvChannel> channels) => _loadProgress(ticket, channels),
+    loadProgress: (int ticket, List<IptvChannel> channels) => _virtualResults.loadProgress(ticket, channels),
     makeDbList: (CatalogSnapshot snap, {String? group, String? search}) => _catalogFacades.makeDbList(snap, group: group, search: search),
     mounted: () => mounted,
     recomputeSourceCounts: () => _recomputeSourceCounts(),
     setState: setState,
-    updateEpgContext: (IptvPlaylist playlist, IptvParseResult result, int ticket, {bool quiet = false}) => _updateEpgContext(playlist, result, ticket, quiet: quiet),
+    updateEpgContext: (IptvPlaylist playlist, IptvParseResult result, int ticket, {bool quiet = false}) => _guideContext.updateEpgContext(playlist, result, ticket, quiet: quiet),
   ));
   late final IptvCatalogFacades _catalogFacades = IptvCatalogFacades((
     catalogState: _catalogState,
     focusState: _focusState,
     membershipState: _membershipState,
     settingsState: _settingsState,
-    applyFilters: () => _applyFilters(),
+    applyFilters: () => _filtersSection.applyFilters(),
     mounted: () => mounted,
     setState: setState,
   ));
@@ -236,7 +305,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     focusState: _focusState,
     settingsState: _settingsState,
     statusState: _statusState,
-    applyFilters: () => _applyFilters(),
+    applyFilters: () => _filtersSection.applyFilters(),
     deriveCategories: (CatalogSnapshot snap, List<CatalogGroup> groups) => _catalogPresentation.deriveCategories(snap, groups),
     loadFavorites: () => _favorites.loadFavorites(),
     makeDbList: (CatalogSnapshot snap, {String? group, String? search}) => _catalogFacades.makeDbList(snap, group: group, search: search),
@@ -246,7 +315,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     rowAttached: (IptvChannel channel) => _rowAttached(channel),
     setState: setState,
     showChip: (CatalogChipState state, String message, {Duration? autoHide, ChipOwner owner = ChipOwner.refresh}) => _statusChip.showChip(state, message, autoHide: autoHide, owner: owner),
-    updateEpgContext: (IptvPlaylist playlist, IptvParseResult result, int ticket, {bool quiet = false}) => _updateEpgContext(playlist, result, ticket, quiet: quiet),
+    updateEpgContext: (IptvPlaylist playlist, IptvParseResult result, int ticket, {bool quiet = false}) => _guideContext.updateEpgContext(playlist, result, ticket, quiet: quiet),
   ));
   late final IptvCatalogNetwork _catalogNetwork = IptvCatalogNetwork((
     catalogState: _catalogState,
@@ -345,8 +414,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
 
   // Search spans the current source; retain the browse category for clearing.
-  String? get _effectiveCategory =>
-      widget.searchQuery.isNotEmpty ? null : _catalogState.selectedCategory;
+
 
 
 
@@ -625,7 +693,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     }
     // Virtual Stremio playlists come and go with the installed addon set.
     StremioService.instance.addAddonsChangedListener(_settingsLoading.onStremioAddonsChanged);
-    IptvChannelOrderSignal.revision.addListener(_onChannelOrderChanged);
+    IptvChannelOrderSignal.revision.addListener(_filtersSection.onChannelOrderChanged);
     IptvCatalogRefreshService.instance.revision.addListener(
       _catalogRefresh.onCatalogRefreshed,
     );
@@ -675,24 +743,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
 
 
-  void _onChannelOrderChanged() {
-    final playlist = _settingsState.selectedPlaylist;
-    final change = IptvChannelOrderSignal.latest;
-    if (!mounted || playlist == null || change == null) return;
-    final affected = switch (change.scope) {
-      IptvChannelOrderScope.list =>
-        (playlist.isFavorites &&
-                change.target == IptvFavoritesStorage.iptvFavoritesListId) ||
-            playlist.customListId == change.target,
-      IptvChannelOrderScope.source =>
-        change.target.isEmpty || playlist.id == change.target,
-      IptvChannelOrderScope.catalog =>
-        change.target.isEmpty ||
-            IptvCatalogKey.forCategoryOrder(playlist, _catalogState.selectedContentType) ==
-                change.target,
-    };
-    if (affected) unawaited(_catalogLoading.loadPlaylist(playlist));
-  }
+
 
 
 
@@ -734,10 +785,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       _selectionState.lastSearchQuery = widget.searchQuery;
       _selectionState.searchDebounce?.cancel();
       if (widget.searchQuery.isEmpty) {
-        _applyFilters();
+        _filtersSection.applyFilters();
       } else {
         _selectionState.searchDebounce = Timer(const Duration(milliseconds: 220), () {
-          if (mounted) _applyFilters();
+          if (mounted) _filtersSection.applyFilters();
         });
       }
     }
@@ -763,7 +814,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     StremioService.instance.removeAddonsChangedListener(
       _settingsLoading.onStremioAddonsChanged,
     );
-    IptvChannelOrderSignal.revision.removeListener(_onChannelOrderChanged);
+    IptvChannelOrderSignal.revision.removeListener(_filtersSection.onChannelOrderChanged);
     _selectionState.searchDebounce?.cancel();
     _selectionState.contentTypeDebounce?.cancel();
     _statusState.loadTicker?.cancel();
@@ -896,557 +947,29 @@ class IptvResultsViewState extends State<IptvResultsView>
 
 
 
-  /// Activate (or clear) XMLTV guide data for the loaded playlist. Fire and
-  /// forget: the list renders immediately, and rows re-render with their
-  /// schedule affordances if/when the guide lands.
-  ///
-  /// Guide URL resolution, per playlist kind:
-  /// - Plain M3U: user-configured epgUrl > the header's url-tvg > (when the
-  ///   playlist is really an Xtream `get.php` export, i.e. its channel URLs
-  ///   carry credentials) the panel's own xmltv.php.
-  /// - Xtream (live view): user-configured epgUrl > the panel's xmltv.php.
-  ///   This layers ON TOP of the per-stream get_short_epg endpoints — the
-  ///   XMLTV index answers first, the endpoints cover anything it doesn't.
-  ///   It's the same source TiviMate reads, so panels whose per-stream EPG
-  ///   is broken/disabled (a real-world regular) still get a full guide.
-  /// - Favorites/custom lists: one guide context per originating provider.
-  /// - Everything else (Stremio/continue): no guide context.
-  void _updateEpgContext(
-    IptvPlaylist playlist,
-    IptvParseResult result,
-    int ticket, {
-    // Suppress the user-facing failure hints (background revalidate re-runs
-    // already had them surfaced by the foreground pass this visit).
-    bool quiet = false,
-  }) {
-    final service = IptvEpgService.instance;
-    _statusState.lastGuideMb = -1;
-    if (playlist.isFavorites || playlist.isCustomList) {
-      _statusChip.hideChipIfOwned(ChipOwner.guide);
-      unawaited(
-        Zone.root.run(() => service.setListEpgContext(
-          channels: result.channels,
-          playlists: _settingsState.playlists,
-          isCurrent: () => mounted && ticket == _catalogState.loadTicket,
-        )),
-      );
-      return;
-    }
-    final isPlainM3u = !playlist.isVirtual && !playlist.isXtreamCodes;
-    final isXtreamLive =
-        playlist.isXtreamCodes && _catalogState.selectedContentType == 'live';
-    if (!isPlainM3u && !isXtreamLive) {
-      service.clearM3uEpgContext();
-      _statusChip.hideChipIfOwned(ChipOwner.guide);
-      return;
-    }
-    // A user-configured guide URL beats every derived source.
-    final manual = playlist.epgUrl?.trim();
-    final hasManualUrl = manual != null && manual.isNotEmpty;
-    String? epgUrl;
-    if (hasManualUrl) {
-      epgUrl = manual;
-    } else if (isXtreamLive) {
-      epgUrl = IptvEpgService.xmltvUrlFor(
-        playlist.serverUrl!,
-        playlist.username ?? '',
-        playlist.password ?? '',
-      );
-    } else {
-      epgUrl = result.epgUrl;
-      if (epgUrl == null || epgUrl.trim().isEmpty) {
-        // No configured or declared guide — an Xtream-export M3U can still
-        // derive the panel's own xmltv.php from any channel's stream URL.
-        // Such exports are homogeneous (every URL carries the credentials),
-        // so a bounded sample decides. Bounding matters: the
-        // channels list is a paging facade, and walking all of it here would
-        // synchronously materialize the whole catalog on the UI isolate for
-        // a plain M3U that derives nothing.
-        final channels = result.channels;
-        final Iterable<IptvChannel> probe = channels is DbChannelList
-            ? channels.effectiveSnapshot.page(offset: 0, limit: 50, live: true)
-            : channels;
-        for (final channel in probe) {
-          if (!channel.isLive) continue;
-          final derived = IptvEpgService.xmltvUrlForChannelUrl(channel.url);
-          if (derived != null) {
-            epgUrl = derived;
-            break;
-          }
-        }
-      }
-    }
-    // Started in the ROOT zone on purpose. This is fire-and-forget work that
-    // takes the maintenance gate for its catalog scan and guide ingest, and
-    // one of its callers (the background refresh) is itself running inside
-    // that gate — inheriting the caller's zone would make the gate re-entrant
-    // for this long-lived job and let it run alongside the next queued one,
-    // which is the overlap being designed out.
-    Zone.root
-        .run(
-          () => service.setM3uEpgContext(
-            playlistKey: playlist.id,
-            epgUrl: epgUrl,
-            channels: result.channels,
-            // DB-backed view: the guide stores its rows in iptv_catalog.db and
-            // binds URLs through the catalog instead of whole-playlist maps.
-            dbCatalogKey: _catalogState.dbSnapshot?.catalogKey,
-            onPhase: (phase, {bytes, totalBytes}) =>
-                _statusChip.onGuidePhase(ticket, bytes, totalBytes),
-          ),
-        )
-        .then((status) {
-          // The guide is done one way or another — drop its chip if it is
-          // still the one speaking.
-          _statusChip.hideChipIfOwned(ChipOwner.guide);
-          if (!mounted || ticket != _catalogState.loadTicket) return;
-          // Failure hints only for a guide the user configured themselves.
-          // Header-derived url-tvg URLs are routinely dead in wild playlists —
-          // those users never asked for EPG and got silent no-guide before;
-          // nagging them on every load would be a regression.
-          void hint(String message) {
-            if (quiet || !hasManualUrl) return;
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(message)));
-          }
-
-          switch (status) {
-            case M3uEpgStatus.matched:
-              // Capability changed: rebuild the rows so EPG-covered channels
-              // gain the RIGHT-key/calendar affordance. The rail card refreshes
-              // itself via the service's contextVersion listener.
-              setState(() {});
-            // The guide failing is otherwise invisible — rows just never grow
-            // their affordances — and "EPG doesn't work" reports can't tell
-            // the flavors apart. Say which one happened.
-            case M3uEpgStatus.noMatch:
-              hint(
-                'TV guide loaded, but none of its channels matched this '
-                'playlist (the ids and names don\'t line up).',
-              );
-            case M3uEpgStatus.noProgrammes:
-              hint(
-                'TV guide matched this playlist, but it has no programme '
-                'data for the current period.',
-              );
-            case M3uEpgStatus.failed:
-              hint('Couldn\'t load the TV guide — check the EPG URL.');
-            case M3uEpgStatus.inactive:
-              break;
-          }
-        })
-        // The chain above had NO error handler: a throw anywhere in the
-        // guide pipeline (isolate spawn under memory pressure, malformed
-        // XMLTV, a BUSY SqliteException from a colliding write) became an
-        // unhandled async rejection — and because the work deliberately runs
-        // in the root zone, no caller-side guard could ever catch it either.
-        // A failed guide load degrades to "no guide", exactly like the
-        // status-carrying failures above.
-        .catchError((Object e) {
-          debugPrint('IPTV: guide context update failed: $e');
-          _statusChip.hideChipIfOwned(ChipOwner.guide);
-          if (!mounted || ticket != _catalogState.loadTicket) return;
-          if (!quiet && hasManualUrl) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Couldn\'t load the TV guide — check the EPG URL.',
-                ),
-              ),
-            );
-          }
-        });
-  }
-
-  /// A page of Stremio channels landed while the catalog walk is still
-  /// running. Batches are cumulative snapshots, so skipped intermediate ones
-  /// lose nothing — throttle the repaints and let the next batch (or the
-  /// final result) true everything up.
-  void _applyProgressiveBatch(
-    int ticket,
-    List<IptvChannel> channels,
-    List<String> categories,
-  ) {
-    if (!mounted || ticket != _catalogState.loadTicket) return;
-    final now = DateTime.now();
-    final last = _catalogState.lastProgressiveApply;
-    final firstBatch = !_catalogState.isLoadingMore;
-    if (!firstBatch &&
-        last != null &&
-        now.difference(last) < const Duration(milliseconds: 300)) {
-      return;
-    }
-    final wasFirstBatch = firstBatch;
-    _catalogState.lastProgressiveApply = now;
-    _loadStatus.endLoadStatus();
-    setState(() {
-      _catalogState.isLoading = false; // first batch swaps the spinner for real rows
-      _catalogState.isLoadingMore = true;
-      _catalogState.allChannels = channels;
-      _catalogState.categories = categories;
-    });
-    _applyFilters();
-    // A Stremio source picked from the rail: hand focus to the content pane
-    // once its first batch of rows is on screen (later batches keep focus).
-    if (wasFirstBatch) _consumeContentFocusRequest();
-  }
-
-  /// Look up saved positions for the loaded list. Live channels can't have
-  /// one, so a playlist with no on-demand items skips the read entirely —
-  /// that's the overwhelmingly common case (a live-TV panel).
-  Future<void> _loadProgress(int ticket, List<IptvChannel> channels) async {
-    // Bars load per faulted page (_loadPageProgress); a full-list
-    // refresh (post-playback) re-reads just the RESIDENT pages — the rows
-    // that can be on screen.
-    if (_catalogState.dbSnapshot != null) {
-      final all = _catalogState.allChannels;
-      final filtered = _catalogState.filteredChannels;
-      final resident = <IptvChannel>[
-        if (all is DbChannelList) ...all.residentChannels(),
-        if (filtered is DbChannelList) ...filtered.residentChannels(),
-      ];
-      final urls = <String>{
-        for (final channel in resident)
-          if (!channel.isLive && channel.contentType != 'series') channel.url,
-      };
-      if (urls.isEmpty) return;
-      final progress = await IptvHistoryStorage.getIptvProgressForUrls(urls);
-      if (!mounted || ticket != _catalogState.loadTicket || progress.isEmpty) return;
-      setState(() => _membershipState.progressByUrl = {..._membershipState.progressByUrl, ...progress});
-      return;
-    }
-
-    final onDemand = [
-      for (final channel in channels)
-        // Series rows carry a sentinel (non-stream) URL — no position can
-        // exist for it; their per-episode progress lives on the detail page.
-        if (!channel.isLive && channel.contentType != 'series') channel.url,
-    ];
-    if (onDemand.isEmpty) {
-      if (_membershipState.progressByUrl.isNotEmpty && mounted && ticket == _catalogState.loadTicket) {
-        setState(() => _membershipState.progressByUrl = {});
-      }
-      return;
-    }
-
-    final progress = await IptvHistoryStorage.getIptvProgressForUrls(onDemand);
-    if (!mounted || ticket != _catalogState.loadTicket) return;
-    setState(() => _membershipState.progressByUrl = progress);
-  }
-
-  /// Build the virtual "Continue watching" playlist. Like Favorites, the rows
-  /// are replayed from metadata captured at play time rather than re-fetched,
-  /// so they survive a provider that has since renumbered or expired.
-  Future<IptvParseResult> _buildContinueResult() async {
-    final items = await IptvHistoryStorage.getIptvContinueWatching();
-    _membershipState.continuePlaylistIds = {};
-    final channels = <IptvChannel>[];
-    // A series' episodes collapse to ONE row: items are most-recent-first, so
-    // the first entry per (provider, series) wins and the rest are folded in.
-    // Non-series items (movies/catchup) keep one row each, exactly as before.
-    final seenSeries = <String>{};
-    for (final item in items) {
-      final seriesId = (item['seriesId'] as String?) ?? '';
-      final originId = (item['playlistId'] as String?) ?? '';
-      if (seriesId.isNotEmpty) {
-        final groupKey = '$originId::$seriesId';
-        if (!seenSeries.add(groupKey)) continue; // already have this series
-        // A series sentinel URL, so a tap routes into the merged series page
-        // (which resumes at the true next-up from the players' saved
-        // positions) rather than playing one episode standalone. The origin
-        // provider id is baked into the URL: Xtream series ids are per-provider
-        // small integers, so two providers routinely share one — a plain
-        // `xtream-series://<id>` would collide in the url-keyed row/focus/
-        // origin bookkeeping and open the wrong show.
-        final sentinelUrl = 'xtream-series://$originId/$seriesId';
-        _membershipState.continuePlaylistIds[sentinelUrl] = originId;
-        final seriesName = (item['seriesName'] as String?)?.isNotEmpty == true
-            ? item['seriesName'] as String
-            : ((item['group'] as String?)?.isNotEmpty == true
-                  ? item['group'] as String
-                  : 'Unknown series');
-        channels.add(
-          IptvChannel(
-            name: seriesName,
-            url: sentinelUrl,
-            logoUrl: (item['logoUrl'] as String?)?.isNotEmpty == true
-                ? item['logoUrl'] as String
-                : null,
-            group: seriesName,
-            contentType: 'series',
-            attributes: {
-              'series_id': seriesId,
-              if (originId.isNotEmpty) 'series_playlist_id': originId,
-            },
-          ),
-        );
-        continue;
-      }
-      // Defensive cast, matching every other field in this loop: this is
-      // decoded storage JSON, and one malformed entry (null/missing url)
-      // must skip that row, not TypeError the whole shelf's build.
-      final itemUrl = item['url'] as String?;
-      if (itemUrl == null || itemUrl.isEmpty) continue;
-      _membershipState.continuePlaylistIds[itemUrl] = originId;
-      channels.add(
-        IptvChannel(
-          name: (item['name'] as String?)?.isNotEmpty == true
-              ? item['name'] as String
-              : 'Unknown',
-          url: itemUrl,
-          logoUrl: (item['logoUrl'] as String?)?.isNotEmpty == true
-              ? item['logoUrl'] as String
-              : null,
-          group: (item['group'] as String?)?.isNotEmpty == true
-              ? item['group'] as String
-              : null,
-          // Always on-demand — live channels are never recorded — so the row
-          // draws a poster and the "LIVE" dot stays off.
-          contentType: 'vod',
-          httpHeaders: IptvFavoritesStorage.iptvFavoriteHeaders(item),
-        ),
-      );
-    }
-    final categories = <String>{
-      for (final channel in channels)
-        if (channel.group != null) channel.group!,
-    }.toList()..sort();
-    // Already ordered most-recently-watched first; leave it alone.
-    return IptvParseResult(channels: channels, categories: categories);
-  }
-
-  /// Build a virtual list shelf (Favorites or a user list) from the stored
-  /// membership. Metadata was captured when the channel was added, so no
-  /// fetch is needed; Stremio-keyed URLs still resolve on focus/play exactly
-  /// like anywhere else.
-  Future<IptvParseResult> _buildListResult(String listId) async {
-    final stored = await IptvFavoritesStorage.getIptvListChannels(listId);
-    final channels = stored.entries.map((entry) {
-      final meta = entry.value;
-      final name = (meta['name'] as String?) ?? '';
-      final logoUrl = (meta['logoUrl'] as String?) ?? '';
-      final group = (meta['group'] as String?) ?? '';
-      return IptvChannel(
-        channelNumber: (meta['channelNumber'] as num?)?.toInt(),
-        name: name.isEmpty ? 'Unknown Channel' : name,
-        url: entry.key,
-        logoUrl: logoUrl.isEmpty ? null : logoUrl,
-        group: group.isEmpty ? null : group,
-        // Rows added before these were stored (and every row migrated
-        // from the pre-v5 favorites table) fall back to live, which is
-        // how they presented then; the reconcile pass backfills them the
-        // first time their provider is opened.
-        duration: (meta['duration'] as num?)?.toInt() ?? -1,
-        contentType: meta['contentType'] as String?,
-        attributes: {
-          if ((meta['playlistId'] as String?)?.isNotEmpty ?? false)
-            IptvMembershipState.kListOriginAttribute: meta['playlistId'] as String,
-        },
-        httpHeaders: IptvFavoritesStorage.iptvFavoriteHeaders(meta),
-      );
-    }).toList();
-    final categories = <String>{
-      for (final channel in channels)
-        if (channel.group != null) channel.group!,
-    }.toList()..sort();
-    return IptvParseResult(channels: channels, categories: categories);
-  }
-
-  void _applyFilters() {
-    _catalogState.spotlightViewGeneration++;
-    // A programme cursor belongs to the outgoing projection. The timeline
-    // will publish the reconciled row/programme after its next frame.
-    _previewState.spotlightProgrammeShown.value = null;
-    // DB-backed catalog: the filter IS the query — a new facade with the
-    // category/search folded into its SQL. Same substring-over-name+group
-    // semantics as searchChannels (the search_key column is the same
-    // haystack IptvChannel.searchKey builds).
-    final snap = _catalogState.dbSnapshot;
-    if (snap != null) {
-      setState(() {
-        _catalogState.filteredChannels = _catalogFacades.makeDbList(
-          snap,
-          group: _effectiveCategory,
-          search: widget.searchQuery.isEmpty ? null : widget.searchQuery,
-        );
-      });
-      // A new facade mints new instances, so the outgoing filter's rows can
-      // never be handed out again — their focus nodes would otherwise pile
-      // up until the next full reload (the materialized path reuses
-      // instances across filters and doesn't have this). Post-frame, after
-      // the new rows are built: retire everything detached and unfocused.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        final orphans = [
-          for (final entry in _focusState.cardFocusNodes.entries)
-            if (_focusState.detachedRows.contains(entry.key) && !entry.value.hasFocus)
-              entry.key,
-        ];
-        for (final channel in orphans) {
-          _focusState.detachedRows.remove(channel);
-          _focusState.cardFocusNodes.remove(channel)?.dispose();
-        }
-      });
-      return;
-    }
-
-    var channels = _catalogState.allChannels;
-
-    // Filter by category
-    if (_effectiveCategory != null) {
-      channels = _settingsState.iptvService.filterByCategory(channels, _effectiveCategory);
-    }
-
-    // Filter by search query
-    if (widget.searchQuery.isNotEmpty) {
-      channels = _settingsState.iptvService.searchChannels(channels, widget.searchQuery);
-    }
-
-    setState(() {
-      _catalogState.filteredChannels = channels;
-    });
-  }
-
-  void _onPlaylistChanged(IptvPlaylist? playlist, {bool focusContent = false}) {
-    if (playlist == null) return;
-    if (playlist == _settingsState.selectedPlaylist) {
-      // Re-picking the current source shouldn't reload, but from the rail it
-      // still means "take me to the list" — collapse the rail and focus the
-      // already-loaded content instead of a dead OK press.
-      if (focusContent) {
-        if (_selectionState.spotlightLayoutMode != IptvSpotlightLayoutMode.classic) {
-          _focusSpotlightContentEntry();
-          return;
-        }
-        _focusState.focusContentAfterLoad = true;
-        _consumeContentFocusRequest();
-      }
-      return;
-    }
-
-    // A pending content-type load belongs to the outgoing playlist.
-    _selectionState.contentTypeDebounce?.cancel();
-    // Honored by the present paths once the new list is on screen. Only the
-    // rail/picker set it — a dropdown or programmatic switch keeps focus
-    // where it was.
-    _focusState.focusContentAfterLoad = focusContent;
-    setState(() {
-      _settingsState.selectedPlaylist = playlist;
-      _catalogState.selectedCategory = null;
-      if (playlist.isXtreamCodes) {
-        _catalogState.selectedContentType = 'live';
-      }
-    });
-
-    _catalogLoading.loadPlaylist(playlist);
-  }
-
-  /// Move DPAD focus into the content pane after a rail-initiated playlist
-  /// switch, which collapses the source rail's overlay. Post-frame so the
-  /// grid's first row (and its lazily-created focus node) exists; falls back
-  /// to the in-pane filter row when the new catalog is empty or errored, so
-  /// focus never strands on the collapsing rail.
-  void _consumeContentFocusRequest() {
-    if (!_focusState.focusContentAfterLoad) return;
-    _focusState.focusContentAfterLoad = false;
-    if (!widget.isTelevision &&
-        _selectionState.spotlightLayoutMode == IptvSpotlightLayoutMode.classic) {
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_catalogState.filteredChannels.isNotEmpty) {
-        if (_selectionState.spotlightLayoutMode != IptvSpotlightLayoutMode.classic &&
-            _focusState.spotlightTimelineController.focusFirstChannel()) {
-          return;
-        }
-        _focusNodeFor(_catalogState.filteredChannels.first).requestFocus();
-      } else if (_selectionState.spotlightLayoutMode != IptvSpotlightLayoutMode.classic &&
-          _focusState.categoryFilterFocusNode.canRequestFocus) {
-        _focusState.categoryFilterFocusNode.requestFocus();
-      } else {
-        _focusState.playlistFilterFocusNode.requestFocus();
-      }
-    });
-    WidgetsBinding.instance.scheduleFrame();
-  }
 
 
 
-  void _onContentTypeChanged(String contentType) {
-    if (contentType == _catalogState.selectedContentType) return;
 
-    setState(() {
-      _catalogState.selectedContentType = contentType;
-      _catalogState.selectedCategory = null;
-      // The outgoing type's rows leave NOW, not when the debounced load
-      // lands: they'd otherwise render for the debounce window under the new
-      // type's layout flag (_showsPosterRows flips immediately), and a tap in
-      // that window would play an item of a type the filter no longer shows.
-      // Mirrors the reset _loadPlaylist performs; the spinner covers the gap
-      // exactly as it did when the load was synchronous.
-      _catalogState.isLoading = true;
-      // The spinner is up NOW but the load is 350ms away, so the status must
-      // reset with it — otherwise this window renders the previous load's
-      // phase and byte count against a stale start time, with the ticker
-      // already stopped: frozen, wrong text rather than merely old.
-      _loadStatus.beginLoadStatus();
-      _catalogState.allChannels = [];
-      _catalogState.filteredChannels = [];
-      _catalogState.categories = [];
-      _catalogState.dbSnapshot = null;
-      _catalogState.dbGroupCounts = const {};
-      _membershipState.progressByUrl = {};
-      _selectionState.scheduleChannel = null;
-    });
-    _clearPreview();
 
-    // Debounced: the classic layout's toggle CYCLES Live → Movies → Series,
-    // so reaching a non-adjacent type means passing through one the user
-    // never wanted — a full playlist load (focus-node disposal, possibly a
-    // multi-second uncached panel fetch) per intermediate step. Let the
-    // selection settle first; only the type the user stops on loads. Short
-    // enough to be imperceptible on a single direct pick (the TV dropdown
-    // path).
-    _selectionState.contentTypeDebounce?.cancel();
-    _selectionState.contentTypeDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted) return;
-      if (_settingsState.selectedPlaylist != null) {
-        _catalogLoading.loadPlaylist(_settingsState.selectedPlaylist!);
-      }
-    });
-  }
 
-  void _onCategoryChanged(String? category) {
-    _catalogState.categoryManuallyChosen = true;
-    setState(() => _catalogState.selectedCategory = category);
-    _applyFilters();
-  }
 
-  /// The category a fresh load should land on when nothing is picked yet:
-  /// the saved default when it still exists in [categories], else the first
-  /// category in display order — so the list opens on the user's #1 category
-  /// rather than the provider's raw channel order. Null (land on All) when
-  /// the user already picked a chip this load, a search is active (a source
-  /// switch mid-search must keep searching everything), or the source has no
-  /// durable identity to save a choice under ([orderKey] null: virtual
-  /// shelves, Stremio addons).
-  ///
-  /// Only a load's FIRST present may seed ([landingSeedArmed]); the
-  /// revalidate paths share these present functions and must never re-seed —
-  /// the vanished-category resets (hidden, renamed, removed by the provider)
-  /// keep their fall-back-to-All behavior, because re-seeding mid-browse
-  /// would yank the view.
-  String? _landingCategory(String? orderKey, List<String> categories) =>
-      !_catalogState.landingSeedArmed
-      ? null
-      : landingCategoryFor(
-          orderKey: orderKey,
-          categories: categories,
-          manuallyChosen: _catalogState.categoryManuallyChosen,
-          searching: widget.searchQuery.isNotEmpty,
-        );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   /// Pure decision behind [_landingCategory], split out for tests.
   @visibleForTesting
@@ -1457,200 +980,6 @@ class IptvResultsViewState extends State<IptvResultsView>
     required bool searching,
   }) => IptvLandingPolicy.landingCategoryFor(orderKey: orderKey, categories: categories, manuallyChosen: manuallyChosen, searching: searching);
 
-  /// Whether categories can be customized in the current view.
-  ///
-  /// Only catalog-backed sources (M3U / Xtream) qualify: the hidden set is
-  /// keyed by catalog, and the virtual shelves (Favorites, custom lists,
-  /// Continue watching), Stremio addons and imported files never get one —
-  /// they stay materialized in memory. Everything downstream of this getter
-  /// can assume [dbSnapshot] is non-null.
-  bool get _canShowCategoryOptions => _catalogState.dbSnapshot != null;
-
-  /// Hold-OK (TV) or long-press (touch) on a category: make it the source's
-  /// default landing category, or hide it. Routed from the same gestures that
-  /// used to jump straight to the hide confirmation; hide still confirms
-  /// through [_promptHideCategory], so its wording and semantics are
-  /// unchanged.
-  Future<void> _promptCategoryOptions(String category) async {
-    final app = AppThemeScope.of(context);
-    final snap = _catalogState.dbSnapshot;
-    if (snap == null || category.isEmpty) return;
-    final isDefault =
-        IptvCatalogDb.defaultCategory(snap.catalogKey) == category;
-    final action = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => TvHeldKeyGuard(
-        child: SimpleDialog(
-          backgroundColor: app.iptv.modalBg,
-          title: Text(
-            category,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: app.core.tx, fontWeight: FontWeight.w700),
-          ),
-          children: [
-            ListTile(
-              autofocus: true,
-              leading: Icon(
-                isDefault
-                    ? Icons.bookmark_remove_rounded
-                    : Icons.bookmark_added_rounded,
-                color: app.core.tx,
-              ),
-              title: Text(
-                isDefault ? 'Clear default category' : 'Set as default',
-                style: TextStyle(color: app.core.tx),
-              ),
-              subtitle: Text(
-                isDefault
-                    ? 'This source goes back to opening on its first category'
-                    : 'Open this source on "$category"',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: app.core.tx.withAlpha(0xB3)),
-              ),
-              onTap: () => Navigator.of(
-                dialogContext,
-              ).pop(isDefault ? 'clearDefault' : 'setDefault'),
-            ),
-            ListTile(
-              leading: Icon(Icons.visibility_off_outlined, color: app.core.tx),
-              title: Text(
-                'Hide category…',
-                style: TextStyle(color: app.core.tx),
-              ),
-              onTap: () => Navigator.of(dialogContext).pop('hide'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (!mounted) return;
-    switch (action) {
-      case 'setDefault':
-        if (IptvCatalogDb.setDefaultCategory(snap.catalogKey, category)) {
-          _statusChip.showChip(
-            CatalogChipState.success,
-            'Opens on "$category" from now on',
-            autoHide: const Duration(milliseconds: 2500),
-          );
-        } else {
-          _statusChip.showChip(
-            CatalogChipState.failure,
-            'Couldn\'t save the default — try again',
-            autoHide: const Duration(milliseconds: 3500),
-          );
-        }
-      case 'clearDefault':
-        if (IptvCatalogDb.setDefaultCategory(snap.catalogKey, null)) {
-          _statusChip.showChip(
-            CatalogChipState.success,
-            'Default category cleared',
-            autoHide: const Duration(milliseconds: 2500),
-          );
-        } else {
-          _statusChip.showChip(
-            CatalogChipState.failure,
-            'Couldn\'t clear the default — try again',
-            autoHide: const Duration(milliseconds: 3500),
-          );
-        }
-      case 'hide':
-        await _promptHideCategory(category);
-    }
-  }
-
-  /// Hide [category] from this source, after confirming.
-  ///
-  /// The gesture that gets here is a HOLD (TV) or long-press (touch) on the
-  /// category in a picker — deliberately confirmed rather than instant, since
-  /// it's a destructive-looking change reached from a control whose normal
-  /// press just selects.
-  Future<void> _promptHideCategory(String category) async {
-    final app = AppThemeScope.of(context);
-    final snap = _catalogState.dbSnapshot;
-    if (snap == null || category.isEmpty) return;
-    final count = _categoryCounts[category] ?? 0;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: app.iptv.modalBg,
-        title: Text(
-          'Hide this category?',
-          style: TextStyle(color: app.core.tx, fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          '$category\n\n'
-          '${count == 0 ? 'Its channels' : '$count channel'
-                    '${count == 1 ? '' : 's'}'} '
-          'will stop showing up in IPTV — in the list, in search and in the '
-          'player\'s guide. Nothing is deleted: bring it back any time from '
-          'Settings › IPTV › Hidden categories.',
-          style: TextStyle(color: app.core.tx.withAlpha(0xB3), height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            autofocus: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Hide'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    if (!IptvCatalogDb.setGroupHidden(snap.catalogKey, category, true)) {
-      _statusChip.showChip(
-        CatalogChipState.failure,
-        'Couldn\'t hide "$category" — try again',
-        autoHide: const Duration(milliseconds: 3500),
-      );
-      return;
-    }
-    await _refreshAfterHiddenChange();
-    if (!mounted) return;
-    _statusChip.showChip(
-      CatalogChipState.success,
-      'Hid "$category"',
-      autoHide: const Duration(milliseconds: 2600),
-    );
-  }
-
-  /// Re-derive the category list, its counts and the row facades after the
-  /// hidden set changed.
-  ///
-  /// The rows themselves are untouched, so the shared instance cache is kept:
-  /// it's keyed by catalog POSITION, which a hidden category doesn't move
-  /// (positions are stored column values, not list offsets). Surviving rows
-  /// therefore keep their instance, ObjectKey and focus node instead of being
-  /// torn down and rebuilt.
-  Future<void> _refreshAfterHiddenChange() async {
-    final snap = _catalogState.dbSnapshot;
-    if (snap == null) return;
-    final ticket = _catalogState.loadTicket;
-    final groups = await IptvCatalogDb.groupsAsync(snap);
-    if (!mounted || ticket != _catalogState.loadTicket) return;
-    final categories = _catalogPresentation.deriveCategories(snap, groups);
-    setState(() {
-      _catalogState.dbGroupCounts = {
-        for (final g in groups)
-          if (g.name != null && g.name!.isNotEmpty) g.name!: g.count,
-      };
-      _catalogState.categories = categories;
-      _catalogState.allChannels = _catalogFacades.makeDbList(snap);
-      // The selected category is the one most likely to have just been
-      // hidden — fall back to All rather than leaving the filter pinned to
-      // something the list no longer offers.
-      if (_catalogState.selectedCategory != null &&
-          !categories.contains(_catalogState.selectedCategory)) {
-        _catalogState.selectedCategory = null;
-      }
-    });
-    _applyFilters();
-  }
 
 
 
@@ -1658,514 +987,26 @@ class IptvResultsViewState extends State<IptvResultsView>
 
 
 
-  List<Map<String, dynamic>> _playerSourcePayload() => [
-    for (final playlist in _settingsState.playlists)
-      if (!playlist.isContinueWatching)
-        {
-          'id': playlist.id,
-          'name': playlist.name,
-          // Favorites keeps its own flag even though it is now just the
-          // built-in list: the native guide's ★ SAVED button resolves the
-          // source by it, and expects exactly one.
-          'isFavorites': playlist.isFavorites,
-          'isContinue': playlist.isContinueWatching,
-          'isXtream': playlist.isXtreamCodes,
-          'isList': playlist.isCustomList,
-          if (playlist.customListId != null) 'listId': playlist.customListId,
-          if (playlist.connectionResourceId != null)
-            'connectionResourceId': playlist.connectionResourceId,
-          if (playlist.connectionResourceRevision != null)
-            'connectionResourceRevision': playlist.connectionResourceRevision,
-        },
-  ];
 
-  /// The user's lists, for the players' "add to list" picker. Shipped once
-  /// per launch rather than as a field on every channel — the channel payload
-  /// is already capped for size (see [kMaxPlayerChannels]).
-  List<Map<String, dynamic>> _playerListsPayload() => [
-    for (final list in _membershipState.lists)
-      {'id': list.id, 'name': list.name, 'isBuiltin': list.isBuiltin},
-  ];
 
-  String _playerOriginPlaylistId(IptvChannel channel, IptvPlaylist source) {
-    final seriesOrigin = channel.attributes['series_playlist_id'];
-    if (seriesOrigin != null && seriesOrigin.isNotEmpty) {
-      return seriesOrigin;
-    }
-    final listId = source.isFavorites
-        ? IptvFavoritesStorage.iptvFavoritesListId
-        : source.customListId;
-    final shelfOrigin = (source.isFavorites || source.isCustomList)
-        // Prefer the row's own origin (see [_kListOriginAttribute]); the map
-        // is only a fallback for rows that predate it.
-        ? (channel.attributes[IptvMembershipState.kListOriginAttribute]?.isNotEmpty ?? false)
-              ? channel.attributes[IptvMembershipState.kListOriginAttribute]
-              : (listId == null
-                    ? null
-                    : _membershipState.favoritePlaylistIds[(listId, channel.url)])
-        : source.isContinueWatching
-        ? _membershipState.continuePlaylistIds[channel.url]
-        : null;
-    return shelfOrigin?.isNotEmpty == true ? shelfOrigin! : source.id;
-  }
 
-  IptvChannel _playerChannelWithOrigin(
-    IptvChannel channel,
-    IptvPlaylist source,
-  ) {
-    return IptvChannel(
-      channelNumber: channel.channelNumber,
-      name: channel.name,
-      url: channel.url,
-      logoUrl: channel.logoUrl,
-      group: channel.group,
-      duration: channel.duration,
-      contentType: channel.contentType,
-      attributes: {
-        ...channel.attributes,
-        'source_playlist_id': _playerOriginPlaylistId(channel, source),
-      },
-      httpHeaders: channel.httpHeaders,
-    );
-  }
 
-  Future<List<Map<String, dynamic>>> _playerChannelPayload(
-    List<({IptvChannel channel, IptvPlaylist source})> entries,
-  ) async {
-    final favoriteUrls = await IptvFavoritesStorage.getIptvFavoriteChannelUrls();
-    final resumePositions = await IptvHistoryStorage.getIptvResumePositions([
-      for (final entry in entries)
-        if (!entry.channel.isLive) entry.channel.url,
-    ]);
-    return [
-      for (final entry in entries)
-        {
-          ...entry.channel.toJson(),
-          'sourceId': _playerOriginPlaylistId(entry.channel, entry.source),
-          'sourceName': entry.source.name,
-          'isFavorite': favoriteUrls.contains(entry.channel.url),
-          if ((resumePositions[entry.channel.url] ?? 0) > 0)
-            'resumePositionMs': resumePositions[entry.channel.url],
-          if (entry.channel.attributes['series_id'] != null)
-            'seriesId': entry.channel.attributes['series_id'],
-          if (entry.channel.attributes['series_name'] != null)
-            'seriesName': entry.channel.attributes['series_name'],
-          if (int.tryParse(entry.channel.attributes['season'] ?? '') != null)
-            'season': int.parse(entry.channel.attributes['season']!),
-          if (int.tryParse(entry.channel.attributes['episode'] ?? '') != null)
-            'episode': int.parse(entry.channel.attributes['episode']!),
-          if (entry.channel.attributes['has_next_episode'] != null)
-            'hasNextEpisode':
-                entry.channel.attributes['has_next_episode'] == 'true',
-          if (entry.channel.attributes['tv_archive'] != null)
-            'tvArchive': entry.channel.attributes['tv_archive'],
-          if (int.tryParse(
-                entry.channel.attributes['tv_archive_duration'] ?? '',
-              ) !=
-              null)
-            'tvArchiveDuration': int.parse(
-              entry.channel.attributes['tv_archive_duration']!,
-            ),
-          if (entry.channel.attributes['series_playlist_id'] != null)
-            'seriesPlaylistId': entry.channel.attributes['series_playlist_id'],
-        },
-    ];
-  }
 
-  /// The source's full category list for the in-player picker — ALL of the
-  /// provider's categories, not just the handful present in the ~1500 channels
-  /// sent to the player.
-  ///
-  /// Reuses [categories], which the view already maintains for its own chips
-  /// (provider categories in order, else every distinct group) and refreshes on
-  /// each catalog load — so the launch/browse path never re-runs a GROUP BY on
-  /// the UI isolate. The snapshot/in-memory branches only cover the rare case
-  /// where it hasn't been populated yet.
-  List<String> _fullCategoryList() {
-    if (_catalogState.categories.isNotEmpty) return _catalogState.categories;
-    final snap = _catalogState.dbSnapshot;
-    if (snap != null) {
-      // Same hidden-category filtering [_deriveCategories] applies, so the
-      // in-player picker can't offer a category the page doesn't. groups()
-      // is already filtered in SQL; the provider list is not.
-      if (snap.categories.isNotEmpty) {
-        return IptvCatalogDb.applyCategoryOrder(
-          snap.catalogKey,
-          _catalogPresentation.withoutHidden(snap.catalogKey, snap.categories),
-        );
-      }
-      return IptvCatalogDb.applyCategoryOrder(snap.catalogKey, [
-        for (final group in snap.groups())
-          if (group.name?.isNotEmpty == true) group.name!,
-      ]);
-    }
-    return <String>{
-      for (final channel in _catalogState.allChannels)
-        if (channel.group?.isNotEmpty == true) channel.group!,
-    }.toList()..sort();
-  }
 
-  Future<Map<String, dynamic>?> _providePlayerIptvBrowse(
-    Map<String, dynamic> request,
-  ) async {
-    if (!mounted) return null;
-    final action = request['action'] as String? ?? 'browse';
-    final query = (request['query'] as String? ?? '').trim();
 
-    final sourceId = request['sourceId'] as String? ?? _settingsState.selectedPlaylist?.id;
-    IptvPlaylist? source;
-    for (final playlist in _settingsState.playlists) {
-      if (playlist.id == sourceId) {
-        source = playlist;
-        break;
-      }
-    }
-    source ??= _settingsState.selectedPlaylist;
-    if (source == null) return null;
 
-    if (action == 'seriesEpisodes') {
-      var episodeSource = source;
-      final seriesUrl = request['channelUrl'] as String? ?? '';
-      String? sentinelOriginId;
-      String? sentinelSeriesId;
-      if (seriesUrl.startsWith('xtream-series://')) {
-        final path = seriesUrl.substring('xtream-series://'.length);
-        final slash = path.indexOf('/');
-        if (slash > 0) {
-          sentinelOriginId = path.substring(0, slash);
-          sentinelSeriesId = path.substring(slash + 1);
-        } else {
-          sentinelSeriesId = path;
-        }
-      }
-      if (!episodeSource.isXtreamCodes && sentinelOriginId != null) {
-        for (final playlist in _settingsState.playlists) {
-          if (playlist.id == sentinelOriginId && playlist.isXtreamCodes) {
-            episodeSource = playlist;
-            break;
-          }
-        }
-      }
-      if (!episodeSource.isXtreamCodes) return null;
-      if (episodeSource != _settingsState.selectedPlaylist ||
-          _catalogState.selectedContentType != 'series') {
-        setState(() {
-          _settingsState.selectedPlaylist = episodeSource;
-          _catalogState.selectedCategory = null;
-          _catalogState.selectedContentType = 'series';
-        });
-        await _catalogLoading.loadPlaylist(episodeSource);
-        if (!mounted) return null;
-      }
-      IptvChannel? series;
-      for (final channel in _catalogState.allChannels) {
-        if (channel.url == seriesUrl ||
-            (sentinelSeriesId != null &&
-                channel.attributes['series_id'] == sentinelSeriesId)) {
-          series = channel;
-          break;
-        }
-      }
-      final seriesId =
-          series?.attributes['series_id'] ?? sentinelSeriesId ?? '';
-      if (seriesId.isEmpty) return null;
-      series ??= IptvChannel(
-        name: (request['title'] as String?)?.trim().isNotEmpty == true
-            ? (request['title'] as String).trim()
-            : 'Series',
-        url: seriesUrl,
-        contentType: 'series',
-        attributes: {
-          'series_id': seriesId,
-          'series_playlist_id': episodeSource.id,
-        },
-      );
-      final info = await XtreamCodesService.instance.fetchSeriesInfo(
-        episodeSource.serverUrl!,
-        episodeSource.username ?? '',
-        episodeSource.password ?? '',
-        seriesId,
-        connectionResourceId: episodeSource.connectionResourceId,
-        connectionResourceRevision: episodeSource.connectionResourceRevision,
-      );
-      if (!mounted || info == null) return null;
-      final episodes = [
-        for (var index = 0; index < info.episodes.length; index++)
-          IptvChannel(
-            name:
-                '${series.name} · S${info.episodes[index].season.toString().padLeft(2, '0')}'
-                'E${info.episodes[index].episode.toString().padLeft(2, '0')}'
-                '${info.episodes[index].title.trim().isEmpty ? '' : ' · ${info.episodes[index].title.trim()}'}',
-            url: info.episodes[index].url,
-            logoUrl: info.episodes[index].thumbnailUrl?.isNotEmpty == true
-                ? info.episodes[index].thumbnailUrl
-                : series.logoUrl,
-            group: series.name,
-            contentType: 'vod',
-            attributes: {
-              'series_id': seriesId,
-              'series_playlist_id': episodeSource.id,
-              'series_name': series.name,
-              'season': info.episodes[index].season.toString(),
-              'episode': info.episodes[index].episode.toString(),
-              'has_next_episode': info.episodes
-                  .skip(index + 1)
-                  .any((episode) => episode.season != 0)
-                  .toString(),
-            },
-          ),
-      ];
-      _playerState.playerSeriesEpisodes = episodes;
-      _playerState.playerSeriesEpisodeSourceId = episodeSource.id;
-      _playerState.playerSeriesTitle = series.name;
-      return {
-        'sourceId': episodeSource.id,
-        'sourceName': episodeSource.name,
-        'contentType': 'episodes',
-        'title': series.name,
-        'categories': const <String>[],
-        'sources': _playerSourcePayload(),
-        'channels': await _playerChannelPayload([
-          for (final episode in episodes)
-            (channel: episode, source: episodeSource),
-        ]),
-      };
-    }
 
-    final requestedType =
-        request['contentType'] as String? ??
-        (source.isXtreamCodes ? _catalogState.selectedContentType : 'live');
-    if (requestedType == 'episodes') {
-      final cached = source.id == _playerState.playerSeriesEpisodeSourceId
-          ? _playerState.playerSeriesEpisodes
-          : const <IptvChannel>[];
-      final terms = query.toLowerCase().split(RegExp(r'\s+'));
-      final episodes = cached
-          .where(
-            (channel) =>
-                query.isEmpty || terms.every(channel.searchKey.contains),
-          )
-          .take(IptvPlayerState.kMaxPlayerChannels)
-          .toList();
-      return {
-        'sourceId': source.id,
-        'sourceName': source.name,
-        'contentType': 'episodes',
-        'title': _playerState.playerSeriesTitle ?? 'Episodes',
-        'categories': const <String>[],
-        'sources': _playerSourcePayload(),
-        'channels': await _playerChannelPayload([
-          for (final episode in episodes) (channel: episode, source: source),
-        ]),
-      };
-    }
-    final needsLoad =
-        source != _settingsState.selectedPlaylist ||
-        (source.isXtreamCodes && requestedType != _catalogState.selectedContentType);
-    if (needsLoad) {
-      setState(() {
-        _settingsState.selectedPlaylist = source;
-        _catalogState.selectedCategory = null;
-        if (source!.isXtreamCodes &&
-            const {'live', 'vod', 'series'}.contains(requestedType)) {
-          _catalogState.selectedContentType = requestedType;
-        }
-      });
-      await _catalogLoading.loadPlaylist(source);
-      if (!mounted) return null;
-    }
 
-    final category = (request['category'] as String?)?.trim();
-    var effectiveCategory =
-        category == null || category.isEmpty || category == 'All'
-        ? null
-        : category;
-    final jumpNumber = action == 'channelNumber'
-        ? (request['channelNumber'] as num?)?.toInt()
-        : null;
-    final isJump = jumpNumber != null && jumpNumber > 0;
-    final isZapPage = action == 'zapPage';
-    final isPagedRequest = isZapPage || isJump;
-    final requestedLimit = (request['limit'] as num?)?.toInt();
-    final pageLimit = isPagedRequest
-        ? (requestedLimit ?? IptvPlayerState.kPlayerZapPageSize).clamp(1, IptvPlayerState.kMaxPlayerChannels)
-        : IptvPlayerState.kMaxPlayerChannels;
-    var pageOffset = isPagedRequest
-        ? ((request['offset'] as num?)?.toInt() ?? 0).clamp(0, 1 << 30)
-        : 0;
-    final anchorUrl = (request['anchorUrl'] as String?)?.trim();
-    final anchorName = (request['anchorName'] as String?)?.trim();
-    final fromEnd = request['fromEnd'] == true;
-    List<IptvChannel> channels;
-    var totalChannels = 0;
-    int? anchorIndex;
-    final snap = _catalogState.dbSnapshot;
-    if (snap != null) {
-      final live = source.isXtreamCodes
-          ? null
-          : switch (requestedType) {
-              'live' => true,
-              'vod' => false,
-              _ => null,
-            };
-      final jumpEntry = isJump ? snap.entryForChannelNumber(jumpNumber) : null;
-      if (isJump && jumpEntry == null) {
-        return {
-          'sourceId': source.id,
-          'sourceName': source.name,
-          'contentType': requestedType,
-          'channelNotFound': true,
-        };
-      }
-      if (jumpEntry != null) effectiveCategory = jumpEntry.channel.group;
-      totalChannels = snap.count(group: effectiveCategory, live: live);
-      if (jumpEntry != null) {
-        anchorIndex = snap.count(
-          group: effectiveCategory,
-          live: live,
-          beforePosition: jumpEntry.position,
-        );
-      } else if (isZapPage &&
-          anchorUrl != null &&
-          anchorUrl.isNotEmpty &&
-          anchorName != null &&
-          anchorName.isNotEmpty) {
-        final catalogPosition = snap.positionOf(
-          url: anchorUrl,
-          name: anchorName,
-          group: effectiveCategory,
-          live: live,
-        );
-        if (catalogPosition != null) {
-          anchorIndex = snap.count(
-            group: effectiveCategory,
-            live: live,
-            beforePosition: catalogPosition,
-          );
-        }
-      }
-      if (isPagedRequest) {
-        pageOffset = iptvPlayerZapPageOffset(
-          total: totalChannels,
-          limit: pageLimit,
-          requestedOffset: pageOffset,
-          anchorIndex: anchorIndex,
-          fromEnd: fromEnd,
-        );
-      }
-      channels = snap.page(
-        offset: pageOffset,
-        limit: pageLimit,
-        group: effectiveCategory,
-        search: isPagedRequest || query.isEmpty ? null : query,
-        live: live,
-      );
-    } else {
-      Iterable<IptvChannel> filtered = _catalogState.allChannels;
-      IptvChannel? jumpChannel;
-      if (isJump) {
-        for (final channel in _catalogState.allChannels) {
-          if (channel.channelNumber == jumpNumber && channel.isLive) {
-            jumpChannel = channel;
-            break;
-          }
-        }
-        if (jumpChannel == null) {
-          return {
-            'sourceId': source.id,
-            'sourceName': source.name,
-            'contentType': requestedType,
-            'channelNotFound': true,
-          };
-        }
-        effectiveCategory = jumpChannel.group;
-      }
-      // A list shelf is a curated mix — whatever the user put in it — so it
-      // is never narrowed by the requested content type. Without this a list
-      // holding movies would come back EMPTY in the player's guide: these
-      // sources aren't Xtream, so requestedType falls back to 'live' above
-      // and would filter out every on-demand row the user chose to save.
-      if (!source.isXtreamCodes &&
-          !source.isContinueWatching &&
-          !source.isFavorites &&
-          !source.isCustomList) {
-        filtered = switch (requestedType) {
-          'live' => filtered.where((channel) => channel.isLive),
-          'vod' => filtered.where(
-            (channel) => !channel.isLive && channel.contentType != 'series',
-          ),
-          'series' => filtered.where(
-            (channel) => channel.contentType == 'series',
-          ),
-          _ => filtered,
-        };
-      }
-      if (effectiveCategory != null) {
-        filtered = filtered.where(
-          (channel) => channel.group == effectiveCategory,
-        );
-      }
-      if (query.isNotEmpty) {
-        final terms = query.toLowerCase().split(RegExp(r'\s+'));
-        filtered = filtered.where(
-          (channel) => terms.every(channel.searchKey.contains),
-        );
-      }
-      if (isPagedRequest) {
-        // Legacy/in-memory catalogs are already materialized. Compute the
-        // filtered ordinal once so native can request a small window centered
-        // on a channel selected from search.
-        final materialized = filtered.toList(growable: false);
-        totalChannels = materialized.length;
-        if (jumpChannel != null) {
-          anchorIndex = materialized.indexWhere(
-            (channel) => channel.channelNumber == jumpNumber,
-          );
-          if (anchorIndex == -1) anchorIndex = null;
-        } else if (anchorUrl != null && anchorUrl.isNotEmpty) {
-          anchorIndex = materialized.indexWhere(
-            (channel) =>
-                channel.url == anchorUrl &&
-                (anchorName == null ||
-                    anchorName.isEmpty ||
-                    channel.name == anchorName),
-          );
-          if (anchorIndex == -1) anchorIndex = null;
-        }
-        pageOffset = iptvPlayerZapPageOffset(
-          total: totalChannels,
-          limit: pageLimit,
-          requestedOffset: pageOffset,
-          anchorIndex: anchorIndex,
-          fromEnd: fromEnd,
-        );
-        channels = materialized
-            .skip(pageOffset)
-            .take(pageLimit)
-            .toList(growable: false);
-      } else {
-        channels = filtered.take(IptvPlayerState.kMaxPlayerChannels).toList();
-        totalChannels = channels.length;
-      }
-    }
 
-    final categories = _fullCategoryList();
-    return {
-      'sourceId': source.id,
-      'sourceName': source.name,
-      'contentType': requestedType,
-      'selectedCategory': effectiveCategory,
-      'categories': categories,
-      if (isPagedRequest) 'pageOffset': pageOffset,
-      if (isPagedRequest) 'totalChannels': totalChannels,
-      if (isPagedRequest && anchorIndex != null) 'anchorIndex': anchorIndex,
-      if (isJump) 'targetChannelNumber': jumpNumber,
-      'sources': _playerSourcePayload(),
-      'channels': await _playerChannelPayload([
-        for (final channel in channels) (channel: channel, source: source),
-      ]),
-    };
-  }
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2308,7 +1149,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     final target = _startupPlaylistFor(payload);
     if (target == null) return null;
     if (_settingsState.selectedPlaylist?.id != target.id) {
-      _onPlaylistChanged(target);
+      _filtersSection.onPlaylistChanged(target);
     }
 
     final deadline = DateTime.now().add(IptvPlayerState.startupResolveDeadline);
@@ -2469,7 +1310,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   Future<void> _adoptStartupCategoryValue(String? group) async {
     if (_catalogState.selectedCategory != group) {
       setState(() => _catalogState.selectedCategory = group);
-      _applyFilters();
+      _filtersSection.applyFilters();
       // Let the new facade/filtered list settle before it is indexed.
       await WidgetsBinding.instance.endOfFrame;
     }
@@ -2776,7 +1617,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         ? channels
         : [
             for (final item in channels)
-              _playerChannelWithOrigin(item, launchSource),
+              _playerPayload.playerChannelWithOrigin(item, launchSource),
           ];
     if (!mounted) return;
     // Last gate before the player exists. Everything above may have taken
@@ -2794,16 +1635,16 @@ class IptvResultsViewState extends State<IptvResultsView>
         viewMode: PlaylistViewMode.sorted,
         iptvChannels: playerChannels,
         iptvStartIndex: channelIndex,
-        iptvCategories: _fullCategoryList(),
+        iptvCategories: _playerPayload.fullCategoryList(),
         iptvSourceId: _settingsState.selectedPlaylist?.id,
         iptvSourceName: _settingsState.selectedPlaylist?.name,
-        iptvSelectedCategory: _effectiveCategory,
+        iptvSelectedCategory: _filtersSection.effectiveCategory,
         iptvContentType: _settingsState.selectedPlaylist?.isXtreamCodes == true
             ? _catalogState.selectedContentType
             : (channel.isLive ? 'live' : 'vod'),
-        iptvSources: _playerSourcePayload(),
-        iptvLists: _playerListsPayload(),
-        iptvBrowseProvider: _providePlayerIptvBrowse,
+        iptvSources: _playerPayload.playerSourcePayload(),
+        iptvLists: _playerPayload.playerListsPayload(),
+        iptvBrowseProvider: _playerBrowse.providePlayerIptvBrowse,
         // Opening headers for the launch channel (later zaps read them off the
         // channel they switch to). Stremio-addon links are already-resolved CDN
         // URLs, so they keep the addon's own defaults.
@@ -2981,7 +1822,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           if (!p.isContinueWatching) p,
       ];
       if (remaining.isNotEmpty) {
-        _onPlaylistChanged(remaining.first);
+        _filtersSection.onPlaylistChanged(remaining.first);
         return;
       }
     }
@@ -3007,7 +1848,7 @@ class IptvResultsViewState extends State<IptvResultsView>
         return;
       }
     }
-    await _loadProgress(_catalogState.loadTicket, _catalogState.allChannels);
+    await _virtualResults.loadProgress(_catalogState.loadTicket, _catalogState.allChannels);
   }
 
   /// Add or drop the Continue-watching entry in the picker to match whether
@@ -3071,7 +1912,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     final selected = _settingsState.selectedPlaylist;
     if (selected != null && !_settingsState.playlists.any((p) => p.id == selected.id)) {
       final fallback = _settingsState.playlists.isEmpty ? null : _settingsState.playlists.first;
-      if (fallback != null) _onPlaylistChanged(fallback);
+      if (fallback != null) _filtersSection.onPlaylistChanged(fallback);
     }
   }
 
@@ -3591,7 +2432,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                 beforeHidden,
                 IptvCatalogDb.hiddenGroups(snap.catalogKey),
               )) {
-            await _refreshAfterHiddenChange();
+            await _categoryActions.refreshAfterHiddenChange();
             if (!mounted) return;
           }
           // Settings is where the recording-engine toggle lives: re-probe so
@@ -3605,7 +2446,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               current.id == beforeId &&
               current.epgUrl != beforeEpgUrl &&
               result != null) {
-            _updateEpgContext(current, result, _catalogState.loadTicket);
+            _guideContext.updateEpgContext(current, result, _catalogState.loadTicket);
           }
         });
   }
@@ -3969,14 +2810,14 @@ class IptvResultsViewState extends State<IptvResultsView>
       categorySlot: _spotlightControlNavigation(
         SpotlightCategoryControl(
           dense: true,
-          categoryLabel: _effectiveCategory ?? 'All channels',
+          categoryLabel: _filtersSection.effectiveCategory ?? 'All channels',
           channelCount: _catalogState.filteredChannels.length,
           loading: _catalogState.isLoading,
           onPressed: _showSpotlightCategoryPicker,
           focusNode: _focusState.categoryFilterFocusNode,
           optionsFocusNode: _focusState.spotlightCategoryOptionsFocusNode,
-          onOpenOptions: _canShowCategoryOptions && _effectiveCategory != null
-              ? () => unawaited(_promptCategoryOptions(_catalogState.selectedCategory!))
+          onOpenOptions: _categoryActions.canShowCategoryOptions && _filtersSection.effectiveCategory != null
+              ? () => unawaited(_categoryActions.promptCategoryOptions(_catalogState.selectedCategory!))
               : null,
         ),
       ),
@@ -3985,7 +2826,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               SpotlightContentTypeControl(
                 dense: true,
                 value: _catalogState.selectedContentType,
-                onChanged: _onContentTypeChanged,
+                onChanged: _filtersSection.onContentTypeChanged,
                 firstItemFocusNode: _focusState.contentTypeFocusNode,
               ),
             )
@@ -4196,7 +3037,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           onSelectPlaylist ??
           (playlist) {
             _setSpotlightSourcesExpanded(false);
-            _onPlaylistChanged(playlist, focusContent: true);
+            _filtersSection.onPlaylistChanged(playlist, focusContent: true);
           },
       onOpenRecordings:
           onOpenRecordings ??
@@ -4241,7 +3082,7 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   void _focusSpotlightSearchResults() {
     _selectionState.searchDebounce?.cancel();
-    _applyFilters();
+    _filtersSection.applyFilters();
     final query = widget.searchQuery;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || widget.searchQuery != query) return;
@@ -4893,7 +3734,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                         autofocusFirstItem: true,
                         onSelectPlaylist: (playlist) => closeThen(
                           () =>
-                              _onPlaylistChanged(playlist, focusContent: true),
+                              _filtersSection.onPlaylistChanged(playlist, focusContent: true),
                         ),
                         onOpenRecordings: _recordingState.pageCanRecord
                             ? () => closeThen(_openScheduledRecordings)
@@ -4924,15 +3765,15 @@ class IptvResultsViewState extends State<IptvResultsView>
       barrierColor: Colors.black.withValues(alpha: 0.68),
       builder: (_) => SpotlightCategoryPickerDialog(
         categories: List<String>.of(_catalogState.categories, growable: false),
-        selectedCategory: _effectiveCategory,
+        selectedCategory: _filtersSection.effectiveCategory,
         categoryCounts: Map<String, int>.of(_categoryCounts),
         allChannelCount: _catalogState.allChannels.length,
-        showOptionsHint: _canShowCategoryOptions && _catalogState.categories.isNotEmpty,
+        showOptionsHint: _categoryActions.canShowCategoryOptions && _catalogState.categories.isNotEmpty,
         allCategoryValue: IptvSelectionState.kSpotlightAllCategory,
       ),
     );
     if (!mounted || picked == null) return;
-    _onCategoryChanged(picked == IptvSelectionState.kSpotlightAllCategory ? null : picked);
+    _filtersSection.onCategoryChanged(picked == IptvSelectionState.kSpotlightAllCategory ? null : picked);
   }
 
   /// The single-pane layout: boxed filter bar over a full-width channel list.
@@ -4946,26 +3787,26 @@ class IptvResultsViewState extends State<IptvResultsView>
           playlists: _settingsState.playlists,
           selectedPlaylist: _settingsState.selectedPlaylist,
           categories: _catalogState.categories,
-          selectedCategory: _effectiveCategory,
+          selectedCategory: _filtersSection.effectiveCategory,
           categoryCounts: _categoryCounts,
           channelCount: _catalogState.filteredChannels.length,
           isLoading: _catalogState.isLoading,
           isLoadingMore: _catalogState.isLoadingMore,
-          onPlaylistChanged: _onPlaylistChanged,
-          onCategoryChanged: _onCategoryChanged,
+          onPlaylistChanged: _filtersSection.onPlaylistChanged,
+          onCategoryChanged: _filtersSection.onCategoryChanged,
           onAddPlaylist: _navigateToSettings,
           playlistFocusNode: _focusState.playlistFilterFocusNode,
           categoryFocusNode: _focusState.categoryFilterFocusNode,
           showContentTypeFilter: _settingsState.selectedPlaylist?.isXtreamCodes ?? false,
           selectedContentType: _catalogState.selectedContentType,
-          onContentTypeChanged: _onContentTypeChanged,
+          onContentTypeChanged: _filtersSection.onContentTypeChanged,
           contentTypeFocusNode: _focusState.contentTypeFocusNode,
           onUpArrowPressed: widget.onUpArrowFromFilters,
           onDownArrowPressed: _focusFirstChannel,
           onOpenRecordings: _recordingState.pageCanRecord ? _openScheduledRecordings : null,
           recordingLive: _anyRecordingLive,
-          onCategoryOptions: _canShowCategoryOptions
-              ? _promptCategoryOptions
+          onCategoryOptions: _categoryActions.canShowCategoryOptions
+              ? _categoryActions.promptCategoryOptions
               : null,
         ),
 
@@ -5092,7 +3933,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               // select — it traverses into the guide, which still shows the
               // selected source.)
               onSelectPlaylist: (p) =>
-                  _onPlaylistChanged(p, focusContent: true),
+                  _filtersSection.onPlaylistChanged(p, focusContent: true),
               onOpenScheduled: _openScheduledRecordings,
               onManageSources: _navigateToManageSources,
               // Engine off / unsupported: don't advertise a scheduler that
@@ -5478,7 +4319,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             }
             for (final p in _settingsState.playlists) {
               if (p.id == id) {
-                _onPlaylistChanged(p);
+                _filtersSection.onPlaylistChanged(p);
                 return;
               }
             }
@@ -5498,12 +4339,12 @@ class IptvResultsViewState extends State<IptvResultsView>
               StremioDropdownOption('vod', 'Movies'),
               StremioDropdownOption('series', 'Series'),
             ],
-            onSelected: _onContentTypeChanged,
+            onSelected: _filtersSection.onContentTypeChanged,
           ),
         if (_catalogState.categories.isNotEmpty)
           StremioDropdown<String>(
             label: 'category',
-            value: _effectiveCategory ?? '',
+            value: _filtersSection.effectiveCategory ?? '',
             quiet: true,
             isTelevision: widget.isTelevision,
             focusNode: _focusState.categoryFilterFocusNode,
@@ -5517,14 +4358,14 @@ class IptvResultsViewState extends State<IptvResultsView>
                   '$cat · ${_categoryCounts[cat] ?? 0}',
                   // "All" is deliberately not holdable — there is no such
                   // category to hide.
-                  holdable: _canShowCategoryOptions,
+                  holdable: _categoryActions.canShowCategoryOptions,
                 ),
             ],
             holdHint: widget.isTelevision
                 ? 'HOLD OK FOR OPTIONS'
                 : 'HOLD FOR OPTIONS',
-            onOptionHold: _promptCategoryOptions,
-            onSelected: (v) => _onCategoryChanged(v.isEmpty ? null : v),
+            onOptionHold: _categoryActions.promptCategoryOptions,
+            onSelected: (v) => _filtersSection.onCategoryChanged(v.isEmpty ? null : v),
           ),
         // Non-focusable count — DPAD skips straight over it.
         Padding(
@@ -6505,9 +5346,9 @@ class IptvResultsViewState extends State<IptvResultsView>
   bool landingSeedArmed,
   bool categoryManuallyChosen,
 }) iptvResultsViewTestAccess(IptvResultsViewState state) => (
-  browse: state._providePlayerIptvBrowse,
+  browse: state._playerBrowse.providePlayerIptvBrowse,
   loadPlaylist: state._catalogLoading.loadPlaylist,
-  chooseCategory: state._onCategoryChanged,
+  chooseCategory: state._filtersSection.onCategoryChanged,
   refreshCatalog: state._catalogRefresh.applyDbCatalogRefresh,
   presentDbCatalog: state._catalogPresentation.presentDbCatalog,
   focusNodeFor: state._focusNodeFor,

@@ -11,16 +11,16 @@ import 'package:flutter/material.dart';
 
 typedef IptvCatalogPresentationDeps = ({
   IptvCatalogState catalogState,
-  // TEMP(iptv): _applyFilters -> IptvFiltersSection.applyFilters (step 4).
+
   void Function() applyFilters,
-  // TEMP(iptv): _consumeContentFocusRequest -> IptvFiltersSection.consumeContentFocusRequest (step 4).
+
   void Function() consumeContentFocusRequest,
   BuildContext Function() context,
   void Function() endLoadStatus,
-  // TEMP(iptv): _landingCategory -> IptvFiltersSection.landingCategory (step 4).
+
   String? Function(String? orderKey, List<String> categories) landingCategory,
   Future<void> Function() loadFavorites,
-  // TEMP(iptv): _loadProgress -> IptvVirtualResults.loadProgress (step 4).
+
   Future<void> Function(int ticket, List<IptvChannel> channels) loadProgress,
   DbChannelList Function(CatalogSnapshot snap, {String? group, String? search})
   makeDbList,
@@ -28,7 +28,7 @@ typedef IptvCatalogPresentationDeps = ({
   // TEMP(iptv): _recomputeSourceCounts -> IptvSourceCounts.recomputeSourceCounts (step 5).
   void Function() recomputeSourceCounts,
   StateSetter setState,
-  // TEMP(iptv): _updateEpgContext -> IptvGuideContext.updateEpgContext (step 4).
+
   void Function(
     IptvPlaylist playlist,
     IptvParseResult result,

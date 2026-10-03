@@ -659,3 +659,36 @@ Technique), with these IPTV rules:
   return, Android TV D-pad and first-open performance remain pending device
   verification. This gate is committed before the next extraction step;
   its push goes only to `private` and its CI must pass before step 4.
+- Gate checkpoint: `03543cf4`, pushed only to `private`. All CI jobs pass,
+  including the Linux behavior suite and original-code golden comparisons:
+  https://github.com/varunsalian/debrify-refactor/actions/runs/37111405964.
+
+### Step 4 — complete
+
+- Gate-1 checkpoint: `03543cf4`. Moved 24 methods into six owners: guide
+  context, filters, categories, virtual results, player payload construction
+  and player browsing. Calls to already-moved sections use typed deferred
+  callbacks; borrowed getters stay live. The categories section's wiring
+  receiver is `_categoryActions`, avoiding the original `_categories` field
+  name. The original field still has its single catalog-state owner.
+- The facade ratchets **6,528 → 5,369**; the largest new file is 404 lines.
+  Resolved step-4 `TEMP(iptv)` comments are removed from the earlier owners;
+  remaining callbacks retain their step-5/6 destinations. Their scaffolds
+  change only by those comment removals and the registered receiver wiring.
+- The EPG source test now reads `iptv_guide_context.dart`, validates both
+  markers and retains all four assertions. The shape manifest registers all
+  40 feature files, preserves seven radii and its token floor. Theme
+  measurement and the facade/Browse import walk pass.
+- Added one exact formatter-braces site for the newly split progress guard.
+  The shared parser recognizes an optional trailing comma in multi-field
+  positional record literals; four fixtures accept formatting and reject a
+  changed field or a semantic singleton-record comma. Named dependency
+  records stay pinned. Both manifest/self-test runs pass: 384 IPTV leaves,
+  33 IPTV fixtures plus settings/launcher fixtures, and 316 settings leaves
+  (`step4-verbatim-verified.txt`, `step4-settings.txt`).
+- Whole analyzer: the same 832 identities, zero added/removed, PASS
+  (`step4-analyzer-comparison.txt`). The verified CI-list run has 2,786
+  successes, the same two failures, no missing/new skips and PASS against
+  `base3` (`step4-test-verified-comparison.txt`). Strict payload bytes/key
+  order and goldens are unchanged. Architecture, size, format and diff checks
+  pass. No new allowlist entry or lint suppression was added.

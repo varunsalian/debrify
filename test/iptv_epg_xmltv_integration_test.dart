@@ -332,9 +332,9 @@ void main() {
     'Favorites and custom-list view activate their origin-aware guide path',
     () {
       final source = File(
-        'lib/widgets/iptv/iptv_results_view.dart',
+        'lib/features/iptv/presentation/legacy_iptv/iptv_guide_context.dart',
       ).readAsStringSync();
-      final start = source.indexOf('void _updateEpgContext(');
+      final start = source.indexOf('void updateEpgContext(');
       expect(start, isNonNegative, reason: 'Missing guide method marker');
       final end = source.indexOf('final isPlainM3u', start);
       expect(end, greaterThan(start), reason: 'Missing list-branch end marker');

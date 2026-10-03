@@ -23,17 +23,17 @@ typedef IptvCatalogLoadingDeps = ({
   IptvSelectionState selectionState,
   IptvSettingsState settingsState,
   IptvStatusState statusState,
-  // TEMP(iptv): _applyProgressiveBatch -> IptvVirtualResults.applyProgressiveBatch (step 4).
+
   void Function(int ticket, List<IptvChannel> channels, List<String> categories)
   applyProgressiveBatch,
   void Function() beginLoadStatus,
-  // TEMP(iptv): _buildContinueResult -> IptvVirtualResults.buildContinueResult (step 4).
+
   Future<IptvParseResult> Function() buildContinueResult,
-  // TEMP(iptv): _buildListResult -> IptvVirtualResults.buildListResult (step 4).
+
   Future<IptvParseResult> Function(String listId) buildListResult,
   // TEMP(iptv): _clearPreview -> IptvPreviewTuning.clearPreview (step 6).
   void Function() clearPreview,
-  // TEMP(iptv): _consumeContentFocusRequest -> IptvFiltersSection.consumeContentFocusRequest (step 4).
+
   void Function() consumeContentFocusRequest,
   void Function() endLoadStatus,
   Future<IptvParseResult> Function(

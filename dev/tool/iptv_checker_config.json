@@ -189,7 +189,6 @@
     "_catalogRefresh": "IptvCatalogRefresh",
     "_catalogState": "IptvCatalogState",
     "_catchup": "IptvCatchup",
-    "_categories": "IptvCategories",
     "_categoryOrder": "IptvCategoryOrder",
     "_classicLayout": "IptvClassicLayout",
     "_cockpitStage": "IptvCockpitStage",
@@ -312,7 +311,8 @@
     "TuningWavesPainter": "TuningWavesPainter",
     "_IptvStageChipState": "_IptvStageChipState",
     "_IptvStageFloorState": "_IptvStageFloorState",
-    "_SpotlightCategoryPickerDialogState": "_SpotlightCategoryPickerDialogState"
+    "_SpotlightCategoryPickerDialogState": "_SpotlightCategoryPickerDialogState",
+    "_categoryActions": "IptvCategories"
   },
   "receivers": [
     "IptvAndroidRecording",
@@ -394,7 +394,7 @@
     "_catalogRefresh",
     "_catalogState",
     "_catchup",
-    "_categories",
+    "_categoryActions",
     "_categoryOrder",
     "_classicLayout",
     "_cockpitStage",

@@ -61,6 +61,19 @@ class References extends RecursiveAstVisitor<void> {
   }
 
   @override
+  void visitRecordLiteral(RecordLiteral node) {
+    // The comma in a one-positional-field record distinguishes it from a
+    // parenthesized expression. Only multi-field positional records have an
+    // optional formatter comma here; named dependency records stay pinned.
+    if (node.fields.length > 1 &&
+        node.fields.every((field) => field is! RecordLiteralNamedField) &&
+        node.endToken.previous?.lexeme == ',') {
+      formatCommas.add(node.endToken.previous!.offset);
+    }
+    super.visitRecordLiteral(node);
+  }
+
+  @override
   void visitRecordTypeAnnotation(RecordTypeAnnotation node) {
     final named = node.namedFields;
     if (named?.endToken.previous?.lexeme == ',') {
