@@ -1,0 +1,9 @@
+# Pre-existing analyzer warnings exposed when legacy code moved into the
+# CI-analyzed scope. Each was present in the original file (see its migration's
+# analyze-base evidence) and is kept verbatim by a move-only refactor. Format:
+#   severity | rule | path | message
+# Remove an entry when the code is fixed; check_analyzer_allowlist.py fails on
+# stale entries, on any error, and on any warning not listed here.
+
+# TorBox: originally torbox_downloads_screen.dart (c4f5375a), file-selection card copy button.
+warning | unnecessary_null_comparison | lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_selection_card.dart | The operand can't be 'null', so the condition is always 'true'. Remove the condition
