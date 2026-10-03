@@ -396,6 +396,16 @@ def builder_context_signature(node):
     code = [t for t in node['tokens'] if not t['comment']]
     indexes = {t['offset']: i for i, t in enumerate(code)}
     counts = Counter()
+    # A declaration with its own `context` parameter (a builder method, or a
+    # top-level builder function) shadows the State's context, so the original
+    # can't have used the State's there. Any `_deps.context()` in its body is a
+    # substitution for that parameter, wherever it appears.
+    own_parameter = re.search(r'\bcontext\b', node.get('parameters') or '') is not None
+    if own_parameter:
+        for i, token in enumerate(code):
+            if (token['text'] == 'context' and i >= 2 and code[i - 1]['text'] == '.'
+                    and code[i - 2]['text'] in ('_deps', 'deps')):
+                counts['state-context-over-parameter'] += 1
     for ref in node.get('references', []):
         if not ref['contextParameter'] or ref['name'] not in {'context', 'mounted'}:
             continue
@@ -1308,6 +1318,14 @@ def self_test(package=None):
     if builder_context_signature(guarded) == builder_context_signature(method('Future<void> ask() async { await showDialog(builder: (context) => TextButton(onPressed: () { if (!_deps.mounted()) return; Navigator.of(context).pop(false); })); }')):
         raise AssertionError('Accepted State mounted for builder mounted')
     print('Settings self-test State mounted for builder mounted: rejected')
+    param_original = method('Widget buildThing(BuildContext context) { return Text(Theme.of(context).toString()); }')
+    param_same = method('Widget buildThing(BuildContext context) { return Text(Theme.of(context).toString()); }')
+    param_swapped = method('Widget buildThing(BuildContext context) { return Text(Theme.of(_deps.context()).toString()); }')
+    if builder_context_signature(param_original) != builder_context_signature(param_same):
+        raise AssertionError('Unchanged parameter context rejected')
+    if builder_context_signature(param_original) == builder_context_signature(param_swapped):
+        raise AssertionError('Accepted State context in place of a context parameter')
+    print('Settings self-test State context in place of a context parameter: rejected')
     permission = method('void action() async { if (!await allowed()) return; show(context); }')
     permission_hoist = method('void action() async { final context = _deps.context(); if (!await allowed()) return; show(context); }')
     if not check_context(permission, permission_hoist):

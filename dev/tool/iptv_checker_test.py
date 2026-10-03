@@ -17,3 +17,9 @@ def self_test(package=None):
         if bool(errors) == case['passes']:
             raise AssertionError(f'IPTV fixture {name}: {errors}')
         print(f'IPTV self-test {name}: {"PASS" if not errors else "rejected"}')
+
+
+if __name__ == '__main__':
+    # Normally run through `check_verbatim_moves.py --self-test`; running this
+    # file directly runs the same IPTV fixtures instead of exiting silently.
+    self_test()

@@ -29,7 +29,7 @@ class IptvLoadStatus {
   /// runs a clock so there is always something moving even when the stage
   /// itself is opaque (a buffered download, or the decode/ingest worker).
   Widget buildLoadingState(BuildContext context) {
-    final theme = Theme.of(_deps.context());
+    final theme = Theme.of(context);
     final phase = _statusState.loadPhase;
     final startedAt = _statusState.loadStartedAt;
     final elapsed = startedAt == null

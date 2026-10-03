@@ -57,6 +57,7 @@ class IptvFiltersSection {
       _selectionState = _deps.selectionState,
       _settingsState = _deps.settingsState;
 
+  // Search spans the current source; retain the browse category for clearing.
   String? get effectiveCategory =>
       _deps.searchQuery().isNotEmpty ? null : _catalogState.selectedCategory;
 

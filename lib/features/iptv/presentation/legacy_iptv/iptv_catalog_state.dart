@@ -12,7 +12,6 @@ class IptvCatalogState {
 
   List<String> categories = [];
 
-  // Search spans the current source; retain the browse category for clearing.
   String? selectedCategory;
 
   /// True once the user has picked a category — INCLUDING "All" — for the

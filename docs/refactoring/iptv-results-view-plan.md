@@ -560,6 +560,35 @@ Technique), with these IPTV rules:
 - This checkpoint commits the dependency report, manifest, checker/configs,
   frozen seams and original-code characterization before any extraction.
 
+## Review follow-up
+
+A three-agent review of `a28cd8fe..11e03a20` found no behaviour change: every
+declaration matches, the lifecycle methods are statement for statement the
+original, the player payload is token-identical, all 10 contracts hold, and
+the 52 characterization tests pass on both the original and the refactored
+code. Mutating the original made them fail. Fixed afterwards:
+- `IptvLoadStatus.buildLoadingState` used `Theme.of(_deps.context())` instead
+  of its own `context` parameter (the original's `Theme.of(context)`). It
+  behaved the same, since the only caller passes the State's context, but it
+  broke the parameter-context rule, so it's restored.
+- `check_settings_moves.py`'s builder-context rule now also applies to a
+  declaration's own `context` parameter. Any `_deps.context()` in such a
+  declaration is rejected; a new self-test covers it, and re-introducing the
+  line above is rejected.
+- The "Search spans the current source…" comment is back above
+  `effectiveCategory` (it had landed above `selectedCategory`).
+- The clock seam also covers `_lastGuideRefreshAt = widget.now()`
+  (`spotlight_live_timeline.dart:454`) and makes `_dayHeading` non-static.
+  Both are harmless with the default clock, and both are recorded in
+  `iptv_checker_config.json`.
+- `iptv_context_exceptions.json` approval text says 16 sites (was "seven").
+  `iptv_checker_test.py` runs its fixtures when invoked directly.
+- The local Linux golden-capture branch and worktree are removed.
+
+Noted, not changed: callback wiring is verified against recorded scaffolds,
+not independently. A reviewer checked all 613 IPTV wiring fields by name and
+found them correct.
+
 ## Found, not fixed
 
 - Timeline programme badges can overflow when a current programme is
