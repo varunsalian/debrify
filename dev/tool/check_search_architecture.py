@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -24,6 +24,9 @@ SETTINGS_FACADE = "lib/screens/settings_screen.dart"
 # Until then, the facade is measured only by the repo-wide shrinking ratchet.
 SETTINGS_COMPLETE = True
 IPTV_COMPLETE = True
+TORBOX_COMPLETE = False
+TORBOX_FACADE = "lib/screens/torbox/torbox_downloads_screen.dart"
+TORBOX_BRIDGE = "lib/features/torbox_downloads/presentation/legacy_torbox/"
 IPTV_FACADE = "lib/widgets/iptv/iptv_results_view.dart"
 IPTV_BRIDGE = "lib/features/iptv/presentation/legacy_iptv/"
 SETTINGS_BRIDGE = "lib/features/settings/presentation/legacy_settings/"
@@ -275,6 +278,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     SETTINGS_BRIDGE,
     # Verbatim State-driven IPTV bridge; exit: IPTV data contracts/Riverpod.
     IPTV_BRIDGE,
+    TORBOX_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -330,6 +334,16 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line IPTV facade limit")
         if "TEMP(iptv)" in source:
             problems.append("temporary IPTV cross-call remains in the facade")
+    if relative.startswith("lib/features/torbox_downloads/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line TorBox extraction limit")
+        if "TEMP(torbox)" in source and (TORBOX_COMPLETE or not relative.startswith(TORBOX_BRIDGE)):
+            problems.append("temporary TorBox cross-call outside the staged legacy bridge")
+    if TORBOX_COMPLETE and relative == TORBOX_FACADE:
+        if lines > 400:
+            problems.append(f"{lines} lines exceeds the 400-line TorBox facade limit")
+        if "TEMP(torbox)" in source:
+            problems.append("temporary TorBox cross-call remains in the facade")
     if relative in TORRENT_PLAYBACK_SOURCE_FILES:
         limit = 800 if relative in TORRENT_PLAYBACK_PIPELINES else 500
         if lines > limit:
@@ -379,6 +393,8 @@ def violations(path: Path) -> list[str]:
                     target = resolved.relative_to(ROOT).as_posix()
             if relative.startswith("lib/features/iptv/application/") and target.startswith("lib/services/"):
                 problems.append("pure IPTV application helper imports a legacy service")
+            if relative.startswith("lib/features/torbox_downloads/application/") and target.startswith("lib/services/"):
+                problems.append("pure TorBox application helper imports a legacy service")
             if layer in ("application", "data", "models"):
                 if (target.startswith(("lib/screens/", "lib/widgets/", "lib/ui/"))
                         or "/presentation/" in target
@@ -414,6 +430,8 @@ def violations(path: Path) -> list[str]:
                         # COMPOSITION, outside lib/features.
                         problems.append(
                             f"cross-feature import outside {other}/models: {uri}")
+                if own == "torbox_downloads" and target == TORBOX_FACADE:
+                    problems.append("TorBox feature imports the downloads facade")
                 if own == "iptv" and target == IPTV_FACADE:
                     problems.append("IPTV feature imports the results facade")
                 if own == "player_launch" and layer in ("data", "models") and target == "lib/services/video_player_launcher.dart":
@@ -430,6 +448,8 @@ def main() -> int:
         if not p.name.endswith(GENERATED_SUFFIXES)
     }
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)
+    if TORBOX_COMPLETE:
+        paths.add(ROOT / TORBOX_FACADE)
     if IPTV_COMPLETE:
         paths.add(ROOT / IPTV_FACADE)
     if SETTINGS_COMPLETE:

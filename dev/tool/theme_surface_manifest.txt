@@ -2,7 +2,7 @@
 # Consumed by tool/measure_theme_surface.sh so the plan's table is reproducible.
 calendar = lib/screens/trakt_calendar_screen.dart
 addons = lib/screens/addons_screen.dart lib/screens/addons/*.dart
-cloud = lib/screens/cloud_screen.dart lib/screens/debrid_downloads_screen.dart lib/screens/torbox/*.dart lib/screens/premiumize/*.dart lib/screens/pikpak/*.dart lib/screens/alldebrid/*.dart lib/widgets/cloud/*.dart lib/screens/webdav/*.dart
+cloud = lib/features/torbox_downloads/**/*.dart lib/screens/cloud_screen.dart lib/screens/debrid_downloads_screen.dart lib/screens/torbox/*.dart lib/screens/premiumize/*.dart lib/screens/pikpak/*.dart lib/screens/alldebrid/*.dart lib/widgets/cloud/*.dart lib/screens/webdav/*.dart
 settings = lib/screens/settings_screen.dart lib/screens/settings/*.dart lib/screens/settings/widgets/*.dart lib/features/settings/presentation/*.dart lib/features/settings/presentation/legacy_settings/*.dart lib/features/settings/presentation/legacy_settings/search_index/*.dart
 home_search_discover = lib/screens/search_screen.dart
 home_widgets = lib/widgets/home/*.dart

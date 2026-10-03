@@ -697,6 +697,28 @@ def destination_ownership(parsed, rows, source_path, scaffolds=(), partition_spe
     return errors
 
 
+def accessor_receiver_tokens(values, spec, rows):
+    """Drop only frozen accessor receivers on named methods moved to functions."""
+    rule = spec.get('unbound_tearoffs')
+    if not rule:
+        return values
+    allowed = set()
+    for name in rule['members']:
+        row = next((row for row in rows if row['original_name'] == name), None)
+        if row is None or row['destination_class']:
+            raise ValueError('Unbound accessor tear-off must name a top-level destination: ' + name)
+        allowed.add(name.split('.')[-1])
+    result = []
+    i = 0
+    while i < len(values):
+        if (values[i:i + 2] == [rule['receiver'], '.']
+                and i + 2 < len(values) and values[i + 2] in allowed):
+            i += 2
+        result.append(values[i])
+        i += 1
+    return result
+
+
 def check_scaffolds(lookup, scaffolds):
     errors = []
     for scaffold in scaffolds:
@@ -1009,7 +1031,8 @@ def _check(original_source, sources, rows, source_path, package=None,
                 errors.append('Missing registered test accessor: ' + spec['name'])
             continue
         expected = json.loads((ROOT / spec['tokens_file']).read_text())
-        if normalize(tokens(accessor), rows) != normalize(expected, rows):
+        if (normalize(accessor_receiver_tokens(tokens(accessor), spec, rows), rows)
+                != normalize(accessor_receiver_tokens(expected, spec, rows), rows)):
             errors.append('Test accessor changed outside its registered receiver edits')
     return errors
 

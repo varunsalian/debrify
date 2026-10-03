@@ -35,6 +35,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/screens/torbox/torbox_downloads_screen.dart': 14,
   'lib/features/iptv/presentation/iptv_stage_chip.dart': 0,
   'lib/features/iptv/presentation/key_cap.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_cockpit_stage.dart': 0,
@@ -112,7 +113,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart': 4,
   'lib/screens/stremio_tv/widgets/stremio_tv_repo_browser_dialog.dart': 3,
   'lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart': 0,
-  'lib/screens/torbox/torbox_downloads_screen.dart': 14,
   'lib/screens/trakt_calendar_screen.dart': 2,
   'lib/screens/webdav/webdav_files_screen.dart': 0,
   'lib/widgets/adaptive_playlist_section.dart': 0,
@@ -149,6 +149,16 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/torbox_downloads/presentation/torbox_downloads_view.dart': 0,
+  'lib/features/torbox_downloads/presentation/torbox_more_option.dart': 0,
+  'lib/features/torbox_downloads/presentation/maybe_blur.dart': 0,
+  'lib/features/torbox_downloads/presentation/folder_view_mode.dart': 0,
+  'lib/features/torbox_downloads/application/torbox_file_policy.dart': 0,
+  'lib/features/torbox_downloads/application/torbox_folder_policy.dart': 0,
+  'lib/features/torbox_downloads/application/torbox_magnet_policy.dart': 0,
+  'lib/features/torbox_downloads/models/torbox_episode_candidate.dart': 0,
+  'lib/features/torbox_downloads/models/torbox_search_result.dart': 0,
+  'lib/features/torbox_downloads/models/torbox_file_entry.dart': 0,
   'lib/features/iptv/application/iptv_layout_policy.dart': 0,
   'lib/features/iptv/application/iptv_load_status_policy.dart': 0,
   'lib/features/iptv/application/iptv_rail_resolution.dart': 0,

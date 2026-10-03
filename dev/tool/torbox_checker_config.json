@@ -54,7 +54,26 @@
     {
       "name": "torboxDownloadsTestAccess",
       "tokens_file": "dev/tool/torbox_test_accessor.json",
-      "required": true
+      "required": true,
+      "unbound_tearoffs": {
+        "receiver": "s",
+        "members": [
+          "_TorboxDownloadsScreenState._torboxFileLooksLikeVideo",
+          "_TorboxDownloadsScreenState._torboxDisplayName",
+          "_TorboxDownloadsScreenState._findFirstEpisodeIndex",
+          "_TorboxDownloadsScreenState._formatTorboxPlaylistTitle",
+          "_TorboxDownloadsScreenState._composeTorboxEntryTitle",
+          "_TorboxDownloadsScreenState._formatTorboxError",
+          "_TorboxDownloadsScreenState._isLikelySeries",
+          "_TorboxDownloadsScreenState._isValidMagnetLink",
+          "_TorboxDownloadsScreenState._detectSeriesPattern",
+          "_TorboxDownloadsScreenState._collectVideoFilesRecursively",
+          "_TorboxDownloadsScreenState._applySortedView",
+          "_TorboxDownloadsScreenState._extractSeasonNumber",
+          "_TorboxDownloadsScreenState._extractLeadingNumber",
+          "_TorboxDownloadsScreenState._applySeriesArrangedView"
+        ]
+      }
     }
   ],
   "seams": [],

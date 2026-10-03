@@ -3,8 +3,8 @@
 22221 android/app/src/main/kotlin/com/debrify/app/tv/AndroidTvTorrentPlayerActivity.kt
 18106 lib/screens/video_player_screen.dart
 11271 lib/screens/magic_tv_screen.dart
-7177 lib/screens/torbox/torbox_downloads_screen.dart
 6919 lib/services/profiles/profile_registry.dart
+6795 lib/screens/torbox/torbox_downloads_screen.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 6445 lib/screens/debrid_downloads_screen.dart
 5532 lib/screens/merged_series_detail_screen.dart

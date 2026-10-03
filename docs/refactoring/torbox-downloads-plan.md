@@ -372,6 +372,14 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base4`.
 - Revised coverage verifies route/tab isolation and sentinel teardown, both-view bulk confirmation/cancel/confirm and 149+1 ms waits, magnet refresh from Web Downloads, fresh route snapshots, non-monotonic playlist IDs, magnet flag values, every resource disposal in order, empty-folder/pre-load focus, widget-update initial opens and the complete temporary torrent override body.
 - Analyzer: 830 identities, zero added/removed (`step0b-analyzer-comparison.txt`). TorBox real-config/identity fixtures, settings/IPTV manifest self-tests, architecture, size, storage reference/key, format and diff checks pass. Evidence streams to the common evidence dir; no known-failure list or golden updated to accept a regression.
 
+### Step 1 — complete
+
+- Step 0b committed as `6267a505` (step 0: `c4f5375a`). Restored interrupted step-1 work from the preserved stash; resolved its checker-module conflict by retaining the real-config fixtures and equivalent accessor-wrapper/wrong-member negative checks added in step 0b.
+- Registered exact TorBox feature/bridge boundaries and 500-line destination caps. Moved three pure helper concerns, plain models, enums, the blur helper and presentation option model; all production callers use their moved declarations. Facade 7,177 → 6,795 lines, with all remaining workflows and resources temporarily retained until their scheduled extraction steps.
+- 195 original leaves plus every real-config/callback-identity/accessor fixture pass (`step1-verbatim-base4.txt`); settings/IPTV manifest self-tests pass unchanged. Shape inventory retains 14 bare radii / 23 token calls; theme registry includes feature destinations. No scaffolds are pinned at this step.
+- Whole analyzer: 829 identities, zero added; one former private-option unused-parameter warning disappears when its class becomes public (`step1-analyzer-comparison-base4.txt`). All 79 affected tests pass against base4 (`step1-test-comparison-base4.txt`), including all 63 characterization/source-picker tests unchanged and four strict macOS goldens.
+- Architecture, lowering-only size ratchet, format and diff checks pass. Linux originals remain pending and block step 6. No push.
+
 ## Found, not fixed
 
 - **Startup `setState` after dispose.** With a pre-filled
