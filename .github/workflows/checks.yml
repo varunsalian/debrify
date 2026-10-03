@@ -8,10 +8,12 @@ on:
     # Docs-only pushes need no app checks.
     paths-ignore: ['docs/**', '**/*.md']
 
-# A newer push to the same branch supersedes an in-progress run (private-repo
-# Actions minutes are metered).
+# A newer push to the same branch supersedes an in-progress quick run
+# (private-repo Actions minutes are metered). A run that includes a gate or
+# [full-ci] commit gets its own group, keyed by commit, so a later push can
+# never cancel its behaviour suite.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: "${{ github.workflow }}-${{ github.ref }}-${{ (contains(join(github.event.commits.*.message, ' '), 'gate') || contains(join(github.event.commits.*.message, ' '), '[full-ci]')) && github.sha || 'quick' }}"
   cancel-in-progress: true
 
 permissions:
@@ -47,14 +49,14 @@ jobs:
 
   sources-behavior:
     # The ~8-minute behaviour suite runs on PRs, main, manual runs, and on
-    # refactor pushes whose commit message marks a full-suite gate ("gate") or
-    # asks for it explicitly ("[full-ci]"). Every push still gets the cheap
+    # refactor pushes where ANY pushed commit's message marks a full-suite gate
+    # ("gate") or asks for it ("[full-ci]"). Every push still gets the cheap
     # size, architecture, format and analyzer jobs above.
     if: >-
       github.event_name != 'push' ||
       github.ref == 'refs/heads/main' ||
-      contains(github.event.head_commit.message, 'gate') ||
-      contains(github.event.head_commit.message, '[full-ci]')
+      contains(join(github.event.commits.*.message, ' '), 'gate') ||
+      contains(join(github.event.commits.*.message, ' '), '[full-ci]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

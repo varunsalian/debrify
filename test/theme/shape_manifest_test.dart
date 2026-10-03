@@ -353,7 +353,7 @@ void main() {
     expect(
       unswept,
       isEmpty,
-      reason: 'listed as swept but contains no shape-token call: \$unswept',
+      reason: 'listed as swept but contains no shape-token call: $unswept',
     );
   });
 
@@ -372,7 +372,7 @@ void main() {
     expect(
       calls,
       greaterThanOrEqualTo(488),
-      reason: 'the shape sweep converted 500 sites; only \$calls remain',
+      reason: 'the shape sweep converted 500 sites; only $calls remain',
     );
   });
 }

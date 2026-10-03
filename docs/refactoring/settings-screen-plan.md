@@ -882,7 +882,7 @@ afterwards:
 
 ## Found, not fixed
 
-- Ten bare `BorderRadius.circular` radii arrived with feature work after the
+- Eleven bare `BorderRadius.circular` radii arrived with feature work after the
   shape sweep, and the manifest now records them as current counts:
   - `external_player_settings_page.dart`, 18 → 20;
   - `iptv_results_view.dart`, 1 → 7;
