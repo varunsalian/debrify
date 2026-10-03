@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -25,6 +25,9 @@ SETTINGS_FACADE = "lib/screens/settings_screen.dart"
 SETTINGS_COMPLETE = True
 IPTV_COMPLETE = True
 TORBOX_COMPLETE = True
+DEBRID_COMPLETE = False
+DEBRID_FACADE = "lib/screens/debrid_downloads_screen.dart"
+DEBRID_BRIDGE = "lib/features/debrid_downloads/presentation/legacy_debrid/"
 TORBOX_FACADE = "lib/screens/torbox/torbox_downloads_screen.dart"
 TORBOX_BRIDGE = "lib/features/torbox_downloads/presentation/legacy_torbox/"
 IPTV_FACADE = "lib/widgets/iptv/iptv_results_view.dart"
@@ -88,6 +91,7 @@ TORRENT_PLAYBACK_PIPELINES = {
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
     FACADE,
+    DEBRID_FACADE,
     IPTV_FACADE,
     # Temporary forwarding-only bridge, with its own 400-line cap.
     PLAYBACK_FACADE,
@@ -279,6 +283,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     # Verbatim State-driven IPTV bridge; exit: IPTV data contracts/Riverpod.
     IPTV_BRIDGE,
     TORBOX_BRIDGE,
+    DEBRID_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -344,6 +349,16 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line TorBox facade limit")
         if "TEMP(torbox)" in source:
             problems.append("temporary TorBox cross-call remains in the facade")
+    if relative.startswith("lib/features/debrid_downloads/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line Real-Debrid extraction limit")
+        if "TEMP(debrid)" in source and (DEBRID_COMPLETE or not relative.startswith(DEBRID_BRIDGE)):
+            problems.append("temporary Real-Debrid cross-call outside the staged legacy bridge")
+    if DEBRID_COMPLETE and relative == DEBRID_FACADE:
+        if lines > 400:
+            problems.append(f"{lines} lines exceeds the 400-line Real-Debrid facade limit")
+        if "TEMP(debrid)" in source:
+            problems.append("temporary Real-Debrid cross-call remains in the facade")
     if relative in TORRENT_PLAYBACK_SOURCE_FILES:
         limit = 800 if relative in TORRENT_PLAYBACK_PIPELINES else 500
         if lines > limit:
@@ -395,6 +410,8 @@ def violations(path: Path) -> list[str]:
                 problems.append("pure IPTV application helper imports a legacy service")
             if relative.startswith("lib/features/torbox_downloads/application/") and target.startswith("lib/services/"):
                 problems.append("pure TorBox application helper imports a legacy service")
+            if relative.startswith("lib/features/debrid_downloads/application/") and target.startswith("lib/services/"):
+                problems.append("pure Real-Debrid application helper imports a legacy service")
             if layer in ("application", "data", "models"):
                 if (target.startswith(("lib/screens/", "lib/widgets/", "lib/ui/"))
                         or "/presentation/" in target
@@ -430,6 +447,12 @@ def violations(path: Path) -> list[str]:
                         # COMPOSITION, outside lib/features.
                         problems.append(
                             f"cross-feature import outside {other}/models: {uri}")
+                if own in ("debrid_downloads", "torbox_downloads") and target.startswith("lib/features/"):
+                    other = target.split("/")[2]
+                    if {own, other} == {"debrid_downloads", "torbox_downloads"}:
+                        problems.append("Real-Debrid/TorBox cross-feature import")
+                if own == "debrid_downloads" and target == DEBRID_FACADE:
+                    problems.append("Real-Debrid feature imports the downloads facade")
                 if own == "torbox_downloads" and target == TORBOX_FACADE:
                     problems.append("TorBox feature imports the downloads facade")
                 if own == "iptv" and target == IPTV_FACADE:
@@ -448,6 +471,8 @@ def main() -> int:
         if not p.name.endswith(GENERATED_SUFFIXES)
     }
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)
+    if DEBRID_COMPLETE:
+        paths.add(ROOT / DEBRID_FACADE)
     if TORBOX_COMPLETE:
         paths.add(ROOT / TORBOX_FACADE)
     if IPTV_COMPLETE:

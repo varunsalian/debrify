@@ -433,6 +433,12 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 - Callback negative fixtures now mutate every identity site (wrappers and same-class receiver swaps). Recorded the shape classification rule and the reset-scroll test's correctPixels limitation: listener remove/jump/add order is established by the source guard and checker.
 - Adopted base5: 10,489 success / 13 failure / 28 error / 20 skipped, PASS versus base4 with exactly three added passing identities and no missing/newly skipped identities. Analyzer 825 unchanged; all four manifest self-tests, architecture, size and diff checks pass. Stable tested tree is recorded; only the five pending Linux artifacts are untracked and unused by macOS runs. Use base5 for both gates. Linux artifacts were independently captured and strictly rerun by the user from cc950ed9; verify and commit their hashes/provenance only before step 6.
 
+### Step 1 — complete; pure helpers/models and guard registration
+
+- Moved ten pure helpers, both enums and RDSearchResult into application/models; production and frozen accessor use the actual new declarations. Facade ratchet 6,590 → 6,322; destination maximum 195. Registered exact legacy bridge, 500-line destinations, pure-service/back-import/cross-TorBox bans, recursive theme/light-ink coverage, and every zero-budget shape destination.
+- All four manifests/self-tests pass; Debrid checks all 173 leaves and every callback identity site. Architecture, size, storage reference/key, format and diff checks pass; original 23 radii / 23 tokens preserved. step1-final2 has 127 successes and the one observed pre-existing theme failure, PASS against base5; analyzer relocation comparison has zero additions.
+- The interrupted candidate had incorrect relative imports and private enum references in the accessor; corrected before this checkpoint, without changing assertions. Final verification found one directive-order diagnostic: reordered imports only and repeated analyzer/focused verification. No behavior or allowlist change. Retained staged work through the step-0b stash and resolved only the Progress conflict, preserving both records.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

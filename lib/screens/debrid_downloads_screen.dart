@@ -1,3 +1,10 @@
+
+import 'package:debrify/features/debrid_downloads/models/debrid_downloads_view.dart';
+import 'package:debrify/features/debrid_downloads/models/folder_view_mode.dart';
+import 'package:debrify/features/debrid_downloads/models/rd_search_result.dart';
+import 'package:debrify/features/debrid_downloads/application/debrid_folder_policy.dart';
+import 'package:debrify/features/debrid_downloads/application/debrid_input_policy.dart';
+import 'package:debrify/features/debrid_downloads/application/debrid_error_policy.dart';
 import 'dart:convert';
 
 import 'package:debrify/services/storage/playlist_storage.dart';
@@ -61,12 +68,13 @@ class DebridDownloadsScreen extends StatefulWidget {
   State<DebridDownloadsScreen> createState() => _DebridDownloadsScreenState();
 }
 
-enum _DebridDownloadsView { torrents, ddl }
 
-enum _FolderViewMode { raw, sortedAZ, seriesArrange }
+
+
 
 class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
-  _DebridDownloadsView _selectedView = _DebridDownloadsView.torrents;
+
+  DebridDownloadsView _selectedView = DebridDownloadsView.torrents;
 
   // TV content focus handler (stored for proper unregistration)
   VoidCallback? _tvContentFocusHandler;
@@ -101,7 +109,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   bool _isLoadingFolder = false;
 
   // View mode state
-  final Map<String, _FolderViewMode> _torrentViewModes = {};
+  final Map<String, FolderViewMode> _torrentViewModes = {};
 
   // Magnet input
   final TextEditingController _magnetController = TextEditingController();
@@ -117,11 +125,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   final Set<String> _selectedDownloadIds = {};
 
   Set<String> get _activeSelectedIds =>
-      _selectedView == _DebridDownloadsView.torrents
+      _selectedView == DebridDownloadsView.torrents
       ? _selectedTorrentIds
       : _selectedDownloadIds;
 
-  int get _activeItemCount => _selectedView == _DebridDownloadsView.torrents
+  int get _activeItemCount => _selectedView == DebridDownloadsView.torrents
       ? _torrents.length
       : _downloads.length;
 
@@ -165,7 +173,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   final FocusNode _searchClearFocusNode = FocusNode(
     debugLabel: 'rd-search-clear',
   );
-  List<_RDSearchResult> _searchResults = [];
+  List<RDSearchResult> _searchResults = [];
 
   @override
   void initState() {
@@ -278,11 +286,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (_currentViewNodes != null && _currentViewNodes!.isNotEmpty) {
         _shouldFocusOnLoad = false;
         _firstItemFocusNode.requestFocus();
-      } else if (_selectedView == _DebridDownloadsView.torrents &&
+      } else if (_selectedView == DebridDownloadsView.torrents &&
           _torrents.isNotEmpty) {
         _shouldFocusOnLoad = false;
         _firstItemFocusNode.requestFocus();
-      } else if (_selectedView == _DebridDownloadsView.ddl &&
+      } else if (_selectedView == DebridDownloadsView.ddl &&
           _downloads.isNotEmpty) {
         _shouldFocusOnLoad = false;
         _firstItemFocusNode.requestFocus();
@@ -481,7 +489,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _torrentErrorMessage = _getUserFriendlyErrorMessage(e);
+          _torrentErrorMessage = getUserFriendlyErrorMessage(e);
           _isLoadingTorrents = false;
         });
       }
@@ -523,7 +531,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _torrentErrorMessage = _getUserFriendlyErrorMessage(e);
+          _torrentErrorMessage = getUserFriendlyErrorMessage(e);
           _isLoadingMoreTorrents = false;
         });
       }
@@ -709,7 +717,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _downloadErrorMessage = _getUserFriendlyErrorMessage(e);
+          _downloadErrorMessage = getUserFriendlyErrorMessage(e);
           _isLoadingDownloads = false;
         });
       }
@@ -748,7 +756,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _downloadErrorMessage = _getUserFriendlyErrorMessage(e);
+          _downloadErrorMessage = getUserFriendlyErrorMessage(e);
           _isLoadingMoreDownloads = false;
         });
       }
@@ -1467,7 +1475,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (_isAllSelected) {
         _activeSelectedIds.clear();
       } else {
-        if (_selectedView == _DebridDownloadsView.torrents) {
+        if (_selectedView == DebridDownloadsView.torrents) {
           _selectedTorrentIds.addAll(_torrents.map((t) => t.id));
         } else {
           _selectedDownloadIds.addAll(_downloads.map((d) => d.id));
@@ -1479,7 +1487,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Future<void> _handleDeleteSelected() async {
     if (_apiKey == null || _activeSelectedIds.isEmpty) return;
 
-    final isTorrents = _selectedView == _DebridDownloadsView.torrents;
+    final isTorrents = _selectedView == DebridDownloadsView.torrents;
     final count = _activeSelectedIds.length;
     final itemType = isTorrents ? 'torrent' : 'download';
     final itemTypePlural = isTorrents ? 'torrents' : 'downloads';
@@ -1696,77 +1704,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
   }
 
-  String _getUserFriendlyErrorMessage(dynamic error) {
-    final errorString = error.toString().toLowerCase();
 
-    if (errorString.contains('file is not readily available in real debrid')) {
-      return 'This torrent is not available on Real Debrid servers. Try a different torrent.';
-    } else if (errorString.contains('invalid api key') ||
-        errorString.contains('401')) {
-      return 'Invalid API key. Please check your Real Debrid settings.';
-    } else if (errorString.contains('account locked') ||
-        errorString.contains('403')) {
-      return 'Your Real Debrid account is locked. Please check your account status.';
-    } else if (errorString.contains('network error') ||
-        errorString.contains('connection')) {
-      return 'Network connection error. Please check your internet connection.';
-    } else if (errorString.contains('timeout')) {
-      return 'Request timed out. Please try again.';
-    } else if (errorString.contains('no files found in torrent')) {
-      return 'No files found in this torrent.';
-    } else if (errorString.contains('failed to get download link')) {
-      return 'Unable to get download link. The torrent may not be available.';
-    } else if (errorString.contains('long') || errorString.contains('int')) {
-      return 'Data format error. Please refresh and try again.';
-    } else if (errorString.contains('json')) {
-      return 'Invalid response format. Please try again.';
-    } else if (errorString.contains('failed to load torrents') ||
-        errorString.contains('failed to load downloads')) {
-      return 'Unable to load downloads. Please check your connection and try again.';
-    } else {
-      return 'Failed to add torrent. Please try again.';
-    }
-  }
 
-  String _getLinkUnrestrictErrorMessage(String errorMessage) {
-    final errorString = errorMessage.toLowerCase();
 
-    // Handle specific Real Debrid error codes and messages
-    if (errorString.contains('infringing_file')) {
-      return 'This file contains copyrighted content and cannot be unrestricted.';
-    } else if (errorString.contains('invalid_link')) {
-      return 'Invalid or unsupported link format.';
-    } else if (errorString.contains('file_not_found')) {
-      return 'File not found or no longer available.';
-    } else if (errorString.contains('host_not_supported')) {
-      return 'This file hosting service is not supported by Real Debrid.';
-    } else if (errorString.contains('file_too_large')) {
-      return 'File size exceeds Real Debrid limits.';
-    } else if (errorString.contains('quota_exceeded')) {
-      return 'Real Debrid quota exceeded. Please try again later.';
-    } else if (errorString.contains('invalid api key') ||
-        errorString.contains('401')) {
-      return 'Invalid API key. Please check your Real Debrid settings.';
-    } else if (errorString.contains('account_locked') ||
-        errorString.contains('403')) {
-      return 'Your Real Debrid account is locked. Please check your account status.';
-    } else if (errorString.contains('network error') ||
-        errorString.contains('connection')) {
-      return 'Network connection error. Please check your internet connection.';
-    } else if (errorString.contains('timeout')) {
-      return 'Request timed out. Please try again.';
-    } else {
-      // For other errors, try to extract a clean message
-      if (errorString.contains('failed to unrestrict link:')) {
-        // Extract the status code and clean up the message
-        final parts = errorMessage.split(' - ');
-        if (parts.length > 1) {
-          return 'Failed to unrestrict link (${parts[0].split(': ').last}). Please try a different link.';
-        }
-      }
-      return 'Failed to unrestrict link. Please try a different link.';
-    }
-  }
 
   void _showError(String message) {
     // Messenger lookup first: it is the pre-existing liveness check on this
@@ -1951,20 +1891,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       final rootNodes = RDFolderTreeBuilder.getRootLevelNodes(folderTree);
 
       // Initialize view mode for this torrent if not already set
-      _torrentViewModes.putIfAbsent(torrent.id, () => _FolderViewMode.raw);
+      _torrentViewModes.putIfAbsent(torrent.id, () => FolderViewMode.raw);
 
       // Apply view mode transformation to root nodes
       final mode = _torrentViewModes[torrent.id]!;
       List<RDFileNode> transformedNodes;
       switch (mode) {
-        case _FolderViewMode.raw:
+        case FolderViewMode.raw:
           transformedNodes = rootNodes;
           break;
-        case _FolderViewMode.sortedAZ:
-          transformedNodes = _applySortedView(rootNodes);
+        case FolderViewMode.sortedAZ:
+          transformedNodes = applySortedView(rootNodes);
           break;
-        case _FolderViewMode.seriesArrange:
-          transformedNodes = _applySeriesArrangedView(rootNodes);
+        case FolderViewMode.seriesArrange:
+          transformedNodes = applySeriesArrangedView(rootNodes);
           break;
       }
 
@@ -2002,18 +1942,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     final mode = _getCurrentViewMode();
     List<RDFileNode> transformedChildren;
 
-    if (mode == _FolderViewMode.seriesArrange) {
+    if (mode == FolderViewMode.seriesArrange) {
       // Inside a folder with Series Arrange mode: show files sorted by name
-      transformedChildren = _applySortedView(folder.children);
+      transformedChildren = applySortedView(folder.children);
     } else {
       switch (mode) {
-        case _FolderViewMode.raw:
+        case FolderViewMode.raw:
           transformedChildren = folder.children;
           break;
-        case _FolderViewMode.sortedAZ:
-          transformedChildren = _applySortedView(folder.children);
+        case FolderViewMode.sortedAZ:
+          transformedChildren = applySortedView(folder.children);
           break;
-        case _FolderViewMode.seriesArrange:
+        case FolderViewMode.seriesArrange:
           // Should never reach here
           transformedChildren = folder.children;
           break;
@@ -2075,14 +2015,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             final mode = _getCurrentViewMode();
             List<RDFileNode> transformedNodes;
             switch (mode) {
-              case _FolderViewMode.raw:
+              case FolderViewMode.raw:
                 transformedNodes = rawNodes;
                 break;
-              case _FolderViewMode.sortedAZ:
-                transformedNodes = _applySortedView(rawNodes);
+              case FolderViewMode.sortedAZ:
+                transformedNodes = applySortedView(rawNodes);
                 break;
-              case _FolderViewMode.seriesArrange:
-                transformedNodes = _applySeriesArrangedView(rawNodes);
+              case FolderViewMode.seriesArrange:
+                transformedNodes = applySeriesArrangedView(rawNodes);
                 break;
             }
             setState(() {
@@ -2100,19 +2040,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       final mode = _getCurrentViewMode();
       List<RDFileNode> transformedNodes;
 
-      if (mode == _FolderViewMode.seriesArrange && _folderPath.isNotEmpty) {
+      if (mode == FolderViewMode.seriesArrange && _folderPath.isNotEmpty) {
         // Still inside a folder after going up - use sorted view
-        transformedNodes = _applySortedView(rawNodes);
+        transformedNodes = applySortedView(rawNodes);
       } else {
         switch (mode) {
-          case _FolderViewMode.raw:
+          case FolderViewMode.raw:
             transformedNodes = rawNodes;
             break;
-          case _FolderViewMode.sortedAZ:
-            transformedNodes = _applySortedView(rawNodes);
+          case FolderViewMode.sortedAZ:
+            transformedNodes = applySortedView(rawNodes);
             break;
-          case _FolderViewMode.seriesArrange:
-            transformedNodes = _applySeriesArrangedView(rawNodes);
+          case FolderViewMode.seriesArrange:
+            transformedNodes = applySeriesArrangedView(rawNodes);
             break;
         }
       }
@@ -2132,207 +2072,26 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     return _folderPath.last;
   }
 
-  /// Detect if current folder contains series episodes
-  /// Checks recursively in subfolders as well
-  bool _detectSeriesPattern(List<RDFileNode> nodes) {
-    // Collect video files recursively from current level and subfolders
-    final videoFiles = _collectVideoFilesRecursively(nodes);
 
-    if (videoFiles.length < 3) return false;
 
-    final filenames = videoFiles.map((n) => n.name).toList();
-    final analysis = SeriesParser.analyzePlaylistConfidence(filenames);
-    return analysis.classification == PlaylistClassification.SERIES;
-  }
 
-  /// Recursively collect all video files from nodes and their subfolders
-  List<RDFileNode> _collectVideoFilesRecursively(List<RDFileNode> nodes) {
-    final videoFiles = <RDFileNode>[];
 
-    for (final node in nodes) {
-      if (node.isFolder) {
-        // Recursively collect from subfolder
-        videoFiles.addAll(_collectVideoFilesRecursively(node.children));
-      } else if (FileUtils.isVideoFile(node.name)) {
-        // Add video file
-        videoFiles.add(node);
-      }
-    }
 
-    return videoFiles;
-  }
 
-  /// Apply sorted view (folders first A-Z, then files A-Z)
-  /// Special handling for numbered folders and files to sort numerically
-  List<RDFileNode> _applySortedView(List<RDFileNode> nodes) {
-    final folders = nodes.where((n) => n.isFolder).toList();
-    final files = nodes.where((n) => !n.isFolder).toList();
 
-    // Sort folders with special handling for numbered folders
-    folders.sort((a, b) {
-      // Extract numbers if folders are named "Season X", "Chapter X", etc.
-      final aNum = _extractSeasonNumber(a.name);
-      final bNum = _extractSeasonNumber(b.name);
 
-      // If both have numbers, sort numerically
-      if (aNum != null && bNum != null) {
-        return aNum.compareTo(bNum);
-      }
 
-      // If only one has a number, numbered folders come first
-      if (aNum != null) return -1;
-      if (bNum != null) return 1;
 
-      // Otherwise sort alphabetically
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
 
-    // Sort files with special handling for files starting with numbers
-    files.sort((a, b) {
-      // Extract leading numbers from filenames (e.g., "10. Video.mp4" -> 10)
-      final aNum = _extractLeadingNumber(a.name);
-      final bNum = _extractLeadingNumber(b.name);
-
-      // If both start with numbers, sort numerically
-      if (aNum != null && bNum != null) {
-        return aNum.compareTo(bNum);
-      }
-
-      // If only one starts with a number, numbered files come first
-      if (aNum != null) return -1;
-      if (bNum != null) return 1;
-
-      // Otherwise sort alphabetically
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
-
-    return [...folders, ...files];
-  }
-
-  /// Extract number from folder name for numerical sorting
-  /// Handles: "1. Introduction", "10. Chapter", "Season 10", "Chapter_12", "Episode 5", "Part 3", etc.
-  /// Returns null if no number pattern found
-  int? _extractSeasonNumber(String folderName) {
-    // Try multiple patterns in order of specificity
-    final patterns = [
-      // Leading numbers: "1. ", "10-", "5_", etc.
-      RegExp(r'^(\d+)[\s._-]'),
-      // Season X, Season_X, Season-X
-      RegExp(r'season[\s_-]*(\d+)', caseSensitive: false),
-      // Chapter X, Chapter_X, Chapter-X
-      RegExp(r'chapter[\s_-]*(\d+)', caseSensitive: false),
-      // Episode X, Episode_X, Episode-X
-      RegExp(r'episode[\s_-]*(\d+)', caseSensitive: false),
-      // Part X, Part_X, Part-X
-      RegExp(r'part[\s_-]*(\d+)', caseSensitive: false),
-      // Any word followed by number at the start (e.g., "Lesson_5", "Module-3")
-      RegExp(r'^[a-z]+[\s_-]*(\d+)', caseSensitive: false),
-    ];
-
-    final lowerName = folderName.toLowerCase();
-
-    for (final pattern in patterns) {
-      final match = pattern.firstMatch(lowerName);
-      if (match != null && match.groupCount >= 1) {
-        return int.tryParse(match.group(1)!);
-      }
-    }
-
-    return null;
-  }
-
-  /// Extract leading number from filename for numerical sorting
-  /// Handles: "10. Video.mp4", "9 - Title.mkv", "05_Episode.mp4", etc.
-  /// Returns null if filename doesn't start with a number
-  int? _extractLeadingNumber(String filename) {
-    // Match numbers at the start of filename (before any separator like . - _ space)
-    // Examples: "10.", "9 -", "05_", "123-"
-    final pattern = RegExp(r'^(\d+)[\s._-]');
-    final match = pattern.firstMatch(filename);
-
-    if (match != null && match.groupCount >= 1) {
-      return int.tryParse(match.group(1)!);
-    }
-
-    return null;
-  }
-
-  /// Apply series arranged view (create virtual Season folders)
-  List<RDFileNode> _applySeriesArrangedView(List<RDFileNode> nodes) {
-    final folders = nodes.where((n) => n.isFolder).toList();
-    final files = nodes.where((n) => !n.isFolder).toList();
-
-    // Parse files for series info
-    final videoFiles = files
-        .where((f) => FileUtils.isVideoFile(f.name))
-        .toList();
-    final nonVideoFiles = files
-        .where((f) => !FileUtils.isVideoFile(f.name))
-        .toList();
-
-    if (videoFiles.isEmpty) return nodes;
-
-    final filenames = videoFiles.map((f) => f.name).toList();
-
-    try {
-      final parsedInfos = SeriesParser.parsePlaylist(filenames);
-
-      // Group by season
-      final Map<int, List<RDFileNode>> seasonMap = {};
-      for (int i = 0; i < videoFiles.length; i++) {
-        final info = parsedInfos[i];
-        if (info.isSeries && info.season != null) {
-          seasonMap.putIfAbsent(info.season!, () => []);
-          seasonMap[info.season!]!.add(videoFiles[i]);
-        } else {
-          // If not parsed as series, default to Season 1
-          seasonMap.putIfAbsent(1, () => []);
-          seasonMap[1]!.add(videoFiles[i]);
-        }
-      }
-
-      // Create virtual season folders
-      final seasonFolders = seasonMap.entries.map((entry) {
-        final seasonNum = entry.key;
-        final seasonFiles = entry.value;
-
-        // Sort episodes within season by episode number
-        seasonFiles.sort((a, b) {
-          final aInfo = SeriesParser.parseFilename(a.name);
-          final bInfo = SeriesParser.parseFilename(b.name);
-          final aEp = aInfo.episode ?? 0;
-          final bEp = bInfo.episode ?? 0;
-          return aEp.compareTo(bEp);
-        });
-
-        return RDFileNode.folder(
-          name: seasonNum == 0 ? 'Season 0 - Specials' : 'Season $seasonNum',
-          children: seasonFiles,
-        );
-      }).toList();
-
-      // Sort season folders by season number
-      seasonFolders.sort((a, b) {
-        final aNum = int.tryParse(a.name.replaceAll(RegExp(r'\D'), '')) ?? 0;
-        final bNum = int.tryParse(b.name.replaceAll(RegExp(r'\D'), '')) ?? 0;
-        return aNum.compareTo(bNum);
-      });
-
-      return [...folders, ...seasonFolders, ...nonVideoFiles];
-    } catch (e) {
-      debugPrint('Series arrangement failed: $e');
-      return _applySortedView(nodes); // Fallback to sorted view
-    }
-  }
 
   /// Get current view mode for active torrent
-  _FolderViewMode _getCurrentViewMode() {
-    if (_currentTorrentId == null) return _FolderViewMode.raw;
-    return _torrentViewModes[_currentTorrentId] ?? _FolderViewMode.raw;
+  FolderViewMode _getCurrentViewMode() {
+    if (_currentTorrentId == null) return FolderViewMode.raw;
+    return _torrentViewModes[_currentTorrentId] ?? FolderViewMode.raw;
   }
 
   /// Set view mode and refresh display
-  void _setViewMode(_FolderViewMode mode) {
+  void _setViewMode(FolderViewMode mode) {
     if (_currentTorrentId == null || _currentViewNodes == null) return;
 
     // Get raw nodes based on current path
@@ -2362,8 +2121,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
 
     // If user selected Series Arrange, detect if content is actually a series
-    if (mode == _FolderViewMode.seriesArrange) {
-      final isSeries = _detectSeriesPattern(rawNodes);
+    if (mode == FolderViewMode.seriesArrange) {
+      final isSeries = detectSeriesPattern(rawNodes);
 
       if (!isSeries) {
         // Not a series - show snackbar and fallback to sorted view
@@ -2380,8 +2139,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
         // Switch to sorted view instead
         setState(() {
-          _torrentViewModes[_currentTorrentId!] = _FolderViewMode.sortedAZ;
-          _currentViewNodes = _applySortedView(rawNodes);
+          _torrentViewModes[_currentTorrentId!] = FolderViewMode.sortedAZ;
+          _currentViewNodes = applySortedView(rawNodes);
         });
         return;
       }
@@ -2392,14 +2151,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       _torrentViewModes[_currentTorrentId!] = mode;
 
       switch (mode) {
-        case _FolderViewMode.raw:
+        case FolderViewMode.raw:
           _currentViewNodes = rawNodes;
           break;
-        case _FolderViewMode.sortedAZ:
-          _currentViewNodes = _applySortedView(rawNodes);
+        case FolderViewMode.sortedAZ:
+          _currentViewNodes = applySortedView(rawNodes);
           break;
-        case _FolderViewMode.seriesArrange:
-          _currentViewNodes = _applySeriesArrangedView(rawNodes);
+        case FolderViewMode.seriesArrange:
+          _currentViewNodes = applySeriesArrangedView(rawNodes);
           break;
       }
     });
@@ -2430,13 +2189,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
 
     final lowerQuery = query.toLowerCase();
-    final results = <_RDSearchResult>[];
+    final results = <RDSearchResult>[];
 
     void searchNode(RDFileNode node, List<String> path) {
       if (!node.isFolder) {
         if (FileUtils.isVideoFile(node.name) &&
             node.name.toLowerCase().contains(lowerQuery)) {
-          results.add(_RDSearchResult(node: node, path: path.join(' / ')));
+          results.add(RDSearchResult(node: node, path: path.join(' / ')));
         }
       } else {
         for (final child in node.children) {
@@ -2580,7 +2339,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   /// Build a card for a search result
-  Widget _buildSearchResultCard(_RDSearchResult result, int index) {
+  Widget _buildSearchResultCard(RDSearchResult result, int index) {
     final node = result.node;
     final borderColor = Colors.white.withValues(alpha: 0.08);
 
@@ -2688,7 +2447,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       return _buildFolderBrowserScaffold();
     }
 
-    final Widget content = _selectedView == _DebridDownloadsView.torrents
+    final Widget content = _selectedView == DebridDownloadsView.torrents
         ? _buildTorrentContent()
         : _buildDownloadContent();
 
@@ -2742,7 +2501,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           }
           return KeyEventResult.ignored;
         },
-        child: DropdownButtonFormField<_FolderViewMode>(
+        child: DropdownButtonFormField<FolderViewMode>(
           focusNode: _viewModeDropdownFocusNode,
           autofocus: true,
           isExpanded: true,
@@ -2750,9 +2509,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           decoration: InputDecoration(
             labelText: 'View Mode',
             prefixIcon: Icon(
-              mode == _FolderViewMode.raw
+              mode == FolderViewMode.raw
                   ? Icons.view_list
-                  : mode == _FolderViewMode.sortedAZ
+                  : mode == FolderViewMode.sortedAZ
                   ? Icons.sort_by_alpha
                   : Icons.video_library,
               color: theme.colorScheme.primary,
@@ -2768,9 +2527,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             ),
           ),
           items: const [
-            DropdownMenuItem(value: _FolderViewMode.raw, child: Text('Raw')),
+            DropdownMenuItem(value: FolderViewMode.raw, child: Text('Raw')),
             DropdownMenuItem(
-              value: _FolderViewMode.sortedAZ,
+              value: FolderViewMode.sortedAZ,
               child: Text('Sort (A-Z)'),
             ),
           ],
@@ -2785,7 +2544,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Widget _buildFolderBrowserScaffold() {
     // Back navigation is handled via MainPageBridge.handleBackNavigation
     final currentMode = _getCurrentViewMode();
-    final showSearch = currentMode != _FolderViewMode.seriesArrange;
+    final showSearch = currentMode != FolderViewMode.seriesArrange;
 
     return CloudScaffold(
       appBar: AppBar(
@@ -2942,15 +2701,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Widget _buildViewSelectorBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-      child: CloudSegmentedTabs<_DebridDownloadsView>(
+      child: CloudSegmentedTabs<DebridDownloadsView>(
         segments: const [
           CloudSegment(
-            _DebridDownloadsView.torrents,
+            DebridDownloadsView.torrents,
             'Torrent Downloads',
             Icons.folder_rounded,
           ),
           CloudSegment(
-            _DebridDownloadsView.ddl,
+            DebridDownloadsView.ddl,
             'DDL Downloads',
             Icons.download_rounded,
           ),
@@ -4346,24 +4105,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
   }
 
-  bool _isValidMagnetLink(String link) {
-    final trimmedLink = link.trim();
-    if (!trimmedLink.startsWith('magnet:?')) {
-      return false;
-    }
 
-    // Check for required magnet link components
-    if (!trimmedLink.contains('xt=urn:btih:')) {
-      return false;
-    }
-
-    // Basic length check (magnet links are typically longer than 50 characters)
-    if (trimmedLink.length < 50) {
-      return false;
-    }
-
-    return true;
-  }
 
   Future<void> _addMagnetWithDefaultSelection() async {
     final magnetLink = _magnetController.text.trim();
@@ -4372,7 +4114,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       return;
     }
 
-    if (!_isValidMagnetLink(magnetLink)) {
+    if (!isValidMagnetLink(magnetLink)) {
       _showError('Please enter a valid magnet link');
       return;
     }
@@ -4449,7 +4191,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       if (mounted) {
-        _showError(_getUserFriendlyErrorMessage(e.toString()));
+        _showError(getUserFriendlyErrorMessage(e.toString()));
       }
     } finally {
       if (mounted) {
@@ -4467,7 +4209,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       return;
     }
 
-    if (!_isValidMagnetLink(magnetLink)) {
+    if (!isValidMagnetLink(magnetLink)) {
       _showError('Please enter a valid magnet link');
       return;
     }
@@ -4609,7 +4351,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       if (mounted) {
-        _showError(_getUserFriendlyErrorMessage(e.toString()));
+        _showError(getUserFriendlyErrorMessage(e.toString()));
       }
     } finally {
       if (mounted) {
@@ -4740,11 +4482,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
   }
 
-  bool _isValidLink(String link) {
-    final trimmedLink = link.trim();
-    return trimmedLink.startsWith('http://') ||
-        trimmedLink.startsWith('https://');
-  }
+
 
   Future<void> _addLink() async {
     final link = _linkController.text.trim();
@@ -4753,7 +4491,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       return;
     }
 
-    if (!_isValidLink(link)) {
+    if (!isValidLink(link)) {
       _showError(
         'Please enter a valid URL (must start with http:// or https://)',
       );
@@ -4828,7 +4566,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (mounted) {
         // Show the actual Real Debrid error message with user-friendly formatting
         final errorMessage = e.toString().replaceFirst('Exception: ', '');
-        final friendlyMessage = _getLinkUnrestrictErrorMessage(errorMessage);
+        final friendlyMessage = getLinkUnrestrictErrorMessage(errorMessage);
         _showError(friendlyMessage);
       }
     } finally {
@@ -6436,13 +6174,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 }
 
-/// Helper class to hold search result with its folder path
-class _RDSearchResult {
-  final RDFileNode node;
-  final String path;
 
-  const _RDSearchResult({required this.node, required this.path});
-}
 
 /// Frozen original-code characterization accessor; production does not call it.
 @visibleForTesting
@@ -6537,20 +6269,20 @@ Map<String, Object?> debridDownloadsTestAccess(State<DebridDownloadsScreen> stat
     'showDeleteSelectedProgressDialog': s._showDeleteSelectedProgressDialog,
     'copyToClipboard': s._copyToClipboard,
     'showSuccess': s._showSuccess,
-    'getUserFriendlyErrorMessage': s._getUserFriendlyErrorMessage,
-    'getLinkUnrestrictErrorMessage': s._getLinkUnrestrictErrorMessage,
+    'getUserFriendlyErrorMessage': getUserFriendlyErrorMessage,
+    'getLinkUnrestrictErrorMessage': getLinkUnrestrictErrorMessage,
     'showError': s._showError,
     'resetListScroll': s._resetListScroll,
     'navigateIntoTorrent': s._navigateIntoTorrent,
     'navigateIntoFolder': s._navigateIntoFolder,
     'navigateUp': s._navigateUp,
     'getCurrentFolderTitle': s._getCurrentFolderTitle,
-    'detectSeriesPattern': s._detectSeriesPattern,
-    'collectVideoFilesRecursively': s._collectVideoFilesRecursively,
-    'applySortedView': s._applySortedView,
-    'extractSeasonNumber': s._extractSeasonNumber,
-    'extractLeadingNumber': s._extractLeadingNumber,
-    'applySeriesArrangedView': s._applySeriesArrangedView,
+    'detectSeriesPattern': detectSeriesPattern,
+    'collectVideoFilesRecursively': collectVideoFilesRecursively,
+    'applySortedView': applySortedView,
+    'extractSeasonNumber': extractSeasonNumber,
+    'extractLeadingNumber': extractLeadingNumber,
+    'applySeriesArrangedView': applySeriesArrangedView,
     'getCurrentViewMode': s._getCurrentViewMode,
     'setViewMode': s._setViewMode,
     'toggleSearch': s._toggleSearch,
@@ -6562,13 +6294,13 @@ Map<String, Object?> debridDownloadsTestAccess(State<DebridDownloadsScreen> stat
     'handlePlayMultiFileTorrent': s._handlePlayMultiFileTorrent,
     'showAddMagnetDialog': s._showAddMagnetDialog,
     'autoPasteMagnetLink': s._autoPasteMagnetLink,
-    'isValidMagnetLink': s._isValidMagnetLink,
+    'isValidMagnetLink': isValidMagnetLink,
     'addMagnetWithDefaultSelection': s._addMagnetWithDefaultSelection,
     'showAdvancedMagnetDialog': s._showAdvancedMagnetDialog,
     'addMagnetWithSelection': s._addMagnetWithSelection,
     'showAddLinkDialog': s._showAddLinkDialog,
     'autoPasteLink': s._autoPasteLink,
-    'isValidLink': s._isValidLink,
+    'isValidLink': isValidLink,
     'addLink': s._addLink,
     'playFileOnDemand': s._playFileOnDemand,
     'addFileToPlaylist': s._addFileToPlaylist,
@@ -6583,8 +6315,8 @@ Map<String, Object?> debridDownloadsTestAccess(State<DebridDownloadsScreen> stat
     'addFolderToPlaylist': s._addFolderToPlaylist,
     'formatDate': s._formatDate,
     'copyNodeDownloadLink': s._copyNodeDownloadLink,
-    'rawMode': _FolderViewMode.raw,
-    'sortedMode': _FolderViewMode.sortedAZ,
-    'seriesMode': _FolderViewMode.seriesArrange,
+    'rawMode': FolderViewMode.raw,
+    'sortedMode': FolderViewMode.sortedAZ,
+    'seriesMode': FolderViewMode.seriesArrange,
   };
 }

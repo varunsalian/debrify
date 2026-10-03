@@ -62,6 +62,7 @@ PRIMARY = (
     'lib/screens/settings',
     'lib/screens/cloud_screen.dart',
     'lib/screens/debrid_downloads_screen.dart',
+    'lib/features/debrid_downloads',
     'lib/screens/downloads_screen.dart',
     'lib/screens/catalog_item_detail_screen.dart',
     'lib/screens/merged_series_detail_screen.dart',

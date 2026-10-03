@@ -35,6 +35,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/screens/debrid_downloads_screen.dart': 23,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_options.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_options.dart':
@@ -91,7 +92,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/addons/addon_hub_screen.dart': 7,
   'lib/screens/alldebrid/alldebrid_files_screen.dart': 1,
   'lib/screens/cloud_screen.dart': 0,
-  'lib/screens/debrid_downloads_screen.dart': 23,
   'lib/screens/debrify_tv/dialogs/community_channels_dialog.dart': 12,
   'lib/screens/debrify_tv/dialogs/external_player_notice_dialog.dart': 0,
   'lib/screens/debrify_tv/dialogs/spotlight_dialog.dart': 0,
@@ -170,6 +170,12 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/debrid_downloads/application/debrid_input_policy.dart': 0,
+  'lib/features/debrid_downloads/application/debrid_error_policy.dart': 0,
+  'lib/features/debrid_downloads/application/debrid_folder_policy.dart': 0,
+  'lib/features/debrid_downloads/models/debrid_downloads_view.dart': 0,
+  'lib/features/debrid_downloads/models/folder_view_mode.dart': 0,
+  'lib/features/debrid_downloads/models/rd_search_result.dart': 0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_view_state.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_playback.dart':
