@@ -386,3 +386,8 @@ Android TV directional focus/repeat, all three native launcher handoffs and real
 ## Original integration dependencies
 
 The legacy bridge keeps direct calls to PikpakStorage (profile preferences and credentials), PikPakApiService (metadata/list/recursive/detail/offline/batch/logout), PlaylistStorage (persisted raw maps), DownloadService (sequential enqueue), VideoPlayerLauncher (three static handoffs), MainPageBridge (back/focus/tab), Clipboard, and Navigator/ScaffoldMessenger. Shared FileUtils, Formatters, SeriesParser and theme/cloud widgets keep their existing contracts. None is moved or upgraded. The application helpers import only their existing pure utilities; there is no cross-cloud feature import.
+
+## Wiring review evidence
+
+- Step 2: reviewed all seven state/resource owners and their facade/accessor receivers before pinning seven owner handles; declaration initializers, identities and lifecycle order are preserved.
+- Step 3: reviewed all data-composition entries against the checklist above before pinning 33 scaffolds. Owners are the originating State instances, live callbacks resolve State/context/widget at use, deferred navigation callbacks invoke the real facade, and cross-section callbacks resolve the one fully wired composition. No constructor starts work; nullable slots are assigned before exposure, with no late fields.

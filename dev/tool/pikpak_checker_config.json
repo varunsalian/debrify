@@ -114,11 +114,17 @@
   "seams": [],
   "self_test_module": "pikpak_checker_test",
   "receivers": [
+    "PikpakBackNavigation",
+    "PikpakCatalogLoading",
     "PikpakCatalogState",
+    "PikpakDeleteActions",
+    "PikpakFeedback",
+    "PikpakFocusActions",
     "PikpakFocusState",
     "PikpakLinkState",
     "PikpakNavigationState",
     "PikpakSearchState",
+    "PikpakSelectionActions",
     "PikpakSelectionState",
     "PikpakViewState",
     "_deps",
@@ -138,7 +144,13 @@
     "_search": "PikpakSearchState",
     "_deps.searchState": "PikpakSearchState",
     "_link": "PikpakLinkState",
-    "_deps.linkState": "PikpakLinkState"
+    "_deps.linkState": "PikpakLinkState",
+    "_sections.focusActions": "PikpakFocusActions",
+    "_sections.backNavigation": "PikpakBackNavigation",
+    "_sections.catalogLoading": "PikpakCatalogLoading",
+    "_sections.deleteActions": "PikpakDeleteActions",
+    "_sections.selectionActions": "PikpakSelectionActions",
+    "_sections.feedback": "PikpakFeedback"
   },
   "receiver_owners": {
     "_PikPakFilesScreenState": "_PikPakFilesScreenState",
@@ -155,7 +167,13 @@
     "_search": "PikpakSearchState",
     "_deps.searchState": "PikpakSearchState",
     "_link": "PikpakLinkState",
-    "_deps.linkState": "PikpakLinkState"
+    "_deps.linkState": "PikpakLinkState",
+    "_sections.focusActions": "PikpakFocusActions",
+    "_sections.backNavigation": "PikpakBackNavigation",
+    "_sections.catalogLoading": "PikpakCatalogLoading",
+    "_sections.deleteActions": "PikpakDeleteActions",
+    "_sections.selectionActions": "PikpakSelectionActions",
+    "_sections.feedback": "PikpakFeedback"
   },
   "plain_sections": [],
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in pikpak_context_exceptions.json; original guards and statement order unchanged",
@@ -229,7 +247,9 @@
   ],
   "callback_instances": {
     "_PikPakFilesScreenState": "$State",
-    "PikpakFocusState": "$State._focus"
+    "PikpakFocusState": "$State._focus",
+    "PikpakBackNavigation": "$State._sections.backNavigation",
+    "PikpakCatalogLoading": "$State._sections.catalogLoading"
   },
   "callback_receiver_aliases": {
     "_deps.catalogState": "$State._catalog",
