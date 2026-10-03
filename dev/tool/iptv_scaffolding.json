@@ -1,3 +1,130 @@
 {
-  "scaffolds": []
+  "scaffolds": [
+    {
+      "file": "lib/widgets/iptv/iptv_results_view.dart",
+      "owner": "IptvResultsViewState",
+      "name": "_catalogState",
+      "tokens": [
+        "final",
+        "_catalogState",
+        "=",
+        "IptvCatalogState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/widgets/iptv/iptv_results_view.dart",
+      "owner": "IptvResultsViewState",
+      "name": "_focusState",
+      "tokens": [
+        "final",
+        "_focusState",
+        "=",
+        "IptvFocusState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/widgets/iptv/iptv_results_view.dart",
+      "owner": "IptvResultsViewState",
+      "name": "_membershipState",
+      "tokens": [
+        "final",
+        "_membershipState",
+        "=",
+        "IptvMembershipState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/widgets/iptv/iptv_results_view.dart",
+      "owner": "IptvResultsViewState",
+      "name": "_playerState",
+      "tokens": [
+        "final",
+        "_playerState",
+        "=",
+        "IptvPlayerState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/widgets/iptv/iptv_results_view.dart",
+      "owner": "IptvResultsViewState",
+      "name": "_previewState",
+      "tokens": [
+        "final",
+        "_previewState",
+        "=",
+        "IptvPreviewState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/widgets/iptv/iptv_results_view.dart",
+      "owner": "IptvResultsViewState",
+      "name": "_recordingState",
+      "tokens": [
+        "final",
+        "_recordingState",
+        "=",
+        "IptvRecordingState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/widgets/iptv/iptv_results_view.dart",
+      "owner": "IptvResultsViewState",
+      "name": "_selectionState",
+      "tokens": [
+        "final",
+        "_selectionState",
+        "=",
+        "IptvSelectionState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/widgets/iptv/iptv_results_view.dart",
+      "owner": "IptvResultsViewState",
+      "name": "_settingsState",
+      "tokens": [
+        "final",
+        "_settingsState",
+        "=",
+        "IptvSettingsState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/widgets/iptv/iptv_results_view.dart",
+      "owner": "IptvResultsViewState",
+      "name": "_statusState",
+      "tokens": [
+        "final",
+        "_statusState",
+        "=",
+        "IptvStatusState",
+        "(",
+        ")",
+        ";"
+      ]
+    }
+  ]
 }

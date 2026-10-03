@@ -593,3 +593,32 @@ Technique), with these IPTV rules:
   `suite_evidence.py run iptv/step1 @dev/tool/ci_behavior_tests.txt`: 2,786
   successes, the same two known failures, zero missing/new skips, PASS against
   `base3` (`step1-test-comparison.txt`). No golden or payload fixture changed.
+
+### Step 2 — complete
+
+- Step-1 checkpoint: `282dd6b7`. The 111 remaining original State fields now
+  have nine owners by concern; the two public threshold constants already
+  belong to the step-1 layout policy. Initializers, static/final semantics
+  and collection/notifier identity remain exact. No owner receives a combined
+  disposal method: lifecycle statements stay interleaved in the State.
+- The facade ratchets **8,256 → 8,085**; nine new owners are 29–105 lines.
+  Their borrowed services/collections retain original initialization and
+  construction/disposal ownership. Nine exact composition fields are pinned
+  in the scaffolding sidecar. Every lifecycle body remains receiver-qualified
+  in the facade with its original statement order.
+- The State and category-dialog fields both originally used `_scrollController`.
+  The checker now resolves ambiguous renames within the original declaration
+  owner. Added positive/negative fixtures prove that the dialog's independent
+  field reference cannot be silently renamed. All 29 IPTV fixtures and the
+  settings/launcher fixtures pass, with 384 IPTV leaves and 316 settings leaves
+  (`step2-verbatim-verified.txt`, `step2-settings-verified.txt`).
+- Ported the EPG source guard's ticket spelling when fields moved, ahead of
+  its method relocation in step 4. All original assertions remain, and both
+  slice markers must exist. Its focused 12 tests pass (`step2-epg-port.txt`).
+  Other source guards, all seven radii and all 23 feature registrations remain.
+- Whole analyzer is 832 diagnostics with zero added after relocation, PASS
+  (`step2-analyzer-comparison.txt`). `iptv/step2-verified` reruns the complete
+  CI list after the source guard correction: 2,786 successes, the same two
+  failures, no missing/new skips, PASS against `base3`
+  (`step2-test-comparison.txt`). Architecture, size, formatting, import
+  reachability/theme measurement and diff checks pass. No fixture changed.

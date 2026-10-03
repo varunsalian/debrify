@@ -1,7 +1,7 @@
 # IPTV results view source-text consumers, audited at d93428fb.
 # Consumer | assertion/measurement contract | porting step
 # Every existing assertion survives; existence of slice markers is checked first.
-test/iptv_epg_xmltv_integration_test.dart:335 | _updateEpgContext origin-aware list branch and load-ticket check; add explicit start/end existence checks, retain all assertions | 4
+test/iptv_epg_xmltv_integration_test.dart:335 | _updateEpgContext origin-aware list branch and load-ticket check; add explicit start/end existence checks, retain all assertions; qualifications start with field ownership | 2-4
 test/theme/shape_manifest_test.dart:123 | seven bare radii distributed across real owners; register every new feature file, shape-token owners in kShapeResidue and others in kExtractedShapeResidue; retain token floor | 1-7
 dev/tool/theme_surface_manifest.txt:25 | p2_iptv file patterns must cover all new files for measure_theme_surface.sh | 1-7
 dev/tool/measure_theme_surface.sh | consume the expanded p2_iptv patterns; no independent file registry | 1-7

@@ -759,5 +759,105 @@
       ]
     },
     "passes": false
+  },
+  "declaration-local field rename": {
+    "original": "class State { int _scroll=0; int read()=>_scroll; } class Child { int _scroll=1; int read()=>_scroll; }",
+    "sources": {
+      "source": "class State { int read()=>_focusState.scroll; } class Child { int _scroll=1; int read()=>_scroll; }",
+      "feature/state.dart": "class StateOwner { int scroll=0; }"
+    },
+    "rows": [
+      {
+        "original_name": "State._scroll",
+        "destination_file": "feature/state.dart",
+        "destination_class": "StateOwner",
+        "new_name": "scroll",
+        "allowed_edits": "rename,receiver",
+        "expected_difference": ""
+      },
+      {
+        "original_name": "State.read",
+        "destination_file": "source",
+        "destination_class": "State",
+        "new_name": "read",
+        "allowed_edits": "receiver",
+        "expected_difference": ""
+      },
+      {
+        "original_name": "Child._scroll",
+        "destination_file": "source",
+        "destination_class": "Child",
+        "new_name": "_scroll",
+        "allowed_edits": "unchanged",
+        "expected_difference": ""
+      },
+      {
+        "original_name": "Child.read",
+        "destination_file": "source",
+        "destination_class": "Child",
+        "new_name": "read",
+        "allowed_edits": "unchanged",
+        "expected_difference": ""
+      }
+    ],
+    "config": {
+      "receivers": [
+        "_focusState"
+      ],
+      "receiver_owners": {
+        "_focusState": "StateOwner"
+      }
+    },
+    "passes": true
+  },
+  "other owner field reference changed": {
+    "original": "class State { int _scroll=0; int read()=>_scroll; } class Child { int _scroll=1; int read()=>_scroll; }",
+    "sources": {
+      "source": "class State { int read()=>_focusState.scroll; } class Child { int _scroll=1; int read()=>scroll; }",
+      "feature/state.dart": "class StateOwner { int scroll=0; }"
+    },
+    "rows": [
+      {
+        "original_name": "State._scroll",
+        "destination_file": "feature/state.dart",
+        "destination_class": "StateOwner",
+        "new_name": "scroll",
+        "allowed_edits": "rename,receiver",
+        "expected_difference": ""
+      },
+      {
+        "original_name": "State.read",
+        "destination_file": "source",
+        "destination_class": "State",
+        "new_name": "read",
+        "allowed_edits": "receiver",
+        "expected_difference": ""
+      },
+      {
+        "original_name": "Child._scroll",
+        "destination_file": "source",
+        "destination_class": "Child",
+        "new_name": "_scroll",
+        "allowed_edits": "unchanged",
+        "expected_difference": ""
+      },
+      {
+        "original_name": "Child.read",
+        "destination_file": "source",
+        "destination_class": "Child",
+        "new_name": "read",
+        "allowed_edits": "unchanged",
+        "expected_difference": ""
+      }
+    ],
+    "config": {
+      "receivers": [
+        "_focusState"
+      ],
+      "receiver_owners": {
+        "_focusState": "StateOwner"
+      }
+    },
+    "passes": false
   }
 }

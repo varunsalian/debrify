@@ -184,18 +184,25 @@ def tokens(node, start=None, end=None):
             and t['offset'] not in punctuation]
 
 
-def names(rows):
+def names(rows, owner=None):
     # Ambiguous method names (e.g. build) are declaration-local below.
     candidates = {}
     for r in rows:
         old = r['original_name'].split('.')[-1]
         candidates.setdefault(old, set()).add(r['new_name'])
+    if owner:
+        for old, news in list(candidates.items()):
+            if len(news) > 1:
+                local = {r['new_name'] for r in rows
+                         if r['original_name'] == owner + '.' + old}
+                if len(local) == 1:
+                    candidates[old] = local
     return {old: next(iter(news)) for old, news in candidates.items()
             if len(news) == 1 and old != next(iter(news))}
 
 
 def normalize(values, rows, row=None):
-    mapping = names(rows)
+    mapping = names(rows, row['original_name'].rsplit('.', 1)[0] if row else None)
     mapped = set(mapping.values()) | {r['new_name'] for r in rows}
     if row:
         mapped.update(row.get('_partition_preamble_names', []))
@@ -262,7 +269,7 @@ def declaration_tokens(node, rows, row, *, original=False):
         return values
     key = row['original_name']
     old = key.split('.')[-1]
-    mapped = names(rows).get(old, old)
+    mapped = names(rows, key.rsplit('.', 1)[0]).get(old, old)
     # A common name such as build is renamed only on this declaration.
     if old != row['new_name'] and mapped != row['new_name']:
         index = values.index(mapped)
@@ -720,7 +727,7 @@ def check_forwarder(before, actual, row, spec, package=None):
 
 def lifecycle_tokens(node, rows):
     """Only registered owner receivers and their leaf renames may change."""
-    mapping = names(rows)
+    mapping = names(rows, node['owner'])
     owner_for = {r['new_name']: r['destination_class'] for r in rows}
     receivers = CONFIG.get('receiver_owners', {})
     result = []

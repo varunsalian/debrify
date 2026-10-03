@@ -335,7 +335,9 @@ void main() {
         'lib/widgets/iptv/iptv_results_view.dart',
       ).readAsStringSync();
       final start = source.indexOf('void _updateEpgContext(');
+      expect(start, isNonNegative, reason: 'Missing guide method marker');
       final end = source.indexOf('final isPlainM3u', start);
+      expect(end, greaterThan(start), reason: 'Missing list-branch end marker');
       final listBranch = source.substring(start, end);
       expect(
         listBranch,
@@ -343,7 +345,7 @@ void main() {
       );
       expect(listBranch, contains('service.setListEpgContext('));
       expect(listBranch, contains('channels: result.channels'));
-      expect(listBranch, contains('ticket == _loadTicket'));
+      expect(listBranch, contains('ticket == _catalogState.loadTicket'));
     },
   );
 
