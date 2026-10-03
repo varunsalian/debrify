@@ -38,6 +38,13 @@ typedef IptvStartupLaunchDeps = ({
   bool Function() spotlightUsesTimeline,
 });
 
+// ==========================================================================
+// Startup channel — boot straight into a live channel
+//
+// Runs against the MOUNTED page rather than as a headless launcher: the
+// player's launch payload includes `iptvBrowseProvider`, a closure into this
+// state, and without it a launched channel plays but cannot zap.
+// ==========================================================================
 class IptvStartupLaunch {
   final IptvStartupLaunchDeps _deps;
   final IptvCatalogState _catalogState;

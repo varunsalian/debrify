@@ -5,12 +5,14 @@ import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/widgets/iptv/db_channel_list.dart';
 
 class IptvCatalogState {
+  // Current playlist data
   List<IptvChannel> allChannels = [];
 
   List<IptvChannel> filteredChannels = [];
 
   List<String> categories = [];
 
+  // Search spans the current source; retain the browse category for clearing.
   String? selectedCategory;
 
   /// True once the user has picked a category — INCLUDING "All" — for the
@@ -55,12 +57,20 @@ class IptvCatalogState {
   /// generation, whose rows can carry changed data).
   String? dbInstanceCacheKey;
 
+  // Content type for Xtream Codes playlists
   String selectedContentType = 'live';
 
+  // Loading state
   bool isLoading = false;
 
   String? errorMessage;
 
+  // Progressive (Stremio-addon) loads: [_loadTicket] orphans a superseded
+  // load's batches AND its final result, and doubles as the cancel signal
+  // that stops its catalog walk; [_isLoadingMore] is true from the first
+  // streamed batch until the walk completes — every "N channels" readout and
+  // empty state must stay honest while it's set (the list is still growing,
+  // so a search can have matches on the way).
   int loadTicket = 0;
 
   /// Changes whenever the visible channel projection changes inside one

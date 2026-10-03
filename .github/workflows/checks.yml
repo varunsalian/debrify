@@ -42,10 +42,10 @@ jobs:
       - run: flutter pub get
       # Scoped to migrated code: the rest of the repo predates formatting
       # enforcement and is not bulk-reformatted by this migration.
-      - run: dart format --output=none --set-exit-if-changed lib/features lib/screens/settings_screen.dart lib/screens/search_screen.dart lib/screens/search_screen lib/services/torrent_playback_service.dart lib/services/video_player_launcher.dart lib/services/storage lib/models/ambient_trailer_surface.dart lib/models/tv_render_quality.dart test/features test/support/settings_golden.dart test/support/iptv_results_fixture.dart test/support/iptv_results_source.dart test/settings_spotlight_shell_test.dart test/settings_tv_spotlight_layout_test.dart
+      - run: dart format --output=none --set-exit-if-changed lib/features lib/screens/settings_screen.dart lib/screens/search_screen.dart lib/screens/search_screen lib/services/torrent_playback_service.dart lib/services/video_player_launcher.dart lib/services/storage lib/models/ambient_trailer_surface.dart lib/models/tv_render_quality.dart lib/widgets/iptv/iptv_results_view.dart test/features test/support/settings_golden.dart test/support/iptv_results_fixture.dart test/support/iptv_results_source.dart test/settings_spotlight_shell_test.dart test/settings_tv_spotlight_layout_test.dart
       - run: python3 dev/tool/check_search_architecture.py
-      # Settings destinations and its completed facade are both covered.
-      - run: flutter analyze --no-fatal-infos lib/features lib/screens/settings_screen.dart lib/screens/search_screen.dart lib/screens/search_screen lib/services/torrent_playback_service.dart lib/services/video_player_launcher.dart lib/services/storage lib/models/ambient_trailer_surface.dart lib/models/tv_render_quality.dart
+      # Migrated destinations and their facades are both covered.
+      - run: flutter analyze --no-fatal-infos lib/features lib/screens/settings_screen.dart lib/screens/search_screen.dart lib/screens/search_screen lib/services/torrent_playback_service.dart lib/services/video_player_launcher.dart lib/services/storage lib/models/ambient_trailer_surface.dart lib/models/tv_render_quality.dart lib/widgets/iptv/iptv_results_view.dart
 
   sources-behavior:
     # The ~8-minute behaviour suite runs on PRs, main, manual runs, and on

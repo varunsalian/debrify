@@ -28,6 +28,7 @@ typedef IptvPreviewLayoutDeps = ({
   Widget Function(Widget child) stageHoverGuard,
 });
 
+// ── TV preview rail widgets ─────────────────────────────────────────────────
 class IptvPreviewLayout {
   final IptvPreviewLayoutDeps _deps;
   final IptvPlayerState _playerState;

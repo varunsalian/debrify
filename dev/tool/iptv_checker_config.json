@@ -9,7 +9,8 @@
     "rename",
     "state_callback",
     "unchanged",
-    "retained_forwarder"
+    "retained_forwarder",
+    "root_build_forwarder"
   ],
   "context_exception_difference": "context_confirmation/formatter_if_braces: only exact sites in dev/tool/iptv_context_exceptions.json; existing State mounted guard and context acquisition, no intervening await",
   "baseline": "d93428fb",
@@ -22,7 +23,13 @@
     "scaffolding": "dev/tool/iptv_scaffolding.json",
     "context_exceptions": "dev/tool/iptv_context_exceptions.json"
   },
-  "named_exceptions": {},
+  "named_exceptions": {
+    "root_build_forwarder": [
+      "IptvResultsViewState.build",
+      "lib/features/iptv/presentation/legacy_iptv/iptv_root_layout.dart",
+      "root_build_forwarder: user-approved plain IptvRootLayout; move build verbatim except deps/receivers and removal of its @override; retain exact annotated State single-expression forwarder"
+    ]
+  },
   "annotation_exceptions": {
     "IptvResultsViewState.applyStoredLocalCategoryOrder": {
       "file": "lib/features/iptv/presentation/legacy_iptv/iptv_category_order.dart",
@@ -74,7 +81,18 @@
     "debugOnSpotlightStartupFocus",
     "debugSpotlightNow"
   ],
-  "token_rules": [],
+  "token_rules": [
+    {
+      "original_name": "IptvResultsViewState.build",
+      "allowed_edit": "root_build_forwarder",
+      "difference_prefix": "root_build_forwarder:",
+      "before": [
+        "@",
+        "override"
+      ],
+      "after": []
+    }
+  ],
   "additional_owners": [],
   "required_nodes": [],
   "forwarders": {
@@ -90,7 +108,10 @@
     "IptvResultsViewState.chipRankGuide": {},
     "IptvResultsViewState.chipRankMaintenance": {},
     "IptvResultsViewState.chipRankRefresh": {},
-    "IptvResultsViewState.landingCategoryFor": {}
+    "IptvResultsViewState.landingCategoryFor": {},
+    "IptvResultsViewState.build": {
+      "receiver": "_sections.standardLayouts.rootLayout"
+    }
   },
   "lifecycle": [
     "IptvResultsViewState.initState",
@@ -450,5 +471,68 @@
     "_twoPaneLayout",
     "_virtualResults",
     "deps"
+  ],
+  "receiver_paths": {
+    "_sections.recordings.androidRecording": "IptvAndroidRecording",
+    "_sections.catalog.catalogFacades": "IptvCatalogFacades",
+    "_sections.catalog.catalogLoading": "IptvCatalogLoading",
+    "_sections.catalog.catalogMaintenance": "IptvCatalogMaintenance",
+    "_sections.catalog.catalogNetwork": "IptvCatalogNetwork",
+    "_sections.catalog.catalogPresentation": "IptvCatalogPresentation",
+    "_sections.catalog.catalogRefresh": "IptvCatalogRefresh",
+    "_sections.playback.catchup": "IptvCatchup",
+    "_sections.browsing.categoryActions": "IptvCategories",
+    "_sections.standardLayouts.classicLayout": "IptvClassicLayout",
+    "_sections.standardLayouts.cockpitStage": "IptvCockpitStage",
+    "_sections.standardLayouts.contentLayout": "IptvContentLayout",
+    "_sections.recordings.desktopRecording": "IptvDesktopRecording",
+    "_sections.catalog.favorites": "IptvFavorites",
+    "_sections.browsing.filtersSection": "IptvFiltersSection",
+    "_sections.browsing.guideContext": "IptvGuideContext",
+    "_sections.catalog.loadStatus": "IptvLoadStatus",
+    "_sections.standardLayouts.loadedLayout": "IptvLoadedLayout",
+    "_sections.recordings.navigation": "IptvNavigation",
+    "_sections.playback.playback": "IptvPlayback",
+    "_sections.playback.playbackActions": "IptvPlaybackActions",
+    "_sections.playback.playbackRefresh": "IptvPlaybackRefresh",
+    "_sections.browsing.playerBrowse": "IptvPlayerBrowse",
+    "_sections.browsing.playerPayload": "IptvPlayerPayload",
+    "_sections.playback.previewHandoff": "IptvPreviewHandoff",
+    "_sections.previewAndSelection.previewLayout": "IptvPreviewLayout",
+    "_sections.previewAndSelection.previewTuning": "IptvPreviewTuning",
+    "_sections.standardLayouts.quietFilters": "IptvQuietFilters",
+    "_sections.recordings.recordNow": "IptvRecordNow",
+    "_sections.recordings.recordingSupport": "IptvRecordingSupport",
+    "_sections.previewAndSelection.rowProjection": "IptvRowProjection",
+    "_sections.recordings.scheduleActions": "IptvScheduleActions",
+    "_sections.catalog.settingsLoading": "IptvSettingsLoading",
+    "_sections.recordings.sourceStatistics": "IptvSourceCounts",
+    "_sections.spotlight.spotlightActions": "IptvSpotlightActions",
+    "_sections.spotlight.spotlightContent": "IptvSpotlightContent",
+    "_sections.spotlight.spotlightFocus": "IptvSpotlightFocus",
+    "_sections.spotlight.spotlightHero": "IptvSpotlightHero",
+    "_sections.spotlight.spotlightLayout": "IptvSpotlightLayout",
+    "_sections.playback.startupLaunch": "IptvStartupLaunch",
+    "_sections.playback.startupResolution": "IptvStartupResolution",
+    "_sections.catalog.statusChip": "IptvStatusChip",
+    "_sections.previewAndSelection.tabletSelection": "IptvTabletSelection",
+    "_sections.standardLayouts.twoPaneLayout": "IptvTwoPaneLayout",
+    "_sections.browsing.virtualResults": "IptvVirtualResults",
+    "_owners.catalogState": "IptvCatalogState",
+    "_owners.focusState": "IptvFocusState",
+    "_owners.membershipState": "IptvMembershipState",
+    "_owners.playerState": "IptvPlayerState",
+    "_owners.previewState": "IptvPreviewState",
+    "_owners.recordingState": "IptvRecordingState",
+    "_owners.selectionState": "IptvSelectionState",
+    "_owners.settingsState": "IptvSettingsState",
+    "_owners.statusState": "IptvStatusState",
+    "_sections.standardLayouts.rootLayout": "IptvRootLayout"
+  },
+  "plain_sections": [
+    {
+      "file": "lib/features/iptv/presentation/legacy_iptv/iptv_root_layout.dart",
+      "owner": "IptvRootLayout"
+    }
   ]
 }

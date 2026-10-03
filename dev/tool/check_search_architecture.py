@@ -23,7 +23,7 @@ SETTINGS_FACADE = "lib/screens/settings_screen.dart"
 # Step 6 enables the facade cap and rejects remaining temporary cross-calls.
 # Until then, the facade is measured only by the repo-wide shrinking ratchet.
 SETTINGS_COMPLETE = True
-IPTV_COMPLETE = False
+IPTV_COMPLETE = True
 IPTV_FACADE = "lib/widgets/iptv/iptv_results_view.dart"
 IPTV_BRIDGE = "lib/features/iptv/presentation/legacy_iptv/"
 SETTINGS_BRIDGE = "lib/features/settings/presentation/legacy_settings/"
@@ -85,6 +85,7 @@ TORRENT_PLAYBACK_PIPELINES = {
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
     FACADE,
+    IPTV_FACADE,
     # Temporary forwarding-only bridge, with its own 400-line cap.
     PLAYBACK_FACADE,
     PLAYER_LAUNCH_FACADE,

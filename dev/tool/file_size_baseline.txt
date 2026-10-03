@@ -66,7 +66,6 @@
 1799 lib/services/simkl/simkl_service.dart
 1778 lib/services/webdav_sync/webdav_sync_hot_merge.dart
 1766 lib/services/iptv_epg_service.dart
-1714 lib/widgets/iptv/iptv_results_view.dart
 1707 lib/widgets/pipeline_loading_overlay.dart
 1685 lib/widgets/detail/detail_layout_premium.dart
 1602 lib/widgets/iptv/iptv_channel_row.dart

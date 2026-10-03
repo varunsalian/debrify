@@ -20,6 +20,7 @@ typedef IptvGuideContextDeps = ({
   StateSetter setState,
 });
 
+// ── Spotlight Guide ───────────────────────────────────────────────────────
 class IptvGuideContext {
   final IptvGuideContextDeps _deps;
   final IptvCatalogState _catalogState;

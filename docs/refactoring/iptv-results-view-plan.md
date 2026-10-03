@@ -73,7 +73,7 @@ state (4984) and `_pointerInStage` (7393).
 | 3925–4836 | Play, startup channel, catch-up, `_playChannelInner`, series detail, continue actions, after-playback refresh | 5 |
 | 4837–5319 | `didChangeAppLifecycleState` (**stays in the State**), sidebar focus, recording support, source counts (`_recomputeSourceCounts` 4906), recordings | 5 |
 | 5320–5413 | Navigation; the focus-interface methods (**stay in the State** as entry points; their bodies may forward) | 5 |
-| 5414–8209 | `build` (stays) and every layout: Spotlight, classic, TV two-pane, cockpit stage, quiet filters, focus and preview tuning, preview rail and stage, `_buildContent`, tablet selector | 6 |
+| 5414–8209 | `build` (signature stays; body moves only under the approved step-7 exception) and every layout: Spotlight, classic, TV two-pane, cockpit stage, quiet filters, focus and preview tuning, preview rail and stage, `_buildContent`, tablet selector | 6 |
 | 8210–9084 | Private widgets and painters | 1 |
 
 ## Contracts that must not change
@@ -219,7 +219,11 @@ Technique), with these IPTV rules:
    - optional `super.key` on widgets made public;
    - removing `@visibleForTesting` from production-called implementations
      that move into another library (the facade copy keeps it);
-   - the two named test seams below.
+   - the two named test seams below;
+   - **Approved 2026-10-03:** the exact `root_build_forwarder` exception
+     recorded in the manifest and Progress: move the original `build` body
+     into plain `IptvRootLayout`, remove only its `@override`, and retain the
+     State's exact annotated signature as a single forwarding expression.
 
    Any other edit needs approval and is recorded in the manifest.
 6. **Named test seams.** These are the only production additions; each is
@@ -417,7 +421,8 @@ Technique), with these IPTV rules:
 1. **The facade** (at most 400 lines, formatted, an exact composition root)
    holds:
    - `IptvResultsView`;
-   - `IptvResultsViewState`: the verbatim lifecycle, section wiring, `build`,
+   - `IptvResultsViewState`: the verbatim lifecycle, section wiring, the
+     approved single-expression `build` forwarder to plain `IptvRootLayout`,
      the interface entry points, and the whole public surface with identical
      signatures.
 
@@ -750,3 +755,68 @@ Technique), with these IPTV rules:
   Architecture, size, format and diff checks pass. Native preview layering,
   native launch/return, Android TV D-pad and first-open performance remain
   pending device verification.
+
+### Step 7 — local gate 2 complete
+
+- Step-6 checkpoint: `2172b70b`. The 45 existing section constructors now live
+  in seven concern-specific composition factories, borrowing the same nine state
+  owners and live State/widget callbacks. Deferred cross-group getters preserve
+  lazy access. `IptvCompositionOwners` constructs the original nine owners eagerly
+  and in their original order; teardown remains in the State's verbatim lifecycle.
+  Ordinary field/section comments move beside their owners. No original business
+  implementation is copied into the factories.
+- **Approved named exception, `root_build_forwarder` (2026-10-03):** the original
+  `IptvResultsViewState.build` body moves verbatim into
+  `presentation/legacy_iptv/iptv_root_layout.dart::IptvRootLayout.build`, except
+  for dependency/receiver wiring and removal of the moved `@override`. The State
+  keeps its exact annotated signature and one forwarding expression. The root
+  section is a plain class with narrow callbacks and borrowed settings state;
+  it is not a widget and does not introduce a new element/rebuild scope. Widget
+  trees, local builder contexts, conditional reads, callbacks and evaluation
+  order remain intact. The prescribed retained members exceeded 400 lines before
+  imports/wiring (435 at the initial measurement); this approved exception
+  resolves that conflict while preserving the 400-line cap.
+- The formatted facade is **393 lines**. All 80 feature files meet 500 lines;
+  the largest is 439. The ten composition/binding/owner files range from 36 to
+  326 lines, and the root layout is 113. The completed guard is enabled, registers
+  the facade as an exact composition root, and rejects `TEMP(iptv)` throughout
+  the completed source set. CI format and analyzer scope include the facade.
+- The shared checker pins the root class header to `class IptvRootLayout {`,
+  excluding inheritance, interfaces, mixins and widget aliases. It compares the
+  complete moved declaration with the original, removing only the named
+  `@override` tokens and normalizing registered dependencies/receivers. It requires
+  the retained State member, its exact annotated signature and the single
+  expression `_sections.standardLayouts.rootLayout.build(context)`. Twelve
+  new positive/negative fixtures cover the plain section, body/annotation
+  mutations, widget inheritance, interfaces/mixins, missing forwarding member,
+  statement/wrapped dispatch, wrong context and lost facade annotation.
+- The prepared proposal passed isolated compilation and all 30 characterization
+  identities against `base3`, with strict original golden/payload fixtures and no
+  added/missing/skipped identities. This proposal evidence is retained separately
+  from final production checks (`root-build-proposal-verbatim.txt`,
+  `root-build-proposal-analyze.txt`, `root-build-proposal-test-comparison.txt`).
+- Final production checks pass: 384 IPTV leaves and all 50 IPTV fixtures, plus
+  existing settings/launcher fixtures (`step7-verbatim.txt`); 316 settings leaves
+  and self-tests (`step7-settings.txt`). The full analyzer retains the same 832
+  identities, zero added/removed (`step7-analyzer-comparison.txt`), and the exact
+  CI analyzer command exits successfully (`step7-ci-analyze.txt`). All 1,263
+  files in CI's format scope are already formatted (`step7-format.txt`). The
+  101-test focused run has zero failures and exactly matches `base3`
+  (`step7-focused-comparison.txt`). No lint suppression is added.
+- Gate 2 exactly matches **both** observed full-suite baselines: **10,351
+  successes, 13 failures, 28 errors and 20 skips**, with no new failures, missing
+  tests, added identities, fixed identities or new skips
+  (`gate2-base3-comparison.txt`, `gate2-gate1-comparison.txt`). These existing
+  failures/errors remain; a nonzero Flutter runner exit is not a clean-suite
+  claim. SDK/configuration match the recorded baselines.
+- Architecture, file-size, import reachability, separate theme measurement,
+  shape registration and diff checks pass. All 80 feature files are reached
+  from facade/Browse roots. The seven bare radii and token-call floor are
+  unchanged; original golden/payload fixtures, CI test list and failure allowlist
+  gain nothing. Native preview layering, native launch/return, Android TV D-pad
+  and first-open performance remain **pending device verification**.
+- This step's checkpoint commit is `refactor(iptv): gate 2 complete facade and
+  composition extraction`. Its private-only push and CI confirmation follow the
+  local gate; the final review report records the resulting commit/run URL, with
+  local CI evidence in `gate2-ci-status.json` and `gate2-ci.log`. No `origin` push
+  is authorized. Stop after this gate and its passing private CI.

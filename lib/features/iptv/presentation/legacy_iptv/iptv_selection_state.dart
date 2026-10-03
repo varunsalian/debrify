@@ -5,6 +5,9 @@ import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/widgets/iptv/spotlight/iptv_spotlight_layout.dart';
 
 class IptvSelectionState {
+  // ---- Startup channel -----------------------------------------------------
+  // Grid metrics, published from the LayoutBuilder so the startup launch can
+  // scroll to a not-yet-built row.
   int gridColumns = 1;
 
   double gridRowExtent = 72;

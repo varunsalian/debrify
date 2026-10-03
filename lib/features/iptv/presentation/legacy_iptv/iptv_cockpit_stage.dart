@@ -48,6 +48,7 @@ typedef IptvCockpitStageDeps = ({
   Future<void> Function(IptvChannel channel, bool isFavorited) toggleFavorite,
 });
 
+// ---- Command Center (rail + stage cockpit) ------------------------------
 class IptvCockpitStage {
   final IptvCockpitStageDeps _deps;
   final IptvMembershipState _membershipState;

@@ -4,6 +4,7 @@ import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/widgets/iptv/spotlight/spotlight_live_timeline.dart';
 import 'package:flutter/material.dart';
 
+// Focus nodes for DPAD
 class IptvFocusState {
   final ScrollController scrollController = ScrollController();
 
@@ -52,6 +53,14 @@ class IptvFocusState {
     debugLabel: 'iptv-spotlight-timeline',
   );
 
+  // Keyed by channel INSTANCE rather than list position (focus survives
+  // category/search filtering, which reuses the same objects) — and rather
+  // than URL: playlists routinely list one stream URL under several names,
+  // and a URL key would hand those rows a single shared FocusNode, lighting
+  // them all up together and scrambling DPAD traversal around the pair.
+  // Instances are stable for a playlist's whole life (progressive Stremio
+  // batches append to one list; filters select from it), and the map is
+  // rebuilt with the instances on every _loadPlaylist.
   final Map<IptvChannel, FocusNode> cardFocusNodes = Map.identity();
 
   /// Channel instances whose row State has been disposed (reported via

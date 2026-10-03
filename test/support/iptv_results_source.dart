@@ -56,6 +56,10 @@ String iptvOriginalMember(String originalName) {
       member = member.replaceAll('$receiver.$name()', name);
     }
   }
+  final paths = config['receiver_paths'] as Map<String, dynamic>? ?? const {};
+  for (final path in paths.keys) {
+    member = member.replaceAll(RegExp(r'\b' + RegExp.escape(path) + r'\.'), '');
+  }
   for (final receiver in config['receivers'] as List<dynamic>) {
     member = member.replaceAll(
       RegExp(r'\b' + RegExp.escape(receiver as String) + r'\.'),

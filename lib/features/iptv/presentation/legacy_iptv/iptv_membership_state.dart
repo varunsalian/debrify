@@ -1,6 +1,8 @@
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/services/iptv_media_store.dart' show IptvListMeta;
 
+// Favorites — the built-in list, kept as its own set because every row's
+// star icon reads it on each build.
 class IptvMembershipState {
   Set<String> favoriteUrls = {};
 

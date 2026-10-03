@@ -201,6 +201,20 @@ def names(rows, owner=None):
             if len(news) == 1 and old != next(iter(news))}
 
 
+def receiver_path_match(values, index):
+    """Match only a configured composition path and retain its exact owner."""
+    for path, owner in CONFIG.get('receiver_paths', {}).items():
+        pattern = []
+        for part in path.split('.'):
+            if pattern:
+                pattern.append('.')
+            pattern.append(part)
+        end = index + len(pattern)
+        if values[index:end] == pattern and values[end:end + 1] == ['.']:
+            return len(pattern), owner
+    return None
+
+
 def normalize(values, rows, row=None):
     mapping = names(rows, row['original_name'].rsplit('.', 1)[0] if row else None)
     mapped = set(mapping.values()) | {r['new_name'] for r in rows}
@@ -220,6 +234,14 @@ def normalize(values, rows, row=None):
         # A member qualification needs braces in a formerly simple string
         # interpolation. Canonicalize only an otherwise identical single read.
         if value == '${':
+            path = receiver_path_match(values, i + 1)
+            if path:
+                member = i + 1 + path[0] + 1
+                if (values[member:member + 1] and values[member] in mapped
+                        and values[member + 1:member + 2] == ['}']):
+                    out.extend(['$', mapping.get(values[member], values[member])])
+                    i = member + 2
+                    continue
             if values[i + 1:i + 2] and values[i + 1] in RECEIVERS and values[i + 2:i + 3] == ['.'] and values[i + 4:i + 5] == ['}'] and values[i + 3] in mapped:
                 out.extend(['$', mapping.get(values[i + 3], values[i + 3])])
                 i += 5; continue
@@ -234,6 +256,12 @@ def normalize(values, rows, row=None):
             raise ValueError('context.mounted is a property, not a callback')
         if values[i:i + 3] == ['context', '.', 'mounted']:
             out.append('mounted'); i += 3; continue
+        path = receiver_path_match(values, i)
+        if path and i + path[0] + 1 < len(values):
+            target = values[i + path[0] + 1]
+            if target in mapped:
+                i += path[0] + 1
+                continue
         if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
             if target in mapped or target in {'mounted', 'setState', 'context'} | set(CONFIG.get('live_widget_getters', [])):
@@ -669,6 +697,20 @@ def check_scaffolds(lookup, scaffolds):
     return errors
 
 
+def check_plain_sections(lookup):
+    """Pin named sections to plain classes, with no widget inheritance/mixins."""
+    errors = []
+    for spec in CONFIG.get('plain_sections', []):
+        key = (spec['file'], '', spec['owner'])
+        node = lookup.get(key)
+        values = [value for value in tokens(node)
+                  if not value.startswith(('//', '/*'))] if node else []
+        header = values[:values.index('{') + 1] if '{' in values else values
+        if header != ['class', spec['owner'], '{']:
+            errors.append('Registered plain section class changed: ' + str(key))
+    return errors
+
+
 def check_seams(original_source, sources, config, baseline, package=None):
     """Apply registered additions to the baseline; sidecar files stay exact.
 
@@ -735,6 +777,11 @@ def lifecycle_tokens(node, rows):
     i = 0
     while i < len(values):
         value = values[i]
+        path = receiver_path_match(values, i)
+        if (path and i + path[0] + 1 < len(values)
+                and owner_for.get(values[i + path[0] + 1]) == path[1]):
+            i += path[0] + 1
+            continue
         if (value in receivers and values[i + 1:i + 2] == ['.']
                 and owner_for.get(values[i + 2]) == receivers[value]):
             i += 2
@@ -761,6 +808,7 @@ def _check(original_source, sources, rows, source_path, package=None,
     if set(original) != known:
         return ['Settings manifest coverage differs: ' + str(sorted(set(original) ^ known))]
     lookup = all_nodes(parsed)
+    errors.extend(check_plain_sections(lookup))
     partitions = sidecar('partitions', 'partitions', {})
     scaffolds = sidecar('scaffolding', 'scaffolds', []) if source_path == CONFIG['source'] else []
     errors.extend(check_scaffolds(lookup, scaffolds))
@@ -877,6 +925,9 @@ def _check(original_source, sources, rows, source_path, package=None,
         before = original[key]
         if actual is None:
             errors.append('Missing settings declaration: ' + key); continue
+        if ('retained_forwarder' in row['allowed_edits'].split(',')
+                and destination is not None and in_place is None):
+            errors.append('Retained facade forwarder missing: ' + key)
         if destination is not None and in_place is not None and destination is not in_place:
             forwarder = CONFIG.get('forwarders', {}).get(key)
             if forwarder is None:

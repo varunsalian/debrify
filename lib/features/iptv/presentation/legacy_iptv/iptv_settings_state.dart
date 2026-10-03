@@ -6,6 +6,7 @@ import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/widgets/iptv/styles/iptv_style.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+// Playlists and settings
 class IptvSettingsState {
   final IptvService iptvService = IptvService.instance;
 

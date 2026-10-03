@@ -44,6 +44,7 @@ typedef IptvTwoPaneLayoutDeps = ({
   Future<void> Function() refreshAndroidRecordingState,
 });
 
+// ── TV two-pane ──────────────────────────────────────────────────────────
 class IptvTwoPaneLayout {
   final IptvTwoPaneLayoutDeps _deps;
   final IptvCatalogState _catalogState;

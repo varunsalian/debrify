@@ -155,6 +155,9 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/iptv/application/iptv_status_chip_types.dart': 0,
   'lib/features/iptv/presentation/iptv_rail_hints.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_android_recording.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_browsing_composition.dart':
+      0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_catalog_composition.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_catalog_facades.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_catalog_loading.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_catalog_maintenance.dart': 0,
@@ -167,6 +170,9 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/iptv/presentation/legacy_iptv/iptv_categories.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_category_order.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_classic_layout.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_composition_bindings.dart':
+      0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_composition_owners.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_content_layout.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_desktop_recording.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_favorites.dart': 0,
@@ -179,10 +185,14 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/iptv/presentation/legacy_iptv/iptv_navigation.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_playback.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_playback_actions.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_playback_composition.dart':
+      0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_playback_refresh.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_player_browse.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_player_payload.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_player_state.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_preview_and_selection_composition.dart':
+      0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_preview_handoff.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_preview_state.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_preview_tuning.dart': 0,
@@ -190,6 +200,9 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/iptv/presentation/legacy_iptv/iptv_record_now.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_recording_state.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_recording_support.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_recordings_composition.dart':
+      0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_root_layout.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_row_projection.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_schedule_actions.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_selection_state.dart': 0,
@@ -197,11 +210,15 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/iptv/presentation/legacy_iptv/iptv_settings_state.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_source_counts.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_spotlight_actions.dart': 2,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_spotlight_composition.dart':
+      0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_spotlight_content.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_spotlight_focus.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_spotlight_hero.dart': 2,
   'lib/features/iptv/presentation/legacy_iptv/iptv_spotlight_layout.dart': 1,
   'lib/features/iptv/presentation/legacy_iptv/iptv_stage_floor.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_standard_layouts_composition.dart':
+      0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_startup_launch.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_startup_resolution.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_status_chip.dart': 0,
@@ -209,6 +226,7 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/iptv/presentation/legacy_iptv/iptv_tablet_identity.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_tablet_selection.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_two_pane_layout.dart': 0,
+  'lib/features/iptv/presentation/legacy_iptv/iptv_view_sections.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_virtual_results.dart': 0,
   'lib/features/iptv/presentation/spotlight_category_picker_dialog.dart': 1,
   'lib/features/iptv/presentation/tuning_waves_painter.dart': 0,
