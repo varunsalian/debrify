@@ -38,23 +38,28 @@ template. Pulling out their shared parts is a **later, separate** behaviour-leve
 plan; this plan must not merge anything with Real-Debrid.
 
 **Architectural status:** a bounded legacy-extraction stage, as before. The
-temporary exceptions, each with an exit milestone in Progress, are:
-- State-driven sections instead of Riverpod;
-- a `legacy_torbox/` bridge folder that calls services directly;
-- unchanged legacy text.
+temporary exceptions and their exit milestones (AGENTS.md: exceptions need an
+exit milestone) are:
+- **State-driven sections instead of Riverpod.** Exit: move the TorBox
+  library state (lists, navigation, selection, search) into Riverpod
+  notifiers in a later TorBox change.
+- **A `legacy_torbox/` bridge folder that calls services directly.** Exit:
+  put `TorboxService`, `TorboxTorrentControlService`, `DownloadService` and
+  launcher calls behind TorBox data contracts, then dissolve the bridge.
+- **Unchanged legacy text.** Exit: the app-wide localization migration.
 
 ## Public surface (at `40212b6c`)
 
-`TorboxDownloadsScreen({initialTorrentToOpen, isPushedRoute, initialSearchQuery,
-selectSourceMode, onSourceSelected, ...})` keeps its exact signature and
-defaults; step 0 re-derives the full parameter list. It is the only public
-symbol. Callers construct it from:
+`const TorboxDownloadsScreen({super.key, initialTorrentToOpen, isPushedRoute =
+false, initialSearchQuery, selectSourceMode = false, onSourceSelected})` keeps
+this exact signature and these defaults (the nullable parameters default to
+null). It is the only public symbol. Callers construct it from:
 - `main.dart`;
 - `home_source_editor.dart`;
 - `catalog_browser.dart`;
 - `aggregated_search_results.dart`;
 - `trakt_results_view.dart`;
-- two deprecated home widgets;
+- two deprecated home widgets (commented-out references only);
 - two tests: `provider_source_picker_web_download_test.dart` and
   `home_source_editor_test.dart`.
 
@@ -62,8 +67,8 @@ symbol. Callers construct it from:
 
 | Lines | Area | Notes |
 | --- | --- | --- |
-| 1–80 | Imports, widget, enums `_FolderViewMode`, `_TorboxDownloadsView` | |
-| 81–200 | 58 State fields (some declared later) | 10 focus nodes, 6 text controllers, 2 scroll controllers |
+| 1–80 | Imports, the top-level `_maybeBlur` helper (40), widget, enums `_FolderViewMode`, `_TorboxDownloadsView` | |
+| 81–200 | All 57 State fields (56 instance fields plus `_limit`) | 10 focus nodes, 6 text controllers, 2 scroll controllers. Later declarations such as `_currentFiles`, `_filteredTorrentSearchResults`, `_currentItems` and `_isBrowsePush` are getters. Builders are spread through the areas below too. |
 | 201–298, 1045–1081 | `initState`, `didUpdateWidget`, `dispose` | **Stay verbatim in the State** (Technique 2). |
 | 299–1044 | Torrent actions | focus fallback, download all, playlist and Debrify TV add, copy links, more-options sheet (139), `_handlePlayTorrent` (205), delete confirmations |
 | 1082–1325 | Back navigation, scroll paging, fetching | `_handleBackNavigation`, `_fetchTorrents`, `_fetchWebDownloads`, load more, refresh |
@@ -95,17 +100,42 @@ No single method is over 500 lines.
    pre-filled torrent search, the same focus.
 3. **Playback handoff:** the same launcher calls and arguments (URLs,
    playlists, titles, series and episode metadata, resume identity) from
-   torrents, web downloads, files and folders. No change to `VideoPlayerLauncher`
-   usage.
+   torrents, web downloads, files and folders, across all **seven launcher
+   call sites**. No change to `VideoPlayerLauncher` usage. Inline evaluations
+   such as `mounted ? context : null` stay inline, evaluated at the same
+   moment.
 4. **Downloads:** the same `DownloadService` and enqueue payloads (single,
-   multiple, selected, ZIP), the same file naming, and the same TorBox API
-   requests.
+   multiple, selected, ZIP) at all **eight enqueue sites**, the same file
+   naming, and the same TorBox API requests.
 5. **Destructive actions:** every delete (single, all, selected, web download)
    keeps its confirmation dialog, wording, progress dialog and the API calls
    it makes, in order.
+   - **Torrent deletion** is a **POST** through `TorboxTorrentControlService`
+     (`torbox_torrent_control_service.dart:14`), with `operation: delete`,
+     `all`, and an optional **string** `torrent_id`.
+   - **Web-download deletion** is a **POST** with an **integer** `webdl_id`
+     (`torbox_service.dart:744`).
+   - **Bulk delete** (2078–2110) works through the selection in insertion
+     order, sequentially, with a 150 ms wait between requests. It checks for
+     cancellation before and after each request; cancelling lets an
+     in-flight request finish.
+     - **Completion** clears the selection.
+     - **Cancellation** removes the IDs already deleted but keeps selection
+       mode.
+     - **Partial failure** keeps its current handling.
 6. **Lists and views:** the same paging triggers (scroll thresholds), sorting,
    series arrangement (season and episode extraction, ordering), search
    matching, and empty and error states.
+   - **The view-mode dropdown** offers only Raw and A–Z (5688). Series
+     Arrange is unreachable through it, and the series selection sheet
+     `_showTorboxFileSelectionSheet` (2503) has no callers. Both move
+     verbatim as dormant code; neither is made reachable here.
+   - **`_resetListScroll`** keeps its detach-listener, jump, reattach
+     sequence (5254).
+   - **Embedded mutations:** builders that mutate state (for example 6647)
+     keep doing so at the same point.
+   - **Download override:** `_currentTorrent`'s temporary override and
+     restoration around downloads (343) stays exactly as it is.
 7. **D-pad and focus:** the 10 focus nodes and their key handlers (for
    example the arrow-up/down handling on `_firstItemFocusNode` and
    `_torrentSearchFocusNode`), focus fallback after loads and deletes, and the
@@ -125,16 +155,29 @@ No single method is over 500 lines.
   `_detectSeriesPattern`, `_extractSeasonNumber`, `_extractLeadingNumber`,
   `_isValidMagnetLink`, `_formatTorboxError`, sorting and series-arrangement
   calculations.
-- **`models/`:** the four private data classes, made public, if they are
-  plain data.
+- **`models/`:** `_TorboxFileEntry`, `_TorboxEpisodeCandidate` and
+  `_TorboxSearchResult`, made public, if the report confirms they are plain
+  data. `_TorboxMoreOption` carries `IconData` and an action callback (7048),
+  so it goes to presentation.
 - **`presentation/legacy_torbox/`:** the bridge (exact path in the guard),
   holding the state owners, every section that takes a `BuildContext` or
   calls services, the dialogs and sheets, and the builders.
 - **`presentation/`, outside the bridge:** only widgets with no service
   imports.
 - **The facade** (`lib/screens/torbox/torbox_downloads_screen.dart`) is
-  registered as an exact composition root: a 400-line cap at the end,
-  `TEMP(torbox)` rejection, and no feature file may import it.
+  registered as an exact composition root. It gets a 400-line cap and
+  `TEMP(torbox)` rejection, both turned on at step 7 (staged as in the IPTV
+  plan).
+- **Guard rules,** added in step 1:
+  - **No back-imports:** no file under `lib/features/torbox_downloads/` may
+    import the facade, the same rule as for IPTV. Callers elsewhere, such as
+    `lib/features/home/presentation/home_source_editor.dart:9`, keep importing
+    it.
+  - **Bridge path:** the `presentation/legacy_torbox/` prefix is exact.
+  - **Pure helpers:** `application/` files may not import services (the IPTV
+    rule at `check_search_architecture.py:380`, extended to TorBox).
+  - **Size caps:** 500 lines for destination files from step 1, 400 for the
+    facade from step 7.
 
 Each destination file is at most **500 lines**.
 
@@ -187,7 +230,15 @@ The same as the IPTV plan's Technique, with these points:
    cross-call's final destination; and the contract each one touches.
 3. **Checker:** add `dev/tool/torbox_manifest.tsv` and
    `torbox_checker_config.json`, using the manifest-driven
-   `check_settings_moves.py`.
+   `check_settings_moves.py`. `check_verbatim_moves.py:355` already picks up a
+   third config. The config needs TorBox's own lifecycle and receiver
+   ownership rules, live getters, scaffolding, accessor, plain root section,
+   forwarder rules and exact annotation removals.
+   - **Wiring review first:** before scaffolds are pinned, check every
+     wiring entry by hand against the dependency report. The checker only
+     compares wiring with the recorded scaffolds, so wiring that's wrong when
+     recorded would be accepted. Give particular attention to same-signature
+     fetch callbacks and the listener and back-handler tear-offs.
    - The IPTV and settings configs stay unchanged and keep passing.
    - Add TorBox fixtures (positive and negative): lifecycle reordering, a
      builder-context swap, an own-`context`-parameter swap, wrong callback
@@ -198,14 +249,15 @@ The same as the IPTV plan's Technique, with these points:
 
    | Contract | Coverage |
    | --- | --- |
-   | 1 Navigation | Widget tests: tab versus pushed route (back handler registered and unregistered, using the existing `MainPageBridge` hooks); folder back goes up a level; the `initialTorrentToOpen` flow. Source guard on the 10-second pop's condition. |
-   | 2 Select-source | Widget test: `selectSourceMode` with `initialSearchQuery` pre-fills the torrent search; choosing a file calls `onSourceSelected` with the expected `SeriesSource` (extend `provider_source_picker_web_download_test.dart`). |
-   | 3 Playback | Through the test accessor or a launcher spy if one can be injected without production change: the launch arguments for torrent, file, folder and web-download play. Otherwise source guards plus **pending device verification**. |
-   | 4 Downloads | Source guards on enqueue payload construction and file naming; where `DownloadService` can be faked in tests today, assert the payloads. |
-   | 5 Destructive | Widget tests: each delete shows its confirmation, cancelling makes no API call, confirming makes the expected DELETE requests, in order (MockClient log). |
-   | 6 Lists | Widget tests: paging request on scroll; raw, A–Z and series-arranged order for a fixed folder (season and episode parsing); search filtering; empty and error states. Pixel goldens of the main views (torrents list, folder, series view, web downloads, selection mode) on macOS and Linux, Linux captured from the original code on Ubuntu (the IPTV procedure). |
+   | 1 Navigation | Widget tests: tab versus pushed route (back handler registered and unregistered, using the existing `MainPageBridge` hooks); folder back goes up a level; the `initialTorrentToOpen` flow. Source guards on the 10-second pop's condition and on the exact registration order. |
+   | 2 Select-source | Widget tests on a pushed route (extend `provider_source_picker_web_download_test.dart`) for the two selection paths: **torrent rows** (6474) and **web-download rows** (6392). File rows play (6618). Assert the callback count, the route pop, identity and hash, the web download's `cloudSourceKind`, and that a web row with no playable files is disabled. Treat `boundAt` as a bounded timestamp; no clock seam. Also assert that `initialSearchQuery` pre-fills the torrent search. |
+   | 3 Playback | `VideoPlayerLauncher` is static and can't be spied without a production change, so: **source guards on all seven launcher call sites** and their arguments, plus **pending device verification**. Where a test accessor can expose argument-building code as real tear-offs, assert it too. |
+   | 4 Downloads | `DownloadService` is a fixed singleton, so: **source guards on all eight enqueue sites**, payload construction and file naming. Assert payloads only where the existing test infrastructure can observe them. |
+   | 5 Destructive | Widget tests with a MockClient log. **Confirmation:** cancelling the dialog makes no request; confirming makes the exact POST control requests above (operation, `all`, string `torrent_id`; integer `webdl_id`). **Bulk delete, for torrents and web downloads:** full success; partial failure; cancellation while a request is in flight. Assert insertion-order processing, no request after cancellation, remaining rows and selection, and that the dialog closes. |
+   | 6 Lists | Widget tests: paging request on scroll; Raw and A–Z order for a fixed folder; search filtering; empty and error states. **Series arrangement** and season/episode parsing are tested through the registered test accessor (the UI can't reach them), with a source guard on the dormant dropdown and sheet branches. Pixel goldens of the reachable views (torrents list, folder, web downloads, selection mode) on macOS and Linux, Linux captured from the original code on Ubuntu (the IPTV procedure), with HTTP fixtures and fixed animation capture points. |
    | 7 D-pad | Widget tests on the arrow-key handlers of `_firstItemFocusNode` and `_torrentSearchFocusNode`, and focus fallback after a load. |
-   | 8 Lifecycle | Source guards on the verbatim lifecycle, which the checker also enforces; an unmount test with a pending fetch (no throw). |
+   | 8 Lifecycle | Source guards on the verbatim lifecycle, which the checker also enforces. An unmount test with a pending fetch on **normal startup** (no pre-filled query): no throw. The pre-filled-query startup can call `setState` after dispose (see "Found, not fixed"), so it isn't asserted, and the extraction keeps its existing guards exactly. |
+   | 9 Profile | Widget tests: a profile-gate remount gives a fresh State whose owners are new, so the incoming credentials and lists replace the outgoing ones; two independent routes don't share owners. No new profile semantics. |
 
    - Record `torbox/base2` after any test seam (with a seam-only manual size
      raise, as in the IPTV plan, if the facade grows), then `torbox/base3`
@@ -214,10 +266,18 @@ The same as the IPTV plan's Technique, with these points:
      characterization test passes.
 5. **CI list:** add every affected test as a concrete path now.
 6. **Source-text inventory:**
-   - `test/theme/shape_manifest_test.dart` (this file's radii);
-   - `dev/tool/theme_rendered_set.py` and `measure_theme_surface.sh`, if they
-     list it;
-   - `dev/tool/file_size_baseline.txt`.
+   - **Theme registry:** the `cloud` entry in
+     `dev/tool/theme_surface_manifest.txt:5`, read by `measure_theme_surface.sh`
+     and `theme_rendered_set.py`. Expand its patterns to cover the
+     destinations.
+   - **Shape manifest:** `test/theme/shape_manifest_test.dart` records **14
+     bare radii** for this file, and the file has **23 shape-token calls**.
+     Keep all 14 radii, and register the token-bearing owners in
+     `kShapeResidue` so the token floor (433) still counts them.
+   - **Generic readers:** the theme source guards, the profile source
+     guards, the storage-reference checks and the size ratchet
+     (`dev/tool/file_size_baseline.txt`). These scan the repo, so they need
+     verification, not path rewrites.
 
    Grep for more. Each entry gets the step that ports it.
 
@@ -267,4 +327,11 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base3`.
 
 ## Found, not fixed
 
-(none yet)
+- **Startup `setState` after dispose.** With a pre-filled
+  `initialSearchQuery`, `_loadApiKeyAndTorrents` awaits both initial fetches
+  and then calls `_submitTorrentSearch` with no further `mounted` check
+  (1175). That can call `setState` after the screen is disposed (5760).
+  Pre-existing; the extraction keeps it exactly. Fix it in a separate change.
+- **Dormant code.** `_showTorboxFileSelectionSheet` (2503) has no callers,
+  and the dropdown can't select Series Arrange (5688). Pre-existing; moved
+  verbatim.
