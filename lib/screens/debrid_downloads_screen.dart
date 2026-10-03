@@ -7,6 +7,18 @@ import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/deb
 import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search_state.dart';
 import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_state.dart';
 import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_add_input_state.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_focus_actions.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_back_navigation.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_loading.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_download_row_actions.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_single_delete_actions.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_delete_all_actions.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_bulk_delete.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_download_bulk_delete.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_actions.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_selected_delete.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_feedback.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_sections.dart';
 import 'package:debrify/features/debrid_downloads/models/debrid_downloads_view.dart';
 import 'package:debrify/features/debrid_downloads/models/folder_view_mode.dart';
 import 'package:debrify/features/debrid_downloads/models/rd_search_result.dart';
@@ -85,6 +97,106 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   final _torrentSearch = DebridTorrentSearchState();
   final _selection = DebridSelectionState();
   final _addInput = DebridAddInputState();
+  late final _sections = _createSections();
+
+  DebridSections _createSections() {
+    final sections = DebridSections();
+    sections.focusActions = DebridFocusActions((
+    focusState: _focus,
+    mounted: () => mounted,
+    navigationState: _nav,
+    catalogState: _catalog,
+    downloadState: _downloadState,
+    ));
+    sections.backNavigation = DebridBackNavigation((
+    context: () => context,
+    selectionState: _selection,
+    exitSelectionMode: () => sections.selectionActions.exitSelectionMode(),
+    folderSearchState: _folderSearch,
+    toggleSearch: () => _toggleSearch(),
+    navigationState: _nav,
+    navigateUp: () => _navigateUp(),
+    selectSourceMode: () => widget.selectSourceMode,
+    isPushedRoute: () => widget.isPushedRoute,
+    initialTorrentForOptions: () => widget.initialTorrentForOptions,
+    ));
+    sections.catalogLoading = DebridCatalogLoading((
+    focusState: _focus,
+    catalogState: _catalog,
+    downloadState: _downloadState,
+    mounted: () => mounted,
+    setState: setState,
+    submitTorrentSearch: () => _submitTorrentSearch(),
+    initialSearchQuery: () => widget.initialSearchQuery,
+    focusFirstItemOrFallback: () => sections.focusActions.focusFirstItemOrFallback(),
+    ));
+    sections.downloadRowActions = DebridDownloadRowActions((
+    catalogState: _catalog,
+    copyToClipboard: (String text) => sections.feedback.copyToClipboard(text),
+    mounted: () => mounted,
+    context: () => context,
+    showError: (String message) => sections.feedback.showError(message),
+    ));
+    sections.singleDeleteActions = DebridSingleDeleteActions((
+    catalogState: _catalog,
+    context: () => context,
+    mounted: () => mounted,
+    setState: setState,
+    showSuccess: (String message) => sections.feedback.showSuccess(message),
+    showError: (String message) => sections.feedback.showError(message),
+    downloadState: _downloadState,
+    ));
+    sections.deleteAllActions = DebridDeleteAllActions((
+    catalogState: _catalog,
+    context: () => context,
+    mounted: () => mounted,
+    showDeleteAllProgressDialog: () => sections.torrentBulkDelete.showDeleteAllProgressDialog(),
+    downloadState: _downloadState,
+    showDeleteAllDownloadsProgressDialog: () => sections.downloadBulkDelete.showDeleteAllDownloadsProgressDialog(),
+    ));
+    sections.torrentBulkDelete = DebridTorrentBulkDelete((
+    context: () => context,
+    catalogState: _catalog,
+    mounted: () => mounted,
+    fetchTorrents: (String apiKey, {bool reset = false}) => sections.catalogLoading.fetchTorrents(apiKey, reset: reset),
+    setState: setState,
+    showSuccess: (String message) => sections.feedback.showSuccess(message),
+    showError: (String message) => sections.feedback.showError(message),
+    ));
+    sections.downloadBulkDelete = DebridDownloadBulkDelete((
+    context: () => context,
+    catalogState: _catalog,
+    mounted: () => mounted,
+    fetchDownloads: (String apiKey, {bool reset = false}) => sections.catalogLoading.fetchDownloads(apiKey, reset: reset),
+    setState: setState,
+    downloadState: _downloadState,
+    showSuccess: (String message) => sections.feedback.showSuccess(message),
+    showError: (String message) => sections.feedback.showError(message),
+    ));
+    sections.selectionActions = DebridSelectionActions((
+    catalogState: _catalog,
+    selectionState: _selection,
+    downloadState: _downloadState,
+    setState: setState,
+    context: () => context,
+    mounted: () => mounted,
+    showDeleteSelectedProgressDialog: (Set<String> ids, bool isTorrents) => sections.selectedDelete.showDeleteSelectedProgressDialog(ids, isTorrents),
+    ));
+    sections.selectedDelete = DebridSelectedDelete((
+    context: () => context,
+    catalogState: _catalog,
+    mounted: () => mounted,
+    setState: setState,
+    downloadState: _downloadState,
+    selectionState: _selection,
+    showSuccess: (String message) => sections.feedback.showSuccess(message),
+    showError: (String message) => sections.feedback.showError(message),
+    ));
+    sections.feedback = DebridFeedback((
+    context: () => context,
+    ));
+    return sections;
+  }
 
   // TV content focus handler (stored for proper unregistration)
 
@@ -105,18 +217,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   // Link input
 
   // Multi-select state
-
-  Set<String> get _activeSelectedIds =>
-      _catalog.selectedView == DebridDownloadsView.torrents
-      ? _selection.selectedTorrentIds
-      : _selection.selectedDownloadIds;
-
-  int get _activeItemCount => _catalog.selectedView == DebridDownloadsView.torrents
-      ? _catalog.torrents.length
-      : _downloadState.downloads.length;
-
-  bool get _isAllSelected =>
-      _activeSelectedIds.length == _activeItemCount && _activeItemCount > 0;
 
   // TV/DPAD navigation
 
@@ -167,14 +267,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       });
     }
 
-    _loadApiKeyAndData();
-    _focus.torrentScrollController.addListener(_onTorrentScroll);
-    _focus.downloadScrollController.addListener(_onDownloadScroll);
+    _sections.catalogLoading.loadApiKeyAndData();
+    _focus.torrentScrollController.addListener(_sections.catalogLoading.onTorrentScroll);
+    _focus.downloadScrollController.addListener(_sections.catalogLoading.onDownloadScroll);
 
     // Register back navigation handler for folder navigation
     if (widget.isPushedRoute) {
       // Pushed as a route - use pushed route handler
-      MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
+      MainPageBridge.pushRouteBackHandler(_sections.backNavigation.handleBackNavigation);
       // Set up timeout - if a DEEP LINK into a specific torrent hasn't resolved
       // after 10s, pop and show an error. Only when we were actually deep-linked
       // (initialTorrentForOptions); when browsing from the Cloud hub there's no
@@ -198,14 +298,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Displayed in a tab
       MainPageBridge.registerTabBackHandler(
         'realdebrid',
-        _handleBackNavigation,
+        _sections.backNavigation.handleBackNavigation,
       );
       // Register TV sidebar focus handler (tab index 4 = Real Debrid)
       _focus.tvContentFocusHandler = () {
         // Set flag to focus after data loads
         _focus.shouldFocusOnLoad = true;
         // Try to focus now in case data is already loaded
-        _focusFirstItemOrFallback();
+        _sections.focusActions.focusFirstItemOrFallback();
       };
       MainPageBridge.registerTvContentFocusHandler(4, _focus.tvContentFocusHandler!);
     }
@@ -228,42 +328,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     });
   }
 
-  /// Focus first item if data is loaded, otherwise focus search button
-  void _focusFirstItemOrFallback() {
-    if (!_focus.shouldFocusOnLoad) return;
-
-    // Use post-frame callback to ensure widgets are built
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_focus.shouldFocusOnLoad) return;
-
-      // Check if we're in folder view
-      if (_nav.currentViewNodes != null && _nav.currentViewNodes!.isNotEmpty) {
-        _focus.shouldFocusOnLoad = false;
-        _focus.firstItemFocusNode.requestFocus();
-      } else if (_catalog.selectedView == DebridDownloadsView.torrents &&
-          _catalog.torrents.isNotEmpty) {
-        _focus.shouldFocusOnLoad = false;
-        _focus.firstItemFocusNode.requestFocus();
-      } else if (_catalog.selectedView == DebridDownloadsView.ddl &&
-          _downloadState.downloads.isNotEmpty) {
-        _focus.shouldFocusOnLoad = false;
-        _focus.firstItemFocusNode.requestFocus();
-      } else if (!_catalog.isLoadingTorrents &&
-          !_downloadState.isLoadingDownloads &&
-          !_nav.isLoadingFolder) {
-        // No items and not loading - focus fallback
-        _focus.shouldFocusOnLoad = false;
-        _focus.searchButtonFocusNode.requestFocus();
-      }
-      // If still loading, keep the flag set - will be called again after load
-    });
-  }
-
   @override
   void dispose() {
     // Unregister back navigation handler
     if (widget.isPushedRoute) {
-      MainPageBridge.popRouteBackHandler(_handleBackNavigation);
+      MainPageBridge.popRouteBackHandler(_sections.backNavigation.handleBackNavigation);
     } else {
       MainPageBridge.unregisterTabBackHandler('realdebrid');
       if (_focus.tvContentFocusHandler != null) {
@@ -294,202 +363,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     _focus.torrentSearchClearFocusNode.dispose();
 
     super.dispose();
-  }
-
-  /// Handle back navigation for folder browsing.
-  /// Returns true if handled (navigated up), false if at root level.
-  bool _handleBackNavigation() {
-    // Select-source mode: back always pops the route.
-    if (widget.selectSourceMode && widget.isPushedRoute) {
-      Navigator.of(context).pop();
-      return true;
-    }
-
-    // Exit selection mode first if active
-    if (_selection.isSelectionMode) {
-      _exitSelectionMode();
-      return true;
-    }
-
-    // Close search first if active
-    if (_folderSearch.isSearchActive) {
-      _toggleSearch();
-      return true;
-    }
-
-    // If inside a folder within the torrent, navigate up
-    if (_nav.currentTorrentId != null && _nav.folderPath.isNotEmpty) {
-      _navigateUp();
-      return true;
-    }
-
-    // At torrent root level (viewing torrent files, not inside a subfolder)
-    if (_nav.currentTorrentId != null && _nav.folderPath.isEmpty) {
-      // Deep-linked directly into this torrent (pushed WITH a target) → pop back
-      // to the caller. Browsing (pushed from the Cloud hub without a target, or a
-      // normal tab) → fall through to _navigateUp so Back returns to the torrents
-      // list, not straight out of the screen.
-      if (widget.isPushedRoute && widget.initialTorrentForOptions != null) {
-        Navigator.of(context).pop();
-        return true;
-      }
-      // If came from torrent search flow, switch back to torrent search tab
-      if (MainPageBridge.returnToTorrentSearchOnBack) {
-        MainPageBridge.returnToTorrentSearchOnBack = false;
-        MainPageBridge.switchTab?.call(MainTab.legacyTorrentSearch);
-        return true;
-      }
-      // Normal case: go back to torrents list
-      _navigateUp();
-      return true;
-    }
-
-    return false; // Not in folder mode, let app handle it
-  }
-
-  void _onTorrentScroll() {
-    if (_focus.torrentScrollController.position.pixels >=
-        _focus.torrentScrollController.position.maxScrollExtent - 200) {
-      if (!_catalog.isLoadingMoreTorrents && _catalog.hasMoreTorrents) {
-        _loadMoreTorrents();
-      }
-    }
-  }
-
-  void _onDownloadScroll() {
-    if (_focus.downloadScrollController.position.pixels >=
-        _focus.downloadScrollController.position.maxScrollExtent - 200) {
-      if (!_downloadState.isLoadingMoreDownloads && _downloadState.hasMoreDownloads) {
-        _loadMoreDownloads();
-      }
-    }
-  }
-
-  Future<void> _loadApiKeyAndData() async {
-    final apiKey = await RealDebridStorage.getApiKey();
-
-    if (mounted) {
-      setState(() {
-        _catalog.apiKey = apiKey;
-      });
-    }
-
-    if (apiKey != null) {
-      await _fetchTorrents(apiKey, reset: true);
-      await _fetchDownloads(apiKey, reset: true);
-    } else {
-      if (mounted) {
-        setState(() {
-          _catalog.torrentErrorMessage =
-              'No API key configured. Please add your Real Debrid API key in Settings.';
-          _downloadState.downloadErrorMessage =
-              'No API key configured. Please add your Real Debrid API key in Settings.';
-        });
-      }
-    }
-
-    if (widget.initialSearchQuery != null &&
-        widget.initialSearchQuery!.isNotEmpty) {
-      _submitTorrentSearch();
-    }
-  }
-
-  Future<void> _fetchTorrents(String apiKey, {bool reset = false}) async {
-    if (reset) {
-      if (mounted) {
-        setState(() {
-          _catalog.torrentPage = 1;
-          _catalog.hasMoreTorrents = true;
-          _catalog.torrents.clear();
-        });
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _catalog.isLoadingTorrents = true;
-        _catalog.torrentErrorMessage = '';
-      });
-    }
-
-    try {
-      final result = await DebridService.getTorrents(
-        apiKey,
-        page: _catalog.torrentPage,
-        limit: DebridCatalogState.limit,
-        // filter: 'downloaded', // Temporarily removed to test
-      );
-
-      final List<RDTorrent> newTorrents = result['torrents'];
-      final bool hasMore = result['hasMore'];
-
-      if (mounted) {
-        setState(() {
-          if (reset) {
-            _catalog.torrents.clear();
-          }
-          // Filter to show only downloaded torrents
-          final downloadedTorrents = newTorrents
-              .where((torrent) => torrent.isDownloaded)
-              .toList();
-          _catalog.torrents.addAll(downloadedTorrents);
-          _catalog.hasMoreTorrents = hasMore;
-          _catalog.torrentPage++;
-          _catalog.isLoadingTorrents = false;
-        });
-        // Focus first item if navigated from sidebar
-        _focusFirstItemOrFallback();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _catalog.torrentErrorMessage = getUserFriendlyErrorMessage(e);
-          _catalog.isLoadingTorrents = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadMoreTorrents() async {
-    if (_catalog.apiKey == null || _catalog.isLoadingMoreTorrents || !_catalog.hasMoreTorrents) return;
-
-    if (mounted) {
-      setState(() {
-        _catalog.isLoadingMoreTorrents = true;
-      });
-    }
-
-    try {
-      final result = await DebridService.getTorrents(
-        _catalog.apiKey!,
-        page: _catalog.torrentPage,
-        limit: DebridCatalogState.limit,
-        // filter: 'downloaded', // Temporarily removed to test
-      );
-
-      final List<RDTorrent> newTorrents = result['torrents'];
-      final bool hasMore = result['hasMore'];
-
-      if (mounted) {
-        setState(() {
-          // Filter to show only downloaded torrents
-          final downloadedTorrents = newTorrents
-              .where((torrent) => torrent.isDownloaded)
-              .toList();
-          _catalog.torrents.addAll(downloadedTorrents);
-          _catalog.hasMoreTorrents = hasMore;
-          _catalog.torrentPage++;
-          _catalog.isLoadingMoreTorrents = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _catalog.torrentErrorMessage = getUserFriendlyErrorMessage(e);
-          _catalog.isLoadingMoreTorrents = false;
-        });
-      }
-    }
   }
 
   // Torrent list search methods
@@ -627,95 +500,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   // Downloads methods
-  Future<void> _fetchDownloads(String apiKey, {bool reset = false}) async {
-    if (reset) {
-      if (mounted) {
-        setState(() {
-          _downloadState.downloadPage = 1;
-          _downloadState.hasMoreDownloads = true;
-          _downloadState.downloads.clear();
-        });
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _downloadState.isLoadingDownloads = true;
-        _downloadState.downloadErrorMessage = '';
-      });
-    }
-
-    try {
-      final result = await DebridService.getDownloads(
-        apiKey,
-        page: _downloadState.downloadPage,
-        limit: DebridCatalogState.limit,
-      );
-
-      final List<DebridDownload> newDownloads = result['downloads'];
-      final bool hasMore = result['hasMore'];
-
-      if (mounted) {
-        setState(() {
-          if (reset) {
-            _downloadState.downloads.clear();
-          }
-          _downloadState.downloads.addAll(newDownloads);
-          _downloadState.hasMoreDownloads = hasMore;
-          _downloadState.downloadPage++;
-          _downloadState.isLoadingDownloads = false;
-        });
-        // Focus first item if navigated from sidebar
-        _focusFirstItemOrFallback();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _downloadState.downloadErrorMessage = getUserFriendlyErrorMessage(e);
-          _downloadState.isLoadingDownloads = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadMoreDownloads() async {
-    if (_catalog.apiKey == null || _downloadState.isLoadingMoreDownloads || !_downloadState.hasMoreDownloads) {
-      return;
-    }
-
-    if (mounted) {
-      setState(() {
-        _downloadState.isLoadingMoreDownloads = true;
-      });
-    }
-
-    try {
-      final result = await DebridService.getDownloads(
-        _catalog.apiKey!,
-        page: _downloadState.downloadPage,
-        limit: DebridCatalogState.limit,
-      );
-
-      final List<DebridDownload> newDownloads = result['downloads'];
-      final bool hasMore = result['hasMore'];
-
-      if (mounted) {
-        setState(() {
-          _downloadState.downloads.addAll(newDownloads);
-          _downloadState.hasMoreDownloads = hasMore;
-          _downloadState.downloadPage++;
-          _downloadState.isLoadingMoreDownloads = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _downloadState.downloadErrorMessage = getUserFriendlyErrorMessage(e);
-          _downloadState.isLoadingMoreDownloads = false;
-        });
-      }
-    }
-  }
 
   Future<void> _handlePlayVideo(RDTorrent torrent) async {
     if (_catalog.apiKey == null) return;
@@ -745,12 +529,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           }
         } else {
           if (mounted) {
-            _showError('This file is not a video (MIME type: $mimeType)');
+            _sections.feedback.showError('This file is not a video (MIME type: $mimeType)');
           }
         }
       } catch (e) {
         if (mounted) {
-          _showError('Failed to load video: ${e.toString()}');
+          _sections.feedback.showError('Failed to load video: ${e.toString()}');
         }
       }
     } else {
@@ -762,968 +546,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   // Download action methods
-  Future<void> _handleDownloadAction(DebridDownload download) async {
-    if (_catalog.apiKey == null) return;
-
-    // Copy download link to clipboard
-    _copyToClipboard(download.download);
-  }
-
-  Future<void> _handlePlayDownload(DebridDownload download) async {
-    if (_catalog.apiKey == null) return;
-
-    // Video by MIME **or** by name: the provider's MIME is often generic
-    // (application/octet-stream) or absent for the less common containers, and
-    // refusing on that alone left files the player handles perfectly with
-    // "not a video" and no way to watch them.
-    if (FileUtils.isVideoMimeType(download.mimeType) ||
-        FileUtils.isVideoFile(download.filename)) {
-      if (mounted) {
-        await VideoPlayerLauncher.push(
-          context,
-          VideoPlayerLaunchArgs(
-            videoUrl: download.download,
-            title: download.filename,
-            subtitle: Formatters.formatFileSize(download.filesize),
-            viewMode: PlaylistViewMode.sorted, // Single file - not series
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        _showError(
-          'This file is not a video (MIME type: ${download.mimeType})',
-        );
-      }
-    }
-  }
-
-  Future<void> _handleQueueDownload(DebridDownload download) async {
-    if (_catalog.apiKey == null) return;
-
-    try {
-      final meta = jsonEncode({
-        'restrictedLink': download.link,
-        'torrentHash': '',
-        'fileIndex': '',
-      });
-      await DownloadService.instance.enqueueDownload(
-        credentialKey: 'real_debrid_api_key',
-        url: download.link,
-        fileName: download.filename,
-        context: context,
-        torrentName: download.filename,
-        meta: meta,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Added to downloads')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to start download: $e')));
-    }
-  }
-
-  Future<void> _handleDeleteTorrent(RDTorrent torrent) async {
-    if (_catalog.apiKey == null) return;
-
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Delete Torrent',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'Are you sure you want to delete "${torrent.filename}" from Real Debrid? This action cannot be undone.',
-          style: const TextStyle(color: Colors.grey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      try {
-        // Show loading indicator
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-            content: const Row(
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(width: 16),
-                Text('Deleting torrent...'),
-              ],
-            ),
-          ),
-        );
-
-        // Delete the torrent
-        await DebridService.deleteTorrent(_catalog.apiKey!, torrent.id);
-
-        // Check if widget is still mounted before updating UI
-        if (mounted) {
-          // Close loading dialog
-          Navigator.of(context).pop();
-
-          // Remove the torrent from the local list
-          setState(() {
-            _catalog.torrents.removeWhere((t) => t.id == torrent.id);
-          });
-
-          // Show success message
-          _showSuccess('Torrent deleted successfully!');
-        }
-      } catch (e) {
-        // Check if widget is still mounted before updating UI
-        if (mounted) {
-          // Close loading dialog
-          Navigator.of(context).pop();
-
-          // Show error message
-          _showError('Failed to delete torrent: ${e.toString()}');
-        }
-      }
-    }
-  }
-
-  Future<void> _handleDeleteAllTorrents() async {
-    if (_catalog.apiKey == null || _catalog.torrents.isEmpty) return;
-
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Delete All Torrents',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Are you sure you want to delete all torrents from Real Debrid? This action cannot be undone.',
-          style: TextStyle(color: Colors.grey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      await _showDeleteAllProgressDialog();
-    }
-  }
-
-  Future<void> _showDeleteAllProgressDialog() async {
-    bool isCancelled = false;
-    int completed = 0;
-    int total = 0;
-    String phase = 'Fetching all torrents...';
-    List<String> failedDeletes = [];
-    StateSetter? setDialogState;
-    final app = AppThemeScope.of(context);
-
-    // Show progress dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, dialogStateSetter) {
-          setDialogState = dialogStateSetter;
-          return AlertDialog(
-            backgroundColor: app.cloud.dialogSurface,
-            shape: RoundedRectangleBorder(borderRadius: app.shape.br(16)),
-            title: const Text(
-              'Deleting All Torrents',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  total == 0
-                      ? phase
-                      : 'Deleting torrents... ($completed/$total)',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                LinearProgressIndicator(
-                  value: total > 0 ? completed / total : null,
-                  backgroundColor: Colors.grey.withValues(alpha: 0.3),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFFEF4444),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                if (failedDeletes.isNotEmpty)
-                  Text(
-                    'Failed: ${failedDeletes.length}',
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  isCancelled = true;
-                  Navigator.of(context).pop();
-                },
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    // Fetch ALL torrents first (1000 per page for speed)
-    List<RDTorrent> allTorrents = [];
-    try {
-      int page = 1;
-      bool hasMore = true;
-
-      while (hasMore && !isCancelled) {
-        final result = await DebridService.getTorrents(
-          _catalog.apiKey!,
-          page: page,
-          limit: 1000,
-        );
-        final torrents = result['torrents'] as List<RDTorrent>;
-        allTorrents.addAll(torrents);
-        hasMore = result['hasMore'] as bool;
-        page++;
-
-        // Update phase text
-        if (setDialogState != null && !isCancelled) {
-          phase = 'Fetching torrents... (${allTorrents.length} found)';
-          setDialogState!(() {});
-        }
-      }
-
-      if (isCancelled) {
-        if (mounted) await _fetchTorrents(_catalog.apiKey!, reset: true);
-        return;
-      }
-
-      total = allTorrents.length;
-      if (setDialogState != null) setDialogState!(() {});
-
-      // Now delete all torrents
-      for (int i = 0; i < allTorrents.length && !isCancelled; i++) {
-        final torrent = allTorrents[i];
-
-        try {
-          await DebridService.deleteTorrent(_catalog.apiKey!, torrent.id);
-          completed++;
-
-          // Update dialog state only if not cancelled
-          if (!isCancelled && setDialogState != null) {
-            setDialogState!(() {});
-          }
-
-          // Small delay to prevent overwhelming the API
-          await Future.delayed(const Duration(milliseconds: 150));
-        } catch (e) {
-          failedDeletes.add(torrent.filename);
-          completed++;
-
-          // Update dialog state only if not cancelled
-          if (!isCancelled && setDialogState != null) {
-            setDialogState!(() {});
-          }
-        }
-      }
-
-      // Close progress dialog only if not already cancelled
-      if (mounted && !isCancelled) {
-        Navigator.of(context).pop();
-      }
-
-      if (!isCancelled) {
-        // Update the torrents list
-        if (mounted) {
-          setState(() {
-            _catalog.torrents.clear();
-          });
-        }
-
-        // Refresh the list
-        if (mounted) {
-          await _fetchTorrents(_catalog.apiKey!, reset: true);
-        }
-
-        // Show result message
-        if (failedDeletes.isEmpty) {
-          _showSuccess('All $total torrents deleted successfully!');
-        } else {
-          _showError(
-            'Deleted ${completed - failedDeletes.length} torrents. ${failedDeletes.length} failed to delete.',
-          );
-        }
-      } else {
-        // Operation was cancelled, refresh the list to show current state
-        if (mounted) {
-          await _fetchTorrents(_catalog.apiKey!, reset: true);
-        }
-      }
-    } catch (e) {
-      // Close progress dialog
-      if (mounted) {
-        Navigator.of(context).pop();
-        _showError('Failed to delete torrents: ${e.toString()}');
-      }
-    }
-  }
-
-  Future<void> _handleDeleteAllDownloads() async {
-    if (_catalog.apiKey == null || _downloadState.downloads.isEmpty) return;
-
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Delete All Downloads',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Are you sure you want to delete all downloads from Real Debrid? This action cannot be undone.',
-          style: TextStyle(color: Colors.grey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      await _showDeleteAllDownloadsProgressDialog();
-    }
-  }
-
-  Future<void> _showDeleteAllDownloadsProgressDialog() async {
-    bool isCancelled = false;
-    int completed = 0;
-    int total = 0;
-    String phase = 'Fetching all downloads...';
-    List<String> failedDeletes = [];
-    StateSetter? setDialogState;
-    final app = AppThemeScope.of(context);
-
-    // Show progress dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, dialogStateSetter) {
-          setDialogState = dialogStateSetter;
-          return AlertDialog(
-            backgroundColor: app.cloud.dialogSurface,
-            shape: RoundedRectangleBorder(borderRadius: app.shape.br(16)),
-            title: const Text(
-              'Deleting All Downloads',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  total == 0
-                      ? phase
-                      : 'Deleting downloads... ($completed/$total)',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                LinearProgressIndicator(
-                  value: total > 0 ? completed / total : null,
-                  backgroundColor: Colors.grey.withValues(alpha: 0.3),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFFEF4444),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                if (failedDeletes.isNotEmpty)
-                  Text(
-                    'Failed: ${failedDeletes.length}',
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  isCancelled = true;
-                  Navigator.of(context).pop();
-                },
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    // Fetch ALL downloads first (1000 per page for speed)
-    List<DebridDownload> allDownloads = [];
-    try {
-      int page = 1;
-      bool hasMore = true;
-
-      while (hasMore && !isCancelled) {
-        final result = await DebridService.getDownloads(
-          _catalog.apiKey!,
-          page: page,
-          limit: 1000,
-        );
-        final downloads = result['downloads'] as List<DebridDownload>;
-        allDownloads.addAll(downloads);
-        hasMore = result['hasMore'] as bool;
-        page++;
-
-        // Update phase text
-        if (setDialogState != null && !isCancelled) {
-          phase = 'Fetching downloads... (${allDownloads.length} found)';
-          setDialogState!(() {});
-        }
-      }
-
-      if (isCancelled) {
-        if (mounted) await _fetchDownloads(_catalog.apiKey!, reset: true);
-        return;
-      }
-
-      total = allDownloads.length;
-      if (setDialogState != null) setDialogState!(() {});
-
-      // Now delete all downloads
-      for (int i = 0; i < allDownloads.length && !isCancelled; i++) {
-        final download = allDownloads[i];
-
-        try {
-          await DebridService.deleteDownload(_catalog.apiKey!, download.id);
-          completed++;
-
-          // Update dialog state only if not cancelled
-          if (!isCancelled && setDialogState != null) {
-            setDialogState!(() {});
-          }
-
-          // Small delay to prevent overwhelming the API
-          await Future.delayed(const Duration(milliseconds: 150));
-        } catch (e) {
-          failedDeletes.add(download.filename);
-          completed++;
-
-          // Update dialog state only if not cancelled
-          if (!isCancelled && setDialogState != null) {
-            setDialogState!(() {});
-          }
-        }
-      }
-
-      // Close progress dialog only if not already cancelled
-      if (mounted && !isCancelled) {
-        Navigator.of(context).pop();
-      }
-
-      if (!isCancelled) {
-        // Update the downloads list
-        if (mounted) {
-          setState(() {
-            _downloadState.downloads.clear();
-          });
-        }
-
-        // Refresh the list
-        if (mounted) {
-          await _fetchDownloads(_catalog.apiKey!, reset: true);
-        }
-
-        // Show result message
-        if (failedDeletes.isEmpty) {
-          _showSuccess('All $total downloads deleted successfully!');
-        } else {
-          _showError(
-            'Deleted ${completed - failedDeletes.length} downloads. ${failedDeletes.length} failed to delete.',
-          );
-        }
-      } else {
-        // Operation was cancelled, refresh the list to show current state
-        if (mounted) {
-          await _fetchDownloads(_catalog.apiKey!, reset: true);
-        }
-      }
-    } catch (e) {
-      // Close progress dialog
-      if (mounted) {
-        Navigator.of(context).pop();
-        _showError('Failed to delete downloads: ${e.toString()}');
-      }
-    }
-  }
-
-  Future<void> _handleDeleteDownload(DebridDownload download) async {
-    if (_catalog.apiKey == null) return;
-
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Delete Download',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'Are you sure you want to delete "${download.filename}" from Real Debrid? This action cannot be undone.',
-          style: const TextStyle(color: Colors.grey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      try {
-        // Show loading indicator
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-            content: const Row(
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(width: 16),
-                Text('Deleting download...'),
-              ],
-            ),
-          ),
-        );
-
-        // Delete the download
-        await DebridService.deleteDownload(_catalog.apiKey!, download.id);
-
-        // Check if widget is still mounted before updating UI
-        if (mounted) {
-          // Close loading dialog
-          Navigator.of(context).pop();
-
-          // Remove the download from the local list
-          setState(() {
-            _downloadState.downloads.removeWhere((d) => d.id == download.id);
-          });
-
-          // Show success message
-          _showSuccess('Download deleted successfully!');
-        }
-      } catch (e) {
-        // Check if widget is still mounted before updating UI
-        if (mounted) {
-          // Close loading dialog
-          Navigator.of(context).pop();
-
-          // Show error message
-          _showError('Failed to delete download: ${e.toString()}');
-        }
-      }
-    }
-  }
 
   // --- Multi-select helpers ---
 
-  void _toggleSelectionMode() {
-    setState(() {
-      if (_selection.isSelectionMode) {
-        _selection.selectedTorrentIds.clear();
-        _selection.selectedDownloadIds.clear();
-      }
-      _selection.isSelectionMode = !_selection.isSelectionMode;
-    });
-  }
-
-  void _exitSelectionMode() {
-    if (!_selection.isSelectionMode) return;
-    setState(() {
-      _selection.isSelectionMode = false;
-      _selection.selectedTorrentIds.clear();
-      _selection.selectedDownloadIds.clear();
-    });
-  }
-
-  void _toggleTorrentSelection(String id) {
-    setState(() {
-      if (_selection.selectedTorrentIds.contains(id)) {
-        _selection.selectedTorrentIds.remove(id);
-      } else {
-        _selection.selectedTorrentIds.add(id);
-      }
-    });
-  }
-
-  void _toggleDownloadSelection(String id) {
-    setState(() {
-      if (_selection.selectedDownloadIds.contains(id)) {
-        _selection.selectedDownloadIds.remove(id);
-      } else {
-        _selection.selectedDownloadIds.add(id);
-      }
-    });
-  }
-
-  void _toggleSelectAll() {
-    setState(() {
-      if (_isAllSelected) {
-        _activeSelectedIds.clear();
-      } else {
-        if (_catalog.selectedView == DebridDownloadsView.torrents) {
-          _selection.selectedTorrentIds.addAll(_catalog.torrents.map((t) => t.id));
-        } else {
-          _selection.selectedDownloadIds.addAll(_downloadState.downloads.map((d) => d.id));
-        }
-      }
-    });
-  }
-
-  Future<void> _handleDeleteSelected() async {
-    if (_catalog.apiKey == null || _activeSelectedIds.isEmpty) return;
-
-    final isTorrents = _catalog.selectedView == DebridDownloadsView.torrents;
-    final count = _activeSelectedIds.length;
-    final itemType = isTorrents ? 'torrent' : 'download';
-    final itemTypePlural = isTorrents ? 'torrents' : 'downloads';
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Delete $count ${count == 1 ? itemType : itemTypePlural}',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'Are you sure you want to delete $count selected ${count == 1 ? itemType : itemTypePlural}? This action cannot be undone.',
-          style: const TextStyle(color: Colors.grey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      await _showDeleteSelectedProgressDialog(
-        Set<String>.from(_activeSelectedIds),
-        isTorrents,
-      );
-    }
-  }
-
-  Future<void> _showDeleteSelectedProgressDialog(
-    Set<String> ids,
-    bool isTorrents,
-  ) async {
-    bool isCancelled = false;
-    bool dialogOpen = true;
-    int completed = 0;
-    final int total = ids.length;
-    List<String> failedDeletes = [];
-    StateSetter? setDialogState;
-    final nav = Navigator.of(context);
-    final app = AppThemeScope.of(context);
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, dialogStateSetter) {
-          setDialogState = dialogStateSetter;
-          return AlertDialog(
-            backgroundColor: app.cloud.dialogSurface,
-            shape: RoundedRectangleBorder(borderRadius: app.shape.br(16)),
-            title: Text(
-              'Deleting ${isTorrents ? 'Torrents' : 'Downloads'}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Deleting... ($completed/$total)',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                LinearProgressIndicator(
-                  value: total > 0 ? completed / total : null,
-                  backgroundColor: Colors.grey.withValues(alpha: 0.3),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFFEF4444),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                if (failedDeletes.isNotEmpty)
-                  Text(
-                    'Failed: ${failedDeletes.length}',
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  isCancelled = true;
-                  dialogOpen = false;
-                  Navigator.of(dialogContext).pop();
-                },
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    final deletedIds = <String>{};
-
-    for (final id in ids) {
-      if (isCancelled) break;
-
-      try {
-        if (isTorrents) {
-          await DebridService.deleteTorrent(_catalog.apiKey!, id);
-        } else {
-          await DebridService.deleteDownload(_catalog.apiKey!, id);
-        }
-        deletedIds.add(id);
-      } catch (e) {
-        failedDeletes.add(id);
-      }
-
-      completed++;
-      if (!isCancelled && setDialogState != null) {
-        setDialogState!(() {});
-      }
-
-      if (isCancelled) break;
-      await Future.delayed(const Duration(milliseconds: 150));
-    }
-
-    // Close progress dialog if still open
-    if (dialogOpen && mounted) {
-      dialogOpen = false;
-      nav.pop();
-    }
-
-    if (!isCancelled && mounted) {
-      setState(() {
-        if (isTorrents) {
-          _catalog.torrents.removeWhere((t) => deletedIds.contains(t.id));
-        } else {
-          _downloadState.downloads.removeWhere((d) => deletedIds.contains(d.id));
-        }
-        _selection.selectedTorrentIds.clear();
-        _selection.selectedDownloadIds.clear();
-        _selection.isSelectionMode = false;
-      });
-
-      if (failedDeletes.isEmpty) {
-        _showSuccess(
-          '${deletedIds.length} ${isTorrents ? 'torrents' : 'downloads'} deleted successfully!',
-        );
-      } else {
-        _showError(
-          'Deleted ${deletedIds.length}. ${failedDeletes.length} failed to delete.',
-        );
-      }
-    } else if (mounted) {
-      // Cancelled — remove already-deleted items and deselect them, but stay in selection mode
-      setState(() {
-        if (isTorrents) {
-          _catalog.torrents.removeWhere((t) => deletedIds.contains(t.id));
-          _selection.selectedTorrentIds.removeAll(deletedIds);
-        } else {
-          _downloadState.downloads.removeWhere((d) => deletedIds.contains(d.id));
-          _selection.selectedDownloadIds.removeAll(deletedIds);
-        }
-      });
-    }
-  }
-
-  void _copyToClipboard(String text) {
-    Clipboard.setData(ClipboardData(text: text));
-    _showSuccess('Download link(s) copied to clipboard!');
-  }
-
-  void _showSuccess(String message) {
-    // Messenger lookup first: it is the pre-existing liveness check on this
-    // context, so an unmounted caller fails exactly where it always did.
-    final messenger = ScaffoldMessenger.of(context);
-    final app = AppThemeScope.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF10B981),
-                borderRadius: app.shape.br(8),
-              ),
-              // Ink PINNED with its surface. The fill above is a `const Color`
-              // that does not follow the palette, so page ink on it is exactly
-              // the both-directions mistake — near-black on a semantic green
-              // under a paper theme, or Phosphor's amber on amber.
-              child: Icon(Icons.check, color: Colors.white, size: 16),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: app.cloud.dialogSurface,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  void _showError(String message) {
-    // Messenger lookup first: it is the pre-existing liveness check on this
-    // context, so an unmounted caller fails exactly where it always did.
-    final messenger = ScaffoldMessenger.of(context);
-    final app = AppThemeScope.of(context);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEF4444),
-                borderRadius: app.shape.br(8),
-              ),
-              // Ink PINNED with its surface. The fill above is a `const Color`
-              // that does not follow the palette, so page ink on it is exactly
-              // the both-directions mistake — near-black on a semantic green
-              // under a paper theme, or Phosphor's amber on amber.
-              child: Icon(Icons.error, color: Colors.white, size: 16),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: app.cloud.dialogSurface,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
   // ========== Folder Navigation Methods ==========
-
-  /// Navigate into a torrent (shows root level folders/files)
-  /// Reset scroll while the outgoing list is still attached, so the next
-  /// listing never inherits the old offset. Listeners are detached around the
-  /// jump so it can't trigger a stale load-more at the navigation boundary.
-  void _resetListScroll() {
-    if (_focus.torrentScrollController.hasClients) {
-      _focus.torrentScrollController.removeListener(_onTorrentScroll);
-      _focus.torrentScrollController.jumpTo(0);
-      _focus.torrentScrollController.addListener(_onTorrentScroll);
-    }
-    if (_focus.downloadScrollController.hasClients) {
-      _focus.downloadScrollController.removeListener(_onDownloadScroll);
-      _focus.downloadScrollController.jumpTo(0);
-      _focus.downloadScrollController.addListener(_onDownloadScroll);
-    }
-  }
 
   Future<void> _navigateIntoTorrent(RDTorrent torrent) async {
     if (_catalog.apiKey == null) return;
 
-    _exitSelectionMode();
+    _sections.selectionActions.exitSelectionMode();
 
     // Focus first item after folder contents load
     _focus.shouldFocusOnLoad = true;
-    _resetListScroll();
+    _sections.catalogLoading.resetListScroll();
 
     setState(() {
       _nav.isLoadingFolder = true;
@@ -1811,10 +646,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                         final downloadUrl =
                             unrestrictResult['download'] as String?;
                         if (downloadUrl != null) {
-                          _copyToClipboard(downloadUrl);
+                          _sections.feedback.copyToClipboard(downloadUrl);
                         }
                       } catch (e) {
-                        _showError(
+                        _sections.feedback.showError(
                           'Failed to get download link: ${e.toString()}',
                         );
                       }
@@ -1869,13 +704,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       });
 
       // Focus first item after folder contents load
-      _focusFirstItemOrFallback();
+      _sections.focusActions.focusFirstItemOrFallback();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _nav.isLoadingFolder = false;
       });
-      _showError('Failed to load torrent contents: ${e.toString()}');
+      _sections.feedback.showError('Failed to load torrent contents: ${e.toString()}');
     }
   }
 
@@ -1916,7 +751,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     });
 
     // Focus first item after navigation
-    _focusFirstItemOrFallback();
+    _sections.focusActions.focusFirstItemOrFallback();
   }
 
   /// Navigate up one level
@@ -1924,7 +759,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     // Refocus the first row once the previous listing shows — the focused
     // row is disposed by the swap and nothing else reclaims DPAD focus.
     _focus.shouldFocusOnLoad = true;
-    _resetListScroll();
+    _sections.catalogLoading.resetListScroll();
     if (_nav.folderPath.isEmpty && _nav.currentTorrentId != null) {
       // Go back to torrents list
       setState(() {
@@ -1934,7 +769,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         _nav.currentViewNodes = null;
         _nav.folderPath = [];
       });
-      _focusFirstItemOrFallback();
+      _sections.focusActions.focusFirstItemOrFallback();
     } else if (_nav.folderPath.isNotEmpty && _nav.currentFolderTree != null) {
       // Go up one folder level
       _nav.folderPath.removeLast();
@@ -1978,7 +813,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             setState(() {
               _nav.currentViewNodes = transformedNodes;
             });
-            _focusFirstItemOrFallback();
+            _sections.focusActions.focusFirstItemOrFallback();
             return;
           }
         }
@@ -2010,7 +845,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       setState(() {
         _nav.currentViewNodes = transformedNodes;
       });
-      _focusFirstItemOrFallback();
+      _sections.focusActions.focusFirstItemOrFallback();
     }
   }
 
@@ -2499,7 +1334,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           child: IconButton(
             focusNode: _focus.backButtonFocusNode,
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => _handleBackNavigation(),
+            onPressed: () => _sections.backNavigation.handleBackNavigation(),
           ),
         ),
         title: Text(_getCurrentFolderTitle()),
@@ -2655,10 +1490,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         selected: _catalog.selectedView,
         onSelected: (value) {
           if (value == _catalog.selectedView) return;
-          _exitSelectionMode();
+          _sections.selectionActions.exitSelectionMode();
           // The two root lists swap in the same element slot, so the incoming
           // one would inherit the outgoing list's scroll offset.
-          _resetListScroll();
+          _sections.catalogLoading.resetListScroll();
           setState(() => _catalog.selectedView = value);
         },
       ),
@@ -2668,7 +1503,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Widget _buildSelectionBar() {
     final app = AppThemeScope.of(context);
     final theme = Theme.of(context);
-    final count = _activeSelectedIds.length;
+    final count = _sections.selectionActions.activeSelectedIds.length;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -2690,13 +1525,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ),
           const Spacer(),
           TextButton(
-            onPressed: _toggleSelectAll,
-            child: Text(_isAllSelected ? 'Deselect All' : 'Select All'),
+            onPressed: _sections.selectionActions.toggleSelectAll,
+            child: Text(_sections.selectionActions.isAllSelected ? 'Deselect All' : 'Select All'),
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
             focusNode: _focus.deleteButtonFocusNode,
-            onPressed: count > 0 ? _handleDeleteSelected : null,
+            onPressed: count > 0 ? _sections.selectionActions.handleDeleteSelected : null,
             icon: const Icon(Icons.delete_outline, size: 18),
             label: const Text('Delete'),
             style:
@@ -2795,7 +1630,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 Tooltip(
                   message: _selection.isSelectionMode ? 'Exit selection' : 'Select items',
                   child: IconButton(
-                    onPressed: _toggleSelectionMode,
+                    onPressed: _sections.selectionActions.toggleSelectionMode,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
@@ -2811,7 +1646,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 Tooltip(
                   message: 'Delete all torrents',
                   child: IconButton(
-                    onPressed: _handleDeleteAllTorrents,
+                    onPressed: _sections.deleteAllActions.handleDeleteAllTorrents,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
@@ -2889,7 +1724,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 Tooltip(
                   message: _selection.isSelectionMode ? 'Exit selection' : 'Select items',
                   child: IconButton(
-                    onPressed: _toggleSelectionMode,
+                    onPressed: _sections.selectionActions.toggleSelectionMode,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
@@ -2905,7 +1740,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 Tooltip(
                   message: 'Delete all downloads',
                   child: IconButton(
-                    onPressed: _handleDeleteAllDownloads,
+                    onPressed: _sections.deleteAllActions.handleDeleteAllDownloads,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
@@ -2977,7 +1812,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               const SizedBox(height: 16),
               ElevatedButton(
                 autofocus: true,
-                onPressed: () => _fetchTorrents(_catalog.apiKey!, reset: true),
+                onPressed: () => _sections.catalogLoading.fetchTorrents(_catalog.apiKey!, reset: true),
                 child: const Text('Retry'),
               ),
             ],
@@ -3011,7 +1846,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       body = RefreshIndicator(
         onRefresh: () async {
           if (_catalog.apiKey != null) {
-            await _fetchTorrents(_catalog.apiKey!, reset: true);
+            await _sections.catalogLoading.fetchTorrents(_catalog.apiKey!, reset: true);
           }
         },
         color: Colors.white,
@@ -3259,7 +2094,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               const SizedBox(height: 16),
               ElevatedButton(
                 autofocus: true,
-                onPressed: () => _fetchDownloads(_catalog.apiKey!, reset: true),
+                onPressed: () => _sections.catalogLoading.fetchDownloads(_catalog.apiKey!, reset: true),
                 child: const Text('Retry'),
               ),
             ],
@@ -3293,7 +2128,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       body = RefreshIndicator(
         onRefresh: () async {
           if (_catalog.apiKey != null) {
-            await _fetchDownloads(_catalog.apiKey!, reset: true);
+            await _sections.catalogLoading.fetchDownloads(_catalog.apiKey!, reset: true);
           }
         },
         color: Colors.white,
@@ -3394,7 +2229,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         icon: Icons.delete_outline,
         label: 'Delete',
         destructive: true,
-        onSelected: () => _handleDeleteTorrent(torrent),
+        onSelected: () => _sections.singleDeleteActions.handleDeleteTorrent(torrent),
       ),
     ];
 
@@ -3406,7 +2241,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       actions: actions,
       selectionMode: _selection.isSelectionMode,
       selected: _selection.selectedTorrentIds.contains(torrent.id),
-      onToggleSelected: () => _toggleTorrentSelection(torrent.id),
+      onToggleSelected: () => _sections.selectionActions.toggleTorrentSelection(torrent.id),
       focusNode: index == 0 ? _focus.firstItemFocusNode : null,
       upFocusNode: upNode,
     );
@@ -3451,7 +2286,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (mounted) Navigator.of(context).pop();
 
       if (files.isEmpty || links.isEmpty) {
-        _showError('No files available for download');
+        _sections.feedback.showError('No files available for download');
         return;
       }
 
@@ -3491,7 +2326,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       );
     } catch (e) {
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
-      _showError('Failed to load torrent: $e');
+      _sections.feedback.showError('Failed to load torrent: $e');
     }
   }
 
@@ -3522,12 +2357,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           );
         } else {
           if (mounted) {
-            _showError('This file is not a video (MIME type: $mimeType)');
+            _sections.feedback.showError('This file is not a video (MIME type: $mimeType)');
           }
         }
       } catch (e) {
         if (mounted) {
-          _showError('Failed to validate file: ${e.toString()}');
+          _sections.feedback.showError('Failed to validate file: ${e.toString()}');
         }
       }
     } else {
@@ -3555,13 +2390,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       );
 
       if (result == null || !mounted) return;
-      _showSuccess(result.successMessage);
+      _sections.feedback.showSuccess(result.successMessage);
     } on DebrifyTvChannelAddException catch (e) {
       if (!mounted) return;
-      _showError(e.message);
+      _sections.feedback.showError(e.message);
     } catch (e) {
       if (!mounted) return;
-      _showError('Failed to add torrent to Debrify TV: $e');
+      _sections.feedback.showError('Failed to add torrent to Debrify TV: $e');
     }
   }
 
@@ -3608,24 +2443,24 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           icon: Icons.play_arrow_rounded,
           label: 'Play',
           showInStrip: true,
-          onSelected: () => _handlePlayDownload(download),
+          onSelected: () => _sections.downloadRowActions.handlePlayDownload(download),
         ),
       CloudRowAction(
         icon: Icons.download,
         label: 'Download',
         showInStrip: true,
-        onSelected: () => _handleQueueDownload(download),
+        onSelected: () => _sections.downloadRowActions.handleQueueDownload(download),
       ),
       CloudRowAction(
         icon: Icons.link,
         label: 'Copy Link',
-        onSelected: () => _handleDownloadAction(download),
+        onSelected: () => _sections.downloadRowActions.handleDownloadAction(download),
       ),
       CloudRowAction(
         icon: Icons.delete_outline,
         label: 'Delete',
         destructive: true,
-        onSelected: () => _handleDeleteDownload(download),
+        onSelected: () => _sections.singleDeleteActions.handleDeleteDownload(download),
       ),
     ];
 
@@ -3635,12 +2470,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       meta:
           '${Formatters.formatFileSize(download.filesize)} · ${download.host}',
       onTap: (canStream || isVideo)
-          ? () => _handlePlayDownload(download)
+          ? () => _sections.downloadRowActions.handlePlayDownload(download)
           : null,
       actions: actions,
       selectionMode: _selection.isSelectionMode,
       selected: _selection.selectedDownloadIds.contains(download.id),
-      onToggleSelected: () => _toggleDownloadSelection(download.id),
+      onToggleSelected: () => _sections.selectionActions.toggleDownloadSelection(download.id),
       focusNode: index == 0 ? _focus.firstItemFocusNode : null,
       upFocusNode: (_selection.isSelectionMode && index == 0)
           ? _focus.deleteButtonFocusNode
@@ -3680,7 +2515,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (files == null || files.isEmpty) {
         if (mounted) Navigator.of(context).pop(); // close loading
         if (mounted) {
-          _showError('Failed to get file information from torrent.');
+          _sections.feedback.showError('Failed to get file information from torrent.');
         }
         return;
       }
@@ -3702,7 +2537,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (isArchive) {
         if (mounted) Navigator.of(context).pop(); // close loading
         if (mounted) {
-          _showError('This is an archived torrent. Please extract it first.');
+          _sections.feedback.showError('This is an archived torrent. Please extract it first.');
         }
         return;
       }
@@ -3909,7 +2744,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       if (entries.isEmpty) {
         if (mounted) {
-          _showError('No playable video files found in this torrent.');
+          _sections.feedback.showError('No playable video files found in this torrent.');
         }
         return;
       }
@@ -3941,7 +2776,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         if (Navigator.of(context).canPop()) {
           Navigator.of(context).pop();
         }
-        _showError('Failed to prepare playlist: $e');
+        _sections.feedback.showError('Failed to prepare playlist: $e');
       }
     }
   }
@@ -4042,12 +2877,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Future<void> _addMagnetWithDefaultSelection() async {
     final magnetLink = _addInput.magnetController.text.trim();
     if (magnetLink.isEmpty) {
-      _showError('Please enter a magnet link');
+      _sections.feedback.showError('Please enter a magnet link');
       return;
     }
 
     if (!isValidMagnetLink(magnetLink)) {
-      _showError('Please enter a valid magnet link');
+      _sections.feedback.showError('Please enter a valid magnet link');
       return;
     }
 
@@ -4111,11 +2946,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       // Refresh the torrent list
-      await _fetchTorrents(_catalog.apiKey!, reset: true);
+      await _sections.catalogLoading.fetchTorrents(_catalog.apiKey!, reset: true);
     } on TorrentNotCachedException catch (e) {
       await DebridService.deleteTorrent(e.apiKey, e.torrentId);
       if (mounted) Navigator.of(context).pop();
-      if (mounted) _showError('File is not readily available in Real Debrid');
+      if (mounted) _sections.feedback.showError('File is not readily available in Real Debrid');
     } catch (e) {
       // Close loading dialog
       if (mounted) {
@@ -4123,7 +2958,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       if (mounted) {
-        _showError(getUserFriendlyErrorMessage(e.toString()));
+        _sections.feedback.showError(getUserFriendlyErrorMessage(e.toString()));
       }
     } finally {
       if (mounted) {
@@ -4137,12 +2972,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Future<void> _showAdvancedMagnetDialog() async {
     final magnetLink = _addInput.magnetController.text.trim();
     if (magnetLink.isEmpty) {
-      _showError('Please enter a magnet link first');
+      _sections.feedback.showError('Please enter a magnet link first');
       return;
     }
 
     if (!isValidMagnetLink(magnetLink)) {
-      _showError('Please enter a valid magnet link');
+      _sections.feedback.showError('Please enter a valid magnet link');
       return;
     }
 
@@ -4271,11 +3106,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       // Refresh the torrent list
-      await _fetchTorrents(_catalog.apiKey!, reset: true);
+      await _sections.catalogLoading.fetchTorrents(_catalog.apiKey!, reset: true);
     } on TorrentNotCachedException catch (e) {
       await DebridService.deleteTorrent(e.apiKey, e.torrentId);
       if (mounted) Navigator.of(context).pop();
-      if (mounted) _showError('File is not readily available in Real Debrid');
+      if (mounted) _sections.feedback.showError('File is not readily available in Real Debrid');
     } catch (e) {
       // Close loading dialog
       if (mounted) {
@@ -4283,7 +3118,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       if (mounted) {
-        _showError(getUserFriendlyErrorMessage(e.toString()));
+        _sections.feedback.showError(getUserFriendlyErrorMessage(e.toString()));
       }
     } finally {
       if (mounted) {
@@ -4417,12 +3252,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Future<void> _addLink() async {
     final link = _addInput.linkController.text.trim();
     if (link.isEmpty) {
-      _showError('Please enter a link');
+      _sections.feedback.showError('Please enter a link');
       return;
     }
 
     if (!isValidLink(link)) {
-      _showError(
+      _sections.feedback.showError(
         'Please enter a valid URL (must start with http:// or https://)',
       );
       return;
@@ -4486,7 +3321,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       // Refresh the downloads list
-      await _fetchDownloads(_catalog.apiKey!, reset: true);
+      await _sections.catalogLoading.fetchDownloads(_catalog.apiKey!, reset: true);
     } catch (e) {
       // Close loading dialog
       if (mounted) {
@@ -4497,7 +3332,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         // Show the actual Real Debrid error message with user-friendly formatting
         final errorMessage = e.toString().replaceFirst('Exception: ', '');
         final friendlyMessage = getLinkUnrestrictErrorMessage(errorMessage);
-        _showError(friendlyMessage);
+        _sections.feedback.showError(friendlyMessage);
       }
     } finally {
       if (mounted) {
@@ -4545,17 +3380,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           }
         } else {
           if (mounted) {
-            _showError('This file is not a video (MIME type: $mimeType)');
+            _sections.feedback.showError('This file is not a video (MIME type: $mimeType)');
           }
         }
       } else {
         if (mounted) {
-          _showError('Failed to get download link');
+          _sections.feedback.showError('Failed to get download link');
         }
       }
     } catch (e) {
       if (mounted) {
-        _showError('Failed to load video: ${e.toString()}');
+        _sections.feedback.showError('Failed to load video: ${e.toString()}');
       }
     } finally {
       setLocal(() {
@@ -4597,12 +3432,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         );
       } else {
         if (mounted) {
-          _showError('This file is not a video (MIME type: $mimeType)');
+          _sections.feedback.showError('This file is not a video (MIME type: $mimeType)');
         }
       }
     } catch (e) {
       if (mounted) {
-        _showError('Failed to validate file: ${e.toString()}');
+        _sections.feedback.showError('Failed to validate file: ${e.toString()}');
       }
     }
   }
@@ -4642,12 +3477,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         });
       } else {
         if (mounted) {
-          _showError('Failed to get download link');
+          _sections.feedback.showError('Failed to get download link');
         }
       }
     } catch (e) {
       if (mounted) {
-        _showError('Failed to get download link: ${e.toString()}');
+        _sections.feedback.showError('Failed to get download link: ${e.toString()}');
       }
     } finally {
       setLocal(() {
@@ -4677,16 +3512,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       if (downloadLink.isNotEmpty) {
         if (mounted) {
-          _copyToClipboard(downloadLink);
+          _sections.feedback.copyToClipboard(downloadLink);
         }
       } else {
         if (mounted) {
-          _showError('Failed to get download link');
+          _sections.feedback.showError('Failed to get download link');
         }
       }
     } catch (e) {
       if (mounted) {
-        _showError('Failed to get download link: ${e.toString()}');
+        _sections.feedback.showError('Failed to get download link: ${e.toString()}');
       }
     } finally {
       setLocal(() {
@@ -5597,7 +4432,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } catch (e) {
       if (mounted) {
         Navigator.of(context).pop();
-        _showError('Failed to play file: ${e.toString()}');
+        _sections.feedback.showError('Failed to play file: ${e.toString()}');
       }
     }
   }
@@ -5623,7 +4458,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (videoFiles.isEmpty) {
         if (mounted) {
           Navigator.of(context).pop();
-          _showError('No video files found in this folder');
+          _sections.feedback.showError('No video files found in this folder');
         }
         return;
       }
@@ -5704,7 +4539,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } catch (e) {
       if (mounted) {
         Navigator.of(context).pop();
-        _showError('Failed to play folder: ${e.toString()}');
+        _sections.feedback.showError('Failed to play folder: ${e.toString()}');
       }
     }
   }
@@ -5712,7 +4547,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   /// Download a single file
   Future<void> _downloadFile(RDFileNode file) async {
     if (_catalog.apiKey == null || _nav.currentTorrentId == null) {
-      _showError('No API key or torrent ID available');
+      _sections.feedback.showError('No API key or torrent ID available');
       return;
     }
 
@@ -5746,7 +4581,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Validate linkIndex
       if (file.linkIndex >= links.length) {
         if (mounted) Navigator.of(context).pop();
-        _showError('Invalid file link index');
+        _sections.feedback.showError('Invalid file link index');
         return;
       }
 
@@ -5776,20 +4611,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         context: mounted ? context : null,
       );
 
-      _showSuccess('Download queued: $fileName');
+      _sections.feedback.showSuccess('Download queued: $fileName');
     } catch (e) {
       // Close loading dialog if still open
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }
-      _showError('Failed to download: $e');
+      _sections.feedback.showError('Failed to download: $e');
     }
   }
 
   /// Download files from a folder with file selection dialog
   Future<void> _downloadFolder(RDFileNode folder) async {
     if (_catalog.apiKey == null || _nav.currentTorrentId == null) {
-      _showError('No API key or torrent ID available');
+      _sections.feedback.showError('No API key or torrent ID available');
       return;
     }
 
@@ -5823,7 +4658,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (mounted) Navigator.of(context).pop();
 
       if (allFiles.isEmpty) {
-        _showError('No files found in folder');
+        _sections.feedback.showError('No files found in folder');
         return;
       }
 
@@ -5869,7 +4704,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }
-      _showError('Failed to load folder: $e');
+      _sections.feedback.showError('Failed to load folder: $e');
     }
   }
 
@@ -5952,22 +4787,22 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Show result
       if (successCount > 0 && failCount == 0) {
-        _showSuccess(
+        _sections.feedback.showSuccess(
           'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
         );
       } else if (successCount > 0 && failCount > 0) {
-        _showError(
+        _sections.feedback.showError(
           'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
         );
       } else {
-        _showError('Failed to queue any files for download');
+        _sections.feedback.showError('Failed to queue any files for download');
       }
     } catch (e) {
       // Close any open dialogs
       if (mounted) {
         Navigator.of(context, rootNavigator: true).pop();
       }
-      _showError('Failed to queue downloads: $e');
+      _sections.feedback.showError('Failed to queue downloads: $e');
     }
   }
 
@@ -5986,11 +4821,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       });
 
       if (mounted) {
-        _showSuccess(added ? 'Added to playlist' : 'Already in playlist');
+        _sections.feedback.showSuccess(added ? 'Added to playlist' : 'Already in playlist');
       }
     } catch (e) {
       if (mounted) {
-        _showError('Failed to add to playlist: ${e.toString()}');
+        _sections.feedback.showError('Failed to add to playlist: ${e.toString()}');
       }
     }
   }
@@ -6003,7 +4838,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Collect video files
       final videoFiles = RDFolderTreeBuilder.collectVideoFiles(folder);
       if (videoFiles.isEmpty) {
-        _showError('No video files to add');
+        _sections.feedback.showError('No video files to add');
         return;
       }
 
@@ -6019,7 +4854,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       });
 
       if (mounted) {
-        _showSuccess(
+        _sections.feedback.showSuccess(
           added
               ? 'Added ${videoFiles.length} videos to playlist'
               : 'Already in playlist',
@@ -6027,7 +4862,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        _showError('Failed to add to playlist: ${e.toString()}');
+        _sections.feedback.showError('Failed to add to playlist: ${e.toString()}');
       }
     }
   }
@@ -6064,7 +4899,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       final links = (info['links'] as List).cast<String>();
 
       if (links.isEmpty) {
-        _showError('No links available');
+        _sections.feedback.showError('No links available');
         return;
       }
 
@@ -6077,9 +4912,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Copy to clipboard
       await Clipboard.setData(ClipboardData(text: downloadUrl));
-      _showSuccess('Download link copied to clipboard');
+      _sections.feedback.showSuccess('Download link copied to clipboard');
     } catch (e) {
-      _showError('Failed to get download link: $e');
+      _sections.feedback.showError('Failed to get download link: $e');
     }
   }
 
@@ -6097,9 +4932,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Copy to clipboard
       await Clipboard.setData(ClipboardData(text: downloadUrl));
-      _showSuccess('Download link copied to clipboard');
+      _sections.feedback.showSuccess('Download link copied to clipboard');
     } catch (e) {
-      _showError('Failed to get download link: $e');
+      _sections.feedback.showError('Failed to get download link: $e');
     }
   }
 }
@@ -6161,46 +4996,46 @@ Map<String, Object?> debridDownloadsTestAccess(State<DebridDownloadsScreen> stat
     'searchResults': s._folderSearch.searchResults,
     'torrentSearchFocusNode': s._focus.torrentSearchFocusNode,
     'torrentSearchClearFocusNode': s._focus.torrentSearchClearFocusNode,
-    'activeSelectedIds': s._activeSelectedIds,
-    'activeItemCount': s._activeItemCount,
-    'isAllSelected': s._isAllSelected,
-    'focusFirstItemOrFallback': s._focusFirstItemOrFallback,
-    'handleBackNavigation': s._handleBackNavigation,
-    'onTorrentScroll': s._onTorrentScroll,
-    'onDownloadScroll': s._onDownloadScroll,
-    'loadApiKeyAndData': s._loadApiKeyAndData,
-    'fetchTorrents': s._fetchTorrents,
-    'loadMoreTorrents': s._loadMoreTorrents,
+    'activeSelectedIds': s._sections.selectionActions.activeSelectedIds,
+    'activeItemCount': s._sections.selectionActions.activeItemCount,
+    'isAllSelected': s._sections.selectionActions.isAllSelected,
+    'focusFirstItemOrFallback': s._sections.focusActions.focusFirstItemOrFallback,
+    'handleBackNavigation': s._sections.backNavigation.handleBackNavigation,
+    'onTorrentScroll': s._sections.catalogLoading.onTorrentScroll,
+    'onDownloadScroll': s._sections.catalogLoading.onDownloadScroll,
+    'loadApiKeyAndData': s._sections.catalogLoading.loadApiKeyAndData,
+    'fetchTorrents': s._sections.catalogLoading.fetchTorrents,
+    'loadMoreTorrents': s._sections.catalogLoading.loadMoreTorrents,
     'toggleTorrentSearch': s._toggleTorrentSearch,
     'queryMatchesInitialTitle': s._queryMatchesInitialTitle,
     'submitTorrentSearch': s._submitTorrentSearch,
     'completeTorrentSearchSubmitFocus': s._completeTorrentSearchSubmitFocus,
     'fetchAllTorrentsForSearch': s._fetchAllTorrentsForSearch,
     'filteredSearchTorrents': s._filteredSearchTorrents,
-    'fetchDownloads': s._fetchDownloads,
-    'loadMoreDownloads': s._loadMoreDownloads,
-    'handleDownloadAction': s._handleDownloadAction,
-    'handlePlayDownload': s._handlePlayDownload,
-    'handleQueueDownload': s._handleQueueDownload,
-    'handleDeleteTorrent': s._handleDeleteTorrent,
-    'handleDeleteAllTorrents': s._handleDeleteAllTorrents,
-    'showDeleteAllProgressDialog': s._showDeleteAllProgressDialog,
-    'handleDeleteAllDownloads': s._handleDeleteAllDownloads,
-    'showDeleteAllDownloadsProgressDialog': s._showDeleteAllDownloadsProgressDialog,
-    'handleDeleteDownload': s._handleDeleteDownload,
-    'toggleSelectionMode': s._toggleSelectionMode,
-    'exitSelectionMode': s._exitSelectionMode,
-    'toggleTorrentSelection': s._toggleTorrentSelection,
-    'toggleDownloadSelection': s._toggleDownloadSelection,
-    'toggleSelectAll': s._toggleSelectAll,
-    'handleDeleteSelected': s._handleDeleteSelected,
-    'showDeleteSelectedProgressDialog': s._showDeleteSelectedProgressDialog,
-    'copyToClipboard': s._copyToClipboard,
-    'showSuccess': s._showSuccess,
+    'fetchDownloads': s._sections.catalogLoading.fetchDownloads,
+    'loadMoreDownloads': s._sections.catalogLoading.loadMoreDownloads,
+    'handleDownloadAction': s._sections.downloadRowActions.handleDownloadAction,
+    'handlePlayDownload': s._sections.downloadRowActions.handlePlayDownload,
+    'handleQueueDownload': s._sections.downloadRowActions.handleQueueDownload,
+    'handleDeleteTorrent': s._sections.singleDeleteActions.handleDeleteTorrent,
+    'handleDeleteAllTorrents': s._sections.deleteAllActions.handleDeleteAllTorrents,
+    'showDeleteAllProgressDialog': s._sections.torrentBulkDelete.showDeleteAllProgressDialog,
+    'handleDeleteAllDownloads': s._sections.deleteAllActions.handleDeleteAllDownloads,
+    'showDeleteAllDownloadsProgressDialog': s._sections.downloadBulkDelete.showDeleteAllDownloadsProgressDialog,
+    'handleDeleteDownload': s._sections.singleDeleteActions.handleDeleteDownload,
+    'toggleSelectionMode': s._sections.selectionActions.toggleSelectionMode,
+    'exitSelectionMode': s._sections.selectionActions.exitSelectionMode,
+    'toggleTorrentSelection': s._sections.selectionActions.toggleTorrentSelection,
+    'toggleDownloadSelection': s._sections.selectionActions.toggleDownloadSelection,
+    'toggleSelectAll': s._sections.selectionActions.toggleSelectAll,
+    'handleDeleteSelected': s._sections.selectionActions.handleDeleteSelected,
+    'showDeleteSelectedProgressDialog': s._sections.selectedDelete.showDeleteSelectedProgressDialog,
+    'copyToClipboard': s._sections.feedback.copyToClipboard,
+    'showSuccess': s._sections.feedback.showSuccess,
     'getUserFriendlyErrorMessage': getUserFriendlyErrorMessage,
     'getLinkUnrestrictErrorMessage': getLinkUnrestrictErrorMessage,
-    'showError': s._showError,
-    'resetListScroll': s._resetListScroll,
+    'showError': s._sections.feedback.showError,
+    'resetListScroll': s._sections.catalogLoading.resetListScroll,
     'navigateIntoTorrent': s._navigateIntoTorrent,
     'navigateIntoFolder': s._navigateIntoFolder,
     'navigateUp': s._navigateUp,

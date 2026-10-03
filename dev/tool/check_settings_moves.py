@@ -88,6 +88,13 @@ def remove_context_exceptions(node, sites, rows, row):
         elif site['kind'] == 'formatter_if_braces':
             pattern = ['{', *site['body_tokens'], '}']
             matches = [i for i in range(len(code)) if values[i:i + len(pattern)] == pattern]
+            # Identical original bodies can occur elsewhere. Only the complete
+            # recorded prefix selects this site; other bodies remain verbatim.
+            if len(matches) > 1:
+                matches = [i for i in matches if (
+                    tokens(node, end=code[i]['offset']) if site.get('prefix_mode') == 'raw'
+                    else normalize(tokens(node, end=code[i]['offset']), rows, row)
+                ) == site['prefix_tokens']]
             if len(matches) != 1:
                 raise ValueError('Recorded formatter if body changed or is not wrapped exactly once')
             i = matches[0]
@@ -1134,6 +1141,30 @@ def self_test(package=None):
         if braces_valid(text):
             raise AssertionError('Accepted ' + label)
         print('Settings self-test ' + label + ': rejected')
+    repeated_original = method('void action() { if (first) { work(); } if (second) work(); if (third) { work(); } }')
+    repeated_code = [t for t in repeated_original['tokens'] if not t['comment']]
+    second_offset = [t['offset'] for t in repeated_code if t['text'] == 'work'][1]
+    repeated_site = dict(kind='formatter_if_braces', body_tokens=['work', '(', ')', ';'],
+                         prefix_mode='raw', prefix_tokens=tokens(repeated_original, end=second_offset))
+    repeated_good = 'void action() { if (first) { work(); } if (second) { work(); } if (third) { work(); } }'
+    def repeated_valid(text):
+        try:
+            stripped = remove_context_exceptions(method(text), [repeated_site], [], None)
+        except ValueError:
+            return False
+        return tokens(stripped) == tokens(repeated_original)
+    if not repeated_valid(repeated_good):
+        raise AssertionError('Exact repeated-body formatter site rejected')
+    for label, text in {
+        'repeated body changed elsewhere': repeated_good.replace('work();', 'changed();', 1),
+        'repeated body guard changed': repeated_good.replace('second', 'changed'),
+        'repeated body extra braces elsewhere': repeated_good.replace('{ work(); }', '{ { work(); } }', 1),
+        'repeated body original braces removed': repeated_good.replace('{ work(); }', 'work();', 1),
+    }.items():
+        if repeated_valid(text):
+            raise AssertionError('Accepted ' + label)
+        print('Settings self-test ' + label + ': rejected')
+    print('Settings self-test exact repeated-body formatter site: passed')
     before = method('List<Object> entries() { final x = 1; return [x, if (true) ...[2, 3], for (final n in [4]) n]; }')
     good = [method('List<Object> one() { return [x]; }'),
             method('List<Object> two() { return [if (true) ...[2, 3], for (final n in [4]) n]; }')]

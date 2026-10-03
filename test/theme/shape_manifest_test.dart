@@ -35,7 +35,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
-  'lib/screens/debrid_downloads_screen.dart': 23,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_bulk_delete.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selected_delete.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_feedback.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_bulk_delete.dart': 0,
+  'lib/screens/debrid_downloads_screen.dart': 18,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_options.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_options.dart':
@@ -176,8 +180,16 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_add_input_state.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search_state.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_focus_state.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_single_delete_actions.dart': 2,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_loading.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_row_actions.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search_state.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_delete_all_actions.dart': 2,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_state.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_back_navigation.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_focus_actions.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_actions.dart': 1,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_sections.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_view_state.dart': 0,
   'lib/features/debrid_downloads/application/debrid_input_policy.dart': 0,
   'lib/features/debrid_downloads/application/debrid_error_policy.dart': 0,

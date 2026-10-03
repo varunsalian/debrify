@@ -194,78 +194,78 @@ Actual bindings are reviewed against original reads/signatures and this inventor
 
 | Section | Dependency | Expected binding and contract | Status before pinning |
 | --- | --- | --- | --- |
-| `focus_actions` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `focus_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `focus_actions` | `navigation_state` (`DebridNavigationState`) | _nav: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `focus_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `focus_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `back_navigation` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `back_navigation` | `selection_state` (`DebridSelectionState`) | _selection: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `back_navigation` | `exitSelectionMode` (`void Function()`) | DebridSelectionActions.exitSelectionMode at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `back_navigation` | `folder_search_state` (`DebridFolderSearchState`) | _folderSearch: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `back_navigation` | `toggleSearch` (`void Function()`) | DebridFolderSearch.toggleSearch at step 4; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `back_navigation` | `navigation_state` (`DebridNavigationState`) | _nav: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `back_navigation` | `navigateUp` (`void Function()`) | DebridFolderNavigation.navigateUp at step 4; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `back_navigation` | `selectSourceMode` (`bool Function()`) | () => widget.selectSourceMode: live getter, never a snapshot | [ ] Step 3 actual binding pending |
-| `back_navigation` | `isPushedRoute` (`bool Function()`) | () => widget.isPushedRoute: live getter, never a snapshot | [ ] Step 3 actual binding pending |
-| `back_navigation` | `initialTorrentForOptions` (`RDTorrent? Function()`) | () => widget.initialTorrentForOptions: live getter, never a snapshot | [ ] Step 3 actual binding pending |
-| `catalog_loading` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `catalog_loading` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `catalog_loading` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `catalog_loading` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `catalog_loading` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `catalog_loading` | `submitTorrentSearch` (`void Function()`) | DebridTorrentSearch.submitTorrentSearch at step 4; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `catalog_loading` | `initialSearchQuery` (`String? Function()`) | () => widget.initialSearchQuery: live getter, never a snapshot | [ ] Step 3 actual binding pending |
-| `catalog_loading` | `focusFirstItemOrFallback` (`void Function()`) | DebridFocusActions.focusFirstItemOrFallback at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `download_row_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `download_row_actions` | `copyToClipboard` (`void Function(String text)`) | DebridFeedback.copyToClipboard at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `download_row_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `download_row_actions` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `download_row_actions` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `single_delete_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `single_delete_actions` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `single_delete_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `single_delete_actions` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `single_delete_actions` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `single_delete_actions` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `single_delete_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `delete_all_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `delete_all_actions` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `delete_all_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `delete_all_actions` | `showDeleteAllProgressDialog` (`Future<void> Function()`) | DebridTorrentBulkDelete.showDeleteAllProgressDialog at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `delete_all_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `delete_all_actions` | `showDeleteAllDownloadsProgressDialog` (`Future<void> Function()`) | DebridDownloadBulkDelete.showDeleteAllDownloadsProgressDialog at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `torrent_bulk_delete` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `torrent_bulk_delete` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `torrent_bulk_delete` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `torrent_bulk_delete` | `fetchTorrents` (`Future<void> Function(String apiKey, {bool reset})`) | DebridCatalogLoading.fetchTorrents at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `torrent_bulk_delete` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `torrent_bulk_delete` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `torrent_bulk_delete` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `download_bulk_delete` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `download_bulk_delete` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `download_bulk_delete` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `download_bulk_delete` | `fetchDownloads` (`Future<void> Function(String apiKey, {bool reset})`) | DebridCatalogLoading.fetchDownloads at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `download_bulk_delete` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `download_bulk_delete` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `download_bulk_delete` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `download_bulk_delete` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `selection_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `selection_actions` | `selection_state` (`DebridSelectionState`) | _selection: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `selection_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `selection_actions` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `selection_actions` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `selection_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `selection_actions` | `showDeleteSelectedProgressDialog` (`Future<void> Function(Set<String> ids, bool isTorrents)`) | DebridSelectedDelete.showDeleteSelectedProgressDialog at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `selected_delete` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `selected_delete` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `selected_delete` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `selected_delete` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `selected_delete` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `selected_delete` | `selection_state` (`DebridSelectionState`) | _selection: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `selected_delete` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `selected_delete` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `feedback` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
+| `focus_actions` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `focus_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `focus_actions` | `navigation_state` (`DebridNavigationState`) | _nav: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `focus_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `focus_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `selection_state` (`DebridSelectionState`) | _selection: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `exitSelectionMode` (`void Function()`) | DebridSelectionActions.exitSelectionMode at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `folder_search_state` (`DebridFolderSearchState`) | _folderSearch: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `toggleSearch` (`void Function()`) | DebridFolderSearch.toggleSearch at step 4; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `navigation_state` (`DebridNavigationState`) | _nav: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `navigateUp` (`void Function()`) | DebridFolderNavigation.navigateUp at step 4; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `selectSourceMode` (`bool Function()`) | () => widget.selectSourceMode: live getter, never a snapshot | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `isPushedRoute` (`bool Function()`) | () => widget.isPushedRoute: live getter, never a snapshot | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `initialTorrentForOptions` (`RDTorrent? Function()`) | () => widget.initialTorrentForOptions: live getter, never a snapshot | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `submitTorrentSearch` (`void Function()`) | DebridTorrentSearch.submitTorrentSearch at step 4; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `initialSearchQuery` (`String? Function()`) | () => widget.initialSearchQuery: live getter, never a snapshot | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `focusFirstItemOrFallback` (`void Function()`) | DebridFocusActions.focusFirstItemOrFallback at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `download_row_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `download_row_actions` | `copyToClipboard` (`void Function(String text)`) | DebridFeedback.copyToClipboard at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `download_row_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `download_row_actions` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `download_row_actions` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `single_delete_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `single_delete_actions` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `single_delete_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `single_delete_actions` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `single_delete_actions` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `single_delete_actions` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `single_delete_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `delete_all_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `delete_all_actions` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `delete_all_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `delete_all_actions` | `showDeleteAllProgressDialog` (`Future<void> Function()`) | DebridTorrentBulkDelete.showDeleteAllProgressDialog at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `delete_all_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `delete_all_actions` | `showDeleteAllDownloadsProgressDialog` (`Future<void> Function()`) | DebridDownloadBulkDelete.showDeleteAllDownloadsProgressDialog at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `torrent_bulk_delete` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_bulk_delete` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `torrent_bulk_delete` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_bulk_delete` | `fetchTorrents` (`Future<void> Function(String apiKey, {bool reset})`) | DebridCatalogLoading.fetchTorrents at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `torrent_bulk_delete` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_bulk_delete` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `torrent_bulk_delete` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `download_bulk_delete` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `download_bulk_delete` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `download_bulk_delete` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `download_bulk_delete` | `fetchDownloads` (`Future<void> Function(String apiKey, {bool reset})`) | DebridCatalogLoading.fetchDownloads at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `download_bulk_delete` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `download_bulk_delete` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `download_bulk_delete` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `download_bulk_delete` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `selection_state` (`DebridSelectionState`) | _selection: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `showDeleteSelectedProgressDialog` (`Future<void> Function(Set<String> ids, bool isTorrents)`) | DebridSelectedDelete.showDeleteSelectedProgressDialog at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `selected_delete` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `selected_delete` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `selected_delete` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `selected_delete` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `selected_delete` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `selected_delete` | `selection_state` (`DebridSelectionState`) | _selection: original one owner, borrowed; lifecycle identity | [x] Step 3 actual binding reviewed |
+| `selected_delete` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `selected_delete` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
+| `feedback` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
 | `folder_navigation` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
 | `folder_navigation` | `exitSelectionMode` (`void Function()`) | DebridSelectionActions.exitSelectionMode at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 4 actual binding pending |
 | `folder_navigation` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
