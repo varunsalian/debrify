@@ -1,5 +1,4 @@
 import 'package:debrify/features/pikpak_files/models/folder_view_mode.dart';
-import 'package:debrify/features/pikpak_files/models/pikpak_playlist_item.dart';
 import 'package:debrify/features/pikpak_files/models/pikpak_search_result.dart';
 import 'package:debrify/features/pikpak_files/application/pikpak_sort_policy.dart';
 import 'package:debrify/features/pikpak_files/application/pikpak_playlist_titles.dart';
@@ -12,26 +11,18 @@ import 'package:debrify/features/pikpak_files/presentation/legacy_pikpak/pikpak_
 import 'package:debrify/features/pikpak_files/presentation/legacy_pikpak/pikpak_search_state.dart';
 import 'package:debrify/features/pikpak_files/presentation/legacy_pikpak/pikpak_link_state.dart';
 import 'package:debrify/features/pikpak_files/presentation/legacy_pikpak/pikpak_composition.dart';
-import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:convert';
-import '../../screens/video_player_screen.dart';
 import '../../services/analytics_service.dart';
-import '../../services/pikpak_api_service.dart';
-import '../../services/download_service.dart';
-import '../../services/video_player_launcher.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/series_source_service.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
-import '../../utils/series_parser.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/cloud/cloud_file_row.dart';
 import '../../widgets/cloud/cloud_row_skeleton.dart';
 import '../../widgets/cloud/cloud_theme.dart';
-import '../../widgets/file_selection_dialog.dart';
 import '../../widgets/tv_text_field.dart';
 
 class PikPakFilesScreen extends StatefulWidget {
@@ -193,381 +184,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     _search.searchClearFocusNode.dispose();
     _focus.deleteButtonFocusNode.dispose();
     super.dispose();
-  }
-
-  Future<void> _playFile(Map<String, dynamic> fileData) async {
-    try {
-      // Check if it's a folder
-      final kind = fileData['kind'];
-      if (kind == 'drive#folder') {
-        _sections.feedback.showSnackBar(
-          'Cannot play folders. Please select a video file.',
-          isError: true,
-        );
-        return;
-      }
-
-      // Check if it's a video
-      final mimeType = fileData['mime_type'] ?? '';
-      if (!mimeType.startsWith('video/')) {
-        _sections.feedback.showSnackBar(
-          'Only video files can be played',
-          isError: true,
-        );
-        return;
-      }
-
-      // CRITICAL FIX: Fetch fresh file details with download URLs
-      // listFiles() returns empty web_content_link/medias, so we need to call
-      // getFileDetails() with usage=FETCH to get populated download URLs
-      final fileId = fileData['id'];
-
-      // Show loading indicator
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) =>
-            const Center(child: CircularProgressIndicator()),
-      );
-
-      Map<String, dynamic> freshFileData;
-      try {
-        freshFileData = await PikPakApiService.instance.getFileDetails(fileId);
-      } finally {
-        // Close loading indicator
-        if (mounted) {
-          Navigator.of(context, rootNavigator: true).pop();
-        }
-      }
-
-      // Extract streaming URL from fresh data
-      final streamingUrl = PikPakApiService.instance.getStreamingUrl(
-        freshFileData,
-      );
-
-      if (streamingUrl == null || streamingUrl.isEmpty) {
-        _sections.feedback.showSnackBar(
-          'No streaming URL available for this file',
-          isError: true,
-        );
-        return;
-      }
-
-      // Links ready - play the video
-      if (!mounted) return;
-
-      await VideoPlayerLauncher.push(
-        context,
-        VideoPlayerLaunchArgs(
-          videoUrl: streamingUrl,
-          title: freshFileData['name'] ?? 'Video',
-        ),
-      );
-    } catch (e) {
-      print('Error playing file: $e');
-      _sections.feedback.showSnackBar(
-        'Failed to play video: $e',
-        isError: true,
-      );
-    }
-  }
-
-  /// Download a single file
-  Future<void> _downloadFile(Map<String, dynamic> file) async {
-    final fileId = file['id'] as String?;
-    final fileName = file['name'] ?? 'download';
-
-    if (fileId == null) {
-      _sections.feedback.showSnackBar('Invalid file ID', isError: true);
-      return;
-    }
-
-    // Check if it's a folder
-    final kind = file['kind'];
-    if (kind == 'drive#folder') {
-      _sections.feedback.showSnackBar(
-        'Cannot download folders directly. Use Download button on folder.',
-        isError: true,
-      );
-      return;
-    }
-
-    try {
-      // Show loading indicator
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text(
-                'Preparing download...',
-                style: TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-        ),
-      );
-
-      // Get fresh file details with download URLs
-      Map<String, dynamic> freshFileData;
-      try {
-        freshFileData = await PikPakApiService.instance.getFileDetails(fileId);
-      } catch (e) {
-        // Close loading indicator
-        if (mounted) {
-          Navigator.of(context, rootNavigator: true).pop();
-        }
-        _sections.feedback.showSnackBar(
-          'Failed to get download URL: $e',
-          isError: true,
-        );
-        return;
-      }
-
-      // Extract download URL (use web_content_link for all files)
-      final downloadUrl = freshFileData['web_content_link'] as String?;
-
-      // Close loading indicator
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-
-      if (downloadUrl == null || downloadUrl.isEmpty) {
-        _sections.feedback.showSnackBar(
-          'No download URL available for this file',
-          isError: true,
-        );
-        return;
-      }
-
-      // Prepare metadata for download service
-      final meta = jsonEncode({
-        'pikpakDownload': true,
-        'pikpakFileId': fileId,
-        'pikpakFileName': fileName,
-      });
-
-      // Enqueue download
-      await DownloadService.instance.enqueueDownload(
-        credentialKey: 'pikpak_email',
-        url: downloadUrl,
-        fileName: fileName,
-        meta: meta,
-        context: mounted ? context : null,
-      );
-
-      _sections.feedback.showSnackBar(
-        'Download queued: $fileName',
-        isError: false,
-      );
-    } catch (e) {
-      print('Error downloading file: $e');
-      // Close loading indicator if still open
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-      _sections.feedback.showSnackBar('Failed to download: $e', isError: true);
-    }
-  }
-
-  /// Download all files in a folder with file selection dialog
-  /// Works for both root folders and subfolders
-  /// When downloading a subfolder, only shows that subfolder's contents (not parent structure)
-  Future<void> _downloadFolder(Map<String, dynamic> folder) async {
-    final folderId = folder['id'] as String?;
-    final folderName = folder['name'] ?? 'Folder';
-
-    if (folderId == null) {
-      _sections.feedback.showSnackBar('Invalid folder ID', isError: true);
-      return;
-    }
-
-    // Show loading dialog
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(
-              'Scanning folder for files...',
-              style: TextStyle(color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      // Recursively scan folder for all files WITH path tracking
-      // This ensures the dialog shows folder structure starting from this folder
-      final allFiles = await PikPakApiService.instance.listFilesRecursive(
-        folderId: folderId,
-        includePaths: true, // Enable path tracking for folder structure
-      );
-
-      // Close loading dialog
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-
-      if (!mounted) return;
-
-      // Filter out folders, keep only files
-      final filesOnly = allFiles.where((file) {
-        final kind = file['kind'] ?? '';
-        return kind != 'drive#folder';
-      }).toList();
-
-      if (filesOnly.isEmpty) {
-        _sections.feedback.showSnackBar(
-          'This folder doesn\'t contain any files',
-          isError: true,
-        );
-        return;
-      }
-
-      // Show file selection dialog
-      await showDialog(
-        context: context,
-        builder: (context) => FileSelectionDialog(
-          files: filesOnly,
-          torrentName: folderName,
-          onDownload: (selectedFiles) {
-            _downloadSelectedPikPakFiles(selectedFiles, folderName);
-          },
-        ),
-      );
-    } catch (e) {
-      print('Error downloading folder: $e');
-      if (mounted) {
-        // Close loading dialog if still open
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-      _sections.feedback.showSnackBar(
-        'Failed to scan folder: $e',
-        isError: true,
-      );
-    }
-  }
-
-  /// Download selected PikPak files from the file selection dialog
-  /// Handles error reporting and uses folder name for download organization
-  Future<void> _downloadSelectedPikPakFiles(
-    List<Map<String, dynamic>> selectedFiles,
-    String folderName,
-  ) async {
-    if (selectedFiles.isEmpty) {
-      _sections.feedback.showSnackBar('No files selected', isError: true);
-      return;
-    }
-
-    int successCount = 0;
-    int failCount = 0;
-
-    // Show progress indicator
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(
-              'Queuing ${selectedFiles.length} file${selectedFiles.length == 1 ? '' : 's'}...',
-              style: const TextStyle(color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      for (final file in selectedFiles) {
-        try {
-          final fileId = file['id'] as String?;
-          // Use _fullPath if available (from path tracking), otherwise use original name
-          final fileName =
-              (file['_fullPath'] as String?) ?? file['name'] ?? 'download';
-
-          if (fileId == null) {
-            failCount++;
-            continue;
-          }
-
-          // Get fresh file details with download URLs
-          final freshFileData = await PikPakApiService.instance.getFileDetails(
-            fileId,
-          );
-          final downloadUrl = freshFileData['web_content_link'] as String?;
-
-          if (downloadUrl == null || downloadUrl.isEmpty) {
-            failCount++;
-            continue;
-          }
-
-          // Prepare metadata for download service
-          final meta = jsonEncode({
-            'pikpakDownload': true,
-            'pikpakFileId': fileId,
-            'pikpakFileName': fileName,
-          });
-
-          // Enqueue download with folder name for organization
-          await DownloadService.instance.enqueueDownload(
-            credentialKey: 'pikpak_email',
-            url: downloadUrl,
-            fileName: fileName,
-            meta: meta,
-            torrentName: folderName, // Use folder name for organization
-            context: mounted ? context : null,
-          );
-
-          successCount++;
-        } catch (e) {
-          print('Error queuing file for download: $e');
-          failCount++;
-        }
-      }
-    } finally {
-      // Close progress dialog
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
-
-    if (!mounted) return;
-
-    // Show result
-    if (successCount > 0 && failCount == 0) {
-      _sections.feedback.showSnackBar(
-        'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
-        isError: false,
-      );
-    } else if (successCount > 0 && failCount > 0) {
-      _sections.feedback.showSnackBar(
-        'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
-        isError: true,
-      );
-    } else {
-      _sections.feedback.showSnackBar(
-        'Failed to queue any files for download',
-        isError: true,
-      );
-    }
   }
 
   // --- Multi-select helpers ---
@@ -801,7 +417,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: () => _playFile(file),
+          onTap: () => _sections.filePlayback.playFile(file),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -1009,7 +625,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             IconButton(
               focusNode: _focus.addLinkButtonFocusNode,
               icon: const Icon(Icons.add_link),
-              onPressed: _catalog.isLoading ? null : _showAddLinkDialog,
+              onPressed: _catalog.isLoading
+                  ? null
+                  : _sections.linkActions.showAddLinkDialog,
               tooltip: 'Add Link',
               iconSize: actionIconSize,
               padding: actionIconPadding,
@@ -1373,9 +991,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             showInStrip: true,
             onSelected: () {
               if (isFolder) {
-                _playFolder(file);
+                _sections.folderPlayback.playFolder(file);
               } else {
-                _playFile(file);
+                _sections.filePlayback.playFile(file);
               }
             },
           ),
@@ -1385,16 +1003,16 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           showInStrip: true,
           onSelected: () {
             if (isFolder) {
-              _downloadFolder(file);
+              _sections.folderDownload.downloadFolder(file);
             } else {
-              _downloadFile(file);
+              _sections.fileDownload.downloadFile(file);
             }
           },
         ),
         CloudRowAction(
           icon: Icons.playlist_add,
           label: 'Add to Playlist',
-          onSelected: () => _handleAddToPlaylist(file),
+          onSelected: () => _sections.playlistActions.handleAddToPlaylist(file),
         ),
         CloudRowAction(
           icon: Icons.delete_outline,
@@ -1443,7 +1061,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           ? () =>
                 _sections.folderNavigation.navigateIntoFolder(file['id'], name)
           : (isVideo && isComplete)
-          ? () => _playFile(file)
+          ? () => _sections.filePlayback.playFile(file)
           : null,
       actions: actions,
       selectionMode: _selection.isSelectionMode,
@@ -1477,679 +1095,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
   }
 
-  /// Play all videos in a folder (recursively scans subfolders)
-  Future<void> _playFolder(Map<String, dynamic> folder) async {
-    final folderId = folder['id'] as String?;
-    final folderName = folder['name'] ?? 'Folder';
-
-    if (folderId == null) {
-      _sections.feedback.showSnackBar('Invalid folder ID', isError: true);
-      return;
-    }
-
-    // Show loading dialog
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(
-              'Scanning folder for videos...',
-              style: TextStyle(color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      // Recursively scan folder for all files (includePaths for auxiliary folder detection)
-      final allFiles = await PikPakApiService.instance.listFilesRecursive(
-        folderId: folderId,
-        includePaths: true,
-      );
-
-      // Close loading dialog
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-
-      if (!mounted) return;
-
-      // Filter for videos only
-      List<Map<String, dynamic>> videoFiles = allFiles.where((file) {
-        final mimeType = file['mime_type'] ?? '';
-        final phase = file['phase'] ?? '';
-        final isVideo = mimeType.startsWith('video/');
-        final isComplete = phase == 'PHASE_TYPE_COMPLETE';
-        return isVideo && isComplete;
-      }).toList();
-
-      // Apply user settings filters
-      if (_catalog.showVideosOnly) {
-        // Already filtered for videos above
-      }
-
-      if (_catalog.ignoreSmallVideos) {
-        videoFiles = videoFiles.where((file) {
-          final size = file['size'];
-          if (size == null) return true;
-          final sizeBytes = int.tryParse(size.toString()) ?? 0;
-          final sizeMB = sizeBytes / (1024 * 1024);
-          return sizeMB >= 100;
-        }).toList();
-      }
-
-      if (videoFiles.isEmpty) {
-        _sections.feedback.showSnackBar(
-          'This folder doesn\'t contain any videos',
-          isError: true,
-        );
-        return;
-      }
-
-      // Same logic the retired TorrentSearchScreen used
-      await _playPikPakVideos(videoFiles, folderName);
-    } catch (e) {
-      print('Error playing folder: $e');
-      if (mounted) {
-        // Close loading dialog if still open
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-      _sections.feedback.showSnackBar(
-        'Failed to scan folder: $e',
-        isError: true,
-      );
-    }
-  }
-
-  /// Play PikPak videos (single or playlist) - mirrors the retired TorrentSearchScreen
-  Future<void> _playPikPakVideos(
-    List<Map<String, dynamic>> videoFiles,
-    String collectionName,
-  ) async {
-    if (videoFiles.isEmpty) return;
-
-    final pikpak = PikPakApiService.instance;
-
-    // Single video - play with playlist entry for consistent resume key
-    if (videoFiles.length == 1) {
-      final file = videoFiles.first;
-      try {
-        final fullData = await pikpak.getFileDetails(file['id']);
-        final url = pikpak.getStreamingUrl(fullData);
-        if (url != null && mounted) {
-          final sizeBytes = int.tryParse(file['size']?.toString() ?? '0') ?? 0;
-          final title = file['name'] ?? collectionName;
-          await VideoPlayerLauncher.push(
-            context,
-            VideoPlayerLaunchArgs(
-              videoUrl: url,
-              title: title,
-              subtitle: Formatters.formatFileSize(sizeBytes),
-              playlist: [
-                PlaylistEntry(
-                  url: url,
-                  title: title,
-                  relativePath: file['_fullPath'] as String?,
-                  provider: 'pikpak',
-                  pikpakFileId: file['id'],
-                  sizeBytes: sizeBytes,
-                ),
-              ],
-              startIndex: 0,
-            ),
-          );
-        }
-      } catch (e) {
-        _sections.feedback.showSnackBar(
-          'Failed to play: ${e.toString()}',
-          isError: true,
-        );
-      }
-      return;
-    }
-
-    // Multiple videos - build playlist
-    final entries = <PikPakPlaylistItem>[];
-    for (int i = 0; i < videoFiles.length; i++) {
-      final file = videoFiles[i];
-      final displayName = pikpakDisplayName(file);
-      final info = SeriesParser.parseFilename(displayName);
-      entries.add(
-        PikPakPlaylistItem(
-          file: file,
-          originalIndex: i,
-          seriesInfo: info,
-          displayName: displayName,
-        ),
-      );
-    }
-
-    // Detect if it's a series collection
-    final filenames = entries.map((e) => e.displayName).toList();
-    final bool isSeriesCollection =
-        entries.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
-
-    // Sort entries
-    final sortedEntries = [...entries];
-    if (isSeriesCollection) {
-      sortedEntries.sort((a, b) {
-        final aInfo = a.seriesInfo;
-        final bInfo = b.seriesInfo;
-        final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
-        if (seasonCompare != 0) return seasonCompare;
-        final episodeCompare = (aInfo.episode ?? 0).compareTo(
-          bInfo.episode ?? 0,
-        );
-        if (episodeCompare != 0) return episodeCompare;
-        return a.displayName.toLowerCase().compareTo(
-          b.displayName.toLowerCase(),
-        );
-      });
-    } else {
-      sortedEntries.sort(
-        (a, b) =>
-            a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
-      );
-    }
-
-    // Find first episode to start from
-    final seriesInfos = sortedEntries.map((e) => e.seriesInfo).toList();
-    int startIndex = isSeriesCollection
-        ? findFirstEpisodeIndex(seriesInfos)
-        : 0;
-    if (startIndex < 0 || startIndex >= sortedEntries.length) {
-      startIndex = 0;
-    }
-
-    // Resolve only the first video URL (lazy loading for rest)
-    String initialUrl = '';
-    try {
-      final firstFile = sortedEntries[startIndex].file;
-      final fullData = await pikpak.getFileDetails(firstFile['id']);
-      initialUrl = pikpak.getStreamingUrl(fullData) ?? '';
-    } catch (e) {
-      _sections.feedback.showSnackBar(
-        'Failed to prepare stream: ${e.toString()}',
-        isError: true,
-      );
-      return;
-    }
-
-    if (initialUrl.isEmpty) {
-      _sections.feedback.showSnackBar(
-        'Could not get streaming URL',
-        isError: true,
-      );
-      return;
-    }
-
-    // Build playlist entries
-    final playlistEntries = <PlaylistEntry>[];
-    for (int i = 0; i < sortedEntries.length; i++) {
-      final entry = sortedEntries[i];
-      final seriesInfo = entry.seriesInfo;
-      final episodeLabel = formatPikPakPlaylistTitle(
-        info: seriesInfo,
-        fallback: entry.displayName,
-        isSeriesCollection: isSeriesCollection,
-      );
-      final combinedTitle = combineSeriesAndEpisodeTitle(
-        seriesTitle: seriesInfo.title,
-        episodeLabel: episodeLabel,
-        isSeriesCollection: isSeriesCollection,
-        fallback: entry.displayName,
-      );
-      playlistEntries.add(
-        PlaylistEntry(
-          url: i == startIndex ? initialUrl : '',
-          title: combinedTitle,
-          relativePath: entry.file['_fullPath'] as String?,
-          provider: 'pikpak',
-          pikpakFileId: entry.file['id'],
-          sizeBytes: int.tryParse(entry.file['size']?.toString() ?? '0'),
-        ),
-      );
-    }
-
-    // Calculate subtitle
-    final totalBytes = sortedEntries.fold<int>(
-      0,
-      (sum, e) => sum + (int.tryParse(e.file['size']?.toString() ?? '0') ?? 0),
-    );
-    final subtitle =
-        '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
-
-    if (!mounted) return;
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: initialUrl,
-        title: collectionName,
-        subtitle: subtitle,
-        playlist: playlistEntries,
-        startIndex: startIndex,
-      ),
-    );
-  }
-
-  /// Handle adding a file or folder to playlist
-  Future<void> _handleAddToPlaylist(Map<String, dynamic> file) async {
-    final kind = file['kind'] ?? '';
-    final isFolder = kind == 'drive#folder';
-
-    if (isFolder) {
-      await _addFolderToPlaylist(file);
-    } else {
-      await _addSingleFileToPlaylist(file);
-    }
-  }
-
-  /// Add a single video file to playlist
-  Future<void> _addSingleFileToPlaylist(Map<String, dynamic> file) async {
-    final mimeType = file['mime_type'] ?? '';
-    final isVideo = mimeType.startsWith('video/');
-
-    if (!isVideo) {
-      _sections.feedback.showSnackBar(
-        'Only video files can be added to playlist',
-        isError: true,
-      );
-      return;
-    }
-
-    final added = await PlaylistStorage.addPlaylistItemRaw({
-      'provider': 'pikpak',
-      'title': FileUtils.cleanPlaylistTitle(file['name'] ?? 'Video'),
-      'kind': 'single',
-      'pikpakFileId': file['id'],
-      // Store full metadata for instant playback
-      'pikpakFile': {
-        'id': file['id'],
-        'name': file['name'],
-        'size': file['size'],
-        'mime_type': file['mime_type'],
-      },
-      'sizeBytes': int.tryParse(file['size']?.toString() ?? '0'),
-    });
-
-    _sections.feedback.showSnackBar(
-      added ? 'Added to playlist' : 'Already in playlist',
-      isError: !added,
-    );
-  }
-
-  /// Add all videos in a folder to playlist (recursively scans subfolders)
-  Future<void> _addFolderToPlaylist(Map<String, dynamic> folder) async {
-    final folderId = folder['id'] as String?;
-    final folderName = folder['name'] ?? 'Folder';
-
-    if (folderId == null) {
-      _sections.feedback.showSnackBar('Invalid folder ID', isError: true);
-      return;
-    }
-
-    // Show loading dialog
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(
-              'Scanning folder for videos...',
-              style: TextStyle(color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      // Recursively scan folder for all files (includePaths for auxiliary folder detection)
-      final allFiles = await PikPakApiService.instance.listFilesRecursive(
-        folderId: folderId,
-        includePaths: true,
-      );
-
-      // Close loading dialog
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-
-      if (!mounted) return;
-
-      // Filter for videos only
-      List<Map<String, dynamic>> videoFiles = allFiles.where((file) {
-        final mimeType = file['mime_type'] ?? '';
-        final phase = file['phase'] ?? '';
-        final isVideo = mimeType.startsWith('video/');
-        final isComplete = phase == 'PHASE_TYPE_COMPLETE';
-        return isVideo && isComplete;
-      }).toList();
-
-      // Apply user settings filters
-      if (_catalog.ignoreSmallVideos) {
-        videoFiles = videoFiles.where((file) {
-          final size = file['size'];
-          if (size == null) return true;
-          final sizeBytes = int.tryParse(size.toString()) ?? 0;
-          final sizeMB = sizeBytes / (1024 * 1024);
-          return sizeMB >= 100;
-        }).toList();
-      }
-
-      if (videoFiles.isEmpty) {
-        _sections.feedback.showSnackBar(
-          'This folder doesn\'t contain any videos',
-          isError: true,
-        );
-        return;
-      }
-
-      // Add to playlist
-      if (videoFiles.length == 1) {
-        // Single video file - store full metadata for instant playback
-        final file = videoFiles.first;
-        final added = await PlaylistStorage.addPlaylistItemRaw({
-          'provider': 'pikpak',
-          'title': FileUtils.cleanPlaylistTitle(file['name'] ?? folderName),
-          'kind': 'single',
-          'pikpakFileId': file['id'],
-          'pikpakFile': {
-            'id': file['id'],
-            'name': file['name'],
-            'size': file['size'],
-            'mime_type': file['mime_type'],
-          },
-          'sizeBytes': int.tryParse(file['size']?.toString() ?? '0'),
-        });
-        _sections.feedback.showSnackBar(
-          added ? 'Added to playlist' : 'Already in playlist',
-          isError: !added,
-        );
-      } else {
-        // Multiple videos - save as collection with full metadata for instant playback
-        // Store both pikpakFiles (new format) and pikpakFileIds (for dedupe compatibility)
-        final fileIds = videoFiles.map((f) => f['id'] as String).toList();
-        final filesMetadata = videoFiles
-            .map(
-              (f) => {
-                'id': f['id'],
-                'name': f['name'],
-                'size': f['size'],
-                'mime_type': f['mime_type'],
-              },
-            )
-            .toList();
-
-        final added = await PlaylistStorage.addPlaylistItemRaw({
-          'provider': 'pikpak',
-          'title': FileUtils.cleanPlaylistTitle(folderName),
-          'kind': 'collection',
-          'pikpakFileId': folderId, // Store the folder ID for folder structure
-          'pikpakFiles':
-              filesMetadata, // NEW: Full metadata for instant playback
-          'pikpakFileIds':
-              fileIds, // KEEP: For backward compatibility and deduplication
-          'count': videoFiles.length,
-        });
-        _sections.feedback.showSnackBar(
-          added
-              ? 'Added ${videoFiles.length} videos to playlist'
-              : 'Already in playlist',
-          isError: !added,
-        );
-      }
-    } catch (e) {
-      print('Error adding folder to playlist: $e');
-      if (mounted) {
-        // Close loading dialog if still open
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-      _sections.feedback.showSnackBar(
-        'Failed to scan folder: $e',
-        isError: true,
-      );
-    }
-  }
-
   // ============================================================================
   // Add Link Dialog
   // ============================================================================
-
-  Future<void> _showAddLinkDialog() async {
-    // Auto-paste link from clipboard if available
-    await _autoPasteLink();
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Add Link',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Enter a link to download:',
-              style: TextStyle(color: Colors.grey, fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            Focus(
-              onKeyEvent: (node, event) {
-                if (event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                  node.nextFocus();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: TextField(
-                controller: _link.linkController,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: 'magnet:?xt=... or https://...',
-                  hintStyle: TextStyle(color: Colors.grey[600]),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF475569)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF475569)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFFFFAA00)),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
-                  ),
-                ),
-                maxLines: 3,
-                minLines: 1,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Supported: Magnet links, HTTP/HTTPS URLs',
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-            ),
-          ],
-        ),
-        actions: [
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    _link.linkController.clear();
-                    Navigator.of(context).pop();
-                  },
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    side: const BorderSide(color: Color(0xFF475569)),
-                  ),
-                  child: const Text('Cancel'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _link.isAddingLink ? null : _addLink,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    backgroundColor: const Color(0xFFFFAA00),
-                  ),
-                  child: _link.isAddingLink
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Add',
-                          style: TextStyle(color: Colors.black),
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _autoPasteLink() async {
-    try {
-      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-      if (clipboardData?.text != null) {
-        final text = clipboardData!.text!.trim();
-        // Check if it looks like a supported link
-        if (text.startsWith('http://') ||
-            text.startsWith('https://') ||
-            text.startsWith('magnet:')) {
-          _link.linkController.text = text;
-        }
-      }
-    } catch (e) {
-      debugPrint('Failed to read clipboard: $e');
-    }
-  }
-
-  Future<void> _addLink() async {
-    final link = _link.linkController.text.trim();
-    if (link.isEmpty) {
-      _sections.feedback.showSnackBar('Please enter a link', isError: true);
-      return;
-    }
-
-    if (!isValidPikPakLink(link)) {
-      _sections.feedback.showSnackBar(
-        'Please enter a valid URL or magnet link',
-        isError: true,
-      );
-      return;
-    }
-
-    Navigator.of(context).pop(); // Close the dialog
-
-    setState(() {
-      _link.isAddingLink = true;
-    });
-
-    // Show loading dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(color: Color(0xFFFFAA00)),
-            const SizedBox(height: 16),
-            const Text('Adding to PikPak...'),
-            const SizedBox(height: 8),
-            Text(
-              link.length > 50 ? '${link.substring(0, 50)}...' : link,
-              style: TextStyle(color: Colors.grey[500], fontSize: 12),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      final pikpak = PikPakApiService.instance;
-
-      // Use current folder if browsing, otherwise use restricted folder or root
-      final parentFolderId = _nav.currentFolderId ?? _nav.restrictedFolderId;
-
-      final result = await pikpak.addOfflineDownload(
-        link,
-        parentFolderId: parentFolderId,
-      );
-
-      if (!mounted) return;
-      Navigator.of(context).pop(); // Close loading dialog
-
-      // Extract file name from response
-      String? fileName;
-      if (result['file'] != null) {
-        fileName = result['file']['name'];
-      } else if (result['task'] != null) {
-        fileName = result['task']['name'];
-      }
-
-      _sections.feedback.showSnackBar(
-        'Added to PikPak${fileName != null ? ': $fileName' : ''}',
-        isError: false,
-      );
-
-      // Clear the controller and refresh
-      _link.linkController.clear();
-      _sections.feedback.refreshFiles();
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.of(context).pop(); // Close loading dialog
-
-      _sections.feedback.showSnackBar(
-        'Failed to add: ${e.toString()}',
-        isError: true,
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _link.isAddingLink = false;
-        });
-      }
-    }
-  }
 }
 
 /// Original-code characterization seam: fresh state and real action tear-offs.
@@ -2218,10 +1166,11 @@ Map<String, Object?> pikpakFilesTestAccess(State<PikPakFilesScreen> state) {
     'navigateUpWithVirtual': s._sections.folderNavigation.navigateUpWithVirtual,
     'navigateIntoVirtualFolder':
         s._sections.folderNavigation.navigateIntoVirtualFolder,
-    'playFile': s._playFile,
-    'downloadFile': s._downloadFile,
-    'downloadFolder': s._downloadFolder,
-    'downloadSelectedPikPakFiles': s._downloadSelectedPikPakFiles,
+    'playFile': s._sections.filePlayback.playFile,
+    'downloadFile': s._sections.fileDownload.downloadFile,
+    'downloadFolder': s._sections.folderDownload.downloadFolder,
+    'downloadSelectedPikPakFiles':
+        s._sections.folderDownload.downloadSelectedPikPakFiles,
     'refreshFiles': s._sections.feedback.refreshFiles,
     'showDeleteDialog': s._sections.deleteActions.showDeleteDialog,
     'deleteFile': s._sections.deleteActions.deleteFile,
@@ -2244,19 +1193,20 @@ Map<String, Object?> pikpakFilesTestAccess(State<PikPakFilesScreen> state) {
     'performSearch': s._sections.searchActions.performSearch,
     'isBrowsePush': s._isBrowsePush,
     'formatDate': s._formatDate,
-    'playFolder': s._playFolder,
-    'playPikPakVideos': s._playPikPakVideos,
-    'handleAddToPlaylist': s._handleAddToPlaylist,
-    'addSingleFileToPlaylist': s._addSingleFileToPlaylist,
-    'addFolderToPlaylist': s._addFolderToPlaylist,
+    'playFolder': s._sections.folderPlayback.playFolder,
+    'playPikPakVideos': s._sections.folderPlayback.playPikPakVideos,
+    'handleAddToPlaylist': s._sections.playlistActions.handleAddToPlaylist,
+    'addSingleFileToPlaylist':
+        s._sections.playlistActions.addSingleFileToPlaylist,
+    'addFolderToPlaylist': s._sections.playlistActions.addFolderToPlaylist,
     'pikpakDisplayName': pikpakDisplayName,
     'formatPikPakPlaylistTitle': formatPikPakPlaylistTitle,
     'combineSeriesAndEpisodeTitle': combineSeriesAndEpisodeTitle,
     'findFirstEpisodeIndex': findFirstEpisodeIndex,
-    'showAddLinkDialog': s._showAddLinkDialog,
-    'autoPasteLink': s._autoPasteLink,
+    'showAddLinkDialog': s._sections.linkActions.showAddLinkDialog,
+    'autoPasteLink': s._sections.linkActions.autoPasteLink,
     'isValidPikPakLink': isValidPikPakLink,
-    'addLink': s._addLink,
+    'addLink': s._sections.linkActions.addLink,
     'rawMode': FolderViewMode.raw,
     'sortedMode': FolderViewMode.sortedAZ,
     'seriesMode': FolderViewMode.seriesArrange,
