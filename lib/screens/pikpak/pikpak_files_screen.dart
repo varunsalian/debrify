@@ -86,14 +86,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       searchState: _search,
       linkState: _link,
     ),
-    (
-      applyViewMode: (FolderViewMode mode, List<Map<String, dynamic>> items) =>
-          _applyViewMode(mode, items),
-      filterFiles: (List<Map<String, dynamic>> files) => _filterFiles(files),
-      getCurrentViewMode: () => _getCurrentViewMode(),
-      navigateUpWithVirtual: () => _navigateUpWithVirtual(),
-      toggleSearch: () => _toggleSearch(),
-    ),
   );
 
   // TV content focus handler (stored for proper unregistration)
@@ -169,151 +161,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
   }
 
-  Future<void> _selectBoundSource(Map<String, dynamic> file) async {
-    final id = file['id']?.toString() ?? '';
-    final name = file['name']?.toString() ?? 'PikPak Source';
-    final kind = file['kind']?.toString() ?? '';
-    final isFolder = kind == 'drive#folder';
-    final isVideo =
-        (file['mime_type']?.toString().startsWith('video/') ?? false) ||
-        FileUtils.isVideoFile(name);
-    if (id.isEmpty || (!isFolder && !isVideo)) {
-      _sections.feedback.showSnackBar(
-        'Choose a video file or folder',
-        isError: true,
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(
-              'Checking PikPak source...',
-              style: TextStyle(color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-    var checkingDialogOpen = true;
-    void closeCheckingDialog() {
-      if (!checkingDialogOpen || !mounted) return;
-      checkingDialogOpen = false;
-      Navigator.of(context, rootNavigator: true).pop();
-    }
-
-    try {
-      if (isFolder) {
-        final folderDetails = await PikPakApiService.instance.getFileDetails(
-          id,
-        );
-        if (folderDetails['phase'] != 'PHASE_TYPE_COMPLETE') {
-          if (!mounted) return;
-          closeCheckingDialog();
-          _sections.feedback.showSnackBar(
-            'This PikPak folder is not ready to stream',
-            isError: true,
-          );
-          return;
-        }
-        final files = await PikPakApiService.instance.listFilesRecursive(
-          folderId: id,
-          includePaths: true,
-        );
-        final videos = files.where((entry) {
-          final entryName = entry['name']?.toString() ?? '';
-          final mime = entry['mime_type']?.toString() ?? '';
-          return mime.startsWith('video/') || FileUtils.isVideoFile(entryName);
-        }).toList();
-        if (!mounted) return;
-        if (videos.isEmpty) {
-          closeCheckingDialog();
-          _sections.feedback.showSnackBar(
-            'This folder has no playable videos',
-            isError: true,
-          );
-          return;
-        }
-
-        // A completed folder can still contain an incomplete or otherwise
-        // unstreamable file. Confirm that at least one video resolves to a
-        // fresh PikPak URL before persisting only the stable folder id.
-        var hasPlayableVideo = false;
-        for (final video in videos) {
-          if (video['phase'] != 'PHASE_TYPE_COMPLETE') continue;
-          final videoId = video['id']?.toString() ?? '';
-          if (videoId.isEmpty) continue;
-          try {
-            final details = await PikPakApiService.instance.getFileDetails(
-              videoId,
-            );
-            final url = PikPakApiService.instance.getStreamingUrl(details);
-            if (details['phase'] == 'PHASE_TYPE_COMPLETE' &&
-                url != null &&
-                url.isNotEmpty) {
-              hasPlayableVideo = true;
-              break;
-            }
-          } catch (_) {
-            // One stale child must not hide another playable video.
-          }
-        }
-        if (!mounted) return;
-        closeCheckingDialog();
-        if (!hasPlayableVideo) {
-          _sections.feedback.showSnackBar(
-            'This PikPak folder has no ready video streams',
-            isError: true,
-          );
-          return;
-        }
-      } else {
-        final details = await PikPakApiService.instance.getFileDetails(id);
-        if (!mounted) return;
-        closeCheckingDialog();
-        if (details['phase'] != 'PHASE_TYPE_COMPLETE' ||
-            PikPakApiService.instance.getStreamingUrl(details) == null) {
-          _sections.feedback.showSnackBar(
-            'This PikPak file is not ready to stream',
-            isError: true,
-          );
-          return;
-        }
-      }
-
-      await widget.onSourceSelected?.call(
-        SeriesSource(
-          torrentHash: '',
-          torrentName: name,
-          debridService: 'pikpak',
-          debridTorrentId: id,
-          cloudSourceKind: isFolder
-              ? SeriesSource.cloudKindFolder
-              : SeriesSource.cloudKindFile,
-          boundAt: DateTime.now().millisecondsSinceEpoch,
-        ),
-      );
-      if (!mounted) return;
-      Navigator.of(context).pop();
-    } catch (e) {
-      if (mounted) {
-        closeCheckingDialog();
-        _sections.feedback.showSnackBar(
-          'Could not bind this PikPak source: $e',
-          isError: true,
-        );
-      }
-    }
-  }
-
   @override
   void dispose() {
     // Unregister back navigation handler
@@ -346,173 +193,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     _search.searchClearFocusNode.dispose();
     _focus.deleteButtonFocusNode.dispose();
     super.dispose();
-  }
-
-  /// Filter files based on user settings (videos only, ignore small videos)
-  List<Map<String, dynamic>> _filterFiles(List<Map<String, dynamic>> files) {
-    List<Map<String, dynamic>> filteredFiles = files;
-
-    // Filter by file type (videos only)
-    if (_catalog.showVideosOnly) {
-      filteredFiles = filteredFiles.where((file) {
-        final kind = file['kind'] ?? '';
-        final mimeType = file['mime_type'] ?? '';
-        // Always show folders, only filter non-folder items
-        return kind == 'drive#folder' || mimeType.startsWith('video/');
-      }).toList();
-    }
-
-    // Filter by size (ignore videos under 100MB)
-    if (_catalog.ignoreSmallVideos) {
-      filteredFiles = filteredFiles.where((file) {
-        final kind = file['kind'] ?? '';
-        final mimeType = file['mime_type'] ?? '';
-        final size = file['size'];
-
-        // Always show folders
-        if (kind == 'drive#folder') return true;
-
-        // For videos, check size
-        if (mimeType.startsWith('video/')) {
-          if (size == null) return true; // Show if size is unknown
-          final sizeBytes = int.tryParse(size.toString()) ?? 0;
-          final sizeMB = sizeBytes / (1024 * 1024);
-          return sizeMB >= 100; // Only show videos 100MB or larger
-        }
-
-        // Show non-video files if videos-only filter is off
-        return true;
-      }).toList();
-    }
-
-    return filteredFiles;
-  }
-
-  void _navigateIntoFolder(String folderId, String folderName) {
-    _sections.selectionActions.exitSelectionMode();
-    // Focus first item after folder contents load
-    _focus.shouldFocusOnLoad = true;
-
-    _sections.catalogLoading.resetListScroll();
-    setState(() {
-      // Push current folder to stack before navigating
-      _nav.navigationStack.add((
-        id: _nav.currentFolderId,
-        name: _nav.currentFolderName,
-      ));
-      _nav.currentFolderId = folderId;
-      _nav.currentFolderName = folderName;
-      // Clear stale rows so the loading skeleton shows instead of the
-      // outgoing folder's contents sitting frozen while the fetch runs.
-      _catalog.files.clear();
-      // We're navigating into a subfolder, so we're no longer at restricted root
-      _nav.isAtRestrictedRoot = false;
-    });
-    _sections.catalogLoading.loadFiles();
-  }
-
-  void _navigateUp() {
-    _sections.selectionActions.exitSelectionMode();
-    // Don't navigate above restricted folder
-    if (_nav.restrictedFolderId != null &&
-        _nav.currentFolderId == _nav.restrictedFolderId) {
-      _sections.feedback.showSnackBar(
-        'Already at restricted folder root',
-        isError: false,
-      );
-      return;
-    }
-
-    // Refocus the first row once the parent listing loads — clearing _files
-    // disposes the focused row and nothing else reclaims DPAD focus.
-    _focus.shouldFocusOnLoad = true;
-    _sections.catalogLoading.resetListScroll();
-    setState(() {
-      _catalog.files.clear();
-      // Pop from stack to go back one level
-      if (_nav.navigationStack.isNotEmpty) {
-        final previous = _nav.navigationStack.removeLast();
-        _nav.currentFolderId = previous.id;
-        _nav.currentFolderName = previous.name;
-
-        // Check if we're back at the restricted root
-        _nav.isAtRestrictedRoot =
-            (_nav.restrictedFolderId != null &&
-            _nav.currentFolderId == _nav.restrictedFolderId);
-      } else {
-        // Already at root (or restricted root)
-        if (_nav.restrictedFolderId != null) {
-          _nav.currentFolderId = _nav.restrictedFolderId;
-          _nav.currentFolderName =
-              _nav.restrictedFolderName ?? 'Restricted Folder';
-          _nav.isAtRestrictedRoot = true;
-        } else {
-          _nav.currentFolderId = null;
-          _nav.currentFolderName = 'My Files';
-        }
-      }
-    });
-    _sections.catalogLoading.loadFiles();
-  }
-
-  /// Navigate up with virtual folder support
-  /// If in virtual folder, exit virtual folder first before navigating real folders
-  void _navigateUpWithVirtual() {
-    if (_view.isInVirtualFolder) {
-      // Exit virtual folder, go back to transformed view
-      _focus.shouldFocusOnLoad = true;
-      _sections.catalogLoading.resetListScroll();
-      setState(() {
-        _view.isInVirtualFolder = false;
-        _view.virtualFolderName = null;
-        _view.virtualFolderFiles.clear();
-      });
-
-      // Re-apply current view mode to show the season folders again
-      final mode = _getCurrentViewMode();
-      _setViewMode(mode);
-      _sections.focusActions.focusFirstItemOrFallback();
-    } else {
-      // Normal navigation up real folders
-      _navigateUp();
-    }
-  }
-
-  /// Navigate into a virtual Season folder
-  void _navigateIntoVirtualFolder(Map<String, dynamic> virtualFolder) {
-    _sections.selectionActions.exitSelectionMode();
-    final seasonName = virtualFolder['name'] as String? ?? 'Virtual Folder';
-    final virtualFiles = virtualFolder['virtual_files'] as List<dynamic>? ?? [];
-
-    // Validate virtual files exist
-    if (virtualFiles.isEmpty) {
-      _sections.feedback.showSnackBar('Virtual folder is empty', isError: true);
-      return;
-    }
-
-    // Focus first item after navigation
-    _focus.shouldFocusOnLoad = true;
-
-    _sections.catalogLoading.resetListScroll();
-    try {
-      final typedFiles = virtualFiles.cast<Map<String, dynamic>>();
-      setState(() {
-        _view.isInVirtualFolder = true;
-        _view.virtualFolderName = seasonName;
-        _view.virtualFolderFiles = typedFiles;
-        _catalog.files.clear();
-        _catalog.files.addAll(_view.virtualFolderFiles);
-      });
-
-      // Focus first item after navigation
-      _sections.focusActions.focusFirstItemOrFallback();
-    } catch (e) {
-      print('Error navigating into virtual folder: $e');
-      _sections.feedback.showSnackBar(
-        'Failed to open virtual folder: $e',
-        isError: true,
-      );
-    }
   }
 
   Future<void> _playFile(Map<String, dynamic> fileData) async {
@@ -894,234 +574,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   // ========== VIEW MODE TRANSFORMATION METHODS ==========
 
-  /// Get current view mode for the active folder
-  FolderViewMode _getCurrentViewMode() {
-    // Virtual folders don't have their own view modes
-    if (_view.isInVirtualFolder) return FolderViewMode.seriesArrange;
-
-    // Root level (no folder selected) defaults to Raw
-    if (_nav.currentFolderId == null) return FolderViewMode.raw;
-
-    return _view.folderViewModes[_nav.currentFolderId!] ?? FolderViewMode.raw;
-  }
-
-  /// Set view mode and refresh display
-  Future<void> _setViewMode(FolderViewMode mode) async {
-    if (_nav.currentFolderId == null) return;
-
-    // If user selected Series Arrange, we need to fetch all files recursively
-    if (mode == FolderViewMode.seriesArrange) {
-      // Show loading indicator
-      setState(() {
-        _catalog.isLoading = true;
-      });
-
-      try {
-        // Fetch all files recursively from this folder
-        List<Map<String, dynamic>> allFiles;
-        if (_view.recursiveFileCache.containsKey(_nav.currentFolderId!)) {
-          allFiles = _view.recursiveFileCache[_nav.currentFolderId!]!;
-        } else {
-          allFiles = await PikPakApiService.instance.listFilesRecursive(
-            folderId: _nav.currentFolderId!,
-          );
-          _view.recursiveFileCache[_nav.currentFolderId!] = allFiles;
-        }
-
-        // Filter for video files only
-        final videoFiles = allFiles.where((file) {
-          final kind = file['kind'] ?? '';
-          final mimeType = file['mime_type'] ?? '';
-          return kind != 'drive#folder' && mimeType.startsWith('video/');
-        }).toList();
-
-        // Detect if it's actually a series
-        if (videoFiles.length < 3) {
-          _showFallbackToSorted(
-            'Not enough video files for series detection',
-            allFiles,
-          );
-          return;
-        }
-
-        final filenames = videoFiles
-            .map((f) => f['name'] as String? ?? '')
-            .toList();
-        final isSeries = SeriesParser.isSeriesPlaylist(filenames);
-
-        if (!isSeries) {
-          _showFallbackToSorted('No series detected in this folder', allFiles);
-          return;
-        }
-
-        // It's a series! Apply Series Arrange view
-        setState(() {
-          _view.folderViewModes[_nav.currentFolderId!] = mode;
-          final transformed = _applySeriesArrangeView(allFiles);
-          _catalog.files.clear();
-          _catalog.files.addAll(transformed);
-          _catalog.isLoading = false;
-        });
-      } catch (e) {
-        print('Error applying Series Arrange view: $e');
-        _showFallbackToSorted('Failed to load series view', null);
-      }
-    } else {
-      // For Raw and Sort modes, work with current page files
-      setState(() {
-        _view.folderViewModes[_nav.currentFolderId!] = mode;
-        final transformed = _applyViewMode(mode, _catalog.files);
-        _catalog.files.clear();
-        _catalog.files.addAll(transformed);
-        // Reset pagination when transforming (can't mix transformed/raw data)
-        _catalog.nextPageToken = null;
-        _catalog.hasMore = false;
-      });
-    }
-  }
-
-  /// Show snackbar and fallback to sorted view
-  /// If allFiles is provided (from recursive fetch), use those instead of _files
-  void _showFallbackToSorted(
-    String reason,
-    List<Map<String, dynamic>>? allFiles,
-  ) {
-    if (!mounted) return;
-
-    final app = AppThemeScope.of(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text(
-          'No series detected in this folder. Switching to Sort (A-Z) view.',
-        ),
-        duration: const Duration(seconds: 3),
-        backgroundColor: app.cloud.dialogSurface,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-    setState(() {
-      _view.folderViewModes[_nav.currentFolderId!] = FolderViewMode.sortedAZ;
-      // Use allFiles if provided (preserves full recursive fetch), otherwise use _files
-      final filesToTransform = allFiles ?? _catalog.files;
-      final transformed = applySortedView(filesToTransform);
-      _catalog.files.clear();
-      _catalog.files.addAll(transformed);
-      _catalog.isLoading = false;
-    });
-  }
-
-  /// Apply view mode transformation to a list of files
-  List<Map<String, dynamic>> _applyViewMode(
-    FolderViewMode mode,
-    List<Map<String, dynamic>> items,
-  ) {
-    switch (mode) {
-      case FolderViewMode.raw:
-        return items;
-      case FolderViewMode.sortedAZ:
-        return applySortedView(items);
-      case FolderViewMode.seriesArrange:
-        return _applySeriesArrangeView(items);
-    }
-  }
-
-  /// Apply series arranged view (create virtual Season folders)
-  List<Map<String, dynamic>> _applySeriesArrangeView(
-    List<Map<String, dynamic>> items,
-  ) {
-    // Separate folders and files
-    final folders = items.where((item) {
-      final kind = item['kind'] ?? '';
-      return kind == 'drive#folder';
-    }).toList();
-
-    final files = items.where((item) {
-      final kind = item['kind'] ?? '';
-      return kind != 'drive#folder';
-    }).toList();
-
-    // Filter for video files only
-    final videoFiles = files.where((file) {
-      final mimeType = file['mime_type'] ?? '';
-      return mimeType.startsWith('video/');
-    }).toList();
-
-    final nonVideoFiles = files.where((file) {
-      final mimeType = file['mime_type'] ?? '';
-      return !mimeType.startsWith('video/');
-    }).toList();
-
-    if (videoFiles.isEmpty) return items;
-
-    final filenames = videoFiles
-        .map((f) => f['name'] as String? ?? '')
-        .toList();
-
-    try {
-      final parsedInfos = SeriesParser.parsePlaylist(filenames);
-
-      // Group by season
-      final Map<int, List<Map<String, dynamic>>> seasonMap = {};
-      for (int i = 0; i < videoFiles.length; i++) {
-        final info = parsedInfos[i];
-        if (info.isSeries && info.season != null) {
-          seasonMap.putIfAbsent(info.season!, () => []);
-          seasonMap[info.season!]!.add(videoFiles[i]);
-        } else {
-          // If not parsed as series, default to Season 1
-          seasonMap.putIfAbsent(1, () => []);
-          seasonMap[1]!.add(videoFiles[i]);
-        }
-      }
-
-      // Create virtual season folders
-      final seasonFolders = seasonMap.entries.map((entry) {
-        final seasonNum = entry.key;
-        final seasonFiles = entry.value;
-
-        // Sort episodes within season by episode number
-        seasonFiles.sort((a, b) {
-          final aInfo = SeriesParser.parseFilename(a['name'] as String? ?? '');
-          final bInfo = SeriesParser.parseFilename(b['name'] as String? ?? '');
-          final aEp = aInfo.episode ?? 0;
-          final bEp = bInfo.episode ?? 0;
-          return aEp.compareTo(bEp);
-        });
-
-        // Create virtual folder (marked with special kind)
-        return {
-          'id': 'virtual_season_$seasonNum',
-          'kind': 'virtual#season',
-          'name': seasonNum == 0 ? 'Season 0 - Specials' : 'Season $seasonNum',
-          'season_number': seasonNum,
-          'virtual_files': seasonFiles, // Store the files inside
-          'size': seasonFiles.fold<int>(
-            0,
-            (sum, f) => sum + (int.tryParse(f['size']?.toString() ?? '0') ?? 0),
-          ),
-          'created_time': DateTime.now().toIso8601String(),
-        };
-      }).toList();
-
-      // Sort season folders by season number
-      seasonFolders.sort((a, b) {
-        final aNum = a['season_number'] as int? ?? 0;
-        final bNum = b['season_number'] as int? ?? 0;
-        return aNum.compareTo(bNum);
-      });
-
-      return [...folders, ...seasonFolders, ...nonVideoFiles];
-    } catch (e) {
-      print('Series arrangement failed: $e');
-      return applySortedView(items); // Fallback to sorted view
-    }
-  }
-
   /// Build the view mode dropdown (shown below AppBar when inside folders)
   Widget _buildViewModeDropdown() {
     final theme = Theme.of(context);
-    final mode = _getCurrentViewMode();
+    final mode = _sections.viewModes.getCurrentViewMode();
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1178,7 +634,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             ),
           ],
           onChanged: (value) {
-            if (value != null) _setViewMode(value);
+            if (value != null) _sections.viewModes.setViewMode(value);
           },
         ),
       ),
@@ -1186,57 +642,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   // ============ Search Methods ============
-
-  /// Toggle search mode on/off
-  void _toggleSearch() {
-    setState(() {
-      _search.isSearchActive = !_search.isSearchActive;
-      if (!_search.isSearchActive) {
-        _search.searchController.clear();
-        _search.searchResults.clear();
-      } else {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _search.searchFocusNode.requestFocus();
-        });
-      }
-    });
-  }
-
-  /// Perform deep search across all files in current folder recursively
-  Future<void> _performSearch(String query) async {
-    if (query.isEmpty) {
-      setState(() => _search.searchResults = []);
-      return;
-    }
-
-    final lowerQuery = query.toLowerCase();
-    final results = <PikPakSearchResult>[];
-
-    // Get cached recursive files or fetch them
-    final folderId = _nav.currentFolderId ?? '';
-    List<Map<String, dynamic>> allFiles;
-
-    if (_view.recursiveFileCache.containsKey(folderId)) {
-      allFiles = _view.recursiveFileCache[folderId]!;
-    } else {
-      // For search, we need to use the current files if recursive cache not available
-      allFiles = _catalog.files;
-    }
-
-    for (final file in allFiles) {
-      final name = file['name'] as String? ?? '';
-      final kind = file['kind'] as String? ?? '';
-      final isVideo = kind.contains('video') || FileUtils.isVideoFile(name);
-
-      if (isVideo && name.toLowerCase().contains(lowerQuery)) {
-        // Get path from file data if available
-        final parentPath = file['parent_name'] as String? ?? '';
-        results.add(PikPakSearchResult(file: file, path: parentPath));
-      }
-    }
-
-    setState(() => _search.searchResults = results);
-  }
 
   /// Build the search bar widget
   Widget _buildSearchBar() {
@@ -1271,7 +676,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   vertical: 12,
                 ),
               ),
-              onChanged: _performSearch,
+              onChanged: _sections.searchActions.performSearch,
               onSubmitted: (_) => _search.searchFocusNode.unfocus(),
             ),
           ),
@@ -1374,7 +779,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         meta: result.path.isEmpty
             ? Formatters.formatFileSize(int.tryParse(size) ?? 0)
             : result.path,
-        onTap: () => _selectBoundSource(file),
+        onTap: () => _sections.sourceBinding.selectBoundSource(file),
       );
     }
 
@@ -1498,7 +903,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // Only show when navigated at least one level deep (inside a folder)
     final showViewModeDropdown =
         _nav.navigationStack.isNotEmpty || _view.isInVirtualFolder;
-    final currentMode = _getCurrentViewMode();
+    final currentMode = _sections.viewModes.getCurrentViewMode();
     final showSearch =
         showViewModeDropdown &&
         currentMode != FolderViewMode.seriesArrange &&
@@ -1593,7 +998,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             IconButton(
               focusNode: _search.searchButtonFocusNode,
               icon: Icon(_search.isSearchActive ? Icons.close : Icons.search),
-              onPressed: _toggleSearch,
+              onPressed: _sections.searchActions.toggleSearch,
               tooltip: _search.isSearchActive ? 'Close search' : 'Search files',
               iconSize: actionIconSize,
               padding: actionIconPadding,
@@ -1939,13 +1344,16 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                 style: TextStyle(color: Colors.orange.shade700, fontSize: 12.5),
               )
             : null,
-        onTap: selectable ? () => _selectBoundSource(file) : null,
+        onTap: selectable
+            ? () => _sections.sourceBinding.selectBoundSource(file)
+            : null,
         actions: isFolder
             ? [
                 CloudRowAction(
                   icon: Icons.folder_open_rounded,
                   label: 'Browse folder',
-                  onSelected: () => _navigateIntoFolder(file['id'], name),
+                  onSelected: () => _sections.folderNavigation
+                      .navigateIntoFolder(file['id'], name),
                 ),
               ]
             : const [],
@@ -2030,9 +1438,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             )
           : null,
       onTap: isVirtualFolder
-          ? () => _navigateIntoVirtualFolder(file)
+          ? () => _sections.folderNavigation.navigateIntoVirtualFolder(file)
           : isFolder
-          ? () => _navigateIntoFolder(file['id'], name)
+          ? () =>
+                _sections.folderNavigation.navigateIntoFolder(file['id'], name)
           : (isVideo && isComplete)
           ? () => _playFile(file)
           : null,
@@ -2792,7 +2201,7 @@ Map<String, Object?> pikpakFilesTestAccess(State<PikPakFilesScreen> state) {
     'searchResults': s._search.searchResults,
     'selectableFileCount': s._sections.selectionActions.selectableFileCount,
     'isAllSelected': s._sections.selectionActions.isAllSelected,
-    'selectBoundSource': s._selectBoundSource,
+    'selectBoundSource': s._sections.sourceBinding.selectBoundSource,
     'onScroll': s._sections.catalogLoading.onScroll,
     'resetListScroll': s._sections.catalogLoading.resetListScroll,
     'focusFirstItemOrFallback':
@@ -2803,11 +2212,12 @@ Map<String, Object?> pikpakFilesTestAccess(State<PikPakFilesScreen> state) {
         s._sections.catalogLoading.handleRestrictedFolderDeleted,
     'loadFiles': s._sections.catalogLoading.loadFiles,
     'loadMoreFiles': s._sections.catalogLoading.loadMoreFiles,
-    'filterFiles': s._filterFiles,
-    'navigateIntoFolder': s._navigateIntoFolder,
-    'navigateUp': s._navigateUp,
-    'navigateUpWithVirtual': s._navigateUpWithVirtual,
-    'navigateIntoVirtualFolder': s._navigateIntoVirtualFolder,
+    'filterFiles': s._sections.folderNavigation.filterFiles,
+    'navigateIntoFolder': s._sections.folderNavigation.navigateIntoFolder,
+    'navigateUp': s._sections.folderNavigation.navigateUp,
+    'navigateUpWithVirtual': s._sections.folderNavigation.navigateUpWithVirtual,
+    'navigateIntoVirtualFolder':
+        s._sections.folderNavigation.navigateIntoVirtualFolder,
     'playFile': s._playFile,
     'downloadFile': s._downloadFile,
     'downloadFolder': s._downloadFolder,
@@ -2822,16 +2232,16 @@ Map<String, Object?> pikpakFilesTestAccess(State<PikPakFilesScreen> state) {
     'handleDeleteSelected': s._sections.deleteActions.handleDeleteSelected,
     'executeDeleteSelected': s._sections.deleteActions.executeDeleteSelected,
     'showSnackBar': s._sections.feedback.showSnackBar,
-    'getCurrentViewMode': s._getCurrentViewMode,
-    'setViewMode': s._setViewMode,
-    'showFallbackToSorted': s._showFallbackToSorted,
-    'applyViewMode': s._applyViewMode,
+    'getCurrentViewMode': s._sections.viewModes.getCurrentViewMode,
+    'setViewMode': s._sections.viewModes.setViewMode,
+    'showFallbackToSorted': s._sections.viewModes.showFallbackToSorted,
+    'applyViewMode': s._sections.viewModes.applyViewMode,
     'applySortedView': applySortedView,
     'extractSeasonNumber': extractSeasonNumber,
     'extractLeadingNumber': extractLeadingNumber,
-    'applySeriesArrangeView': s._applySeriesArrangeView,
-    'toggleSearch': s._toggleSearch,
-    'performSearch': s._performSearch,
+    'applySeriesArrangeView': s._sections.viewModes.applySeriesArrangeView,
+    'toggleSearch': s._sections.searchActions.toggleSearch,
+    'performSearch': s._sections.searchActions.performSearch,
     'isBrowsePush': s._isBrowsePush,
     'formatDate': s._formatDate,
     'playFolder': s._playFolder,

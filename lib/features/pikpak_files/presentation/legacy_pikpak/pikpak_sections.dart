@@ -1,4 +1,3 @@
-import 'package:debrify/features/pikpak_files/models/folder_view_mode.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:flutter/material.dart';
 
@@ -9,11 +8,15 @@ import 'pikpak_delete_actions.dart';
 import 'pikpak_feedback.dart';
 import 'pikpak_focus_actions.dart';
 import 'pikpak_focus_state.dart';
+import 'pikpak_folder_navigation.dart';
 import 'pikpak_link_state.dart';
 import 'pikpak_navigation_state.dart';
+import 'pikpak_search_actions.dart';
 import 'pikpak_search_state.dart';
 import 'pikpak_selection_actions.dart';
 import 'pikpak_selection_state.dart';
+import 'pikpak_source_binding.dart';
+import 'pikpak_view_modes.dart';
 import 'pikpak_view_state.dart';
 
 typedef PikpakScope = ({
@@ -35,18 +38,6 @@ typedef PikpakOwners = ({
   PikpakSearchState searchState,
   PikpakLinkState linkState,
 });
-typedef PikpakDeferred = ({
-  List<Map<String, dynamic>> Function(
-    FolderViewMode mode,
-    List<Map<String, dynamic>> items,
-  )
-  applyViewMode,
-  List<Map<String, dynamic>> Function(List<Map<String, dynamic>> files)
-  filterFiles,
-  FolderViewMode Function() getCurrentViewMode,
-  void Function() navigateUpWithVirtual,
-  void Function() toggleSearch,
-});
 
 class PikpakSections {
   PikpakFocusActions? focusActionsSlot;
@@ -61,4 +52,12 @@ class PikpakSections {
   PikpakSelectionActions get selectionActions => selectionActionsSlot!;
   PikpakFeedback? feedbackSlot;
   PikpakFeedback get feedback => feedbackSlot!;
+  PikpakFolderNavigation? folderNavigationSlot;
+  PikpakFolderNavigation get folderNavigation => folderNavigationSlot!;
+  PikpakViewModes? viewModesSlot;
+  PikpakViewModes get viewModes => viewModesSlot!;
+  PikpakSearchActions? searchActionsSlot;
+  PikpakSearchActions get searchActions => searchActionsSlot!;
+  PikpakSourceBinding? sourceBindingSlot;
+  PikpakSourceBinding get sourceBinding => sourceBindingSlot!;
 }

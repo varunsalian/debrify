@@ -121,11 +121,15 @@
     "PikpakFeedback",
     "PikpakFocusActions",
     "PikpakFocusState",
+    "PikpakFolderNavigation",
     "PikpakLinkState",
     "PikpakNavigationState",
+    "PikpakSearchActions",
     "PikpakSearchState",
     "PikpakSelectionActions",
     "PikpakSelectionState",
+    "PikpakSourceBinding",
+    "PikpakViewModes",
     "PikpakViewState",
     "_deps",
     "deps"
@@ -150,7 +154,11 @@
     "_sections.catalogLoading": "PikpakCatalogLoading",
     "_sections.deleteActions": "PikpakDeleteActions",
     "_sections.selectionActions": "PikpakSelectionActions",
-    "_sections.feedback": "PikpakFeedback"
+    "_sections.feedback": "PikpakFeedback",
+    "_sections.folderNavigation": "PikpakFolderNavigation",
+    "_sections.viewModes": "PikpakViewModes",
+    "_sections.searchActions": "PikpakSearchActions",
+    "_sections.sourceBinding": "PikpakSourceBinding"
   },
   "receiver_owners": {
     "_PikPakFilesScreenState": "_PikPakFilesScreenState",
@@ -173,7 +181,11 @@
     "_sections.catalogLoading": "PikpakCatalogLoading",
     "_sections.deleteActions": "PikpakDeleteActions",
     "_sections.selectionActions": "PikpakSelectionActions",
-    "_sections.feedback": "PikpakFeedback"
+    "_sections.feedback": "PikpakFeedback",
+    "_sections.folderNavigation": "PikpakFolderNavigation",
+    "_sections.viewModes": "PikpakViewModes",
+    "_sections.searchActions": "PikpakSearchActions",
+    "_sections.sourceBinding": "PikpakSourceBinding"
   },
   "plain_sections": [],
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in pikpak_context_exceptions.json; original guards and statement order unchanged",

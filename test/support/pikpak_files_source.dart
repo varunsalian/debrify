@@ -98,6 +98,9 @@ String pikpakOriginalMember(String originalName) {
   for (final getter in config['live_getter_callbacks'] as List<dynamic>) {
     member = member.replaceAll('_deps.$getter()', '$getter');
   }
+  for (final getter in config['live_widget_getters'] as List<dynamic>) {
+    member = member.replaceAll('_deps.$getter()', 'widget.$getter');
+  }
   final paths = config['receiver_paths'] as Map<String, dynamic>? ?? const {};
   for (final entry in rows) {
     final original = entry['original_name']!.split('.').last;
@@ -107,8 +110,8 @@ String pikpakOriginalMember(String originalName) {
       member = member.replaceAll(
         RegExp(
           r'\b' +
-              RegExp.escape(path.key) +
-              r'\.' +
+              path.key.split('.').map(RegExp.escape).join(r'\s*\.\s*') +
+              r'\s*\.\s*' +
               RegExp.escape(current) +
               r'\b',
         ),
@@ -116,7 +119,7 @@ String pikpakOriginalMember(String originalName) {
       );
     }
     member = member.replaceAll(
-      RegExp(r'\b(?:_deps|deps)\.' + RegExp.escape(current) + r'\b'),
+      RegExp(r'\b(?:_deps|deps)\s*\.\s*' + RegExp.escape(current) + r'\b'),
       original,
     );
     // Unqualified names are methods/types, never a moved field's public name.
@@ -127,9 +130,6 @@ String pikpakOriginalMember(String originalName) {
         original,
       );
     }
-  }
-  for (final getter in config['live_widget_getters'] as List<dynamic>) {
-    member = member.replaceAll('_deps.$getter()', 'widget.$getter');
   }
   member = member.replaceAllMapped(
     RegExp(r'\$\{(_[A-Za-z][A-Za-z0-9]*)\}'),

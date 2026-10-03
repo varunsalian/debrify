@@ -424,6 +424,13 @@ Real-Debrid, PikPak) with self-tests, and gates against the latest PikPak base.
 - Gate 1: 10,572 successes / 13 failures / 28 errors / 20 skips. PASS against latest PikPak base3 by identity, zero added/missing/newly skipped identities and no new failures. Historical helper reused completed runner JSON, with no second runner or recording: its same 32 failure/error identities absent from the historical list are byte-identical to base3. No failure list changed.
 - JSON/env/comparison/historical fingerprints are recorded in gate1-final-proof.json. Gate evidence is committed separately before Step 4. No push.
 
+### Step 4 — complete
+
+- Gate 1 evidence is `43025625`. Moved filtering/folder/virtual navigation, all view modes, synchronous search and awaited select-source binding. Facade 2,854 → 2,264, largest destination 267 lines. Raw identity and emptying, recursive cast aliasing, stale-list behavior, readiness-probe request order and checking-dialog Back/pops remain exactly characterized.
+- Reviewed every navigation-composition entry before pinning 45 current scaffold declarations. All five deferred callbacks now resolve their real section owners; removed the obsolete deferred record, State closures and factory parameters. Source binding uses the live callback getter; no widget snapshot or context hoist. Original DateTime.now stays in the dormant series method.
+- Recorded one exact formatter-brace site in getCurrentViewMode after receiver expansion. Corrected only source-reader normalization order (live widget getters before member renames) and whitespace around qualified receivers; frozen assertions are unchanged. Replayed all five source-contract identities against the unchanged original c2e02c0d worktree with the revised reader: PASS, stable tree/env recorded as original-source-reader-step4.
+- `pikpak/step4`: 111 successes / one observed pre-existing theme failure, PASS versus latest base3, zero added/missing/newly skipped identities/new failures; all 83 characterizations and five macOS PNGs unchanged. Stable staged tested tree f1ce75ff1135d9b60c9e87b53b9db68e0865d9bc. Whole analyzer 839, zero additions/removals. All five manifest/self-tests, architecture, sizes, storage references/self-tests/314 keys, exact CI format (1,450 files), analyzer/strict five-warning allowlist and staged diff checks PASS.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

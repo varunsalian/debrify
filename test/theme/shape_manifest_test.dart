@@ -666,9 +666,15 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_focus_state.dart':
       0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_folder_navigation.dart':
+      0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_link_state.dart':
       0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_navigation_composition.dart':
+      0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_navigation_state.dart':
+      0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_search_actions.dart':
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_search_state.dart':
       0,
@@ -677,6 +683,10 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_selection_actions.dart':
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_selection_state.dart':
+      0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_source_binding.dart':
+      0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_view_modes.dart':
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_view_state.dart':
       0,

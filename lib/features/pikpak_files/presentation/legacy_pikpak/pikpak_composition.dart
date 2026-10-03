@@ -1,14 +1,12 @@
 import 'pikpak_data_composition.dart';
+import 'pikpak_navigation_composition.dart';
 import 'pikpak_sections.dart';
 
 export 'pikpak_sections.dart';
 
-PikpakSections createPikpakSections(
-  PikpakScope scope,
-  PikpakOwners owners,
-  PikpakDeferred deferred,
-) {
+PikpakSections createPikpakSections(PikpakScope scope, PikpakOwners owners) {
   final sections = PikpakSections();
-  wirePikpakDataSections(sections, scope, owners, deferred);
+  wirePikpakDataSections(sections, scope, owners);
+  wirePikpakNavigationSections(sections, scope, owners);
   return sections;
 }

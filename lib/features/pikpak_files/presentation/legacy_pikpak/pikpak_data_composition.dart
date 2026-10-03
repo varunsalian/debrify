@@ -1,3 +1,5 @@
+import 'package:debrify/features/pikpak_files/models/folder_view_mode.dart';
+
 import 'pikpak_back_navigation.dart';
 import 'pikpak_catalog_loading.dart';
 import 'pikpak_delete_actions.dart';
@@ -10,7 +12,6 @@ void wirePikpakDataSections(
   PikpakSections sections,
   PikpakScope scope,
   PikpakOwners owners,
-  PikpakDeferred deferred,
 ) {
   sections.focusActionsSlot = PikpakFocusActions((
     focusState: owners.focusState,
@@ -21,10 +22,11 @@ void wirePikpakDataSections(
     selectionState: owners.selectionState,
     exitSelectionMode: () => sections.selectionActions.exitSelectionMode(),
     searchState: owners.searchState,
-    toggleSearch: deferred.toggleSearch,
+    toggleSearch: () => sections.searchActions.toggleSearch(),
     viewState: owners.viewState,
     navigationState: owners.navigationState,
-    navigateUpWithVirtual: deferred.navigateUpWithVirtual,
+    navigateUpWithVirtual: () =>
+        sections.folderNavigation.navigateUpWithVirtual(),
     isPushedRoute: scope.isPushedRoute,
     context: scope.context,
   ));
@@ -41,9 +43,11 @@ void wirePikpakDataSections(
           isError: isError,
           duration: duration,
         ),
-    filterFiles: deferred.filterFiles,
-    getCurrentViewMode: deferred.getCurrentViewMode,
-    applyViewMode: deferred.applyViewMode,
+    filterFiles: (List<Map<String, dynamic>> files) =>
+        sections.folderNavigation.filterFiles(files),
+    getCurrentViewMode: () => sections.viewModes.getCurrentViewMode(),
+    applyViewMode: (FolderViewMode mode, List<Map<String, dynamic>> items) =>
+        sections.viewModes.applyViewMode(mode, items),
     focusFirstItemOrFallback: () =>
         sections.focusActions.focusFirstItemOrFallback(),
     focusState: owners.focusState,
