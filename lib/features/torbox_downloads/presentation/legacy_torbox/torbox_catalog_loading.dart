@@ -24,7 +24,6 @@ typedef TorboxCatalogLoadingDeps = ({
   String? Function() initialSearchQuery,
   TorboxTorrentSearchState torrentSearchState,
   void Function() focusFirstItemOrFallback,
-  // TEMP(torbox): maybeTriggerInitialAction -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_initial_action.dart at step 4.
   void Function() maybeTriggerInitialAction,
 });
 

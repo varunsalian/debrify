@@ -12,11 +12,9 @@ import 'torbox_catalog_state.dart';
 
 typedef TorboxTorrentPlaybackDeps = ({
   TorboxCatalogState catalogState,
-  // TEMP(torbox): showComingSoon -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_magnet_actions.dart at step 4.
   void Function(String action) showComingSoon,
   bool Function() mounted,
   BuildContext Function() context,
-  // TEMP(torbox): requestTorboxStreamUrl -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_stream_request.dart at step 4.
   Future<String> Function({
     required String apiKey,
     required TorboxTorrent torrent,

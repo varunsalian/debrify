@@ -11,7 +11,6 @@ typedef TorboxTorrentPlaylistActionsDeps = ({
   bool Function() mounted,
   BuildContext Function() context,
   TorboxTorrentSearchState torrentSearchState,
-  // TEMP(torbox): showSnackBar -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_notifications.dart at step 4.
   void Function(String message, {bool isError}) showSnackBar,
 });
 

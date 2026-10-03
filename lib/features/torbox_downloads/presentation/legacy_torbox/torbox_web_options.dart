@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 typedef TorboxWebOptionsDeps = ({
   BuildContext Function() context,
-  // TEMP(torbox): buildDownloadOptionCard -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_download_options.dart at step 4.
   Widget Function({
     required IconData icon,
     required String title,

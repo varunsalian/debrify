@@ -8,7 +8,6 @@ import 'torbox_web_state.dart';
 
 typedef TorboxWebDeleteActionDeps = ({
   TorboxCatalogState catalogState,
-  // TEMP(torbox): showSnackBar -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_notifications.dart at step 4.
   void Function(String message, {bool isError}) showSnackBar,
   BuildContext Function() context,
   bool Function() mounted,

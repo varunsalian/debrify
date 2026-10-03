@@ -10,7 +10,6 @@ import 'torbox_catalog_state.dart';
 
 typedef TorboxWebPlaybackDeps = ({
   TorboxCatalogState catalogState,
-  // TEMP(torbox): showSnackBar -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_notifications.dart at step 4.
   void Function(String message, {bool isError}) showSnackBar,
   bool Function() mounted,
   BuildContext Function() context,

@@ -8,7 +8,6 @@
 6445 lib/screens/debrid_downloads_screen.dart
 5532 lib/screens/merged_series_detail_screen.dart
 5475 lib/services/remote_control/remote_command_router.dart
-4993 lib/screens/torbox/torbox_downloads_screen.dart
 4700 lib/services/webdav_sync/webdav_sync_engine.dart
 4685 lib/services/download_service.dart
 4480 lib/screens/settings/iptv_settings_page.dart
@@ -33,6 +32,7 @@
 2800 lib/screens/downloads_screen.dart
 2764 lib/screens/profiles/edit_profile_screen.dart
 2608 lib/screens/settings/stremio_addons_page.dart
+2598 lib/screens/torbox/torbox_downloads_screen.dart
 2584 lib/services/webdav_sync/webdav_sync_local_adapter.dart
 2476 lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart
 2399 lib/services/mdblist/mdblist_service.dart

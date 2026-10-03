@@ -397,6 +397,14 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base4`.
 - Historical helper audited against the completed original base4 and gate1 evidence, without another runner or any allowlist changes: both report the same 32 failure/error identities absent from `test/known_failures.txt` (`base4-historical-helper.txt`, `gate1-historical-helper.txt`). This historical-list mismatch predates extraction; the observed-baseline identity comparisons establish this gate. No `--record`/regression acceptance.
 - Architecture, strict size/lowering-only ratchet, format, shape inventory, theme measurement and storage reference/key checks pass. Linux capture is still unavailable: interactive VM shell also has no Flutter, Docker or Podman command. No SDK installed, no push; step 6 remains blocked unless originals arrive.
 
+### Step 4 — complete
+
+- Step 3/gate 1 committed as `e6416fba`. Moved file helpers and layouts, selection sheet, stream requests, download options, enqueue and ZIP actions, file playback/download/playlist/link actions, notifications, initial action and magnet actions into 15 further plain sections. Facade 4,993 → **2,598** lines; each destination remains at most 500 (largest 459).
+- Reviewed each active wiring entry before pinning 139 scaffolds. Zero-dependency concerns use ordinary zero-argument constructors. Read-only navigation-owner aliases in file actions and playlist links preserve the original short return-only guards under normal formatting; no new braces or payload assertion changes. All seven launcher and seven enqueue bodies, including the temporary torrent override, pass unchanged.
+- Two additional context-read negative fixtures were first rejected under the original c4f5375a screen/accessor in the separate worktree (`step4-context-fixtures-original-verified.txt`), then copied unchanged to the production fixture set and rejected against moved code. Existing fixture assertions remain unchanged. All characterization Dart tests/helpers remain byte-identical to step 0b.
+- 195 original leaves and all TorBox real-config/callback/accessor/context fixtures pass (`step4-verbatim-final.txt`); settings/IPTV self-tests pass. Whole analyzer: 825 diagnostics, zero additions against original step 0b after relocation (`step4-analyzer-comparison-final.txt`). All 79 affected identities pass against base4 (76 in `step4.jsonl` plus three shape tests in `step4-shapes.jsonl`), including all 63 characterization/source-picker identities and four strict macOS goldens.
+- Architecture, normal format, strict size/lowering-only ratchet and diff checks pass; original 14 radii / 23 token calls preserved. Linux originals still pending; no push.
+
 ## Found, not fixed
 
 - **Startup `setState` after dispose.** With a pre-filled

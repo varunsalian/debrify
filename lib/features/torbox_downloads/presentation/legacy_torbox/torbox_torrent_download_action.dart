@@ -8,12 +8,10 @@ import 'torbox_navigation_state.dart';
 
 typedef TorboxTorrentDownloadActionDeps = ({
   TorboxCatalogState catalogState,
-  // TEMP(torbox): showSnackBar -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_notifications.dart at step 4.
   void Function(String message, {bool isError}) showSnackBar,
   TorboxNavigationState navigationState,
   bool Function() mounted,
   BuildContext Function() context,
-  // TEMP(torbox): downloadSelectedTorboxFiles -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_actions.dart at step 4.
   Future<void> Function(
     List<Map<String, dynamic>> selectedFiles,
     String folderName,

@@ -7,7 +7,6 @@ import 'torbox_selection_state.dart';
 
 typedef TorboxTorrentDeleteActionsDeps = ({
   TorboxCatalogState catalogState,
-  // TEMP(torbox): showComingSoon -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_magnet_actions.dart at step 4.
   void Function(String action) showComingSoon,
   BuildContext Function() context,
   bool Function() mounted,
