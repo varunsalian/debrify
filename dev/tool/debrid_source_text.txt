@@ -1,0 +1,10 @@
+Original inventory at ecea0f96; port at the stated step, preserving numeric budgets.
+step 0: dev/tool/ci_behavior_tests.txt — every new concrete characterization path; provider_source_picker_web_download_test.dart and home_source_editor_test.dart.
+step 1 and every formatting checkpoint: test/theme/shape_manifest_test.dart — exactly 23 counted bare radii / 23 app.shape.br calls; retain the modern card's trailing-comma radius uncounted; register every destination (zero budgets included).
+step 1: dev/tool/theme_surface_manifest.txt — cloud exact facade path plus every feature destination; retain generic theme readers.
+step 1: dev/tool/light_ink_inventory.py — feature path in PRIMARY.
+steps 1–7: dev/tool/file_size_baseline.txt — lowering-only facade ratchet after the accessor-only manual raise (145 lines, exits by step 1); 500-line destination caps; final 400-line facade cap step 7.
+step 0: test/support/debrid_downloads_source.dart — manifest-resolved source guards with exact original payload bodies; lexical contexts independently checked by AST.
+step 1 and final: generic profile/theme/stale-runtime/source/storage reference guards — scan recursive lib roots; verify without path rewrites.
+step 6: original Linux PNG prerequisite + strict missing-original failure; provenance and hashes reviewed, never generated from moved code.
+step 7: .github/workflows/checks.yml — facade format/analyze scope and final composition guard.

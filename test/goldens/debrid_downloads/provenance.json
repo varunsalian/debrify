@@ -1,0 +1,14 @@
+{
+  "original_source_revision": "ecea0f96",
+  "original_worktree": "/tmp/debrify-debrid-original-ecea0f96",
+  "flutter": "3.44.8",
+  "dates": "fixed January 2026 UTC (> 7 days); original absolute-date branch",
+  "macos": "original screen and frozen accessor; initial capture then exact comparison",
+  "hashes": {
+    "test/goldens/debrid_downloads/macos/selection.png": "19c595a8317ce362f8c5c5b907921d8e13c57738d616a205d11969ed0e20d0f8",
+    "test/goldens/debrid_downloads/macos/folder.png": "8a4ef08c25cd25acbbb8c7db0ae8a3933dfe57ce8ca0469d5ffc41b76a9a30fb",
+    "test/goldens/debrid_downloads/macos/ddl.png": "67c3de2db6e88ba0d823eeb6658ab72304b6b21e534d7a187048fbf3b346bd6c",
+    "test/goldens/debrid_downloads/macos/torrents.png": "50631826719e2ba9f0c769e4893196a43418397dd812d893f78cf783eacfee2a",
+    "test/goldens/debrid_downloads/macos/select_source.png": "bc77e0591177da1c2bfe6eb1610e93cdee63e32ed736ff7faa7b2b5a80c72193"
+  }
+}

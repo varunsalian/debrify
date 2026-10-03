@@ -142,3 +142,11 @@ test/features/torbox_downloads/presentation/legacy_torbox/torbox_navigation_test
 test/features/torbox_downloads/presentation/legacy_torbox/torbox_source_contract_test.dart
 test/features/torbox_downloads/presentation/legacy_torbox/torbox_views_test.dart
 test/features/home/presentation/home_source_editor_test.dart
+
+test/features/debrid_downloads/presentation/legacy_debrid/debrid_views_test.dart
+test/features/debrid_downloads/presentation/legacy_debrid/debrid_profile_test.dart
+test/features/debrid_downloads/presentation/legacy_debrid/debrid_actions_test.dart
+test/features/debrid_downloads/presentation/legacy_debrid/debrid_navigation_test.dart
+test/features/debrid_downloads/presentation/legacy_debrid/debrid_source_contract_test.dart
+test/features/debrid_downloads/presentation/legacy_debrid/debrid_harness_test.dart
+test/features/debrid_downloads/presentation/legacy_debrid/debrid_delete_test.dart

@@ -1,3 +1,4 @@
+import 'support/debrid_source_picker_cases.dart';
 import 'support/torbox_downloads_fixture.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/widgets/cloud/cloud_file_row.dart';
@@ -92,6 +93,7 @@ void main() {
     );
   });
   torboxSelectionCharacterization();
+  debridSelectionCharacterization();
 }
 
 // TorBox's original HTTP-backed pushed-route selection contracts.

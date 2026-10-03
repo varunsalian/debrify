@@ -410,7 +410,20 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 
 ## Progress
 
-(empty)
+### Step 0 — complete; original-code checkpoint
+
+- Starting revision ecea0f96; Flutter 3.44.8 / Dart 3.12.2. Untouched base: 10,411 success / 13 failure / 28 error / 20 skipped; analyzer 825 identities. Corrected accessor-only base2a matches base exactly. Preliminary base2 exposed a redundant foundation import; removed it before adopting base2a. No new failure accepted.
+- Added the frozen actual-tear-off accessor only; no original method moves. Manual seam-only facade ratchet 6,445 → 6,590 (+145); exit at step 1. Inventory has all 173 leaves and all 53 fields, including both mid-file focus declarations. The deps report has a per-entry binding checklist before scaffolds are pinned.
+- Harness first passed against original screen/accessor in detached ecea0f96 worktree. Tests exercise real HTTP/service paths, real delete confirmations, non-monotonic string IDs, fresh post-action state, exact 149+1 ms waits, all 16 disposals plus super, and sentinel route/tab registrations. Committed profile coverage uses the real ProfileGate without a GlobalKey, matching production remount semantics.
+- Five macOS originals captured in the original worktree then compared exactly. January 2026 UTC fixture dates use the original absolute-date branch. Linux remains pending during steps 0–5; step 6 activates mandatory missing-original failure. The capture script resolves the unique step-0 commit by its exact subject because a commit cannot embed its own hash, then checks out that commit detached; no moved-code capture, SDK installation or push.
+- The first full test baseline base3 has the 75 passing added identities; the analyzer exposed 37 new test-style brace diagnostics. Added braces only in test code, retaining every assertion, and re-proved all 97 affected identities in the original worktree. Final base4 is the gate baseline; no extraction has begun. Manifest CRLF normalized to LF and descriptive rd_search_result filename chosen before moves.
+- Real-config fixtures cover wrong context, lifecycle order/move, callback rewiring, duplicate owners, root/forwarder/accessor rules, and callback receiver-path/member equality with same-class receiver-swap and wrapper negatives. Existing settings/IPTV/TorBox configs remain unchanged.
+- Conservative decisions: retain every dormant entry and original guard, mutation, payload, delay and known defect; copy duplicate helpers only inside this feature; no Riverpod/data/localization redesign. Pending physical Android TV focus, six launcher handoffs and real-account download/add/playlist/TV checks. All original found-not-fixed items remain out of scope.
+
+
+- Final base4: 10,486 success / 13 failure / 28 error / 20 skipped; PASS versus base2a (75 added successes) and base3 (no added identities). Analyzer 825, zero additions versus original. All 97 core affected identities pass in the original ecea0f96 worktree; all 125 expanded focused identities match base4 (124 success, one pre-existing theme source-guard failure). Original worktree/test fingerprints and tested trees are retained in suite_evidence env files; no input changed during these runs.
+- All four manifest/self-test runs pass, including original-code real-config negative fixtures. Architecture, strict sizes, storage reference fixtures and all 314 storage constants pass. Five original macOS hashes recorded; Linux capture script syntax passes. A preliminary expanded run named a nonexistent runtime-guard path; corrected to test/profiles/isolation_suite/stale_runtime_guard_test.dart and reran successfully against the observed baseline. No assertion removed/weakened and no allowlist/golden regression acceptance.
+- Concurrent user-owned CI-only commit 00bcf391 landed between base2 and base2a. Preserved unchanged; no application/test change. Base2a/base3/base4 record that HEAD and stable tested trees. Historical helper reports the same 32 failure/error identities missing from the nine-entry historical list, before extraction; observed-baseline identity comparisons establish parity.
 
 ## Found, not fixed
 
