@@ -410,13 +410,19 @@ Real-Debrid, PikPak) with self-tests, and gates against the latest PikPak base.
 - Facade 3,342 → 3,318; largest owner 37 lines. Receiver expansion requires one named-record trailing comma in navigation and braces around the paging early return. Both are exact, manifest-listed formatting exceptions; the source reader reverses only the registered brace site with its entire prefix and body matched. Frozen characterization assertions and PNGs are unchanged.
 - `pikpak/step2`: 111 successes / one observed pre-existing theme failure; PASS versus latest base3, no added/missing/newly skipped identities or new failures. Stable staged tested tree 9ec23679db9b3390acffd64d6259e178a9db2620. Whole analyzer 839 diagnostics, zero additions/removals. All five manifest/self-tests, architecture, strict sizes, storage references/self-tests/314 keys, formatting and staged diff checks PASS.
 
-### Step 3 — source complete; gate 1 follows
+### Step 3 — complete; gate 1 PASS
 
 - Step 2 is `d181b61d`. Moved back/focus actions, private `_email` with settings, restricted-folder logout, file loading/paging with both scroll methods, refresh, single/batch deletion, selection and feedback. All production callers use the new sections; facade 3,318 → 2,854, largest destination 262 lines.
 - Manually reviewed every dependency entry against the data composition before pinning 33 scaffold declarations. Each section receives only its used owners/callbacks. Cross-section callbacks resolve the one section holder; five remaining navigation/view callbacks are deferred to the real facade until step 4. Context/widget/mounted getters are live and evaluated at original sites; no context hoisting or guard change.
 - Conservative no-late decision: original fields retain declaration initializers, the State lazily caches one section composition through an explicit nullable field/getter, and composition assigns section slots once before returning them. Constructors only retain dependency records, so callbacks cannot run during wiring. No `late` fields or lifecycle initialization statement is added. Scroll/back tear-offs and the stored TV closure retain their exact owning instances.
 - `_email` remains private and write-only; relocated exactly its original unused_field identity in the analyzer allowlist. Whole analyzer still 839 diagnostics, zero additions/removals by identity/relocation. CI format (1,445 files, zero changes), scoped analyzer and strict five-warning allowlist PASS.
 - `pikpak/step3`: 111 successes / one observed pre-existing theme failure; PASS against base3, zero added/missing/newly skipped identities/new failures; all 83 frozen characterizations and five macOS originals unchanged. Stable staged tested tree 6f65996c5e78a4ce4eba66222f2b9370e3f01f15. All five manifest/self-tests, architecture, sizes, storage references/self-tests/314 keys, format and staged diff checks PASS. Gate 1 must run from the committed Step 3 source before dependent moves.
+
+### Gate 1 — complete
+
+- Step 3 source is `31ee19ac`. Full suite ran from that clean committed source, HEAD/index/tested/end tree recorded in gate1.env.json: tested tree `8c5874c542dd9cbf4f223af2f38b5f10e9f0149c`, no worktree snapshot, no untracked inputs, no changes during run; Flutter 3.44.8 / Dart 3.12.2.
+- Gate 1: 10,572 successes / 13 failures / 28 errors / 20 skips. PASS against latest PikPak base3 by identity, zero added/missing/newly skipped identities and no new failures. Historical helper reused completed runner JSON, with no second runner or recording: its same 32 failure/error identities absent from the historical list are byte-identical to base3. No failure list changed.
+- JSON/env/comparison/historical fingerprints are recorded in gate1-final-proof.json. Gate evidence is committed separately before Step 4. No push.
 
 ## Found, not fixed
 
