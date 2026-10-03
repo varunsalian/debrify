@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 
 typedef IptvPlaybackActionsDeps = ({
   IptvSettingsState settingsState,
-  // TEMP(iptv): _clearPreview -> IptvPreviewTuning.clearPreview (step 6).
+
   void Function() clearPreview,
   BuildContext Function() context,
   bool Function() isTelevision,

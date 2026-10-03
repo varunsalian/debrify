@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 typedef IptvCategoriesDeps = ({
   IptvCatalogState catalogState,
   void Function() applyFilters,
-  // TEMP(iptv): _categoryCounts -> IptvRowProjection.categoryCounts (step 6).
+
   Map<String, int> Function() categoryCounts,
   BuildContext Function() context,
   List<String> Function(CatalogSnapshot snap, List<CatalogGroup> groups)

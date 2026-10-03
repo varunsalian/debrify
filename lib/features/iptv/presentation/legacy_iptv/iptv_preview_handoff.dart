@@ -6,11 +6,11 @@ import 'package:debrify/features/iptv/presentation/legacy_iptv/iptv_preview_stat
 typedef IptvPreviewHandoffDeps = ({
   IptvPlayerState playerState,
   IptvPreviewState previewState,
-  // TEMP(iptv): _clearPreview -> IptvPreviewTuning.clearPreview (step 6).
+
   void Function() clearPreview,
   bool Function() mounted,
   Future<void> Function() refreshAfterPlayback,
-  // TEMP(iptv): _setSpotlightSourcesExpanded -> IptvSpotlightFocus.setSpotlightSourcesExpanded (step 6).
+
   void Function(bool expanded) setSpotlightSourcesExpanded,
 });
 

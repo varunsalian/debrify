@@ -31,7 +31,7 @@ typedef IptvCatalogLoadingDeps = ({
   Future<IptvParseResult> Function() buildContinueResult,
 
   Future<IptvParseResult> Function(String listId) buildListResult,
-  // TEMP(iptv): _clearPreview -> IptvPreviewTuning.clearPreview (step 6).
+
   void Function() clearPreview,
 
   void Function() consumeContentFocusRequest,

@@ -17,7 +17,7 @@ typedef IptvNavigationDeps = ({
   IptvSelectionState selectionState,
   IptvSettingsState settingsState,
   BuildContext Function() context,
-  // TEMP(iptv): _focusNodeFor -> IptvRowProjection.focusNodeFor (step 6).
+
   FocusNode Function(IptvChannel channel) focusNodeFor,
   Future<void> Function() initRecordingSupport,
   Future<void> Function({bool forceReload}) loadSettings,

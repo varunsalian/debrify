@@ -720,3 +720,33 @@ Technique), with these IPTV rules:
 - Architecture, size, format and diff checks pass. Shape registration covers
   all 54 feature files and seven radii; theme measurement and facade/Browse
   import reachability pass. No allowlist or golden/payload fixture changed.
+
+### Step 6 — complete
+
+- Step-5 checkpoint: `864b1247`. Moved 64 methods into fifteen owners:
+  loaded/classic/TV two-pane layouts, cockpit stage, content, quiet filters,
+  Spotlight layout/hero/content/actions/focus, row projection, tablet selection,
+  preview layout and preview tuning. Widget trees, keys, focus nodes, paint
+  order, lazy callbacks and live widget reads remain verbatim.
+- The facade ratchets **4,120 → 1,714** before final composition cleanup.
+  No `TEMP(iptv)` remains in the feature. Six exact formatter-braces sites
+  preserve existing guards and statement order. Every section meets 500 lines;
+  composition wiring is the remaining step-7 responsibility, alongside final
+  facade formatting, guard registration and CI scope.
+- Shape registration covers all 69 feature files plus the facade and preserves
+  seven radii and the unchanged token floor. Owners with `app.shape.` calls
+  stay in `kShapeResidue`; the facade now has none and moves to
+  `kExtractedShapeResidue`. Theme measurement and all-file import reachability
+  from facade/Browse pass.
+- Both manifest/self-test runs pass: 384 IPTV leaves and 33 IPTV fixtures
+  plus settings/launcher fixtures, and 316 settings leaves
+  (`step6-verbatim-verified.txt`, `step6-settings.txt`). Whole analyzer retains
+  the same 832 identities, zero added/removed, PASS
+  (`step6-analyzer-comparison.txt`).
+- The verified CI list matches `base3`: 2,786 successes, the same two
+  failures, no missing/new skips and PASS (`step6-test-comparison.txt`). All
+  four strict layout goldens, row repeat/hold behavior, Browse handoffs,
+  startup focus, payload fixtures and preview/lifecycle source guards pass.
+  Architecture, size, format and diff checks pass. Native preview layering,
+  native launch/return, Android TV D-pad and first-open performance remain
+  pending device verification.

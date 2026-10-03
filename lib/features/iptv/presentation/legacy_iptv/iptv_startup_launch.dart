@@ -29,12 +29,12 @@ typedef IptvStartupLaunchDeps = ({
     bool Function() cancelled,
   )
   resolveStartupRow,
-  // TEMP(iptv): _selectTabletChannel -> IptvTabletSelection.selectTabletChannel (step 6).
+
   void Function(int index, IptvChannel channel) selectTabletChannel,
   StateSetter setState,
-  // TEMP(iptv): _spotlightRequestedForDevice -> IptvRowProjection.spotlightRequestedForDevice (step 6).
+
   bool Function() spotlightRequestedForDevice,
-  // TEMP(iptv): _spotlightUsesTimeline -> IptvSpotlightContent.spotlightUsesTimeline (step 6).
+
   bool Function() spotlightUsesTimeline,
 });
 

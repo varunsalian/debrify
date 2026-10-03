@@ -24,11 +24,11 @@ typedef IptvFiltersSectionDeps = ({
   IptvSelectionState selectionState,
   IptvSettingsState settingsState,
   void Function() beginLoadStatus,
-  // TEMP(iptv): _clearPreview -> IptvPreviewTuning.clearPreview (step 6).
+
   void Function() clearPreview,
-  // TEMP(iptv): _focusNodeFor -> IptvRowProjection.focusNodeFor (step 6).
+
   FocusNode Function(IptvChannel channel) focusNodeFor,
-  // TEMP(iptv): _focusSpotlightContentEntry -> IptvSpotlightFocus.focusSpotlightContentEntry (step 6).
+
   void Function() focusSpotlightContentEntry,
   bool Function() isTelevision,
   Future<void> Function(IptvPlaylist playlist, {bool userRequested})

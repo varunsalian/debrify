@@ -27,10 +27,10 @@ typedef IptvSettingsLoadingDeps = ({
   Future<void> Function(IptvPlaylist playlist, {bool userRequested})
   loadPlaylist,
   bool Function() mounted,
-  // TEMP(iptv): _retunePreview -> IptvPreviewTuning.retunePreview (step 6).
+
   void Function(IptvChannel channel) retunePreview,
   StateSetter setState,
-  // TEMP(iptv): _stopPreviewPlayback -> IptvPreviewTuning.stopPreviewPlayback (step 6).
+
   void Function() stopPreviewPlayback,
 });
 

@@ -38,7 +38,7 @@ typedef IptvCatalogRefreshDeps = ({
   presentCatalog,
   bool Function(IptvPlaylist playlist, String contentType, int ticket)
   revalidateSuperseded,
-  // TEMP(iptv): _rowAttached -> IptvRowProjection.rowAttached (step 6).
+
   bool Function(IptvChannel channel) rowAttached,
   StateSetter setState,
   void Function(
