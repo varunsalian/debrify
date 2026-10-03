@@ -1,4 +1,12 @@
-
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_state.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_download_state.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_navigation_state.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_view_state.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_focus_state.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search_state.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search_state.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_state.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_add_input_state.dart';
 import 'package:debrify/features/debrid_downloads/models/debrid_downloads_view.dart';
 import 'package:debrify/features/debrid_downloads/models/folder_view_mode.dart';
 import 'package:debrify/features/debrid_downloads/models/rd_search_result.dart';
@@ -25,7 +33,6 @@ import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../utils/rd_folder_tree_builder.dart';
 import '../utils/platform_util.dart';
-import '../utils/tv_search_focus_handoff.dart';
 import 'video_player_screen.dart';
 import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
@@ -68,112 +75,59 @@ class DebridDownloadsScreen extends StatefulWidget {
   State<DebridDownloadsScreen> createState() => _DebridDownloadsScreenState();
 }
 
-
-
-
-
 class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
-
-  DebridDownloadsView _selectedView = DebridDownloadsView.torrents;
+  final _catalog = DebridCatalogState();
+  final _downloadState = DebridDownloadState();
+  final _nav = DebridNavigationState();
+  final _view = DebridViewState();
+  final _focus = DebridFocusState();
+  final _folderSearch = DebridFolderSearchState();
+  final _torrentSearch = DebridTorrentSearchState();
+  final _selection = DebridSelectionState();
+  final _addInput = DebridAddInputState();
 
   // TV content focus handler (stored for proper unregistration)
-  VoidCallback? _tvContentFocusHandler;
 
   // Torrent Downloads data
-  final List<RDTorrent> _torrents = [];
-  final ScrollController _torrentScrollController = ScrollController();
-  bool _isLoadingTorrents = false;
-  bool _isLoadingMoreTorrents = false;
-  String _torrentErrorMessage = '';
-  int _torrentPage = 1;
-  bool _hasMoreTorrents = true;
 
   // Downloads data
-  final List<DebridDownload> _downloads = [];
-  final ScrollController _downloadScrollController = ScrollController();
-  bool _isLoadingDownloads = false;
-  bool _isLoadingMoreDownloads = false;
-  String _downloadErrorMessage = '';
-  int _downloadPage = 1;
-  bool _hasMoreDownloads = true;
-
-  String? _apiKey;
-  static const int _limit = 50;
 
   // Folder navigation state
-  String? _currentTorrentId;
-  RDTorrent? _currentTorrent;
-  List<String> _folderPath = []; // e.g., ["Season 1", "Episodes"]
-  RDFileNode? _currentFolderTree;
-  List<RDFileNode>? _currentViewNodes; // Current folder contents
-  bool _isLoadingFolder = false;
+
+   // e.g., ["Season 1", "Episodes"]
+
+   // Current folder contents
 
   // View mode state
-  final Map<String, FolderViewMode> _torrentViewModes = {};
 
   // Magnet input
-  final TextEditingController _magnetController = TextEditingController();
-  bool _isAddingMagnet = false;
 
   // Link input
-  final TextEditingController _linkController = TextEditingController();
-  bool _isAddingLink = false;
 
   // Multi-select state
-  bool _isSelectionMode = false;
-  final Set<String> _selectedTorrentIds = {};
-  final Set<String> _selectedDownloadIds = {};
 
   Set<String> get _activeSelectedIds =>
-      _selectedView == DebridDownloadsView.torrents
-      ? _selectedTorrentIds
-      : _selectedDownloadIds;
+      _catalog.selectedView == DebridDownloadsView.torrents
+      ? _selection.selectedTorrentIds
+      : _selection.selectedDownloadIds;
 
-  int get _activeItemCount => _selectedView == DebridDownloadsView.torrents
-      ? _torrents.length
-      : _downloads.length;
+  int get _activeItemCount => _catalog.selectedView == DebridDownloadsView.torrents
+      ? _catalog.torrents.length
+      : _downloadState.downloads.length;
 
   bool get _isAllSelected =>
       _activeSelectedIds.length == _activeItemCount && _activeItemCount > 0;
 
   // TV/DPAD navigation
-  final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'rd-back');
-  final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'rd-refresh');
-  final FocusNode _viewModeDropdownFocusNode = FocusNode(
-    debugLabel: 'rd-view-mode',
-  );
-  late final FocusNode _firstItemFocusNode;
-  final FocusNode _deleteButtonFocusNode = FocusNode(
-    debugLabel: 'rd-delete-btn',
-  );
-  final TvSearchFocusHandoff _torrentSearchSubmitFocus = TvSearchFocusHandoff();
 
   // Flag to focus first item after data loads (set by TV content focus handler)
-  bool _shouldFocusOnLoad = false;
 
   // Torrent list search state
-  bool _isTorrentSearchActive = false;
-  final TextEditingController _torrentSearchController =
-      TextEditingController();
-  List<RDTorrent> _allTorrentsForSearch = [];
-  bool _isLoadingSearch = false;
-  String _torrentSearchQuery = '';
 
   // Whether RD is hidden from bottom-nav. In selectSourceMode we use this to
   // decide whether to restrict searches to queries matching the show title.
-  bool _hiddenFromNav = false;
 
   // Search state (for folder browsing mode)
-  bool _isSearchActive = false;
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'rd-search');
-  final FocusNode _searchButtonFocusNode = FocusNode(
-    debugLabel: 'rd-search-button',
-  );
-  final FocusNode _searchClearFocusNode = FocusNode(
-    debugLabel: 'rd-search-clear',
-  );
-  List<RDSearchResult> _searchResults = [];
 
   @override
   void initState() {
@@ -182,10 +136,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     // Row 0 binds this node; CloudFileRow supplies the key handling (its
     // upFocusNode routes ↑ to the torrent search field when active).
-    _firstItemFocusNode = FocusNode(debugLabel: 'rd-first-item');
+    _focus.firstItemFocusNode = FocusNode(debugLabel: 'rd-first-item');
 
     // Initialize torrent search focus node with DPAD key handler
-    _torrentSearchFocusNode = FocusNode(
+    _focus.torrentSearchFocusNode = FocusNode(
       debugLabel: 'rd-torrent-search',
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -196,7 +150,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           return KeyEventResult.handled;
         }
         if (key == LogicalKeyboardKey.arrowDown) {
-          _firstItemFocusNode.requestFocus();
+          _focus.firstItemFocusNode.requestFocus();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -206,16 +160,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (widget.selectSourceMode &&
         widget.initialSearchQuery != null &&
         widget.initialSearchQuery!.isNotEmpty) {
-      _isTorrentSearchActive = true;
-      _torrentSearchController.text = widget.initialSearchQuery!;
+      _torrentSearch.isTorrentSearchActive = true;
+      _torrentSearch.torrentSearchController.text = widget.initialSearchQuery!;
       RealDebridStorage.getRealDebridHiddenFromNav().then((v) {
-        if (mounted) setState(() => _hiddenFromNav = v);
+        if (mounted) setState(() => _torrentSearch.hiddenFromNav = v);
       });
     }
 
     _loadApiKeyAndData();
-    _torrentScrollController.addListener(_onTorrentScroll);
-    _downloadScrollController.addListener(_onDownloadScroll);
+    _focus.torrentScrollController.addListener(_onTorrentScroll);
+    _focus.downloadScrollController.addListener(_onDownloadScroll);
 
     // Register back navigation handler for folder navigation
     if (widget.isPushedRoute) {
@@ -230,7 +184,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             widget.isPushedRoute &&
             !widget.selectSourceMode &&
             widget.initialTorrentForOptions != null &&
-            _currentTorrentId == null) {
+            _nav.currentTorrentId == null) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -247,13 +201,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         _handleBackNavigation,
       );
       // Register TV sidebar focus handler (tab index 4 = Real Debrid)
-      _tvContentFocusHandler = () {
+      _focus.tvContentFocusHandler = () {
         // Set flag to focus after data loads
-        _shouldFocusOnLoad = true;
+        _focus.shouldFocusOnLoad = true;
         // Try to focus now in case data is already loaded
         _focusFirstItemOrFallback();
       };
-      MainPageBridge.registerTvContentFocusHandler(4, _tvContentFocusHandler!);
+      MainPageBridge.registerTvContentFocusHandler(4, _focus.tvContentFocusHandler!);
     }
 
     // If asked to show options for a specific torrent, open after init
@@ -261,12 +215,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (widget.initialTorrentForOptions != null) {
         // Wait until API key is loaded
         int attempts = 0;
-        while (_apiKey == null && attempts < 20) {
+        while (_catalog.apiKey == null && attempts < 20) {
           await Future.delayed(const Duration(milliseconds: 150));
           attempts++;
         }
 
-        if (mounted && _apiKey != null) {
+        if (mounted && _catalog.apiKey != null) {
           // Navigate into the torrent folder instead of showing dialog
           await _navigateIntoTorrent(widget.initialTorrentForOptions!);
         }
@@ -276,30 +230,30 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Focus first item if data is loaded, otherwise focus search button
   void _focusFirstItemOrFallback() {
-    if (!_shouldFocusOnLoad) return;
+    if (!_focus.shouldFocusOnLoad) return;
 
     // Use post-frame callback to ensure widgets are built
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_shouldFocusOnLoad) return;
+      if (!mounted || !_focus.shouldFocusOnLoad) return;
 
       // Check if we're in folder view
-      if (_currentViewNodes != null && _currentViewNodes!.isNotEmpty) {
-        _shouldFocusOnLoad = false;
-        _firstItemFocusNode.requestFocus();
-      } else if (_selectedView == DebridDownloadsView.torrents &&
-          _torrents.isNotEmpty) {
-        _shouldFocusOnLoad = false;
-        _firstItemFocusNode.requestFocus();
-      } else if (_selectedView == DebridDownloadsView.ddl &&
-          _downloads.isNotEmpty) {
-        _shouldFocusOnLoad = false;
-        _firstItemFocusNode.requestFocus();
-      } else if (!_isLoadingTorrents &&
-          !_isLoadingDownloads &&
-          !_isLoadingFolder) {
+      if (_nav.currentViewNodes != null && _nav.currentViewNodes!.isNotEmpty) {
+        _focus.shouldFocusOnLoad = false;
+        _focus.firstItemFocusNode.requestFocus();
+      } else if (_catalog.selectedView == DebridDownloadsView.torrents &&
+          _catalog.torrents.isNotEmpty) {
+        _focus.shouldFocusOnLoad = false;
+        _focus.firstItemFocusNode.requestFocus();
+      } else if (_catalog.selectedView == DebridDownloadsView.ddl &&
+          _downloadState.downloads.isNotEmpty) {
+        _focus.shouldFocusOnLoad = false;
+        _focus.firstItemFocusNode.requestFocus();
+      } else if (!_catalog.isLoadingTorrents &&
+          !_downloadState.isLoadingDownloads &&
+          !_nav.isLoadingFolder) {
         // No items and not loading - focus fallback
-        _shouldFocusOnLoad = false;
-        _searchButtonFocusNode.requestFocus();
+        _focus.shouldFocusOnLoad = false;
+        _focus.searchButtonFocusNode.requestFocus();
       }
       // If still loading, keep the flag set - will be called again after load
     });
@@ -312,32 +266,32 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       MainPageBridge.popRouteBackHandler(_handleBackNavigation);
     } else {
       MainPageBridge.unregisterTabBackHandler('realdebrid');
-      if (_tvContentFocusHandler != null) {
+      if (_focus.tvContentFocusHandler != null) {
         MainPageBridge.unregisterTvContentFocusHandler(
           4,
-          _tvContentFocusHandler!,
+          _focus.tvContentFocusHandler!,
         );
       }
     }
 
-    _torrentScrollController.dispose();
-    _downloadScrollController.dispose();
-    _magnetController.dispose();
-    _linkController.dispose();
+    _focus.torrentScrollController.dispose();
+    _focus.downloadScrollController.dispose();
+    _addInput.magnetController.dispose();
+    _addInput.linkController.dispose();
 
     // Dispose focus nodes
-    _backButtonFocusNode.dispose();
-    _refreshButtonFocusNode.dispose();
-    _viewModeDropdownFocusNode.dispose();
-    _firstItemFocusNode.dispose();
-    _deleteButtonFocusNode.dispose();
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _searchButtonFocusNode.dispose();
-    _searchClearFocusNode.dispose();
-    _torrentSearchController.dispose();
-    _torrentSearchFocusNode.dispose();
-    _torrentSearchClearFocusNode.dispose();
+    _focus.backButtonFocusNode.dispose();
+    _focus.refreshButtonFocusNode.dispose();
+    _focus.viewModeDropdownFocusNode.dispose();
+    _focus.firstItemFocusNode.dispose();
+    _focus.deleteButtonFocusNode.dispose();
+    _folderSearch.searchController.dispose();
+    _focus.searchFocusNode.dispose();
+    _focus.searchButtonFocusNode.dispose();
+    _focus.searchClearFocusNode.dispose();
+    _torrentSearch.torrentSearchController.dispose();
+    _focus.torrentSearchFocusNode.dispose();
+    _focus.torrentSearchClearFocusNode.dispose();
 
     super.dispose();
   }
@@ -352,25 +306,25 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
 
     // Exit selection mode first if active
-    if (_isSelectionMode) {
+    if (_selection.isSelectionMode) {
       _exitSelectionMode();
       return true;
     }
 
     // Close search first if active
-    if (_isSearchActive) {
+    if (_folderSearch.isSearchActive) {
       _toggleSearch();
       return true;
     }
 
     // If inside a folder within the torrent, navigate up
-    if (_currentTorrentId != null && _folderPath.isNotEmpty) {
+    if (_nav.currentTorrentId != null && _nav.folderPath.isNotEmpty) {
       _navigateUp();
       return true;
     }
 
     // At torrent root level (viewing torrent files, not inside a subfolder)
-    if (_currentTorrentId != null && _folderPath.isEmpty) {
+    if (_nav.currentTorrentId != null && _nav.folderPath.isEmpty) {
       // Deep-linked directly into this torrent (pushed WITH a target) → pop back
       // to the caller. Browsing (pushed from the Cloud hub without a target, or a
       // normal tab) → fall through to _navigateUp so Back returns to the torrents
@@ -394,18 +348,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   void _onTorrentScroll() {
-    if (_torrentScrollController.position.pixels >=
-        _torrentScrollController.position.maxScrollExtent - 200) {
-      if (!_isLoadingMoreTorrents && _hasMoreTorrents) {
+    if (_focus.torrentScrollController.position.pixels >=
+        _focus.torrentScrollController.position.maxScrollExtent - 200) {
+      if (!_catalog.isLoadingMoreTorrents && _catalog.hasMoreTorrents) {
         _loadMoreTorrents();
       }
     }
   }
 
   void _onDownloadScroll() {
-    if (_downloadScrollController.position.pixels >=
-        _downloadScrollController.position.maxScrollExtent - 200) {
-      if (!_isLoadingMoreDownloads && _hasMoreDownloads) {
+    if (_focus.downloadScrollController.position.pixels >=
+        _focus.downloadScrollController.position.maxScrollExtent - 200) {
+      if (!_downloadState.isLoadingMoreDownloads && _downloadState.hasMoreDownloads) {
         _loadMoreDownloads();
       }
     }
@@ -416,7 +370,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     if (mounted) {
       setState(() {
-        _apiKey = apiKey;
+        _catalog.apiKey = apiKey;
       });
     }
 
@@ -426,9 +380,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } else {
       if (mounted) {
         setState(() {
-          _torrentErrorMessage =
+          _catalog.torrentErrorMessage =
               'No API key configured. Please add your Real Debrid API key in Settings.';
-          _downloadErrorMessage =
+          _downloadState.downloadErrorMessage =
               'No API key configured. Please add your Real Debrid API key in Settings.';
         });
       }
@@ -444,25 +398,25 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (reset) {
       if (mounted) {
         setState(() {
-          _torrentPage = 1;
-          _hasMoreTorrents = true;
-          _torrents.clear();
+          _catalog.torrentPage = 1;
+          _catalog.hasMoreTorrents = true;
+          _catalog.torrents.clear();
         });
       }
     }
 
     if (mounted) {
       setState(() {
-        _isLoadingTorrents = true;
-        _torrentErrorMessage = '';
+        _catalog.isLoadingTorrents = true;
+        _catalog.torrentErrorMessage = '';
       });
     }
 
     try {
       final result = await DebridService.getTorrents(
         apiKey,
-        page: _torrentPage,
-        limit: _limit,
+        page: _catalog.torrentPage,
+        limit: DebridCatalogState.limit,
         // filter: 'downloaded', // Temporarily removed to test
       );
 
@@ -472,16 +426,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (mounted) {
         setState(() {
           if (reset) {
-            _torrents.clear();
+            _catalog.torrents.clear();
           }
           // Filter to show only downloaded torrents
           final downloadedTorrents = newTorrents
               .where((torrent) => torrent.isDownloaded)
               .toList();
-          _torrents.addAll(downloadedTorrents);
-          _hasMoreTorrents = hasMore;
-          _torrentPage++;
-          _isLoadingTorrents = false;
+          _catalog.torrents.addAll(downloadedTorrents);
+          _catalog.hasMoreTorrents = hasMore;
+          _catalog.torrentPage++;
+          _catalog.isLoadingTorrents = false;
         });
         // Focus first item if navigated from sidebar
         _focusFirstItemOrFallback();
@@ -489,27 +443,27 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _torrentErrorMessage = getUserFriendlyErrorMessage(e);
-          _isLoadingTorrents = false;
+          _catalog.torrentErrorMessage = getUserFriendlyErrorMessage(e);
+          _catalog.isLoadingTorrents = false;
         });
       }
     }
   }
 
   Future<void> _loadMoreTorrents() async {
-    if (_apiKey == null || _isLoadingMoreTorrents || !_hasMoreTorrents) return;
+    if (_catalog.apiKey == null || _catalog.isLoadingMoreTorrents || !_catalog.hasMoreTorrents) return;
 
     if (mounted) {
       setState(() {
-        _isLoadingMoreTorrents = true;
+        _catalog.isLoadingMoreTorrents = true;
       });
     }
 
     try {
       final result = await DebridService.getTorrents(
-        _apiKey!,
-        page: _torrentPage,
-        limit: _limit,
+        _catalog.apiKey!,
+        page: _catalog.torrentPage,
+        limit: DebridCatalogState.limit,
         // filter: 'downloaded', // Temporarily removed to test
       );
 
@@ -522,17 +476,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           final downloadedTorrents = newTorrents
               .where((torrent) => torrent.isDownloaded)
               .toList();
-          _torrents.addAll(downloadedTorrents);
-          _hasMoreTorrents = hasMore;
-          _torrentPage++;
-          _isLoadingMoreTorrents = false;
+          _catalog.torrents.addAll(downloadedTorrents);
+          _catalog.hasMoreTorrents = hasMore;
+          _catalog.torrentPage++;
+          _catalog.isLoadingMoreTorrents = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _torrentErrorMessage = getUserFriendlyErrorMessage(e);
-          _isLoadingMoreTorrents = false;
+          _catalog.torrentErrorMessage = getUserFriendlyErrorMessage(e);
+          _catalog.isLoadingMoreTorrents = false;
         });
       }
     }
@@ -543,11 +497,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   void _toggleTorrentSearch() {
     if (widget.selectSourceMode) return;
     setState(() {
-      _isTorrentSearchActive = !_isTorrentSearchActive;
-      if (!_isTorrentSearchActive) {
-        _torrentSearchController.clear();
-        _torrentSearchQuery = '';
-        _allTorrentsForSearch.clear();
+      _torrentSearch.isTorrentSearchActive = !_torrentSearch.isTorrentSearchActive;
+      if (!_torrentSearch.isTorrentSearchActive) {
+        _torrentSearch.torrentSearchController.clear();
+        _torrentSearch.torrentSearchQuery = '';
+        _torrentSearch.allTorrentsForSearch.clear();
       }
     });
   }
@@ -571,13 +525,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   void _submitTorrentSearch() {
-    final query = _torrentSearchController.text.trim();
+    final query = _torrentSearch.torrentSearchController.text.trim();
     if (query.isEmpty) {
-      _torrentSearchSubmitFocus.cancel();
+      _focus.torrentSearchSubmitFocus.cancel();
       return;
     }
     if (widget.selectSourceMode &&
-        _hiddenFromNav &&
+        _torrentSearch.hiddenFromNav &&
         !_queryMatchesInitialTitle(query)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -588,13 +542,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           duration: const Duration(seconds: 3),
         ),
       );
-      _torrentSearchSubmitFocus.cancel();
+      _focus.torrentSearchSubmitFocus.cancel();
       return;
     }
-    _torrentSearchSubmitFocus.arm(enabled: PlatformUtil.isTelevision);
-    setState(() => _torrentSearchQuery = query);
-    if (_allTorrentsForSearch.isEmpty) {
-      if (!_isLoadingSearch) _fetchAllTorrentsForSearch();
+    _focus.torrentSearchSubmitFocus.arm(enabled: PlatformUtil.isTelevision);
+    setState(() => _torrentSearch.torrentSearchQuery = query);
+    if (_torrentSearch.allTorrentsForSearch.isEmpty) {
+      if (!_torrentSearch.isLoadingSearch) _fetchAllTorrentsForSearch();
     } else {
       setState(() {}); // Trigger rebuild with new query
       _completeTorrentSearchSubmitFocus();
@@ -603,23 +557,23 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   void _completeTorrentSearchSubmitFocus() {
     if (_filteredSearchTorrents.isEmpty) {
-      _torrentSearchSubmitFocus.cancel();
+      _focus.torrentSearchSubmitFocus.cancel();
       return;
     }
-    _torrentSearchSubmitFocus.complete(
-      field: _torrentSearchFocusNode,
+    _focus.torrentSearchSubmitFocus.complete(
+      field: _focus.torrentSearchFocusNode,
       isMounted: () => mounted,
-      requestFocus: _firstItemFocusNode.requestFocus,
-      targetHasFocus: () => _firstItemFocusNode.hasFocus,
+      requestFocus: _focus.firstItemFocusNode.requestFocus,
+      targetHasFocus: () => _focus.firstItemFocusNode.hasFocus,
     );
   }
 
   Future<void> _fetchAllTorrentsForSearch() async {
-    if (_apiKey == null) {
-      _torrentSearchSubmitFocus.cancel();
+    if (_catalog.apiKey == null) {
+      _focus.torrentSearchSubmitFocus.cancel();
       return;
     }
-    setState(() => _isLoadingSearch = true);
+    setState(() => _torrentSearch.isLoadingSearch = true);
 
     try {
       final List<RDTorrent> allTorrents = [];
@@ -628,7 +582,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       while (hasMore) {
         final result = await DebridService.getTorrents(
-          _apiKey!,
+          _catalog.apiKey!,
           page: page,
           limit: 2000,
         );
@@ -642,15 +596,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       if (mounted) {
         setState(() {
-          _allTorrentsForSearch = allTorrents;
-          _isLoadingSearch = false;
+          _torrentSearch.allTorrentsForSearch = allTorrents;
+          _torrentSearch.isLoadingSearch = false;
         });
         _completeTorrentSearchSubmitFocus();
       }
     } catch (e) {
       if (mounted) {
-        _torrentSearchSubmitFocus.cancel();
-        setState(() => _isLoadingSearch = false);
+        _focus.torrentSearchSubmitFocus.cancel();
+        setState(() => _torrentSearch.isLoadingSearch = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -663,10 +617,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   List<RDTorrent> get _filteredSearchTorrents {
-    if (widget.selectSourceMode && _torrentSearchQuery.isEmpty) return [];
-    final downloaded = _allTorrentsForSearch.where((t) => t.isDownloaded);
-    if (_torrentSearchQuery.isEmpty) return downloaded.toList();
-    final query = _torrentSearchQuery.toLowerCase();
+    if (widget.selectSourceMode && _torrentSearch.torrentSearchQuery.isEmpty) return [];
+    final downloaded = _torrentSearch.allTorrentsForSearch.where((t) => t.isDownloaded);
+    if (_torrentSearch.torrentSearchQuery.isEmpty) return downloaded.toList();
+    final query = _torrentSearch.torrentSearchQuery.toLowerCase();
     return downloaded
         .where((t) => t.filename.toLowerCase().contains(query))
         .toList();
@@ -677,25 +631,25 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (reset) {
       if (mounted) {
         setState(() {
-          _downloadPage = 1;
-          _hasMoreDownloads = true;
-          _downloads.clear();
+          _downloadState.downloadPage = 1;
+          _downloadState.hasMoreDownloads = true;
+          _downloadState.downloads.clear();
         });
       }
     }
 
     if (mounted) {
       setState(() {
-        _isLoadingDownloads = true;
-        _downloadErrorMessage = '';
+        _downloadState.isLoadingDownloads = true;
+        _downloadState.downloadErrorMessage = '';
       });
     }
 
     try {
       final result = await DebridService.getDownloads(
         apiKey,
-        page: _downloadPage,
-        limit: _limit,
+        page: _downloadState.downloadPage,
+        limit: DebridCatalogState.limit,
       );
 
       final List<DebridDownload> newDownloads = result['downloads'];
@@ -704,12 +658,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (mounted) {
         setState(() {
           if (reset) {
-            _downloads.clear();
+            _downloadState.downloads.clear();
           }
-          _downloads.addAll(newDownloads);
-          _hasMoreDownloads = hasMore;
-          _downloadPage++;
-          _isLoadingDownloads = false;
+          _downloadState.downloads.addAll(newDownloads);
+          _downloadState.hasMoreDownloads = hasMore;
+          _downloadState.downloadPage++;
+          _downloadState.isLoadingDownloads = false;
         });
         // Focus first item if navigated from sidebar
         _focusFirstItemOrFallback();
@@ -717,29 +671,29 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _downloadErrorMessage = getUserFriendlyErrorMessage(e);
-          _isLoadingDownloads = false;
+          _downloadState.downloadErrorMessage = getUserFriendlyErrorMessage(e);
+          _downloadState.isLoadingDownloads = false;
         });
       }
     }
   }
 
   Future<void> _loadMoreDownloads() async {
-    if (_apiKey == null || _isLoadingMoreDownloads || !_hasMoreDownloads) {
+    if (_catalog.apiKey == null || _downloadState.isLoadingMoreDownloads || !_downloadState.hasMoreDownloads) {
       return;
     }
 
     if (mounted) {
       setState(() {
-        _isLoadingMoreDownloads = true;
+        _downloadState.isLoadingMoreDownloads = true;
       });
     }
 
     try {
       final result = await DebridService.getDownloads(
-        _apiKey!,
-        page: _downloadPage,
-        limit: _limit,
+        _catalog.apiKey!,
+        page: _downloadState.downloadPage,
+        limit: DebridCatalogState.limit,
       );
 
       final List<DebridDownload> newDownloads = result['downloads'];
@@ -747,30 +701,30 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       if (mounted) {
         setState(() {
-          _downloads.addAll(newDownloads);
-          _hasMoreDownloads = hasMore;
-          _downloadPage++;
-          _isLoadingMoreDownloads = false;
+          _downloadState.downloads.addAll(newDownloads);
+          _downloadState.hasMoreDownloads = hasMore;
+          _downloadState.downloadPage++;
+          _downloadState.isLoadingMoreDownloads = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _downloadErrorMessage = getUserFriendlyErrorMessage(e);
-          _isLoadingMoreDownloads = false;
+          _downloadState.downloadErrorMessage = getUserFriendlyErrorMessage(e);
+          _downloadState.isLoadingMoreDownloads = false;
         });
       }
     }
   }
 
   Future<void> _handlePlayVideo(RDTorrent torrent) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     if (torrent.links.length == 1) {
       // Single file - check MIME type after unrestricting
       try {
         final unrestrictResult = await DebridService.unrestrictLink(
-          _apiKey!,
+          _catalog.apiKey!,
           torrent.links[0],
         );
         final downloadLink = unrestrictResult['download'];
@@ -809,14 +763,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   // Download action methods
   Future<void> _handleDownloadAction(DebridDownload download) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     // Copy download link to clipboard
     _copyToClipboard(download.download);
   }
 
   Future<void> _handlePlayDownload(DebridDownload download) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     // Video by MIME **or** by name: the provider's MIME is often generic
     // (application/octet-stream) or absent for the less common containers, and
@@ -845,7 +799,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Future<void> _handleQueueDownload(DebridDownload download) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     try {
       final meta = jsonEncode({
@@ -874,7 +828,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Future<void> _handleDeleteTorrent(RDTorrent torrent) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
@@ -923,7 +877,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         );
 
         // Delete the torrent
-        await DebridService.deleteTorrent(_apiKey!, torrent.id);
+        await DebridService.deleteTorrent(_catalog.apiKey!, torrent.id);
 
         // Check if widget is still mounted before updating UI
         if (mounted) {
@@ -932,7 +886,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
           // Remove the torrent from the local list
           setState(() {
-            _torrents.removeWhere((t) => t.id == torrent.id);
+            _catalog.torrents.removeWhere((t) => t.id == torrent.id);
           });
 
           // Show success message
@@ -952,7 +906,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Future<void> _handleDeleteAllTorrents() async {
-    if (_apiKey == null || _torrents.isEmpty) return;
+    if (_catalog.apiKey == null || _catalog.torrents.isEmpty) return;
 
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
@@ -1060,7 +1014,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       while (hasMore && !isCancelled) {
         final result = await DebridService.getTorrents(
-          _apiKey!,
+          _catalog.apiKey!,
           page: page,
           limit: 1000,
         );
@@ -1077,7 +1031,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       if (isCancelled) {
-        if (mounted) await _fetchTorrents(_apiKey!, reset: true);
+        if (mounted) await _fetchTorrents(_catalog.apiKey!, reset: true);
         return;
       }
 
@@ -1089,7 +1043,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         final torrent = allTorrents[i];
 
         try {
-          await DebridService.deleteTorrent(_apiKey!, torrent.id);
+          await DebridService.deleteTorrent(_catalog.apiKey!, torrent.id);
           completed++;
 
           // Update dialog state only if not cancelled
@@ -1119,13 +1073,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         // Update the torrents list
         if (mounted) {
           setState(() {
-            _torrents.clear();
+            _catalog.torrents.clear();
           });
         }
 
         // Refresh the list
         if (mounted) {
-          await _fetchTorrents(_apiKey!, reset: true);
+          await _fetchTorrents(_catalog.apiKey!, reset: true);
         }
 
         // Show result message
@@ -1139,7 +1093,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       } else {
         // Operation was cancelled, refresh the list to show current state
         if (mounted) {
-          await _fetchTorrents(_apiKey!, reset: true);
+          await _fetchTorrents(_catalog.apiKey!, reset: true);
         }
       }
     } catch (e) {
@@ -1152,7 +1106,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Future<void> _handleDeleteAllDownloads() async {
-    if (_apiKey == null || _downloads.isEmpty) return;
+    if (_catalog.apiKey == null || _downloadState.downloads.isEmpty) return;
 
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
@@ -1260,7 +1214,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       while (hasMore && !isCancelled) {
         final result = await DebridService.getDownloads(
-          _apiKey!,
+          _catalog.apiKey!,
           page: page,
           limit: 1000,
         );
@@ -1277,7 +1231,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       if (isCancelled) {
-        if (mounted) await _fetchDownloads(_apiKey!, reset: true);
+        if (mounted) await _fetchDownloads(_catalog.apiKey!, reset: true);
         return;
       }
 
@@ -1289,7 +1243,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         final download = allDownloads[i];
 
         try {
-          await DebridService.deleteDownload(_apiKey!, download.id);
+          await DebridService.deleteDownload(_catalog.apiKey!, download.id);
           completed++;
 
           // Update dialog state only if not cancelled
@@ -1319,13 +1273,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         // Update the downloads list
         if (mounted) {
           setState(() {
-            _downloads.clear();
+            _downloadState.downloads.clear();
           });
         }
 
         // Refresh the list
         if (mounted) {
-          await _fetchDownloads(_apiKey!, reset: true);
+          await _fetchDownloads(_catalog.apiKey!, reset: true);
         }
 
         // Show result message
@@ -1339,7 +1293,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       } else {
         // Operation was cancelled, refresh the list to show current state
         if (mounted) {
-          await _fetchDownloads(_apiKey!, reset: true);
+          await _fetchDownloads(_catalog.apiKey!, reset: true);
         }
       }
     } catch (e) {
@@ -1352,7 +1306,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Future<void> _handleDeleteDownload(DebridDownload download) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
@@ -1401,7 +1355,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         );
 
         // Delete the download
-        await DebridService.deleteDownload(_apiKey!, download.id);
+        await DebridService.deleteDownload(_catalog.apiKey!, download.id);
 
         // Check if widget is still mounted before updating UI
         if (mounted) {
@@ -1410,7 +1364,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
           // Remove the download from the local list
           setState(() {
-            _downloads.removeWhere((d) => d.id == download.id);
+            _downloadState.downloads.removeWhere((d) => d.id == download.id);
           });
 
           // Show success message
@@ -1433,39 +1387,39 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   void _toggleSelectionMode() {
     setState(() {
-      if (_isSelectionMode) {
-        _selectedTorrentIds.clear();
-        _selectedDownloadIds.clear();
+      if (_selection.isSelectionMode) {
+        _selection.selectedTorrentIds.clear();
+        _selection.selectedDownloadIds.clear();
       }
-      _isSelectionMode = !_isSelectionMode;
+      _selection.isSelectionMode = !_selection.isSelectionMode;
     });
   }
 
   void _exitSelectionMode() {
-    if (!_isSelectionMode) return;
+    if (!_selection.isSelectionMode) return;
     setState(() {
-      _isSelectionMode = false;
-      _selectedTorrentIds.clear();
-      _selectedDownloadIds.clear();
+      _selection.isSelectionMode = false;
+      _selection.selectedTorrentIds.clear();
+      _selection.selectedDownloadIds.clear();
     });
   }
 
   void _toggleTorrentSelection(String id) {
     setState(() {
-      if (_selectedTorrentIds.contains(id)) {
-        _selectedTorrentIds.remove(id);
+      if (_selection.selectedTorrentIds.contains(id)) {
+        _selection.selectedTorrentIds.remove(id);
       } else {
-        _selectedTorrentIds.add(id);
+        _selection.selectedTorrentIds.add(id);
       }
     });
   }
 
   void _toggleDownloadSelection(String id) {
     setState(() {
-      if (_selectedDownloadIds.contains(id)) {
-        _selectedDownloadIds.remove(id);
+      if (_selection.selectedDownloadIds.contains(id)) {
+        _selection.selectedDownloadIds.remove(id);
       } else {
-        _selectedDownloadIds.add(id);
+        _selection.selectedDownloadIds.add(id);
       }
     });
   }
@@ -1475,19 +1429,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (_isAllSelected) {
         _activeSelectedIds.clear();
       } else {
-        if (_selectedView == DebridDownloadsView.torrents) {
-          _selectedTorrentIds.addAll(_torrents.map((t) => t.id));
+        if (_catalog.selectedView == DebridDownloadsView.torrents) {
+          _selection.selectedTorrentIds.addAll(_catalog.torrents.map((t) => t.id));
         } else {
-          _selectedDownloadIds.addAll(_downloads.map((d) => d.id));
+          _selection.selectedDownloadIds.addAll(_downloadState.downloads.map((d) => d.id));
         }
       }
     });
   }
 
   Future<void> _handleDeleteSelected() async {
-    if (_apiKey == null || _activeSelectedIds.isEmpty) return;
+    if (_catalog.apiKey == null || _activeSelectedIds.isEmpty) return;
 
-    final isTorrents = _selectedView == DebridDownloadsView.torrents;
+    final isTorrents = _catalog.selectedView == DebridDownloadsView.torrents;
     final count = _activeSelectedIds.length;
     final itemType = isTorrents ? 'torrent' : 'download';
     final itemTypePlural = isTorrents ? 'torrents' : 'downloads';
@@ -1601,9 +1555,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       try {
         if (isTorrents) {
-          await DebridService.deleteTorrent(_apiKey!, id);
+          await DebridService.deleteTorrent(_catalog.apiKey!, id);
         } else {
-          await DebridService.deleteDownload(_apiKey!, id);
+          await DebridService.deleteDownload(_catalog.apiKey!, id);
         }
         deletedIds.add(id);
       } catch (e) {
@@ -1628,13 +1582,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (!isCancelled && mounted) {
       setState(() {
         if (isTorrents) {
-          _torrents.removeWhere((t) => deletedIds.contains(t.id));
+          _catalog.torrents.removeWhere((t) => deletedIds.contains(t.id));
         } else {
-          _downloads.removeWhere((d) => deletedIds.contains(d.id));
+          _downloadState.downloads.removeWhere((d) => deletedIds.contains(d.id));
         }
-        _selectedTorrentIds.clear();
-        _selectedDownloadIds.clear();
-        _isSelectionMode = false;
+        _selection.selectedTorrentIds.clear();
+        _selection.selectedDownloadIds.clear();
+        _selection.isSelectionMode = false;
       });
 
       if (failedDeletes.isEmpty) {
@@ -1650,11 +1604,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Cancelled — remove already-deleted items and deselect them, but stay in selection mode
       setState(() {
         if (isTorrents) {
-          _torrents.removeWhere((t) => deletedIds.contains(t.id));
-          _selectedTorrentIds.removeAll(deletedIds);
+          _catalog.torrents.removeWhere((t) => deletedIds.contains(t.id));
+          _selection.selectedTorrentIds.removeAll(deletedIds);
         } else {
-          _downloads.removeWhere((d) => deletedIds.contains(d.id));
-          _selectedDownloadIds.removeAll(deletedIds);
+          _downloadState.downloads.removeWhere((d) => deletedIds.contains(d.id));
+          _selection.selectedDownloadIds.removeAll(deletedIds);
         }
       });
     }
@@ -1704,10 +1658,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
   }
 
-
-
-
-
   void _showError(String message) {
     // Messenger lookup first: it is the pre-existing liveness check on this
     // context, so an unmounted caller fails exactly where it always did.
@@ -1754,35 +1704,35 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   /// listing never inherits the old offset. Listeners are detached around the
   /// jump so it can't trigger a stale load-more at the navigation boundary.
   void _resetListScroll() {
-    if (_torrentScrollController.hasClients) {
-      _torrentScrollController.removeListener(_onTorrentScroll);
-      _torrentScrollController.jumpTo(0);
-      _torrentScrollController.addListener(_onTorrentScroll);
+    if (_focus.torrentScrollController.hasClients) {
+      _focus.torrentScrollController.removeListener(_onTorrentScroll);
+      _focus.torrentScrollController.jumpTo(0);
+      _focus.torrentScrollController.addListener(_onTorrentScroll);
     }
-    if (_downloadScrollController.hasClients) {
-      _downloadScrollController.removeListener(_onDownloadScroll);
-      _downloadScrollController.jumpTo(0);
-      _downloadScrollController.addListener(_onDownloadScroll);
+    if (_focus.downloadScrollController.hasClients) {
+      _focus.downloadScrollController.removeListener(_onDownloadScroll);
+      _focus.downloadScrollController.jumpTo(0);
+      _focus.downloadScrollController.addListener(_onDownloadScroll);
     }
   }
 
   Future<void> _navigateIntoTorrent(RDTorrent torrent) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     _exitSelectionMode();
 
     // Focus first item after folder contents load
-    _shouldFocusOnLoad = true;
+    _focus.shouldFocusOnLoad = true;
     _resetListScroll();
 
     setState(() {
-      _isLoadingFolder = true;
+      _nav.isLoadingFolder = true;
     });
 
     try {
       // Get torrent info to check for RAR archives
       final torrentInfo = await DebridService.getTorrentInfo(
-        _apiKey!,
+        _catalog.apiKey!,
         torrent.id,
       );
       final files =
@@ -1798,7 +1748,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (isRarArchive) {
         // Show a message that this cannot be browsed
         setState(() {
-          _isLoadingFolder = false;
+          _nav.isLoadingFolder = false;
         });
 
         // Show dialog explaining RAR archives and offering to download
@@ -1855,7 +1805,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                       try {
                         final unrestrictResult =
                             await DebridService.unrestrictLink(
-                              _apiKey!,
+                              _catalog.apiKey!,
                               links[0],
                             );
                         final downloadUrl =
@@ -1885,16 +1835,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Not a RAR archive - proceed with normal folder navigation
       // Get the folder tree for this torrent
       final folderTree = await DebridService.getTorrentFolderTree(
-        _apiKey!,
+        _catalog.apiKey!,
         torrent.id,
       );
       final rootNodes = RDFolderTreeBuilder.getRootLevelNodes(folderTree);
 
       // Initialize view mode for this torrent if not already set
-      _torrentViewModes.putIfAbsent(torrent.id, () => FolderViewMode.raw);
+      _view.torrentViewModes.putIfAbsent(torrent.id, () => FolderViewMode.raw);
 
       // Apply view mode transformation to root nodes
-      final mode = _torrentViewModes[torrent.id]!;
+      final mode = _view.torrentViewModes[torrent.id]!;
       List<RDFileNode> transformedNodes;
       switch (mode) {
         case FolderViewMode.raw:
@@ -1910,12 +1860,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       if (!mounted) return;
       setState(() {
-        _currentTorrentId = torrent.id;
-        _currentTorrent = torrent;
-        _currentFolderTree = folderTree;
-        _currentViewNodes = transformedNodes;
-        _folderPath = [];
-        _isLoadingFolder = false;
+        _nav.currentTorrentId = torrent.id;
+        _nav.currentTorrent = torrent;
+        _nav.currentFolderTree = folderTree;
+        _nav.currentViewNodes = transformedNodes;
+        _nav.folderPath = [];
+        _nav.isLoadingFolder = false;
       });
 
       // Focus first item after folder contents load
@@ -1923,7 +1873,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isLoadingFolder = false;
+        _nav.isLoadingFolder = false;
       });
       _showError('Failed to load torrent contents: ${e.toString()}');
     }
@@ -1934,7 +1884,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (!folder.isFolder) return;
 
     // Focus first item after navigation
-    _shouldFocusOnLoad = true;
+    _focus.shouldFocusOnLoad = true;
 
     // Apply view mode to folder children
     // NOTE: Series Arrange only makes sense at root level (it creates virtual Season folders)
@@ -1961,8 +1911,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
 
     setState(() {
-      _folderPath.add(folder.name);
-      _currentViewNodes = transformedChildren;
+      _nav.folderPath.add(folder.name);
+      _nav.currentViewNodes = transformedChildren;
     });
 
     // Focus first item after navigation
@@ -1973,30 +1923,30 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   void _navigateUp() {
     // Refocus the first row once the previous listing shows — the focused
     // row is disposed by the swap and nothing else reclaims DPAD focus.
-    _shouldFocusOnLoad = true;
+    _focus.shouldFocusOnLoad = true;
     _resetListScroll();
-    if (_folderPath.isEmpty && _currentTorrentId != null) {
+    if (_nav.folderPath.isEmpty && _nav.currentTorrentId != null) {
       // Go back to torrents list
       setState(() {
-        _currentTorrentId = null;
-        _currentTorrent = null;
-        _currentFolderTree = null;
-        _currentViewNodes = null;
-        _folderPath = [];
+        _nav.currentTorrentId = null;
+        _nav.currentTorrent = null;
+        _nav.currentFolderTree = null;
+        _nav.currentViewNodes = null;
+        _nav.folderPath = [];
       });
       _focusFirstItemOrFallback();
-    } else if (_folderPath.isNotEmpty && _currentFolderTree != null) {
+    } else if (_nav.folderPath.isNotEmpty && _nav.currentFolderTree != null) {
       // Go up one folder level
-      _folderPath.removeLast();
+      _nav.folderPath.removeLast();
 
       // Get raw nodes at the new path
       List<RDFileNode> rawNodes;
-      if (_folderPath.isEmpty) {
-        rawNodes = RDFolderTreeBuilder.getRootLevelNodes(_currentFolderTree!);
+      if (_nav.folderPath.isEmpty) {
+        rawNodes = RDFolderTreeBuilder.getRootLevelNodes(_nav.currentFolderTree!);
       } else {
         // Find the folder node at the current path
-        RDFileNode currentNode = _currentFolderTree!;
-        for (final folderName in _folderPath) {
+        RDFileNode currentNode = _nav.currentFolderTree!;
+        for (final folderName in _nav.folderPath) {
           final childFolder = currentNode.children
               .cast<RDFileNode?>()
               .firstWhere(
@@ -2007,9 +1957,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             currentNode = childFolder;
           } else {
             // Folder not found - reset to root
-            _folderPath.clear();
+            _nav.folderPath.clear();
             rawNodes = RDFolderTreeBuilder.getRootLevelNodes(
-              _currentFolderTree!,
+              _nav.currentFolderTree!,
             );
             // Apply view mode and set state
             final mode = _getCurrentViewMode();
@@ -2026,7 +1976,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 break;
             }
             setState(() {
-              _currentViewNodes = transformedNodes;
+              _nav.currentViewNodes = transformedNodes;
             });
             _focusFirstItemOrFallback();
             return;
@@ -2040,7 +1990,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       final mode = _getCurrentViewMode();
       List<RDFileNode> transformedNodes;
 
-      if (mode == FolderViewMode.seriesArrange && _folderPath.isNotEmpty) {
+      if (mode == FolderViewMode.seriesArrange && _nav.folderPath.isNotEmpty) {
         // Still inside a folder after going up - use sorted view
         transformedNodes = applySortedView(rawNodes);
       } else {
@@ -2058,50 +2008,38 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       setState(() {
-        _currentViewNodes = transformedNodes;
+        _nav.currentViewNodes = transformedNodes;
       });
       _focusFirstItemOrFallback();
     }
   }
 
   String _getCurrentFolderTitle() {
-    if (_currentTorrentId == null) return '';
-    if (_folderPath.isEmpty) {
-      return _currentTorrent?.filename ?? 'Torrent Files';
+    if (_nav.currentTorrentId == null) return '';
+    if (_nav.folderPath.isEmpty) {
+      return _nav.currentTorrent?.filename ?? 'Torrent Files';
     }
-    return _folderPath.last;
+    return _nav.folderPath.last;
   }
-
-
-
-
-
-
-
-
-
-
-
-
 
   /// Get current view mode for active torrent
   FolderViewMode _getCurrentViewMode() {
-    if (_currentTorrentId == null) return FolderViewMode.raw;
-    return _torrentViewModes[_currentTorrentId] ?? FolderViewMode.raw;
+    if (_nav.currentTorrentId == null) return FolderViewMode.raw;
+    return _view.torrentViewModes[_nav.currentTorrentId] ?? FolderViewMode.raw;
   }
 
   /// Set view mode and refresh display
   void _setViewMode(FolderViewMode mode) {
-    if (_currentTorrentId == null || _currentViewNodes == null) return;
+    if (_nav.currentTorrentId == null || _nav.currentViewNodes == null) return;
 
     // Get raw nodes based on current path
     List<RDFileNode> rawNodes;
-    if (_folderPath.isEmpty && _currentFolderTree != null) {
-      rawNodes = RDFolderTreeBuilder.getRootLevelNodes(_currentFolderTree!);
-    } else if (_currentFolderTree != null) {
+    if (_nav.folderPath.isEmpty && _nav.currentFolderTree != null) {
+      rawNodes = RDFolderTreeBuilder.getRootLevelNodes(_nav.currentFolderTree!);
+    } else if (_nav.currentFolderTree != null) {
       // Navigate to current path to get raw nodes
-      RDFileNode currentNode = _currentFolderTree!;
-      for (final folderName in _folderPath) {
+      RDFileNode currentNode = _nav.currentFolderTree!;
+      for (final folderName in _nav.folderPath) {
         final childFolder = currentNode.children.cast<RDFileNode?>().firstWhere(
           (node) => node?.name == folderName && node?.isFolder == true,
           orElse: () => null,
@@ -2110,7 +2048,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           currentNode = childFolder;
         } else {
           setState(() {
-            _currentViewNodes = [];
+            _nav.currentViewNodes = [];
           });
           return;
         }
@@ -2139,8 +2077,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
         // Switch to sorted view instead
         setState(() {
-          _torrentViewModes[_currentTorrentId!] = FolderViewMode.sortedAZ;
-          _currentViewNodes = applySortedView(rawNodes);
+          _view.torrentViewModes[_nav.currentTorrentId!] = FolderViewMode.sortedAZ;
+          _nav.currentViewNodes = applySortedView(rawNodes);
         });
         return;
       }
@@ -2148,17 +2086,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     // Apply transformation based on mode
     setState(() {
-      _torrentViewModes[_currentTorrentId!] = mode;
+      _view.torrentViewModes[_nav.currentTorrentId!] = mode;
 
       switch (mode) {
         case FolderViewMode.raw:
-          _currentViewNodes = rawNodes;
+          _nav.currentViewNodes = rawNodes;
           break;
         case FolderViewMode.sortedAZ:
-          _currentViewNodes = applySortedView(rawNodes);
+          _nav.currentViewNodes = applySortedView(rawNodes);
           break;
         case FolderViewMode.seriesArrange:
-          _currentViewNodes = applySeriesArrangedView(rawNodes);
+          _nav.currentViewNodes = applySeriesArrangedView(rawNodes);
           break;
       }
     });
@@ -2169,13 +2107,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   /// Toggle search mode on/off
   void _toggleSearch() {
     setState(() {
-      _isSearchActive = !_isSearchActive;
-      if (!_isSearchActive) {
-        _searchController.clear();
-        _searchResults.clear();
+      _folderSearch.isSearchActive = !_folderSearch.isSearchActive;
+      if (!_folderSearch.isSearchActive) {
+        _folderSearch.searchController.clear();
+        _folderSearch.searchResults.clear();
       } else {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _searchFocusNode.requestFocus();
+          _focus.searchFocusNode.requestFocus();
         });
       }
     });
@@ -2183,8 +2121,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Perform deep search across all files in current torrent
   void _performSearch(String query) {
-    if (_currentFolderTree == null || query.isEmpty) {
-      setState(() => _searchResults = []);
+    if (_nav.currentFolderTree == null || query.isEmpty) {
+      setState(() => _folderSearch.searchResults = []);
       return;
     }
 
@@ -2204,31 +2142,31 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
     }
 
-    for (final child in _currentFolderTree!.children) {
+    for (final child in _nav.currentFolderTree!.children) {
       searchNode(child, []);
     }
 
-    setState(() => _searchResults = results);
+    setState(() => _folderSearch.searchResults = results);
   }
 
   /// Build the search bar widget
   Widget _buildSearchBar() {
     final app = AppThemeScope.of(context);
-    final hasText = _searchController.text.isNotEmpty;
+    final hasText = _folderSearch.searchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Row(
         children: [
           Expanded(
             child: TvTextField(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
+              controller: _folderSearch.searchController,
+              focusNode: _focus.searchFocusNode,
               textInputAction: TextInputAction.search,
               // D-pad exits for Android TV (formerly a Focus/onKeyEvent wrapper)
-              onUpArrow: () => _searchFocusNode.unfocus(),
-              onDownArrow: () => _searchFocusNode.unfocus(),
+              onUpArrow: () => _focus.searchFocusNode.unfocus(),
+              onDownArrow: () => _focus.searchFocusNode.unfocus(),
               onRightArrow: hasText
-                  ? () => _searchClearFocusNode.requestFocus()
+                  ? () => _focus.searchClearFocusNode.requestFocus()
                   : null,
               decoration: InputDecoration(
                 hintText: 'Search all files...',
@@ -2245,7 +2183,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 ),
               ),
               onChanged: _performSearch,
-              onSubmitted: (_) => _searchFocusNode.unfocus(),
+              onSubmitted: (_) => _focus.searchFocusNode.unfocus(),
             ),
           ),
           // Clear button - separate focusable widget for D-pad navigation
@@ -2253,7 +2191,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             Padding(
               padding: const EdgeInsets.only(left: 8),
               child: Focus(
-                focusNode: _searchClearFocusNode,
+                focusNode: _focus.searchClearFocusNode,
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
@@ -2261,16 +2199,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   // Select/Enter: clear search
                   if (isActivateKey(key)) {
                     setState(() {
-                      _searchController.clear();
-                      _searchResults.clear();
+                      _folderSearch.searchController.clear();
+                      _folderSearch.searchResults.clear();
                     });
-                    _searchFocusNode.requestFocus();
+                    _focus.searchFocusNode.requestFocus();
                     return KeyEventResult.handled;
                   }
 
                   // Arrow Left: go back to TextField
                   if (key == LogicalKeyboardKey.arrowLeft) {
-                    _searchFocusNode.requestFocus();
+                    _focus.searchFocusNode.requestFocus();
                     return KeyEventResult.handled;
                   }
 
@@ -2295,10 +2233,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                         icon: const Icon(Icons.clear, color: Colors.grey),
                         onPressed: () {
                           setState(() {
-                            _searchController.clear();
-                            _searchResults.clear();
+                            _folderSearch.searchController.clear();
+                            _folderSearch.searchResults.clear();
                           });
-                          _searchFocusNode.requestFocus();
+                          _focus.searchFocusNode.requestFocus();
                         },
                       ),
                     );
@@ -2313,7 +2251,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Build search results list
   Widget _buildSearchResults() {
-    if (_searchController.text.isEmpty) {
+    if (_folderSearch.searchController.text.isEmpty) {
       return const Center(
         child: Text(
           'Type to search all files',
@@ -2322,7 +2260,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       );
     }
 
-    if (_searchResults.isEmpty) {
+    if (_folderSearch.searchResults.isEmpty) {
       return const Center(
         child: Text('No files found', style: TextStyle(color: Colors.grey)),
       );
@@ -2330,9 +2268,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _searchResults.length,
+      itemCount: _folderSearch.searchResults.length,
       itemBuilder: (context, index) {
-        final result = _searchResults[index];
+        final result = _folderSearch.searchResults[index];
         return _buildSearchResultCard(result, index);
       },
     );
@@ -2419,7 +2357,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (widget.isPushedRoute &&
         !widget.selectSourceMode &&
         widget.initialTorrentForOptions != null &&
-        _currentTorrentId == null) {
+        _nav.currentTorrentId == null) {
       return CloudScaffold(
         appBar: AppBar(
           leading: IconButton(
@@ -2443,11 +2381,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     }
 
     // If in folder browsing mode, show folder view
-    if (_currentTorrentId != null) {
+    if (_nav.currentTorrentId != null) {
       return _buildFolderBrowserScaffold();
     }
 
-    final Widget content = _selectedView == DebridDownloadsView.torrents
+    final Widget content = _catalog.selectedView == DebridDownloadsView.torrents
         ? _buildTorrentContent()
         : _buildDownloadContent();
 
@@ -2455,7 +2393,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       appBar: widget.selectSourceMode
           ? AppBar(
               leading: IconButton(
-                focusNode: _backButtonFocusNode,
+                focusNode: _focus.backButtonFocusNode,
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => Navigator.of(context).pop(),
                 tooltip: 'Back',
@@ -2496,13 +2434,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           // Navigate to back button on up arrow
           if (event is KeyDownEvent &&
               event.logicalKey == LogicalKeyboardKey.arrowUp) {
-            _backButtonFocusNode.requestFocus();
+            _focus.backButtonFocusNode.requestFocus();
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
         },
         child: DropdownButtonFormField<FolderViewMode>(
-          focusNode: _viewModeDropdownFocusNode,
+          focusNode: _focus.viewModeDropdownFocusNode,
           autofocus: true,
           isExpanded: true,
           value: mode,
@@ -2559,7 +2497,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             return KeyEventResult.ignored;
           },
           child: IconButton(
-            focusNode: _backButtonFocusNode,
+            focusNode: _focus.backButtonFocusNode,
             icon: const Icon(Icons.arrow_back),
             onPressed: () => _handleBackNavigation(),
           ),
@@ -2568,16 +2506,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         actions: [
           if (showSearch)
             IconButton(
-              focusNode: _searchButtonFocusNode,
-              icon: Icon(_isSearchActive ? Icons.close : Icons.search),
+              focusNode: _focus.searchButtonFocusNode,
+              icon: Icon(_folderSearch.isSearchActive ? Icons.close : Icons.search),
               onPressed: _toggleSearch,
-              tooltip: _isSearchActive ? 'Close search' : 'Search files',
+              tooltip: _folderSearch.isSearchActive ? 'Close search' : 'Search files',
             ),
           IconButton(
-            focusNode: _refreshButtonFocusNode,
+            focusNode: _focus.refreshButtonFocusNode,
             icon: const Icon(Icons.refresh),
-            onPressed: _currentTorrent != null
-                ? () => _navigateIntoTorrent(_currentTorrent!)
+            onPressed: _nav.currentTorrent != null
+                ? () => _navigateIntoTorrent(_nav.currentTorrent!)
                 : null,
           ),
         ],
@@ -2585,11 +2523,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       body: Column(
         children: [
           _buildViewModeDropdown(),
-          if (_isSearchActive && showSearch) _buildSearchBar(),
+          if (_folderSearch.isSearchActive && showSearch) _buildSearchBar(),
           Expanded(
             child: FocusTraversalGroup(
               policy: OrderedTraversalPolicy(),
-              child: _isSearchActive
+              child: _folderSearch.isSearchActive
                   ? _buildSearchResults()
                   : _buildFolderContentsView(),
             ),
@@ -2604,21 +2542,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Widget _buildFolderContentsView() {
-    if (_isLoadingFolder) {
+    if (_nav.isLoadingFolder) {
       return _buildFolderLoadingView();
     }
 
-    if (_currentViewNodes == null || _currentViewNodes!.isEmpty) {
+    if (_nav.currentViewNodes == null || _nav.currentViewNodes!.isEmpty) {
       return const Center(child: Text('Empty folder'));
     }
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _currentViewNodes!.length,
+      itemCount: _nav.currentViewNodes!.length,
       cacheExtent: 200.0, // Pre-cache items for smoother scrolling
       addRepaintBoundaries: true, // Optimize repainting
       itemBuilder: (context, index) {
-        final node = _currentViewNodes![index];
+        final node = _nav.currentViewNodes![index];
         return RepaintBoundary(child: _buildNodeCard(node, index));
       },
     );
@@ -2692,7 +2630,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ? () => _playFile(node)
           : null,
       actions: actions,
-      focusNode: index == 0 ? _firstItemFocusNode : null,
+      focusNode: index == 0 ? _focus.firstItemFocusNode : null,
     );
   }
 
@@ -2714,14 +2652,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             Icons.download_rounded,
           ),
         ],
-        selected: _selectedView,
+        selected: _catalog.selectedView,
         onSelected: (value) {
-          if (value == _selectedView) return;
+          if (value == _catalog.selectedView) return;
           _exitSelectionMode();
           // The two root lists swap in the same element slot, so the incoming
           // one would inherit the outgoing list's scroll offset.
           _resetListScroll();
-          setState(() => _selectedView = value);
+          setState(() => _catalog.selectedView = value);
         },
       ),
     );
@@ -2757,7 +2695,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
-            focusNode: _deleteButtonFocusNode,
+            focusNode: _focus.deleteButtonFocusNode,
             onPressed: count > 0 ? _handleDeleteSelected : null,
             icon: const Icon(Icons.delete_outline, size: 18),
             label: const Text('Delete'),
@@ -2834,7 +2772,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               ],
               const Spacer(),
               Tooltip(
-                message: _isTorrentSearchActive
+                message: _torrentSearch.isTorrentSearchActive
                     ? 'Close search'
                     : 'Search torrents',
                 child: IconButton(
@@ -2843,28 +2781,28 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   padding: iconPadding,
                   constraints: iconConstraints,
                   icon: Icon(
-                    _isTorrentSearchActive
+                    _torrentSearch.isTorrentSearchActive
                         ? Icons.search_off_rounded
                         : Icons.search_rounded,
                   ),
-                  color: _isTorrentSearchActive
+                  color: _torrentSearch.isTorrentSearchActive
                       ? theme.colorScheme.primary
                       : theme.colorScheme.onSurface,
                   visualDensity: VisualDensity.compact,
                 ),
               ),
-              if (_torrents.isNotEmpty) ...[
+              if (_catalog.torrents.isNotEmpty) ...[
                 Tooltip(
-                  message: _isSelectionMode ? 'Exit selection' : 'Select items',
+                  message: _selection.isSelectionMode ? 'Exit selection' : 'Select items',
                   child: IconButton(
                     onPressed: _toggleSelectionMode,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
                     icon: Icon(
-                      _isSelectionMode ? Icons.close : Icons.checklist_outlined,
+                      _selection.isSelectionMode ? Icons.close : Icons.checklist_outlined,
                     ),
-                    color: _isSelectionMode
+                    color: _selection.isSelectionMode
                         ? theme.colorScheme.error
                         : theme.colorScheme.onSurface,
                     visualDensity: VisualDensity.compact,
@@ -2947,18 +2885,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 SizedBox(width: isCompact ? 4 : 8),
               ],
               const Spacer(),
-              if (_downloads.isNotEmpty) ...[
+              if (_downloadState.downloads.isNotEmpty) ...[
                 Tooltip(
-                  message: _isSelectionMode ? 'Exit selection' : 'Select items',
+                  message: _selection.isSelectionMode ? 'Exit selection' : 'Select items',
                   child: IconButton(
                     onPressed: _toggleSelectionMode,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
                     icon: Icon(
-                      _isSelectionMode ? Icons.close : Icons.checklist_outlined,
+                      _selection.isSelectionMode ? Icons.close : Icons.checklist_outlined,
                     ),
-                    color: _isSelectionMode
+                    color: _selection.isSelectionMode
                         ? theme.colorScheme.error
                         : theme.colorScheme.onSurface,
                     visualDensity: VisualDensity.compact,
@@ -2999,9 +2937,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Widget _buildTorrentContent() {
     Widget body;
 
-    if (_isLoadingTorrents && _torrents.isEmpty) {
+    if (_catalog.isLoadingTorrents && _catalog.torrents.isEmpty) {
       body = const CloudRowSkeletonList();
-    } else if (_torrentErrorMessage.isNotEmpty && _torrents.isEmpty) {
+    } else if (_catalog.torrentErrorMessage.isNotEmpty && _catalog.torrents.isEmpty) {
       body = Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -3029,7 +2967,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _torrentErrorMessage,
+                      _catalog.torrentErrorMessage,
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.red[600], fontSize: 14),
                     ),
@@ -3039,14 +2977,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               const SizedBox(height: 16),
               ElevatedButton(
                 autofocus: true,
-                onPressed: () => _fetchTorrents(_apiKey!, reset: true),
+                onPressed: () => _fetchTorrents(_catalog.apiKey!, reset: true),
                 child: const Text('Retry'),
               ),
             ],
           ),
         ),
       );
-    } else if (_torrents.isEmpty) {
+    } else if (_catalog.torrents.isEmpty) {
       body = const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -3072,21 +3010,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } else {
       body = RefreshIndicator(
         onRefresh: () async {
-          if (_apiKey != null) {
-            await _fetchTorrents(_apiKey!, reset: true);
+          if (_catalog.apiKey != null) {
+            await _fetchTorrents(_catalog.apiKey!, reset: true);
           }
         },
         color: Colors.white,
         backgroundColor: const Color(0xFF1E293B),
         strokeWidth: 3,
         child: ListView.builder(
-          controller: _torrentScrollController,
+          controller: _focus.torrentScrollController,
           padding: const EdgeInsets.all(16),
-          itemCount: _torrents.length + (_hasMoreTorrents ? 1 : 0),
+          itemCount: _catalog.torrents.length + (_catalog.hasMoreTorrents ? 1 : 0),
           cacheExtent: 200.0, // Pre-cache items for smoother scrolling
           addRepaintBoundaries: true, // Optimize repainting
           itemBuilder: (context, index) {
-            if (index == _torrents.length) {
+            if (index == _catalog.torrents.length) {
               // Loading more indicator
               return const Padding(
                 padding: EdgeInsets.all(16),
@@ -3094,7 +3032,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               );
             }
 
-            final torrent = _torrents[index];
+            final torrent = _catalog.torrents[index];
             return KeyedSubtree(
               key: ValueKey(torrent.id),
               child: _buildTorrentCard(torrent, index),
@@ -3108,12 +3046,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       children: [
         if (!widget.selectSourceMode) _buildTorrentToolbar(),
         _buildViewSelectorBar(),
-        if (_isTorrentSearchActive) _buildTorrentSearchBar(),
-        if (_isSelectionMode) _buildSelectionBar(),
+        if (_torrentSearch.isTorrentSearchActive) _buildTorrentSearchBar(),
+        if (_selection.isSelectionMode) _buildSelectionBar(),
         Expanded(
-          child: _isLoadingFolder
+          child: _nav.isLoadingFolder
               ? _buildFolderLoadingView()
-              : _isTorrentSearchActive
+              : _torrentSearch.isTorrentSearchActive
               ? _buildTorrentSearchResults()
               : body,
         ),
@@ -3122,24 +3060,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   // Focus nodes for torrent search DPAD navigation
-  late final FocusNode _torrentSearchFocusNode;
-  final FocusNode _torrentSearchClearFocusNode = FocusNode(
-    debugLabel: 'rd-torrent-search-clear',
-  );
 
   Widget _buildTorrentSearchBar() {
     final app = AppThemeScope.of(context);
-    final hasText = _torrentSearchController.text.isNotEmpty;
+    final hasText = _torrentSearch.torrentSearchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
           Expanded(
             child: TvTextField(
-              controller: _torrentSearchController,
-              focusNode: _torrentSearchFocusNode,
+              controller: _torrentSearch.torrentSearchController,
+              focusNode: _focus.torrentSearchFocusNode,
               autofocus: true,
-              onChanged: (_) => _torrentSearchSubmitFocus.cancel(),
+              onChanged: (_) => _focus.torrentSearchSubmitFocus.cancel(),
               onSubmitted: (_) => _submitTorrentSearch(),
               textInputAction: TextInputAction.search,
               style: const TextStyle(fontSize: 14),
@@ -3176,19 +3110,19 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             Padding(
               padding: const EdgeInsets.only(left: 8),
               child: Focus(
-                focusNode: _torrentSearchClearFocusNode,
+                focusNode: _focus.torrentSearchClearFocusNode,
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
                   if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
-                    _torrentSearchSubmitFocus.cancel();
-                    _torrentSearchController.clear();
-                    setState(() => _torrentSearchQuery = '');
-                    _torrentSearchFocusNode.requestFocus();
+                    _focus.torrentSearchSubmitFocus.cancel();
+                    _torrentSearch.torrentSearchController.clear();
+                    setState(() => _torrentSearch.torrentSearchQuery = '');
+                    _focus.torrentSearchFocusNode.requestFocus();
                     return KeyEventResult.handled;
                   }
                   if (key == LogicalKeyboardKey.arrowLeft) {
-                    _torrentSearchFocusNode.requestFocus();
+                    _focus.torrentSearchFocusNode.requestFocus();
                     return KeyEventResult.handled;
                   }
                   return KeyEventResult.ignored;
@@ -3198,10 +3132,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return IconButton(
                       onPressed: () {
-                        _torrentSearchSubmitFocus.cancel();
-                        _torrentSearchController.clear();
-                        setState(() => _torrentSearchQuery = '');
-                        _torrentSearchFocusNode.requestFocus();
+                        _focus.torrentSearchSubmitFocus.cancel();
+                        _torrentSearch.torrentSearchController.clear();
+                        setState(() => _torrentSearch.torrentSearchQuery = '');
+                        _focus.torrentSearchFocusNode.requestFocus();
                       },
                       icon: Icon(
                         Icons.clear_rounded,
@@ -3222,7 +3156,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   Widget _buildTorrentSearchResults() {
     final app = AppThemeScope.of(context);
-    if (_isLoadingSearch) {
+    if (_torrentSearch.isLoadingSearch) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -3240,7 +3174,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     final results = _filteredSearchTorrents;
 
-    if (_torrentSearchQuery.isEmpty) {
+    if (_torrentSearch.torrentSearchQuery.isEmpty) {
       return Center(
         child: Text(
           'Type a keyword and press search',
@@ -3285,9 +3219,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Widget _buildDownloadContent() {
     Widget body;
 
-    if (_isLoadingDownloads && _downloads.isEmpty) {
+    if (_downloadState.isLoadingDownloads && _downloadState.downloads.isEmpty) {
       body = const CloudRowSkeletonList();
-    } else if (_downloadErrorMessage.isNotEmpty && _downloads.isEmpty) {
+    } else if (_downloadState.downloadErrorMessage.isNotEmpty && _downloadState.downloads.isEmpty) {
       body = Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -3315,7 +3249,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _downloadErrorMessage,
+                      _downloadState.downloadErrorMessage,
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.red[600], fontSize: 14),
                     ),
@@ -3325,14 +3259,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               const SizedBox(height: 16),
               ElevatedButton(
                 autofocus: true,
-                onPressed: () => _fetchDownloads(_apiKey!, reset: true),
+                onPressed: () => _fetchDownloads(_catalog.apiKey!, reset: true),
                 child: const Text('Retry'),
               ),
             ],
           ),
         ),
       );
-    } else if (_downloads.isEmpty) {
+    } else if (_downloadState.downloads.isEmpty) {
       body = const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -3358,21 +3292,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } else {
       body = RefreshIndicator(
         onRefresh: () async {
-          if (_apiKey != null) {
-            await _fetchDownloads(_apiKey!, reset: true);
+          if (_catalog.apiKey != null) {
+            await _fetchDownloads(_catalog.apiKey!, reset: true);
           }
         },
         color: Colors.white,
         backgroundColor: const Color(0xFF1E293B),
         strokeWidth: 3,
         child: ListView.builder(
-          controller: _downloadScrollController,
+          controller: _focus.downloadScrollController,
           padding: const EdgeInsets.all(16),
-          itemCount: _downloads.length + (_hasMoreDownloads ? 1 : 0),
+          itemCount: _downloadState.downloads.length + (_downloadState.hasMoreDownloads ? 1 : 0),
           cacheExtent: 200.0, // Pre-cache items for smoother scrolling
           addRepaintBoundaries: true, // Optimize repainting
           itemBuilder: (context, index) {
-            if (index == _downloads.length) {
+            if (index == _downloadState.downloads.length) {
               // Loading more indicator
               return const Padding(
                 padding: EdgeInsets.all(16),
@@ -3380,7 +3314,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               );
             }
 
-            final download = _downloads[index];
+            final download = _downloadState.downloads[index];
             return KeyedSubtree(
               key: ValueKey(download.id),
               child: _buildDownloadCard(download, index),
@@ -3394,7 +3328,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       children: [
         if (!widget.selectSourceMode) _buildDownloadToolbar(),
         _buildViewSelectorBar(),
-        if (_isSelectionMode) _buildSelectionBar(),
+        if (_selection.isSelectionMode) _buildSelectionBar(),
         Expanded(child: body),
       ],
     );
@@ -3404,9 +3338,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     final meta =
         '${Formatters.formatFileSize(torrent.bytes)} · ${torrent.links.length} ${torrent.links.length == 1 ? 'file' : 'files'} · ${_formatDate(torrent.added)}';
     final upNode = (index == 0)
-        ? (_isSelectionMode
-              ? _deleteButtonFocusNode
-              : (_isTorrentSearchActive ? _torrentSearchFocusNode : null))
+        ? (_selection.isSelectionMode
+              ? _focus.deleteButtonFocusNode
+              : (_torrentSearch.isTorrentSearchActive ? _focus.torrentSearchFocusNode : null))
         : null;
 
     if (widget.selectSourceMode) {
@@ -3426,7 +3360,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           widget.onSourceSelected?.call(source);
           Navigator.of(context).pop();
         },
-        focusNode: index == 0 ? _firstItemFocusNode : null,
+        focusNode: index == 0 ? _focus.firstItemFocusNode : null,
         upFocusNode: upNode,
       );
     }
@@ -3470,16 +3404,16 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       meta: meta,
       onTap: () => _navigateIntoTorrent(torrent),
       actions: actions,
-      selectionMode: _isSelectionMode,
-      selected: _selectedTorrentIds.contains(torrent.id),
+      selectionMode: _selection.isSelectionMode,
+      selected: _selection.selectedTorrentIds.contains(torrent.id),
       onToggleSelected: () => _toggleTorrentSelection(torrent.id),
-      focusNode: index == 0 ? _firstItemFocusNode : null,
+      focusNode: index == 0 ? _focus.firstItemFocusNode : null,
       upFocusNode: upNode,
     );
   }
 
   Future<void> _handleDownloadTorrent(RDTorrent torrent) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     try {
       // Show loading
@@ -3503,7 +3437,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Get torrent info to access files and links
       final torrentInfo = await DebridService.getTorrentInfo(
-        _apiKey!,
+        _catalog.apiKey!,
         torrent.id,
       );
       final allFiles =
@@ -3562,12 +3496,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Future<void> _handleAddTorrentToPlaylist(RDTorrent torrent) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     if (torrent.links.length == 1) {
       try {
         final unrestrictResult = await DebridService.unrestrictLink(
-          _apiKey!,
+          _catalog.apiKey!,
           torrent.links[0],
         );
         final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
@@ -3617,7 +3551,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       final result = await DebrifyTvChannelAddBridge.addTorrentsToChannel(
         context,
         torrents: [DebrifyTvChannelAddBridge.fromRealDebridTorrent(torrent)],
-        searchKeyword: _torrentSearchQuery,
+        searchKeyword: _torrentSearch.torrentSearchQuery,
       );
 
       if (result == null || !mounted) return;
@@ -3657,7 +3591,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 Navigator.of(context).pop();
               }
             : null,
-        focusNode: index == 0 ? _firstItemFocusNode : null,
+        focusNode: index == 0 ? _focus.firstItemFocusNode : null,
       );
     }
 
@@ -3704,18 +3638,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ? () => _handlePlayDownload(download)
           : null,
       actions: actions,
-      selectionMode: _isSelectionMode,
-      selected: _selectedDownloadIds.contains(download.id),
+      selectionMode: _selection.isSelectionMode,
+      selected: _selection.selectedDownloadIds.contains(download.id),
       onToggleSelected: () => _toggleDownloadSelection(download.id),
-      focusNode: index == 0 ? _firstItemFocusNode : null,
-      upFocusNode: (_isSelectionMode && index == 0)
-          ? _deleteButtonFocusNode
+      focusNode: index == 0 ? _focus.firstItemFocusNode : null,
+      upFocusNode: (_selection.isSelectionMode && index == 0)
+          ? _focus.deleteButtonFocusNode
           : null,
     );
   }
 
   Future<void> _handlePlayMultiFileTorrent(RDTorrent torrent) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
     try {
       // Show loading dialog
       showDialog(
@@ -3735,7 +3669,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Get torrent info to access file names and links
       final torrentInfo = await DebridService.getTorrentInfo(
-        _apiKey!,
+        _catalog.apiKey!,
         torrent.id,
       );
       final files = torrentInfo['files'] as List<dynamic>?;
@@ -3847,7 +3781,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           if (i == firstEpisodeIndex) {
             try {
               final unrestrictResult = await DebridService.unrestrictLink(
-                _apiKey!,
+                _catalog.apiKey!,
                 infoLinks[i],
               );
               final url = unrestrictResult['download']?.toString() ?? '';
@@ -3922,7 +3856,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           if (i == 0) {
             try {
               final unrestrictResult = await DebridService.unrestrictLink(
-                _apiKey!,
+                _catalog.apiKey!,
                 infoLinks[i],
               );
               final url = unrestrictResult['download']?.toString() ?? '';
@@ -4032,7 +3966,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 ),
               ),
               child: TextField(
-                controller: _magnetController,
+                controller: _addInput.magnetController,
                 decoration: const InputDecoration(
                   hintText: 'Paste magnet link here...',
                   border: InputBorder.none,
@@ -4068,14 +4002,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
-                    onPressed: _isAddingMagnet
+                    onPressed: _addInput.isAddingMagnet
                         ? null
                         : _addMagnetWithDefaultSelection,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       backgroundColor: const Color(0xFF6366F1),
                     ),
-                    child: _isAddingMagnet
+                    child: _addInput.isAddingMagnet
                         ? const SizedBox(
                             width: 16,
                             height: 16,
@@ -4100,15 +4034,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (clipboardData?.text != null) {
       final text = clipboardData!.text!.trim();
       if (text.startsWith('magnet:?')) {
-        _magnetController.text = text;
+        _addInput.magnetController.text = text;
       }
     }
   }
 
-
-
   Future<void> _addMagnetWithDefaultSelection() async {
-    final magnetLink = _magnetController.text.trim();
+    final magnetLink = _addInput.magnetController.text.trim();
     if (magnetLink.isEmpty) {
       _showError('Please enter a magnet link');
       return;
@@ -4145,7 +4077,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     if (mounted) {
       setState(() {
-        _isAddingMagnet = true;
+        _addInput.isAddingMagnet = true;
       });
     }
 
@@ -4155,7 +4087,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Add the magnet using the same logic as the torrent search screen
       await DebridService.addTorrentToDebrid(
-        _apiKey!,
+        _catalog.apiKey!,
         magnetLink,
         tempFileSelection: fileSelection,
       );
@@ -4166,7 +4098,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       // Clear the input
-      _magnetController.clear();
+      _addInput.magnetController.clear();
 
       // Show success message
       if (mounted) {
@@ -4179,7 +4111,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       // Refresh the torrent list
-      await _fetchTorrents(_apiKey!, reset: true);
+      await _fetchTorrents(_catalog.apiKey!, reset: true);
     } on TorrentNotCachedException catch (e) {
       await DebridService.deleteTorrent(e.apiKey, e.torrentId);
       if (mounted) Navigator.of(context).pop();
@@ -4196,14 +4128,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } finally {
       if (mounted) {
         setState(() {
-          _isAddingMagnet = false;
+          _addInput.isAddingMagnet = false;
         });
       }
     }
   }
 
   Future<void> _showAdvancedMagnetDialog() async {
-    final magnetLink = _magnetController.text.trim();
+    final magnetLink = _addInput.magnetController.text.trim();
     if (magnetLink.isEmpty) {
       _showError('Please enter a magnet link first');
       return;
@@ -4228,10 +4160,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: _isAddingMagnet
+            onPressed: _addInput.isAddingMagnet
                 ? null
                 : () => _addMagnetWithSelection(magnetLink, 'smart'),
-            child: _isAddingMagnet
+            child: _addInput.isAddingMagnet
                 ? const SizedBox(
                     width: 16,
                     height: 16,
@@ -4240,10 +4172,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 : const Text('Smart (recommended)'),
           ),
           TextButton(
-            onPressed: _isAddingMagnet
+            onPressed: _addInput.isAddingMagnet
                 ? null
                 : () => _addMagnetWithSelection(magnetLink, 'largest'),
-            child: _isAddingMagnet
+            child: _addInput.isAddingMagnet
                 ? const SizedBox(
                     width: 16,
                     height: 16,
@@ -4252,10 +4184,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 : const Text('Largest File'),
           ),
           TextButton(
-            onPressed: _isAddingMagnet
+            onPressed: _addInput.isAddingMagnet
                 ? null
                 : () => _addMagnetWithSelection(magnetLink, 'video'),
-            child: _isAddingMagnet
+            child: _addInput.isAddingMagnet
                 ? const SizedBox(
                     width: 16,
                     height: 16,
@@ -4264,10 +4196,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 : const Text('Video Files'),
           ),
           TextButton(
-            onPressed: _isAddingMagnet
+            onPressed: _addInput.isAddingMagnet
                 ? null
                 : () => _addMagnetWithSelection(magnetLink, 'all'),
-            child: _isAddingMagnet
+            child: _addInput.isAddingMagnet
                 ? const SizedBox(
                     width: 16,
                     height: 16,
@@ -4309,13 +4241,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     );
 
     setState(() {
-      _isAddingMagnet = true;
+      _addInput.isAddingMagnet = true;
     });
 
     try {
       // Add the magnet with the selected file preference
       await DebridService.addTorrentToDebrid(
-        _apiKey!,
+        _catalog.apiKey!,
         magnetLink,
         tempFileSelection: fileSelection,
       );
@@ -4326,7 +4258,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       // Clear the input
-      _magnetController.clear();
+      _addInput.magnetController.clear();
 
       // Show success message
       if (mounted) {
@@ -4339,7 +4271,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       // Refresh the torrent list
-      await _fetchTorrents(_apiKey!, reset: true);
+      await _fetchTorrents(_catalog.apiKey!, reset: true);
     } on TorrentNotCachedException catch (e) {
       await DebridService.deleteTorrent(e.apiKey, e.torrentId);
       if (mounted) Navigator.of(context).pop();
@@ -4356,7 +4288,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } finally {
       if (mounted) {
         setState(() {
-          _isAddingMagnet = false;
+          _addInput.isAddingMagnet = false;
         });
       }
     }
@@ -4397,7 +4329,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   return KeyEventResult.ignored;
                 },
                 child: TextField(
-                  controller: _linkController,
+                  controller: _addInput.linkController,
                   autofocus: true,
                   decoration: InputDecoration(
                     hintText: 'https://example.com/file.zip',
@@ -4446,12 +4378,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
-                    onPressed: _isAddingLink ? null : _addLink,
+                    onPressed: _addInput.isAddingLink ? null : _addLink,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       backgroundColor: const Color(0xFF6366F1),
                     ),
-                    child: _isAddingLink
+                    child: _addInput.isAddingLink
                         ? const SizedBox(
                             width: 16,
                             height: 16,
@@ -4477,15 +4409,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       final text = clipboardData!.text!.trim();
       // Check if it looks like a URL
       if (text.startsWith('http://') || text.startsWith('https://')) {
-        _linkController.text = text;
+        _addInput.linkController.text = text;
       }
     }
   }
 
-
-
   Future<void> _addLink() async {
-    final link = _linkController.text.trim();
+    final link = _addInput.linkController.text.trim();
     if (link.isEmpty) {
       _showError('Please enter a link');
       return;
@@ -4529,13 +4459,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     if (mounted) {
       setState(() {
-        _isAddingLink = true;
+        _addInput.isAddingLink = true;
       });
     }
 
     try {
       // Unrestrict the link
-      await DebridService.unrestrictLink(_apiKey!, link);
+      await DebridService.unrestrictLink(_catalog.apiKey!, link);
 
       // Close loading dialog
       if (mounted) {
@@ -4543,7 +4473,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       // Clear the input
-      _linkController.clear();
+      _addInput.linkController.clear();
 
       // Show success message
       if (mounted) {
@@ -4556,7 +4486,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
 
       // Refresh the downloads list
-      await _fetchDownloads(_apiKey!, reset: true);
+      await _fetchDownloads(_catalog.apiKey!, reset: true);
     } catch (e) {
       // Close loading dialog
       if (mounted) {
@@ -4572,7 +4502,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } finally {
       if (mounted) {
         setState(() {
-          _isAddingLink = false;
+          _addInput.isAddingLink = false;
         });
       }
     }
@@ -4585,7 +4515,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     StateSetter setLocal,
     Map<int, bool> unrestrictingFiles,
   ) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     try {
       setLocal(() {
@@ -4593,7 +4523,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       });
 
       final unrestrictResult = await DebridService.unrestrictLink(
-        _apiKey!,
+        _catalog.apiKey!,
         torrent.links[index],
       );
       final downloadLink = unrestrictResult['download']?.toString() ?? '';
@@ -4639,12 +4569,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     int index,
     StateSetter setLocal,
   ) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     try {
       // Check if it's a video file before adding to playlist
       final unrestrictResult = await DebridService.unrestrictLink(
-        _apiKey!,
+        _catalog.apiKey!,
         torrent.links[index],
       );
       final mimeType = unrestrictResult['mimeType']?.toString() ?? '';
@@ -4685,7 +4615,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     Set<int> added,
     Map<int, bool> unrestrictingFiles,
   ) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     try {
       setLocal(() {
@@ -4693,7 +4623,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       });
 
       final unrestrictResult = await DebridService.unrestrictLink(
-        _apiKey!,
+        _catalog.apiKey!,
         torrent.links[index],
       );
       final downloadLink = unrestrictResult['download']?.toString() ?? '';
@@ -4732,7 +4662,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     StateSetter setLocal,
     Map<int, bool> unrestrictingFiles,
   ) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     try {
       setLocal(() {
@@ -4740,7 +4670,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       });
 
       final unrestrictResult = await DebridService.unrestrictLink(
-        _apiKey!,
+        _catalog.apiKey!,
         torrent.links[index],
       );
       final downloadLink = unrestrictResult['download']?.toString() ?? '';
@@ -5634,7 +5564,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Play a single file from the folder browser
   Future<void> _playFile(RDFileNode file) async {
-    if (_apiKey == null || _currentTorrentId == null) return;
+    if (_catalog.apiKey == null || _nav.currentTorrentId == null) return;
 
     try {
       // Show loading dialog
@@ -5646,8 +5576,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Get download URL for the file
       final downloadUrl = await DebridService.getFileDownloadUrl(
-        _apiKey!,
-        _currentTorrentId!,
+        _catalog.apiKey!,
+        _nav.currentTorrentId!,
         file.linkIndex,
       );
 
@@ -5674,9 +5604,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Play all videos in a folder with a playlist
   Future<void> _playFolder(RDFileNode folder) async {
-    if (_apiKey == null ||
-        _currentTorrentId == null ||
-        _currentTorrent == null) {
+    if (_catalog.apiKey == null ||
+        _nav.currentTorrentId == null ||
+        _nav.currentTorrent == null) {
       return;
     }
 
@@ -5734,8 +5664,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Get the first video URL to start playing
       final firstVideoUrl = await DebridService.getFileDownloadUrl(
-        _apiKey!,
-        _currentTorrentId!,
+        _catalog.apiKey!,
+        _nav.currentTorrentId!,
         sortedVideoFiles[0].linkIndex,
       );
 
@@ -5747,7 +5677,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         return PlaylistEntry(
           title: file.name,
           url: '', // Will be loaded on demand
-          restrictedLink: _currentTorrent!.links[file.linkIndex],
+          restrictedLink: _nav.currentTorrent!.links[file.linkIndex],
           sizeBytes: file.bytes ?? 0,
         );
       }).toList();
@@ -5781,7 +5711,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Download a single file
   Future<void> _downloadFile(RDFileNode file) async {
-    if (_apiKey == null || _currentTorrentId == null) {
+    if (_catalog.apiKey == null || _nav.currentTorrentId == null) {
       _showError('No API key or torrent ID available');
       return;
     }
@@ -5808,8 +5738,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Get the torrent info to access the restricted link
       final torrentInfo = await DebridService.getTorrentInfo(
-        _apiKey!,
-        _currentTorrentId!,
+        _catalog.apiKey!,
+        _nav.currentTorrentId!,
       );
       final links = (torrentInfo['links'] as List).cast<String>();
 
@@ -5832,7 +5762,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Pass metadata for lazy unrestriction
       final meta = jsonEncode({
         'restrictedLink': restrictedLink,
-        'torrentHash': _currentTorrent?.hash,
+        'torrentHash': _nav.currentTorrent?.hash,
         'fileIndex': file.linkIndex,
       });
 
@@ -5842,7 +5772,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         url: restrictedLink,
         fileName: fileName,
         meta: meta,
-        torrentName: _currentTorrent?.filename,
+        torrentName: _nav.currentTorrent?.filename,
         context: mounted ? context : null,
       );
 
@@ -5858,7 +5788,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Download files from a folder with file selection dialog
   Future<void> _downloadFolder(RDFileNode folder) async {
-    if (_apiKey == null || _currentTorrentId == null) {
+    if (_catalog.apiKey == null || _nav.currentTorrentId == null) {
       _showError('No API key or torrent ID available');
       return;
     }
@@ -5885,8 +5815,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Get torrent info to access links
       final torrentInfo = await DebridService.getTorrentInfo(
-        _apiKey!,
-        _currentTorrentId!,
+        _catalog.apiKey!,
+        _nav.currentTorrentId!,
       );
       final links = (torrentInfo['links'] as List).cast<String>();
 
@@ -5995,7 +5925,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           // Pass metadata for lazy unrestriction
           final meta = jsonEncode({
             'restrictedLink': restrictedLink,
-            'torrentHash': _currentTorrent?.hash,
+            'torrentHash': _nav.currentTorrent?.hash,
             'fileIndex': linkIndex,
           });
 
@@ -6006,7 +5936,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 restrictedLink, // Pass restricted link (will be replaced by download service)
             fileName: fileName,
             meta: meta,
-            torrentName: _currentTorrent?.filename ?? folderName,
+            torrentName: _nav.currentTorrent?.filename ?? folderName,
             context: mounted ? context : null,
           );
 
@@ -6043,14 +5973,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Add a single file to playlist
   Future<void> _addNodeFileToPlaylist(RDFileNode file) async {
-    if (_currentTorrentId == null) return;
+    if (_nav.currentTorrentId == null) return;
 
     try {
       final added = await PlaylistStorage.addPlaylistItemRaw({
         'provider': 'rd',
         'title': FileUtils.cleanPlaylistTitle(file.name),
         'kind': 'single',
-        'rdTorrentId': _currentTorrentId,
+        'rdTorrentId': _nav.currentTorrentId,
         'rdLinkIndex': file.linkIndex,
         'sizeBytes': file.bytes,
       });
@@ -6067,7 +5997,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Add all videos in a folder to playlist
   Future<void> _addFolderToPlaylist(RDFileNode folder) async {
-    if (_currentTorrentId == null) return;
+    if (_nav.currentTorrentId == null) return;
 
     try {
       // Collect video files
@@ -6082,7 +6012,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         'provider': 'rd',
         'title': FileUtils.cleanPlaylistTitle(folder.name),
         'kind': 'collection',
-        'rdTorrentId': _currentTorrentId,
+        'rdTorrentId': _nav.currentTorrentId,
         'rdFileNodes': videoFiles.map((f) => f.toJson()).toList(),
         'fileCount': videoFiles.length,
         'totalBytes': folder.totalBytes,
@@ -6126,11 +6056,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Copy download link for torrent to clipboard
   Future<void> _copyDownloadLink(RDTorrent torrent) async {
-    if (_apiKey == null) return;
+    if (_catalog.apiKey == null) return;
 
     try {
       // Get torrent info
-      final info = await DebridService.getTorrentInfo(_apiKey!, torrent.id);
+      final info = await DebridService.getTorrentInfo(_catalog.apiKey!, torrent.id);
       final links = (info['links'] as List).cast<String>();
 
       if (links.isEmpty) {
@@ -6140,7 +6070,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Unrestrict the first link
       final unrestrictedData = await DebridService.unrestrictLink(
-        _apiKey!,
+        _catalog.apiKey!,
         links[0],
       );
       final downloadUrl = unrestrictedData['download'] as String;
@@ -6155,13 +6085,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Copy download link for file node to clipboard
   Future<void> _copyNodeDownloadLink(RDFileNode node) async {
-    if (_apiKey == null || _currentTorrentId == null) return;
+    if (_catalog.apiKey == null || _nav.currentTorrentId == null) return;
 
     try {
       // Unrestrict the file's link
       final downloadUrl = await DebridService.getFileDownloadUrl(
-        _apiKey!,
-        _currentTorrentId!,
+        _catalog.apiKey!,
+        _nav.currentTorrentId!,
         node.linkIndex,
       );
 
@@ -6174,65 +6104,63 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 }
 
-
-
 /// Frozen original-code characterization accessor; production does not call it.
 @visibleForTesting
 Map<String, Object?> debridDownloadsTestAccess(State<DebridDownloadsScreen> state) {
   final s = state as _DebridDownloadsScreenState;
   return {
-    'selectedView': s._selectedView,
-    'tvContentFocusHandler': s._tvContentFocusHandler,
-    'torrents': s._torrents,
-    'torrentScrollController': s._torrentScrollController,
-    'isLoadingTorrents': s._isLoadingTorrents,
-    'isLoadingMoreTorrents': s._isLoadingMoreTorrents,
-    'torrentErrorMessage': s._torrentErrorMessage,
-    'torrentPage': s._torrentPage,
-    'hasMoreTorrents': s._hasMoreTorrents,
-    'downloads': s._downloads,
-    'downloadScrollController': s._downloadScrollController,
-    'isLoadingDownloads': s._isLoadingDownloads,
-    'isLoadingMoreDownloads': s._isLoadingMoreDownloads,
-    'downloadErrorMessage': s._downloadErrorMessage,
-    'downloadPage': s._downloadPage,
-    'hasMoreDownloads': s._hasMoreDownloads,
-    'apiKey': s._apiKey,
-    'currentTorrentId': s._currentTorrentId,
-    'currentTorrent': s._currentTorrent,
-    'folderPath': s._folderPath,
-    'currentFolderTree': s._currentFolderTree,
-    'currentViewNodes': s._currentViewNodes,
-    'isLoadingFolder': s._isLoadingFolder,
-    'torrentViewModes': s._torrentViewModes,
-    'magnetController': s._magnetController,
-    'isAddingMagnet': s._isAddingMagnet,
-    'linkController': s._linkController,
-    'isAddingLink': s._isAddingLink,
-    'isSelectionMode': s._isSelectionMode,
-    'selectedTorrentIds': s._selectedTorrentIds,
-    'selectedDownloadIds': s._selectedDownloadIds,
-    'backButtonFocusNode': s._backButtonFocusNode,
-    'refreshButtonFocusNode': s._refreshButtonFocusNode,
-    'viewModeDropdownFocusNode': s._viewModeDropdownFocusNode,
-    'firstItemFocusNode': s._firstItemFocusNode,
-    'deleteButtonFocusNode': s._deleteButtonFocusNode,
-    'torrentSearchSubmitFocus': s._torrentSearchSubmitFocus,
-    'shouldFocusOnLoad': s._shouldFocusOnLoad,
-    'isTorrentSearchActive': s._isTorrentSearchActive,
-    'torrentSearchController': s._torrentSearchController,
-    'allTorrentsForSearch': s._allTorrentsForSearch,
-    'isLoadingSearch': s._isLoadingSearch,
-    'torrentSearchQuery': s._torrentSearchQuery,
-    'hiddenFromNav': s._hiddenFromNav,
-    'isSearchActive': s._isSearchActive,
-    'searchController': s._searchController,
-    'searchFocusNode': s._searchFocusNode,
-    'searchButtonFocusNode': s._searchButtonFocusNode,
-    'searchClearFocusNode': s._searchClearFocusNode,
-    'searchResults': s._searchResults,
-    'torrentSearchFocusNode': s._torrentSearchFocusNode,
-    'torrentSearchClearFocusNode': s._torrentSearchClearFocusNode,
+    'selectedView': s._catalog.selectedView,
+    'tvContentFocusHandler': s._focus.tvContentFocusHandler,
+    'torrents': s._catalog.torrents,
+    'torrentScrollController': s._focus.torrentScrollController,
+    'isLoadingTorrents': s._catalog.isLoadingTorrents,
+    'isLoadingMoreTorrents': s._catalog.isLoadingMoreTorrents,
+    'torrentErrorMessage': s._catalog.torrentErrorMessage,
+    'torrentPage': s._catalog.torrentPage,
+    'hasMoreTorrents': s._catalog.hasMoreTorrents,
+    'downloads': s._downloadState.downloads,
+    'downloadScrollController': s._focus.downloadScrollController,
+    'isLoadingDownloads': s._downloadState.isLoadingDownloads,
+    'isLoadingMoreDownloads': s._downloadState.isLoadingMoreDownloads,
+    'downloadErrorMessage': s._downloadState.downloadErrorMessage,
+    'downloadPage': s._downloadState.downloadPage,
+    'hasMoreDownloads': s._downloadState.hasMoreDownloads,
+    'apiKey': s._catalog.apiKey,
+    'currentTorrentId': s._nav.currentTorrentId,
+    'currentTorrent': s._nav.currentTorrent,
+    'folderPath': s._nav.folderPath,
+    'currentFolderTree': s._nav.currentFolderTree,
+    'currentViewNodes': s._nav.currentViewNodes,
+    'isLoadingFolder': s._nav.isLoadingFolder,
+    'torrentViewModes': s._view.torrentViewModes,
+    'magnetController': s._addInput.magnetController,
+    'isAddingMagnet': s._addInput.isAddingMagnet,
+    'linkController': s._addInput.linkController,
+    'isAddingLink': s._addInput.isAddingLink,
+    'isSelectionMode': s._selection.isSelectionMode,
+    'selectedTorrentIds': s._selection.selectedTorrentIds,
+    'selectedDownloadIds': s._selection.selectedDownloadIds,
+    'backButtonFocusNode': s._focus.backButtonFocusNode,
+    'refreshButtonFocusNode': s._focus.refreshButtonFocusNode,
+    'viewModeDropdownFocusNode': s._focus.viewModeDropdownFocusNode,
+    'firstItemFocusNode': s._focus.firstItemFocusNode,
+    'deleteButtonFocusNode': s._focus.deleteButtonFocusNode,
+    'torrentSearchSubmitFocus': s._focus.torrentSearchSubmitFocus,
+    'shouldFocusOnLoad': s._focus.shouldFocusOnLoad,
+    'isTorrentSearchActive': s._torrentSearch.isTorrentSearchActive,
+    'torrentSearchController': s._torrentSearch.torrentSearchController,
+    'allTorrentsForSearch': s._torrentSearch.allTorrentsForSearch,
+    'isLoadingSearch': s._torrentSearch.isLoadingSearch,
+    'torrentSearchQuery': s._torrentSearch.torrentSearchQuery,
+    'hiddenFromNav': s._torrentSearch.hiddenFromNav,
+    'isSearchActive': s._folderSearch.isSearchActive,
+    'searchController': s._folderSearch.searchController,
+    'searchFocusNode': s._focus.searchFocusNode,
+    'searchButtonFocusNode': s._focus.searchButtonFocusNode,
+    'searchClearFocusNode': s._focus.searchClearFocusNode,
+    'searchResults': s._folderSearch.searchResults,
+    'torrentSearchFocusNode': s._focus.torrentSearchFocusNode,
+    'torrentSearchClearFocusNode': s._focus.torrentSearchClearFocusNode,
     'activeSelectedIds': s._activeSelectedIds,
     'activeItemCount': s._activeItemCount,
     'isAllSelected': s._isAllSelected,

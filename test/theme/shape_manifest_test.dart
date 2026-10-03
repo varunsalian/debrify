@@ -170,6 +170,15 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_state.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_download_state.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_navigation_state.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_add_input_state.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search_state.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_focus_state.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search_state.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_state.dart': 0,
+  'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_view_state.dart': 0,
   'lib/features/debrid_downloads/application/debrid_input_policy.dart': 0,
   'lib/features/debrid_downloads/application/debrid_error_policy.dart': 0,
   'lib/features/debrid_downloads/application/debrid_folder_policy.dart': 0,

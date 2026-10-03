@@ -439,6 +439,12 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 - All four manifests/self-tests pass; Debrid checks all 173 leaves and every callback identity site. Architecture, size, storage reference/key, format and diff checks pass; original 23 radii / 23 tokens preserved. step1-final2 has 127 successes and the one observed pre-existing theme failure, PASS against base5; analyzer relocation comparison has zero additions.
 - The interrupted candidate had incorrect relative imports and private enum references in the accessor; corrected before this checkpoint, without changing assertions. Final verification found one directive-order diagnostic: reordered imports only and repeated analyzer/focused verification. No behavior or allowlist change. Retained staged work through the step-0b stash and resolved only the Progress conflict, preserving both records.
 
+### Step 2 — complete; nine state owners
+
+- Moved all 53 fields (including both mid-file focus declarations) with original types/initializers into the nine concern owners. State retains both late focus assignments, every listener/registration and the complete 16-resource disposal sequence plus super. No ownership duplication or snapshots; facade ratchet 6,322 → 6,250.
+- Conservative decision: use `_downloadState` for the owner handle, because `_downloads` collided with the original list field. The duplicate-owner checker caught the collision; corrected the handle and its fixture without weakening the checker. Initial candidate import cleanup supplied two targets to dart fix (unsupported); corrected to separate scoped calls. Whole-facade formatting exposed two brace infos; retained the original method formatting until extraction and normalized only vacant field gaps.
+- step2-final2: all four manifest/self-tests, architecture, strict sizes, storage refs/314 keys, feature format and diff pass; 127 success / one observed theme failure, PASS versus base5. Analyzer relocation comparison has zero additions. The original 23 radii / 23 tokens and resource identities remain pinned.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

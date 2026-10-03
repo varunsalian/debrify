@@ -171,14 +171,14 @@
     "_download_row",
     "DebridDownloadRow",
     "_catalog",
-    "_downloads",
     "_nav",
     "_view",
     "_focus",
     "_folderSearch",
     "_torrentSearch",
     "_selection",
-    "_addInput"
+    "_addInput",
+    "_downloadState"
   ],
   "receiver_paths": {
     "_deps.catalog_state": "DebridCatalogState",
@@ -329,7 +329,6 @@
     "_owners.download_row": "DebridDownloadRow",
     "_sections.download_row": "DebridDownloadRow",
     "_catalog": "DebridCatalogState",
-    "_downloads": "DebridDownloadState",
     "_nav": "DebridNavigationState",
     "_view": "DebridViewState",
     "_focus": "DebridFocusState",
@@ -478,7 +477,8 @@
     "_deps.torrentRow": "DebridTorrentRow",
     "sections.downloadRow": "DebridDownloadRow",
     "_sections.downloadRow": "DebridDownloadRow",
-    "_deps.downloadRow": "DebridDownloadRow"
+    "_deps.downloadRow": "DebridDownloadRow",
+    "_downloadState": "DebridDownloadState"
   },
   "receiver_owners": {
     "_catalog_state": "DebridCatalogState",
@@ -580,14 +580,14 @@
     "_download_row": "DebridDownloadRow",
     "DebridDownloadRow": "DebridDownloadRow",
     "_catalog": "DebridCatalogState",
-    "_downloads": "DebridDownloadState",
     "_nav": "DebridNavigationState",
     "_view": "DebridViewState",
     "_focus": "DebridFocusState",
     "_folderSearch": "DebridFolderSearchState",
     "_torrentSearch": "DebridTorrentSearchState",
     "_selection": "DebridSelectionState",
-    "_addInput": "DebridAddInputState"
+    "_addInput": "DebridAddInputState",
+    "_downloadState": "DebridDownloadState"
   },
   "plain_sections": [],
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in debrid_context_exceptions.json; original guards and statement order unchanged",
@@ -698,8 +698,7 @@
   "callback_receiver_aliases": {
     "_deps.catalogState": "$State._catalog",
     "_catalog": "$State._catalog",
-    "_deps.downloadState": "$State._downloads",
-    "_downloads": "$State._downloads",
+    "_deps.downloadState": "$State._downloadState",
     "_deps.navigationState": "$State._nav",
     "_nav": "$State._nav",
     "_deps.viewState": "$State._view",
@@ -713,6 +712,7 @@
     "_deps.selectionState": "$State._selection",
     "_selection": "$State._selection",
     "_deps.addInputState": "$State._addInput",
-    "_addInput": "$State._addInput"
+    "_addInput": "$State._addInput",
+    "_downloadState": "$State._downloadState"
   }
 }

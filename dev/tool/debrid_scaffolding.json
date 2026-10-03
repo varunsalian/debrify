@@ -1,3 +1,130 @@
 {
-  "scaffolds": []
+  "scaffolds": [
+    {
+      "file": "lib/screens/debrid_downloads_screen.dart",
+      "owner": "_DebridDownloadsScreenState",
+      "name": "_catalog",
+      "tokens": [
+        "final",
+        "_catalog",
+        "=",
+        "DebridCatalogState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/debrid_downloads_screen.dart",
+      "owner": "_DebridDownloadsScreenState",
+      "name": "_downloadState",
+      "tokens": [
+        "final",
+        "_downloadState",
+        "=",
+        "DebridDownloadState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/debrid_downloads_screen.dart",
+      "owner": "_DebridDownloadsScreenState",
+      "name": "_nav",
+      "tokens": [
+        "final",
+        "_nav",
+        "=",
+        "DebridNavigationState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/debrid_downloads_screen.dart",
+      "owner": "_DebridDownloadsScreenState",
+      "name": "_view",
+      "tokens": [
+        "final",
+        "_view",
+        "=",
+        "DebridViewState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/debrid_downloads_screen.dart",
+      "owner": "_DebridDownloadsScreenState",
+      "name": "_focus",
+      "tokens": [
+        "final",
+        "_focus",
+        "=",
+        "DebridFocusState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/debrid_downloads_screen.dart",
+      "owner": "_DebridDownloadsScreenState",
+      "name": "_folderSearch",
+      "tokens": [
+        "final",
+        "_folderSearch",
+        "=",
+        "DebridFolderSearchState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/debrid_downloads_screen.dart",
+      "owner": "_DebridDownloadsScreenState",
+      "name": "_torrentSearch",
+      "tokens": [
+        "final",
+        "_torrentSearch",
+        "=",
+        "DebridTorrentSearchState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/debrid_downloads_screen.dart",
+      "owner": "_DebridDownloadsScreenState",
+      "name": "_selection",
+      "tokens": [
+        "final",
+        "_selection",
+        "=",
+        "DebridSelectionState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/debrid_downloads_screen.dart",
+      "owner": "_DebridDownloadsScreenState",
+      "name": "_addInput",
+      "tokens": [
+        "final",
+        "_addInput",
+        "=",
+        "DebridAddInputState",
+        "(",
+        ")",
+        ";"
+      ]
+    }
+  ]
 }

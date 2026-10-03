@@ -56,7 +56,7 @@ def self_test(package=None):
             receiver = re.search(r'([A-Za-z_]\w*)\.torrentScrollController\.addListener', text)
             if receiver:
                 # Swap an existing State owner, rather than adding a statement.
-                text = text[:receiver.start(1)] + '_downloads' + text[receiver.end(1):]
+                text = text[:receiver.start(1)] + '_downloadState' + text[receiver.end(1):]
             else:
                 assert '_torrentScrollController.addListener' in text
                 text = text.replace('_torrentScrollController.addListener', '_downloadScrollController.addListener', 1)

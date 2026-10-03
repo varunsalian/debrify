@@ -198,7 +198,7 @@ Actual bindings are reviewed against original reads/signatures and this inventor
 | `focus_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `focus_actions` | `navigation_state` (`DebridNavigationState`) | _nav: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `focus_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `focus_actions` | `download_state` (`DebridDownloadState`) | _downloads: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
+| `focus_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `back_navigation` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `back_navigation` | `selection_state` (`DebridSelectionState`) | _selection: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `back_navigation` | `exitSelectionMode` (`void Function()`) | DebridSelectionActions.exitSelectionMode at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
@@ -211,7 +211,7 @@ Actual bindings are reviewed against original reads/signatures and this inventor
 | `back_navigation` | `initialTorrentForOptions` (`RDTorrent? Function()`) | () => widget.initialTorrentForOptions: live getter, never a snapshot | [ ] Step 3 actual binding pending |
 | `catalog_loading` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `catalog_loading` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `catalog_loading` | `download_state` (`DebridDownloadState`) | _downloads: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
+| `catalog_loading` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `catalog_loading` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `catalog_loading` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `catalog_loading` | `submitTorrentSearch` (`void Function()`) | DebridTorrentSearch.submitTorrentSearch at step 4; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
@@ -228,12 +228,12 @@ Actual bindings are reviewed against original reads/signatures and this inventor
 | `single_delete_actions` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `single_delete_actions` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
 | `single_delete_actions` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `single_delete_actions` | `download_state` (`DebridDownloadState`) | _downloads: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
+| `single_delete_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `delete_all_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `delete_all_actions` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `delete_all_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `delete_all_actions` | `showDeleteAllProgressDialog` (`Future<void> Function()`) | DebridTorrentBulkDelete.showDeleteAllProgressDialog at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
-| `delete_all_actions` | `download_state` (`DebridDownloadState`) | _downloads: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
+| `delete_all_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `delete_all_actions` | `showDeleteAllDownloadsProgressDialog` (`Future<void> Function()`) | DebridDownloadBulkDelete.showDeleteAllDownloadsProgressDialog at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
 | `torrent_bulk_delete` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `torrent_bulk_delete` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
@@ -247,12 +247,12 @@ Actual bindings are reviewed against original reads/signatures and this inventor
 | `download_bulk_delete` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `download_bulk_delete` | `fetchDownloads` (`Future<void> Function(String apiKey, {bool reset})`) | DebridCatalogLoading.fetchDownloads at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
 | `download_bulk_delete` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `download_bulk_delete` | `download_state` (`DebridDownloadState`) | _downloads: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
+| `download_bulk_delete` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `download_bulk_delete` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
 | `download_bulk_delete` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
 | `selection_actions` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `selection_actions` | `selection_state` (`DebridSelectionState`) | _selection: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
-| `selection_actions` | `download_state` (`DebridDownloadState`) | _downloads: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
+| `selection_actions` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `selection_actions` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `selection_actions` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `selection_actions` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
@@ -261,7 +261,7 @@ Actual bindings are reviewed against original reads/signatures and this inventor
 | `selected_delete` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `selected_delete` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
 | `selected_delete` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 3 actual binding pending |
-| `selected_delete` | `download_state` (`DebridDownloadState`) | _downloads: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
+| `selected_delete` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `selected_delete` | `selection_state` (`DebridSelectionState`) | _selection: original one owner, borrowed; lifecycle identity | [ ] Step 3 actual binding pending |
 | `selected_delete` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
 | `selected_delete` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 3 actual binding pending |
@@ -423,7 +423,7 @@ Actual bindings are reviewed against original reads/signatures and this inventor
 | `torrent_toolbar` | `showAddMagnetDialog` (`void Function()`) | DebridMagnetActions.showAddMagnetDialog at step 5; original arguments/defaults; deferred until assignments complete | [ ] Step 6 actual binding pending |
 | `download_toolbar` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 6 actual binding pending |
 | `download_toolbar` | `isBrowsePush` (`bool Function()`) | DebridTorrentToolbar.isBrowsePush at step 6; original arguments/defaults; deferred until assignments complete | [ ] Step 6 actual binding pending |
-| `download_toolbar` | `download_state` (`DebridDownloadState`) | _downloads: original one owner, borrowed; lifecycle identity | [ ] Step 6 actual binding pending |
+| `download_toolbar` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 6 actual binding pending |
 | `download_toolbar` | `selection_state` (`DebridSelectionState`) | _selection: original one owner, borrowed; lifecycle identity | [ ] Step 6 actual binding pending |
 | `download_toolbar` | `toggleSelectionMode` (`void Function()`) | DebridSelectionActions.toggleSelectionMode at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 6 actual binding pending |
 | `download_toolbar` | `handleDeleteAllDownloads` (`Future<void> Function()`) | DebridDeleteAllActions.handleDeleteAllDownloads at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 6 actual binding pending |
@@ -442,7 +442,7 @@ Actual bindings are reviewed against original reads/signatures and this inventor
 | `library_lists` | `buildFolderLoadingView` (`Widget Function()`) | DebridFolderLayout.buildFolderLoadingView at step 6; original arguments/defaults; deferred until assignments complete | [ ] Step 6 actual binding pending |
 | `library_lists` | `buildTorrentSearchResults` (`Widget Function()`) | DebridTorrentSearchLayout.buildTorrentSearchResults at step 6; original arguments/defaults; deferred until assignments complete | [ ] Step 6 actual binding pending |
 | `library_lists` | `selectSourceMode` (`bool Function()`) | () => widget.selectSourceMode: live getter, never a snapshot | [ ] Step 6 actual binding pending |
-| `library_lists` | `download_state` (`DebridDownloadState`) | _downloads: original one owner, borrowed; lifecycle identity | [ ] Step 6 actual binding pending |
+| `library_lists` | `download_state` (`DebridDownloadState`) | _downloadState: original one owner, borrowed; lifecycle identity | [ ] Step 6 actual binding pending |
 | `library_lists` | `fetchDownloads` (`Future<void> Function(String apiKey, {bool reset})`) | DebridCatalogLoading.fetchDownloads at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 6 actual binding pending |
 | `library_lists` | `buildDownloadCard` (`Widget Function(DebridDownload download, int index)`) | DebridDownloadRow.buildDownloadCard at step 6; original arguments/defaults; deferred until assignments complete | [ ] Step 6 actual binding pending |
 | `library_lists` | `buildDownloadToolbar` (`Widget Function()`) | DebridDownloadToolbar.buildDownloadToolbar at step 6; original arguments/defaults; deferred until assignments complete | [ ] Step 6 actual binding pending |
