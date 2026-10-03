@@ -99,6 +99,17 @@ class References extends RecursiveAstVisitor<void> {
   }
 
   @override
+  void visitMethodDeclaration(MethodDeclaration node) {
+    // Method parameters also bind nested callbacks, just like function ones.
+    parameters.add({
+      for (final p in node.parameters?.parameters ?? <FormalParameter>[])
+        p.name!.lexeme,
+    });
+    super.visitMethodDeclaration(node);
+    parameters.removeLast();
+  }
+
+  @override
   void visitFunctionExpression(FunctionExpression node) {
     scopes.add('${callbacks.length}');
     parameters.add({

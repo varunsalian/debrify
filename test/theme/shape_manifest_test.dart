@@ -39,7 +39,13 @@ const Map<String, int> kShapeResidue = {
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_options.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_toolbar.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_selection_sheet.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_selection_bar.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_search_layout.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_search.dart':
       2,
@@ -51,7 +57,6 @@ const Map<String, int> kShapeResidue = {
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_series_layout.dart':
       0,
-  'lib/screens/torbox/torbox_downloads_screen.dart': 0,
   'lib/features/iptv/presentation/iptv_stage_chip.dart': 0,
   'lib/features/iptv/presentation/key_cap.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_cockpit_stage.dart': 0,
@@ -187,9 +192,15 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_playlist_actions.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_row.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_library_lists.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_magnet_actions.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_view_selector.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_playback.dart':
       0,
@@ -205,17 +216,23 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_sections.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_row.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_navigation_state.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_zip_download.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_playlist_links.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_root_layout.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_create_actions.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_stream_request.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_add_input_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_row.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_selection_actions.dart':
       1,
@@ -253,6 +270,7 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/torbox_downloads/models/torbox_episode_candidate.dart': 0,
   'lib/features/torbox_downloads/models/torbox_search_result.dart': 0,
   'lib/features/torbox_downloads/models/torbox_file_entry.dart': 0,
+  'lib/screens/torbox/torbox_downloads_screen.dart': 0,
   'lib/features/iptv/application/iptv_layout_policy.dart': 0,
   'lib/features/iptv/application/iptv_load_status_policy.dart': 0,
   'lib/features/iptv/application/iptv_rail_resolution.dart': 0,

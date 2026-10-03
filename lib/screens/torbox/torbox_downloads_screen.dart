@@ -44,9 +44,16 @@ import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/tor
 import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_view_modes.dart';
 import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_search.dart';
 import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_search.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_root_layout.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_library_lists.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_web_row.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_row.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_file_row.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_view_selector.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_selection_bar.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_search_layout.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_toolbar.dart';
 import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_sections.dart';
-import 'package:debrify/features/torbox_downloads/presentation/folder_view_mode.dart';
-import 'package:debrify/features/torbox_downloads/presentation/torbox_downloads_view.dart';
 import 'package:debrify/features/torbox_downloads/models/torbox_file_entry.dart';
 import 'package:debrify/features/torbox_downloads/application/torbox_file_policy.dart';
 import 'package:debrify/features/torbox_downloads/application/torbox_magnet_policy.dart';
@@ -63,16 +70,6 @@ import '../../models/rd_file_node.dart';
 import '../../services/analytics_service.dart';
 import '../../services/series_source_service.dart';
 import '../../services/main_page_bridge.dart';
-import '../../theme/app_theme_scope.dart';
-import '../../utils/formatters.dart';
-import '../../utils/file_utils.dart';
-import '../../utils/torbox_folder_tree_builder.dart';
-import '../../widgets/cloud/cloud_file_row.dart';
-import '../../widgets/cloud/cloud_row_skeleton.dart';
-import '../../widgets/cloud/cloud_segmented_tabs.dart';
-import '../../widgets/cloud/cloud_theme.dart';
-import '../../widgets/tv_text_field.dart';
-import '../../utils/tv_keys.dart';
 
 class TorboxDownloadsScreen extends StatefulWidget {
   const TorboxDownloadsScreen({
@@ -568,6 +565,157 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       playVideoFile: (RDFileNode fileNode) =>
           sections.fileActions.playVideoFile(fileNode),
     ));
+    sections.rootLayout = TorboxRootLayout((
+      isAtRoot: () => sections.folderNavigation.isAtRoot,
+      catalogState: _catalog,
+      webState: _web,
+      viewState: _view,
+      navigationState: _nav,
+      getCurrentViewMode: () => sections.viewModes.getCurrentViewMode(),
+      focusState: _focus,
+      handleBackNavigation: () =>
+          sections.backNavigation.handleBackNavigation(),
+      currentFolderName: () => sections.folderNavigation.currentFolderName,
+      folderSearchState: _folderSearch,
+      toggleSearch: () => sections.folderSearch.toggleSearch(),
+      buildToolbar: () => sections.toolbar.buildToolbar(),
+      buildViewSelectorBar: () => sections.viewSelector.buildViewSelectorBar(),
+      torrentSearchState: _torrentSearch,
+      buildTorrentSearchBar: () =>
+          sections.torrentSearchLayout.buildTorrentSearchBar(),
+      selectionState: _selection,
+      buildSelectionBar: () => sections.selectionBar.buildSelectionBar(),
+      buildViewModeDropdown: () => sections.viewModes.buildViewModeDropdown(),
+      buildSearchBar: () => sections.folderSearch.buildSearchBar(),
+      buildTorrentSearchResults: () =>
+          sections.torrentSearchLayout.buildTorrentSearchResults(),
+      buildSearchResults: () => sections.folderSearch.buildSearchResults(),
+      refresh: () => sections.catalogLoading.refresh(),
+      buildFilesFoldersList: () =>
+          sections.libraryLists.buildFilesFoldersList(),
+      isPushedRoute: () => widget.isPushedRoute,
+      selectSourceMode: () => widget.selectSourceMode,
+      initialTorrentToOpen: () => widget.initialTorrentToOpen,
+    ));
+    sections.libraryLists = TorboxLibraryLists((
+      isAtRoot: () => sections.folderNavigation.isAtRoot,
+      catalogState: _catalog,
+      currentItems: () => sections.rootLayout.currentItems,
+      context: () => context,
+      openSettings: () => sections.magnetActions.openSettings(),
+      focusState: _focus,
+      buildTorrentFolderCard: (TorboxTorrent torrent, int index) =>
+          sections.torrentRow.buildTorrentFolderCard(torrent, index),
+      buildFileOrFolderCard: (RDFileNode node, int index) =>
+          sections.fileRow.buildFileOrFolderCard(node, index),
+      webState: _web,
+      buildWebDownloadCard: (TorboxWebDownload webDownload, int index) =>
+          sections.webRow.buildWebDownloadCard(webDownload, index),
+    ));
+    sections.webRow = TorboxWebRow((
+      context: () => context,
+      focusState: _focus,
+      handlePlayWebDownload: (TorboxWebDownload webDownload) =>
+          sections.webPlayback.handlePlayWebDownload(webDownload),
+      showWebDownloadOptionsDialog: (TorboxWebDownload webDownload) =>
+          sections.webOptions.showWebDownloadOptionsDialog(webDownload),
+      navigateIntoWebDownload: (TorboxWebDownload webDownload) =>
+          sections.folderNavigation.navigateIntoWebDownload(webDownload),
+      copyWebDownloadLink: (TorboxWebDownload webDownload) =>
+          sections.webLinkPlaylistActions.copyWebDownloadLink(webDownload),
+      confirmDeleteWebDownload: (TorboxWebDownload webDownload) =>
+          sections.webDeleteAction.confirmDeleteWebDownload(webDownload),
+      selectionState: _selection,
+      toggleWebDownloadSelection: (int id) =>
+          sections.selectionActions.toggleWebDownloadSelection(id),
+      selectSourceMode: () => widget.selectSourceMode,
+      onSourceSelected: () => widget.onSourceSelected,
+    ));
+    sections.torrentRow = TorboxTorrentRow((
+      torrentSearchState: _torrentSearch,
+      focusState: _focus,
+      context: () => context,
+      handlePlayTorrent: (TorboxTorrent torrent) =>
+          sections.torrentPlayback.handlePlayTorrent(torrent),
+      showDownloadOptionsDialog: (TorboxTorrent torrent) =>
+          sections.downloadOptions.showDownloadOptionsDialog(torrent),
+      navigateIntoTorrent: (TorboxTorrent torrent) =>
+          sections.folderNavigation.navigateIntoTorrent(torrent),
+      copyTorboxZipLink: (TorboxTorrent torrent) =>
+          sections.torrentLinkActions.copyTorboxZipLink(torrent),
+      handleAddToPlaylist: (TorboxTorrent torrent) =>
+          sections.torrentPlaylistActions.handleAddToPlaylist(torrent),
+      handleAddToDebrifyTv: (TorboxTorrent torrent) =>
+          sections.torrentPlaylistActions.handleAddToDebrifyTv(torrent),
+      confirmDeleteTorrent: (TorboxTorrent torrent) =>
+          sections.torrentDeleteActions.confirmDeleteTorrent(torrent),
+      selectionState: _selection,
+      toggleTorrentSelection: (int id) =>
+          sections.selectionActions.toggleTorrentSelection(id),
+      selectSourceMode: () => widget.selectSourceMode,
+      onSourceSelected: () => widget.onSourceSelected,
+    ));
+    sections.fileRow = TorboxFileRow((
+      playFolderVideos: (RDFileNode folderNode) =>
+          sections.fileActions.playFolderVideos(folderNode),
+      playVideoFile: (RDFileNode fileNode) =>
+          sections.fileActions.playVideoFile(fileNode),
+      downloadFileOrFolder: (RDFileNode node) =>
+          sections.fileActions.downloadFileOrFolder(node),
+      navigationState: _nav,
+      addFileOrFolderToPlaylist: (RDFileNode node) =>
+          sections.filePlaylistLinks.addFileOrFolderToPlaylist(node),
+      copyFileLink: (RDFileNode node) =>
+          sections.filePlaylistLinks.copyFileLink(node),
+      navigateIntoFolder: (RDFileNode folderNode) =>
+          sections.folderNavigation.navigateIntoFolder(folderNode),
+      focusState: _focus,
+    ));
+    sections.viewSelector = TorboxViewSelector((
+      catalogState: _catalog,
+      resetListScroll: () => sections.catalogLoading.resetListScroll(),
+      setState: setState,
+      torrentSearchState: _torrentSearch,
+      selectionState: _selection,
+    ));
+    sections.selectionBar = TorboxSelectionBar((
+      context: () => context,
+      activeSelectedIds: () => sections.selectionActions.activeSelectedIds,
+      toggleSelectAll: () => sections.selectionActions.toggleSelectAll(),
+      isAllSelected: () => sections.selectionActions.isAllSelected,
+      focusState: _focus,
+      handleDeleteSelected: () =>
+          sections.selectionActions.handleDeleteSelected(),
+    ));
+    sections.torrentSearchLayout = TorboxTorrentSearchLayout((
+      context: () => context,
+      torrentSearchState: _torrentSearch,
+      focusState: _focus,
+      submitTorrentSearch: () => sections.torrentSearch.submitTorrentSearch(),
+      setState: setState,
+      filteredTorrentSearchResults: () =>
+          sections.torrentSearch.filteredTorrentSearchResults,
+      buildTorrentFolderCard: (TorboxTorrent torrent, int index) =>
+          sections.torrentRow.buildTorrentFolderCard(torrent, index),
+    ));
+    sections.toolbar = TorboxToolbar((
+      isPushedRoute: () => widget.isPushedRoute,
+      selectSourceMode: () => widget.selectSourceMode,
+      initialTorrentToOpen: () => widget.initialTorrentToOpen,
+      context: () => context,
+      catalogState: _catalog,
+      webState: _web,
+      selectionState: _selection,
+      toggleSelectionMode: () =>
+          sections.selectionActions.toggleSelectionMode(),
+      confirmDeleteAll: () => sections.torrentDeleteActions.confirmDeleteAll(),
+      torrentSearchState: _torrentSearch,
+      focusState: _focus,
+      toggleTorrentSearch: () => sections.torrentSearch.toggleTorrentSearch(),
+      showAddMagnetDialog: () => sections.magnetActions.showAddMagnetDialog(),
+      showAddWebDownloadDialog: () =>
+          sections.webCreateActions.showAddWebDownloadDialog(),
+    ));
     return sections;
   }
 
@@ -754,980 +902,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   // ============ File Search Methods ============
 
-  /// Get items to display (torrents/web downloads or files/folders)
-  List<dynamic> get _currentItems {
-    if (_sections.folderNavigation.isAtRoot) {
-      // At root: show torrents or web downloads based on selected view
-      if (_catalog.selectedView == TorboxDownloadsView.webDownloads) {
-        return _web.webDownloads;
-      }
-      return _catalog.torrents;
-    } else {
-      // Inside torrent/web download: show current folder's children (transformed by view mode)
-      return _view.currentViewNodes ?? _nav.currentFolderNode?.children ?? [];
-    }
-  }
-
   @override
-  Widget build(BuildContext context) {
-    // Back navigation is handled via MainPageBridge.handleBackNavigation
-
-    // When DEEP-LINKED into a specific torrent (pushed WITH a target) and still
-    // at root, show the loading state. Browsing from the Cloud hub has no target,
-    // so the list root is the real content — don't gate it behind a spinner.
-    if (widget.isPushedRoute &&
-        !widget.selectSourceMode &&
-        widget.initialTorrentToOpen != null &&
-        _sections.folderNavigation.isAtRoot) {
-      return CloudScaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.of(context).pop(),
-            tooltip: 'Back',
-          ),
-          title: const Text('Opening torrent...'),
-        ),
-        body: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Loading torrent files...'),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final currentMode = _sections.viewModes.getCurrentViewMode();
-    final showSearch =
-        !_sections.folderNavigation.isAtRoot &&
-        currentMode != FolderViewMode.seriesArrange;
-
-    return CloudScaffold(
-      appBar: _sections.folderNavigation.isAtRoot
-          ? (widget.selectSourceMode
-                ? AppBar(
-                    leading: IconButton(
-                      focusNode: _focus.backButtonFocusNode,
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: () => Navigator.of(context).pop(),
-                      tooltip: 'Back',
-                    ),
-                    title: const Text('Select Source from TorBox'),
-                  )
-                : null)
-          : AppBar(
-              leading: IconButton(
-                focusNode: _focus.backButtonFocusNode,
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () =>
-                    _sections.backNavigation.handleBackNavigation(),
-                tooltip: 'Back',
-              ),
-              title: Text(_sections.folderNavigation.currentFolderName),
-              actions: [
-                if (showSearch)
-                  Focus(
-                    onKeyEvent: (node, event) {
-                      if (event is KeyDownEvent &&
-                          event.logicalKey == LogicalKeyboardKey.arrowLeft &&
-                          MainPageBridge.focusTvSidebar != null) {
-                        MainPageBridge.focusTvSidebar!();
-                        return KeyEventResult.handled;
-                      }
-                      return KeyEventResult.ignored;
-                    },
-                    child: IconButton(
-                      focusNode: _focus.searchButtonFocusNode,
-                      icon: Icon(
-                        _folderSearch.isSearchActive
-                            ? Icons.close
-                            : Icons.search,
-                      ),
-                      onPressed: _sections.folderSearch.toggleSearch,
-                      tooltip: _folderSearch.isSearchActive
-                          ? 'Close search'
-                          : 'Search files',
-                    ),
-                  ),
-              ],
-            ),
-      body: Column(
-        children: [
-          const SizedBox(height: 8),
-          if (_sections.folderNavigation.isAtRoot && !widget.selectSourceMode)
-            _buildToolbar(),
-          if (_sections.folderNavigation.isAtRoot) _buildViewSelectorBar(),
-          if (_sections.folderNavigation.isAtRoot &&
-              _torrentSearch.isTorrentSearchActive)
-            _buildTorrentSearchBar(),
-          if (_sections.folderNavigation.isAtRoot && _selection.isSelectionMode)
-            _buildSelectionBar(),
-          if (!_sections.folderNavigation.isAtRoot)
-            _sections.viewModes.buildViewModeDropdown(),
-          if (_folderSearch.isSearchActive && showSearch)
-            _sections.folderSearch.buildSearchBar(),
-          Expanded(
-            child:
-                _torrentSearch.isTorrentSearchActive &&
-                    _sections.folderNavigation.isAtRoot
-                ? _buildTorrentSearchResults()
-                : _folderSearch.isSearchActive
-                ? _sections.folderSearch.buildSearchResults()
-                : RefreshIndicator(
-                    onRefresh: _sections.catalogLoading.refresh,
-                    child: _buildFilesFoldersList(),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilesFoldersList() {
-    // Check if we're showing web downloads view at root level
-    final isWebDownloadsView =
-        _sections.folderNavigation.isAtRoot &&
-        _catalog.selectedView == TorboxDownloadsView.webDownloads;
-
-    if (isWebDownloadsView) {
-      return _buildWebDownloadsList();
-    }
-
-    // Loading state
-    if (_catalog.isLoading && _currentItems.isEmpty) {
-      return const CloudRowSkeletonList();
-    }
-
-    // Error state
-    if (_catalog.errorMessage.isNotEmpty &&
-        _currentItems.isEmpty &&
-        !_catalog.initialLoad) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
-        children: [
-          Icon(
-            Icons.flash_on_rounded,
-            size: 48,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _catalog.errorMessage,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 12),
-          if (_catalog.apiKey == null || _catalog.apiKey!.isEmpty)
-            FilledButton(
-              onPressed: _sections.magnetActions.openSettings,
-              child: const Text('Open Torbox Settings'),
-            ),
-        ],
-      );
-    }
-
-    // Empty state
-    if (_currentItems.isEmpty && !_catalog.isLoading) {
-      final isRoot = _sections.folderNavigation.isAtRoot;
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                isRoot ? Icons.inbox_outlined : Icons.folder_open,
-                size: 64,
-                color: Colors.grey.shade400,
-              ),
-              const SizedBox(height: 24),
-              Text(
-                isRoot ? 'No Torrents Yet' : 'Folder is Empty',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                isRoot
-                    ? 'Add torrents via Torbox to see them here.'
-                    : 'This folder doesn\'t contain any files or subfolders.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // List of items (torrents or files/folders)
-    return ListView.builder(
-      controller: _focus.scrollController,
-      padding: const EdgeInsets.all(16),
-      itemCount: _currentItems.length + (_catalog.isLoadingMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index >= _currentItems.length) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final item = _currentItems[index];
-
-        if (_sections.folderNavigation.isAtRoot) {
-          // Show torrent as a folder
-          return _buildTorrentFolderCard(item as TorboxTorrent, index);
-        } else {
-          // Show file or folder node
-          return _buildFileOrFolderCard(item as RDFileNode, index);
-        }
-      },
-    );
-  }
-
-  Widget _buildWebDownloadsList() {
-    // Loading state
-    if (_web.isLoadingWebDownloads && _web.webDownloads.isEmpty) {
-      return const CloudRowSkeletonList();
-    }
-
-    // Error state
-    if (_web.webDownloadErrorMessage.isNotEmpty && _web.webDownloads.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
-        children: [
-          Icon(
-            Icons.link_rounded,
-            size: 48,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _web.webDownloadErrorMessage,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 12),
-          if (_catalog.apiKey == null || _catalog.apiKey!.isEmpty)
-            FilledButton(
-              onPressed: _sections.magnetActions.openSettings,
-              child: const Text('Open Torbox Settings'),
-            ),
-        ],
-      );
-    }
-
-    // Empty state
-    if (_web.webDownloads.isEmpty && !_web.isLoadingWebDownloads) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.link_off, size: 64, color: Colors.grey.shade400),
-              const SizedBox(height: 24),
-              Text(
-                'No Web Downloads Yet',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Add web downloads from YouTube, file hosts, and more.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // List of web downloads
-    return ListView.builder(
-      controller: _focus.webDownloadScrollController,
-      padding: const EdgeInsets.all(16),
-      itemCount:
-          _web.webDownloads.length + (_web.isLoadingMoreWebDownloads ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index >= _web.webDownloads.length) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        return _buildWebDownloadCard(_web.webDownloads[index], index);
-      },
-    );
-  }
-
-  Widget _buildWebDownloadCard(TorboxWebDownload webDownload, int index) {
-    final videoCount = webDownload.files
-        .where((file) => !file.zipped && torboxFileLooksLikeVideo(file))
-        .length;
-
-    if (widget.selectSourceMode) {
-      return CloudFileRow(
-        kind: CloudRowKind.folder,
-        title: webDownload.name,
-        meta:
-            '${Formatters.formatFileSize(webDownload.size)} · ${webDownload.files.length} file${webDownload.files.length == 1 ? '' : 's'}',
-        onTap: videoCount > 0
-            ? () {
-                widget.onSourceSelected?.call(
-                  SeriesSource(
-                    torrentHash: '',
-                    torrentName: webDownload.name,
-                    debridService: 'torbox',
-                    debridTorrentId: webDownload.id.toString(),
-                    cloudSourceKind: SeriesSource.cloudKindWebDownload,
-                    boundAt: DateTime.now().millisecondsSinceEpoch,
-                  ),
-                );
-                Navigator.of(context).pop();
-              }
-            : null,
-        focusNode: index == 0 ? _focus.firstItemFocusNode : null,
-      );
-    }
-
-    // Same action set (labels, conditions) the old Open/Play pills + ⋮ menu
-    // offered; the row's tap now carries Open.
-    final actions = <CloudRowAction>[
-      if (videoCount > 0)
-        CloudRowAction(
-          icon: Icons.play_arrow_rounded,
-          label: 'Play',
-          showInStrip: true,
-          onSelected: () =>
-              _sections.webPlayback.handlePlayWebDownload(webDownload),
-        ),
-      CloudRowAction(
-        icon: Icons.download,
-        label: 'Download to device',
-        showInStrip: true,
-        onSelected: () =>
-            _sections.webOptions.showWebDownloadOptionsDialog(webDownload),
-      ),
-      CloudRowAction(
-        icon: Icons.folder_open,
-        label: 'Open',
-        onSelected: () =>
-            _sections.folderNavigation.navigateIntoWebDownload(webDownload),
-      ),
-      CloudRowAction(
-        icon: Icons.link,
-        label: 'Copy Download Link',
-        onSelected: () =>
-            _sections.webLinkPlaylistActions.copyWebDownloadLink(webDownload),
-      ),
-      CloudRowAction(
-        icon: Icons.delete_outline,
-        label: 'Delete',
-        destructive: true,
-        onSelected: () =>
-            _sections.webDeleteAction.confirmDeleteWebDownload(webDownload),
-      ),
-    ];
-
-    return CloudFileRow(
-      kind: CloudRowKind.folder,
-      title: webDownload.name,
-      meta:
-          '${Formatters.formatFileSize(webDownload.size)} · ${webDownload.files.length} file${webDownload.files.length == 1 ? '' : 's'}',
-      onTap: () =>
-          _sections.folderNavigation.navigateIntoWebDownload(webDownload),
-      actions: actions,
-      selectionMode: _selection.isSelectionMode,
-      selected: _selection.selectedWebDownloadIds.contains(webDownload.id),
-      onToggleSelected: () =>
-          _sections.selectionActions.toggleWebDownloadSelection(webDownload.id),
-      focusNode: index == 0 ? _focus.firstItemFocusNode : null,
-    );
-  }
-
-  /// Build a card for a torrent (displayed as a folder at root level)
-  Widget _buildTorrentFolderCard(TorboxTorrent torrent, int index) {
-    final videoCount = torrent.files.where(torboxFileLooksLikeVideo).length;
-    final meta =
-        '${Formatters.formatFileSize(torrent.size)} · ${torrent.files.length} files';
-    final upNode = (index == 0 && _torrentSearch.isTorrentSearchActive)
-        ? _focus.torrentSearchFocusNode
-        : null;
-
-    if (widget.selectSourceMode) {
-      // Select-source flow: the row IS the Select action — no strip, no menu.
-      return CloudFileRow(
-        kind: CloudRowKind.folder,
-        title: torrent.name,
-        meta: meta,
-        onTap: () {
-          final source = SeriesSource(
-            torrentHash: torrent.hash,
-            torrentName: torrent.name,
-            debridService: 'torbox',
-            debridTorrentId: torrent.id.toString(),
-            boundAt: DateTime.now().millisecondsSinceEpoch,
-          );
-          widget.onSourceSelected?.call(source);
-          Navigator.of(context).pop();
-        },
-        focusNode: index == 0 ? _focus.firstItemFocusNode : null,
-        upFocusNode: upNode,
-      );
-    }
-
-    // Same action set (labels, conditions) the old Open/Play pills + ⋮ menu
-    // offered; the row's tap now carries Open.
-    final actions = <CloudRowAction>[
-      if (videoCount > 0)
-        CloudRowAction(
-          icon: Icons.play_arrow_rounded,
-          label: 'Play',
-          showInStrip: true,
-          onSelected: () =>
-              _sections.torrentPlayback.handlePlayTorrent(torrent),
-        ),
-      CloudRowAction(
-        icon: Icons.download,
-        label: 'Download to device',
-        showInStrip: true,
-        onSelected: () =>
-            _sections.downloadOptions.showDownloadOptionsDialog(torrent),
-      ),
-      CloudRowAction(
-        icon: Icons.folder_open,
-        label: 'Open',
-        onSelected: () =>
-            _sections.folderNavigation.navigateIntoTorrent(torrent),
-      ),
-      CloudRowAction(
-        icon: Icons.link,
-        label: 'Copy Download Link (Zip)',
-        onSelected: () =>
-            _sections.torrentLinkActions.copyTorboxZipLink(torrent),
-      ),
-      if (videoCount > 0)
-        CloudRowAction(
-          icon: Icons.playlist_add,
-          label: 'Add to Playlist',
-          onSelected: () =>
-              _sections.torrentPlaylistActions.handleAddToPlaylist(torrent),
-        ),
-      CloudRowAction(
-        icon: Icons.live_tv_rounded,
-        label: 'Add to Debrify TV',
-        onSelected: () =>
-            _sections.torrentPlaylistActions.handleAddToDebrifyTv(torrent),
-      ),
-      CloudRowAction(
-        icon: Icons.delete_outline,
-        label: 'Delete',
-        destructive: true,
-        onSelected: () =>
-            _sections.torrentDeleteActions.confirmDeleteTorrent(torrent),
-      ),
-    ];
-
-    return CloudFileRow(
-      kind: CloudRowKind.folder,
-      title: torrent.name,
-      meta: meta,
-      badges: [
-        if (torrent.cached)
-          const CloudRowBadge('✓ Cached', CloudBadgeKind.ok)
-        else if (!torrent.downloadFinished)
-          CloudRowBadge(
-            '${(torrent.progress * 100).clamp(0, 100).round()}%',
-            CloudBadgeKind.warn,
-          ),
-      ],
-      onTap: () => _sections.folderNavigation.navigateIntoTorrent(torrent),
-      actions: actions,
-      selectionMode: _selection.isSelectionMode,
-      selected: _selection.selectedTorrentIds.contains(torrent.id),
-      onToggleSelected: () =>
-          _sections.selectionActions.toggleTorrentSelection(torrent.id),
-      focusNode: index == 0 ? _focus.firstItemFocusNode : null,
-      upFocusNode: upNode,
-    );
-  }
-
-  /// Build a card for a file or folder node (inside a torrent)
-  Widget _buildFileOrFolderCard(RDFileNode node, int index) {
-    final isFolder = node.isFolder;
-    final isVideo = !isFolder && FileUtils.isVideoFile(node.name);
-    final folderHasVideos =
-        isFolder && TorboxFolderTreeBuilder.hasVideoFiles(node);
-
-    // Same action set (labels, conditions) the old pills + ⋮ menu offered —
-    // note: no delete at node granularity, and Add to Playlist only for
-    // torrents (not web downloads), exactly as before.
-    final actions = <CloudRowAction>[
-      if (folderHasVideos || isVideo)
-        CloudRowAction(
-          icon: Icons.play_arrow_rounded,
-          label: 'Play',
-          showInStrip: true,
-          onSelected: () {
-            if (isFolder) {
-              _sections.fileActions.playFolderVideos(node);
-            } else {
-              _sections.fileActions.playVideoFile(node);
-            }
-          },
-        ),
-      CloudRowAction(
-        icon: Icons.download_rounded,
-        label: 'Download',
-        showInStrip: true,
-        onSelected: () => _sections.fileActions.downloadFileOrFolder(node),
-      ),
-      if (_nav.currentWebDownload == null && (isVideo || folderHasVideos))
-        CloudRowAction(
-          icon: Icons.playlist_add,
-          label: 'Add to Playlist',
-          onSelected: () =>
-              _sections.filePlaylistLinks.addFileOrFolderToPlaylist(node),
-        ),
-      if (!isFolder)
-        CloudRowAction(
-          icon: Icons.link,
-          label: 'Copy Link',
-          onSelected: () => _sections.filePlaylistLinks.copyFileLink(node),
-        ),
-    ];
-
-    return CloudFileRow(
-      kind: isFolder
-          ? CloudRowKind.folder
-          : isVideo
-          ? CloudRowKind.video
-          : CloudRowKind.file,
-      title: node.name,
-      meta: isFolder
-          ? '${node.fileCount} items · ${Formatters.formatFileSize(node.totalBytes)}'
-          : Formatters.formatFileSize(node.bytes ?? 0),
-      onTap: isFolder
-          ? () => _sections.folderNavigation.navigateIntoFolder(node)
-          : isVideo
-          ? () => _sections.fileActions.playVideoFile(node)
-          : null,
-      actions: actions,
-      focusNode: index == 0 ? _focus.firstItemFocusNode : null,
-    );
-  }
-
-  /// Full-width view switcher on its own line under the toolbar (two labels
-  /// don't fit the toolbar slot the old single-label dropdown used).
-  Widget _buildViewSelectorBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-      child: CloudSegmentedTabs<TorboxDownloadsView>(
-        segments: const [
-          CloudSegment(
-            TorboxDownloadsView.torrents,
-            'Torrents',
-            Icons.folder_rounded,
-          ),
-          CloudSegment(
-            TorboxDownloadsView.webDownloads,
-            'Web Downloads',
-            Icons.link_rounded,
-          ),
-        ],
-        selected: _catalog.selectedView,
-        onSelected: (value) {
-          if (value == _catalog.selectedView) return;
-          // The two root lists swap in the same element slot, so the incoming
-          // one would inherit the outgoing list's scroll offset.
-          _sections.catalogLoading.resetListScroll();
-          setState(() {
-            _catalog.selectedView = value;
-            // Source-selection mode arrives with torrent title search active.
-            // Suspend that search while Web Downloads is selected, then
-            // restore it if the user switches back to Torrents.
-            _torrentSearch.isTorrentSearchActive =
-                value == TorboxDownloadsView.torrents &&
-                _torrentSearch.torrentSearchController.text.trim().isNotEmpty;
-            // Exit selection mode when switching views
-            if (_selection.isSelectionMode) {
-              _selection.isSelectionMode = false;
-              _selection.selectedTorrentIds.clear();
-              _selection.selectedWebDownloadIds.clear();
-            }
-          });
-        },
-      ),
-    );
-  }
-
-  Widget _buildSelectionBar() {
-    final app = AppThemeScope.of(context);
-    final theme = Theme.of(context);
-    final count = _sections.selectionActions.activeSelectedIds.length;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: app.shape.br(12),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Row(
-        children: [
-          Text(
-            '$count selected',
-            style: TextStyle(
-              color: theme.colorScheme.onSurface,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const Spacer(),
-          TextButton(
-            onPressed: _sections.selectionActions.toggleSelectAll,
-            child: Text(
-              _sections.selectionActions.isAllSelected
-                  ? 'Deselect All'
-                  : 'Select All',
-            ),
-          ),
-          const SizedBox(width: 8),
-          FilledButton.icon(
-            focusNode: _focus.deleteButtonFocusNode,
-            onPressed: count > 0
-                ? _sections.selectionActions.handleDeleteSelected
-                : null,
-            icon: const Icon(Icons.delete_outline, size: 18),
-            label: const Text('Delete'),
-            style:
-                FilledButton.styleFrom(
-                  backgroundColor: theme.colorScheme.error,
-                  disabledBackgroundColor: theme.colorScheme.error.withValues(
-                    alpha: 0.3,
-                  ),
-                ).copyWith(
-                  side: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.focused)) {
-                      return BorderSide(color: app.core.tx, width: 3);
-                    }
-                    return null;
-                  }),
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTorrentSearchBar() {
-    final app = AppThemeScope.of(context);
-    final hasText = _torrentSearch.torrentSearchController.text.isNotEmpty;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: TvTextField(
-              controller: _torrentSearch.torrentSearchController,
-              focusNode: _focus.torrentSearchFocusNode,
-              autofocus: true,
-              onChanged: (_) => _focus.torrentSearchSubmitFocus.cancel(),
-              onSubmitted: (_) => _sections.torrentSearch.submitTorrentSearch(),
-              textInputAction: TextInputAction.search,
-              style: const TextStyle(fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Search your torrents...',
-                hintStyle: TextStyle(color: app.fade(app.core.tx, 0.3)),
-                prefixIcon: Icon(
-                  Icons.search_rounded,
-                  color: app.fade(app.core.tx, 0.4),
-                  size: 20,
-                ),
-                filled: true,
-                fillColor: app.fade(app.core.tx, 0.06),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: app.shape.br(12),
-                  borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: app.shape.br(12),
-                  borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: app.shape.br(12),
-                  borderSide: BorderSide(color: app.cloud.accent),
-                ),
-              ),
-            ),
-          ),
-          if (hasText)
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Focus(
-                focusNode: _focus.torrentSearchClearFocusNode,
-                onKeyEvent: (node, event) {
-                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                  final key = event.logicalKey;
-                  if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
-                    _focus.torrentSearchSubmitFocus.cancel();
-                    _torrentSearch.torrentSearchController.clear();
-                    setState(() => _torrentSearch.torrentSearchQuery = '');
-                    _focus.torrentSearchFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-                  if (key == LogicalKeyboardKey.arrowLeft) {
-                    _focus.torrentSearchFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: Builder(
-                  builder: (context) {
-                    final isFocused = Focus.of(context).hasFocus;
-                    return IconButton(
-                      onPressed: () {
-                        _focus.torrentSearchSubmitFocus.cancel();
-                        _torrentSearch.torrentSearchController.clear();
-                        setState(() => _torrentSearch.torrentSearchQuery = '');
-                        _focus.torrentSearchFocusNode.requestFocus();
-                      },
-                      icon: Icon(
-                        Icons.clear_rounded,
-                        color: isFocused
-                            ? app.core.tx
-                            : app.fade(app.core.tx, 0.4),
-                        size: 18,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTorrentSearchResults() {
-    final app = AppThemeScope.of(context);
-    if (_torrentSearch.isLoadingTorrentSearch) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(
-              'Loading all torrents...',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_torrentSearch.torrentSearchQuery.isEmpty) {
-      return Center(
-        child: Text(
-          'Type a keyword and press search',
-          style: TextStyle(color: app.fade(app.core.tx, 0.4)),
-        ),
-      );
-    }
-
-    final results = _sections.torrentSearch.filteredTorrentSearchResults;
-
-    if (results.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.search_off_rounded,
-              size: 48,
-              color: app.fade(app.core.tx, 0.2),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'No results for "${_torrentSearch.torrentSearchQuery}"',
-              style: TextStyle(color: app.fade(app.core.tx, 0.5)),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: results.length,
-      itemBuilder: (context, index) {
-        final torrent = results[index];
-        return _buildTorrentFolderCard(torrent, index);
-      },
-    );
-  }
-
-  /// Opened from the Cloud hub to browse (pushed, no deep-link target, not
-  /// select-source) — the list root otherwise has no Back affordance.
-  bool get _isBrowsePush =>
-      widget.isPushedRoute &&
-      !widget.selectSourceMode &&
-      widget.initialTorrentToOpen == null;
-
-  Widget _buildToolbar() {
-    final theme = Theme.of(context);
-    final app = AppThemeScope.of(context);
-    final isTorrentsView =
-        _catalog.selectedView == TorboxDownloadsView.torrents;
-    final hasItems = isTorrentsView
-        ? _catalog.torrents.isNotEmpty
-        : _web.webDownloads.isNotEmpty;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 480;
-        final double iconSize = isCompact ? 20 : 24;
-        final EdgeInsets iconPadding = isCompact
-            ? const EdgeInsets.all(6)
-            : const EdgeInsets.all(8);
-        final BoxConstraints iconConstraints = isCompact
-            ? const BoxConstraints(minWidth: 36, minHeight: 36)
-            : const BoxConstraints(minWidth: 44, minHeight: 44);
-        return Container(
-          margin: EdgeInsets.symmetric(
-            horizontal: isCompact ? 8 : 16,
-            vertical: 8,
-          ),
-          padding: EdgeInsets.symmetric(
-            horizontal: isCompact ? 8 : 16,
-            vertical: 8,
-          ),
-          decoration: BoxDecoration(
-            color: app.fade(app.core.tx, 0.05),
-            borderRadius: app.shape.br(12),
-            border: Border.all(color: app.fade(app.core.tx, 0.08)),
-          ),
-          child: Row(
-            children: [
-              if (_isBrowsePush) ...[
-                Tooltip(
-                  message: 'Back',
-                  child: IconButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    iconSize: iconSize,
-                    padding: iconPadding,
-                    constraints: iconConstraints,
-                    icon: const Icon(Icons.arrow_back),
-                    color: theme.colorScheme.onSurface,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-                SizedBox(width: isCompact ? 4 : 8),
-              ],
-              const Spacer(),
-              if (hasItems) ...[
-                Tooltip(
-                  message: _selection.isSelectionMode
-                      ? 'Exit selection'
-                      : 'Select items',
-                  child: IconButton(
-                    onPressed: _sections.selectionActions.toggleSelectionMode,
-                    iconSize: iconSize,
-                    padding: iconPadding,
-                    constraints: iconConstraints,
-                    icon: Icon(
-                      _selection.isSelectionMode
-                          ? Icons.close
-                          : Icons.checklist_outlined,
-                    ),
-                    color: _selection.isSelectionMode
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.onSurface,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-                if (isTorrentsView)
-                  Tooltip(
-                    message: 'Delete all torrents',
-                    child: IconButton(
-                      onPressed:
-                          _sections.torrentDeleteActions.confirmDeleteAll,
-                      iconSize: iconSize,
-                      padding: iconPadding,
-                      constraints: iconConstraints,
-                      icon: const Icon(Icons.delete_sweep_outlined),
-                      color: theme.colorScheme.error,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-              ],
-              if (isTorrentsView) ...[
-                Tooltip(
-                  message: _torrentSearch.isTorrentSearchActive
-                      ? 'Close search'
-                      : 'Search torrents',
-                  child: IconButton(
-                    focusNode: _focus.torrentSearchToggleFocusNode,
-                    onPressed: _sections.torrentSearch.toggleTorrentSearch,
-                    iconSize: iconSize,
-                    padding: iconPadding,
-                    constraints: iconConstraints,
-                    icon: Icon(
-                      _torrentSearch.isTorrentSearchActive
-                          ? Icons.search_off_rounded
-                          : Icons.search_rounded,
-                    ),
-                    color: _torrentSearch.isTorrentSearchActive
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-                Tooltip(
-                  message: 'Add magnet link',
-                  child: IconButton(
-                    onPressed: _sections.magnetActions.showAddMagnetDialog,
-                    iconSize: iconSize,
-                    padding: iconPadding,
-                    constraints: iconConstraints,
-                    icon: const Icon(Icons.add_circle_outline),
-                    color: theme.colorScheme.primary,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-              ] else ...[
-                Tooltip(
-                  message: 'Add web download',
-                  child: IconButton(
-                    onPressed:
-                        _sections.webCreateActions.showAddWebDownloadDialog,
-                    iconSize: iconSize,
-                    padding: iconPadding,
-                    constraints: iconConstraints,
-                    icon: const Icon(Icons.link),
-                    color: theme.colorScheme.primary,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) => _sections.rootLayout.build(context);
 }
 
 /// Frozen original-code characterization accessor; production does not call it.
@@ -1841,7 +1017,7 @@ Map<String, Object?> torboxDownloadsTestAccess(
     'deleteButtonFocusNode': s._focus.deleteButtonFocusNode,
     'torrentSearchSubmitFocus': s._focus.torrentSearchSubmitFocus,
     'isAtRoot': s._sections.folderNavigation.isAtRoot,
-    'currentItems': s._currentItems,
+    'currentItems': s._sections.rootLayout.currentItems,
     'filteredTorrentSearchResults':
         s._sections.torrentSearch.filteredTorrentSearchResults,
   };

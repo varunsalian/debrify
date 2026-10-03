@@ -21,7 +21,13 @@
     "scaffolding": "dev/tool/torbox_scaffolding.json",
     "context_exceptions": "dev/tool/torbox_context_exceptions.json"
   },
-  "named_exceptions": {},
+  "named_exceptions": {
+    "root_build_forwarder": [
+      "_TorboxDownloadsScreenState.build",
+      "lib/features/torbox_downloads/presentation/legacy_torbox/torbox_root_layout.dart",
+      "root_build_forwarder: plan-approved plain TorboxRootLayout; move build verbatim except deps/receivers and removal of its @override; retain exact annotated State single-expression forwarder"
+    ]
+  },
   "annotation_exceptions": {},
   "live_getter_callbacks": [
     "activeSelectedIds",
@@ -41,10 +47,25 @@
     "selectSourceMode",
     "onSourceSelected"
   ],
-  "token_rules": [],
+  "token_rules": [
+    {
+      "original_name": "_TorboxDownloadsScreenState.build",
+      "allowed_edit": "root_build_forwarder",
+      "difference_prefix": "root_build_forwarder:",
+      "before": [
+        "@",
+        "override"
+      ],
+      "after": []
+    }
+  ],
   "additional_owners": [],
   "required_nodes": [],
-  "forwarders": {},
+  "forwarders": {
+    "_TorboxDownloadsScreenState.build": {
+      "receiver": "_sections.rootLayout"
+    }
+  },
   "lifecycle": [
     "_TorboxDownloadsScreenState.initState",
     "_TorboxDownloadsScreenState.didUpdateWidget",
@@ -701,7 +722,12 @@
     "_addInput": "TorboxAddInputState",
     "_nav": "TorboxNavigationState"
   },
-  "plain_sections": [],
+  "plain_sections": [
+    {
+      "file": "lib/features/torbox_downloads/presentation/legacy_torbox/torbox_root_layout.dart",
+      "owner": "TorboxRootLayout"
+    }
+  ],
   "callback_identities": [
     {
       "name": "torrent scroll detach/reattach",

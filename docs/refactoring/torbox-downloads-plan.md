@@ -420,6 +420,14 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base4`.
 - Verified all four supplied PNG SHA-256 values against `linux-original-sha256.txt`; capture/strict/revision evidence retained in the common git evidence directory. Host provenance and all eight macOS/Linux hashes are in `test/goldens/torbox_downloads/provenance.json`. No golden regenerated.
 - Removed the pending-original skip: Linux hosts now always perform exact Linux PNG comparison, and missing originals fail. The revised view tests first passed against unchanged original screen/accessor in the c4f5375a worktree (`linux-host-guard-original.jsonl`, 12 successes, PASS against base4), before adoption against moved code. The historical step-5 stop is resolved; continue at step 6.
 
+### Step 6 — complete
+
+- Linux artifact prerequisite committed as `c7e6a754`. Moved the final nine layout concerns (root, library lists, three row types, view selector, selection bar, torrent-search layout and toolbar). State build is the exact annotated single-expression forwarder to plain `TorboxRootLayout`; its original own `context` remains lexical, including nested callbacks. Facade 1,848 → **1,024** lines; only State/widget, lifecycle, accessor and reviewed composition wiring remain until step 7.
+- All step-6 deps entries reviewed before pinning 191 scaffolds. Corrected the report's root context entry: it is the existing method parameter, not borrowed State context. Public source-picker constructor/signatures, callback values and route pop order remain unchanged.
+- Tooling correction: the AST adapter now records method parameters in the same lexical parameter stack as function parameters. Previously a nested callback in `build(context)` was misclassified as an owned State-context read, causing a false prefix mismatch when the approved `@override` removal happened. The correction was proven first against original c4f5375a (`step7-fixtures-parser-original.txt`), including real root/forwarder negatives and an assertion that every build context reference binds its method parameter; no assertion or guard removed.
+- 195 original leaves and every active TorBox/context/callback/accessor fixture pass (`step6-verbatim-final.txt`); settings/IPTV self-tests pass unchanged with the corrected adapter. All 79 affected identities pass against base4 (`step6-test-comparison.txt`), including four strict macOS goldens. Linux originals and their original-code strict run are verified; extracted-code Linux execution awaits remote CI/user execution because no local Flutter Linux host exists.
+- Whole analyzer: 825 diagnostics, zero additions after relocation (`step6-analyzer-comparison.txt`). Architecture, format, strict size/lowering-only ratchet and shape inventory (14 bare radii / 23 token calls) pass. No golden update, assertion rewrite, SDK install or push.
+
 ## Found, not fixed
 
 - **Startup `setState` after dispose.** With a pre-filled

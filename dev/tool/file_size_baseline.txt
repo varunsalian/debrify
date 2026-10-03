@@ -57,7 +57,6 @@
 1937 lib/services/remote_control/remote_control_state.dart
 1928 lib/screens/profiles/profile_gate_looks.dart
 1864 lib/screens/collections/collection_folder_screen.dart
-1848 lib/screens/torbox/torbox_downloads_screen.dart
 1844 lib/screens/video_player/widgets/player_menu_panel.dart
 1829 lib/screens/settings/settings_tv_layout.dart
 1826 lib/utils/series_parser.dart
@@ -126,6 +125,7 @@
 1032 lib/screens/profiles/profile_pin_screen.dart
 1027 lib/widgets/parents_guide_section.dart
 1025 lib/services/webdav_sync/webdav_sync_scheduler.dart
+1024 lib/screens/torbox/torbox_downloads_screen.dart
 1023 lib/services/webdav_sync/webdav_sync_graph.dart
 1021 lib/screens/settings/settings_spotlight_shell.dart
 1021 lib/services/webdav_sync/webdav_sync_tombstones.dart
