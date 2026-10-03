@@ -36,7 +36,6 @@ typedef TorboxFileActionsDeps = ({
 class TorboxFileActions {
   TorboxFileActions(this._deps);
   final TorboxFileActionsDeps _deps;
-
   TorboxNavigationState get _nav => _deps.navigationState;
 
   /// Get files list from current torrent or web download

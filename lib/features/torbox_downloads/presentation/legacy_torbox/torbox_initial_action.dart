@@ -6,7 +6,6 @@ import 'torbox_catalog_state.dart';
 typedef TorboxInitialActionDeps = ({
   TorboxCatalogState catalogState,
   bool Function() mounted,
-  // TEMP(torbox): navigateIntoTorrent -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_navigation.dart at step 5.
   void Function(TorboxTorrent torrent) navigateIntoTorrent,
 });
 

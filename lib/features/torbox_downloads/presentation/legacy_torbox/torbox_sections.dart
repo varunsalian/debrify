@@ -10,6 +10,8 @@ import 'torbox_file_playlist_links.dart';
 import 'torbox_file_selection_card.dart';
 import 'torbox_file_selection_sheet.dart';
 import 'torbox_focus_actions.dart';
+import 'torbox_folder_navigation.dart';
+import 'torbox_folder_search.dart';
 import 'torbox_initial_action.dart';
 import 'torbox_magnet_actions.dart';
 import 'torbox_notifications.dart';
@@ -23,7 +25,9 @@ import 'torbox_torrent_link_actions.dart';
 import 'torbox_torrent_options.dart';
 import 'torbox_torrent_playback.dart';
 import 'torbox_torrent_playlist_actions.dart';
+import 'torbox_torrent_search.dart';
 import 'torbox_torrent_zip_download.dart';
+import 'torbox_view_modes.dart';
 import 'torbox_web_create_actions.dart';
 import 'torbox_web_delete_action.dart';
 import 'torbox_web_file_downloads.dart';
@@ -66,4 +70,8 @@ class TorboxSections {
   late final TorboxFileDownloads fileDownloads;
   late final TorboxFilePlayback filePlayback;
   late final TorboxNotifications notifications;
+  late final TorboxFolderNavigation folderNavigation;
+  late final TorboxViewModes viewModes;
+  late final TorboxTorrentSearch torrentSearch;
+  late final TorboxFolderSearch folderSearch;
 }

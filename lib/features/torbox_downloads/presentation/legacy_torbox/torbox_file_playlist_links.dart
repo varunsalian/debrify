@@ -25,7 +25,6 @@ typedef TorboxFilePlaylistLinksDeps = ({
 class TorboxFilePlaylistLinks {
   TorboxFilePlaylistLinks(this._deps);
   final TorboxFilePlaylistLinksDeps _deps;
-
   TorboxNavigationState get _nav => _deps.navigationState;
 
   /// Add file or folder to playlist

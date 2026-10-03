@@ -19,7 +19,6 @@ typedef TorboxCatalogLoadingDeps = ({
   TorboxWebState webState,
   bool Function() mounted,
   void Function(VoidCallback) setState,
-  // TEMP(torbox): submitTorrentSearch -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_search.dart at step 5.
   void Function() submitTorrentSearch,
   String? Function() initialSearchQuery,
   TorboxTorrentSearchState torrentSearchState,

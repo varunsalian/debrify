@@ -386,32 +386,32 @@ Each entry below is checked against the declaration table above before its scaff
 | `file_playback` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 4 actual binding reviewed |
 | `notifications` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 4 actual binding reviewed |
 | `notifications` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 4 actual binding reviewed |
-| `folder_navigation` | `exitSelectionMode` (void Function()) | `TorboxSelectionActions.exitSelectionMode` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 5 |
-| `folder_navigation` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `folder_navigation` | `viewState` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `folder_navigation` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
-| `folder_navigation` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `folder_navigation` | `focusFirstItemOrFallback` (void Function()) | `TorboxFocusActions.focusFirstItemOrFallback` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 5 |
-| `folder_navigation` | `getCurrentViewMode` (FolderViewMode Function()) | `TorboxViewModes.getCurrentViewMode` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 5 |
-| `view_modes` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `view_modes` | `viewState` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `view_modes` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
-| `view_modes` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
-| `view_modes` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `torrent_search` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
-| `torrent_search` | `torrentSearchState` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `torrent_search` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `torrent_search` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot | [ ] Review at extraction step 5 |
-| `torrent_search` | `initialSearchQuery` (String? Function()) | `() => widget.initialSearchQuery` live, never snapshot | [ ] Review at extraction step 5 |
-| `torrent_search` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
-| `torrent_search` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
-| `torrent_search` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `folder_search` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
-| `folder_search` | `folderSearchState` (TorboxFolderSearchState) | `_folderSearch`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `folder_search` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `folder_search` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
-| `folder_search` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
-| `folder_search` | `playVideoFile` (Future<void> Function(RDFileNode fileNode)) | `TorboxFileActions.playVideoFile` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 5 |
+| `folder_navigation` | `exitSelectionMode` (void Function()) | `TorboxSelectionActions.exitSelectionMode` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Reviewed actual step-5 binding before pin |
+| `folder_navigation` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `folder_navigation` | `viewState` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `folder_navigation` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [x] Reviewed actual step-5 binding before pin |
+| `folder_navigation` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `folder_navigation` | `focusFirstItemOrFallback` (void Function()) | `TorboxFocusActions.focusFirstItemOrFallback` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Reviewed actual step-5 binding before pin |
+| `folder_navigation` | `getCurrentViewMode` (FolderViewMode Function()) | `TorboxViewModes.getCurrentViewMode` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [x] Reviewed actual step-5 binding before pin |
+| `view_modes` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `view_modes` | `viewState` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `view_modes` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Reviewed actual step-5 binding before pin |
+| `view_modes` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [x] Reviewed actual step-5 binding before pin |
+| `view_modes` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `torrent_search` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [x] Reviewed actual step-5 binding before pin |
+| `torrent_search` | `torrentSearchState` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `torrent_search` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `torrent_search` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot | [x] Reviewed actual step-5 binding before pin |
+| `torrent_search` | `initialSearchQuery` (String? Function()) | `() => widget.initialSearchQuery` live, never snapshot | [x] Reviewed actual step-5 binding before pin |
+| `torrent_search` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Reviewed actual step-5 binding before pin |
+| `torrent_search` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Reviewed actual step-5 binding before pin |
+| `torrent_search` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `folder_search` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [x] Reviewed actual step-5 binding before pin |
+| `folder_search` | `folderSearchState` (TorboxFolderSearchState) | `_folderSearch`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `folder_search` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `folder_search` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [x] Reviewed actual step-5 binding before pin |
+| `folder_search` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Reviewed actual step-5 binding before pin |
+| `folder_search` | `playVideoFile` (Future<void> Function(RDFileNode fileNode)) | `TorboxFileActions.playVideoFile` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Reviewed actual step-5 binding before pin |
 | `root_layout` | `isAtRoot` (bool Function()) | `TorboxFolderNavigation.isAtRoot` (step 5); exact arguments/defaults; getter read at invocation | [ ] Review at extraction step 6 |
 | `root_layout` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
 | `root_layout` | `webState` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
@@ -522,3 +522,5 @@ Step-2 binding review: all nine State fields construct their concern owner exact
 Step-3 wiring reviewed before pin: all 18 section records match each original read/write/call entry. Fetches remain the `fetchTorrents`/`fetchWebDownloads` pair on the single catalog-loading instance; web-create refresh targets `fetchWebDownloads`. Init and reset use direct `catalogLoading.onScroll` / `onWebDownloadScroll` tear-offs on that same instance. Route push/pop use direct `backNavigation.handleBackNavigation`. TV tab 5 registers and removes the one `_focus.tvContentFocusHandler` closure, whose original body sets the flag and invokes focus fallback. Named callback signatures retain original `required` and default values; all widget inputs remain live getters. New section/record binding names use normal lowerCamelCase.
 
 Step-4 wiring reviewed before pin: stream request and file selection card have no borrowed state and use plain zero-argument section construction. Other callbacks retain required/default arguments and the public names of moved model types. Magnet refresh targets catalog-loading refresh, which selects the active view. File-current getters stay live; file actions and playlist links use the exact read-only `_nav => _deps.navigationState` owner alias to preserve guard formatting without adding braces or changing frozen source tests. All seven playback and seven enqueue argument-building bodies retain their guards and evaluation positions.
+
+Step-5 wiring reviewed before pin: folder navigation borrows the same `_nav`, `_view` and `_focus` owners and calls the single catalog-loading reset; focus callbacks still target the single focus-actions section. View modes read the same torrent/web mode maps. Torrent search uses live `widget.selectSourceMode` and `widget.initialSearchQuery` getters and the original mounted/context/setState boundaries. Folder search keeps its original stack-root lookup and builder-local context; file playback targets file-actions `playVideoFile`. Back-navigation, initial-open and catalog-loading callbacks now defer to these final section destinations, with no captured values or eager calls. Both scroll listeners and every registration/teardown identity remain unchanged.

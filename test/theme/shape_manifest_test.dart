@@ -41,6 +41,8 @@ const Map<String, int> kShapeResidue = {
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_selection_sheet.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_search.dart':
+      2,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_link_actions.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_download_options.dart':
@@ -49,7 +51,7 @@ const Map<String, int> kShapeResidue = {
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_series_layout.dart':
       0,
-  'lib/screens/torbox/torbox_downloads_screen.dart': 3,
+  'lib/screens/torbox/torbox_downloads_screen.dart': 0,
   'lib/features/iptv/presentation/iptv_stage_chip.dart': 0,
   'lib/features/iptv/presentation/key_cap.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_cockpit_stage.dart': 0,
@@ -181,6 +183,8 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_enqueue.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_navigation.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_playlist_actions.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_magnet_actions.dart':
@@ -193,6 +197,8 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_selection_card.dart':
       6,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_view_modes.dart':
+      1,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_delete_actions.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_download_action.dart':
@@ -222,6 +228,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_downloads.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_actions.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_search.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_delete_action.dart':
       0,

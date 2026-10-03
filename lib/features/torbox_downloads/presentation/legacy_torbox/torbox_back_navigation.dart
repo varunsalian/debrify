@@ -12,15 +12,11 @@ typedef TorboxBackNavigationDeps = ({
   TorboxSelectionState selectionState,
   void Function() exitSelectionMode,
   TorboxTorrentSearchState torrentSearchState,
-  // TEMP(torbox): toggleTorrentSearch -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_search.dart at step 5.
   void Function() toggleTorrentSearch,
   TorboxFolderSearchState folderSearchState,
-  // TEMP(torbox): toggleSearch -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_search.dart at step 5.
   void Function() toggleSearch,
-  // TEMP(torbox): isAtRoot -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_navigation.dart at step 5.
   bool Function() isAtRoot,
   TorboxNavigationState navigationState,
-  // TEMP(torbox): navigateUp -> lib/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_navigation.dart at step 5.
   void Function() navigateUp,
   bool Function() selectSourceMode,
   bool Function() isPushedRoute,

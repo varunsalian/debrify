@@ -32,7 +32,6 @@
 2800 lib/screens/downloads_screen.dart
 2764 lib/screens/profiles/edit_profile_screen.dart
 2608 lib/screens/settings/stremio_addons_page.dart
-2598 lib/screens/torbox/torbox_downloads_screen.dart
 2584 lib/services/webdav_sync/webdav_sync_local_adapter.dart
 2476 lib/screens/stremio_tv/widgets/stremio_tv_tuner.dart
 2399 lib/services/mdblist/mdblist_service.dart
@@ -58,6 +57,7 @@
 1937 lib/services/remote_control/remote_control_state.dart
 1928 lib/screens/profiles/profile_gate_looks.dart
 1864 lib/screens/collections/collection_folder_screen.dart
+1848 lib/screens/torbox/torbox_downloads_screen.dart
 1844 lib/screens/video_player/widgets/player_menu_panel.dart
 1829 lib/screens/settings/settings_tv_layout.dart
 1826 lib/utils/series_parser.dart
