@@ -18,6 +18,10 @@ import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/deb
 import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_selection_actions.dart';
 import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_selected_delete.dart';
 import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_feedback.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_navigation.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_view_modes.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search.dart';
+import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search.dart';
 import 'package:debrify/features/debrid_downloads/presentation/legacy_debrid/debrid_sections.dart';
 import 'package:debrify/features/debrid_downloads/models/debrid_downloads_view.dart';
 import 'package:debrify/features/debrid_downloads/models/folder_view_mode.dart';
@@ -44,7 +48,6 @@ import '../utils/formatters.dart';
 import '../utils/file_utils.dart';
 import '../utils/series_parser.dart';
 import '../utils/rd_folder_tree_builder.dart';
-import '../utils/platform_util.dart';
 import 'video_player_screen.dart';
 import '../services/video_player_launcher.dart';
 import '../services/download_service.dart';
@@ -113,9 +116,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     selectionState: _selection,
     exitSelectionMode: () => sections.selectionActions.exitSelectionMode(),
     folderSearchState: _folderSearch,
-    toggleSearch: () => _toggleSearch(),
+    toggleSearch: () => sections.folderSearch.toggleSearch(),
     navigationState: _nav,
-    navigateUp: () => _navigateUp(),
+    navigateUp: () => sections.folderNavigation.navigateUp(),
     selectSourceMode: () => widget.selectSourceMode,
     isPushedRoute: () => widget.isPushedRoute,
     initialTorrentForOptions: () => widget.initialTorrentForOptions,
@@ -126,7 +129,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     downloadState: _downloadState,
     mounted: () => mounted,
     setState: setState,
-    submitTorrentSearch: () => _submitTorrentSearch(),
+    submitTorrentSearch: () => sections.torrentSearch.submitTorrentSearch(),
     initialSearchQuery: () => widget.initialSearchQuery,
     focusFirstItemOrFallback: () => sections.focusActions.focusFirstItemOrFallback(),
     ));
@@ -194,6 +197,43 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     ));
     sections.feedback = DebridFeedback((
     context: () => context,
+    ));
+    sections.folderNavigation = DebridFolderNavigation((
+    catalogState: _catalog,
+    exitSelectionMode: () => sections.selectionActions.exitSelectionMode(),
+    focusState: _focus,
+    resetListScroll: () => sections.catalogLoading.resetListScroll(),
+    setState: setState,
+    navigationState: _nav,
+    mounted: () => mounted,
+    context: () => context,
+    copyToClipboard: (String text) => sections.feedback.copyToClipboard(text),
+    showError: (String message) => sections.feedback.showError(message),
+    viewState: _view,
+    focusFirstItemOrFallback: () => sections.focusActions.focusFirstItemOrFallback(),
+    getCurrentViewMode: () => sections.viewModes.getCurrentViewMode(),
+    ));
+    sections.viewModes = DebridViewModes((
+    navigationState: _nav,
+    viewState: _view,
+    setState: setState,
+    context: () => context,
+    ));
+    sections.folderSearch = DebridFolderSearch((
+    setState: setState,
+    folderSearchState: _folderSearch,
+    focusState: _focus,
+    navigationState: _nav,
+    ));
+    sections.torrentSearch = DebridTorrentSearch((
+    setState: setState,
+    torrentSearchState: _torrentSearch,
+    selectSourceMode: () => widget.selectSourceMode,
+    initialSearchQuery: () => widget.initialSearchQuery,
+    focusState: _focus,
+    context: () => context,
+    mounted: () => mounted,
+    catalogState: _catalog,
     ));
     return sections;
   }
@@ -322,7 +362,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
         if (mounted && _catalog.apiKey != null) {
           // Navigate into the torrent folder instead of showing dialog
-          await _navigateIntoTorrent(widget.initialTorrentForOptions!);
+          await _sections.folderNavigation.navigateIntoTorrent(widget.initialTorrentForOptions!);
         }
       }
     });
@@ -367,138 +407,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   // Torrent list search methods
 
-  void _toggleTorrentSearch() {
-    if (widget.selectSourceMode) return;
-    setState(() {
-      _torrentSearch.isTorrentSearchActive = !_torrentSearch.isTorrentSearchActive;
-      if (!_torrentSearch.isTorrentSearchActive) {
-        _torrentSearch.torrentSearchController.clear();
-        _torrentSearch.torrentSearchQuery = '';
-        _torrentSearch.allTorrentsForSearch.clear();
-      }
-    });
-  }
-
-  bool _queryMatchesInitialTitle(String query) {
-    final title = widget.initialSearchQuery;
-    if (title == null || title.isEmpty) return true;
-    const stopwords = {'the', 'a', 'an'};
-    final rawTokens = title
-        .toLowerCase()
-        .split(RegExp(r'[^a-z0-9]+'))
-        .where((t) => t.isNotEmpty)
-        .toList();
-    final filtered = rawTokens
-        .where((t) => !stopwords.contains(t) && t.length >= 2)
-        .toList();
-    final effectiveTokens = filtered.isEmpty ? rawTokens : filtered;
-    if (effectiveTokens.isEmpty) return true;
-    final normalizedQuery = query.toLowerCase();
-    return effectiveTokens.any((t) => normalizedQuery.contains(t));
-  }
-
-  void _submitTorrentSearch() {
-    final query = _torrentSearch.torrentSearchController.text.trim();
-    if (query.isEmpty) {
-      _focus.torrentSearchSubmitFocus.cancel();
-      return;
-    }
-    if (widget.selectSourceMode &&
-        _torrentSearch.hiddenFromNav &&
-        !_queryMatchesInitialTitle(query)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Search must include part of "${widget.initialSearchQuery}"',
-          ),
-          backgroundColor: const Color(0xFFF59E0B),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-      _focus.torrentSearchSubmitFocus.cancel();
-      return;
-    }
-    _focus.torrentSearchSubmitFocus.arm(enabled: PlatformUtil.isTelevision);
-    setState(() => _torrentSearch.torrentSearchQuery = query);
-    if (_torrentSearch.allTorrentsForSearch.isEmpty) {
-      if (!_torrentSearch.isLoadingSearch) _fetchAllTorrentsForSearch();
-    } else {
-      setState(() {}); // Trigger rebuild with new query
-      _completeTorrentSearchSubmitFocus();
-    }
-  }
-
-  void _completeTorrentSearchSubmitFocus() {
-    if (_filteredSearchTorrents.isEmpty) {
-      _focus.torrentSearchSubmitFocus.cancel();
-      return;
-    }
-    _focus.torrentSearchSubmitFocus.complete(
-      field: _focus.torrentSearchFocusNode,
-      isMounted: () => mounted,
-      requestFocus: _focus.firstItemFocusNode.requestFocus,
-      targetHasFocus: () => _focus.firstItemFocusNode.hasFocus,
-    );
-  }
-
-  Future<void> _fetchAllTorrentsForSearch() async {
-    if (_catalog.apiKey == null) {
-      _focus.torrentSearchSubmitFocus.cancel();
-      return;
-    }
-    setState(() => _torrentSearch.isLoadingSearch = true);
-
-    try {
-      final List<RDTorrent> allTorrents = [];
-      int page = 1;
-      bool hasMore = true;
-
-      while (hasMore) {
-        final result = await DebridService.getTorrents(
-          _catalog.apiKey!,
-          page: page,
-          limit: 2000,
-        );
-        final List<RDTorrent> batch = result['torrents'];
-        allTorrents.addAll(batch);
-        hasMore = result['hasMore'] && batch.isNotEmpty;
-        page++;
-        // Safety cap at 3 pages (6000 torrents max)
-        if (page > 3) break;
-      }
-
-      if (mounted) {
-        setState(() {
-          _torrentSearch.allTorrentsForSearch = allTorrents;
-          _torrentSearch.isLoadingSearch = false;
-        });
-        _completeTorrentSearchSubmitFocus();
-      }
-    } catch (e) {
-      if (mounted) {
-        _focus.torrentSearchSubmitFocus.cancel();
-        setState(() => _torrentSearch.isLoadingSearch = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to load torrents for search: ${e.toString()}',
-            ),
-          ),
-        );
-      }
-    }
-  }
-
-  List<RDTorrent> get _filteredSearchTorrents {
-    if (widget.selectSourceMode && _torrentSearch.torrentSearchQuery.isEmpty) return [];
-    final downloaded = _torrentSearch.allTorrentsForSearch.where((t) => t.isDownloaded);
-    if (_torrentSearch.torrentSearchQuery.isEmpty) return downloaded.toList();
-    final query = _torrentSearch.torrentSearchQuery.toLowerCase();
-    return downloaded
-        .where((t) => t.filename.toLowerCase().contains(query))
-        .toList();
-  }
-
   // Downloads methods
 
   Future<void> _handlePlayVideo(RDTorrent torrent) async {
@@ -540,7 +448,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } else {
       // Multiple files - navigate into torrent folder view
       if (mounted) {
-        await _navigateIntoTorrent(torrent);
+        await _sections.folderNavigation.navigateIntoTorrent(torrent);
       }
     }
   }
@@ -551,438 +459,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   // ========== Folder Navigation Methods ==========
 
-  Future<void> _navigateIntoTorrent(RDTorrent torrent) async {
-    if (_catalog.apiKey == null) return;
-
-    _sections.selectionActions.exitSelectionMode();
-
-    // Focus first item after folder contents load
-    _focus.shouldFocusOnLoad = true;
-    _sections.catalogLoading.resetListScroll();
-
-    setState(() {
-      _nav.isLoadingFolder = true;
-    });
-
-    try {
-      // Get torrent info to check for RAR archives
-      final torrentInfo = await DebridService.getTorrentInfo(
-        _catalog.apiKey!,
-        torrent.id,
-      );
-      final files =
-          (torrentInfo['files'] as List<dynamic>?)
-              ?.map((f) => f as Map<String, dynamic>)
-              .toList() ??
-          [];
-      final links = (torrentInfo['links'] as List<dynamic>?) ?? [];
-
-      // Check if this is a RAR archive
-      final isRarArchive = RDFolderTreeBuilder.isRarArchive(files, links);
-
-      if (isRarArchive) {
-        // Show a message that this cannot be browsed
-        setState(() {
-          _nav.isLoadingFolder = false;
-        });
-
-        // Show dialog explaining RAR archives and offering to download
-        if (mounted) {
-          await showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: AppThemeScope.of(ctx).cloud.dialogSurface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF59E0B),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.archive,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'RAR Archive Detected',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              content: Text(
-                'This is a RAR archive that Real-Debrid has not extracted yet. '
-                'The folder structure shown represents the archive contents, but only the RAR file itself can be downloaded.\n\n'
-                'You can download the RAR archive to extract it locally.',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    Navigator.of(ctx).pop();
-                    // Download the single RAR file
-                    if (links.isNotEmpty) {
-                      try {
-                        final unrestrictResult =
-                            await DebridService.unrestrictLink(
-                              _catalog.apiKey!,
-                              links[0],
-                            );
-                        final downloadUrl =
-                            unrestrictResult['download'] as String?;
-                        if (downloadUrl != null) {
-                          _sections.feedback.copyToClipboard(downloadUrl);
-                        }
-                      } catch (e) {
-                        _sections.feedback.showError(
-                          'Failed to get download link: ${e.toString()}',
-                        );
-                      }
-                    }
-                  },
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF60A5FA),
-                  ),
-                  child: const Text('Copy Download Link'),
-                ),
-              ],
-            ),
-          );
-        }
-        return;
-      }
-
-      // Not a RAR archive - proceed with normal folder navigation
-      // Get the folder tree for this torrent
-      final folderTree = await DebridService.getTorrentFolderTree(
-        _catalog.apiKey!,
-        torrent.id,
-      );
-      final rootNodes = RDFolderTreeBuilder.getRootLevelNodes(folderTree);
-
-      // Initialize view mode for this torrent if not already set
-      _view.torrentViewModes.putIfAbsent(torrent.id, () => FolderViewMode.raw);
-
-      // Apply view mode transformation to root nodes
-      final mode = _view.torrentViewModes[torrent.id]!;
-      List<RDFileNode> transformedNodes;
-      switch (mode) {
-        case FolderViewMode.raw:
-          transformedNodes = rootNodes;
-          break;
-        case FolderViewMode.sortedAZ:
-          transformedNodes = applySortedView(rootNodes);
-          break;
-        case FolderViewMode.seriesArrange:
-          transformedNodes = applySeriesArrangedView(rootNodes);
-          break;
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _nav.currentTorrentId = torrent.id;
-        _nav.currentTorrent = torrent;
-        _nav.currentFolderTree = folderTree;
-        _nav.currentViewNodes = transformedNodes;
-        _nav.folderPath = [];
-        _nav.isLoadingFolder = false;
-      });
-
-      // Focus first item after folder contents load
-      _sections.focusActions.focusFirstItemOrFallback();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _nav.isLoadingFolder = false;
-      });
-      _sections.feedback.showError('Failed to load torrent contents: ${e.toString()}');
-    }
-  }
-
-  /// Navigate into a folder
-  void _navigateIntoFolder(RDFileNode folder) {
-    if (!folder.isFolder) return;
-
-    // Focus first item after navigation
-    _focus.shouldFocusOnLoad = true;
-
-    // Apply view mode to folder children
-    // NOTE: Series Arrange only makes sense at root level (it creates virtual Season folders)
-    // When inside any folder, show files in sorted or raw view
-    final mode = _getCurrentViewMode();
-    List<RDFileNode> transformedChildren;
-
-    if (mode == FolderViewMode.seriesArrange) {
-      // Inside a folder with Series Arrange mode: show files sorted by name
-      transformedChildren = applySortedView(folder.children);
-    } else {
-      switch (mode) {
-        case FolderViewMode.raw:
-          transformedChildren = folder.children;
-          break;
-        case FolderViewMode.sortedAZ:
-          transformedChildren = applySortedView(folder.children);
-          break;
-        case FolderViewMode.seriesArrange:
-          // Should never reach here
-          transformedChildren = folder.children;
-          break;
-      }
-    }
-
-    setState(() {
-      _nav.folderPath.add(folder.name);
-      _nav.currentViewNodes = transformedChildren;
-    });
-
-    // Focus first item after navigation
-    _sections.focusActions.focusFirstItemOrFallback();
-  }
-
-  /// Navigate up one level
-  void _navigateUp() {
-    // Refocus the first row once the previous listing shows — the focused
-    // row is disposed by the swap and nothing else reclaims DPAD focus.
-    _focus.shouldFocusOnLoad = true;
-    _sections.catalogLoading.resetListScroll();
-    if (_nav.folderPath.isEmpty && _nav.currentTorrentId != null) {
-      // Go back to torrents list
-      setState(() {
-        _nav.currentTorrentId = null;
-        _nav.currentTorrent = null;
-        _nav.currentFolderTree = null;
-        _nav.currentViewNodes = null;
-        _nav.folderPath = [];
-      });
-      _sections.focusActions.focusFirstItemOrFallback();
-    } else if (_nav.folderPath.isNotEmpty && _nav.currentFolderTree != null) {
-      // Go up one folder level
-      _nav.folderPath.removeLast();
-
-      // Get raw nodes at the new path
-      List<RDFileNode> rawNodes;
-      if (_nav.folderPath.isEmpty) {
-        rawNodes = RDFolderTreeBuilder.getRootLevelNodes(_nav.currentFolderTree!);
-      } else {
-        // Find the folder node at the current path
-        RDFileNode currentNode = _nav.currentFolderTree!;
-        for (final folderName in _nav.folderPath) {
-          final childFolder = currentNode.children
-              .cast<RDFileNode?>()
-              .firstWhere(
-                (node) => node?.name == folderName && node?.isFolder == true,
-                orElse: () => null,
-              );
-          if (childFolder != null) {
-            currentNode = childFolder;
-          } else {
-            // Folder not found - reset to root
-            _nav.folderPath.clear();
-            rawNodes = RDFolderTreeBuilder.getRootLevelNodes(
-              _nav.currentFolderTree!,
-            );
-            // Apply view mode and set state
-            final mode = _getCurrentViewMode();
-            List<RDFileNode> transformedNodes;
-            switch (mode) {
-              case FolderViewMode.raw:
-                transformedNodes = rawNodes;
-                break;
-              case FolderViewMode.sortedAZ:
-                transformedNodes = applySortedView(rawNodes);
-                break;
-              case FolderViewMode.seriesArrange:
-                transformedNodes = applySeriesArrangedView(rawNodes);
-                break;
-            }
-            setState(() {
-              _nav.currentViewNodes = transformedNodes;
-            });
-            _sections.focusActions.focusFirstItemOrFallback();
-            return;
-          }
-        }
-        rawNodes = currentNode.children;
-      }
-
-      // Apply view mode transformation
-      // NOTE: Series Arrange only applies at root level
-      final mode = _getCurrentViewMode();
-      List<RDFileNode> transformedNodes;
-
-      if (mode == FolderViewMode.seriesArrange && _nav.folderPath.isNotEmpty) {
-        // Still inside a folder after going up - use sorted view
-        transformedNodes = applySortedView(rawNodes);
-      } else {
-        switch (mode) {
-          case FolderViewMode.raw:
-            transformedNodes = rawNodes;
-            break;
-          case FolderViewMode.sortedAZ:
-            transformedNodes = applySortedView(rawNodes);
-            break;
-          case FolderViewMode.seriesArrange:
-            transformedNodes = applySeriesArrangedView(rawNodes);
-            break;
-        }
-      }
-
-      setState(() {
-        _nav.currentViewNodes = transformedNodes;
-      });
-      _sections.focusActions.focusFirstItemOrFallback();
-    }
-  }
-
-  String _getCurrentFolderTitle() {
-    if (_nav.currentTorrentId == null) return '';
-    if (_nav.folderPath.isEmpty) {
-      return _nav.currentTorrent?.filename ?? 'Torrent Files';
-    }
-    return _nav.folderPath.last;
-  }
-
-  /// Get current view mode for active torrent
-  FolderViewMode _getCurrentViewMode() {
-    if (_nav.currentTorrentId == null) return FolderViewMode.raw;
-    return _view.torrentViewModes[_nav.currentTorrentId] ?? FolderViewMode.raw;
-  }
-
-  /// Set view mode and refresh display
-  void _setViewMode(FolderViewMode mode) {
-    if (_nav.currentTorrentId == null || _nav.currentViewNodes == null) return;
-
-    // Get raw nodes based on current path
-    List<RDFileNode> rawNodes;
-    if (_nav.folderPath.isEmpty && _nav.currentFolderTree != null) {
-      rawNodes = RDFolderTreeBuilder.getRootLevelNodes(_nav.currentFolderTree!);
-    } else if (_nav.currentFolderTree != null) {
-      // Navigate to current path to get raw nodes
-      RDFileNode currentNode = _nav.currentFolderTree!;
-      for (final folderName in _nav.folderPath) {
-        final childFolder = currentNode.children.cast<RDFileNode?>().firstWhere(
-          (node) => node?.name == folderName && node?.isFolder == true,
-          orElse: () => null,
-        );
-        if (childFolder != null) {
-          currentNode = childFolder;
-        } else {
-          setState(() {
-            _nav.currentViewNodes = [];
-          });
-          return;
-        }
-      }
-      rawNodes = currentNode.children;
-    } else {
-      return;
-    }
-
-    // If user selected Series Arrange, detect if content is actually a series
-    if (mode == FolderViewMode.seriesArrange) {
-      final isSeries = detectSeriesPattern(rawNodes);
-
-      if (!isSeries) {
-        // Not a series - show snackbar and fallback to sorted view
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'No series detected in this folder. Switching to Sort (A-Z) view.',
-            ),
-            duration: const Duration(seconds: 3),
-            backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-
-        // Switch to sorted view instead
-        setState(() {
-          _view.torrentViewModes[_nav.currentTorrentId!] = FolderViewMode.sortedAZ;
-          _nav.currentViewNodes = applySortedView(rawNodes);
-        });
-        return;
-      }
-    }
-
-    // Apply transformation based on mode
-    setState(() {
-      _view.torrentViewModes[_nav.currentTorrentId!] = mode;
-
-      switch (mode) {
-        case FolderViewMode.raw:
-          _nav.currentViewNodes = rawNodes;
-          break;
-        case FolderViewMode.sortedAZ:
-          _nav.currentViewNodes = applySortedView(rawNodes);
-          break;
-        case FolderViewMode.seriesArrange:
-          _nav.currentViewNodes = applySeriesArrangedView(rawNodes);
-          break;
-      }
-    });
-  }
-
   // ============ Search Methods ============
-
-  /// Toggle search mode on/off
-  void _toggleSearch() {
-    setState(() {
-      _folderSearch.isSearchActive = !_folderSearch.isSearchActive;
-      if (!_folderSearch.isSearchActive) {
-        _folderSearch.searchController.clear();
-        _folderSearch.searchResults.clear();
-      } else {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _focus.searchFocusNode.requestFocus();
-        });
-      }
-    });
-  }
-
-  /// Perform deep search across all files in current torrent
-  void _performSearch(String query) {
-    if (_nav.currentFolderTree == null || query.isEmpty) {
-      setState(() => _folderSearch.searchResults = []);
-      return;
-    }
-
-    final lowerQuery = query.toLowerCase();
-    final results = <RDSearchResult>[];
-
-    void searchNode(RDFileNode node, List<String> path) {
-      if (!node.isFolder) {
-        if (FileUtils.isVideoFile(node.name) &&
-            node.name.toLowerCase().contains(lowerQuery)) {
-          results.add(RDSearchResult(node: node, path: path.join(' / ')));
-        }
-      } else {
-        for (final child in node.children) {
-          searchNode(child, [...path, node.name]);
-        }
-      }
-    }
-
-    for (final child in _nav.currentFolderTree!.children) {
-      searchNode(child, []);
-    }
-
-    setState(() => _folderSearch.searchResults = results);
-  }
 
   /// Build the search bar widget
   Widget _buildSearchBar() {
@@ -1017,7 +494,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   vertical: 12,
                 ),
               ),
-              onChanged: _performSearch,
+              onChanged: _sections.folderSearch.performSearch,
               onSubmitted: (_) => _focus.searchFocusNode.unfocus(),
             ),
           ),
@@ -1250,7 +727,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   Widget _buildViewModeDropdown() {
     final theme = Theme.of(context);
-    final mode = _getCurrentViewMode();
+    final mode = _sections.viewModes.getCurrentViewMode();
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1307,7 +784,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             ),
           ],
           onChanged: (value) {
-            if (value != null) _setViewMode(value);
+            if (value != null) _sections.viewModes.setViewMode(value);
           },
         ),
       ),
@@ -1316,7 +793,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   Widget _buildFolderBrowserScaffold() {
     // Back navigation is handled via MainPageBridge.handleBackNavigation
-    final currentMode = _getCurrentViewMode();
+    final currentMode = _sections.viewModes.getCurrentViewMode();
     final showSearch = currentMode != FolderViewMode.seriesArrange;
 
     return CloudScaffold(
@@ -1337,20 +814,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             onPressed: () => _sections.backNavigation.handleBackNavigation(),
           ),
         ),
-        title: Text(_getCurrentFolderTitle()),
+        title: Text(_sections.folderNavigation.getCurrentFolderTitle()),
         actions: [
           if (showSearch)
             IconButton(
               focusNode: _focus.searchButtonFocusNode,
               icon: Icon(_folderSearch.isSearchActive ? Icons.close : Icons.search),
-              onPressed: _toggleSearch,
+              onPressed: _sections.folderSearch.toggleSearch,
               tooltip: _folderSearch.isSearchActive ? 'Close search' : 'Search files',
             ),
           IconButton(
             focusNode: _focus.refreshButtonFocusNode,
             icon: const Icon(Icons.refresh),
             onPressed: _nav.currentTorrent != null
-                ? () => _navigateIntoTorrent(_nav.currentTorrent!)
+                ? () => _sections.folderNavigation.navigateIntoTorrent(_nav.currentTorrent!)
                 : null,
           ),
         ],
@@ -1460,7 +937,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           ? '${RDFolderTreeBuilder.countFiles(node)} files · ${Formatters.formatFileSize(node.totalBytes)}'
           : Formatters.formatFileSize(node.bytes ?? 0),
       onTap: isFolder
-          ? () => _navigateIntoFolder(node)
+          ? () => _sections.folderNavigation.navigateIntoFolder(node)
           : isVideo
           ? () => _playFile(node)
           : null,
@@ -1611,7 +1088,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     ? 'Close search'
                     : 'Search torrents',
                 child: IconButton(
-                  onPressed: _toggleTorrentSearch,
+                  onPressed: _sections.torrentSearch.toggleTorrentSearch,
                   iconSize: iconSize,
                   padding: iconPadding,
                   constraints: iconConstraints,
@@ -1909,7 +1386,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               focusNode: _focus.torrentSearchFocusNode,
               autofocus: true,
               onChanged: (_) => _focus.torrentSearchSubmitFocus.cancel(),
-              onSubmitted: (_) => _submitTorrentSearch(),
+              onSubmitted: (_) => _sections.torrentSearch.submitTorrentSearch(),
               textInputAction: TextInputAction.search,
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
@@ -2007,7 +1484,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       );
     }
 
-    final results = _filteredSearchTorrents;
+    final results = _sections.torrentSearch.filteredSearchTorrents;
 
     if (_torrentSearch.torrentSearchQuery.isEmpty) {
       return Center(
@@ -2237,7 +1714,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       kind: CloudRowKind.folder,
       title: torrent.filename,
       meta: meta,
-      onTap: () => _navigateIntoTorrent(torrent),
+      onTap: () => _sections.folderNavigation.navigateIntoTorrent(torrent),
       actions: actions,
       selectionMode: _selection.isSelectionMode,
       selected: _selection.selectedTorrentIds.contains(torrent.id),
@@ -5006,12 +4483,12 @@ Map<String, Object?> debridDownloadsTestAccess(State<DebridDownloadsScreen> stat
     'loadApiKeyAndData': s._sections.catalogLoading.loadApiKeyAndData,
     'fetchTorrents': s._sections.catalogLoading.fetchTorrents,
     'loadMoreTorrents': s._sections.catalogLoading.loadMoreTorrents,
-    'toggleTorrentSearch': s._toggleTorrentSearch,
-    'queryMatchesInitialTitle': s._queryMatchesInitialTitle,
-    'submitTorrentSearch': s._submitTorrentSearch,
-    'completeTorrentSearchSubmitFocus': s._completeTorrentSearchSubmitFocus,
-    'fetchAllTorrentsForSearch': s._fetchAllTorrentsForSearch,
-    'filteredSearchTorrents': s._filteredSearchTorrents,
+    'toggleTorrentSearch': s._sections.torrentSearch.toggleTorrentSearch,
+    'queryMatchesInitialTitle': s._sections.torrentSearch.queryMatchesInitialTitle,
+    'submitTorrentSearch': s._sections.torrentSearch.submitTorrentSearch,
+    'completeTorrentSearchSubmitFocus': s._sections.torrentSearch.completeTorrentSearchSubmitFocus,
+    'fetchAllTorrentsForSearch': s._sections.torrentSearch.fetchAllTorrentsForSearch,
+    'filteredSearchTorrents': s._sections.torrentSearch.filteredSearchTorrents,
     'fetchDownloads': s._sections.catalogLoading.fetchDownloads,
     'loadMoreDownloads': s._sections.catalogLoading.loadMoreDownloads,
     'handleDownloadAction': s._sections.downloadRowActions.handleDownloadAction,
@@ -5036,20 +4513,20 @@ Map<String, Object?> debridDownloadsTestAccess(State<DebridDownloadsScreen> stat
     'getLinkUnrestrictErrorMessage': getLinkUnrestrictErrorMessage,
     'showError': s._sections.feedback.showError,
     'resetListScroll': s._sections.catalogLoading.resetListScroll,
-    'navigateIntoTorrent': s._navigateIntoTorrent,
-    'navigateIntoFolder': s._navigateIntoFolder,
-    'navigateUp': s._navigateUp,
-    'getCurrentFolderTitle': s._getCurrentFolderTitle,
+    'navigateIntoTorrent': s._sections.folderNavigation.navigateIntoTorrent,
+    'navigateIntoFolder': s._sections.folderNavigation.navigateIntoFolder,
+    'navigateUp': s._sections.folderNavigation.navigateUp,
+    'getCurrentFolderTitle': s._sections.folderNavigation.getCurrentFolderTitle,
     'detectSeriesPattern': detectSeriesPattern,
     'collectVideoFilesRecursively': collectVideoFilesRecursively,
     'applySortedView': applySortedView,
     'extractSeasonNumber': extractSeasonNumber,
     'extractLeadingNumber': extractLeadingNumber,
     'applySeriesArrangedView': applySeriesArrangedView,
-    'getCurrentViewMode': s._getCurrentViewMode,
-    'setViewMode': s._setViewMode,
-    'toggleSearch': s._toggleSearch,
-    'performSearch': s._performSearch,
+    'getCurrentViewMode': s._sections.viewModes.getCurrentViewMode,
+    'setViewMode': s._sections.viewModes.setViewMode,
+    'toggleSearch': s._sections.folderSearch.toggleSearch,
+    'performSearch': s._sections.folderSearch.performSearch,
     'isBrowsePush': s._isBrowsePush,
     'handleDownloadTorrent': s._handleDownloadTorrent,
     'handleAddTorrentToPlaylist': s._handleAddTorrentToPlaylist,

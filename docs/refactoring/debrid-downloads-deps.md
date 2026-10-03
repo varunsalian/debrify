@@ -266,35 +266,35 @@ Actual bindings are reviewed against original reads/signatures and this inventor
 | `selected_delete` | `showSuccess` (`void Function(String message)`) | DebridFeedback.showSuccess at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
 | `selected_delete` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 3 actual binding reviewed |
 | `feedback` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 3 actual binding reviewed |
-| `folder_navigation` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `exitSelectionMode` (`void Function()`) | DebridSelectionActions.exitSelectionMode at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `resetListScroll` (`void Function()`) | DebridCatalogLoading.resetListScroll at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `navigation_state` (`DebridNavigationState`) | _nav: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `copyToClipboard` (`void Function(String text)`) | DebridFeedback.copyToClipboard at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `view_state` (`DebridViewState`) | _view: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `focusFirstItemOrFallback` (`void Function()`) | DebridFocusActions.focusFirstItemOrFallback at step 3; original arguments/defaults; deferred until assignments complete | [ ] Step 4 actual binding pending |
-| `folder_navigation` | `getCurrentViewMode` (`_FolderViewMode Function()`) | DebridViewModes.getCurrentViewMode at step 4; original arguments/defaults; deferred until assignments complete | [ ] Step 4 actual binding pending |
-| `view_modes` | `navigation_state` (`DebridNavigationState`) | _nav: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
-| `view_modes` | `view_state` (`DebridViewState`) | _view: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
-| `view_modes` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 4 actual binding pending |
-| `view_modes` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 4 actual binding pending |
-| `folder_search` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 4 actual binding pending |
-| `folder_search` | `folder_search_state` (`DebridFolderSearchState`) | _folderSearch: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
-| `folder_search` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
-| `folder_search` | `navigation_state` (`DebridNavigationState`) | _nav: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
-| `torrent_search` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [ ] Step 4 actual binding pending |
-| `torrent_search` | `torrent_search_state` (`DebridTorrentSearchState`) | _torrentSearch: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
-| `torrent_search` | `selectSourceMode` (`bool Function()`) | () => widget.selectSourceMode: live getter, never a snapshot | [ ] Step 4 actual binding pending |
-| `torrent_search` | `initialSearchQuery` (`String? Function()`) | () => widget.initialSearchQuery: live getter, never a snapshot | [ ] Step 4 actual binding pending |
-| `torrent_search` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
-| `torrent_search` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 4 actual binding pending |
-| `torrent_search` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 4 actual binding pending |
-| `torrent_search` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 4 actual binding pending |
+| `folder_navigation` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `exitSelectionMode` (`void Function()`) | DebridSelectionActions.exitSelectionMode at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `resetListScroll` (`void Function()`) | DebridCatalogLoading.resetListScroll at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `navigation_state` (`DebridNavigationState`) | _nav: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `copyToClipboard` (`void Function(String text)`) | DebridFeedback.copyToClipboard at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `showError` (`void Function(String message)`) | DebridFeedback.showError at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `view_state` (`DebridViewState`) | _view: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `focusFirstItemOrFallback` (`void Function()`) | DebridFocusActions.focusFirstItemOrFallback at step 3; original arguments/defaults; deferred until assignments complete | [x] Step 4 actual binding reviewed |
+| `folder_navigation` | `getCurrentViewMode` (`_FolderViewMode Function()`) | DebridViewModes.getCurrentViewMode at step 4; original arguments/defaults; deferred until assignments complete | [x] Step 4 actual binding reviewed |
+| `view_modes` | `navigation_state` (`DebridNavigationState`) | _nav: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
+| `view_modes` | `view_state` (`DebridViewState`) | _view: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
+| `view_modes` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [x] Step 4 actual binding reviewed |
+| `view_modes` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 4 actual binding reviewed |
+| `folder_search` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [x] Step 4 actual binding reviewed |
+| `folder_search` | `folder_search_state` (`DebridFolderSearchState`) | _folderSearch: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
+| `folder_search` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
+| `folder_search` | `navigation_state` (`DebridNavigationState`) | _nav: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
+| `torrent_search` | `setState` (`void Function(VoidCallback)`) | live State setState; original lexical use/guard and evaluation position | [x] Step 4 actual binding reviewed |
+| `torrent_search` | `torrent_search_state` (`DebridTorrentSearchState`) | _torrentSearch: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
+| `torrent_search` | `selectSourceMode` (`bool Function()`) | () => widget.selectSourceMode: live getter, never a snapshot | [x] Step 4 actual binding reviewed |
+| `torrent_search` | `initialSearchQuery` (`String? Function()`) | () => widget.initialSearchQuery: live getter, never a snapshot | [x] Step 4 actual binding reviewed |
+| `torrent_search` | `focus_state` (`DebridFocusState`) | _focus: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
+| `torrent_search` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [x] Step 4 actual binding reviewed |
+| `torrent_search` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [x] Step 4 actual binding reviewed |
+| `torrent_search` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [x] Step 4 actual binding reviewed |
 | `torrent_download_action` | `catalog_state` (`DebridCatalogState`) | _catalog: original one owner, borrowed; lifecycle identity | [ ] Step 5 actual binding pending |
 | `torrent_download_action` | `context` (`BuildContext Function()`) | live State context; original lexical use/guard and evaluation position | [ ] Step 5 actual binding pending |
 | `torrent_download_action` | `mounted` (`bool Function()`) | live State mounted; original lexical use/guard and evaluation position | [ ] Step 5 actual binding pending |

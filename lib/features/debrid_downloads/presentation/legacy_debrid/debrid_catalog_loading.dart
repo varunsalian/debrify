@@ -16,7 +16,6 @@ typedef DebridCatalogLoadingDeps = ({
   DebridDownloadState downloadState,
   bool Function() mounted,
   void Function(VoidCallback) setState,
-  // TEMP(debrid): submitTorrentSearch -> lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_search.dart at step 4.
   void Function() submitTorrentSearch,
   String? Function() initialSearchQuery,
   void Function() focusFirstItemOrFallback,

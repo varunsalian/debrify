@@ -11,10 +11,8 @@ typedef DebridBackNavigationDeps = ({
   DebridSelectionState selectionState,
   void Function() exitSelectionMode,
   DebridFolderSearchState folderSearchState,
-  // TEMP(debrid): toggleSearch -> lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_search.dart at step 4.
   void Function() toggleSearch,
   DebridNavigationState navigationState,
-  // TEMP(debrid): navigateUp -> lib/features/debrid_downloads/presentation/legacy_debrid/debrid_folder_navigation.dart at step 4.
   void Function() navigateUp,
   bool Function() selectSourceMode,
   bool Function() isPushedRoute,

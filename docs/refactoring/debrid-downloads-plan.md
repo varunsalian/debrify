@@ -453,6 +453,11 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 - Five exact formatter brace sites preserve each original predicate, statement and ordering. Two cancellation-refresh statements repeat elsewhere; improved the checker to select the unique complete recorded prefix while leaving other bodies in the verbatim comparison. Added positive and four negative repeated-body fixtures; every existing assertion remains. These fixtures first passed in the ORIGINAL cc950ed9 worktree. The initial site script omitted comments from two raw prefixes; corrected them before adoption. All four real-config self-tests pass with the final helper.
 - Gate 1 ran on committed source 06c67593: 10,489 success / 13 failure / 28 error / 20 skipped, PASS versus base5 with no additions, missing identities or newly skipped tests. suite_evidence records HEAD/index/tested tree 9f7322e87ce8480db0f535377d5154b7fc0a7281, no tracked changes or changes during the run. Only five reserved Linux PNGs are untracked and unused by macOS. Historical helper reports the same 32 unlisted pre-existing failure/error identities as base5; no historical list changed.
 
+### Step 4 — complete; navigation, view modes and search
+
+- Moved folder navigation/RAR/source selection, view-mode decisions and both searches into four sections. All temporary step-3 callbacks now target the real owners; reviewed 101 bindings before pinning. Facade 5,085 → 4,562. Five exact formatter sites preserve single-statement bodies; no guard, timing, context or state change.
+- step4: all four manifest/self-tests and structure/storage/shape/format/diff checks pass; 127 successes / the observed theme failure, PASS against base5. Analyzer relocation and per-symbol original strict comparison both have zero additions (16 current / 42 original). All 23 radii and 23 tokens remain.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
