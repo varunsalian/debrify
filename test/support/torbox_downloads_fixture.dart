@@ -14,7 +14,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Map<String, Object?> torboxRow(int id, {int files = 3}) => {
+Map<String, Object?> torboxRow(int id, {int files = 3, List<int>? fileIds}) => {
   'id': id,
   'hash': 'hash-$id',
   'name': 'Library $id',
@@ -26,7 +26,7 @@ Map<String, Object?> torboxRow(int id, {int files = 3}) => {
   'files': [
     for (var i = 0; i < files; i++)
       {
-        'id': i + 1,
+        'id': fileIds?[i] ?? i + 1,
         'name': ['Zebra.mkv', 'Alpha.mkv', 'Nested/Show.S02E03.mkv'][i % 3],
         'short_name': ['Zebra.mkv', 'Alpha.mkv', 'Show.S02E03.mkv'][i % 3],
         'size': 1000,
@@ -51,6 +51,7 @@ class TorboxFixture {
   ];
   int? failDelete;
   bool failLists = false;
+  bool fullPages = false;
   bool failCreate = false;
   Completer<http.Response>? pending;
   bool holdLists = false;
@@ -60,10 +61,10 @@ class TorboxFixture {
   Map<String, Object?> get access =>
       torboxDownloadsTestAccess(key.currentState!);
   dynamic member(String name) => access[name];
-  TorboxTorrent torrent(int id, {int files = 3}) =>
-      TorboxTorrent.fromJson(torboxRow(id, files: files));
-  TorboxWebDownload download(int id, {int files = 3}) =>
-      TorboxWebDownload.fromJson(torboxRow(id, files: files));
+  TorboxTorrent torrent(int id, {int files = 3, List<int>? fileIds}) =>
+      TorboxTorrent.fromJson(torboxRow(id, files: files, fileIds: fileIds));
+  TorboxWebDownload download(int id, {int files = 3, List<int>? fileIds}) =>
+      TorboxWebDownload.fromJson(torboxRow(id, files: files, fileIds: fileIds));
 
   Future<http.Response> respond(http.Request request) async {
     requests.add(request);
@@ -78,7 +79,14 @@ class TorboxFixture {
       final rows = request.url.path.contains('/webdl/') ? web : torrents;
       final offset = int.parse(request.url.queryParameters['offset'] ?? '0');
       return http.Response(
-        jsonEncode({'success': true, 'data': offset == 0 ? rows : []}),
+        jsonEncode({
+          'success': true,
+          'data': offset == 0
+              ? rows
+              : fullPages
+              ? [for (var i = 0; i < 50; i++) torboxRow(offset + i + 100)]
+              : [],
+        }),
         200,
       );
     }

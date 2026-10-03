@@ -113,6 +113,58 @@ void main() {
       }),
     );
   }
+
+  for (final web in [false, true]) {
+    testWidgets(
+      'reset detaches paging and reattaches one listener web=$web',
+      (t) => torboxCase(t, (f) async {
+        f.torrents = [for (var i = 0; i < 50; i++) torboxRow(i + 1)];
+        f.web = [for (var i = 0; i < 50; i++) torboxRow(i + 101)];
+        f.fullPages = true;
+        await f.mount(t);
+        if (web) {
+          await t.tap(find.text('Web Downloads'));
+          await t.pumpAndSettle();
+        }
+        final controller =
+            f.member(web ? 'webDownloadScrollController' : 'scrollController')
+                as ScrollController;
+        final path = web ? '/v1/api/webdl/mylist' : '/v1/api/torrents/mylist';
+        List<String?> offsets() => f.requests
+            .where((r) => r.url.path == path)
+            .map((r) => r.url.queryParameters['offset'])
+            .toList();
+        expect(f.member(web ? 'hasMoreWebDownloads' : 'hasMore'), isTrue);
+        // Stage the outgoing bottom without dispatching a legitimate page event.
+        // jumpTo(0) emits start/end notifications at that old bottom: only the
+        // reset's detach protects against the otherwise spurious offset=50.
+        controller.position.correctPixels(controller.position.maxScrollExtent);
+        if (web) {
+          f.member('navigateIntoWebDownload')(f.download(101, files: 1));
+        } else {
+          f.member('navigateIntoTorrent')(f.torrent(1, files: 1));
+        }
+        await t.pumpAndSettle();
+        expect(offsets(), ['0']);
+        f.member('navigateUp')();
+        await t.pumpAndSettle();
+        expect((controller as dynamic).hasListeners, isTrue);
+        expect(offsets(), ['0']);
+        for (final offset in ['50', '100']) {
+          controller.jumpTo(controller.position.maxScrollExtent);
+          await f.until(
+            t,
+            () =>
+                f.member(web ? 'isLoadingMoreWebDownloads' : 'isLoadingMore') ==
+                false,
+          );
+          await t.pumpAndSettle();
+          expect(offsets(), offset == '50' ? ['0', '50'] : ['0', '50', '100']);
+          expect((controller as dynamic).hasListeners, isTrue);
+        }
+      }),
+    );
+  }
   for (final error in [false, true]) {
     testWidgets(
       'list empty or error error=$error',
@@ -150,7 +202,8 @@ void main() {
         if (Platform.isLinux &&
             !File(
               'test/goldens/torbox_downloads/linux/$view.png',
-            ).existsSync()) {
+            ).existsSync() &&
+            !const bool.fromEnvironment('TORBOX_CAPTURE_ORIGINAL_LINUX')) {
           markTestSkipped(
             'Pending original-code Ubuntu capture; no push authorized',
           );

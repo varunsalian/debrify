@@ -819,6 +819,8 @@ def _check(original_source, sources, rows, source_path, package=None,
         return ['Settings manifest coverage differs: ' + str(sorted(set(original) ^ known))]
     lookup = all_nodes(parsed)
     errors.extend(check_plain_sections(lookup))
+    from torbox_callback_identity import check_callback_identities
+    errors.extend(check_callback_identities(lookup, rows, source_path, CONFIG))
     partitions = sidecar('partitions', 'partitions', {})
     scaffolds = sidecar('scaffolding', 'scaffolds', []) if source_path == CONFIG['source'] else []
     errors.extend(check_scaffolds(lookup, scaffolds))

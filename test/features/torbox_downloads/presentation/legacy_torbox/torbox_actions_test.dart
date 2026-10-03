@@ -45,7 +45,7 @@ void main() {
         }),
       );
     }
-    for (final scenario in ['success', 'partial', 'cancel']) {
+    for (final scenario in ['success', 'partial', 'cancel', 'decline']) {
       testWidgets(
         'bulk delete web=$web $scenario preserves insertion order selection and dialog',
         (t) => torboxCase(t, (f) async {
@@ -63,15 +63,51 @@ void main() {
             f.pending = Completer<http.Response>();
           }
           var done = false;
-          final future =
-              f.member('showDeleteSelectedProgressDialog')(
-                    Set<int>.from(ids),
-                    !web,
-                  )
-                  as Future<void>;
+          final future = f.member('handleDeleteSelected')() as Future<void>;
           future.then((_) => done = true);
           await t.pumpAndSettle();
+          final label = web ? 'web downloads' : 'torrents';
+          expect(find.text('Delete 3 $label'), findsOneWidget);
+          expect(
+            find.text(
+              'Are you sure you want to delete 3 selected $label? This action cannot be undone.',
+            ),
+            findsOneWidget,
+          );
+          expect(f.deleteCount, 0);
+          await t.tap(
+            find.widgetWithText(
+              TextButton,
+              scenario == 'decline' ? 'Cancel' : 'Delete',
+            ),
+          );
+          // Pump no elapsed time: preserve the first inter-request deadline.
+          await t.pump();
+          await t.pump();
+          if (scenario == 'decline') {
+            await future;
+            await t.pumpAndSettle();
+            expect(f.deleteCount, 0);
+            expect(f.member('isSelectionMode'), isTrue);
+            expect(
+              (f.member(web ? 'selectedWebDownloadIds' : 'selectedTorrentIds')
+                      as Set<int>)
+                  .toList(),
+              ids,
+            );
+            expect(find.byType(AlertDialog), findsNothing);
+            return;
+          }
+          await f.until(t, () => f.deleteCount == 1);
+          if (scenario != 'cancel') {
+            await t.pump(const Duration(milliseconds: 149));
+            expect(f.deleteCount, 1, reason: 'No second request before 150 ms');
+            await t.pump(const Duration(milliseconds: 1));
+            await f.until(t, () => f.deleteCount == 2);
+            expect(f.deleteCount, 2, reason: 'Next request starts at 150 ms');
+          }
           if (scenario == 'cancel') {
+            await t.pumpAndSettle();
             expect(f.deleteCount, 1);
             await t.tap(find.widgetWithText(TextButton, 'Cancel'));
             await t.pumpAndSettle();
@@ -205,8 +241,15 @@ void main() {
               expect(body, contains('fixture password'));
             } else {
               expect(body, contains('magnet:?xt=urn:btih:'));
-              for (final name in ['seed', 'allow_zip', 'add_only_if_cached']) {
-                expect(body, contains('name="$name"'));
+              for (final entry in {
+                'seed': '1',
+                'allow_zip': 'true',
+                'add_only_if_cached': 'true',
+              }.entries) {
+                expect(
+                  body,
+                  contains('name="${entry.key}"\r\n\r\n${entry.value}\r\n'),
+                );
               }
             }
           }
@@ -232,11 +275,19 @@ void main() {
           await t.runAsync(() async {
             if (web) {
               await f.member('handleAddWebDownloadToPlaylist')(
-                f.download(42, files: count),
+                f.download(
+                  42,
+                  files: count,
+                  fileIds: count == 1 ? [3] : [3, 1, 2],
+                ),
               );
             } else {
               await f.member('handleAddToPlaylist')(
-                f.torrent(42, files: count),
+                f.torrent(
+                  42,
+                  files: count,
+                  fileIds: count == 1 ? [3] : [3, 1, 2],
+                ),
               );
             }
           });
@@ -248,11 +299,41 @@ void main() {
           expect(item[web ? 'torboxWebDownloadId' : 'torboxTorrentId'], 42);
           expect(
             item[count == 1 ? 'torboxFileId' : 'torboxFileIds'],
-            count == 1 ? 1 : [1, 2, 3],
+            count == 1 ? 3 : [3, 1, 2],
           );
           expect(item[web ? 'webdl_hash' : 'torrent_hash'], 'hash-42');
         }),
       );
     }
   }
+  testWidgets(
+    'magnet created from Web Downloads refreshes web list',
+    (t) => torboxCase(t, (f) async {
+      await f.mount(t);
+      await t.tap(find.text('Web Downloads'));
+      await t.pumpAndSettle();
+      final before = f.requests.length;
+      final future = f.member('showAddMagnetDialog')();
+      await f.until(
+        t,
+        () => find.text('Add Magnet Link').evaluate().isNotEmpty,
+      );
+      await t.pumpAndSettle();
+      (f.member('magnetController') as TextEditingController).text =
+          'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567';
+      await t.pump();
+      await t.tap(find.widgetWithText(FilledButton, 'Add'));
+      await t.pumpAndSettle();
+      await future;
+      final added = f.requests.skip(before).toList();
+      expect(
+        added.where((r) => r.method == 'POST').single.url.path,
+        '/v1/api/torrents/createtorrent',
+      );
+      expect(
+        added.where((r) => r.method == 'GET').single.url.path,
+        '/v1/api/webdl/mylist',
+      );
+    }),
+  );
 }

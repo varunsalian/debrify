@@ -66,10 +66,33 @@ void main() {
     }
     final dispose = torboxOriginalMember('_TorboxDownloadsScreenState.dispose');
     expect(RegExp(r'\.dispose\(\)').allMatches(dispose).length, 19);
-    expect(
-      dispose.indexOf('_scrollController.dispose()'),
-      lessThan(dispose.indexOf('super.dispose()')),
-    );
+    final disposalOrder = [
+      '_scrollController',
+      '_webDownloadScrollController',
+      '_magnetController',
+      '_webLinkController',
+      '_webNameController',
+      '_webPasswordController',
+      '_viewModeDropdownFocusNode',
+      '_firstItemFocusNode',
+      '_backButtonFocusNode',
+      '_searchController',
+      '_searchFocusNode',
+      '_searchButtonFocusNode',
+      '_searchClearFocusNode',
+      '_torrentSearchController',
+      '_torrentSearchFocusNode',
+      '_torrentSearchClearFocusNode',
+      '_torrentSearchToggleFocusNode',
+      '_deleteButtonFocusNode',
+      'super',
+    ];
+    var last = -1;
+    for (final name in disposalOrder) {
+      final index = dispose.indexOf('$name.dispose()');
+      expect(index, greaterThan(last), reason: name);
+      last = index;
+    }
   });
   test('dormant sheet and dropdown branches and TV handoff remain exact', () {
     final dropdown = torboxOriginalMember(
@@ -96,4 +119,14 @@ void main() {
     expect(reset.indexOf('removeListener'), lessThan(reset.indexOf('jumpTo')));
     expect(reset.indexOf('jumpTo'), lessThan(reset.indexOf('addListener')));
   });
+  test(
+    'download all temporary torrent override and every restoration stay exact',
+    () {
+      const member = '_TorboxDownloadsScreenState._downloadAllTorrentFiles';
+      expect(
+        compact(torboxOriginalMember(member)),
+        contains(compact(bodies[member] as String)),
+      );
+    },
+  );
 }

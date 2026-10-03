@@ -312,10 +312,10 @@ As in the IPTV plan:
 - **Checks:** `check_verbatim_moves.py --manifest dev/tool/torbox_manifest.tsv
   --self-test`, plus the settings and IPTV manifest runs, which must still
   pass; the architecture guard; `check_file_sizes.py --update`.
-- **Tests:** the affected tests, compared with `torbox/base3`.
+- **Tests:** the affected tests, compared with `torbox/base4`.
 - **Commit.**
 
-Gates use `suite_evidence.py run torbox/gateN` against `torbox/base3`.
+Gates use `suite_evidence.py run torbox/gateN` against `torbox/base4`.
 
 ## Definition of done
 
@@ -329,7 +329,7 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base3`.
 3. **Checks:** all three manifest runs pass with self-tests, and every
    characterization test passes unchanged.
 4. **Analyzer and tests:** no new diagnostics and no suppressions; gate 2
-   passes against `torbox/base3` and gate 1.
+   passes against `torbox/base4` and gate 1.
 5. **CI:** it passes on `private`; the test list holds the new tests; the
    allowlist gains nothing.
 6. **Progress records:** the commits, the ownership, the exceptions with exit
@@ -357,6 +357,20 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base3`.
 - `torbox/base3`: 10,402 successes, the same 13 failures / 28 errors / 20 skips, 51 added test identities; PASS against `base2`. Every new test passes. Final original-code source tests include complete playback/download argument-building bodies as well as all 14 call expressions.
 - Final analyzer: 830 diagnostics, zero added; accessor removes two unused-method warnings. All three manifest/self-test runs, architecture, size, storage reference/key, format and diff checks pass. IPTV/settings configs remain unchanged.
 - No push or remote CI is authorized; local CI-equivalent checks replace the plan's private-push requirement. Remote CI remains pending.
+
+### Step 0b — complete
+
+- Interrupted step-1 work preserved in stash `2f515213a5d78b466be8c89eee8bfae5e8cdfa4a`; no extraction is included in step 0b. Revised tests first execute in detached original-code worktree `/private/tmp/debrify-torbox-original-c4f5375a` at `c4f5375a`, with the screen and frozen accessor unchanged.
+- Step change: `_resetListScroll` moves with **both** scroll listeners and paging in step 3, not step 5. Resolved callback checks run before receiver normalization and compare receiver path plus member, rejecting closure wrappers and same-class instance swaps for scroll, route back and TV tab-5 focus. Tab-back teardown remains the original key-only unregister; its registration shares the route-back tear-off.
+- TorBox fixtures now use the real production configuration and declarations; fixture overrides contain paths only. The deps report contains a review checklist for every wiring entry; review actual bindings before each scaffold pin.
+- Base3 predates the final edits to the two playback/download source guards. Base4 records their complete bodies and all step-0b changes against original code; later affected tests and full gates use base4. Final reports also compare gates transitively with base3.
+- Linux originals are a **blocking prerequisite before step 6**. `minttest` exists but has no Flutter SDK in PATH or under `/home`, `/opt`, `/usr/local`; no SDK installed. On an Ubuntu checkout containing this commit and existing Flutter 3.44.8, run `bash dev/tool/capture_torbox_linux_goldens.sh`. It creates a detached c4f5375a worktree, copies reviewed tests only, captures four originals, compares them strictly, copies PNGs back, and writes revision/hash/capture/strict evidence under the common git evidence directory. Commit those four PNGs and retain the evidence; never update against moved code. No push is authorized. Stop before step 6 with `BLOCKED: Linux goldens` if the files/evidence remain absent.
+- Conservative test choice: stage the outgoing scroll position at bottom with `correctPixels` to isolate reset-generated notifications from a legitimate page scroll. Assert no offset=50 during reset, then exactly one offset=50 and offset=100 request on separate real scrolls. The identity checker verifies the single init add plus balanced reset remove/add for each controller; behavior verifies the retained attached listener and page counts.
+- Removing the frozen test accessor later will re-surface the original unused-element warnings for dormant `_handleAddWebDownloadToPlaylist` and `_findFirstEpisodeIndex`. Match those by rule/symbol/message; removal is outside this move-only plan and the accessor is retained here.
+
+- Original-code final `torbox/base4`: 10,411 successes, unchanged 13 failures / 28 errors / 20 skips. PASS against base3: exactly nine added identities, no failures, missing tests or newly skipped tests (`base4-comparison.txt`). All 63 affected identities pass, including four strict macOS goldens. Original code/accessor is byte-unchanged; hashes recorded in `step0b-original-sha256.txt`.
+- Revised coverage verifies route/tab isolation and sentinel teardown, both-view bulk confirmation/cancel/confirm and 149+1 ms waits, magnet refresh from Web Downloads, fresh route snapshots, non-monotonic playlist IDs, magnet flag values, every resource disposal in order, empty-folder/pre-load focus, widget-update initial opens and the complete temporary torrent override body.
+- Analyzer: 830 identities, zero added/removed (`step0b-analyzer-comparison.txt`). TorBox real-config/identity fixtures, settings/IPTV manifest self-tests, architecture, size, storage reference/key, format and diff checks pass. Evidence streams to the common evidence dir; no known-failure list or golden updated to accept a regression.
 
 ## Found, not fixed
 

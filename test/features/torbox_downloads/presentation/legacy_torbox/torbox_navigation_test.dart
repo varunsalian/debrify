@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:debrify/models/rd_file_node.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/screens/torbox/torbox_downloads_screen.dart';
@@ -14,12 +15,34 @@ void main() {
     testWidgets(
       'back registration and unregistration pushed=$pushed',
       (t) => torboxCase(t, (f) async {
+        var sentinelCalls = 0;
+        bool sentinel() {
+          sentinelCalls++;
+          return true;
+        }
+
+        MainPageBridge.registerTabBackHandler('torbox', sentinel);
         await f.mount(t, pushed: pushed);
+        MainPageBridge.setActiveTvTab(5);
+        expect(f.member('tvContentFocusHandler'), pushed ? isNull : isNotNull);
+        expect(MainPageBridge.requestTvContentFocus(), !pushed);
         f.member('toggleSelectionMode')();
         expect(MainPageBridge.handleBackNavigation(), isTrue);
         expect(f.member('isSelectionMode'), isFalse);
+        expect(sentinelCalls, 0);
+        // A pushed route must leave the existing tab registration untouched.
+        if (pushed) {
+          MainPageBridge.popRouteBackHandler(f.member('handleBackNavigation'));
+          expect(MainPageBridge.handleBackNavigation(), isTrue);
+          expect(sentinelCalls, 1);
+          MainPageBridge.pushRouteBackHandler(f.member('handleBackNavigation'));
+        }
         await f.close(t);
-        expect(MainPageBridge.handleBackNavigation(), isFalse);
+        expect(MainPageBridge.requestTvContentFocus(), isFalse);
+        MainPageBridge.registerTabBackHandler('torbox', sentinel);
+        expect(MainPageBridge.handleBackNavigation(), isTrue);
+        expect(sentinelCalls, pushed ? 2 : 1);
+        MainPageBridge.unregisterTabBackHandler('torbox', sentinel);
       }),
     );
   }
@@ -153,7 +176,11 @@ void main() {
         isFalse,
       );
       f.member('toggleSelectionMode')();
-      expect(other['isSelectionMode'], isFalse);
+      expect(
+        torboxDownloadsTestAccess(second.currentState!)['isSelectionMode'],
+        isFalse,
+      );
+      expect(f.member('isSelectionMode'), isTrue);
       f.navigatorKey.currentState!.pop();
       await t.pumpAndSettle();
     }),
@@ -194,6 +221,73 @@ void main() {
       await t.pump();
       await t.pump();
       expect((f.member('firstItemFocusNode') as FocusNode).hasFocus, isTrue);
+    }),
+  );
+  for (final pending in [false, true]) {
+    testWidgets(
+      'focus fallback empty or before load pending=$pending',
+      (t) => torboxCase(t, (f) async {
+        f.torrents = [];
+        f.web = [];
+        f.holdLists = pending;
+        if (pending) f.pending = Completer<http.Response>();
+        await f.mount(t);
+        if (!pending) {
+          await f.until(t, () => f.member('isLoadingWebDownloads') == false);
+          f.member('navigateIntoTorrent')(f.torrent(99, files: 0));
+          await t.pumpAndSettle();
+        }
+        MainPageBridge.setActiveTvTab(5);
+        expect(MainPageBridge.requestTvContentFocus(), isTrue);
+        t.binding.scheduleFrame();
+        await t.pump();
+        await t.pump();
+        expect(f.member('shouldFocusOnLoad'), pending);
+        if (pending) {
+          expect(
+            (f.member('firstItemFocusNode') as FocusNode).hasFocus,
+            isFalse,
+          );
+          f.pending!.complete(
+            http.Response(
+              jsonEncode({
+                'success': true,
+                'data': [torboxRow(1)],
+              }),
+              200,
+            ),
+          );
+          await f.until(
+            t,
+            () =>
+                f.member('initialLoad') == false &&
+                f.member('isLoadingWebDownloads') == false,
+          );
+          await t.pump();
+          await t.pump();
+        }
+        expect(f.member('shouldFocusOnLoad'), isFalse);
+        expect(
+          (f.member(pending ? 'firstItemFocusNode' : 'searchButtonFocusNode')
+                  as FocusNode)
+              .hasFocus,
+          isTrue,
+        );
+      }),
+    );
+  }
+  testWidgets(
+    'didUpdateWidget reopens each new initial torrent',
+    (t) => torboxCase(t, (f) async {
+      await f.mount(t, initial: f.torrent(1));
+      expect((f.member('currentTorrent') as dynamic).id, 1);
+      final state = f.key.currentState;
+      await f.mount(t, initial: f.torrent(2));
+      expect(identical(f.key.currentState, state), isTrue);
+      expect((f.member('currentTorrent') as dynamic).id, 2);
+      expect(f.member('initialActionHandled'), isTrue);
+      await f.mount(t, initial: f.torrent(3));
+      expect((f.member('currentTorrent') as dynamic).id, 3);
     }),
   );
 }

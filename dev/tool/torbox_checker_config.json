@@ -499,5 +499,114 @@
     "_toolbar": "TorboxToolbar",
     "TorboxToolbar": "TorboxToolbar"
   },
-  "plain_sections": []
+  "plain_sections": [],
+  "callback_identities": [
+    {
+      "name": "torrent scroll detach/reattach",
+      "sites": [
+        {
+          "member": "_TorboxDownloadsScreenState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 2,
+          "occurrence": 0
+        },
+        {
+          "member": "_TorboxDownloadsScreenState._resetListScroll",
+          "call": "removeListener",
+          "argument": 0,
+          "count": 2,
+          "occurrence": 0
+        },
+        {
+          "member": "_TorboxDownloadsScreenState._resetListScroll",
+          "call": "addListener",
+          "argument": 0,
+          "count": 2,
+          "occurrence": 0
+        }
+      ],
+      "callback_member": "_TorboxDownloadsScreenState._onScroll"
+    },
+    {
+      "name": "web download scroll detach/reattach",
+      "sites": [
+        {
+          "member": "_TorboxDownloadsScreenState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 2,
+          "occurrence": 1
+        },
+        {
+          "member": "_TorboxDownloadsScreenState._resetListScroll",
+          "call": "removeListener",
+          "argument": 0,
+          "count": 2,
+          "occurrence": 1
+        },
+        {
+          "member": "_TorboxDownloadsScreenState._resetListScroll",
+          "call": "addListener",
+          "argument": 0,
+          "count": 2,
+          "occurrence": 1
+        }
+      ],
+      "callback_member": "_TorboxDownloadsScreenState._onWebDownloadScroll"
+    },
+    {
+      "name": "route back push/pop",
+      "sites": [
+        {
+          "member": "_TorboxDownloadsScreenState.initState",
+          "call": "pushRouteBackHandler",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "_TorboxDownloadsScreenState.dispose",
+          "call": "popRouteBackHandler",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "_TorboxDownloadsScreenState.initState",
+          "call": "registerTabBackHandler",
+          "argument": 1,
+          "count": 1
+        }
+      ],
+      "callback_member": "_TorboxDownloadsScreenState._handleBackNavigation"
+    },
+    {
+      "name": "TV tab 5 focus registration/teardown",
+      "sites": [
+        {
+          "member": "_TorboxDownloadsScreenState.initState",
+          "call": "registerTvContentFocusHandler",
+          "argument": 1,
+          "count": 1
+        },
+        {
+          "member": "_TorboxDownloadsScreenState.dispose",
+          "call": "unregisterTvContentFocusHandler",
+          "argument": 1,
+          "count": 1
+        }
+      ],
+      "callback_member": "_TorboxDownloadsScreenState._tvContentFocusHandler"
+    }
+  ],
+  "callback_instances": {
+    "_TorboxDownloadsScreenState": "$State",
+    "TorboxCatalogLoading": "$State._sections.catalog_loading",
+    "TorboxFocusState": "$State._owners.focus_state",
+    "TorboxBackNavigation": "$State._sections.back_navigation"
+  },
+  "callback_receiver_aliases": {
+    "_deps.catalog_state": "$State._owners.catalog_state",
+    "_deps.web_state": "$State._owners.web_state",
+    "_deps.focus_state": "$State._owners.focus_state"
+  }
 }
