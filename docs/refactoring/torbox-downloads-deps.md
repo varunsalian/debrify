@@ -224,297 +224,299 @@ State-driven sections exit with later TorBox Riverpod migration; direct-service 
 
 Each entry below is checked against the declaration table above before its scaffold is pinned. Owners are borrowed once; widget values are live getters; methods preserve arguments/defaults and evaluation order. After extraction, mark the actual binding reviewed before running `pin.py`.
 
-| Section | Dependency | Expected binding / review |
-| --- | --- | --- |
-| `focus_actions` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `focus_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `focus_actions` | `view_state` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner |
-| `focus_actions` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `focus_actions` | `web_state` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner |
-| `torrent_download_action` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `torrent_download_action` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_download_action` | `navigation_state` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner |
-| `torrent_download_action` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `torrent_download_action` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `torrent_download_action` | `downloadSelectedTorboxFiles` (Future<void> Function(List<Map<String, dynamic>> selectedFiles, String folderName)) | `TorboxFileActions.downloadSelectedTorboxFiles` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_playlist_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `torrent_playlist_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `torrent_playlist_actions` | `torrent_search_state` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner |
-| `torrent_playlist_actions` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_link_actions` | `showComingSoon` (void Function(String action)) | `TorboxMagnetActions.showComingSoon` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_link_actions` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `torrent_link_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `torrent_link_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `torrent_options` | `handleAddToPlaylist` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentPlaylistActions.handleAddToPlaylist` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_options` | `handleAddToDebrifyTv` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentPlaylistActions.handleAddToDebrifyTv` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_options` | `copyTorrentZipLink` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentLinkActions.copyTorrentZipLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_options` | `copyTorrentLink` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentLinkActions.copyTorrentLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_options` | `confirmDeleteTorrent` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentDeleteActions.confirmDeleteTorrent` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_options` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `torrent_playback` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `torrent_playback` | `showComingSoon` (void Function(String action)) | `TorboxMagnetActions.showComingSoon` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_playback` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `torrent_playback` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `torrent_playback` | `requestTorboxStreamUrl` (Future<String> Function({required String apiKey, required TorboxTorrent torrent, required TorboxFile file})) | `TorboxStreamRequest.requestTorboxStreamUrl` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_delete_actions` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `torrent_delete_actions` | `showComingSoon` (void Function(String action)) | `TorboxMagnetActions.showComingSoon` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_delete_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `torrent_delete_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `torrent_delete_actions` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position |
-| `torrent_delete_actions` | `selection_state` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner |
-| `back_navigation` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `back_navigation` | `selection_state` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner |
-| `back_navigation` | `exitSelectionMode` (void Function()) | `TorboxSelectionActions.exitSelectionMode` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `back_navigation` | `torrent_search_state` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner |
-| `back_navigation` | `toggleTorrentSearch` (void Function()) | `TorboxTorrentSearch.toggleTorrentSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `back_navigation` | `folder_search_state` (TorboxFolderSearchState) | `_folderSearch`: same instance as lifecycle; never allocate another owner |
-| `back_navigation` | `toggleSearch` (void Function()) | `TorboxFolderSearch.toggleSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `back_navigation` | `isAtRoot` (bool Function()) | `TorboxFolderNavigation.isAtRoot` (step 5); exact arguments/defaults; getter read at invocation |
-| `back_navigation` | `navigation_state` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner |
-| `back_navigation` | `navigateUp` (void Function()) | `TorboxFolderNavigation.navigateUp` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `back_navigation` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot |
-| `back_navigation` | `isPushedRoute` (bool Function()) | `() => widget.isPushedRoute` live, never snapshot |
-| `back_navigation` | `initialTorrentToOpen` (TorboxTorrent? Function()) | `() => widget.initialTorrentToOpen` live, never snapshot |
-| `catalog_loading` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `catalog_loading` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `catalog_loading` | `web_state` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner |
-| `catalog_loading` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `catalog_loading` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position |
-| `catalog_loading` | `submitTorrentSearch` (void Function()) | `TorboxTorrentSearch.submitTorrentSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `catalog_loading` | `initialSearchQuery` (String? Function()) | `() => widget.initialSearchQuery` live, never snapshot |
-| `catalog_loading` | `torrent_search_state` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner |
-| `catalog_loading` | `focusFirstItemOrFallback` (void Function()) | `TorboxFocusActions.focusFirstItemOrFallback` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `catalog_loading` | `maybeTriggerInitialAction` (void Function()) | `TorboxInitialAction.maybeTriggerInitialAction` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_playback` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `web_playback` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_playback` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `web_playback` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `web_options` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `web_options` | `buildDownloadOptionCard` (Widget Function({required IconData icon, required String title, required String description, required Color color, required VoidCallback onTap})) | `TorboxDownloadOptions.buildDownloadOptionCard` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_options` | `downloadWebDownloadFiles` (Future<void> Function(TorboxWebDownload webDownload)) | `TorboxWebFileDownloads.downloadWebDownloadFiles` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_options` | `enqueueWebDownloadZipDownload` (Future<void> Function({required TorboxWebDownload webDownload, required BuildContext sheetContext})) | `TorboxWebZipDownload.enqueueWebDownloadZipDownload` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_zip_download` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `web_zip_download` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `web_zip_download` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `web_file_downloads` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `web_file_downloads` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_file_downloads` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `web_file_downloads` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `web_link_playlist_actions` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `web_link_playlist_actions` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_link_playlist_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `web_delete_action` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `web_delete_action` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_delete_action` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `web_delete_action` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `web_delete_action` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position |
-| `web_delete_action` | `web_state` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner |
-| `selection_actions` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `selection_actions` | `selection_state` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner |
-| `selection_actions` | `web_state` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner |
-| `selection_actions` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position |
-| `selection_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `selection_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `selection_actions` | `showDeleteSelectedProgressDialog` (Future<void> Function(Set<int> ids, bool isTorrents)) | `TorboxBulkDelete.showDeleteSelectedProgressDialog` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `bulk_delete` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `bulk_delete` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `bulk_delete` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `bulk_delete` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position |
-| `bulk_delete` | `web_state` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner |
-| `bulk_delete` | `selection_state` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner |
-| `bulk_delete` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_create_actions` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `web_create_actions` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_create_actions` | `add_input_state` (TorboxAddInputState) | `_addInput`: same instance as lifecycle; never allocate another owner |
-| `web_create_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `web_create_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `web_create_actions` | `fetchWebDownloads` (Future<void> Function({bool reset})) | `TorboxCatalogLoading.fetchWebDownloads` (step 3); exact arguments/defaults; deferred callback until all sections assigned; verify its own endpoint, never substitute the same-signature sibling |
-| `initial_action` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `initial_action` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `initial_action` | `navigateIntoTorrent` (void Function(TorboxTorrent torrent)) | `TorboxFolderNavigation.navigateIntoTorrent` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_selection_sheet` | `showComingSoon` (void Function(String action)) | `TorboxMagnetActions.showComingSoon` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_selection_sheet` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `file_selection_sheet` | `buildTorboxRawList` (Widget Function({required List<TorboxFileEntry> entries, required Set<int> selectedIndices, required ValueChanged<int> onToggle, Future<void> Function(TorboxFileEntry entry)? onCopy})) | `TorboxFileListLayouts.buildTorboxRawList` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_selection_sheet` | `copyTorboxFileLink` (Future<void> Function(TorboxTorrent torrent, TorboxFile file)) | `TorboxTorrentLinkActions.copyTorboxFileLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_selection_sheet` | `buildTorboxSeriesView` (Widget Function({required List<TorboxFileEntry> entries, required Set<int> selectedIndices, required int? currentSeason, required ValueChanged<int?> onSeasonChange, required ValueChanged<int> onToggleFile, required void Function(int season, List<int> indices) onToggleSeason, Future<void> Function(TorboxFileEntry entry)? onCopy})) | `TorboxSeriesLayout.buildTorboxSeriesView` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_selection_sheet` | `buildTorboxMovieView` (Widget Function({required List<TorboxFileEntry> entries, required Set<int> selectedIndices, required ValueChanged<int> onToggle, Future<void> Function(TorboxFileEntry entry)? onCopy})) | `TorboxFileListLayouts.buildTorboxMovieView` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_selection_sheet` | `buildTorboxGenericList` (Widget Function({required List<TorboxFileEntry> entries, required Set<int> selectedIndices, required ValueChanged<int> onToggle, Future<void> Function(TorboxFileEntry entry)? onCopy})) | `TorboxFileListLayouts.buildTorboxGenericList` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_selection_sheet` | `enqueueTorboxDownloads` (Future<bool> Function({required TorboxTorrent torrent, required List<TorboxFileEntry> entriesToDownload, required BuildContext sheetContext})) | `TorboxTorrentEnqueue.enqueueTorboxDownloads` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_enqueue` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `torrent_enqueue` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `torrent_enqueue` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `torrent_zip_download` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `torrent_zip_download` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `torrent_zip_download` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `download_options` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `download_options` | `downloadAllTorrentFiles` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentDownloadAction.downloadAllTorrentFiles` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `download_options` | `enqueueTorboxZipDownload` (Future<void> Function({required TorboxTorrent torrent, required BuildContext sheetContext})) | `TorboxTorrentZipDownload.enqueueTorboxZipDownload` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_list_layouts` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `file_list_layouts` | `buildTorboxFileCard` (Widget Function({required TorboxFileEntry entry, required bool isSelected, required VoidCallback onToggle, required int animationIndex, required Color surface, String? badge, String? subtitle, Future<void> Function()? onCopy})) | `TorboxFileSelectionCard.buildTorboxFileCard` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `series_layout` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `series_layout` | `buildSectionHeader` (Widget Function(String title)) | `TorboxFileListLayouts.buildSectionHeader` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `series_layout` | `buildTorboxFileCard` (Widget Function({required TorboxFileEntry entry, required bool isSelected, required VoidCallback onToggle, required int animationIndex, required Color surface, String? badge, String? subtitle, Future<void> Function()? onCopy})) | `TorboxFileSelectionCard.buildTorboxFileCard` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `magnet_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `magnet_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `magnet_actions` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `magnet_actions` | `add_input_state` (TorboxAddInputState) | `_addInput`: same instance as lifecycle; never allocate another owner |
-| `magnet_actions` | `refresh` (Future<void> Function()) | `TorboxCatalogLoading.refresh` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_actions` | `navigation_state` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner |
-| `file_actions` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_actions` | `playTorboxFiles` (Future<void> Function(List<TorboxFile> files, String collectionName)) | `TorboxFilePlayback.playTorboxFiles` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_actions` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `file_actions` | `requestTorboxStreamUrl` (Future<String> Function({required String apiKey, required TorboxTorrent torrent, required TorboxFile file})) | `TorboxStreamRequest.requestTorboxStreamUrl` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `file_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `file_actions` | `downloadSingleFile` (Future<void> Function(TorboxFile file)) | `TorboxFileDownloads.downloadSingleFile` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_playlist_links` | `navigation_state` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner |
-| `file_playlist_links` | `currentFiles` (List<TorboxFile> Function()) | `TorboxFileActions.currentFiles` (step 4); exact arguments/defaults; getter read at invocation |
-| `file_playlist_links` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_playlist_links` | `copyTorboxFileLink` (Future<void> Function(TorboxTorrent torrent, TorboxFile file)) | `TorboxTorrentLinkActions.copyTorboxFileLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_playlist_links` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `file_playlist_links` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `file_downloads` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `file_downloads` | `navigation_state` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner |
-| `file_downloads` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `file_downloads` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `file_downloads` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_playback` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `file_playback` | `navigation_state` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner |
-| `file_playback` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_playback` | `requestTorboxStreamUrl` (Future<String> Function({required String apiKey, required TorboxTorrent torrent, required TorboxFile file})) | `TorboxStreamRequest.requestTorboxStreamUrl` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_playback` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `file_playback` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `notifications` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `notifications` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `folder_navigation` | `exitSelectionMode` (void Function()) | `TorboxSelectionActions.exitSelectionMode` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `folder_navigation` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `folder_navigation` | `view_state` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner |
-| `folder_navigation` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position |
-| `folder_navigation` | `navigation_state` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner |
-| `folder_navigation` | `focusFirstItemOrFallback` (void Function()) | `TorboxFocusActions.focusFirstItemOrFallback` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `folder_navigation` | `getCurrentViewMode` (FolderViewMode Function()) | `TorboxViewModes.getCurrentViewMode` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `view_modes` | `navigation_state` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner |
-| `view_modes` | `view_state` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner |
-| `view_modes` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `view_modes` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position |
-| `view_modes` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `torrent_search` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position |
-| `torrent_search` | `torrent_search_state` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner |
-| `torrent_search` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `torrent_search` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot |
-| `torrent_search` | `initialSearchQuery` (String? Function()) | `() => widget.initialSearchQuery` live, never snapshot |
-| `torrent_search` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `torrent_search` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position |
-| `torrent_search` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `folder_search` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position |
-| `folder_search` | `folder_search_state` (TorboxFolderSearchState) | `_folderSearch`: same instance as lifecycle; never allocate another owner |
-| `folder_search` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `folder_search` | `navigation_state` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner |
-| `folder_search` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `folder_search` | `playVideoFile` (Future<void> Function(RDFileNode fileNode)) | `TorboxFileActions.playVideoFile` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `isAtRoot` (bool Function()) | `TorboxFolderNavigation.isAtRoot` (step 5); exact arguments/defaults; getter read at invocation |
-| `root_layout` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `root_layout` | `web_state` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner |
-| `root_layout` | `view_state` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner |
-| `root_layout` | `navigation_state` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner |
-| `root_layout` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `root_layout` | `getCurrentViewMode` (FolderViewMode Function()) | `TorboxViewModes.getCurrentViewMode` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `root_layout` | `handleBackNavigation` (bool Function()) | `TorboxBackNavigation.handleBackNavigation` (step 3); exact arguments/defaults; deferred callback until all sections assigned; DIRECT tear-off, same receiver instance for removal |
-| `root_layout` | `currentFolderName` (String Function()) | `TorboxFolderNavigation.currentFolderName` (step 5); exact arguments/defaults; getter read at invocation |
-| `root_layout` | `folder_search_state` (TorboxFolderSearchState) | `_folderSearch`: same instance as lifecycle; never allocate another owner |
-| `root_layout` | `toggleSearch` (void Function()) | `TorboxFolderSearch.toggleSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `buildToolbar` (Widget Function()) | `TorboxToolbar.buildToolbar` (step 6); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `buildViewSelectorBar` (Widget Function()) | `TorboxViewSelector.buildViewSelectorBar` (step 6); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `torrent_search_state` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner |
-| `root_layout` | `buildTorrentSearchBar` (Widget Function()) | `TorboxTorrentSearchLayout.buildTorrentSearchBar` (step 6); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `selection_state` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner |
-| `root_layout` | `buildSelectionBar` (Widget Function()) | `TorboxSelectionBar.buildSelectionBar` (step 6); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `buildViewModeDropdown` (Widget Function()) | `TorboxViewModes.buildViewModeDropdown` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `buildSearchBar` (Widget Function()) | `TorboxFolderSearch.buildSearchBar` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `buildTorrentSearchResults` (Widget Function()) | `TorboxTorrentSearchLayout.buildTorrentSearchResults` (step 6); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `buildSearchResults` (Widget Function()) | `TorboxFolderSearch.buildSearchResults` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `refresh` (Future<void> Function()) | `TorboxCatalogLoading.refresh` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `buildFilesFoldersList` (Widget Function()) | `TorboxLibraryLists.buildFilesFoldersList` (step 6); exact arguments/defaults; deferred callback until all sections assigned |
-| `root_layout` | `isPushedRoute` (bool Function()) | `() => widget.isPushedRoute` live, never snapshot |
-| `root_layout` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot |
-| `root_layout` | `initialTorrentToOpen` (TorboxTorrent? Function()) | `() => widget.initialTorrentToOpen` live, never snapshot |
-| `library_lists` | `isAtRoot` (bool Function()) | `TorboxFolderNavigation.isAtRoot` (step 5); exact arguments/defaults; getter read at invocation |
-| `library_lists` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `library_lists` | `currentItems` (List<dynamic> Function()) | `TorboxRootLayout.currentItems` (step 6); exact arguments/defaults; getter read at invocation |
-| `library_lists` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `library_lists` | `openSettings` (void Function()) | `TorboxMagnetActions.openSettings` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `library_lists` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `library_lists` | `buildTorrentFolderCard` (Widget Function(TorboxTorrent torrent, int index)) | `TorboxTorrentRow.buildTorrentFolderCard` (step 6); exact arguments/defaults; deferred callback until all sections assigned |
-| `library_lists` | `buildFileOrFolderCard` (Widget Function(RDFileNode node, int index)) | `TorboxFileRow.buildFileOrFolderCard` (step 6); exact arguments/defaults; deferred callback until all sections assigned |
-| `library_lists` | `web_state` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner |
-| `library_lists` | `buildWebDownloadCard` (Widget Function(TorboxWebDownload webDownload, int index)) | `TorboxWebRow.buildWebDownloadCard` (step 6); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_row` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `web_row` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `web_row` | `handlePlayWebDownload` (Future<void> Function(TorboxWebDownload webDownload)) | `TorboxWebPlayback.handlePlayWebDownload` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_row` | `showWebDownloadOptionsDialog` (void Function(TorboxWebDownload webDownload)) | `TorboxWebOptions.showWebDownloadOptionsDialog` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_row` | `navigateIntoWebDownload` (void Function(TorboxWebDownload webDownload)) | `TorboxFolderNavigation.navigateIntoWebDownload` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_row` | `copyWebDownloadLink` (Future<void> Function(TorboxWebDownload webDownload)) | `TorboxWebLinkPlaylistActions.copyWebDownloadLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_row` | `confirmDeleteWebDownload` (Future<void> Function(TorboxWebDownload webDownload)) | `TorboxWebDeleteAction.confirmDeleteWebDownload` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_row` | `selection_state` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner |
-| `web_row` | `toggleWebDownloadSelection` (void Function(int id)) | `TorboxSelectionActions.toggleWebDownloadSelection` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `web_row` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot |
-| `web_row` | `onSourceSelected` (void Function(SeriesSource)? Function()) | `() => widget.onSourceSelected` live, never snapshot |
-| `torrent_row` | `torrent_search_state` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner |
-| `torrent_row` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `torrent_row` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `torrent_row` | `handlePlayTorrent` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentPlayback.handlePlayTorrent` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_row` | `showDownloadOptionsDialog` (void Function(TorboxTorrent torrent)) | `TorboxDownloadOptions.showDownloadOptionsDialog` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_row` | `navigateIntoTorrent` (void Function(TorboxTorrent torrent)) | `TorboxFolderNavigation.navigateIntoTorrent` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_row` | `copyTorboxZipLink` (void Function(TorboxTorrent torrent)) | `TorboxTorrentLinkActions.copyTorboxZipLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_row` | `handleAddToPlaylist` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentPlaylistActions.handleAddToPlaylist` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_row` | `handleAddToDebrifyTv` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentPlaylistActions.handleAddToDebrifyTv` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_row` | `confirmDeleteTorrent` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentDeleteActions.confirmDeleteTorrent` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_row` | `selection_state` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner |
-| `torrent_row` | `toggleTorrentSelection` (void Function(int id)) | `TorboxSelectionActions.toggleTorrentSelection` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_row` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot |
-| `torrent_row` | `onSourceSelected` (void Function(SeriesSource)? Function()) | `() => widget.onSourceSelected` live, never snapshot |
-| `file_row` | `playFolderVideos` (Future<void> Function(RDFileNode folderNode)) | `TorboxFileActions.playFolderVideos` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_row` | `playVideoFile` (Future<void> Function(RDFileNode fileNode)) | `TorboxFileActions.playVideoFile` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_row` | `downloadFileOrFolder` (Future<void> Function(RDFileNode node)) | `TorboxFileActions.downloadFileOrFolder` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_row` | `navigation_state` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner |
-| `file_row` | `addFileOrFolderToPlaylist` (Future<void> Function(RDFileNode node)) | `TorboxFilePlaylistLinks.addFileOrFolderToPlaylist` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_row` | `copyFileLink` (Future<void> Function(RDFileNode node)) | `TorboxFilePlaylistLinks.copyFileLink` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_row` | `navigateIntoFolder` (void Function(RDFileNode folderNode)) | `TorboxFolderNavigation.navigateIntoFolder` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `file_row` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `view_selector` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `view_selector` | `resetListScroll` (void Function()) | `TorboxCatalogLoading.resetListScroll` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `view_selector` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position |
-| `view_selector` | `torrent_search_state` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner |
-| `view_selector` | `selection_state` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner |
-| `selection_bar` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `selection_bar` | `activeSelectedIds` (Set<int> Function()) | `TorboxSelectionActions.activeSelectedIds` (step 3); exact arguments/defaults; getter read at invocation |
-| `selection_bar` | `toggleSelectAll` (void Function()) | `TorboxSelectionActions.toggleSelectAll` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `selection_bar` | `isAllSelected` (bool Function()) | `TorboxSelectionActions.isAllSelected` (step 3); exact arguments/defaults; getter read at invocation |
-| `selection_bar` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `selection_bar` | `handleDeleteSelected` (Future<void> Function()) | `TorboxSelectionActions.handleDeleteSelected` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_search_layout` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `torrent_search_layout` | `torrent_search_state` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner |
-| `torrent_search_layout` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `torrent_search_layout` | `submitTorrentSearch` (void Function()) | `TorboxTorrentSearch.submitTorrentSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `torrent_search_layout` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position |
-| `torrent_search_layout` | `filteredTorrentSearchResults` (List<TorboxTorrent> Function()) | `TorboxTorrentSearch.filteredTorrentSearchResults` (step 5); exact arguments/defaults; getter read at invocation |
-| `torrent_search_layout` | `buildTorrentFolderCard` (Widget Function(TorboxTorrent torrent, int index)) | `TorboxTorrentRow.buildTorrentFolderCard` (step 6); exact arguments/defaults; deferred callback until all sections assigned |
-| `toolbar` | `isPushedRoute` (bool Function()) | `() => widget.isPushedRoute` live, never snapshot |
-| `toolbar` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot |
-| `toolbar` | `initialTorrentToOpen` (TorboxTorrent? Function()) | `() => widget.initialTorrentToOpen` live, never snapshot |
-| `toolbar` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position |
-| `toolbar` | `catalog_state` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner |
-| `toolbar` | `web_state` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner |
-| `toolbar` | `selection_state` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner |
-| `toolbar` | `toggleSelectionMode` (void Function()) | `TorboxSelectionActions.toggleSelectionMode` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `toolbar` | `confirmDeleteAll` (Future<void> Function()) | `TorboxTorrentDeleteActions.confirmDeleteAll` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
-| `toolbar` | `torrent_search_state` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner |
-| `toolbar` | `focus_state` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner |
-| `toolbar` | `toggleTorrentSearch` (void Function()) | `TorboxTorrentSearch.toggleTorrentSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned |
-| `toolbar` | `showAddMagnetDialog` (Future<void> Function()) | `TorboxMagnetActions.showAddMagnetDialog` (step 4); exact arguments/defaults; deferred callback until all sections assigned |
-| `toolbar` | `showAddWebDownloadDialog` (Future<void> Function()) | `TorboxWebCreateActions.showAddWebDownloadDialog` (step 3); exact arguments/defaults; deferred callback until all sections assigned |
+| Section | Dependency | Expected binding / review | Status before pinning |
+| --- | --- | --- | --- |
+| `focus_actions` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `focus_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `focus_actions` | `viewState` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `focus_actions` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `focus_actions` | `webState` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `torrent_download_action` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `torrent_download_action` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_download_action` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `torrent_download_action` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_download_action` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_download_action` | `downloadSelectedTorboxFiles` (Future<void> Function(List<Map<String, dynamic>> selectedFiles, String folderName)) | `TorboxFileActions.downloadSelectedTorboxFiles` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_playlist_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_playlist_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_playlist_actions` | `torrentSearchState` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `torrent_playlist_actions` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_link_actions` | `showComingSoon` (void Function(String action)) | `TorboxMagnetActions.showComingSoon` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_link_actions` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `torrent_link_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_link_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_options` | `handleAddToPlaylist` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentPlaylistActions.handleAddToPlaylist` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_options` | `handleAddToDebrifyTv` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentPlaylistActions.handleAddToDebrifyTv` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_options` | `copyTorrentZipLink` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentLinkActions.copyTorrentZipLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_options` | `copyTorrentLink` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentLinkActions.copyTorrentLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_options` | `confirmDeleteTorrent` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentDeleteActions.confirmDeleteTorrent` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_options` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_playback` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `torrent_playback` | `showComingSoon` (void Function(String action)) | `TorboxMagnetActions.showComingSoon` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_playback` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_playback` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_playback` | `requestTorboxStreamUrl` (Future<String> Function({required String apiKey, required TorboxTorrent torrent, required TorboxFile file})) | `TorboxStreamRequest.requestTorboxStreamUrl` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_delete_actions` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `torrent_delete_actions` | `showComingSoon` (void Function(String action)) | `TorboxMagnetActions.showComingSoon` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `torrent_delete_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_delete_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_delete_actions` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `torrent_delete_actions` | `selectionState` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `selectionState` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `exitSelectionMode` (void Function()) | `TorboxSelectionActions.exitSelectionMode` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `torrentSearchState` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `toggleTorrentSearch` (void Function()) | `TorboxTorrentSearch.toggleTorrentSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `folderSearchState` (TorboxFolderSearchState) | `_folderSearch`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `toggleSearch` (void Function()) | `TorboxFolderSearch.toggleSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `isAtRoot` (bool Function()) | `TorboxFolderNavigation.isAtRoot` (step 5); exact arguments/defaults; getter read at invocation | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `navigateUp` (void Function()) | `TorboxFolderNavigation.navigateUp` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `isPushedRoute` (bool Function()) | `() => widget.isPushedRoute` live, never snapshot | [x] Step 3 actual binding reviewed |
+| `back_navigation` | `initialTorrentToOpen` (TorboxTorrent? Function()) | `() => widget.initialTorrentToOpen` live, never snapshot | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `webState` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `submitTorrentSearch` (void Function()) | `TorboxTorrentSearch.submitTorrentSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `initialSearchQuery` (String? Function()) | `() => widget.initialSearchQuery` live, never snapshot | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `torrentSearchState` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `focusFirstItemOrFallback` (void Function()) | `TorboxFocusActions.focusFirstItemOrFallback` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `catalog_loading` | `maybeTriggerInitialAction` (void Function()) | `TorboxInitialAction.maybeTriggerInitialAction` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `web_playback` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `web_playback` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `web_playback` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_playback` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_options` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_options` | `buildDownloadOptionCard` (Widget Function({required IconData icon, required String title, required String description, required Color color, required VoidCallback onTap})) | `TorboxDownloadOptions.buildDownloadOptionCard` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `web_options` | `downloadWebDownloadFiles` (Future<void> Function(TorboxWebDownload webDownload)) | `TorboxWebFileDownloads.downloadWebDownloadFiles` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `web_options` | `enqueueWebDownloadZipDownload` (Future<void> Function({required TorboxWebDownload webDownload, required BuildContext sheetContext})) | `TorboxWebZipDownload.enqueueWebDownloadZipDownload` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `web_zip_download` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `web_zip_download` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_zip_download` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_file_downloads` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `web_file_downloads` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `web_file_downloads` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_file_downloads` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_link_playlist_actions` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `web_link_playlist_actions` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `web_link_playlist_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_delete_action` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `web_delete_action` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `web_delete_action` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_delete_action` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_delete_action` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_delete_action` | `webState` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `selectionState` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `webState` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `selection_actions` | `showDeleteSelectedProgressDialog` (Future<void> Function(Set<int> ids, bool isTorrents)) | `TorboxBulkDelete.showDeleteSelectedProgressDialog` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `bulk_delete` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `bulk_delete` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `bulk_delete` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `bulk_delete` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `bulk_delete` | `webState` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `bulk_delete` | `selectionState` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `bulk_delete` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `web_create_actions` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `web_create_actions` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [x] Step 3 actual binding reviewed |
+| `web_create_actions` | `addInputState` (TorboxAddInputState) | `_addInput`: same instance as lifecycle; never allocate another owner | [x] Step 3 actual binding reviewed |
+| `web_create_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_create_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [x] Step 3 actual binding reviewed |
+| `web_create_actions` | `fetchWebDownloads` (Future<void> Function({bool reset})) | `TorboxCatalogLoading.fetchWebDownloads` (step 3); exact arguments/defaults; deferred callback until all sections assigned; verify its own endpoint, never substitute the same-signature sibling | [x] Step 3 actual binding reviewed |
+| `initial_action` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `initial_action` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `initial_action` | `navigateIntoTorrent` (void Function(TorboxTorrent torrent)) | `TorboxFolderNavigation.navigateIntoTorrent` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_selection_sheet` | `showComingSoon` (void Function(String action)) | `TorboxMagnetActions.showComingSoon` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_selection_sheet` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `file_selection_sheet` | `buildTorboxRawList` (Widget Function({required List<TorboxFileEntry> entries, required Set<int> selectedIndices, required ValueChanged<int> onToggle, Future<void> Function(TorboxFileEntry entry)? onCopy})) | `TorboxFileListLayouts.buildTorboxRawList` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_selection_sheet` | `copyTorboxFileLink` (Future<void> Function(TorboxTorrent torrent, TorboxFile file)) | `TorboxTorrentLinkActions.copyTorboxFileLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_selection_sheet` | `buildTorboxSeriesView` (Widget Function({required List<TorboxFileEntry> entries, required Set<int> selectedIndices, required int? currentSeason, required ValueChanged<int?> onSeasonChange, required ValueChanged<int> onToggleFile, required void Function(int season, List<int> indices) onToggleSeason, Future<void> Function(TorboxFileEntry entry)? onCopy})) | `TorboxSeriesLayout.buildTorboxSeriesView` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_selection_sheet` | `buildTorboxMovieView` (Widget Function({required List<TorboxFileEntry> entries, required Set<int> selectedIndices, required ValueChanged<int> onToggle, Future<void> Function(TorboxFileEntry entry)? onCopy})) | `TorboxFileListLayouts.buildTorboxMovieView` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_selection_sheet` | `buildTorboxGenericList` (Widget Function({required List<TorboxFileEntry> entries, required Set<int> selectedIndices, required ValueChanged<int> onToggle, Future<void> Function(TorboxFileEntry entry)? onCopy})) | `TorboxFileListLayouts.buildTorboxGenericList` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_selection_sheet` | `enqueueTorboxDownloads` (Future<bool> Function({required TorboxTorrent torrent, required List<TorboxFileEntry> entriesToDownload, required BuildContext sheetContext})) | `TorboxTorrentEnqueue.enqueueTorboxDownloads` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `torrent_enqueue` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `torrent_enqueue` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `torrent_enqueue` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `torrent_zip_download` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `torrent_zip_download` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `torrent_zip_download` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `download_options` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `download_options` | `downloadAllTorrentFiles` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentDownloadAction.downloadAllTorrentFiles` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `download_options` | `enqueueTorboxZipDownload` (Future<void> Function({required TorboxTorrent torrent, required BuildContext sheetContext})) | `TorboxTorrentZipDownload.enqueueTorboxZipDownload` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_list_layouts` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `file_list_layouts` | `buildTorboxFileCard` (Widget Function({required TorboxFileEntry entry, required bool isSelected, required VoidCallback onToggle, required int animationIndex, required Color surface, String? badge, String? subtitle, Future<void> Function()? onCopy})) | `TorboxFileSelectionCard.buildTorboxFileCard` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `series_layout` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `series_layout` | `buildSectionHeader` (Widget Function(String title)) | `TorboxFileListLayouts.buildSectionHeader` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `series_layout` | `buildTorboxFileCard` (Widget Function({required TorboxFileEntry entry, required bool isSelected, required VoidCallback onToggle, required int animationIndex, required Color surface, String? badge, String? subtitle, Future<void> Function()? onCopy})) | `TorboxFileSelectionCard.buildTorboxFileCard` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `magnet_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `magnet_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `magnet_actions` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `magnet_actions` | `addInputState` (TorboxAddInputState) | `_addInput`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `magnet_actions` | `refresh` (Future<void> Function()) | `TorboxCatalogLoading.refresh` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_actions` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `file_actions` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_actions` | `playTorboxFiles` (Future<void> Function(List<TorboxFile> files, String collectionName)) | `TorboxFilePlayback.playTorboxFiles` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_actions` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `file_actions` | `requestTorboxStreamUrl` (Future<String> Function({required String apiKey, required TorboxTorrent torrent, required TorboxFile file})) | `TorboxStreamRequest.requestTorboxStreamUrl` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_actions` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `file_actions` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `file_actions` | `downloadSingleFile` (Future<void> Function(TorboxFile file)) | `TorboxFileDownloads.downloadSingleFile` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_playlist_links` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `file_playlist_links` | `currentFiles` (List<TorboxFile> Function()) | `TorboxFileActions.currentFiles` (step 4); exact arguments/defaults; getter read at invocation | [ ] Review at extraction step 4 |
+| `file_playlist_links` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_playlist_links` | `copyTorboxFileLink` (Future<void> Function(TorboxTorrent torrent, TorboxFile file)) | `TorboxTorrentLinkActions.copyTorboxFileLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_playlist_links` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `file_playlist_links` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `file_downloads` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `file_downloads` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `file_downloads` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `file_downloads` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `file_downloads` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_playback` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `file_playback` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 4 |
+| `file_playback` | `showSnackBar` (void Function(String message, {bool isError})) | `TorboxNotifications.showSnackBar` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_playback` | `requestTorboxStreamUrl` (Future<String> Function({required String apiKey, required TorboxTorrent torrent, required TorboxFile file})) | `TorboxStreamRequest.requestTorboxStreamUrl` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 4 |
+| `file_playback` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `file_playback` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `notifications` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `notifications` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 4 |
+| `folder_navigation` | `exitSelectionMode` (void Function()) | `TorboxSelectionActions.exitSelectionMode` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 5 |
+| `folder_navigation` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `folder_navigation` | `viewState` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `folder_navigation` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
+| `folder_navigation` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `folder_navigation` | `focusFirstItemOrFallback` (void Function()) | `TorboxFocusActions.focusFirstItemOrFallback` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 5 |
+| `folder_navigation` | `getCurrentViewMode` (FolderViewMode Function()) | `TorboxViewModes.getCurrentViewMode` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 5 |
+| `view_modes` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `view_modes` | `viewState` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `view_modes` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
+| `view_modes` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
+| `view_modes` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `torrent_search` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
+| `torrent_search` | `torrentSearchState` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `torrent_search` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `torrent_search` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot | [ ] Review at extraction step 5 |
+| `torrent_search` | `initialSearchQuery` (String? Function()) | `() => widget.initialSearchQuery` live, never snapshot | [ ] Review at extraction step 5 |
+| `torrent_search` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
+| `torrent_search` | `mounted` (bool Function()) | borrow State `mounted`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
+| `torrent_search` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `folder_search` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
+| `folder_search` | `folderSearchState` (TorboxFolderSearchState) | `_folderSearch`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `folder_search` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `folder_search` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 5 |
+| `folder_search` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 5 |
+| `folder_search` | `playVideoFile` (Future<void> Function(RDFileNode fileNode)) | `TorboxFileActions.playVideoFile` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 5 |
+| `root_layout` | `isAtRoot` (bool Function()) | `TorboxFolderNavigation.isAtRoot` (step 5); exact arguments/defaults; getter read at invocation | [ ] Review at extraction step 6 |
+| `root_layout` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `root_layout` | `webState` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `root_layout` | `viewState` (TorboxViewState) | `_view`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `root_layout` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `root_layout` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 6 |
+| `root_layout` | `getCurrentViewMode` (FolderViewMode Function()) | `TorboxViewModes.getCurrentViewMode` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `root_layout` | `handleBackNavigation` (bool Function()) | `TorboxBackNavigation.handleBackNavigation` (step 3); exact arguments/defaults; deferred callback until all sections assigned; DIRECT tear-off, same receiver instance for removal | [ ] Review at extraction step 6 |
+| `root_layout` | `currentFolderName` (String Function()) | `TorboxFolderNavigation.currentFolderName` (step 5); exact arguments/defaults; getter read at invocation | [ ] Review at extraction step 6 |
+| `root_layout` | `folderSearchState` (TorboxFolderSearchState) | `_folderSearch`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `root_layout` | `toggleSearch` (void Function()) | `TorboxFolderSearch.toggleSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `buildToolbar` (Widget Function()) | `TorboxToolbar.buildToolbar` (step 6); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `buildViewSelectorBar` (Widget Function()) | `TorboxViewSelector.buildViewSelectorBar` (step 6); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `torrentSearchState` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `root_layout` | `buildTorrentSearchBar` (Widget Function()) | `TorboxTorrentSearchLayout.buildTorrentSearchBar` (step 6); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `selectionState` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `root_layout` | `buildSelectionBar` (Widget Function()) | `TorboxSelectionBar.buildSelectionBar` (step 6); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `buildViewModeDropdown` (Widget Function()) | `TorboxViewModes.buildViewModeDropdown` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `buildSearchBar` (Widget Function()) | `TorboxFolderSearch.buildSearchBar` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `buildTorrentSearchResults` (Widget Function()) | `TorboxTorrentSearchLayout.buildTorrentSearchResults` (step 6); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `buildSearchResults` (Widget Function()) | `TorboxFolderSearch.buildSearchResults` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `refresh` (Future<void> Function()) | `TorboxCatalogLoading.refresh` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `buildFilesFoldersList` (Widget Function()) | `TorboxLibraryLists.buildFilesFoldersList` (step 6); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `root_layout` | `isPushedRoute` (bool Function()) | `() => widget.isPushedRoute` live, never snapshot | [ ] Review at extraction step 6 |
+| `root_layout` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot | [ ] Review at extraction step 6 |
+| `root_layout` | `initialTorrentToOpen` (TorboxTorrent? Function()) | `() => widget.initialTorrentToOpen` live, never snapshot | [ ] Review at extraction step 6 |
+| `library_lists` | `isAtRoot` (bool Function()) | `TorboxFolderNavigation.isAtRoot` (step 5); exact arguments/defaults; getter read at invocation | [ ] Review at extraction step 6 |
+| `library_lists` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `library_lists` | `currentItems` (List<dynamic> Function()) | `TorboxRootLayout.currentItems` (step 6); exact arguments/defaults; getter read at invocation | [ ] Review at extraction step 6 |
+| `library_lists` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 6 |
+| `library_lists` | `openSettings` (void Function()) | `TorboxMagnetActions.openSettings` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `library_lists` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `library_lists` | `buildTorrentFolderCard` (Widget Function(TorboxTorrent torrent, int index)) | `TorboxTorrentRow.buildTorrentFolderCard` (step 6); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `library_lists` | `buildFileOrFolderCard` (Widget Function(RDFileNode node, int index)) | `TorboxFileRow.buildFileOrFolderCard` (step 6); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `library_lists` | `webState` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `library_lists` | `buildWebDownloadCard` (Widget Function(TorboxWebDownload webDownload, int index)) | `TorboxWebRow.buildWebDownloadCard` (step 6); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `web_row` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 6 |
+| `web_row` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `web_row` | `handlePlayWebDownload` (Future<void> Function(TorboxWebDownload webDownload)) | `TorboxWebPlayback.handlePlayWebDownload` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `web_row` | `showWebDownloadOptionsDialog` (void Function(TorboxWebDownload webDownload)) | `TorboxWebOptions.showWebDownloadOptionsDialog` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `web_row` | `navigateIntoWebDownload` (void Function(TorboxWebDownload webDownload)) | `TorboxFolderNavigation.navigateIntoWebDownload` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `web_row` | `copyWebDownloadLink` (Future<void> Function(TorboxWebDownload webDownload)) | `TorboxWebLinkPlaylistActions.copyWebDownloadLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `web_row` | `confirmDeleteWebDownload` (Future<void> Function(TorboxWebDownload webDownload)) | `TorboxWebDeleteAction.confirmDeleteWebDownload` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `web_row` | `selectionState` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `web_row` | `toggleWebDownloadSelection` (void Function(int id)) | `TorboxSelectionActions.toggleWebDownloadSelection` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `web_row` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot | [ ] Review at extraction step 6 |
+| `web_row` | `onSourceSelected` (void Function(SeriesSource)? Function()) | `() => widget.onSourceSelected` live, never snapshot | [ ] Review at extraction step 6 |
+| `torrent_row` | `torrentSearchState` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `torrent_row` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `torrent_row` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 6 |
+| `torrent_row` | `handlePlayTorrent` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentPlayback.handlePlayTorrent` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `torrent_row` | `showDownloadOptionsDialog` (void Function(TorboxTorrent torrent)) | `TorboxDownloadOptions.showDownloadOptionsDialog` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `torrent_row` | `navigateIntoTorrent` (void Function(TorboxTorrent torrent)) | `TorboxFolderNavigation.navigateIntoTorrent` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `torrent_row` | `copyTorboxZipLink` (void Function(TorboxTorrent torrent)) | `TorboxTorrentLinkActions.copyTorboxZipLink` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `torrent_row` | `handleAddToPlaylist` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentPlaylistActions.handleAddToPlaylist` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `torrent_row` | `handleAddToDebrifyTv` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentPlaylistActions.handleAddToDebrifyTv` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `torrent_row` | `confirmDeleteTorrent` (Future<void> Function(TorboxTorrent torrent)) | `TorboxTorrentDeleteActions.confirmDeleteTorrent` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `torrent_row` | `selectionState` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `torrent_row` | `toggleTorrentSelection` (void Function(int id)) | `TorboxSelectionActions.toggleTorrentSelection` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `torrent_row` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot | [ ] Review at extraction step 6 |
+| `torrent_row` | `onSourceSelected` (void Function(SeriesSource)? Function()) | `() => widget.onSourceSelected` live, never snapshot | [ ] Review at extraction step 6 |
+| `file_row` | `playFolderVideos` (Future<void> Function(RDFileNode folderNode)) | `TorboxFileActions.playFolderVideos` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `file_row` | `playVideoFile` (Future<void> Function(RDFileNode fileNode)) | `TorboxFileActions.playVideoFile` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `file_row` | `downloadFileOrFolder` (Future<void> Function(RDFileNode node)) | `TorboxFileActions.downloadFileOrFolder` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `file_row` | `navigationState` (TorboxNavigationState) | `_nav`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `file_row` | `addFileOrFolderToPlaylist` (Future<void> Function(RDFileNode node)) | `TorboxFilePlaylistLinks.addFileOrFolderToPlaylist` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `file_row` | `copyFileLink` (Future<void> Function(RDFileNode node)) | `TorboxFilePlaylistLinks.copyFileLink` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `file_row` | `navigateIntoFolder` (void Function(RDFileNode folderNode)) | `TorboxFolderNavigation.navigateIntoFolder` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `file_row` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `view_selector` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `view_selector` | `resetListScroll` (void Function()) | `TorboxCatalogLoading.resetListScroll` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `view_selector` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [ ] Review at extraction step 6 |
+| `view_selector` | `torrentSearchState` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `view_selector` | `selectionState` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `selection_bar` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 6 |
+| `selection_bar` | `activeSelectedIds` (Set<int> Function()) | `TorboxSelectionActions.activeSelectedIds` (step 3); exact arguments/defaults; getter read at invocation | [ ] Review at extraction step 6 |
+| `selection_bar` | `toggleSelectAll` (void Function()) | `TorboxSelectionActions.toggleSelectAll` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `selection_bar` | `isAllSelected` (bool Function()) | `TorboxSelectionActions.isAllSelected` (step 3); exact arguments/defaults; getter read at invocation | [ ] Review at extraction step 6 |
+| `selection_bar` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `selection_bar` | `handleDeleteSelected` (Future<void> Function()) | `TorboxSelectionActions.handleDeleteSelected` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `torrent_search_layout` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 6 |
+| `torrent_search_layout` | `torrentSearchState` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `torrent_search_layout` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `torrent_search_layout` | `submitTorrentSearch` (void Function()) | `TorboxTorrentSearch.submitTorrentSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `torrent_search_layout` | `setState` (void Function(VoidCallback)) | borrow State `setState`; preserve every guard and evaluation position | [ ] Review at extraction step 6 |
+| `torrent_search_layout` | `filteredTorrentSearchResults` (List<TorboxTorrent> Function()) | `TorboxTorrentSearch.filteredTorrentSearchResults` (step 5); exact arguments/defaults; getter read at invocation | [ ] Review at extraction step 6 |
+| `torrent_search_layout` | `buildTorrentFolderCard` (Widget Function(TorboxTorrent torrent, int index)) | `TorboxTorrentRow.buildTorrentFolderCard` (step 6); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `toolbar` | `isPushedRoute` (bool Function()) | `() => widget.isPushedRoute` live, never snapshot | [ ] Review at extraction step 6 |
+| `toolbar` | `selectSourceMode` (bool Function()) | `() => widget.selectSourceMode` live, never snapshot | [ ] Review at extraction step 6 |
+| `toolbar` | `initialTorrentToOpen` (TorboxTorrent? Function()) | `() => widget.initialTorrentToOpen` live, never snapshot | [ ] Review at extraction step 6 |
+| `toolbar` | `context` (BuildContext Function()) | borrow State `context`; preserve every guard and evaluation position | [ ] Review at extraction step 6 |
+| `toolbar` | `catalogState` (TorboxCatalogState) | `_catalog`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `toolbar` | `webState` (TorboxWebState) | `_web`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `toolbar` | `selectionState` (TorboxSelectionState) | `_selection`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `toolbar` | `toggleSelectionMode` (void Function()) | `TorboxSelectionActions.toggleSelectionMode` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `toolbar` | `confirmDeleteAll` (Future<void> Function()) | `TorboxTorrentDeleteActions.confirmDeleteAll` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `toolbar` | `torrentSearchState` (TorboxTorrentSearchState) | `_torrentSearch`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `toolbar` | `focusState` (TorboxFocusState) | `_focus`: same instance as lifecycle; never allocate another owner | [ ] Review at extraction step 6 |
+| `toolbar` | `toggleTorrentSearch` (void Function()) | `TorboxTorrentSearch.toggleTorrentSearch` (step 5); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `toolbar` | `showAddMagnetDialog` (Future<void> Function()) | `TorboxMagnetActions.showAddMagnetDialog` (step 4); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
+| `toolbar` | `showAddWebDownloadDialog` (Future<void> Function()) | `TorboxWebCreateActions.showAddWebDownloadDialog` (step 3); exact arguments/defaults; deferred callback until all sections assigned | [ ] Review at extraction step 6 |
 
 Lifecycle-specific reviewed entries: both scroll adds bind directly to the one catalog-loading instance; reset removes/jumps/re-adds those same members. Route push/pop bind directly to the one back-navigation instance. The tab unregister is intentionally key-only in the original; do not add a callback argument. TV tab 5 retains the single stored closure: set focus-on-load, then invoke focus fallback; register/unregister the same stored field, without replacing its closure.
 
 Step-2 binding review: all nine State fields construct their concern owner exactly once, before `initState`; all 57 original field initializers remain verbatim in those owners. Direct aliases above avoid an extra aggregate and keep receiver-only formatting within the existing facade size ratchet. Lifecycle resource ownership and all 18 disposal statements stay in State in their original order.
+
+Step-3 wiring reviewed before pin: all 18 section records match each original read/write/call entry. Fetches remain the `fetchTorrents`/`fetchWebDownloads` pair on the single catalog-loading instance; web-create refresh targets `fetchWebDownloads`. Init and reset use direct `catalogLoading.onScroll` / `onWebDownloadScroll` tear-offs on that same instance. Route push/pop use direct `backNavigation.handleBackNavigation`. TV tab 5 registers and removes the one `_focus.tvContentFocusHandler` closure, whose original body sets the flag and invokes focus fallback. Named callback signatures retain original `required` and default values; all widget inputs remain live getters. New section/record binding names use normal lowerCamelCase.

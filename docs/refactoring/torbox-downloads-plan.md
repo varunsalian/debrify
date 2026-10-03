@@ -387,6 +387,16 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base4`.
 - 195 leaves and all real-config/identity/accessor fixtures pass (`step2-verbatim-final.txt`); settings/IPTV self-tests pass. Analyzer remains 829 identities with zero new diagnostics (`step2-analyzer-comparison.txt`). All 79 affected tests pass unchanged against base4 (`step2-test-comparison.txt`), including four strict macOS goldens.
 - Architecture, normal format, strict size check and lowering-only ratchet pass; original 14 radii / 23 token calls preserved. Initial candidate evidence caught a renamed original comment and a missing canonical alias in the new identity checker; restored the production comment and registered the actual owner instance path. No test/assertion was changed.
 
+### Step 3 — complete; full-suite gate 1
+
+- Step 2 committed as `e8355bd2`. Moved fetching/paging, back handling, torrent/web actions, selection and bulk deletion into 18 plain sections. `_resetListScroll` moves here with both listeners, as required by step 0b. Facade 6,774 → **4,993** lines; original builders, file workflows and searches remain until their scheduled steps.
+- Reviewed every active wiring entry against the deps report before pinning 83 scaffolds: original required/default arguments, live widget getters, fetch-pair ownership, direct listener/back tear-offs and the one stored TV focus closure. Normal lowerCamelCase section/record bindings; no concrete facade widget enters the feature. Initial import omissions and duplicate imports were corrected before this checkpoint; assertions unchanged.
+- Approved inherited formatter exception: only `_loadMoreWebDownloads` gains braces around its existing return-only paging guard. Exact method/raw prefix/body tokens are recorded in `torbox_context_exceptions.json` and the manifest; the checker removes only those two validated braces for comparison. No predicate, guard position or statement order changes.
+- 195 leaves and all real-config/callback/accessor fixtures pass (`step3-verbatim-final.txt`); settings/IPTV self-tests pass. Whole analyzer: 827 diagnostics, zero added after permitted relocation (`step3-analyzer-comparison-final.txt`). Disappearing diagnostics reflect public extraction/context indirection, with original guards retained. All 79 affected identities pass against base4 (`step3-test-comparison.txt`), including four strict macOS goldens.
+- **Gate 1:** 10,411 successes, the same 13 failures / 28 errors / 20 skips. PASS against both base4 (zero added identities) and base3 (nine added passing identities); zero new failures, missing tests or newly skipped tests (`gate1-base4-comparison.txt`, `gate1-base3-comparison.txt`). SDK/configuration match baseline; output streamed to `gate1.jsonl`.
+- Historical helper audited against the completed original base4 and gate1 evidence, without another runner or any allowlist changes: both report the same 32 failure/error identities absent from `test/known_failures.txt` (`base4-historical-helper.txt`, `gate1-historical-helper.txt`). This historical-list mismatch predates extraction; the observed-baseline identity comparisons establish this gate. No `--record`/regression acceptance.
+- Architecture, strict size/lowering-only ratchet, format, shape inventory, theme measurement and storage reference/key checks pass. Linux capture is still unavailable: interactive VM shell also has no Flutter, Docker or Podman command. No SDK installed, no push; step 6 remains blocked unless originals arrive.
+
 ## Found, not fixed
 
 - **Startup `setState` after dispose.** With a pre-filled
@@ -399,3 +409,5 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base4`.
   verbatim.
 
 - **Folder search null root.** Ordinary navigation pushes a root record whose node is null. `_performSearch` reads that first record and returns no results. Original behavior preserved; test fixture also covers matching with a populated original stack.
+
+- **Legacy Settings action.** `_openSettings` calls `MainPageBridge.openCloudProvider('pikpak')`; its original comment flags the TorBox/PikPak mismatch. Preserved verbatim.

@@ -10,12 +10,30 @@ import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/tor
 import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_search_state.dart';
 import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_selection_state.dart';
 import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_add_input_state.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_focus_actions.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_download_action.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_playlist_actions.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_link_actions.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_options.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_playback.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_delete_actions.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_back_navigation.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_catalog_loading.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_web_playback.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_web_options.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_web_zip_download.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_web_file_downloads.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_web_link_playlist_actions.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_web_delete_action.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_selection_actions.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_bulk_delete.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_web_create_actions.dart';
+import 'package:debrify/features/torbox_downloads/presentation/legacy_torbox/torbox_sections.dart';
 import 'package:debrify/features/torbox_downloads/presentation/maybe_blur.dart';
 import 'package:debrify/features/torbox_downloads/presentation/folder_view_mode.dart';
 import 'package:debrify/features/torbox_downloads/presentation/torbox_downloads_view.dart';
 import 'package:debrify/features/torbox_downloads/models/torbox_file_entry.dart';
 import 'package:debrify/features/torbox_downloads/models/torbox_episode_candidate.dart';
-import 'package:debrify/features/torbox_downloads/presentation/torbox_more_option.dart';
 import 'package:debrify/features/torbox_downloads/models/torbox_search_result.dart';
 import 'dart:convert';
 
@@ -32,10 +50,8 @@ import '../../services/analytics_service.dart';
 import '../../services/series_source_service.dart';
 import '../../services/torbox_service.dart';
 import '../../services/video_player_launcher.dart';
-import '../../services/torbox_torrent_control_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/download_service.dart';
-import '../../widgets/debrify_tv_channel_add_bridge.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/formatters.dart';
 import '../../utils/file_utils.dart';
@@ -90,6 +106,199 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   final _torrentSearch = TorboxTorrentSearchState();
   final _selection = TorboxSelectionState();
   final _addInput = TorboxAddInputState();
+  late final _sections = _createSections();
+
+  TorboxSections _createSections() {
+    final sections = TorboxSections();
+    sections.focusActions = TorboxFocusActions((
+      focusState: _focus,
+      mounted: () => mounted,
+      viewState: _view,
+      catalogState: _catalog,
+      webState: _web,
+    ));
+    sections.torrentDownloadAction = TorboxTorrentDownloadAction((
+      catalogState: _catalog,
+      showSnackBar: (String message, {bool isError = true}) =>
+          _showSnackBar(message, isError: isError),
+      navigationState: _nav,
+      mounted: () => mounted,
+      context: () => context,
+      downloadSelectedTorboxFiles:
+          (List<Map<String, dynamic>> selectedFiles, String folderName) =>
+              _downloadSelectedTorboxFiles(selectedFiles, folderName),
+    ));
+    sections.torrentPlaylistActions = TorboxTorrentPlaylistActions((
+      mounted: () => mounted,
+      context: () => context,
+      torrentSearchState: _torrentSearch,
+      showSnackBar: (String message, {bool isError = true}) =>
+          _showSnackBar(message, isError: isError),
+    ));
+    sections.torrentLinkActions = TorboxTorrentLinkActions((
+      showComingSoon: (String action) => _showComingSoon(action),
+      catalogState: _catalog,
+      mounted: () => mounted,
+      context: () => context,
+    ));
+    sections.torrentOptions = TorboxTorrentOptions((
+      handleAddToPlaylist: (TorboxTorrent torrent) =>
+          sections.torrentPlaylistActions.handleAddToPlaylist(torrent),
+      handleAddToDebrifyTv: (TorboxTorrent torrent) =>
+          sections.torrentPlaylistActions.handleAddToDebrifyTv(torrent),
+      copyTorrentZipLink: (TorboxTorrent torrent) =>
+          sections.torrentLinkActions.copyTorrentZipLink(torrent),
+      copyTorrentLink: (TorboxTorrent torrent) =>
+          sections.torrentLinkActions.copyTorrentLink(torrent),
+      confirmDeleteTorrent: (TorboxTorrent torrent) =>
+          sections.torrentDeleteActions.confirmDeleteTorrent(torrent),
+      context: () => context,
+    ));
+    sections.torrentPlayback = TorboxTorrentPlayback((
+      catalogState: _catalog,
+      showComingSoon: (String action) => _showComingSoon(action),
+      mounted: () => mounted,
+      context: () => context,
+      requestTorboxStreamUrl:
+          ({
+            required String apiKey,
+            required TorboxTorrent torrent,
+            required TorboxFile file,
+          }) => _requestTorboxStreamUrl(
+            apiKey: apiKey,
+            torrent: torrent,
+            file: file,
+          ),
+    ));
+    sections.torrentDeleteActions = TorboxTorrentDeleteActions((
+      catalogState: _catalog,
+      showComingSoon: (String action) => _showComingSoon(action),
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+      selectionState: _selection,
+    ));
+    sections.backNavigation = TorboxBackNavigation((
+      context: () => context,
+      selectionState: _selection,
+      exitSelectionMode: () => sections.selectionActions.exitSelectionMode(),
+      torrentSearchState: _torrentSearch,
+      toggleTorrentSearch: () => _toggleTorrentSearch(),
+      folderSearchState: _folderSearch,
+      toggleSearch: () => _toggleSearch(),
+      isAtRoot: () => _isAtRoot,
+      navigationState: _nav,
+      navigateUp: () => _navigateUp(),
+      selectSourceMode: () => widget.selectSourceMode,
+      isPushedRoute: () => widget.isPushedRoute,
+      initialTorrentToOpen: () => widget.initialTorrentToOpen,
+    ));
+    sections.catalogLoading = TorboxCatalogLoading((
+      focusState: _focus,
+      catalogState: _catalog,
+      webState: _web,
+      mounted: () => mounted,
+      setState: setState,
+      submitTorrentSearch: () => _submitTorrentSearch(),
+      initialSearchQuery: () => widget.initialSearchQuery,
+      torrentSearchState: _torrentSearch,
+      focusFirstItemOrFallback: () =>
+          sections.focusActions.focusFirstItemOrFallback(),
+      maybeTriggerInitialAction: () => _maybeTriggerInitialAction(),
+    ));
+    sections.webPlayback = TorboxWebPlayback((
+      catalogState: _catalog,
+      showSnackBar: (String message, {bool isError = true}) =>
+          _showSnackBar(message, isError: isError),
+      mounted: () => mounted,
+      context: () => context,
+    ));
+    sections.webOptions = TorboxWebOptions((
+      context: () => context,
+      buildDownloadOptionCard:
+          ({
+            required IconData icon,
+            required String title,
+            required String description,
+            required Color color,
+            required VoidCallback onTap,
+          }) => _buildDownloadOptionCard(
+            icon: icon,
+            title: title,
+            description: description,
+            color: color,
+            onTap: onTap,
+          ),
+      downloadWebDownloadFiles: (TorboxWebDownload webDownload) =>
+          sections.webFileDownloads.downloadWebDownloadFiles(webDownload),
+      enqueueWebDownloadZipDownload:
+          ({
+            required TorboxWebDownload webDownload,
+            required BuildContext sheetContext,
+          }) => sections.webZipDownload.enqueueWebDownloadZipDownload(
+            webDownload: webDownload,
+            sheetContext: sheetContext,
+          ),
+    ));
+    sections.webZipDownload = TorboxWebZipDownload((
+      catalogState: _catalog,
+      mounted: () => mounted,
+      context: () => context,
+    ));
+    sections.webFileDownloads = TorboxWebFileDownloads((
+      catalogState: _catalog,
+      showSnackBar: (String message, {bool isError = true}) =>
+          _showSnackBar(message, isError: isError),
+      mounted: () => mounted,
+      context: () => context,
+    ));
+    sections.webLinkPlaylistActions = TorboxWebLinkPlaylistActions((
+      catalogState: _catalog,
+      showSnackBar: (String message, {bool isError = true}) =>
+          _showSnackBar(message, isError: isError),
+      mounted: () => mounted,
+    ));
+    sections.webDeleteAction = TorboxWebDeleteAction((
+      catalogState: _catalog,
+      showSnackBar: (String message, {bool isError = true}) =>
+          _showSnackBar(message, isError: isError),
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+      webState: _web,
+    ));
+    sections.selectionActions = TorboxSelectionActions((
+      catalogState: _catalog,
+      selectionState: _selection,
+      webState: _web,
+      setState: setState,
+      context: () => context,
+      mounted: () => mounted,
+      showDeleteSelectedProgressDialog: (Set<int> ids, bool isTorrents) =>
+          sections.bulkDelete.showDeleteSelectedProgressDialog(ids, isTorrents),
+    ));
+    sections.bulkDelete = TorboxBulkDelete((
+      context: () => context,
+      catalogState: _catalog,
+      mounted: () => mounted,
+      setState: setState,
+      webState: _web,
+      selectionState: _selection,
+      showSnackBar: (String message, {bool isError = true}) =>
+          _showSnackBar(message, isError: isError),
+    ));
+    sections.webCreateActions = TorboxWebCreateActions((
+      catalogState: _catalog,
+      showSnackBar: (String message, {bool isError = true}) =>
+          _showSnackBar(message, isError: isError),
+      addInputState: _addInput,
+      context: () => context,
+      mounted: () => mounted,
+      fetchWebDownloads: ({bool reset = false}) =>
+          sections.catalogLoading.fetchWebDownloads(reset: reset),
+    ));
+    return sections;
+  }
 
   // TV content focus handler (stored for proper unregistration)
 
@@ -115,19 +324,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   // decide whether to restrict searches to queries matching the show title.
 
   // Multi-select state
-
-  Set<int> get _activeSelectedIds =>
-      _catalog.selectedView == TorboxDownloadsView.torrents
-      ? _selection.selectedTorrentIds
-      : _selection.selectedWebDownloadIds;
-
-  int get _activeItemCount =>
-      _catalog.selectedView == TorboxDownloadsView.torrents
-      ? _catalog.torrents.length
-      : _web.webDownloads.length;
-
-  bool get _isAllSelected =>
-      _activeSelectedIds.length == _activeItemCount && _activeItemCount > 0;
 
   @override
   void initState() {
@@ -167,8 +363,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       },
     );
 
-    _focus.scrollController.addListener(_onScroll);
-    _focus.webDownloadScrollController.addListener(_onWebDownloadScroll);
+    _focus.scrollController.addListener(_sections.catalogLoading.onScroll);
+    _focus.webDownloadScrollController.addListener(
+      _sections.catalogLoading.onWebDownloadScroll,
+    );
     _catalog.pendingInitialTorrent = widget.initialTorrentToOpen;
 
     if (widget.selectSourceMode &&
@@ -181,11 +379,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       });
     }
 
-    _loadApiKeyAndTorrents();
+    _sections.catalogLoading.loadApiKeyAndTorrents();
 
     // Register back navigation handler for folder navigation
     if (widget.isPushedRoute) {
-      MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
+      MainPageBridge.pushRouteBackHandler(
+        _sections.backNavigation.handleBackNavigation,
+      );
       // Set up timeout - only when DEEP-LINKED into a specific torrent
       // (initialTorrentToOpen). Browsing from the Cloud hub has no target, so
       // the root list is the resting state — no spurious auto-close.
@@ -205,13 +405,16 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         }
       });
     } else {
-      MainPageBridge.registerTabBackHandler('torbox', _handleBackNavigation);
+      MainPageBridge.registerTabBackHandler(
+        'torbox',
+        _sections.backNavigation.handleBackNavigation,
+      );
       // Register TV sidebar focus handler (tab index 5 = Torbox)
       _focus.tvContentFocusHandler = () {
         // Set flag to focus after data loads
         _focus.shouldFocusOnLoad = true;
         // Try to focus now in case data is already loaded
-        _focusFirstItemOrFallback();
+        _sections.focusActions.focusFirstItemOrFallback();
       };
       MainPageBridge.registerTvContentFocusHandler(
         5,
@@ -230,758 +433,13 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     }
   }
 
-  /// Focus first item if data is loaded, otherwise focus search button
-  void _focusFirstItemOrFallback() {
-    if (!_focus.shouldFocusOnLoad) return;
-
-    // Use post-frame callback to ensure widgets are built
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_focus.shouldFocusOnLoad) return;
-
-      // Check if we're in folder view
-      if (_view.currentViewNodes != null &&
-          _view.currentViewNodes!.isNotEmpty) {
-        _focus.shouldFocusOnLoad = false;
-        _focus.firstItemFocusNode.requestFocus();
-      } else if (_catalog.selectedView == TorboxDownloadsView.torrents &&
-          _catalog.torrents.isNotEmpty) {
-        _focus.shouldFocusOnLoad = false;
-        _focus.firstItemFocusNode.requestFocus();
-      } else if (_catalog.selectedView == TorboxDownloadsView.webDownloads &&
-          _web.webDownloads.isNotEmpty) {
-        _focus.shouldFocusOnLoad = false;
-        _focus.firstItemFocusNode.requestFocus();
-      } else if (!_catalog.isLoading && !_web.isLoadingWebDownloads) {
-        // No items and not loading - focus fallback
-        _focus.shouldFocusOnLoad = false;
-        _focus.searchButtonFocusNode.requestFocus();
-      }
-      // If still loading, keep the flag set - will be called again after load
-    });
-  }
-
-  /// Download files from a torrent with file selection dialog
-  Future<void> _downloadAllTorrentFiles(TorboxTorrent torrent) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      _showSnackBar('Torbox API key not configured');
-      return;
-    }
-
-    print('📦 Showing file selection for torrent: ${torrent.name}');
-    print('   File count: ${torrent.files.length}');
-
-    if (torrent.files.isEmpty) {
-      _showSnackBar('No files found in torrent');
-      return;
-    }
-
-    // Temporarily set _currentTorrent for the download process
-    final previousTorrent = _nav.currentTorrent;
-    _nav.currentTorrent = torrent;
-
-    // Format files for FileSelectionDialog
-    final formattedFiles = <Map<String, dynamic>>[];
-    for (final file in torrent.files) {
-      // Use shortName for file name, fullName for path structure
-      final fullPath = file.name; // Full path with folders
-      final relativePath = fullPath.contains('/')
-          ? fullPath.substring(fullPath.indexOf('/') + 1)
-          : fullPath;
-
-      formattedFiles.add({
-        '_fullPath': relativePath,
-        'name': file.shortName.isNotEmpty
-            ? file.shortName
-            : FileUtils.getFileName(file.name),
-        'size': file.size.toString(),
-        '_torboxFile': file, // Store original TorboxFile for download
-      });
-    }
-
-    // Show file selection dialog
-    if (!mounted) {
-      _nav.currentTorrent = previousTorrent;
-      return;
-    }
-
-    await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return FileSelectionDialog(
-          files: formattedFiles,
-          torrentName: torrent.name,
-          onDownload: (selectedFiles) {
-            if (selectedFiles.isEmpty) return;
-            _downloadSelectedTorboxFiles(selectedFiles, torrent.name);
-          },
-        );
-      },
-    );
-
-    // Restore previous torrent
-    _nav.currentTorrent = previousTorrent;
-  }
-
-  Future<void> _handleAddToPlaylist(TorboxTorrent torrent) async {
-    final videoFiles = torrent.files.where(torboxFileLooksLikeVideo).toList();
-    if (videoFiles.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No playable Torbox video files found.')),
-      );
-      return;
-    }
-
-    if (videoFiles.length == 1) {
-      final file = videoFiles.first;
-      final displayName = file.shortName.isNotEmpty
-          ? file.shortName
-          : FileUtils.getFileName(file.name);
-      final added = await PlaylistStorage.addPlaylistItemRaw({
-        'provider': 'torbox',
-        'title': FileUtils.cleanPlaylistTitle(
-          displayName.isNotEmpty ? displayName : torrent.name,
-        ),
-        'kind': 'single',
-        'torboxTorrentId': torrent.id,
-        'torboxFileId': file.id,
-        'torrent_hash': torrent.hash,
-        'sizeBytes': file.size,
-      });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(added ? 'Added to playlist' : 'Already in playlist'),
-          backgroundColor: added ? null : const Color(0xFFEF4444),
-        ),
-      );
-      return;
-    }
-
-    final ids = videoFiles.map((file) => file.id).toList();
-    final added = await PlaylistStorage.addPlaylistItemRaw({
-      'provider': 'torbox',
-      'title': FileUtils.cleanPlaylistTitle(torrent.name),
-      'kind': 'collection',
-      'torboxTorrentId': torrent.id,
-      'torboxFileIds': ids,
-      'torrent_hash': torrent.hash,
-      'count': videoFiles.length,
-    });
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          added ? 'Added collection to playlist' : 'Already in playlist',
-        ),
-        backgroundColor: added ? null : const Color(0xFFEF4444),
-      ),
-    );
-  }
-
-  Future<void> _handleAddToDebrifyTv(TorboxTorrent torrent) async {
-    try {
-      final result = await DebrifyTvChannelAddBridge.addTorrentsToChannel(
-        context,
-        torrents: [DebrifyTvChannelAddBridge.fromTorboxTorrent(torrent)],
-        searchKeyword: _torrentSearch.torrentSearchQuery,
-      );
-
-      if (result == null || !mounted) return;
-      _showSnackBar(result.successMessage, isError: false);
-    } on DebrifyTvChannelAddException catch (e) {
-      if (!mounted) return;
-      _showSnackBar(e.message);
-    } catch (e) {
-      if (!mounted) return;
-      _showSnackBar('Failed to add torrent to Debrify TV: $e');
-    }
-  }
-
-  Future<void> _copyTorrentLink(TorboxTorrent torrent) async {
-    if (torrent.files.isEmpty) {
-      _showComingSoon('No files available');
-      return;
-    }
-
-    final file = torrent.files.firstWhere(
-      (file) => !file.zipped,
-      orElse: () => torrent.files.first,
-    );
-
-    await _copyTorboxFileLink(torrent, file);
-  }
-
-  Future<void> _copyTorboxFileLink(
-    TorboxTorrent torrent,
-    TorboxFile file,
-  ) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      _showComingSoon('Add Torbox API key');
-      return;
-    }
-
-    try {
-      final link = await TorboxService.requestFileDownloadLink(
-        apiKey: key,
-        torrentId: torrent.id,
-        fileId: file.id,
-      );
-      if (!mounted) return;
-      await Clipboard.setData(ClipboardData(text: link));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Download link copied to clipboard.')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to copy link: ${formatTorboxError(e)}'),
-          backgroundColor: const Color(0xFFEF4444),
-        ),
-      );
-    }
-  }
-
-  Future<void> _copyTorrentZipLink(TorboxTorrent torrent) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      _showComingSoon('Add Torbox API key');
-      return;
-    }
-
-    try {
-      final zipUrl = TorboxService.createZipPermalink(key, torrent.id);
-      await Clipboard.setData(ClipboardData(text: zipUrl));
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ZIP download link copied to clipboard.')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to copy ZIP link: ${formatTorboxError(e)}'),
-          backgroundColor: const Color(0xFFEF4444),
-        ),
-      );
-    }
-  }
-
-  void _showTorboxTorrentMoreOptions(TorboxTorrent torrent) {
-    final isMultiFile = torrent.files.length > 1;
-    final options = <TorboxMoreOption>[
-      TorboxMoreOption(
-        icon: Icons.playlist_add,
-        label: 'Add to Playlist',
-        onTap: () => _handleAddToPlaylist(torrent),
-      ),
-      TorboxMoreOption(
-        icon: Icons.live_tv_rounded,
-        label: 'Add to Debrify TV',
-        onTap: () => _handleAddToDebrifyTv(torrent),
-      ),
-      TorboxMoreOption(
-        icon: Icons.copy,
-        label: 'Copy Link',
-        onTap: isMultiFile
-            ? () => _copyTorrentZipLink(torrent)
-            : () => _copyTorrentLink(torrent),
-      ),
-      TorboxMoreOption(
-        icon: Icons.delete_outline,
-        label: 'Delete Torrent',
-        onTap: () => _confirmDeleteTorrent(torrent),
-        destructive: true,
-      ),
-    ];
-
-    showDialog(
-      context: context,
-      builder: (sheetContext) {
-        final app = AppThemeScope.of(sheetContext);
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: maybeBlur(
-            Container(
-              margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [const Color(0xFF0F172A), app.cloud.dialogSurface],
-                ),
-                borderRadius: app.shape.br(24),
-                border: Border.all(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    blurRadius: 28,
-                    offset: const Offset(0, 16),
-                  ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final option in options) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: InkWell(
-                          onTap: option.enabled
-                              ? () async {
-                                  Navigator.of(sheetContext).pop();
-                                  await option.onTap();
-                                }
-                              : null,
-                          borderRadius: app.shape.br(16),
-                          splashColor: option.enabled
-                              ? const Color(0xFF6366F1).withValues(alpha: 0.2)
-                              : Colors.transparent,
-                          highlightColor: option.enabled
-                              ? Colors.white.withValues(alpha: 0.06)
-                              : Colors.transparent,
-                          child: Opacity(
-                            opacity: option.enabled ? 1.0 : 0.45,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF111C32),
-                                borderRadius: app.shape.br(16),
-                                border: Border.all(
-                                  color: const Color(
-                                    0xFF475569,
-                                  ).withValues(alpha: 0.35),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    option.icon,
-                                    size: 20,
-                                    color: option.destructive
-                                        ? const Color(0xFFEF4444)
-                                        : Colors.white,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      option.label,
-                                      style: TextStyle(
-                                        color: option.destructive
-                                            ? const Color(0xFFEF4444)
-                                            : Theme.of(
-                                                context,
-                                              ).colorScheme.onSurface,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  Icon(
-                                    Icons.chevron_right,
-                                    size: 20,
-                                    color: Colors.white.withValues(alpha: 0.25),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _handlePlayTorrent(TorboxTorrent torrent) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      _showComingSoon('Add Torbox API key');
-      return;
-    }
-
-    final videoFiles = torrent.files.where((file) {
-      if (file.zipped) return false;
-      return torboxFileLooksLikeVideo(file);
-    }).toList();
-
-    debugPrint(
-      'TorboxPlay: torrentId=${torrent.id} files=${videoFiles.length} name="${torrent.name}"',
-    );
-
-    if (videoFiles.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No playable video files found in this torrent.'),
-          backgroundColor: Color(0xFFEF4444),
-        ),
-      );
-      return;
-    }
-
-    if (videoFiles.length == 1) {
-      final file = videoFiles.first;
-      try {
-        final streamUrl = await _requestTorboxStreamUrl(
-          apiKey: key,
-          torrent: torrent,
-          file: file,
-        );
-        if (!mounted) return;
-        await VideoPlayerLauncher.push(
-          context,
-          VideoPlayerLaunchArgs(
-            videoUrl: streamUrl,
-            title: torrent.name,
-            subtitle: Formatters.formatFileSize(file.size),
-          ),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to play file: ${formatTorboxError(e)}'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
-      }
-      return;
-    }
-
-    final candidates = videoFiles.map((file) {
-      final displayName = torboxDisplayName(file);
-      final info = SeriesParser.parseFilename(displayName);
-      return TorboxEpisodeCandidate(
-        file: file,
-        displayName: displayName,
-        info: info,
-      );
-    }).toList();
-
-    final filenames = candidates.map((entry) => entry.displayName).toList();
-    final bool isSeriesCollection =
-        candidates.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
-
-    final sortedCandidates = [...candidates];
-    sortedCandidates.sort((a, b) {
-      final aInfo = a.info;
-      final bInfo = b.info;
-
-      final aIsSeries =
-          aInfo.isSeries && aInfo.season != null && aInfo.episode != null;
-      final bIsSeries =
-          bInfo.isSeries && bInfo.season != null && bInfo.episode != null;
-
-      if (aIsSeries && bIsSeries) {
-        final seasonCompare = (aInfo.season ?? 0).compareTo(bInfo.season ?? 0);
-        if (seasonCompare != 0) return seasonCompare;
-
-        final episodeCompare = (aInfo.episode ?? 0).compareTo(
-          bInfo.episode ?? 0,
-        );
-        if (episodeCompare != 0) return episodeCompare;
-      } else if (aIsSeries != bIsSeries) {
-        return aIsSeries ? -1 : 1;
-      }
-
-      final aName = a.displayName.toLowerCase();
-      final bName = b.displayName.toLowerCase();
-      return aName.compareTo(bName);
-    });
-
-    int startIndex = 0;
-    if (isSeriesCollection) {
-      startIndex = sortedCandidates.indexWhere(
-        (candidate) =>
-            candidate.info.isSeries &&
-            candidate.info.season != null &&
-            candidate.info.episode != null,
-      );
-      if (startIndex == -1) {
-        startIndex = 0;
-      }
-    }
-
-    final seriesInfos = sortedCandidates
-        .map((candidate) => candidate.info)
-        .toList();
-
-    debugPrint(
-      'TorboxPlay: isSeries=$isSeriesCollection startIndex=$startIndex (season=${startIndex < seriesInfos.length ? seriesInfos[startIndex].season : 'n/a'} episode=${startIndex < seriesInfos.length ? seriesInfos[startIndex].episode : 'n/a'})',
-    );
-
-    String initialUrl = '';
-    try {
-      initialUrl = await _requestTorboxStreamUrl(
-        apiKey: key,
-        torrent: torrent,
-        file: sortedCandidates[startIndex].file,
-      );
-    } catch (e) {
-      debugPrint(
-        'TorboxDownloadsScreen: failed to prefetch initial stream for torrent=${torrent.id} fileIndex=$startIndex error=$e',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to prepare stream: ${formatTorboxError(e)}'),
-          backgroundColor: const Color(0xFFEF4444),
-        ),
-      );
-      return;
-    }
-
-    final playlistEntries = <PlaylistEntry>[];
-    for (int i = 0; i < sortedCandidates.length; i++) {
-      final candidate = sortedCandidates[i];
-      final info = candidate.info;
-      final displayName = candidate.displayName;
-      final episodeLabel = formatTorboxPlaylistTitle(
-        info: info,
-        fallback: displayName,
-        isSeriesCollection: isSeriesCollection,
-      );
-      final combinedTitle = composeTorboxEntryTitle(
-        seriesTitle: info.title,
-        episodeLabel: episodeLabel,
-        isSeriesCollection: isSeriesCollection,
-        fallback: displayName,
-      );
-
-      // Strip first folder level (torrent name) from path
-      String relativePath = candidate.file.name;
-      final firstSlash = relativePath.indexOf('/');
-      if (firstSlash > 0) {
-        relativePath = relativePath.substring(firstSlash + 1);
-      }
-
-      playlistEntries.add(
-        PlaylistEntry(
-          url: i == startIndex ? initialUrl : '',
-          title: combinedTitle,
-          relativePath: relativePath, // Now excludes torrent name folder
-          provider: 'torbox',
-          torboxTorrentId: torrent.id,
-          torboxFileId: candidate.file.id,
-          sizeBytes: candidate.file.size,
-          torrentHash: torrent.hash.isNotEmpty ? torrent.hash : null,
-        ),
-      );
-
-      debugPrint(
-        'TorboxPlay: entry[$i] title="$combinedTitle" season=${info.season} episode=${info.episode}',
-      );
-    }
-
-    final totalBytes = sortedCandidates.fold<int>(
-      0,
-      (sum, entry) => sum + entry.file.size,
-    );
-    final subtitle =
-        '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
-
-    debugPrint(
-      'TorboxDownloadsScreen: Play torrent ${torrent.id} (${playlistEntries.length} entries, startIndex=$startIndex, isSeries=$isSeriesCollection)',
-    );
-
-    if (!mounted) return;
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: initialUrl,
-        title: torrent.name,
-        subtitle: subtitle,
-        playlist: playlistEntries,
-        startIndex: startIndex,
-      ),
-    );
-  }
-
-  Future<void> _confirmDeleteAll() async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      _showComingSoon('Add Torbox API key');
-      return;
-    }
-
-    if (_catalog.torrents.isEmpty) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete all torrents?'),
-        content: Text(
-          'Are you sure you want to delete all ${_catalog.torrents.length} cached torrents from Torbox? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-            ),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      await TorboxTorrentControlService.deleteTorrent(
-        apiKey: key,
-        deleteAll: true,
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _catalog.torrents.clear();
-        _catalog.hasMore = false;
-        _selection.selectedTorrentIds.clear();
-        _selection.isSelectionMode = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All Torbox torrents deleted.')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to delete torrents: $e')));
-    }
-  }
-
-  void _copyTorboxZipLink(TorboxTorrent torrent) {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('API key not available'),
-          backgroundColor: Color(0xFFEF4444),
-        ),
-      );
-      return;
-    }
-
-    final zipLink = TorboxService.createZipPermalink(key, torrent.id);
-    Clipboard.setData(ClipboardData(text: zipLink));
-
-    if (!mounted) return;
-    final app = AppThemeScope.of(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF7C3AED),
-                borderRadius: app.shape.br(8),
-              ),
-              child: const Icon(Icons.check, color: Colors.white, size: 16),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'ZIP download link copied to clipboard!',
-                style: TextStyle(fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: app.cloud.dialogSurface,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  Future<void> _confirmDeleteTorrent(TorboxTorrent torrent) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      _showComingSoon('Add Torbox API key');
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete torrent?'),
-        content: Text(
-          'Are you sure you want to delete "${torrent.name}" from Torbox? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      await TorboxTorrentControlService.deleteTorrent(
-        apiKey: key,
-        torrentId: torrent.id,
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _catalog.torrents.removeWhere((item) => item.id == torrent.id);
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Torrent deleted from Torbox.')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to delete torrent: $e')));
-    }
-  }
-
   @override
   void dispose() {
     // Unregister back navigation handler
     if (widget.isPushedRoute) {
-      MainPageBridge.popRouteBackHandler(_handleBackNavigation);
+      MainPageBridge.popRouteBackHandler(
+        _sections.backNavigation.handleBackNavigation,
+      );
     } else {
       MainPageBridge.unregisterTabBackHandler('torbox');
       if (_focus.tvContentFocusHandler != null) {
@@ -1013,1265 +471,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     super.dispose();
   }
 
-  /// Handle back navigation for folder browsing.
-  /// Returns true if handled (navigated up), false if at root level.
-  bool _handleBackNavigation() {
-    // Select-source mode: back always pops the route.
-    if (widget.selectSourceMode && widget.isPushedRoute) {
-      Navigator.of(context).pop();
-      return true;
-    }
-
-    // Exit selection mode first if active
-    if (_selection.isSelectionMode) {
-      _exitSelectionMode();
-      return true;
-    }
-
-    // Close torrent search first if active
-    if (_torrentSearch.isTorrentSearchActive) {
-      _toggleTorrentSearch();
-      return true;
-    }
-
-    // Close file search first if active
-    if (_folderSearch.isSearchActive) {
-      _toggleSearch();
-      return true;
-    }
-
-    // If inside a subfolder within a torrent, navigate up
-    if (!_isAtRoot && _nav.navigationStack.length > 1) {
-      _navigateUp();
-      return true;
-    }
-
-    // At torrent root level (viewing torrent files, not inside a subfolder)
-    if (!_isAtRoot && _nav.navigationStack.length == 1) {
-      // Deep-linked directly into this torrent (pushed WITH a target) → pop back
-      // to the caller. Browsing from the Cloud hub (no target) → fall through to
-      // _navigateUp so Back returns to the downloads list, not out of the screen.
-      if (widget.isPushedRoute && widget.initialTorrentToOpen != null) {
-        Navigator.of(context).pop();
-        return true;
-      }
-      // If came from torrent search flow, switch back to torrent search tab
-      if (MainPageBridge.returnToTorrentSearchOnBack) {
-        MainPageBridge.returnToTorrentSearchOnBack = false;
-        MainPageBridge.switchTab?.call(MainTab.legacyTorrentSearch);
-        return true;
-      }
-      // Normal case: go back to torrents list
-      _navigateUp();
-      return true;
-    }
-
-    return false; // At root, let app handle it
-  }
-
-  void _onScroll() {
-    if (_focus.scrollController.position.pixels >=
-            _focus.scrollController.position.maxScrollExtent - 200 &&
-        !_catalog.isLoadingMore &&
-        _catalog.hasMore &&
-        !_catalog.isLoading) {
-      _loadMore();
-    }
-  }
-
-  void _onWebDownloadScroll() {
-    if (_focus.webDownloadScrollController.position.pixels >=
-            _focus.webDownloadScrollController.position.maxScrollExtent - 200 &&
-        !_web.isLoadingMoreWebDownloads &&
-        _web.hasMoreWebDownloads &&
-        !_web.isLoadingWebDownloads) {
-      _loadMoreWebDownloads();
-    }
-  }
-
-  Future<void> _loadApiKeyAndTorrents() async {
-    final key = await TorboxStorage.getTorboxApiKey();
-    if (!mounted) return;
-
-    setState(() {
-      _catalog.apiKey = key;
-    });
-
-    if (key == null || key.isEmpty) {
-      setState(() {
-        _catalog.initialLoad = false;
-        _catalog.errorMessage =
-            'Add your Torbox API key in Settings to view cached torrents.';
-        _web.webDownloadErrorMessage =
-            'Add your Torbox API key in Settings to view web downloads.';
-      });
-      return;
-    }
-
-    await Future.wait([
-      _fetchTorrents(reset: true),
-      _fetchWebDownloads(reset: true),
-    ]);
-
-    if (widget.initialSearchQuery != null &&
-        widget.initialSearchQuery!.isNotEmpty) {
-      _submitTorrentSearch();
-    }
-  }
-
-  Future<void> _fetchTorrents({bool reset = false}) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) return;
-
-    if (reset) {
-      setState(() {
-        _catalog.isLoading = true;
-        _catalog.initialLoad = true;
-        _catalog.errorMessage = '';
-        _catalog.offset = 0;
-        _catalog.hasMore = true;
-        _catalog.torrents.clear();
-        _torrentSearch.allTorrentsForSearch.clear();
-      });
-    } else {
-      setState(() {
-        _catalog.isLoadingMore = true;
-      });
-    }
-
-    try {
-      final result = await TorboxService.getTorrents(
-        key,
-        offset: _catalog.offset,
-        limit: TorboxCatalogState.limit,
-      );
-      final List<TorboxTorrent> fetched = (result['torrents'] as List)
-          .cast<TorboxTorrent>();
-      final bool hasMore = result['hasMore'] as bool? ?? false;
-      final bool shouldFetchMore = fetched.isEmpty && hasMore;
-
-      if (!mounted) return;
-
-      setState(() {
-        _catalog.torrents.addAll(fetched);
-        _catalog.hasMore = hasMore;
-        _catalog.offset += TorboxCatalogState.limit;
-        _catalog.isLoading = false;
-        _catalog.isLoadingMore = false;
-        _catalog.initialLoad = false;
-        if (_catalog.torrents.isNotEmpty) {
-          _catalog.errorMessage = '';
-        } else if (!hasMore) {
-          _catalog.errorMessage =
-              'No cached torrents found yet. Add torrents via Torbox to see them here.';
-        }
-      });
-
-      // Focus first item if navigated from sidebar
-      _focusFirstItemOrFallback();
-
-      _maybeTriggerInitialAction();
-
-      if (shouldFetchMore) {
-        await _fetchTorrents();
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _catalog.errorMessage = e.toString().replaceFirst('Exception: ', '');
-        _catalog.isLoading = false;
-        _catalog.isLoadingMore = false;
-        _catalog.initialLoad = false;
-      });
-    }
-  }
-
-  Future<void> _loadMore() async {
-    if (_catalog.isLoadingMore || !_catalog.hasMore) return;
-    await _fetchTorrents();
-  }
-
-  Future<void> _refresh() async {
-    if (_catalog.selectedView == TorboxDownloadsView.torrents) {
-      await _fetchTorrents(reset: true);
-    } else {
-      await _fetchWebDownloads(reset: true);
-    }
-  }
-
   // ==================== WEB DOWNLOADS METHODS ====================
 
-  Future<void> _fetchWebDownloads({bool reset = false}) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) return;
-
-    if (reset) {
-      setState(() {
-        _web.isLoadingWebDownloads = true;
-        _web.webDownloadErrorMessage = '';
-        _web.webDownloadOffset = 0;
-        _web.hasMoreWebDownloads = true;
-        _web.webDownloads.clear();
-      });
-    } else {
-      setState(() {
-        _web.isLoadingMoreWebDownloads = true;
-      });
-    }
-
-    try {
-      final result = await TorboxService.getWebDownloads(
-        key,
-        offset: _web.webDownloadOffset,
-        limit: TorboxCatalogState.limit,
-      );
-
-      if (!mounted) return;
-
-      final webDownloads = result['webDownloads'] as List<TorboxWebDownload>;
-      final hasMore = result['hasMore'] as bool;
-
-      setState(() {
-        _web.webDownloads.addAll(webDownloads);
-        // Advance by the page size, not the filtered count — the service
-        // drops non-completed items, so filtered.length under-counts and
-        // would make the next page overlap this one (duplicate rows).
-        _web.webDownloadOffset += TorboxCatalogState.limit;
-        _web.hasMoreWebDownloads = hasMore;
-        _web.isLoadingWebDownloads = false;
-        _web.isLoadingMoreWebDownloads = false;
-      });
-
-      // Focus first item if navigated from sidebar
-      _focusFirstItemOrFallback();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _web.webDownloadErrorMessage = e.toString().replaceFirst(
-          'Exception: ',
-          '',
-        );
-        _web.isLoadingWebDownloads = false;
-        _web.isLoadingMoreWebDownloads = false;
-      });
-    }
-  }
-
-  Future<void> _loadMoreWebDownloads() async {
-    if (_web.isLoadingMoreWebDownloads || !_web.hasMoreWebDownloads) return;
-    await _fetchWebDownloads();
-  }
-
-  Future<void> _handlePlayWebDownload(TorboxWebDownload webDownload) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      _showSnackBar('Torbox API key not configured');
-      return;
-    }
-
-    final videoFiles = webDownload.files.where((file) {
-      if (file.zipped) return false;
-      return torboxFileLooksLikeVideo(file);
-    }).toList();
-
-    if (videoFiles.isEmpty) {
-      _showSnackBar('No playable video files found in this download.');
-      return;
-    }
-
-    if (videoFiles.length == 1) {
-      final file = videoFiles.first;
-      try {
-        final streamUrl = await TorboxService.requestWebDownloadFileLink(
-          apiKey: key,
-          webId: webDownload.id,
-          fileId: file.id,
-        );
-        if (!mounted) return;
-        await VideoPlayerLauncher.push(
-          context,
-          VideoPlayerLaunchArgs(
-            videoUrl: streamUrl,
-            title: webDownload.name,
-            subtitle: Formatters.formatFileSize(file.size),
-          ),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        _showSnackBar('Failed to play file: ${formatTorboxError(e)}');
-      }
-      return;
-    }
-
-    // Multiple video files - show selection dialog
-    await showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Select a file to play'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: videoFiles.length,
-              itemBuilder: (context, index) {
-                final file = videoFiles[index];
-                final fileName = file.shortName.isNotEmpty
-                    ? file.shortName
-                    : FileUtils.getFileName(file.name);
-                return ListTile(
-                  leading: const Icon(Icons.play_circle_outline),
-                  title: Text(
-                    fileName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(Formatters.formatFileSize(file.size)),
-                  onTap: () async {
-                    Navigator.of(dialogContext).pop();
-                    try {
-                      final streamUrl =
-                          await TorboxService.requestWebDownloadFileLink(
-                            apiKey: key,
-                            webId: webDownload.id,
-                            fileId: file.id,
-                          );
-                      if (!mounted) return;
-                      await VideoPlayerLauncher.push(
-                        context,
-                        VideoPlayerLaunchArgs(
-                          videoUrl: streamUrl,
-                          title: fileName,
-                          subtitle: Formatters.formatFileSize(file.size),
-                        ),
-                      );
-                    } catch (e) {
-                      if (!mounted) return;
-                      _showSnackBar(
-                        'Failed to play file: ${formatTorboxError(e)}',
-                      );
-                    }
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// Show dialog with download options for web downloads: select files or download as ZIP
-  void _showWebDownloadOptionsDialog(TorboxWebDownload webDownload) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        final app = AppThemeScope.of(dialogContext);
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: maybeBlur(
-            Container(
-              margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [const Color(0xFF0F172A), app.cloud.dialogSurface],
-                ),
-                borderRadius: app.shape.br(24),
-                border: Border.all(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    blurRadius: 28,
-                    offset: const Offset(0, 16),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.1),
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.download_rounded,
-                          color: Color(0xFF10B981),
-                          size: 24,
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text(
-                            'Download Options',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                          icon: const Icon(Icons.close),
-                          color: Colors.grey.shade400,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Options
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        // Option 1: Select files to download
-                        _buildDownloadOptionCard(
-                          icon: Icons.checklist_rounded,
-                          title: 'Select files to download',
-                          description:
-                              'Choose specific files from this download',
-                          color: const Color(0xFF6366F1),
-                          onTap: () {
-                            Navigator.of(dialogContext).pop();
-                            _downloadWebDownloadFiles(webDownload);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        // Option 2: Download as ZIP
-                        _buildDownloadOptionCard(
-                          icon: Icons.folder_zip_rounded,
-                          title: 'Download as ZIP',
-                          description:
-                              'Download all files in a single ZIP archive',
-                          color: const Color(0xFF10B981),
-                          onTap: () {
-                            _enqueueWebDownloadZipDownload(
-                              webDownload: webDownload,
-                              sheetContext: dialogContext,
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// Enqueue a ZIP download for a web download
-  Future<void> _enqueueWebDownloadZipDownload({
-    required TorboxWebDownload webDownload,
-    required BuildContext sheetContext,
-  }) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Torbox API key is required. Please add it in Settings.',
-            ),
-            backgroundColor: Color(0xFFEF4444),
-          ),
-        );
-      }
-      return;
-    }
-
-    Navigator.of(sheetContext).pop();
-
-    if (!mounted) {
-      return;
-    }
-
-    debugPrint(
-      'TorboxDownloadsScreen: Starting ZIP download for web download ${webDownload.id}',
-    );
-
-    // Show loading indicator
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Preparing ZIP download...'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-
-    try {
-      // Generate ZIP permalink
-      final zipUrl = TorboxService.createWebDownloadZipPermalink(
-        key,
-        webDownload.id,
-      );
-
-      if (zipUrl.isEmpty) {
-        debugPrint('TorboxDownloadsScreen: Failed to generate ZIP permalink');
-        if (mounted) {
-          messenger.showSnackBar(
-            const SnackBar(
-              content: Text('Failed to generate ZIP download link'),
-              backgroundColor: Color(0xFFEF4444),
-            ),
-          );
-        }
-        return;
-      }
-
-      debugPrint('TorboxDownloadsScreen: Generated ZIP permalink: $zipUrl');
-
-      // Create meta JSON with Torbox-specific fields for ZIP
-      final meta = jsonEncode({
-        'torboxWebDownloadId': webDownload.id,
-        'torboxWebDownload': true,
-        'torboxZip': true,
-      });
-
-      // Enqueue ZIP download
-      final zipFileName = '${webDownload.name}.zip';
-      await DownloadService.instance.enqueueDownload(
-        credentialKey: 'torbox_api_key',
-        url: zipUrl,
-        fileName: zipFileName,
-        meta: meta,
-        torrentName: webDownload.name,
-      );
-
-      debugPrint('TorboxDownloadsScreen: Successfully enqueued ZIP download');
-
-      if (mounted) {
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('ZIP download queued successfully'),
-            backgroundColor: Color(0xFF10B981),
-          ),
-        );
-      }
-    } catch (e, stackTrace) {
-      debugPrint('TorboxDownloadsScreen: Error during ZIP download: $e');
-      debugPrint('Stack trace: $stackTrace');
-      if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              'Error: ${e.toString().replaceFirst('Exception: ', '')}',
-            ),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _downloadWebDownloadFiles(TorboxWebDownload webDownload) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      _showSnackBar('Torbox API key not configured');
-      return;
-    }
-
-    if (webDownload.files.isEmpty) {
-      _showSnackBar('No files found in this download');
-      return;
-    }
-
-    // Format files for FileSelectionDialog
-    final formattedFiles = <Map<String, dynamic>>[];
-    for (final file in webDownload.files) {
-      formattedFiles.add({
-        '_fullPath': file.name,
-        'name': file.shortName.isNotEmpty
-            ? file.shortName
-            : FileUtils.getFileName(file.name),
-        'size': file.size.toString(),
-        '_torboxFile': file,
-        '_webDownloadId': webDownload.id,
-      });
-    }
-
-    if (!mounted) return;
-
-    await showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return FileSelectionDialog(
-          files: formattedFiles,
-          torrentName: webDownload.name,
-          onDownload: (selectedFiles) {
-            if (selectedFiles.isEmpty) return;
-            _downloadSelectedWebDownloadFiles(selectedFiles, webDownload);
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _downloadSelectedWebDownloadFiles(
-    List<Map<String, dynamic>> selectedFiles,
-    TorboxWebDownload webDownload,
-  ) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) return;
-
-    if (!mounted) return;
-
-    try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text(
-                'Queuing ${selectedFiles.length} file${selectedFiles.length == 1 ? '' : 's'}...',
-                style: const TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-        ),
-      );
-
-      int successCount = 0;
-      int failCount = 0;
-
-      for (final fileData in selectedFiles) {
-        try {
-          final file = fileData['_torboxFile'] as TorboxFile;
-          final fileName =
-              (fileData['_fullPath'] as String?) ??
-              (fileData['name'] as String? ?? file.shortName);
-
-          final meta = jsonEncode({
-            'torboxWebDownloadId': webDownload.id,
-            'torboxFileId': file.id,
-            'torboxWebDownload': true,
-          });
-
-          await DownloadService.instance.enqueueDownload(
-            credentialKey: 'torbox_api_key',
-            url: '',
-            fileName: fileName,
-            meta: meta,
-            torrentName: webDownload.name,
-            context: mounted ? context : null,
-          );
-
-          successCount++;
-        } catch (e) {
-          failCount++;
-        }
-      }
-
-      if (mounted) Navigator.of(context).pop();
-
-      if (successCount > 0 && failCount == 0) {
-        _showSnackBar(
-          'Queued $successCount file${successCount == 1 ? '' : 's'} for download',
-          isError: false,
-        );
-      } else if (successCount > 0 && failCount > 0) {
-        _showSnackBar(
-          'Queued $successCount file${successCount == 1 ? '' : 's'}, $failCount failed',
-        );
-      } else {
-        _showSnackBar('Failed to queue any files for download');
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-      _showSnackBar('Failed to queue downloads: $e');
-    }
-  }
-
-  Future<void> _copyWebDownloadLink(TorboxWebDownload webDownload) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      _showSnackBar('Torbox API key not configured');
-      return;
-    }
-
-    if (webDownload.files.isEmpty) {
-      _showSnackBar('No files available');
-      return;
-    }
-
-    if (webDownload.files.length == 1) {
-      // Single file - get direct link
-      try {
-        final link = await TorboxService.requestWebDownloadFileLink(
-          apiKey: key,
-          webId: webDownload.id,
-          fileId: webDownload.files.first.id,
-        );
-        if (!mounted) return;
-        await Clipboard.setData(ClipboardData(text: link));
-        _showSnackBar('Download link copied to clipboard.', isError: false);
-      } catch (e) {
-        if (!mounted) return;
-        _showSnackBar('Failed to copy link: ${formatTorboxError(e)}');
-      }
-    } else {
-      // Multiple files - get ZIP link
-      final zipLink = TorboxService.createWebDownloadZipPermalink(
-        key,
-        webDownload.id,
-      );
-      await Clipboard.setData(ClipboardData(text: zipLink));
-      if (!mounted) return;
-      _showSnackBar('ZIP download link copied to clipboard.', isError: false);
-    }
-  }
-
-  Future<void> _handleAddWebDownloadToPlaylist(
-    TorboxWebDownload webDownload,
-  ) async {
-    final videoFiles = webDownload.files.where((file) {
-      if (file.zipped) return false;
-      return torboxFileLooksLikeVideo(file);
-    }).toList();
-
-    if (videoFiles.isEmpty) {
-      _showSnackBar('No video files found in this download.');
-      return;
-    }
-
-    if (videoFiles.length == 1) {
-      // Single video - add as single item
-      final file = videoFiles.first;
-      final added = await PlaylistStorage.addPlaylistItemRaw({
-        'provider': 'torbox_webdl',
-        'title': FileUtils.cleanPlaylistTitle(webDownload.name),
-        'kind': 'single',
-        'torboxWebDownloadId': webDownload.id,
-        'torboxFileId': file.id,
-        'webdl_hash': webDownload.hash,
-        'sizeBytes': file.size,
-      });
-
-      _showSnackBar(
-        added ? 'Added to playlist' : 'Already in playlist',
-        isError: !added,
-      );
-    } else {
-      // Multiple videos - add as collection
-      final ids = videoFiles.map((f) => f.id).toList();
-      final added = await PlaylistStorage.addPlaylistItemRaw({
-        'provider': 'torbox_webdl',
-        'title': FileUtils.cleanPlaylistTitle(webDownload.name),
-        'kind': 'collection',
-        'torboxWebDownloadId': webDownload.id,
-        'torboxFileIds': ids,
-        'webdl_hash': webDownload.hash,
-        'count': videoFiles.length,
-      });
-
-      _showSnackBar(
-        added
-            ? 'Added ${videoFiles.length} videos to playlist'
-            : 'Already in playlist',
-        isError: !added,
-      );
-    }
-  }
-
-  Future<void> _confirmDeleteWebDownload(TorboxWebDownload webDownload) async {
-    final key = _catalog.apiKey;
-    if (key == null || key.isEmpty) {
-      _showSnackBar('Torbox API key not configured');
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete web download?'),
-        content: Text(
-          'Are you sure you want to delete "${webDownload.name}" from Torbox? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      await TorboxService.deleteWebDownload(apiKey: key, webId: webDownload.id);
-
-      if (!mounted) return;
-
-      setState(() {
-        _web.webDownloads.removeWhere((item) => item.id == webDownload.id);
-      });
-
-      _showSnackBar('Web download deleted from Torbox.', isError: false);
-    } catch (e) {
-      if (!mounted) return;
-      _showSnackBar('Failed to delete web download: ${formatTorboxError(e)}');
-    }
-  }
-
   // --- Multi-select helpers ---
-
-  void _toggleSelectionMode() {
-    setState(() {
-      if (_selection.isSelectionMode) {
-        _selection.selectedTorrentIds.clear();
-        _selection.selectedWebDownloadIds.clear();
-      }
-      _selection.isSelectionMode = !_selection.isSelectionMode;
-    });
-  }
-
-  void _exitSelectionMode() {
-    if (!_selection.isSelectionMode) return;
-    setState(() {
-      _selection.isSelectionMode = false;
-      _selection.selectedTorrentIds.clear();
-      _selection.selectedWebDownloadIds.clear();
-    });
-  }
-
-  void _toggleTorrentSelection(int id) {
-    setState(() {
-      if (_selection.selectedTorrentIds.contains(id)) {
-        _selection.selectedTorrentIds.remove(id);
-      } else {
-        _selection.selectedTorrentIds.add(id);
-      }
-    });
-  }
-
-  void _toggleWebDownloadSelection(int id) {
-    setState(() {
-      if (_selection.selectedWebDownloadIds.contains(id)) {
-        _selection.selectedWebDownloadIds.remove(id);
-      } else {
-        _selection.selectedWebDownloadIds.add(id);
-      }
-    });
-  }
-
-  void _toggleSelectAll() {
-    setState(() {
-      if (_isAllSelected) {
-        _activeSelectedIds.clear();
-      } else {
-        if (_catalog.selectedView == TorboxDownloadsView.torrents) {
-          _selection.selectedTorrentIds.addAll(
-            _catalog.torrents.map((t) => t.id),
-          );
-        } else {
-          _selection.selectedWebDownloadIds.addAll(
-            _web.webDownloads.map((d) => d.id),
-          );
-        }
-      }
-    });
-  }
-
-  Future<void> _handleDeleteSelected() async {
-    if (_catalog.apiKey == null || _activeSelectedIds.isEmpty) return;
-
-    final isTorrents = _catalog.selectedView == TorboxDownloadsView.torrents;
-    final count = _activeSelectedIds.length;
-    final itemType = isTorrents ? 'torrent' : 'web download';
-    final itemTypePlural = isTorrents ? 'torrents' : 'web downloads';
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Delete $count ${count == 1 ? itemType : itemTypePlural}',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'Are you sure you want to delete $count selected ${count == 1 ? itemType : itemTypePlural}? This action cannot be undone.',
-          style: const TextStyle(color: Colors.grey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      await _showDeleteSelectedProgressDialog(
-        Set<int>.from(_activeSelectedIds),
-        isTorrents,
-      );
-    }
-  }
-
-  Future<void> _showDeleteSelectedProgressDialog(
-    Set<int> ids,
-    bool isTorrents,
-  ) async {
-    bool isCancelled = false;
-    bool dialogOpen = true;
-    int completed = 0;
-    final int total = ids.length;
-    List<int> failedDeletes = [];
-    StateSetter? setDialogState;
-    final nav = Navigator.of(context);
-    final app = AppThemeScope.of(context);
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, dialogStateSetter) {
-          setDialogState = dialogStateSetter;
-          return AlertDialog(
-            backgroundColor: app.cloud.dialogSurface,
-            shape: RoundedRectangleBorder(borderRadius: app.shape.br(16)),
-            title: Text(
-              'Deleting ${isTorrents ? 'Torrents' : 'Web Downloads'}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Deleting... ($completed/$total)',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                LinearProgressIndicator(
-                  value: total > 0 ? completed / total : null,
-                  backgroundColor: Colors.grey.withValues(alpha: 0.3),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFFEF4444),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                if (failedDeletes.isNotEmpty)
-                  Text(
-                    'Failed: ${failedDeletes.length}',
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  isCancelled = true;
-                  dialogOpen = false;
-                  Navigator.of(dialogContext).pop();
-                },
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    final deletedIds = <int>{};
-
-    for (final id in ids) {
-      if (isCancelled) break;
-
-      try {
-        if (isTorrents) {
-          await TorboxTorrentControlService.deleteTorrent(
-            apiKey: _catalog.apiKey!,
-            torrentId: id,
-          );
-        } else {
-          await TorboxService.deleteWebDownload(
-            apiKey: _catalog.apiKey!,
-            webId: id,
-          );
-        }
-        deletedIds.add(id);
-      } catch (e) {
-        failedDeletes.add(id);
-      }
-
-      completed++;
-      if (!isCancelled && setDialogState != null) {
-        setDialogState!(() {});
-      }
-
-      if (isCancelled) break;
-      await Future.delayed(const Duration(milliseconds: 150));
-    }
-
-    // Close progress dialog if still open
-    if (dialogOpen && mounted) {
-      dialogOpen = false;
-      nav.pop();
-    }
-
-    if (!isCancelled && mounted) {
-      setState(() {
-        if (isTorrents) {
-          _catalog.torrents.removeWhere((t) => deletedIds.contains(t.id));
-        } else {
-          _web.webDownloads.removeWhere((d) => deletedIds.contains(d.id));
-        }
-        _selection.selectedTorrentIds.clear();
-        _selection.selectedWebDownloadIds.clear();
-        _selection.isSelectionMode = false;
-      });
-
-      final label = isTorrents ? 'torrents' : 'web downloads';
-      if (failedDeletes.isEmpty) {
-        _showSnackBar(
-          '${deletedIds.length} $label deleted successfully!',
-          isError: false,
-        );
-      } else {
-        _showSnackBar(
-          'Deleted ${deletedIds.length}. ${failedDeletes.length} failed to delete.',
-        );
-      }
-    } else if (mounted) {
-      // Cancelled — remove already-deleted items and deselect them, but stay in selection mode
-      setState(() {
-        if (isTorrents) {
-          _catalog.torrents.removeWhere((t) => deletedIds.contains(t.id));
-          _selection.selectedTorrentIds.removeAll(deletedIds);
-        } else {
-          _web.webDownloads.removeWhere((d) => deletedIds.contains(d.id));
-          _selection.selectedWebDownloadIds.removeAll(deletedIds);
-        }
-      });
-    }
-  }
-
-  Future<void> _showAddWebDownloadDialog() async {
-    if (_catalog.apiKey == null || _catalog.apiKey!.isEmpty) {
-      _showSnackBar('Add Torbox API key first');
-      return;
-    }
-
-    _addInput.webLinkController.clear();
-    _addInput.webNameController.clear();
-    _addInput.webPasswordController.clear();
-
-    await showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Add Web Download'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Focus(
-                  onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent) {
-                      if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                        node.nextFocus();
-                        return KeyEventResult.handled;
-                      }
-                    }
-                    return KeyEventResult.ignored;
-                  },
-                  child: TextField(
-                    controller: _addInput.webLinkController,
-                    maxLines: 2,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Paste URL here (YouTube, file hosts, etc.)',
-                      labelText: 'URL *',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TvTextField(
-                  controller: _addInput.webNameController,
-                  // D-pad exits (formerly a Focus/onKeyEvent wrapper).
-                  onDownArrow: () =>
-                      FocusManager.instance.primaryFocus?.nextFocus(),
-                  onUpArrow: () =>
-                      FocusManager.instance.primaryFocus?.previousFocus(),
-                  decoration: const InputDecoration(
-                    hintText: 'Custom name for the download',
-                    labelText: 'Name (optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TvTextField(
-                  controller: _addInput.webPasswordController,
-                  obscureText: true,
-                  // D-pad exits (formerly a Focus/onKeyEvent wrapper).
-                  onDownArrow: () =>
-                      FocusManager.instance.primaryFocus?.nextFocus(),
-                  onUpArrow: () =>
-                      FocusManager.instance.primaryFocus?.previousFocus(),
-                  decoration: const InputDecoration(
-                    hintText: 'Password if required',
-                    labelText: 'Password (optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Supports YouTube, file hosts, and direct links.',
-                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => _handleAddWebDownload(dialogContext),
-              child: const Text('Add'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _handleAddWebDownload(BuildContext dialogContext) async {
-    final link = _addInput.webLinkController.text.trim();
-    if (link.isEmpty) {
-      _showSnackBar('Please enter a URL.');
-      return;
-    }
-
-    // Basic URL validation
-    if (!link.startsWith('http://') && !link.startsWith('https://')) {
-      _showSnackBar(
-        'Please enter a valid URL starting with http:// or https://',
-      );
-      return;
-    }
-
-    Navigator.of(dialogContext).pop();
-
-    final apiKey = _catalog.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return;
-
-    final navigator = Navigator.of(context, rootNavigator: true);
-    var dialogClosed = false;
-
-    void closeDialogIfOpen() {
-      if (!dialogClosed && navigator.canPop()) {
-        navigator.pop();
-        dialogClosed = true;
-      }
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) {
-        return const AlertDialog(
-          title: Text('Adding web download'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('This may take up to a minute...'),
-            ],
-          ),
-        );
-      },
-    );
-
-    try {
-      final response = await TorboxService.createWebDownload(
-        apiKey: apiKey,
-        link: link,
-        name: _addInput.webNameController.text.trim().isNotEmpty
-            ? _addInput.webNameController.text.trim()
-            : null,
-        password: _addInput.webPasswordController.text.trim().isNotEmpty
-            ? _addInput.webPasswordController.text.trim()
-            : null,
-      );
-
-      if (!mounted) return;
-
-      closeDialogIfOpen();
-
-      final success = response['success'] as bool? ?? false;
-      if (!success) {
-        final errorMessage = (response['error'] ?? 'Failed to add web download')
-            .toString();
-        _showSnackBar(errorMessage);
-        return;
-      }
-
-      _addInput.webLinkController.clear();
-      _addInput.webNameController.clear();
-      _addInput.webPasswordController.clear();
-
-      final detail = response['detail'] as String? ?? 'Web download added.';
-      _showSnackBar(detail, isError: false);
-
-      // Refresh the web downloads list
-      await _fetchWebDownloads(reset: true);
-    } catch (e) {
-      if (!mounted) return;
-      closeDialogIfOpen();
-      _showSnackBar(
-        'Failed to add web download: ${e.toString().replaceFirst('Exception: ', '')}',
-      );
-    }
-  }
 
   void _maybeTriggerInitialAction() {
     if (_catalog.initialActionHandled) {
@@ -2399,7 +601,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                         }
                       });
                     },
-                    onCopy: (entry) => _copyTorboxFileLink(torrent, entry.file),
+                    onCopy: (entry) => _sections.torrentLinkActions
+                        .copyTorboxFileLink(torrent, entry.file),
                   );
                 } else if (isSeries) {
                   content = _buildTorboxSeriesView(
@@ -2434,7 +637,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                         }
                       });
                     },
-                    onCopy: (entry) => _copyTorboxFileLink(torrent, entry.file),
+                    onCopy: (entry) => _sections.torrentLinkActions
+                        .copyTorboxFileLink(torrent, entry.file),
                   );
                 } else if (isMovieCollection) {
                   content = _buildTorboxMovieView(
@@ -2449,7 +653,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                         }
                       });
                     },
-                    onCopy: (entry) => _copyTorboxFileLink(torrent, entry.file),
+                    onCopy: (entry) => _sections.torrentLinkActions
+                        .copyTorboxFileLink(torrent, entry.file),
                   );
                 } else {
                   content = _buildTorboxGenericList(
@@ -2464,7 +669,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                         }
                       });
                     },
-                    onCopy: (entry) => _copyTorboxFileLink(torrent, entry.file),
+                    onCopy: (entry) => _sections.torrentLinkActions
+                        .copyTorboxFileLink(torrent, entry.file),
                   );
                 }
 
@@ -3074,7 +1280,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                           color: const Color(0xFF6366F1),
                           onTap: () {
                             Navigator.of(dialogContext).pop();
-                            _downloadAllTorrentFiles(torrent);
+                            _sections.torrentDownloadAction
+                                .downloadAllTorrentFiles(torrent);
                           },
                         ),
                         const SizedBox(height: 12),
@@ -4028,7 +2235,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Magnet added to Torbox.')));
 
-      await _refresh();
+      await _sections.catalogLoading.refresh();
     } catch (e) {
       if (!mounted) return;
       closeDialogIfOpen();
@@ -4478,7 +2685,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     if (node.linkIndex >= 0 && node.linkIndex < files.length) {
       final torboxFile = files[node.linkIndex];
       if (_nav.currentTorrent != null) {
-        await _copyTorboxFileLink(_nav.currentTorrent!, torboxFile);
+        await _sections.torrentLinkActions.copyTorboxFileLink(
+          _nav.currentTorrent!,
+          torboxFile,
+        );
       } else if (_nav.currentWebDownload != null) {
         await _copyWebDownloadFileLink(_nav.currentWebDownload!, torboxFile);
       }
@@ -4902,10 +3112,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   /// Navigate into a torrent (show its folder structure)
   void _navigateIntoTorrent(TorboxTorrent torrent) {
-    _exitSelectionMode();
+    _sections.selectionActions.exitSelectionMode();
     // Focus first item after navigation
     _focus.shouldFocusOnLoad = true;
-    _resetListScroll();
+    _sections.catalogLoading.resetListScroll();
 
     print('🔍 Navigating into torrent: id=${torrent.id}, name=${torrent.name}');
     print('   Files count: ${torrent.files.length}');
@@ -4961,15 +3171,15 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     });
 
     // Focus first item after navigation
-    _focusFirstItemOrFallback();
+    _sections.focusActions.focusFirstItemOrFallback();
   }
 
   /// Navigate into a web download (show its folder structure)
   void _navigateIntoWebDownload(TorboxWebDownload webDownload) {
-    _exitSelectionMode();
+    _sections.selectionActions.exitSelectionMode();
     // Focus first item after navigation
     _focus.shouldFocusOnLoad = true;
-    _resetListScroll();
+    _sections.catalogLoading.resetListScroll();
 
     // Build folder tree for this web download
     final tree = TorboxFolderTreeBuilder.buildTree(webDownload.files);
@@ -5013,7 +3223,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     });
 
     // Focus first item after navigation
-    _focusFirstItemOrFallback();
+    _sections.focusActions.focusFirstItemOrFallback();
   }
 
   /// Navigate into a subfolder within current torrent/web download
@@ -5022,7 +3232,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
     // Focus first item after navigation
     _focus.shouldFocusOnLoad = true;
-    _resetListScroll();
+    _sections.catalogLoading.resetListScroll();
 
     // Apply view mode to folder children
     // NOTE: Series Arrange only makes sense at root level (it creates virtual Season folders)
@@ -5059,25 +3269,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     });
 
     // Focus first item after navigation
-    _focusFirstItemOrFallback();
-  }
-
-  /// Reset scroll while the outgoing list is still attached, so the next
-  /// listing never inherits the old offset (the torrent and node lists share
-  /// one controller). Load-more listeners are detached around the jump —
-  /// otherwise jumpTo(0) can fire them while the OLD view's pagination state
-  /// is still live and append its next page into the new listing.
-  void _resetListScroll() {
-    if (_focus.scrollController.hasClients) {
-      _focus.scrollController.removeListener(_onScroll);
-      _focus.scrollController.jumpTo(0);
-      _focus.scrollController.addListener(_onScroll);
-    }
-    if (_focus.webDownloadScrollController.hasClients) {
-      _focus.webDownloadScrollController.removeListener(_onWebDownloadScroll);
-      _focus.webDownloadScrollController.jumpTo(0);
-      _focus.webDownloadScrollController.addListener(_onWebDownloadScroll);
-    }
+    _sections.focusActions.focusFirstItemOrFallback();
   }
 
   /// Navigate up one level (back button)
@@ -5087,7 +3279,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     // Refocus the first row once the previous listing shows — the focused
     // row is disposed by the swap and nothing else reclaims DPAD focus.
     _focus.shouldFocusOnLoad = true;
-    _resetListScroll();
+    _sections.catalogLoading.resetListScroll();
     final previous = _nav.navigationStack.removeLast();
 
     // Reapply view mode transformation after navigation
@@ -5792,7 +3984,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               leading: IconButton(
                 focusNode: _focus.backButtonFocusNode,
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => _handleBackNavigation(),
+                onPressed: () =>
+                    _sections.backNavigation.handleBackNavigation(),
                 tooltip: 'Back',
               ),
               title: Text(_currentFolderName),
@@ -5839,7 +4032,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 : _folderSearch.isSearchActive
                 ? _buildSearchResults()
                 : RefreshIndicator(
-                    onRefresh: _refresh,
+                    onRefresh: _sections.catalogLoading.refresh,
                     child: _buildFilesFoldersList(),
                   ),
           ),
@@ -6064,13 +4257,15 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           icon: Icons.play_arrow_rounded,
           label: 'Play',
           showInStrip: true,
-          onSelected: () => _handlePlayWebDownload(webDownload),
+          onSelected: () =>
+              _sections.webPlayback.handlePlayWebDownload(webDownload),
         ),
       CloudRowAction(
         icon: Icons.download,
         label: 'Download to device',
         showInStrip: true,
-        onSelected: () => _showWebDownloadOptionsDialog(webDownload),
+        onSelected: () =>
+            _sections.webOptions.showWebDownloadOptionsDialog(webDownload),
       ),
       CloudRowAction(
         icon: Icons.folder_open,
@@ -6080,13 +4275,15 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       CloudRowAction(
         icon: Icons.link,
         label: 'Copy Download Link',
-        onSelected: () => _copyWebDownloadLink(webDownload),
+        onSelected: () =>
+            _sections.webLinkPlaylistActions.copyWebDownloadLink(webDownload),
       ),
       CloudRowAction(
         icon: Icons.delete_outline,
         label: 'Delete',
         destructive: true,
-        onSelected: () => _confirmDeleteWebDownload(webDownload),
+        onSelected: () =>
+            _sections.webDeleteAction.confirmDeleteWebDownload(webDownload),
       ),
     ];
 
@@ -6099,7 +4296,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       actions: actions,
       selectionMode: _selection.isSelectionMode,
       selected: _selection.selectedWebDownloadIds.contains(webDownload.id),
-      onToggleSelected: () => _toggleWebDownloadSelection(webDownload.id),
+      onToggleSelected: () =>
+          _sections.selectionActions.toggleWebDownloadSelection(webDownload.id),
       focusNode: index == 0 ? _focus.firstItemFocusNode : null,
     );
   }
@@ -6143,7 +4341,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           icon: Icons.play_arrow_rounded,
           label: 'Play',
           showInStrip: true,
-          onSelected: () => _handlePlayTorrent(torrent),
+          onSelected: () =>
+              _sections.torrentPlayback.handlePlayTorrent(torrent),
         ),
       CloudRowAction(
         icon: Icons.download,
@@ -6159,24 +4358,28 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       CloudRowAction(
         icon: Icons.link,
         label: 'Copy Download Link (Zip)',
-        onSelected: () => _copyTorboxZipLink(torrent),
+        onSelected: () =>
+            _sections.torrentLinkActions.copyTorboxZipLink(torrent),
       ),
       if (videoCount > 0)
         CloudRowAction(
           icon: Icons.playlist_add,
           label: 'Add to Playlist',
-          onSelected: () => _handleAddToPlaylist(torrent),
+          onSelected: () =>
+              _sections.torrentPlaylistActions.handleAddToPlaylist(torrent),
         ),
       CloudRowAction(
         icon: Icons.live_tv_rounded,
         label: 'Add to Debrify TV',
-        onSelected: () => _handleAddToDebrifyTv(torrent),
+        onSelected: () =>
+            _sections.torrentPlaylistActions.handleAddToDebrifyTv(torrent),
       ),
       CloudRowAction(
         icon: Icons.delete_outline,
         label: 'Delete',
         destructive: true,
-        onSelected: () => _confirmDeleteTorrent(torrent),
+        onSelected: () =>
+            _sections.torrentDeleteActions.confirmDeleteTorrent(torrent),
       ),
     ];
 
@@ -6197,7 +4400,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       actions: actions,
       selectionMode: _selection.isSelectionMode,
       selected: _selection.selectedTorrentIds.contains(torrent.id),
-      onToggleSelected: () => _toggleTorrentSelection(torrent.id),
+      onToggleSelected: () =>
+          _sections.selectionActions.toggleTorrentSelection(torrent.id),
       focusNode: index == 0 ? _focus.firstItemFocusNode : null,
       upFocusNode: upNode,
     );
@@ -6290,7 +4494,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           if (value == _catalog.selectedView) return;
           // The two root lists swap in the same element slot, so the incoming
           // one would inherit the outgoing list's scroll offset.
-          _resetListScroll();
+          _sections.catalogLoading.resetListScroll();
           setState(() {
             _catalog.selectedView = value;
             // Source-selection mode arrives with torrent title search active.
@@ -6314,7 +4518,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   Widget _buildSelectionBar() {
     final app = AppThemeScope.of(context);
     final theme = Theme.of(context);
-    final count = _activeSelectedIds.length;
+    final count = _sections.selectionActions.activeSelectedIds.length;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -6336,13 +4540,19 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           ),
           const Spacer(),
           TextButton(
-            onPressed: _toggleSelectAll,
-            child: Text(_isAllSelected ? 'Deselect All' : 'Select All'),
+            onPressed: _sections.selectionActions.toggleSelectAll,
+            child: Text(
+              _sections.selectionActions.isAllSelected
+                  ? 'Deselect All'
+                  : 'Select All',
+            ),
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
             focusNode: _focus.deleteButtonFocusNode,
-            onPressed: count > 0 ? _handleDeleteSelected : null,
+            onPressed: count > 0
+                ? _sections.selectionActions.handleDeleteSelected
+                : null,
             icon: const Icon(Icons.delete_outline, size: 18),
             label: const Text('Delete'),
             style:
@@ -6581,7 +4791,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                       ? 'Exit selection'
                       : 'Select items',
                   child: IconButton(
-                    onPressed: _toggleSelectionMode,
+                    onPressed: _sections.selectionActions.toggleSelectionMode,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
@@ -6600,7 +4810,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   Tooltip(
                     message: 'Delete all torrents',
                     child: IconButton(
-                      onPressed: _confirmDeleteAll,
+                      onPressed:
+                          _sections.torrentDeleteActions.confirmDeleteAll,
                       iconSize: iconSize,
                       padding: iconPadding,
                       constraints: iconConstraints,
@@ -6648,7 +4859,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 Tooltip(
                   message: 'Add web download',
                   child: IconButton(
-                    onPressed: _showAddWebDownloadDialog,
+                    onPressed:
+                        _sections.webCreateActions.showAddWebDownloadDialog,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
@@ -6673,31 +4885,37 @@ Map<String, Object?> torboxDownloadsTestAccess(
 ) {
   final s = state as _TorboxDownloadsScreenState;
   return {
-    'handleBackNavigation': s._handleBackNavigation,
+    'handleBackNavigation': s._sections.backNavigation.handleBackNavigation,
     'navigateIntoTorrent': s._navigateIntoTorrent,
     'navigateIntoWebDownload': s._navigateIntoWebDownload,
     'navigateIntoFolder': s._navigateIntoFolder,
     'navigateUp': s._navigateUp,
-    'toggleSelectionMode': s._toggleSelectionMode,
-    'exitSelectionMode': s._exitSelectionMode,
+    'toggleSelectionMode': s._sections.selectionActions.toggleSelectionMode,
+    'exitSelectionMode': s._sections.selectionActions.exitSelectionMode,
     'toggleTorrentSearch': s._toggleTorrentSearch,
     'toggleSearch': s._toggleSearch,
     'performSearch': s._performSearch,
     'submitTorrentSearch': s._submitTorrentSearch,
-    'fetchTorrents': s._fetchTorrents,
-    'fetchWebDownloads': s._fetchWebDownloads,
-    'loadMore': s._loadMore,
-    'loadMoreWebDownloads': s._loadMoreWebDownloads,
-    'confirmDeleteTorrent': s._confirmDeleteTorrent,
-    'confirmDeleteAll': s._confirmDeleteAll,
-    'confirmDeleteWebDownload': s._confirmDeleteWebDownload,
-    'handleDeleteSelected': s._handleDeleteSelected,
-    'showDeleteSelectedProgressDialog': s._showDeleteSelectedProgressDialog,
-    'showAddWebDownloadDialog': s._showAddWebDownloadDialog,
+    'fetchTorrents': s._sections.catalogLoading.fetchTorrents,
+    'fetchWebDownloads': s._sections.catalogLoading.fetchWebDownloads,
+    'loadMore': s._sections.catalogLoading.loadMore,
+    'loadMoreWebDownloads': s._sections.catalogLoading.loadMoreWebDownloads,
+    'confirmDeleteTorrent':
+        s._sections.torrentDeleteActions.confirmDeleteTorrent,
+    'confirmDeleteAll': s._sections.torrentDeleteActions.confirmDeleteAll,
+    'confirmDeleteWebDownload':
+        s._sections.webDeleteAction.confirmDeleteWebDownload,
+    'handleDeleteSelected': s._sections.selectionActions.handleDeleteSelected,
+    'showDeleteSelectedProgressDialog':
+        s._sections.bulkDelete.showDeleteSelectedProgressDialog,
+    'showAddWebDownloadDialog':
+        s._sections.webCreateActions.showAddWebDownloadDialog,
     'showAddMagnetDialog': s._showAddMagnetDialog,
     'addMagnetToTorbox': s._addMagnetToTorbox,
-    'handleAddToPlaylist': s._handleAddToPlaylist,
-    'handleAddWebDownloadToPlaylist': s._handleAddWebDownloadToPlaylist,
+    'handleAddToPlaylist':
+        s._sections.torrentPlaylistActions.handleAddToPlaylist,
+    'handleAddWebDownloadToPlaylist':
+        s._sections.webLinkPlaylistActions.handleAddWebDownloadToPlaylist,
     'addFileOrFolderToPlaylist': s._addFileOrFolderToPlaylist,
     'extractSeasonNumber': extractSeasonNumber,
     'extractLeadingNumber': extractLeadingNumber,
@@ -6710,7 +4928,8 @@ Map<String, Object?> torboxDownloadsTestAccess(
     'torboxFileLooksLikeVideo': torboxFileLooksLikeVideo,
     'findFirstEpisodeIndex': findFirstEpisodeIndex,
     'isValidMagnetLink': isValidMagnetLink,
-    'focusFirstItemOrFallback': s._focusFirstItemOrFallback,
+    'focusFirstItemOrFallback':
+        s._sections.focusActions.focusFirstItemOrFallback,
     'selectedView': s._catalog.selectedView,
     'scrollController': s._focus.scrollController,
     'torrents': s._catalog.torrents,

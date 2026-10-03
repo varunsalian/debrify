@@ -35,7 +35,15 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
-  'lib/screens/torbox/torbox_downloads_screen.dart': 14,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_options.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_options.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_link_actions.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_bulk_delete.dart':
+      0,
+  'lib/screens/torbox/torbox_downloads_screen.dart': 13,
   'lib/features/iptv/presentation/iptv_stage_chip.dart': 0,
   'lib/features/iptv/presentation/key_cap.dart': 0,
   'lib/features/iptv/presentation/legacy_iptv/iptv_cockpit_stage.dart': 0,
@@ -151,21 +159,51 @@ const Map<String, int> kShapeResidue = {
 const Map<String, int> kExtractedShapeResidue = {
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_view_state.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_playback.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_selection_state.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_catalog_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_back_navigation.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_file_downloads.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_search_state.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_search_state.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_playlist_actions.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_delete_actions.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_download_action.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_sections.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_navigation_state.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_zip_download.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_create_actions.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_add_input_state.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_selection_actions.dart':
+      1,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_link_playlist_actions.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_catalog_loading.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_focus_actions.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_delete_action.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_focus_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_playback.dart':
       0,
   'lib/features/torbox_downloads/presentation/torbox_downloads_view.dart': 0,
   'lib/features/torbox_downloads/presentation/torbox_more_option.dart': 0,
