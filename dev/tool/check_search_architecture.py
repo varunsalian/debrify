@@ -24,7 +24,7 @@ SETTINGS_FACADE = "lib/screens/settings_screen.dart"
 # Until then, the facade is measured only by the repo-wide shrinking ratchet.
 SETTINGS_COMPLETE = True
 IPTV_COMPLETE = True
-TORBOX_COMPLETE = False
+TORBOX_COMPLETE = True
 TORBOX_FACADE = "lib/screens/torbox/torbox_downloads_screen.dart"
 TORBOX_BRIDGE = "lib/features/torbox_downloads/presentation/legacy_torbox/"
 IPTV_FACADE = "lib/widgets/iptv/iptv_results_view.dart"

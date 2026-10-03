@@ -31,9 +31,7 @@
   {
     "name": "wrong-owner receiver path",
     "member": "_TorboxDownloadsScreenState.initState",
-    "mutation": "replace",
-    "before": "super.initState();",
-    "after": "super.initState(); _owners.web_state.scrollController.addListener(_onScroll);"
+    "mutation": "wrong_owner_receiver"
   },
   {
     "name": "builder context read replaced by State getter",
@@ -48,5 +46,10 @@
     "mutation": "replace",
     "before": "Navigator.of(context)",
     "after": "Navigator.of(_deps.context())"
+  },
+  {
+    "name": "lifecycle moved out of State",
+    "member": "_TorboxDownloadsScreenState.dispose",
+    "mutation": "move_lifecycle"
   }
 ]

@@ -49,6 +49,17 @@ def self_test(package=None):
             text = text[:first.start()] + second.group() + text[first.end():second.start()] + first.group() + text[second.end():]
         elif case['mutation'] == 'duplicate_owner':
             changed['fixture_duplicate.dart'] = 'class DuplicateTorboxOwner { ' + text + ' }'
+        elif case['mutation'] == 'move_lifecycle':
+            changed[key[0]] = changed[key[0]][:node['start']] + changed[key[0]][node['end']:]
+            changed['fixture_moved_lifecycle.dart'] = 'class TorboxMovedLifecycle { ' + text + ' }'
+        elif case['mutation'] == 'wrong_owner_receiver':
+            receiver = re.search(r'([A-Za-z_]\w*)\.scrollController\.addListener', text)
+            if receiver:
+                # Swap an existing State owner, rather than adding a statement.
+                text = text[:receiver.start(1)] + '_web' + text[receiver.end(1):]
+            else:
+                assert '_scrollController.addListener' in text
+                text = text.replace('_scrollController.addListener', '_webDownloadScrollController.addListener', 1)
         elif case['mutation'] == 'wrong_fetch_pair':
             text = text.replace('_fetchTorrents(', '_fetchWebDownloads(').replace('fetchTorrents(', 'fetchWebDownloads(')
             assert text != node['text']
@@ -56,11 +67,64 @@ def self_test(package=None):
             old, new = case['before'], case['after']
             assert old in text, (case['name'], text)
             text = text.replace(old, new, 1)
-        if case['mutation'] != 'duplicate_owner':
+        if case['mutation'] not in ('duplicate_owner', 'move_lifecycle'):
             changed[key[0]] = changed[key[0]][:node['start']] + text + changed[key[0]][node['end']:]
         errors = check(original, changed, rows, source, package, context_guard=True, config=config)
         assert errors, 'TorBox accepted ' + case['name']
         print('TorBox real fixture ' + case['name'] + ': rejected')
+
+    # Pending root rules use the real original build declaration until its
+    # approved extraction exists; after step 6 mutate the real production root
+    # and facade. Direct helper checks ensure scaffold errors cannot mask rules.
+    from check_settings_moves import configured, check_plain_sections, check_forwarder
+    build_row = next(r for r in rows if r['original_name'] == '_TorboxDownloadsScreenState.build')
+    original_lookup = all_nodes(parse({source: original}, package))
+    before = original_lookup[(source, '_TorboxDownloadsScreenState', 'build')]
+    build_key, build_node = located(build_row['original_name'])
+    assert all(r['contextParameter'] for r in build_node['references'] if r['name'] == 'context')
+    root_spec = {'file': build_row['destination_file'], 'owner': build_row['destination_class']}
+    root_config = copy.deepcopy(config)
+    root_config['plain_sections'] = [root_spec]
+    root_key = (root_spec['file'], '', root_spec['owner'])
+    if root_key in lookup:
+        root_sources = dict(sources)
+        root = lookup[root_key]
+        text = root['text'].replace('class ' + root_spec['owner'] + ' {',
+                                    'class ' + root_spec['owner'] + ' extends StatelessWidget {', 1)
+        assert text != root['text']
+        root_sources[root_key[0]] = sources[root_key[0]][:root['start']] + text + sources[root_key[0]][root['end']:]
+        assert check(original, root_sources, rows, source, package, context_guard=True, config=config)
+        bad_root_lookup = all_nodes(parse(root_sources, package))
+        good_root_lookup = lookup
+    else:
+        # Only a fixture: unchanged original build body, approved plain wrapper.
+        body = re.sub(r'@override\s*', '', before['text'], count=1)
+        plain = 'class ' + root_spec['owner'] + ' { ' + body + ' }'
+        widget = plain.replace('class ' + root_spec['owner'] + ' {',
+                               'class ' + root_spec['owner'] + ' extends StatelessWidget {', 1)
+        good_root_lookup = all_nodes(parse({root_spec['file']: plain}, package))
+        bad_root_lookup = all_nodes(parse({root_spec['file']: widget}, package))
+    with configured(root_config):
+        assert not check_plain_sections(good_root_lookup)
+        assert check_plain_sections(bad_root_lookup)
+    print('TorBox real fixture root becomes a stateless widget: rejected')
+
+    forward_spec = config['forwarders'].get(build_row['original_name'], {'receiver': '_sections.rootLayout'})
+    prefix = before['text'][:before['bodyOffset'] - before['start']]
+    forward_text = prefix + '=> ' + forward_spec['receiver'] + '.' + build_row['new_name'] + '(context);'
+    forward_node = parse({'forwarder': 'class Facade { ' + forward_text + ' }'}, package)['forwarder']['declarations'][0]['members'][0]
+    assert not check_forwarder(before, forward_node, build_row, forward_spec, package)
+    facade_key = (source, '_TorboxDownloadsScreenState', 'build')
+    actual_forwarder = lookup[facade_key] if config['forwarders'] else forward_node
+    text = actual_forwarder['text'].replace('(context);', '(otherContext);', 1)
+    assert text != actual_forwarder['text']
+    wrong_forwarder = parse({'forwarder': 'class Facade { ' + text + ' }'}, package)['forwarder']['declarations'][0]['members'][0]
+    assert check_forwarder(before, wrong_forwarder, build_row, forward_spec, package)
+    if config['forwarders']:
+        changed = dict(sources)
+        changed[source] = sources[source][:actual_forwarder['start']] + text + sources[source][actual_forwarder['end']:]
+        assert check(original, changed, rows, source, package, context_guard=True, config=config)
+    print('TorBox real fixture build forwarder with wrong context: rejected')
 
     accessor_key = (source, '', 'torboxDownloadsTestAccess')
     accessor = lookup[accessor_key]

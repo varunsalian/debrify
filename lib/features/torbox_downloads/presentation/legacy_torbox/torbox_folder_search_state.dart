@@ -2,6 +2,7 @@ import 'package:debrify/features/torbox_downloads/models/torbox_search_result.da
 import 'package:flutter/material.dart';
 
 class TorboxFolderSearchState {
+  // Search state (for folder browsing mode)
   bool isSearchActive = false;
 
   final TextEditingController searchController = TextEditingController();

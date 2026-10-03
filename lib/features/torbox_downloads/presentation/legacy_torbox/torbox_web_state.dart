@@ -1,6 +1,7 @@
 import 'package:debrify/models/torbox_web_download.dart';
 
 class TorboxWebState {
+  // Web Downloads state
   final List<TorboxWebDownload> webDownloads = [];
 
   bool isLoadingWebDownloads = false;

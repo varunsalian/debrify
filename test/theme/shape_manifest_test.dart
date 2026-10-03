@@ -176,13 +176,19 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_selection_state.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_composition_bindings.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_catalog_state.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_back_navigation.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_file_downloads.dart':
       0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_workflows_composition.dart':
+      0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_search_state.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_composition.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_search_state.dart':
       0,
@@ -191,6 +197,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_folder_navigation.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_torrent_playlist_actions.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_catalog_actions_composition.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_row.dart':
       0,
@@ -223,6 +231,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_web_zip_download.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_file_playlist_links.dart':
+      0,
+  'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_browsing_composition.dart':
       0,
   'lib/features/torbox_downloads/presentation/legacy_torbox/torbox_root_layout.dart':
       0,

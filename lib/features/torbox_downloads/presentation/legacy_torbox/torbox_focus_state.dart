@@ -6,8 +6,10 @@ class TorboxFocusState {
 
   final ScrollController webDownloadScrollController = ScrollController();
 
+  // TV content focus handler (stored for proper unregistration)
   VoidCallback? tvContentFocusHandler;
 
+  // Focus nodes for TV/DPAD navigation
   final FocusNode viewModeDropdownFocusNode = FocusNode(
     debugLabel: 'torbox-view-mode',
   );
@@ -16,6 +18,7 @@ class TorboxFocusState {
 
   final FocusNode backButtonFocusNode = FocusNode(debugLabel: 'torbox-back');
 
+  // Flag to focus first item after data loads (set by TV content focus handler)
   bool shouldFocusOnLoad = false;
 
   final FocusNode searchFocusNode = FocusNode(debugLabel: 'torbox-search');

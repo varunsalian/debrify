@@ -428,6 +428,16 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base4`.
 - 195 original leaves and every active TorBox/context/callback/accessor fixture pass (`step6-verbatim-final.txt`); settings/IPTV self-tests pass unchanged with the corrected adapter. All 79 affected identities pass against base4 (`step6-test-comparison.txt`), including four strict macOS goldens. Linux originals and their original-code strict run are verified; extracted-code Linux execution awaits remote CI/user execution because no local Flutter Linux host exists.
 - Whole analyzer: 825 diagnostics, zero additions after relocation (`step6-analyzer-comparison.txt`). Architecture, format, strict size/lowering-only ratchet and shape inventory (14 bare radii / 23 token calls) pass. No golden update, assertion rewrite, SDK install or push.
 
+### Step 7 — final structure and review follow-ups verified; gate 2 next
+
+- Step 6 committed as `697f6db3`. Facade is **364** formatted lines, retaining the public widget/signature, State's exact lifecycle, single build forwarder, original owner identities and frozen accessor. Three typed composition concern files preserve all 46 assignment orders and deferred cross-calls; each wiring entry was reviewed before pinning 196 scaffolds. No section starts an action while being constructed. Feature destination maximum remains 459 lines; all source responsibilities have a production destination.
+- Moved 14 orphaned field/group comment blocks verbatim beside owned fields. Activated the exact 400-line facade cap, 500-line feature caps, final `TEMP(torbox)` rejection and back-import guard; CI now formats/analyzes the facade as well as all feature destinations. The concrete affected-test CI list already includes every TorBox characterization and source-picker file.
+- Restored real-declaration negatives for lifecycle moved out of State, root becoming a StatelessWidget and a wrong-context build forwarder. The wrong-owner case now swaps an existing receiver rather than inserting a statement. Root/forwarder rule fixtures before activation derive from the real original build declaration; after activation they mutate the actual root and State forwarder. Direct rule checks prevent scaffold failures masking these rules. Revised fixtures/AST parameter assertion first pass against original c4f5375a (`step7-fixtures-parser-original.txt`), then against moved code (`step7-verbatim.txt`). No existing assertion was removed or weakened.
+- Found-not-fixed entries now record the Clipboard await/context lifetime defect and dormant public torrent-options method, including why analyzer warnings disappeared and the later behavior/Riverpod exit milestone. The two accessor-hidden original warnings remain documented by rule/symbol/message.
+- `suite_evidence.py run` now records HEAD, `git write-tree`, a ref-free `git stash create` snapshot/tree, untracked paths and end-of-run HEAD/tree. Comparisons reject evidence whose input tree changed during the run. Step-7 evidence has matching index/tested/end trees and no untracked input; historical env files are not backfilled with invented snapshots. Gate 1 is independently re-running at its e6416fba committed app/test revision with only the tree-recording helper overlay (`gate1-tree-audit`); gate 2 will run from a clean committed final implementation and retain exact revision/tree evidence.
+- All 79 affected identities pass against base4 (`step7-test-comparison.txt`), including unchanged payload/lifecycle assertions and four strict macOS goldens. Eight original PNG hashes remain unchanged. Analyzer: 825 identities, zero additions after relocation (`step7-analyzer-comparison.txt`). All three manifest/self-test runs, architecture, normal format, strict/lowering-only size ratchet, 14 radii / 23 shape-token inventory, theme measurement, storage reference self-tests and 314 key/value pairs pass. No allowlist, golden update, lint suppression or push.
+- This verified final implementation is committed separately before gate 2 so its full-suite evidence identifies an actual committed revision. The subsequent gate commit records the full-suite result and has `gate` in its subject; no implementation or test mutation is permitted during that run.
+
 ## Found, not fixed
 
 - **Startup `setState` after dispose.** With a pre-filled
@@ -435,10 +445,10 @@ Gates use `suite_evidence.py run torbox/gateN` against `torbox/base4`.
   and then calls `_submitTorrentSearch` with no further `mounted` check
   (1175). That can call `setState` after the screen is disposed (5762).
   Pre-existing; the extraction keeps it exactly. Fix it in a separate change.
-- **Dormant code.** `_showTorboxFileSelectionSheet` (2503) has no callers,
-  and the dropdown can't select Series Arrange (5688). Pre-existing; moved
-  verbatim.
+- **Dormant code.** `_showTorboxFileSelectionSheet` has no callers, and the dropdown cannot select Series Arrange. `_showTorboxTorrentMoreOptions` is also dormant: its move to public `TorboxTorrentOptions.showTorboxTorrentMoreOptions` hides the original unused-element warning. All retained verbatim. Exit milestone: review reachability and deliberately wire or remove these paths in the later TorBox behavior/Riverpod migration, with separate behavior coverage; do not infer removal from missing analyzer warnings.
 
 - **Folder search null root.** Ordinary navigation pushes a root record whose node is null. `_performSearch` reads that first record and returns no results. Original behavior preserved; test fixture also covers matching with a populated original stack.
 
 - **Legacy Settings action.** `_openSettings` calls `MainPageBridge.openCloudProvider('pikpak')`; its original comment flags the TorBox/PikPak mismatch. Preserved verbatim.
+
+- **Clipboard context after await.** `TorboxTorrentLinkActions.copyTorboxFileLink` uses context after `await Clipboard.setData` without a mounted check. The original `use_build_context_synchronously` warning disappears because the analyzer cannot follow `_deps.context()`, not because the lifetime problem was fixed. Preserve this move; add lifecycle/clipboard regression coverage and a fix in a separate behavior change.

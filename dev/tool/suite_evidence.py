@@ -3,7 +3,7 @@
 
   run NAME [PATHS...]          flutter test --reporter json (whole suite or
                                PATHS) -> <evidence>/NAME.jsonl, plus
-                               NAME.env.json (Flutter SDK, HEAD, paths)
+                               NAME.env.json (Flutter SDK, HEAD, tested tree, paths)
   compare [--against FILE] [--moved | --relocate FROM=TO_PREFIX ...] RUN...
                                .jsonl runs: no new failures, missing tests or
                                newly skipped tests versus FILE. .txt files:
@@ -114,19 +114,32 @@ def relocate(added, removed, source, prefix):
     return +added, +removed
 
 
+def git_tree_evidence():
+    """Identify tracked input without changing the index or the stash list."""
+    def git(*args):
+        return subprocess.run(['git', *args], cwd=ROOT, capture_output=True,
+                              text=True, check=True).stdout.strip()
+    head = git('rev-parse', 'HEAD')
+    snapshot = git('stash', 'create')
+    return {
+        'head': head,
+        'index_tree': git('write-tree'),
+        'worktree_snapshot': snapshot or None,
+        'tested_tree': git('rev-parse', (snapshot or head) + '^{tree}'),
+        'untracked_paths': git('ls-files', '--others', '--exclude-standard').splitlines(),
+    }
+
+
 def flutter_env(paths):
     version = subprocess.run(
         ['flutter', '--version', '--machine'], cwd=ROOT, capture_output=True, text=True,
     ).stdout
-    head = subprocess.run(
-        ['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True,
-    ).stdout.strip()
     try:
         sdk = json.loads(version[version.index('{'):])
         sdk = {k: sdk.get(k) for k in ('frameworkVersion', 'frameworkRevision', 'dartSdkVersion')}
     except ValueError:
         sdk = {'raw': version.strip()}
-    return {'sdk': sdk, 'head': head, 'root': str(ROOT), 'paths': list(paths)}
+    return {'sdk': sdk, **git_tree_evidence(), 'root': str(ROOT), 'paths': list(paths)}
 
 
 def flutter_test_json(paths, out: Path) -> int:
@@ -141,8 +154,17 @@ def cmd_run(name, paths):
     prefix = evidence_dir() / name
     prefix.parent.mkdir(parents=True, exist_ok=True)
     out = prefix.with_suffix('.jsonl')
+    env = flutter_env(paths)
+    env_path = prefix.with_suffix('.env.json')
+    env_path.write_text(json.dumps(env, indent=2))
     code = flutter_test_json(paths, out)
-    prefix.with_suffix('.env.json').write_text(json.dumps(flutter_env(paths), indent=2))
+    end = git_tree_evidence()
+    env['end_head'] = end['head']
+    env['end_tree'] = end['tested_tree']
+    env['tree_changed_during_run'] = (env['tested_tree'] != end['tested_tree']
+                                      or env['head'] != end['head']
+                                      or env['untracked_paths'] != end['untracked_paths'])
+    env_path.write_text(json.dumps(env, indent=2))
     results, _ = outcomes(out)
     print(f'{out}: exit {code}, {dict(Counter(results.values()))}')
     print('The verdict is `compare`, not this exit code.')
@@ -184,6 +206,11 @@ def cmd_compare(args):
         run = Path(arg)
         if run.suffix == '.jsonl':
             before_env, after_env = env_for(against), env_for(run)
+            if any(env and env.get('tree_changed_during_run')
+                   for env in (before_env, after_env)):
+                print('Tested tree changed during run; comparison invalid:', run.name)
+                ok = False
+                continue
             if before_env and after_env and before_env['sdk'] != after_env['sdk']:
                 print('SDK differs; comparison invalid:', before_env['sdk'], after_env['sdk'])
                 ok = False

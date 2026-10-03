@@ -2,6 +2,7 @@ import 'package:debrify/features/torbox_downloads/presentation/folder_view_mode.
 import 'package:debrify/models/rd_file_node.dart';
 
 class TorboxViewState {
+  // View mode state
   final Map<int, FolderViewMode> torrentViewModes = {};
 
   final Map<int, FolderViewMode> webDownloadViewModes = {};
