@@ -14,3 +14,6 @@ warning | unnecessary_null_comparison | lib/features/torbox_downloads/presentati
 warning | unused_element | lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_series_browser.dart | The declaration '_buildSeriesFileBrowser' isn't referenced. Try removing the declaration of '_buildSeriesFileBrowser'
 warning | unused_element | lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_torrent_actions.dart | The declaration '_handlePlayVideo' isn't referenced. Try removing the declaration of '_handlePlayVideo'
 warning | unused_element | lib/features/debrid_downloads/presentation/legacy_debrid/debrid_dormant_torrent_actions.dart | The declaration '_copyDownloadLink' isn't referenced. Try removing the declaration of '_copyDownloadLink'
+
+# PikPak: original c2e02c0d write-only email, remains private with settings loading.
+warning | unused_field | lib/screens/pikpak/pikpak_files_screen.dart | The value of the field '_email' isn't used. Try removing the field, or using it

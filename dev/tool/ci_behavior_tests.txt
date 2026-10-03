@@ -150,3 +150,12 @@ test/features/debrid_downloads/presentation/legacy_debrid/debrid_navigation_test
 test/features/debrid_downloads/presentation/legacy_debrid/debrid_source_contract_test.dart
 test/features/debrid_downloads/presentation/legacy_debrid/debrid_harness_test.dart
 test/features/debrid_downloads/presentation/legacy_debrid/debrid_delete_test.dart
+
+# PikPak original-code characterization
+test/features/pikpak_files/presentation/legacy_pikpak/pikpak_actions_test.dart
+test/features/pikpak_files/presentation/legacy_pikpak/pikpak_binding_test.dart
+test/features/pikpak_files/presentation/legacy_pikpak/pikpak_delete_test.dart
+test/features/pikpak_files/presentation/legacy_pikpak/pikpak_navigation_test.dart
+test/features/pikpak_files/presentation/legacy_pikpak/pikpak_profile_test.dart
+test/features/pikpak_files/presentation/legacy_pikpak/pikpak_source_contract_test.dart
+test/features/pikpak_files/presentation/legacy_pikpak/pikpak_views_test.dart

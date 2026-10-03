@@ -1,0 +1,150 @@
+{
+  "allowed_edits": [
+    "receiver",
+    "rename",
+    "state_callback",
+    "context_guard",
+    "unchanged",
+    "live_getter_callback",
+    "root_build_forwarder",
+    "retained_forwarder",
+    "formatter_if_braces",
+    "context_confirmation"
+  ],
+  "baseline": "c2e02c0d",
+  "source": "lib/screens/pikpak/pikpak_files_screen.dart",
+  "feature": "lib/features/pikpak_files",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": true,
+  "sidecars": {
+    "scaffolding": "dev/tool/pikpak_scaffolding.json",
+    "context_exceptions": "dev/tool/pikpak_context_exceptions.json"
+  },
+  "named_exceptions": {},
+  "annotation_exceptions": {},
+  "live_getter_callbacks": [
+    "selectableFileCount",
+    "isAllSelected",
+    "isBrowsePush"
+  ],
+  "live_widget_getters": [
+    "initialFolderId",
+    "initialFolderName",
+    "isPushedRoute",
+    "selectSourceMode",
+    "onSourceSelected"
+  ],
+  "token_rules": [],
+  "additional_owners": [],
+  "required_nodes": [],
+  "forwarders": {},
+  "lifecycle": [
+    "_PikPakFilesScreenState.initState",
+    "_PikPakFilesScreenState.dispose"
+  ],
+  "test_accessors": [
+    {
+      "name": "pikpakFilesTestAccess",
+      "tokens_file": "dev/tool/pikpak_test_accessor.json",
+      "required": true,
+      "unbound_tearoffs": {
+        "receiver": "s",
+        "members": [
+          "_PikPakFilesScreenState._applySortedView",
+          "_PikPakFilesScreenState._extractSeasonNumber",
+          "_PikPakFilesScreenState._extractLeadingNumber",
+          "_PikPakFilesScreenState._pikpakDisplayName",
+          "_PikPakFilesScreenState._formatPikPakPlaylistTitle",
+          "_PikPakFilesScreenState._combineSeriesAndEpisodeTitle",
+          "_PikPakFilesScreenState._findFirstEpisodeIndex",
+          "_PikPakFilesScreenState._isValidPikPakLink"
+        ]
+      }
+    }
+  ],
+  "seams": [],
+  "self_test_module": "pikpak_checker_test",
+  "receivers": [
+    "_deps",
+    "deps"
+  ],
+  "receiver_paths": {},
+  "receiver_owners": {
+    "_PikPakFilesScreenState": "_PikPakFilesScreenState"
+  },
+  "plain_sections": [],
+  "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in pikpak_context_exceptions.json; original guards and statement order unchanged",
+  "callback_identities": [
+    {
+      "name": "scroll detach/reattach",
+      "callback_member": "_PikPakFilesScreenState._onScroll",
+      "sites": [
+        {
+          "member": "_PikPakFilesScreenState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "_PikPakFilesScreenState._resetListScroll",
+          "call": "removeListener",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "_PikPakFilesScreenState._resetListScroll",
+          "call": "addListener",
+          "argument": 0,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "route back push/pop and tab registration",
+      "callback_member": "_PikPakFilesScreenState._handleBackNavigation",
+      "sites": [
+        {
+          "member": "_PikPakFilesScreenState.initState",
+          "call": "pushRouteBackHandler",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "_PikPakFilesScreenState.dispose",
+          "call": "popRouteBackHandler",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "_PikPakFilesScreenState.initState",
+          "call": "registerTabBackHandler",
+          "argument": 1,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "TV tab 6 focus registration/teardown",
+      "callback_member": "_PikPakFilesScreenState._tvContentFocusHandler",
+      "sites": [
+        {
+          "member": "_PikPakFilesScreenState.initState",
+          "call": "registerTvContentFocusHandler",
+          "argument": 1,
+          "count": 1
+        },
+        {
+          "member": "_PikPakFilesScreenState.dispose",
+          "call": "unregisterTvContentFocusHandler",
+          "argument": 1,
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "callback_instances": {
+    "_PikPakFilesScreenState": "$State"
+  },
+  "callback_receiver_aliases": {}
+}

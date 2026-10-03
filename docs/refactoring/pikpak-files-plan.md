@@ -379,7 +379,19 @@ Real-Debrid, PikPak) with self-tests, and gates against the latest PikPak base.
 
 ## Progress
 
-(empty)
+### Step 0 — complete; original-code characterization
+
+- Execution begins at `c2e02c0d`, clean `refactor/codebase`, Flutter 3.44.8 / Dart 3.12.2. No push. Original whole suite `pikpak/base`: 10,489 successes / 13 failures / 28 errors / 20 skips. Seam-only `base2` matches by identity (PASS, no additions/missing/skips). Stable tested trees and SDK recorded in env files.
+- One frozen accessor adds fresh snapshots and real action tear-offs; no clock/service seam or public constructor edit. Manual seam-only facade size raise 3,442 → 3,550, ending with shrink-only scheduled extractions. Preferred private `_email` ownership is retained through step 2, moving with settings at step 3.
+- 83 original-code characterization identities pass, including full 14-disposal sequence, all three launch sites, both enqueue bodies, three playlist maps, Raw aliasing/cast view, held paging/probe/download boundaries, exact request sequences, sentinel route/tab/TV handlers, callback waiting and checking-dialog Back hazard, profile gate and shared-owner logout outcomes. All 83 pass unchanged in detached original worktree `/private/tmp/debrify-pikpak-original-c2e02c0d`, plus 13 caller tests (96 total, original-verified JSON/env and byte-identical original source proof). No extraction preceded characterization.
+- Test-fixture decision: explicitly schedule a frame after the legacy post-frame focus callback because adding a post-frame callback alone does not request a frame. Hold HTTP responses and drain route transition animations before checking dialog removal. Search requires actual folder navigation before its field is rendered. Every final characterization assertion is frozen only after proving original behavior.
+- Five macOS goldens were captured on original code with January UTC dates; strict rerun passes. Linux captures remain user-owned and non-strict through step 5. The capture script resolves this checkpoint by exact subject `test(pikpak): step 0 original-code characterization checkpoint`.
+- Enqueue success/mixed messages remain pending: no isolated successful native-downloader/connectivity fixture is proven. Complete original download bodies guard the sequential awaited loop and three result branches. Native launch handoffs, Android TV D-pad and real-account flows remain pending device checks.
+- The dependency report tracks all 128 original leaves and a per-entry wiring checklist; scaffold pinning follows manual binding review, and production root/forwarder rules activate at step 6. Existing checker configs are unchanged. All temporary legacy extraction exceptions and exit milestones remain as specified above.
+
+- Final original `pikpak/base3`: 10,572 successes / 13 failures / 28 errors / 20 skips; PASS against base2, exactly 83 added passing identities, no new failures/missing/newly skipped tests. This is the latest PikPak base for affected runs and both full gates. Env records stable staged tested tree `0eb4bb63436268ee27720a5d91505f49cf4c2517`, with no untracked paths or changes during the run.
+- Whole analyzer: 839 diagnostics, zero additions/removals versus original. CI-equivalent format (1,423 files) and scoped analyze/strict warning allowlist (five original warnings) PASS. Original code was also analyzed under unchanged destination lint configuration in the detached worktree, with only relative-import URI qualification: 19 original diagnostics, including five directive-order infos; no const/runtime rewrite or suppression. This observed strict evidence is retained for any destination-only diagnostic relocation.
+- Architecture, strict sizes, storage reference/self-tests and all 314 storage constants PASS. All five manifest/self-test runs PASS; PikPak accounts for 128 leaves and rejects all wrapping/receiver callback negatives. No historical failure list changed. Evidence lives under the common git directory in `refactor-evidence/pikpak/`; source/checker/test additions are all staged in tree evidence. Remote CI remains pending; no push.
 
 ## Found, not fixed
 

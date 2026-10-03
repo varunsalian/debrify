@@ -1,0 +1,15 @@
+{
+  "macos": {
+    "original_revision": "c2e02c0d",
+    "with_accessor_sha256": "039dba65d1b14c8df54ca36231735a3eeaf31a7d8ed17f9623f8b46cece23a5a",
+    "sha256": {
+      "selection.png": "4feee859c3f5b78d8d8daf24a845e793428e957f0026e5b8acdf20866a447c4e",
+      "folder.png": "c93f0e58748ca520b6dc649114719aec882e182cb9136621d41364890cd5a1e3",
+      "not_enabled.png": "ca7177b5e0a67bc9daa277e3abd4c89afdf894c789e75bf4f65b3e72e9f82f26",
+      "root.png": "9c7ed328eda3f61383e0f93285c25ee9586fa9fd86cbaa5018e8724b672c1c39",
+      "select_source.png": "2a49019d7750ae664b17487951a0f304eacc65adb3f6920963c3e4cbc1f21e46"
+    },
+    "capture": "pikpak/working-views.txt (new originals only)",
+    "strict": "pikpak/working-all3.txt; original worktree replay before extraction"
+  }
+}
