@@ -11,6 +11,7 @@ import '../../models/stremio_addon.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
 import '../../models/stremio_tv/stremio_tv_now_playing.dart';
 import '../../models/torrent.dart';
+import '../../models/torrent_filter_state.dart';
 import '../../services/play_loader_style.dart';
 import '../../services/analytics_service.dart';
 import '../../services/mdblist/mdblist_service.dart';
@@ -31,6 +32,7 @@ import '../../utils/rd_blocked_filter.dart';
 import '../../utils/formatters.dart';
 import '../../utils/stremio_episode_selector.dart';
 import '../../utils/stremio_tv_debrid_fallback.dart';
+import '../../utils/stremio_tv_audio_policy.dart';
 import '../../utils/series_parser.dart';
 import '../../utils/source_quality.dart';
 import '../../utils/torrent_coverage_detector.dart';
@@ -74,6 +76,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   bool _randomEpisodes = false;
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
+  AudioLanguage? _preferredAudioLanguage;
+  Set<AudioLanguage> _blockedAudioLanguages = const <AudioLanguage>{};
   String _debridProvider = 'auto';
   bool _rdSkipBlockedTorrents = false;
   bool _torrentsFirst = true;
@@ -212,6 +216,25 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     _randomEpisodes = await StorageService.getStremioTvRandomEpisodes();
     _autoRefresh = await StorageService.getStremioTvAutoRefresh();
     _preferredQuality = await StorageService.getStremioTvPreferredQuality();
+
+    final preferredAudioLanguageName =
+        await StorageService.getStremioTvPreferredAudioLanguage();
+
+    _preferredAudioLanguage = AudioLanguage.values
+        .where((language) => language.name == preferredAudioLanguageName)
+        .firstOrNull;
+
+    final blockedAudioLanguageNames =
+        await StorageService.getStremioTvBlockedAudioLanguages();
+
+    _blockedAudioLanguages = AudioLanguage.values
+        .where(
+          (language) =>
+              language != AudioLanguage.multiAudio &&
+              blockedAudioLanguageNames.contains(language.name),
+        )
+        .toSet();
+
     final debridProvider = await StorageService.getStremioTvDebridProvider();
     _availableProviders = await _loadAvailableProviders();
     if (debridProvider != 'auto' &&
@@ -772,16 +795,42 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   List<Torrent> _sortStreamsByQuality(List<Torrent> streams) {
-    if (_preferredQuality == 'auto') return streams;
-    final sorted = List<Torrent>.from(streams);
-    sorted.sort((a, b) {
-      final qa = _extractQuality(a.name);
-      final qb = _extractQuality(b.name);
-      final aMatch = qa == _preferredQuality ? 0 : 1;
-      final bMatch = qb == _preferredQuality ? 0 : 1;
-      return aMatch.compareTo(bMatch);
+    if (streams.length < 2) return streams;
+
+    // Keep ordering deterministic/stable while layering:
+    //   1. preferred audio language
+    //   2. preferred video quality
+    //   3. original provider/addon order
+    final indexed = streams.asMap().entries.toList();
+
+    indexed.sort((a, b) {
+      final audioA = StremioTvAudioPolicy.preferenceRank(
+        a.value,
+        _preferredAudioLanguage,
+      );
+      final audioB = StremioTvAudioPolicy.preferenceRank(
+        b.value,
+        _preferredAudioLanguage,
+      );
+
+      final audioCompare = audioA.compareTo(audioB);
+      if (audioCompare != 0) return audioCompare;
+
+      if (_preferredQuality != 'auto') {
+        final qualityA = _extractQuality(a.value.name);
+        final qualityB = _extractQuality(b.value.name);
+
+        final qualityRankA = qualityA == _preferredQuality ? 0 : 1;
+        final qualityRankB = qualityB == _preferredQuality ? 0 : 1;
+
+        final qualityCompare = qualityRankA.compareTo(qualityRankB);
+        if (qualityCompare != 0) return qualityCompare;
+      }
+
+      return a.key.compareTo(b.key);
     });
-    return sorted;
+
+    return indexed.map((entry) => entry.value).toList();
   }
 
   /// Direct-stream validity: delegated to the shared [StreamUrlValidator]
@@ -1020,6 +1069,20 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           playableSources,
           season: season,
           episode: episode,
+        );
+      }
+
+      final beforeAudioPolicy = playableSources.length;
+
+      playableSources = StremioTvAudioPolicy.filterBlocked(
+        playableSources,
+        _blockedAudioLanguages,
+      );
+
+      if (beforeAudioPolicy != playableSources.length) {
+        debugPrint(
+          'StremioTV: Audio policy blocked '
+          '${beforeAudioPolicy - playableSources.length} source(s)',
         );
       }
 

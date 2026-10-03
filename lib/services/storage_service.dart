@@ -535,6 +535,10 @@ class StorageService {
   static const String _stremioTvHideNowPlayingKey =
       'stremio_tv_hide_now_playing';
   static const String _stremioTvTorrentsFirstKey = 'stremio_tv_torrents_first';
+  static const String _stremioTvPreferredAudioLanguageKey =
+      'stremio_tv_preferred_audio_language_v1';
+  static const String _stremioTvBlockedAudioLanguagesKey =
+      'stremio_tv_blocked_audio_languages_v1';
 
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
@@ -10231,6 +10235,44 @@ class StorageService {
   static Future<void> setStremioTvPreferredQuality(String value) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(_stremioTvPreferredQualityKey, value);
+  }
+
+  /// Get preferred source audio language for Stremio TV.
+  ///
+  /// 'auto' keeps the addon's/source's original ordering.
+  static Future<String> getStremioTvPreferredAudioLanguage() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getString(_stremioTvPreferredAudioLanguageKey) ?? 'auto';
+  }
+
+  static Future<void> setStremioTvPreferredAudioLanguage(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_stremioTvPreferredAudioLanguageKey, value);
+  }
+
+  /// Languages Stremio TV must not auto-play when the source is confidently
+  /// detected as containing only blocked languages.
+  static Future<List<String>> getStremioTvBlockedAudioLanguages() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getStringList(_stremioTvBlockedAudioLanguagesKey) ??
+        const <String>[];
+  }
+
+  static Future<void> setStremioTvBlockedAudioLanguages(
+    List<String> values,
+  ) async {
+    final prefs = await ProfilePreferences.instance();
+
+    if (values.isEmpty) {
+      await prefs.remove(_stremioTvBlockedAudioLanguagesKey);
+      return;
+    }
+
+    final normalized = values.toSet().toList()..sort();
+    await prefs.setStringList(
+      _stremioTvBlockedAudioLanguagesKey,
+      normalized,
+    );
   }
 
   /// Get preferred debrid provider for Stremio TV (auto = first available)

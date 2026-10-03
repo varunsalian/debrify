@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../models/torrent_filter_state.dart';
 import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import 'widgets/settings_widgets.dart';
@@ -17,6 +18,8 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
   int _seriesRotationMinutes = 45;
   bool _autoRefresh = true;
   String _preferredQuality = 'auto';
+  String _preferredAudioLanguage = 'auto';
+  final Set<AudioLanguage> _blockedAudioLanguages = <AudioLanguage>{};
   String _debridProvider = 'auto';
   int _maxStartPercent = -1; // -1 = no limit, 0 = beginning, 10/20/30/50 = cap
   bool _hideNowPlaying = false;
@@ -41,6 +44,10 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
       final autoRefresh = await StorageService.getStremioTvAutoRefresh();
       final preferredQuality =
           await StorageService.getStremioTvPreferredQuality();
+      final preferredAudioLanguage =
+          await StorageService.getStremioTvPreferredAudioLanguage();
+      final blockedAudioLanguageNames =
+          await StorageService.getStremioTvBlockedAudioLanguages();
       final debridProvider = await StorageService.getStremioTvDebridProvider();
       final maxStartPercent =
           await StorageService.getStremioTvMaxStartPercent();
@@ -66,6 +73,16 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
         _seriesRotationMinutes = seriesRotationMinutes;
         _autoRefresh = autoRefresh;
         _preferredQuality = preferredQuality;
+        _preferredAudioLanguage = preferredAudioLanguage;
+        _blockedAudioLanguages
+          ..clear()
+          ..addAll(
+            AudioLanguage.values.where(
+              (language) =>
+                  language != AudioLanguage.multiAudio &&
+                  blockedAudioLanguageNames.contains(language.name),
+            ),
+          );
         _debridProvider = debridProvider;
         _maxStartPercent = maxStartPercent;
         _hideNowPlaying = hideNowPlaying;
@@ -133,6 +150,66 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
     try {
       await StorageService.setStremioTvPreferredQuality(value);
       setState(() => _preferredQuality = value);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
+      }
+    }
+  }
+
+  Future<void> _setPreferredAudioLanguage(String value) async {
+    try {
+      if (value != 'auto') {
+        final matches =
+            AudioLanguage.values.where((language) => language.name == value);
+
+        if (matches.isNotEmpty) {
+          final language = matches.first;
+
+          if (_blockedAudioLanguages.remove(language)) {
+            await StorageService.setStremioTvBlockedAudioLanguages(
+              _blockedAudioLanguages.map((e) => e.name).toList(),
+            );
+          }
+        }
+      }
+
+      await StorageService.setStremioTvPreferredAudioLanguage(value);
+
+      setState(() {
+        _preferredAudioLanguage = value;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
+      }
+    }
+  }
+
+  Future<void> _toggleBlockedAudioLanguage(AudioLanguage language) async {
+    try {
+      var resetPreferred = false;
+
+      setState(() {
+        if (!_blockedAudioLanguages.add(language)) {
+          _blockedAudioLanguages.remove(language);
+        } else if (_preferredAudioLanguage == language.name) {
+          _preferredAudioLanguage = 'auto';
+          resetPreferred = true;
+        }
+      });
+
+      if (resetPreferred) {
+        await StorageService.setStremioTvPreferredAudioLanguage('auto');
+      }
+
+      await StorageService.setStremioTvBlockedAudioLanguages(
+        _blockedAudioLanguages.map((e) => e.name).toList(),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -413,6 +490,66 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                 ],
                               ),
                               const Divider(height: 32),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _settingLabel(
+                                      'Preferred Audio Language',
+                                      'Prioritize sources matching this language',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  DropdownButton<String>(
+                                    value: _preferredAudioLanguage,
+                                    dropdownColor: t.panel2,
+                                    items: [
+                                      const DropdownMenuItem(
+                                        value: 'auto',
+                                        child: Text('Automatic'),
+                                      ),
+                                      ..._stremioTvAudioLanguageLabels.entries
+                                          .map(
+                                            (entry) =>
+                                                DropdownMenuItem<String>(
+                                              value: entry.key.name,
+                                              child: Text(entry.value),
+                                            ),
+                                          ),
+                                    ],
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        _setPreferredAudioLanguage(value);
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 18),
+                              _settingLabel(
+                                'Blocked Audio Languages',
+                                'Skip a source only when its detected audio is exclusively blocked. Mixed, multi-audio and unknown sources remain available.',
+                              ),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children:
+                                    _stremioTvAudioLanguageLabels.entries.map(
+                                  (entry) {
+                                    final blocked = _blockedAudioLanguages
+                                        .contains(entry.key);
+                                    return FilterChip(
+                                      label: Text(entry.value),
+                                      selected: blocked,
+                                      onSelected: (_) =>
+                                          _toggleBlockedAudioLanguage(
+                                        entry.key,
+                                      ),
+                                    );
+                                  },
+                                ).toList(),
+                              ),
+                              const Divider(height: 32),
                               // Start position dropdown
                               Row(
                                 children: [
@@ -542,3 +679,19 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
     );
   }
 }
+
+
+const Map<AudioLanguage, String> _stremioTvAudioLanguageLabels = {
+  AudioLanguage.english: 'English',
+  AudioLanguage.hindi: 'Hindi',
+  AudioLanguage.spanish: 'Spanish',
+  AudioLanguage.french: 'French',
+  AudioLanguage.german: 'German',
+  AudioLanguage.russian: 'Russian',
+  AudioLanguage.chinese: 'Chinese',
+  AudioLanguage.japanese: 'Japanese',
+  AudioLanguage.korean: 'Korean',
+  AudioLanguage.italian: 'Italian',
+  AudioLanguage.portuguese: 'Portuguese',
+  AudioLanguage.arabic: 'Arabic',
+};
