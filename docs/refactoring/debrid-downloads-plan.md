@@ -378,7 +378,8 @@ The same as the TorBox plan's Technique. The differences:
 As in the TorBox plan, with `--relocate
 lib/screens/debrid_downloads_screen.dart=lib/features/debrid_downloads/` for
 the analyzer comparison, all four manifest runs (settings, IPTV, TorBox,
-Real-Debrid) with self-tests, and gates against `debrid/base3`.
+Real-Debrid) with self-tests, and gates against the latest characterization
+baseline (`debrid/base5` after step 0b).
 
 ## Definition of done
 
@@ -393,9 +394,11 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
    characterization test passes unchanged.
 4. **Analyzer and tests:** no new diagnostics and no suppressions (relocated
    ones correspond by rule, symbol and message); gate 2 passes against
-   `debrid/base3` and gate 1.
+   `debrid/base5` and gate 1.
 5. **CI:** it passes on `private`; the test list holds the new tests; the
-   allowlist gains nothing.
+   test-failure allowlist (`ci_behavior_known_failures.txt`) gains nothing.
+   `analyzer_allowlist.txt` gains only the three original dormant
+   `unused_element` warnings this plan keeps (see Progress).
 6. **Progress records:** the commits, the ownership, the exceptions with exit
    milestones, any seams, and what is pending device verification (D-pad on
    Android TV, playback handoff, real Real-Debrid account flows).
@@ -484,6 +487,10 @@ Real-Debrid) with self-tests, and gates against `debrid/base3`.
 - Preliminary step7 passes all four manifests/self-tests, including all 22 callback wrapper/receiver negatives, complete disposal guards, root/forwarder/accessor/context fixtures, architecture, sizes, storage references/314 keys and format/diff checks. Focused 127 success / one observed theme failure matches base5, with no missing/newly skipped identities. Removed three directive-style infos by sorting only new composition exports before final verification.
 - Re-run the final focused evidence with every new composition file staged: preliminary suite_evidence listed five untracked production files, so that tested-tree snapshot was incomplete for source provenance. Its results are provisional; the final staged run and committed-source gate 2 supply complete tree evidence. No assertion/test body changed.
 - Final step7-final: all four manifests/self-tests and structure/storage/shape/format/diff checks PASS. Focused 127 success / one observed theme failure PASS against base5, no added/missing/skipped identities; all production files are in stable staged tested tree 50f1d231437931b11d4fde96246e2e43ad5bb167, with no untracked paths. Whole analyzer 839 records, zero additions against the observed original destination-lint baseline; per-symbol 27 current / 42 original strict, zero additions. CI-equivalent format (1,413 files), scoped analyze and strict warning inventory PASS. All ten original PNG hashes remain unchanged.
+- Analyzer coverage note: four `use_build_context_synchronously` infos the
+  analyzer reported on the original facade are no longer reported, because the
+  moved code reaches `context` through `_deps.context()`. The hazards are
+  unchanged and listed under "Found, not fixed".
 - No push is authorized. Local CI-equivalent checks replace the plan's private-push requirement; remote CI, extracted-code Linux pixels, physical Android TV focus, six launcher handoffs and real-account operations remain pending.
 
 

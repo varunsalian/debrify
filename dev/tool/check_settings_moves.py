@@ -91,6 +91,8 @@ def remove_context_exceptions(node, sites, rows, row):
             # Identical original bodies can occur elsewhere. Only the complete
             # recorded prefix selects this site; other bodies remain verbatim.
             if len(matches) > 1:
+                if site.get('prefix_tokens') is None:
+                    raise ValueError('Repeated formatter if body needs a recorded prefix')
                 matches = [i for i in matches if (
                     tokens(node, end=code[i]['offset']) if site.get('prefix_mode') == 'raw'
                     else normalize(tokens(node, end=code[i]['offset']), rows, row)
