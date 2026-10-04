@@ -768,7 +768,41 @@ As in the PikPak plan, with these specifics:
 
 ## Progress
 
-(empty)
+### Step 0 — baseline and format checkpoint
+
+- Dedicated `refactor/playback-settings` worktree starts at `452d8a8b`; Flutter
+  3.44.8 / Dart 3.12.2. `flutter pub get` completed without lockfile changes.
+  Untouched full suite `playback_settings/base`: 10,577 success, 13 failure,
+  28 error, 20 skipped; stable committed tree
+  `6ef59f2099e8a01e0bb0027dc4efec29733ce930`, no overlay or untracked input.
+  These observed identities, not the historical allowlist, are authoritative.
+- Original strict-lint evidence reproduces exactly 29 diagnostics (12
+  deprecations, 11 import-order infos, six const-constructor infos). The root
+  analyzer and per-symbol strict inventory are retained in the shared evidence
+  namespace. Parser package/cache is isolated under `playback_settings/parser`,
+  initialized with the pinned lockfile; every manifest run passes its package
+  config explicitly.
+- Workspace restriction decision: all original-code proofs run in this dedicated
+  worktree before any extraction, with exact original hashes and tested-tree
+  evidence. No other checkout/worktree is opened or modified. The strict-only
+  original copy is under this worktree's ignored `build/` directory, using the
+  unchanged destination lint file and import URI qualification only.
+- Format proof: AST structure equal; token diff contains exactly nine inserted
+  and one removed formatter-owned commas (positions in `format-token-proof.json`);
+  unchanged comment multiset and 20 bare radii/four shape calls. All six original
+  navigation identities pass against `base`. Whole analyzer comparison is PASS
+  with zero additions/removals; the temporary strict/tool Dart copies were renamed
+  to `.dart.txt` before the clean whole-repo check, since the analyzer scans
+  ignored build directories too. Architecture, file-size and staged diff checks
+  pass. The facade is added to both CI format/analyzer command lists.
+- Temporary oversized facade: all original lifecycle, load/actions, values,
+  focus resources and builders remain until steps 1–7. Format-only ratchet raise
+  4,289 → 4,314 is intentional; extraction lowers it thereafter. Lifecycle stays
+  whole; eventual facade cap is determined by the step-0 simulation.
+- The obsolete cloud `**` finding is removed: `452d8a8b` already registers
+  explicit per-directory patterns. New playback theme entries will use the same
+  explicit pattern convention. No push, branch switch, dependency upgrade,
+  behavior fix, assertion weakening or allowlist growth is authorized.
 
 ## Found, not fixed
 
@@ -802,9 +836,6 @@ All of these are pre-existing, and the extraction keeps each one exactly.
   and Windows use a shadow only.
 - **Legacy surface:** 20 legacy bare radii, hard-coded English, and label
   copies in the search index that no test checks.
-- **Unverified:** the `cloud` `**` glob in `theme_surface_manifest.txt`
-  looks non-recursive in both consumers, so it may miss `legacy_pikpak/`.
-  That file isn't touched by this plan.
 - **Late writes after a profile pop.** Popping the page doesn't cancel
   in-flight work: an issued write can land after the switch, a later one can
   be rejected as stale, and a pending picker result can resume its storage

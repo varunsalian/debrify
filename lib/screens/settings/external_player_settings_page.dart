@@ -360,8 +360,7 @@ class _ExternalPlayerSettingsPageState
     _subtitleForcedOnlyFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _subtitleForcedOnlyFocused =
-            _subtitleForcedOnlyFocusNode.hasFocus;
+        _subtitleForcedOnlyFocused = _subtitleForcedOnlyFocusNode.hasFocus;
       });
     });
     _subtitleAutoSyncFocusNode.addListener(() {
@@ -518,9 +517,12 @@ class _ExternalPlayerSettingsPageState
       if (needsExternalPlayers && (Platform.isMacOS)) {
         installed = await ExternalPlayerService.detectInstalledPlayers();
         preferredKey = await ExternalPlayerStorage.getPreferredExternalPlayer();
-        customAppPath = await ExternalPlayerStorage.getCustomExternalPlayerPath();
-        customAppName = await ExternalPlayerStorage.getCustomExternalPlayerName();
-        customCommand = await ExternalPlayerStorage.getCustomExternalPlayerCommand();
+        customAppPath =
+            await ExternalPlayerStorage.getCustomExternalPlayerPath();
+        customAppName =
+            await ExternalPlayerStorage.getCustomExternalPlayerName();
+        customCommand =
+            await ExternalPlayerStorage.getCustomExternalPlayerCommand();
         if (!mounted) return;
         _commandController.text = customCommand ?? '';
       }
@@ -533,8 +535,10 @@ class _ExternalPlayerSettingsPageState
       if (needsExternalPlayers &&
           (PlatformUtil.isIosMobile || PlatformUtil.isTvOS)) {
         installedIOS = await ExternalPlayerService.detectInstalledIOSPlayers();
-        iosPreferredKey = await ExternalPlayerStorage.getPreferredIOSExternalPlayer();
-        iosCustomScheme = await ExternalPlayerStorage.getIOSCustomSchemeTemplate();
+        iosPreferredKey =
+            await ExternalPlayerStorage.getPreferredIOSExternalPlayer();
+        iosCustomScheme =
+            await ExternalPlayerStorage.getIOSCustomSchemeTemplate();
         if (!mounted) return;
         _iosSchemeController.text = iosCustomScheme ?? '';
       }
@@ -549,7 +553,8 @@ class _ExternalPlayerSettingsPageState
             await LinuxExternalPlayerServiceExtension.detectInstalledLinuxPlayers();
         linuxPreferredKey =
             await ExternalPlayerStorage.getPreferredLinuxExternalPlayer();
-        linuxCustomCommand = await ExternalPlayerStorage.getLinuxCustomCommand();
+        linuxCustomCommand =
+            await ExternalPlayerStorage.getLinuxCustomCommand();
         if (!mounted) return;
         _linuxCommandController.text = linuxCustomCommand ?? '';
       }
@@ -564,7 +569,8 @@ class _ExternalPlayerSettingsPageState
             await WindowsExternalPlayerServiceExtension.detectInstalledWindowsPlayers();
         windowsPreferredKey =
             await ExternalPlayerStorage.getPreferredWindowsExternalPlayer();
-        windowsCustomCommand = await ExternalPlayerStorage.getWindowsCustomCommand();
+        windowsCustomCommand =
+            await ExternalPlayerStorage.getWindowsCustomCommand();
         if (!mounted) return;
         _windowsCommandController.text = windowsCustomCommand ?? '';
       }
@@ -596,7 +602,8 @@ class _ExternalPlayerSettingsPageState
       final defaultAspectIndex = isAndroidTv
           ? await PlayerSettingsStorage.getPlayerDefaultAspectIndexTv()
           : await PlayerSettingsStorage.getPlayerDefaultAspectIndex();
-      final nightModeIndex = await PlayerSettingsStorage.getPlayerNightModeIndex();
+      final nightModeIndex =
+          await PlayerSettingsStorage.getPlayerNightModeIndex();
       final systemAudioEffects =
           await PlayerSettingsStorage.getPlayerSystemAudioEffects();
       final tvosForceSoftwareDecode = PlatformUtil.isTvOS
@@ -619,8 +626,10 @@ class _ExternalPlayerSettingsPageState
           await PlayerSettingsStorage.getAndroidVideoRendererMode();
       final contentDisplayMatchMode =
           await PlayerNetworkStorage.getContentDisplayMatchMode();
-      final startPortrait = await PlayerSettingsStorage.getPlayerStartPortrait();
-      final subtitleForcedOnly = await SubtitleSettingsStorage.getSubtitleForcedOnly();
+      final startPortrait =
+          await PlayerSettingsStorage.getPlayerStartPortrait();
+      final subtitleForcedOnly =
+          await SubtitleSettingsStorage.getSubtitleForcedOnly();
       final subtitleOnlyForeignAudio =
           await SubtitleSettingsStorage.getSubtitleOnlyForeignAudio();
       final subtitleAutoSync =
@@ -629,7 +638,8 @@ class _ExternalPlayerSettingsPageState
           await LocalCompletionStorage.getMovieCompletionThreshold();
       final episodeCompletionThreshold =
           await LocalCompletionStorage.getEpisodeCompletionThreshold();
-      final skipSegmentsEnabled = await SkipSegmentsStorage.getSkipSegmentsEnabled();
+      final skipSegmentsEnabled =
+          await SkipSegmentsStorage.getSkipSegmentsEnabled();
       final storedSkipSegmentProvider =
           await SkipSegmentsStorage.getSkipSegmentProvider();
       final skipSegmentProvider =
@@ -640,7 +650,8 @@ class _ExternalPlayerSettingsPageState
           await SubtitleSettingsStorage.getDefaultSubtitleLanguage();
       final defaultAudioLanguage =
           await SubtitleSettingsStorage.getDefaultAudioLanguage();
-      final netPatience = await PlayerNetworkStorage.getNetworkConnectPatience();
+      final netPatience =
+          await PlayerNetworkStorage.getNetworkConnectPatience();
       final iptvDecoderMode = await PlayerNetworkStorage.getIptvDecoderMode();
       final netBuffer = await PlayerNetworkStorage.getNetworkBufferSize();
 
@@ -811,7 +822,9 @@ class _ExternalPlayerSettingsPageState
       await ExternalPlayerStorage.setCustomExternalPlayerName(null);
 
       if (_selectedPlayer == ExternalPlayer.customApp) {
-        await ExternalPlayerStorage.setPreferredExternalPlayer('system_default');
+        await ExternalPlayerStorage.setPreferredExternalPlayer(
+          'system_default',
+        );
         setState(() {
           _selectedPlayer = ExternalPlayer.systemDefault;
         });
@@ -870,7 +883,9 @@ class _ExternalPlayerSettingsPageState
       await ExternalPlayerStorage.setCustomExternalPlayerCommand(null);
 
       if (_selectedPlayer == ExternalPlayer.customCommand) {
-        await ExternalPlayerStorage.setPreferredExternalPlayer('system_default');
+        await ExternalPlayerStorage.setPreferredExternalPlayer(
+          'system_default',
+        );
         setState(() {
           _selectedPlayer = ExternalPlayer.systemDefault;
         });
@@ -893,7 +908,9 @@ class _ExternalPlayerSettingsPageState
   // iOS external player settings methods
   Future<void> _selectIOSPlayer(iOSExternalPlayer player) async {
     try {
-      await ExternalPlayerStorage.setPreferredIOSExternalPlayer(player.storageKey);
+      await ExternalPlayerStorage.setPreferredIOSExternalPlayer(
+        player.storageKey,
+      );
       setState(() {
         _selectedIOSPlayer = player;
       });
@@ -919,7 +936,9 @@ class _ExternalPlayerSettingsPageState
 
     try {
       await ExternalPlayerStorage.setIOSCustomSchemeTemplate(scheme);
-      await ExternalPlayerStorage.setPreferredIOSExternalPlayer('custom_scheme');
+      await ExternalPlayerStorage.setPreferredIOSExternalPlayer(
+        'custom_scheme',
+      );
 
       setState(() {
         _iosCustomScheme = scheme;
@@ -969,7 +988,9 @@ class _ExternalPlayerSettingsPageState
   // Linux external player settings methods
   Future<void> _selectLinuxPlayer(LinuxExternalPlayer player) async {
     try {
-      await ExternalPlayerStorage.setPreferredLinuxExternalPlayer(player.storageKey);
+      await ExternalPlayerStorage.setPreferredLinuxExternalPlayer(
+        player.storageKey,
+      );
       setState(() {
         _selectedLinuxPlayer = player;
       });
@@ -995,7 +1016,9 @@ class _ExternalPlayerSettingsPageState
 
     try {
       await ExternalPlayerStorage.setLinuxCustomCommand(command);
-      await ExternalPlayerStorage.setPreferredLinuxExternalPlayer('custom_command');
+      await ExternalPlayerStorage.setPreferredLinuxExternalPlayer(
+        'custom_command',
+      );
 
       setState(() {
         _linuxCustomCommand = command;
@@ -1022,7 +1045,9 @@ class _ExternalPlayerSettingsPageState
       await ExternalPlayerStorage.setLinuxCustomCommand(null);
 
       if (_selectedLinuxPlayer == LinuxExternalPlayer.customCommand) {
-        await ExternalPlayerStorage.setPreferredLinuxExternalPlayer('system_default');
+        await ExternalPlayerStorage.setPreferredLinuxExternalPlayer(
+          'system_default',
+        );
         setState(() {
           _selectedLinuxPlayer = LinuxExternalPlayer.systemDefault;
         });
@@ -1045,7 +1070,9 @@ class _ExternalPlayerSettingsPageState
   // Windows external player settings methods
   Future<void> _selectWindowsPlayer(WindowsExternalPlayer player) async {
     try {
-      await ExternalPlayerStorage.setPreferredWindowsExternalPlayer(player.storageKey);
+      await ExternalPlayerStorage.setPreferredWindowsExternalPlayer(
+        player.storageKey,
+      );
       setState(() {
         _selectedWindowsPlayer = player;
       });
@@ -1071,7 +1098,9 @@ class _ExternalPlayerSettingsPageState
 
     try {
       await ExternalPlayerStorage.setWindowsCustomCommand(command);
-      await ExternalPlayerStorage.setPreferredWindowsExternalPlayer('custom_command');
+      await ExternalPlayerStorage.setPreferredWindowsExternalPlayer(
+        'custom_command',
+      );
 
       setState(() {
         _windowsCustomCommand = command;
@@ -2531,153 +2560,149 @@ class _ExternalPlayerSettingsPageState
     final theme = Theme.of(context);
     final t = AppThemeScope.of(context).settings;
     return [
-      _defaultsCard(
-        'Picture & decoding',
-        'Default picture fit and device compatibility',
-        [
-          // Default Aspect
-          _buildSettingDropdown(
+      _defaultsCard('Picture & decoding', 'Default picture fit and device compatibility', [
+        // Default Aspect
+        _buildSettingDropdown(
+          context,
+          label: 'Default Aspect',
+          value: _defaultAspectIndex,
+          items: _aspectLabels,
+          onChanged: (index) => _setDefaultAspectIndex(index),
+          focusNode: _aspectFocusNode,
+          isFocused: _aspectFocused,
+        ),
+        const SizedBox(height: 12),
+
+        if (_isAndroidTv || PlatformUtil.isTvOS) ...[
+          _buildDropdownSetting(
             context,
-            label: 'Default Aspect',
-            value: _defaultAspectIndex,
-            items: _aspectLabels,
-            onChanged: (index) => _setDefaultAspectIndex(index),
-            focusNode: _aspectFocusNode,
-            isFocused: _aspectFocused,
+            label: 'Match content display',
+            value: _contentDisplayMatchMode.storageKey,
+            items: {
+              for (final mode in ContentDisplayMatchMode.values)
+                mode.storageKey: mode.label,
+            },
+            onChanged: _setContentDisplayMatchMode,
+            focusNode: _contentDisplayMatchFocusNode,
+            isFocused: _contentDisplayMatchFocused,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            switch (_contentDisplayMatchMode) {
+              ContentDisplayMatchMode.systemDefault =>
+                'Keeps the player’s existing platform behavior. Choose a matching mode to request content-specific output.',
+              ContentDisplayMatchMode.off =>
+                'Disables player-requested display matching. Restart playback to apply.',
+              ContentDisplayMatchMode.frameRate =>
+                PlatformUtil.isTvOS
+                    ? 'Requests the source frame rate from Apple TV. Apple TV Settings → Video and Audio → Match Content → Match Frame Rate must be enabled.'
+                    : 'Keeps the current output resolution and selects a compatible refresh rate. A brief black screen during a mode switch is normal.',
+              ContentDisplayMatchMode.frameRateAndResolution =>
+                PlatformUtil.isTvOS
+                    ? 'Sends Apple TV the source frame rate, dimensions, and video format. tvOS chooses the output mode and may keep its configured resolution; resolution matching is best-effort. Match Content must be enabled in Apple TV settings.'
+                    : 'Selects the closest output resolution and compatible refresh rate. A brief black screen during a mode switch is normal.',
+            },
+            style: theme.textTheme.bodySmall?.copyWith(
+              color:
+                  _contentDisplayMatchMode ==
+                      ContentDisplayMatchMode.systemDefault
+                  ? t.dim
+                  : t.warning,
+            ),
           ),
           const SizedBox(height: 12),
-
-          if (_isAndroidTv || PlatformUtil.isTvOS) ...[
-            _buildDropdownSetting(
-              context,
-              label: 'Match content display',
-              value: _contentDisplayMatchMode.storageKey,
-              items: {
-                for (final mode in ContentDisplayMatchMode.values)
-                  mode.storageKey: mode.label,
-              },
-              onChanged: _setContentDisplayMatchMode,
-              focusNode: _contentDisplayMatchFocusNode,
-              isFocused: _contentDisplayMatchFocused,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              switch (_contentDisplayMatchMode) {
-                ContentDisplayMatchMode.systemDefault =>
-                  'Keeps the player’s existing platform behavior. Choose a matching mode to request content-specific output.',
-                ContentDisplayMatchMode.off =>
-                  'Disables player-requested display matching. Restart playback to apply.',
-                ContentDisplayMatchMode.frameRate =>
-                  PlatformUtil.isTvOS
-                      ? 'Requests the source frame rate from Apple TV. Apple TV Settings → Video and Audio → Match Content → Match Frame Rate must be enabled.'
-                      : 'Keeps the current output resolution and selects a compatible refresh rate. A brief black screen during a mode switch is normal.',
-                ContentDisplayMatchMode.frameRateAndResolution =>
-                  PlatformUtil.isTvOS
-                      ? 'Sends Apple TV the source frame rate, dimensions, and video format. tvOS chooses the output mode and may keep its configured resolution; resolution matching is best-effort. Match Content must be enabled in Apple TV settings.'
-                      : 'Selects the closest output resolution and compatible refresh rate. A brief black screen during a mode switch is normal.',
-              },
-              style: theme.textTheme.bodySmall?.copyWith(
-                color:
-                    _contentDisplayMatchMode ==
-                        ContentDisplayMatchMode.systemDefault
-                    ? t.dim
-                    : t.warning,
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // Android TV only. A frozen picture with running
-          // audio on live IPTV is almost always the box's
-          // hardware decoder choking on the stream — a device
-          // defect, which is why every IPTV player ships this
-          // switch rather than trying to auto-detect it.
-          if (Platform.isAndroid && _isAndroidTv) ...[
-            const SizedBox(height: 12),
-            _buildDropdownSetting(
-              context,
-              label: 'IPTV decoder',
-              value: _iptvDecoderMode,
-              items: const {
-                'auto': 'Automatic',
-                'hardware': 'Hardware',
-                'software': 'Software',
-              },
-              onChanged: _setIptvDecoderMode,
-              focusNode: _iptvDecoderFocusNode,
-              isFocused: _iptvDecoderFocused,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _iptvDecoderMode == 'software'
-                  ? 'Software decoding fixes channels that freeze '
-                        'while audio keeps playing, at the cost of '
-                        'more CPU. Re-open the channel to apply.'
-                  : 'Switch to Software if a channel freezes but '
-                        'audio keeps playing. Re-open the channel '
-                        'to apply.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: _iptvDecoderMode == 'auto' ? t.dim : t.warning,
-              ),
-            ),
-          ],
-
-          // Android phone/tablet only. Android TV already uses
-          // native Media3 + SurfaceView; Apple and desktop
-          // platforms have different decoder APIs entirely.
-          if (Platform.isAndroid && !_isAndroidTv) ...[
-            const SizedBox(height: 12),
-            _buildDropdownSetting(
-              context,
-              label: 'Video renderer',
-              value: _androidVideoRendererMode.storageKey,
-              items: {
-                for (final mode in AndroidVideoRendererMode.values)
-                  mode.storageKey: mode.label,
-              },
-              onChanged: _setAndroidVideoRendererMode,
-              focusNode: _androidVideoRendererFocusNode,
-              isFocused: _androidVideoRendererFocused,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${_androidVideoRendererMode.description} '
-              'Restart playback to apply. Use Automatic if a '
-              'video is black, has incorrect colors, or loses '
-              'a feature.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color:
-                    _androidVideoRendererMode ==
-                        AndroidVideoRendererMode.automatic
-                    ? t.dim
-                    : t.warning,
-              ),
-            ),
-          ],
-
-          // Apple TV only. The automatic 10-bit remedy
-          // (PLAYER_TVOS_10BIT_PLAN.md) handles what it can
-          // detect; this forces software decoding for
-          // anything it cannot — wrong colors on a
-          // clean-reading format, most likely.
-          if (PlatformUtil.isTvOS) ...[
-            const SizedBox(height: 4),
-            _buildCheckboxTile(
-              context,
-              title: 'Force software video decoding',
-              subtitle:
-                  'Compatibility option if a video plays with '
-                  'wrong colors or a blank picture. Slower — '
-                  '4K may stutter. Applies from the next '
-                  'playback.',
-              value: _tvosForceSoftwareDecode,
-              onChanged: _setTvosForceSoftwareDecode,
-              focusNode: _tvosForceSwDecodeFocusNode,
-              isFocused: _tvosForceSwDecodeFocused,
-            ),
-          ],
         ],
-      ),
+
+        // Android TV only. A frozen picture with running
+        // audio on live IPTV is almost always the box's
+        // hardware decoder choking on the stream — a device
+        // defect, which is why every IPTV player ships this
+        // switch rather than trying to auto-detect it.
+        if (Platform.isAndroid && _isAndroidTv) ...[
+          const SizedBox(height: 12),
+          _buildDropdownSetting(
+            context,
+            label: 'IPTV decoder',
+            value: _iptvDecoderMode,
+            items: const {
+              'auto': 'Automatic',
+              'hardware': 'Hardware',
+              'software': 'Software',
+            },
+            onChanged: _setIptvDecoderMode,
+            focusNode: _iptvDecoderFocusNode,
+            isFocused: _iptvDecoderFocused,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _iptvDecoderMode == 'software'
+                ? 'Software decoding fixes channels that freeze '
+                      'while audio keeps playing, at the cost of '
+                      'more CPU. Re-open the channel to apply.'
+                : 'Switch to Software if a channel freezes but '
+                      'audio keeps playing. Re-open the channel '
+                      'to apply.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: _iptvDecoderMode == 'auto' ? t.dim : t.warning,
+            ),
+          ),
+        ],
+
+        // Android phone/tablet only. Android TV already uses
+        // native Media3 + SurfaceView; Apple and desktop
+        // platforms have different decoder APIs entirely.
+        if (Platform.isAndroid && !_isAndroidTv) ...[
+          const SizedBox(height: 12),
+          _buildDropdownSetting(
+            context,
+            label: 'Video renderer',
+            value: _androidVideoRendererMode.storageKey,
+            items: {
+              for (final mode in AndroidVideoRendererMode.values)
+                mode.storageKey: mode.label,
+            },
+            onChanged: _setAndroidVideoRendererMode,
+            focusNode: _androidVideoRendererFocusNode,
+            isFocused: _androidVideoRendererFocused,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${_androidVideoRendererMode.description} '
+            'Restart playback to apply. Use Automatic if a '
+            'video is black, has incorrect colors, or loses '
+            'a feature.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color:
+                  _androidVideoRendererMode ==
+                      AndroidVideoRendererMode.automatic
+                  ? t.dim
+                  : t.warning,
+            ),
+          ),
+        ],
+
+        // Apple TV only. The automatic 10-bit remedy
+        // (PLAYER_TVOS_10BIT_PLAN.md) handles what it can
+        // detect; this forces software decoding for
+        // anything it cannot — wrong colors on a
+        // clean-reading format, most likely.
+        if (PlatformUtil.isTvOS) ...[
+          const SizedBox(height: 4),
+          _buildCheckboxTile(
+            context,
+            title: 'Force software video decoding',
+            subtitle:
+                'Compatibility option if a video plays with '
+                'wrong colors or a blank picture. Slower — '
+                '4K may stutter. Applies from the next '
+                'playback.',
+            value: _tvosForceSoftwareDecode,
+            onChanged: _setTvosForceSoftwareDecode,
+            focusNode: _tvosForceSwDecodeFocusNode,
+            isFocused: _tvosForceSwDecodeFocused,
+          ),
+        ],
+      ]),
     ];
   }
 
