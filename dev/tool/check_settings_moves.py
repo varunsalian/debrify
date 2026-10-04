@@ -208,8 +208,10 @@ def names(rows, owner=None):
                          if r['original_name'] == owner + '.' + old}
                 if len(local) == 1:
                     candidates[old] = local
-    return {old: next(iter(news)) for old, news in candidates.items()
-            if len(news) == 1 and old != next(iter(news))}
+    mapping = {old: next(iter(news)) for old, news in candidates.items()
+               if len(news) == 1 and old != next(iter(news))}
+    mapping.update(CONFIG.get('type_renames', {}))
+    return mapping
 
 
 def receiver_path_match(values, index):
@@ -242,6 +244,29 @@ def normalize(values, rows, row=None):
     i = 0
     while i < len(values):
         value = values[i]
+        # These substitutions are opt-in for one original declaration. They
+        # retain the live State receiver and cannot apply to lexical contexts
+        # or another feature's manifest.
+        original_name = row['original_name'] if row else None
+        bound = CONFIG.get('bound_this', {}).get(original_name)
+        if bound and value == bound['receiver'] and (
+                i == 0 or values[i - 1] not in ('.', '?.')):
+            if values[i + 1:i + 3] == ['.', 'setState']:
+                # Do not erase this prohibited protected-member access.
+                out.append(value); i += 1; continue
+            if values[i + 1:i + 2] != ['.']:
+                out.append('this'); i += 1; continue
+            if values[i + 2:i + 3] and values[i + 2] in bound.get('state_members', []):
+                out.append(values[i + 2]); i += 3; continue
+        view = CONFIG.get('widget_views', {}).get(original_name)
+        if view and values[i:i + 2] == [view['receiver'], '.']:
+            target = values[i + 2] if i + 2 < len(values) else None
+            if target in view['properties']:
+                out.extend(['widget', '.', target]); i += 3; continue
+            if target in view.get('statics', []):
+                out.extend(['SpotlightBoard', '.', target]); i += 3; continue
+            if target in view.get('state_members', []):
+                out.append(target); i += 3; continue
         # A named record cannot have a private field name. This exact borrowed
         # callback alias preserves the retained State member's identity; it is
         # opt-in and never erases a closure or an arbitrary receiver path.
@@ -422,7 +447,7 @@ def context_prefixes(node, rows, row):
     return list(prefixes.values())
 
 
-def builder_context_signature(node):
+def builder_context_signature(node, bound_receivers=()):
     """Screen context/guards used inside closures that take their own context.
 
     The owned-context checks skip these closures (their `context` is a
@@ -446,7 +471,7 @@ def builder_context_signature(node):
     if own_parameter:
         for i, token in enumerate(code):
             if (token['text'] == 'context' and i >= 2 and code[i - 1]['text'] == '.'
-                    and code[i - 2]['text'] in ('_deps', 'deps')):
+                    and code[i - 2]['text'] in ('_deps', 'deps', *bound_receivers)):
                 counts['state-context-over-parameter'] += 1
     for ref in node.get('references', []):
         if not ref['contextParameter'] or ref['name'] not in {'context', 'mounted'}:
@@ -455,7 +480,8 @@ def builder_context_signature(node):
         if i is None:
             continue
         before = [t['text'] for t in code[max(0, i - 2):i]]
-        owned = before[-1:] == ['.'] and before[:1] in (['_deps'], ['deps'])
+        owned = before[-1:] == ['.'] and before[:1] in (
+            ['_deps'], ['deps'], *([receiver] for receiver in bound_receivers))
         if ref['name'] == 'context':
             if owned:
                 counts['state-context'] += 1
@@ -1026,7 +1052,11 @@ def _check(original_source, sources, rows, source_path, package=None,
         def header(node):
             values = tokens(node)
             return normalize(values[:values.index('{')], rows)
-        if header(declaration) != header(headers[0]):
+        expected_header = header(declaration)
+        addition = CONFIG.get('class_header_additions', {}).get(name)
+        if addition and addition['activation_file'] in sources:
+            expected_header += addition['tokens']
+        if expected_header != header(headers[0]):
             errors.append('Widget class header changed: ' + name)
     for row in rows:
         key = row['original_name']
@@ -1055,9 +1085,16 @@ def _check(original_source, sources, rows, source_path, package=None,
         old_owner, _, old_name = key.rpartition('.')
         if not old_owner: old_name = key
         in_place = lookup.get((source_path, old_owner, old_name))
+        if in_place is None and old_owner in CONFIG.get('type_renames', {}):
+            in_place = lookup.get((source_path, CONFIG['type_renames'][old_owner], old_name))
+        if in_place is None and not old_owner and old_name in CONFIG.get('type_renames', {}):
+            in_place = lookup.get((source_path, '', CONFIG['type_renames'][old_name]))
         destination = lookup.get((row['destination_file'], row['destination_class'], row['new_name']))
         actual = destination or in_place
         before = original[key]
+        bound = CONFIG.get('bound_this', {}).get(key)
+        if bound and destination is not None and 'this' in tokens(destination):
+            errors.append('Bound this substitution missing at its registered site: ' + key)
         if actual is None:
             errors.append('Missing settings declaration: ' + key); continue
         if ('retained_forwarder' in row['allowed_edits'].split(',')
@@ -1104,15 +1141,24 @@ def _check(original_source, sources, rows, source_path, package=None,
         elif declaration_tokens(before, rows, row, original=destination is not None or CONFIG.get('original_activation', {}).get(key) in sources) != declaration_tokens(actual, rows, row):
             diff = '\n'.join(list(difflib.unified_diff(declaration_tokens(before, rows, row, original=destination is not None or CONFIG.get('original_activation', {}).get(key) in sources), declaration_tokens(actual, rows, row)))[:45])
             errors.append('Non-verbatim settings declaration: ' + key + '\n' + diff)
-        if builder_context_signature(before) != builder_context_signature(actual):
+        bound_receivers = CONFIG.get('bound_state_receivers', {}).get(key, [])
+        if builder_context_signature(before, bound_receivers) != builder_context_signature(actual, bound_receivers):
             errors.append(key + ': builder/dialog context or guard swapped with the '
-                          "State's: " + str(builder_context_signature(before)) + ' -> '
-                          + str(builder_context_signature(actual)))
+                          "State's: " + str(builder_context_signature(before, bound_receivers)) + ' -> '
+                          + str(builder_context_signature(actual, bound_receivers)))
         if context_guard and 'context_guard' in row['allowed_edits']:
             errors.extend(key + ': ' + e for e in check_context(before, actual, rows, row))
     # Only the registered single test accessor is new in the facade at step 0.
-    leaves = original_leaves(parsed[source_path]['declarations'], split_names(rows))
-    registered_facade = {s['owner'] + '.' + s['name'] for s in scaffolds
+    type_renames = CONFIG.get('type_renames', {})
+    split_owners = split_names(rows)
+    leaves = original_leaves(parsed[source_path]['declarations'],
+                             split_owners | {type_renames[name] for name in split_owners
+                                             if name in type_renames})
+    reverse_types = {new: old for old, new in type_renames.items()}
+    leaves = {(reverse_types.get(name.split('.')[0], name.split('.')[0]) +
+               ('.' + name.split('.', 1)[1] if '.' in name else '')): node
+              for name, node in leaves.items()}
+    registered_facade = {(reverse_types.get(s['owner'], s['owner']) + '.' if s['owner'] else '') + s['name'] for s in scaffolds
                          if s['file'] == source_path}
     retained_renames = {r['destination_class'] + '.' + r['new_name'] for r in rows
                        if r['destination_file'] == source_path}

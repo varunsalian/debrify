@@ -815,7 +815,104 @@ decomposition; bug fixes and behaviour changes, including everything below.
 
 ## Progress
 
-(empty)
+### Step 0 — original baseline and characterization preparation
+
+- Execution is confined to this dedicated `refactor/spotlight-board` worktree,
+  starting at `c5978c5fbc491ed7ef0f4ab84ceb025cd62c94e9`. No push or branch
+  switch; no other existing checkout/worktree is opened. `flutter pub get`
+  completed first, with no dependency or lockfile change. Flutter 3.44.8 /
+  Dart 3.12.2 matches the plan. Parser/kernel caches are isolated under this
+  worktree's ignored `.dart_tool/spotlight_board/`; every manifest invocation
+  passes `--parser-package`. Evidence writes use only `spotlight_board/`.
+- Approved application reference **R is the format-only commit `a65ad81a`**,
+  subject `style(spotlight): format the original spotlight board`. No seam
+  checkpoint is needed. Formatted facade: **3,896 physical lines**; the size
+  ratchet was raised by hand from 3,724. Its original responsibilities remain
+  temporarily until steps 1–7, with the planned extraction milestones above.
+  `format-token-proof.json` proves identical tokens/comments except whitespace
+  and AST-owned optional formatter commas, inventoried by declaration. Edited
+  comment, literal and non-optional comma negatives reject; formatting is
+  idempotent. The commit contains only the facade and its size ratchet.
+- Untouched `base` and committed-format `base-fmt` each record **10,984
+  successes / 13 failures / 28 errors / 20 skips**. Identity comparison PASS:
+  no new failures, missing/newly skipped tests or changed outcomes. Whole
+  analyzer differs by exactly the six format-induced curly-brace infos in the
+  plan; all other diagnostic identities/counts are unchanged. SDK, HEAD,
+  tested/end trees and input paths are in their env files. These observed
+  outcomes remain authoritative over historical allowlists.
+- Strict original probe qualifies import URIs only and uses the unchanged
+  destination lint configuration. It observes 15 import-order, ten curly and
+  two deprecation infos; the root additionally observes the inherited
+  `avoid_renaming_method_parameters` info. The rename-only probe adds exactly
+  four constructor-key infos, no private-type API infos, no warnings/errors
+  and no const recommendation. `spotlight_board_analyzer_inventory.json`
+  combines original/probe counts by **maximum**, never sum, and retains the
+  root parameter-name identity. No constructor, key, const or suppression
+  changes are made. Sorted destination imports will remove the 15 ordering
+  infos. Initial unsuccessful rename probes are retained as evidence.
+- Conservative rename decision: `_previewActive` becomes `cardPreviewActive`,
+  because `_buildCard` already has a local `previewActive`. The local remains
+  unchanged. The final rename probe compiles without errors. The separate
+  local widget `card` remains unchanged; the layout binding is `cardState`.
+- The dependency report and LF manifest inventory **157 original leaves**,
+  their dependencies/destinations and per-entry production wiring checklist.
+  Scaffolds are not pinned before their wiring review. The checker extensions
+  are opt-in: bound-this, bound-State lexical-context guard, view/static
+  receivers, registered header addition and split-State type rename.
+  Real-config fixtures reject lifecycle/stop/timing/trailer/receiver/comment/
+  const mutations; callback identity negatives also run independently of
+  verbatim/scaffold checks. The bound layout positive retains both mounted
+  reads; all three lexical-context substitutions fail. Header negatives
+  cover superclass, mixins, interfaces, modifiers and another class.
+- Original fixture owns host focus nodes and recording callbacks, initializes
+  and resets ProfileRuntime, SharedPreferences, platform flags and travel
+  clock, pins theme/locale/size/DPR, and uses MockClient for held metadata.
+  Bounded pumps explicitly schedule the frame after post-frame setup; fake
+  time stays outside `runAsync`, and the progressive-DOWN window uses real
+  wall time. No `pumpAndSettle` or production trailer seam was added.
+- Characterizations cover cadence/gates/retry and each stop path; full ordered
+  trailer ancestors and TV snap; preview stop before mount; card dwell,
+  growth/text-hide timing; exact decode widths by shape/focus/DPR/TV;
+  original live subclass overrides; ignored dpad preview leases; row-snapped TV
+  ground veil independent of scroll glide; horizontal zero board rebuilds plus shelf,
+  card, scrollable and parallax-body identities; vertical and sections-update
+  positive counts; Android TV insertion anchor; held progressive DOWN; and
+  held description responses after profile change/unmount. Interaction owner
+  identity is observed through the selected card's own mounted State and
+  visual, for focus and hover, while the full body guard pins its argument.
+- Characterization preparation exposed two fixture details: ParallaxFocus has
+  its own MouseRegion (exit/hover); the card's outer enter/exit region is the
+  dpad-gated surface tested here. `_ParallaxBody` owns the spring State;
+  ParallaxFocus itself is StatelessWidget. The three-second window belongs to
+  a pending independent shelf arrival after a false load result, not the
+  directly appended-true continuation. Tests exercise these original scopes.
+- Artwork decision: the original HttpOverrides/bundled-PNG cache probe fails
+  on the host's missing path-provider implementation; its failure log is
+  retained. No cache/HTTP seam is added. All six golden scenes use deterministic
+  null-artwork placeholders and the ground hero. MacOS originals are captured
+  and strict rerun PASS. Linux capture resolves the exact characterization
+  checkpoint subject and R subject and requires equal lib/pubspec/lock blobs;
+  it captures only the checkpoint's own tests in an isolated archive inside
+  the clone. Supplied Linux PNGs will be verified and committed separately.
+- CI coverage adds the 19 unchanged facade importers and all new tests.
+  Exactly the five newly covered failure identities observed in `base` are
+  added under the prescribed dated comment; no other failure is accepted.
+  Shape inventory remains three bare radii (999, 2, 21); all destination and
+  facade registrations begin at step 1. Theme inventory is unchanged.
+  Shape/theme/stale guards pass; the profile source guard's failure is already
+  observed in `base`. The initial stale-guard path typo is retained; the
+  corrected actual suite passes all five cases.
+- Facade estimate is measured in ignored formatted probes: 419 fixed lines
+  before forwarders/owners/composition, 473 with conventional separated
+  forwarding getters, 447 with adjacent related forwarding getters. This is
+  an estimate, not final cap evidence. The real step-3 measured breakdown must
+  fit the plan's hard 450 maximum; the composition probe must settle it.
+- Checkpoint freeze, original-copy replay, original mutation proofs,
+  compiling-composition probe and final base3 evidence follow before any move.
+  Device trailer start/stop, decoder handoff, native card trailers, D-pad
+  hold/repeat and entry-lag burst remain pending, as do remote CI and merged
+  integration. Found-not-fixed items above remain unchanged.
+
 
 ## Found, not fixed
 
