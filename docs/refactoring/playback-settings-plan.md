@@ -1144,6 +1144,29 @@ As in the PikPak plan, with these specifics:
 - Step 7 source is committed before unfiltered full-suite gate 2; its evidence
   will be recorded separately under a gate subject, then execution stops.
 
+### Gate 2 — completion and stop
+
+- Committed source `2f7b7226ecba3e823c655e402ff47b7692c6f765`, tested tree
+  `f7742212faf250bf97a737504bfaf2579e00cc3c`: unfiltered full suite
+  10,701 success / 13 failure / 28 error / 20 skipped. Every outcome identity
+  equals latest original `base4` and gate 1: PASS, no added/removed identities
+  or changed outcomes. Same SDK; stable committed tree, no overlay/untracked
+  inputs. `gate2.env.json`, `gate2-complete-identity-audit.json`,
+  `gate2-comparison.txt` and `gate2-vs-gate1.txt` retain exact provenance.
+- Historical helper replay has the same original stale inventory and exit 1;
+  it is retained as evidence, never recorded/updated to accept a regression.
+  Observed original outcomes remain the acceptance criterion. Original 13
+  failures/28 errors are found-not-fixed full-suite limitations, not new failures.
+- Steps 0–7 and review closure 0b are complete. Final six manifests/self-tests,
+  35 callback identities/negatives, partition/accessor/lifecycle negatives,
+  per-symbol strict analyzer, unchanged allowlists, local CI, both strict host
+  golden sets, shape totals/floor and helper/frozen-input hashes pass.
+  Facade 365, bridge cap 500 respected; no facade cap exception needed.
+- Pending only: DoD 8 device verification (Android/Android TV, iOS-mobile,
+  Windows, real tvOS and representative desktop detection), remote CI after
+  Claude integrates/pushes, and cross-worktree integration review. No push or
+  branch switch. Stop after this Progress-only gate evidence commit.
+
 ## Found, not fixed
 
 All of these are pre-existing, and the extraction keeps each one exactly.
