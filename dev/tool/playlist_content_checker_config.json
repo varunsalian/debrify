@@ -85,6 +85,7 @@
     "PlaylistContentCatalogState",
     "PlaylistContentCloudLoading",
     "PlaylistContentContentLoading",
+    "PlaylistContentDormant",
     "PlaylistContentEpisodeState",
     "PlaylistContentFocusState",
     "PlaylistContentInitialization",
@@ -92,10 +93,15 @@
     "PlaylistContentNavigationState",
     "PlaylistContentOttState",
     "PlaylistContentPlaylistOrder",
+    "PlaylistContentPosters",
+    "PlaylistContentProgress",
     "PlaylistContentScrollState",
+    "PlaylistContentSearch",
     "PlaylistContentSearchState",
+    "PlaylistContentSeriesMetadata",
     "PlaylistContentSeriesState",
     "PlaylistContentViewModes",
+    "PlaylistContentWatched",
     "_deps",
     "deps"
   ],
@@ -119,9 +125,15 @@
     "_sections.initialization": "PlaylistContentInitialization",
     "_sections.navigation": "PlaylistContentNavigation",
     "_sections.viewModes": "PlaylistContentViewModes",
+    "_sections.dormant": "PlaylistContentDormant",
     "_sections.contentLoading": "PlaylistContentContentLoading",
     "_sections.cloudLoading": "PlaylistContentCloudLoading",
-    "_sections.playlistOrder": "PlaylistContentPlaylistOrder"
+    "_sections.playlistOrder": "PlaylistContentPlaylistOrder",
+    "_sections.search": "PlaylistContentSearch",
+    "_sections.progress": "PlaylistContentProgress",
+    "_sections.seriesMetadata": "PlaylistContentSeriesMetadata",
+    "_sections.posters": "PlaylistContentPosters",
+    "_sections.watched": "PlaylistContentWatched"
   },
   "receiver_owners": {
     "_PlaylistContentViewScreenState": "_PlaylistContentViewScreenState",
@@ -144,9 +156,15 @@
     "_sections.initialization": "PlaylistContentInitialization",
     "_sections.navigation": "PlaylistContentNavigation",
     "_sections.viewModes": "PlaylistContentViewModes",
+    "_sections.dormant": "PlaylistContentDormant",
     "_sections.contentLoading": "PlaylistContentContentLoading",
     "_sections.cloudLoading": "PlaylistContentCloudLoading",
-    "_sections.playlistOrder": "PlaylistContentPlaylistOrder"
+    "_sections.playlistOrder": "PlaylistContentPlaylistOrder",
+    "_sections.search": "PlaylistContentSearch",
+    "_sections.progress": "PlaylistContentProgress",
+    "_sections.seriesMetadata": "PlaylistContentSeriesMetadata",
+    "_sections.posters": "PlaylistContentPosters",
+    "_sections.watched": "PlaylistContentWatched"
   },
   "plain_sections": [],
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in playlist_content_context_exceptions.json; original guards and statement order unchanged",
@@ -256,9 +274,15 @@
     "PlaylistContentInitialization": "$State._sections.initialization",
     "PlaylistContentNavigation": "$State._sections.navigation",
     "PlaylistContentViewModes": "$State._sections.viewModes",
+    "PlaylistContentDormant": "$State._sections.dormant",
     "PlaylistContentContentLoading": "$State._sections.contentLoading",
     "PlaylistContentCloudLoading": "$State._sections.cloudLoading",
-    "PlaylistContentPlaylistOrder": "$State._sections.playlistOrder"
+    "PlaylistContentPlaylistOrder": "$State._sections.playlistOrder",
+    "PlaylistContentSearch": "$State._sections.search",
+    "PlaylistContentProgress": "$State._sections.progress",
+    "PlaylistContentSeriesMetadata": "$State._sections.seriesMetadata",
+    "PlaylistContentPosters": "$State._sections.posters",
+    "PlaylistContentWatched": "$State._sections.watched"
   },
   "callback_receiver_aliases": {
     "_catalog": "$State._catalog",
@@ -279,8 +303,11 @@
     "_deps.episodeState": "$State._episode",
     "_deps.handleBackNavigation": "$State._sections.navigation.handleBackNavigation",
     "_deps.navigateUp": "$State._sections.navigation.navigateUp",
+    "_deps.toggleSearch": "$State._sections.search.toggleSearch",
     "_deps.loadContent": "$State._sections.contentLoading.loadContent",
-    "_deps.applyViewMode": "$State._sections.viewModes.applyViewMode"
+    "_deps.applyViewMode": "$State._sections.viewModes.applyViewMode",
+    "_deps.performSearch": "$State._sections.search.performSearch",
+    "_deps.showFixMetadataDialog": "$State._sections.seriesMetadata.showFixMetadataDialog"
   },
   "source_validator_module": "playlist_content_live_bindings"
 }

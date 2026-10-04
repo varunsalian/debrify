@@ -111,17 +111,26 @@ String playlistContentOriginalMember(String originalName) {
           as Map<String, dynamic>;
   // These are exactly the registered live State callbacks. Builder/dialog
   // contexts remain source text and the verbatim checker checks their scope.
-  member = member.replaceAll('_deps.setState', 'setState');
+  member = member.replaceAll(RegExp(r'\b_deps\s*\.\s*setState\b'), 'setState');
   for (final receiver in ['_deps', 'deps']) {
     for (final name in ['mounted', 'context']) {
-      member = member.replaceAll('$receiver.$name()', name);
+      member = member.replaceAll(
+        RegExp(r'\b' + receiver + r'\s*\.\s*' + name + r'\s*\(\s*\)'),
+        name,
+      );
     }
   }
   for (final getter in config['live_getter_callbacks'] as List<dynamic>) {
-    member = member.replaceAll('_deps.$getter()', '$getter');
+    member = member.replaceAll(
+      RegExp(r'\b_deps\s*\.\s*' + getter + r'\s*\(\s*\)'),
+      '$getter',
+    );
   }
   for (final getter in config['live_widget_getters'] as List<dynamic>) {
-    member = member.replaceAll('_deps.$getter()', 'widget.$getter');
+    member = member.replaceAll(
+      RegExp(r'\b_deps\s*\.\s*' + getter + r'\s*\(\s*\)'),
+      'widget.$getter',
+    );
   }
   final paths = config['receiver_paths'] as Map<String, dynamic>? ?? const {};
   for (final entry in rows) {

@@ -1,9 +1,15 @@
 import 'playlist_content_cloud_loading.dart';
 import 'playlist_content_content_loading.dart';
+import 'playlist_content_dormant.dart';
 import 'playlist_content_initialization.dart';
 import 'playlist_content_navigation.dart';
 import 'playlist_content_playlist_order.dart';
+import 'playlist_content_posters.dart';
+import 'playlist_content_progress.dart';
+import 'playlist_content_search.dart';
+import 'playlist_content_series_metadata.dart';
 import 'playlist_content_view_modes.dart';
+import 'playlist_content_watched.dart';
 
 class PlaylistContentSections {
   PlaylistContentInitialization? initializationSlot;
@@ -12,10 +18,22 @@ class PlaylistContentSections {
   PlaylistContentNavigation get navigation => navigationSlot!;
   PlaylistContentViewModes? viewModesSlot;
   PlaylistContentViewModes get viewModes => viewModesSlot!;
+  PlaylistContentDormant? dormantSlot;
+  PlaylistContentDormant get dormant => dormantSlot!;
   PlaylistContentContentLoading? contentLoadingSlot;
   PlaylistContentContentLoading get contentLoading => contentLoadingSlot!;
   PlaylistContentCloudLoading? cloudLoadingSlot;
   PlaylistContentCloudLoading get cloudLoading => cloudLoadingSlot!;
   PlaylistContentPlaylistOrder? playlistOrderSlot;
   PlaylistContentPlaylistOrder get playlistOrder => playlistOrderSlot!;
+  PlaylistContentSearch? searchSlot;
+  PlaylistContentSearch get search => searchSlot!;
+  PlaylistContentProgress? progressSlot;
+  PlaylistContentProgress get progress => progressSlot!;
+  PlaylistContentSeriesMetadata? seriesMetadataSlot;
+  PlaylistContentSeriesMetadata get seriesMetadata => seriesMetadataSlot!;
+  PlaylistContentPosters? postersSlot;
+  PlaylistContentPosters get posters => postersSlot!;
+  PlaylistContentWatched? watchedSlot;
+  PlaylistContentWatched get watched => watchedSlot!;
 }

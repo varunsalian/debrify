@@ -212,6 +212,8 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_content_loading.dart':
       0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_dormant.dart':
+      0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_state.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_focus_state.dart':
@@ -226,15 +228,25 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_playlist_order.dart':
       0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_posters.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_progress.dart':
+      0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_scroll_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_search.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_search_state.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_sections.dart':
       0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_metadata.dart':
+      0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_state.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_view_modes.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_watched.dart':
       0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_workflows_composition.dart':
       0,

@@ -6,6 +6,7 @@ import 'package:debrify/features/playlist_content/models/playlist_content_search
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_catalog_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_cloud_loading.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_content_loading.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_dormant.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_focus_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_initialization.dart';
@@ -13,11 +14,16 @@ import 'package:debrify/features/playlist_content/presentation/legacy_playlist_c
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_navigation_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_ott_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_playlist_order.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_posters.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_progress.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_scroll_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_search.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_search_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_sections.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_metadata.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_view_modes.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_watched.dart';
 import 'package:debrify/models/rd_file_node.dart';
 import 'package:debrify/models/series_playlist.dart';
 import 'package:debrify/models/webdav_item.dart';
@@ -25,34 +31,22 @@ import 'package:debrify/screens/video_player/models/playlist_entry.dart';
 import 'package:debrify/services/alldebrid_service.dart';
 import 'package:debrify/services/analytics_service.dart';
 import 'package:debrify/services/debrid_service.dart';
-import 'package:debrify/services/episode_info_service.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/pikpak_api_service.dart';
 import 'package:debrify/services/premiumize_service.dart';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
-import 'package:debrify/services/storage/episode_completion_storage.dart';
-import 'package:debrify/services/storage/episode_progress_storage.dart';
-import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
-import 'package:debrify/services/storage/playlist_artwork_storage.dart';
-import 'package:debrify/services/storage/playlist_metadata_storage.dart';
-import 'package:debrify/services/storage/playlist_poster_storage.dart';
-import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
-import 'package:debrify/services/storage/tvmaze_mapping_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
 import 'package:debrify/services/torbox_service.dart';
-import 'package:debrify/services/tvmaze_service.dart';
 import 'package:debrify/services/video_player_launcher.dart';
 import 'package:debrify/services/webdav_service.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/file_utils.dart';
 import 'package:debrify/utils/formatters.dart';
-import 'package:debrify/utils/series_parser.dart';
 import 'package:debrify/utils/tv_keys.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
-import 'package:debrify/widgets/tvmaze_search_dialog.dart';
 import 'package:debrify/widgets/view_mode_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -92,7 +86,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       loadSavedViewMode: () => sections.viewModes.loadSavedViewMode(),
       loadContent: () => sections.contentLoading.loadContent(),
       catalogState: _catalog,
-      parseSeriesPlaylist: () => _parseSeriesPlaylist(),
+      parseSeriesPlaylist: () => sections.seriesMetadata.parseSeriesPlaylist(),
       playlistItem: () => widget.playlistItem,
       seriesState: _series,
       setState: setState,
@@ -104,7 +98,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     ));
     sections.navigationSlot = PlaylistContentNavigation((
       searchState: _search,
-      toggleSearch: () => _toggleSearch(),
+      toggleSearch: () => sections.search.toggleSearch(),
       navigationState: _navigation,
       setState: setState,
       applyViewMode: (FolderViewMode mode) =>
@@ -118,6 +112,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       navigationState: _navigation,
       catalogState: _catalog,
       searchState: _search,
+      seriesState: _series,
+    ));
+    sections.dormantSlot = PlaylistContentDormant((
+      playlistItem: () => widget.playlistItem,
+      setState: setState,
       seriesState: _series,
     ));
     sections.contentLoadingSlot = PlaylistContentContentLoading((
@@ -137,6 +136,45 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     sections.playlistOrderSlot = PlaylistContentPlaylistOrder((
       navigationState: _navigation,
       playlistItem: () => widget.playlistItem,
+    ));
+    sections.searchSlot = PlaylistContentSearch((
+      setState: setState,
+      searchState: _search,
+      focusState: _focus,
+      catalogState: _catalog,
+    ));
+    sections.progressSlot = PlaylistContentProgress((
+      seriesState: _series,
+      catalogState: _catalog,
+      applySortedPlaylistOrder: (List<RDFileNode> videoFiles) =>
+          sections.playlistOrder.applySortedPlaylistOrder(videoFiles),
+      mounted: () => mounted,
+      playlistItem: () => widget.playlistItem,
+      setState: setState,
+    ));
+    sections.seriesMetadataSlot = PlaylistContentSeriesMetadata((
+      seriesState: _series,
+      playlistItem: () => widget.playlistItem,
+      catalogState: _catalog,
+      determineInitialSeason: () => sections.progress.determineInitialSeason(),
+      setState: setState,
+      saveDetectedSeriesPosterToPlaylist: () =>
+          sections.posters.saveDetectedSeriesPosterToPlaylist(),
+      mounted: () => mounted,
+      context: () => context,
+      updatePlaylistPoster: (Map<String, dynamic> showInfo) =>
+          sections.posters.updatePlaylistPoster(showInfo),
+    ));
+    sections.postersSlot = PlaylistContentPosters((
+      seriesState: _series,
+      playlistItem: () => widget.playlistItem,
+    ));
+    sections.watchedSlot = PlaylistContentWatched((
+      seriesState: _series,
+      playlistItem: () => widget.playlistItem,
+      reloadProgress: () => sections.progress.reloadProgress(),
+      mounted: () => mounted,
+      context: () => context,
     ));
     return sections;
   }
@@ -175,49 +213,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     _focus.searchButtonFocusNode.dispose();
     _focus.searchClearFocusNode.dispose();
     super.dispose();
-  }
-
-  /// Load progress data for all files
-  Future<void> _loadProgressData() async {
-    try {
-      Map<String, Map<String, dynamic>> episodeProgress = {};
-
-      // 1. Try IMDB ID lookup first (most reliable — avoids title mismatches)
-      final imdbId = widget.playlistItem['imdbId'] as String?;
-      if (imdbId != null && imdbId.isNotEmpty) {
-        episodeProgress =
-            await MergedEpisodeProgressStorage.getEpisodeProgressByImdbId(
-              imdbId,
-            );
-      }
-
-      // 2. Fallback: try seriesTitle field
-      if (episodeProgress.isEmpty) {
-        final seriesTitle = widget.playlistItem['seriesTitle'] as String?;
-        if (seriesTitle != null && seriesTitle.isNotEmpty) {
-          episodeProgress = await EpisodeProgressStorage.getEpisodeProgress(
-            seriesTitle: seriesTitle,
-          );
-        }
-      }
-
-      // 3. Fallback: try raw title
-      if (episodeProgress.isEmpty) {
-        final title = widget.playlistItem['title'] as String?;
-        if (title != null) {
-          episodeProgress = await EpisodeProgressStorage.getEpisodeProgress(
-            seriesTitle: title,
-          );
-        }
-      }
-
-      setState(() {
-        _series.fileProgressCache = episodeProgress;
-      });
-    } catch (e) {
-      print('❌ Error loading progress data: $e');
-      _series.fileProgressCache = {};
-    }
   }
 
   /// Play a file with full playlist support
@@ -293,7 +288,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // Reload progress after returning from video player
       if (mounted) {
-        await _reloadProgress();
+        await _sections.progress.reloadProgress();
       }
     } catch (e) {
       print('❌ Error playing file: $e');
@@ -304,7 +299,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Reload progress even if an error occurred
       // (user might have watched part of video before error)
       if (mounted) {
-        await _reloadProgress();
+        await _sections.progress.reloadProgress();
       }
 
       if (mounted) {
@@ -313,59 +308,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         ).showSnackBar(SnackBar(content: Text('Failed to play file: $e')));
       }
     }
-  }
-
-  // ============ Search Methods ============
-  /// Toggle search mode on/off
-  void _toggleSearch() {
-    setState(() {
-      _search.isSearchActive = !_search.isSearchActive;
-      if (!_search.isSearchActive) {
-        _search.searchController.clear();
-        _search.searchResults.clear();
-      } else {
-        // Focus the search field when activating
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _focus.searchFocusNode.requestFocus();
-        });
-      }
-    });
-  }
-
-  /// Perform deep search across all files
-  void _performSearch(String query) {
-    if (_catalog.rootContent == null || query.isEmpty) {
-      setState(() => _search.searchResults = []);
-      return;
-    }
-
-    final lowerQuery = query.toLowerCase();
-    final results = <PlaylistContentSearchResult>[];
-
-    // Recursive function to search with path tracking
-    void searchNode(RDFileNode node, List<String> path) {
-      if (!node.isFolder) {
-        // Only search video files
-        if (FileUtils.isVideoFile(node.name) &&
-            node.name.toLowerCase().contains(lowerQuery)) {
-          results.add(
-            PlaylistContentSearchResult(node: node, path: path.join(' / ')),
-          );
-        }
-      } else {
-        // Recurse into folder
-        for (final child in node.children) {
-          searchNode(child, [...path, node.name]);
-        }
-      }
-    }
-
-    // Start search from root's children (skip root name itself)
-    for (final child in _catalog.rootContent!.children) {
-      searchNode(child, []);
-    }
-
-    setState(() => _search.searchResults = results);
   }
 
   /// Build the search bar widget
@@ -411,7 +353,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   vertical: 12,
                 ),
               ),
-              onChanged: _performSearch,
+              onChanged: _sections.search.performSearch,
               onSubmitted: (_) {
                 // Unfocus TextField when user presses search/enter on TV keyboard
                 _focus.searchFocusNode.unfocus();
@@ -512,7 +454,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     // Get progress for this file
     double progress = 0.0;
     bool isFinished = false;
-    final progressData = _getProgressForFile(node);
+    final progressData = _sections.progress.getProgressForFile(node);
     if (progressData != null) {
       final positionMs = progressData['positionMs'] as int? ?? 0;
       final durationMs = progressData['durationMs'] as int? ?? 0;
@@ -639,7 +581,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             IconButton(
               focusNode: _focus.searchButtonFocusNode,
               icon: Icon(_search.isSearchActive ? Icons.close : Icons.search),
-              onPressed: _toggleSearch,
+              onPressed: _sections.search.toggleSearch,
               tooltip: _search.isSearchActive ? 'Close search' : 'Search files',
             ),
           IconButton(
@@ -737,7 +679,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     if (isVideo) {
       // Try to get progress from cache
       // For series, use season/episode key; for others use filename
-      final progressData = _getProgressForFile(node);
+      final progressData = _sections.progress.getProgressForFile(node);
       if (progressData != null) {
         final positionMs = progressData['positionMs'] as int? ?? 0;
         final durationMs = progressData['durationMs'] as int? ?? 0;
@@ -899,51 +841,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     );
   }
 
-  /// Get progress data for a specific file
-  Map<String, dynamic>? _getProgressForFile(RDFileNode file) {
-    // ALWAYS try to parse season/episode from filename first (regardless of view mode)
-    // This ensures progress is consistent across Raw and Series Arrange modes
-    final seriesInfo = SeriesParser.parseFilename(file.name);
-    if (seriesInfo.season != null && seriesInfo.episode != null) {
-      final key = '${seriesInfo.season}_${seriesInfo.episode}';
-      final progressData = _series.fileProgressCache[key];
-      if (progressData != null) {
-        return progressData;
-      }
-    }
-
-    // Fallback: For files without parseable season/episode, use sequential indexing
-    // This is for non-series content like movies or special features
-    if (_catalog.rootContent != null) {
-      final allFiles = _catalog.rootContent!.getAllFiles();
-      final videoFiles = allFiles
-          .where((node) => FileUtils.isVideoFile(node.name))
-          .toList();
-
-      // IMPORTANT: Apply sorting if in sortedAZ mode to match the index used when saving progress
-      // When playing in Sort A-Z mode, progress is saved using indices from the sorted list,
-      // so we must apply the same sorting here to look up the correct progress key
-      _sections.playlistOrder.applySortedPlaylistOrder(videoFiles);
-
-      final fileIndex = videoFiles.indexWhere(
-        (node) => node.name == file.name && node.path == file.path,
-      );
-
-      if (fileIndex >= 0) {
-        final key = '0_${fileIndex + 1}'; // season 0, 1-based episode index
-        return _series.fileProgressCache[key];
-      }
-    }
-
-    // Final fallback: try using filename as key
-    return _series.fileProgressCache[file.name];
-  }
-
   /// Build OTT-style view for Series Arrange mode
   Widget _buildOTTView() {
     // Parse series playlist if not already done
     if (_series.seriesPlaylist == null && _catalog.rootContent != null) {
-      _parseSeriesPlaylist();
+      _sections.seriesMetadata.parseSeriesPlaylist();
     }
 
     if (_series.seriesPlaylist == null) {
@@ -1027,570 +929,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     );
   }
 
-  /// Determine initial season based on most recently watched episode
-  /// Returns the season number to start with (defaults to 1 if no progress)
-  int _determineInitialSeason() {
-    if (_series.fileProgressCache.isEmpty) return 1;
-
-    // Find most recently watched episode
-    String? mostRecentKey;
-    int? mostRecentTimestamp;
-
-    for (var entry in _series.fileProgressCache.entries) {
-      final updatedAt = entry.value['updatedAt'];
-      if (updatedAt != null) {
-        try {
-          // Handle both int (milliseconds) and String formats
-          int timestamp;
-          if (updatedAt is int) {
-            // Assume it's already in milliseconds (most common format)
-            timestamp = updatedAt;
-          } else if (updatedAt is String) {
-            // Try parsing as numeric timestamp first, then as ISO date string
-            final parsed = int.tryParse(updatedAt);
-            if (parsed != null) {
-              // Detect if it's likely seconds (10 digits) vs milliseconds (13 digits)
-              // Unix timestamp in seconds: ~10 digits (e.g., 1735134769)
-              // Unix timestamp in milliseconds: ~13 digits (e.g., 1735134769000)
-              if (parsed < 10000000000) {
-                // Likely seconds, convert to milliseconds
-                timestamp = parsed * 1000;
-              } else {
-                // Already milliseconds
-                timestamp = parsed;
-              }
-            } else {
-              // Parse as ISO date string
-              timestamp = DateTime.parse(updatedAt).millisecondsSinceEpoch;
-            }
-          } else {
-            continue;
-          }
-
-          if (mostRecentTimestamp == null || timestamp > mostRecentTimestamp) {
-            mostRecentTimestamp = timestamp;
-            mostRecentKey = entry.key;
-          }
-        } catch (e) {
-          print(
-            '⚠️ Failed to parse updatedAt timestamp: $updatedAt (${e.toString()})',
-          );
-        }
-      }
-    }
-
-    if (mostRecentKey != null) {
-      // Extract season from key format "{season}_{episode}"
-      final parts = mostRecentKey.split('_');
-      if (parts.length >= 2) {
-        final seasonNum = int.tryParse(parts[0]);
-        if (seasonNum != null) {
-          print(
-            '🎯 Found most recent season: $seasonNum from key: $mostRecentKey',
-          );
-          return seasonNum;
-        }
-      }
-    }
-
-    print('📺 No recent progress found, defaulting to Season 1');
-    return 1; // Default to season 1
-  }
-
-  /// Determine initial episode index to scroll to within the selected season
-  /// Returns the episode index (0-based) or null if no specific episode to scroll to
-  int? _determineInitialEpisodeIndex(SeriesSeason season) {
-    if (_series.fileProgressCache.isEmpty) return null;
-
-    // Find most recently watched episode in this season
-    int? mostRecentTimestamp;
-    int? mostRecentEpisodeNum;
-
-    for (var entry in _series.fileProgressCache.entries) {
-      final key = entry.key;
-      final parts = key.split('_');
-
-      if (parts.length >= 2) {
-        final seasonNum = int.tryParse(parts[0]);
-        final episodeNum = int.tryParse(parts[1]);
-
-        // Only consider episodes from the current season
-        if (seasonNum == season.seasonNumber && episodeNum != null) {
-          final updatedAt = entry.value['updatedAt'];
-          if (updatedAt != null) {
-            try {
-              // Handle both int (milliseconds) and String formats
-              int timestamp;
-              if (updatedAt is int) {
-                // Assume it's already in milliseconds (most common format)
-                timestamp = updatedAt;
-              } else if (updatedAt is String) {
-                // Try parsing as numeric timestamp first, then as ISO date string
-                final parsed = int.tryParse(updatedAt);
-                if (parsed != null) {
-                  // Detect if it's likely seconds (10 digits) vs milliseconds (13 digits)
-                  // Unix timestamp in seconds: ~10 digits (e.g., 1735134769)
-                  // Unix timestamp in milliseconds: ~13 digits (e.g., 1735134769000)
-                  if (parsed < 10000000000) {
-                    // Likely seconds, convert to milliseconds
-                    timestamp = parsed * 1000;
-                  } else {
-                    // Already milliseconds
-                    timestamp = parsed;
-                  }
-                } else {
-                  // Parse as ISO date string
-                  timestamp = DateTime.parse(updatedAt).millisecondsSinceEpoch;
-                }
-              } else {
-                continue;
-              }
-
-              if (mostRecentTimestamp == null ||
-                  timestamp > mostRecentTimestamp) {
-                mostRecentTimestamp = timestamp;
-                mostRecentEpisodeNum = episodeNum;
-              }
-            } catch (e) {
-              print(
-                '⚠️ Failed to parse updatedAt timestamp: $updatedAt (${e.toString()})',
-              );
-            }
-          }
-        }
-      }
-    }
-
-    if (mostRecentEpisodeNum != null) {
-      // Find the episode index in the season's episode list
-      for (int i = 0; i < season.episodes.length; i++) {
-        final episode = season.episodes[i];
-        if (episode.seriesInfo.episode == mostRecentEpisodeNum) {
-          print(
-            '🎯 Found most recent episode in season: Episode $mostRecentEpisodeNum at index $i',
-          );
-          return i;
-        }
-      }
-    }
-
-    return null; // No specific episode to scroll to
-  }
-
-  /// Reload progress data from storage
-  /// Called when returning from video player to refresh progress indicators
-  Future<void> _reloadProgress() async {
-    if (!mounted) return;
-
-    try {
-      // Get the series/collection title from the playlist item
-      // IMPORTANT: Use same logic as _parseSeriesPlaylist() for consistency
-      final String? seriesTitle =
-          _series.seriesPlaylist?.seriesTitle ??
-          widget.playlistItem['title'] as String?;
-
-      if (seriesTitle != null && seriesTitle.isNotEmpty) {
-        print('🔄 Reloading progress after video playback for: $seriesTitle');
-        final episodeProgress = await EpisodeProgressStorage.getEpisodeProgress(
-          seriesTitle: seriesTitle,
-        );
-
-        if (!mounted) return; // Check again after async operation
-
-        print(
-          '📊 Reloaded ${episodeProgress.length} episodes with updated progress',
-        );
-        print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
-
-        setState(() {
-          _series.fileProgressCache = episodeProgress;
-        });
-      }
-    } catch (e) {
-      print('❌ Error reloading progress data: $e');
-      // Don't rethrow - this is a non-critical background operation
-    }
-  }
-
-  /// Parse series playlist from current view nodes
-  Future<void> _saveImdbIdToPlaylist({bool force = false}) async {
-    final imdbId = _series.seriesPlaylist?.imdbId;
-    if (imdbId == null || !imdbId.startsWith('tt')) return;
-    if (!force && (widget.playlistItem?['imdbId'] as String?) != null) return;
-
-    final rdTorrentId = widget.playlistItem?['rdTorrentId'] as String?;
-    final torboxTorrentId = widget.playlistItem?['torboxTorrentId']?.toString();
-    final pikpakCollectionId = widget.playlistItem?['pikpakFileId'] as String?;
-    final isPremiumize =
-        (widget.playlistItem?['provider'] as String?)?.toLowerCase() ==
-        'premiumize';
-    final String? premiumizeHash = isPremiumize
-        ? (widget.playlistItem?['torrent_hash'] as String?)
-        : null;
-    final String? premiumizeItemId = isPremiumize
-        ? (widget.playlistItem?['premiumizeItemId']?.toString())
-        : null;
-    final bool isAllDebrid =
-        (widget.playlistItem?['provider'] as String?)?.toLowerCase() ==
-        'alldebrid';
-    final String? allDebridHash = isAllDebrid
-        ? (widget.playlistItem?['torrent_hash'] as String?)
-        : null;
-
-    await PlaylistMetadataStorage.updatePlaylistItemImdbId(
-      imdbId,
-      rdTorrentId: rdTorrentId,
-      torboxTorrentId: torboxTorrentId,
-      pikpakCollectionId: pikpakCollectionId,
-      premiumizeHash: premiumizeHash,
-      premiumizeItemId: premiumizeItemId,
-      allDebridHash: allDebridHash,
-      force: force,
-    );
-  }
-
-  Future<void> _parseSeriesPlaylist() async {
-    if (_catalog.rootContent == null) return;
-
-    try {
-      // Get ALL video files recursively from the entire content tree
-      final allFiles = _catalog.rootContent!.getAllFiles();
-      final videoFiles = allFiles
-          .where((node) => FileUtils.isVideoFile(node.name))
-          .toList();
-
-      if (videoFiles.isEmpty) {
-        return;
-      }
-
-      // Create PlaylistEntry objects from video files
-      final entries = videoFiles
-          .map(
-            (f) => PlaylistEntry(
-              url: '', // Not needed for parsing
-              title: f.name,
-              relativePath:
-                  f.relativePath ??
-                  f.path, // Use relativePath if available, fallback to path
-            ),
-          )
-          .toList();
-
-      // Get series/collection title from playlist item
-      // Try 'seriesTitle' first (if previously extracted), fallback to 'title' (raw torrent name)
-      final String? collectionTitle =
-          widget.playlistItem['seriesTitle'] as String? ??
-          widget.playlistItem['title'] as String?;
-
-      _series.seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
-        entries,
-        collectionTitle: collectionTitle,
-      );
-
-      // Reload progress with the clean extracted series/collection title!
-      // This works for both series and movie collections
-      final String? titleForProgress =
-          _series.seriesPlaylist!.seriesTitle ??
-          widget.playlistItem['title'] as String?;
-
-      if (titleForProgress != null && titleForProgress.isNotEmpty) {
-        print('🔄 Reloading progress with clean title: $titleForProgress');
-        print('📌 isSeries: ${_series.seriesPlaylist!.isSeries}');
-        final episodeProgress = await EpisodeProgressStorage.getEpisodeProgress(
-          seriesTitle: titleForProgress,
-        );
-        print('📊 Loaded ${episodeProgress.length} episodes with progress');
-        print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
-        _series.fileProgressCache = episodeProgress;
-
-        // Determine initial season based on most recent viewing history
-        if (_series.seriesPlaylist!.isSeries &&
-            _series.fileProgressCache.isNotEmpty) {
-          final initialSeason = _determineInitialSeason();
-          print('🎬 Setting initial season to: $initialSeason');
-          _series.selectedSeasonNumber = initialSeason;
-        }
-      }
-
-      // Check if we have a saved TVMaze mapping (indicates cached data)
-      // Only show loading indicator if data needs to be fetched
-      bool showLoading = true;
-      if (widget.playlistItem != null) {
-        final mapping = await TvMazeMappingStorage.getTVMazeSeriesMapping(
-          widget.playlistItem!,
-        );
-        if (mapping != null) {
-          showLoading = false; // Data should be cached, skip loading indicator
-        }
-      }
-
-      if (showLoading) {
-        setState(() {
-          _series.isLoadingSeriesMetadata = true;
-        });
-      }
-
-      // Fetch TVMaze metadata asynchronously
-      if (_series.seriesPlaylist!.isSeries) {
-        _series.seriesPlaylist!
-            .fetchEpisodeInfo(
-              playlistItem: widget.playlistItem,
-              imdbId: widget.playlistItem?['imdbId'] as String?,
-            )
-            .then((_) async {
-              await _saveImdbIdToPlaylist();
-              await _saveDetectedSeriesPosterToPlaylist();
-              if (mounted) {
-                setState(() {
-                  _series.isLoadingSeriesMetadata = false;
-                });
-              }
-            })
-            .catchError((e) {
-              print('Failed to fetch episode metadata: $e');
-              if (mounted) {
-                setState(() {
-                  _series.isLoadingSeriesMetadata = false;
-                });
-              }
-            });
-      }
-    } catch (e) {
-      print('Failed to parse series playlist: $e');
-      setState(() {
-        _series.isLoadingSeriesMetadata = false;
-      });
-    }
-  }
-
-  /// Show the Fix Metadata dialog to manually select a TV show
-  Future<void> _showFixMetadataDialog() async {
-    // Show the search dialog
-    final selectedShow = await showDialog<Map<String, dynamic>>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => TVMazeSearchDialog(
-        initialQuery: _series.seriesPlaylist?.seriesTitle ?? '',
-      ),
-    );
-
-    if (selectedShow != null && mounted) {
-      // 1. Get OLD mapping (before it's overwritten)
-      final oldMapping = await TvMazeMappingStorage.getTVMazeSeriesMapping(
-        widget.playlistItem,
-      );
-      final oldShowId = oldMapping?['tvmazeShowId'] as int?;
-
-      // 2. Clear old show ID cache if it exists
-      if (oldShowId != null && oldShowId != selectedShow['id']) {
-        debugPrint('🧹 Clearing old show ID cache: $oldShowId');
-        await TVMazeService.clearShowCache(oldShowId);
-        await EpisodeInfoService.clearShowCache(oldShowId);
-      }
-
-      // 3. Clear series name cache (existing logic)
-      await EpisodeInfoService.clearSeriesCache(
-        _series.seriesPlaylist?.seriesTitle ?? '',
-      );
-      await TVMazeService.clearSeriesCache(
-        _series.seriesPlaylist?.seriesTitle ?? '',
-      );
-
-      // 4. Save new mapping
-      await TvMazeMappingStorage.saveTVMazeSeriesMapping(
-        playlistItem: widget.playlistItem,
-        tvmazeShowId: selectedShow['id'] as int,
-        showName: selectedShow['name'] as String,
-      );
-
-      // Update playlist item poster/cover image
-      await _updatePlaylistPoster(selectedShow);
-
-      // Show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Metadata fixed! Using "${selectedShow['name']}" from TVMaze',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-
-      // Reload episode info with the new show ID
-      if (_series.seriesPlaylist != null &&
-          _series.seriesPlaylist!.isSeries &&
-          mounted) {
-        // Clear stale tvmazeShowId so fetchEpisodeInfo reads the new mapping.
-        // The name goes with it: fetchEpisodeInfo rewrites it on success, but
-        // a failed lookup must not leave the OLD show's name captioning the
-        // player dock.
-        _series.seriesPlaylist!.tvmazeShowId = null;
-        _series.seriesPlaylist!.tvmazeShowName = null;
-        _series.seriesPlaylist!.showPosterUrl = null;
-
-        setState(() {
-          _series.isLoadingSeriesMetadata = true;
-        });
-
-        _series.seriesPlaylist!
-            .fetchEpisodeInfo(
-              playlistItem: widget.playlistItem,
-              imdbId: widget.playlistItem?['imdbId'] as String?,
-            )
-            .then((_) async {
-              await _saveImdbIdToPlaylist(force: true);
-              await _saveDetectedSeriesPosterToPlaylist();
-              if (mounted) {
-                setState(() {
-                  _series.isLoadingSeriesMetadata = false;
-                });
-              }
-            })
-            .catchError((e) {
-              print('Failed to refresh episode metadata: $e');
-              if (mounted) {
-                setState(() {
-                  _series.isLoadingSeriesMetadata = false;
-                });
-              }
-            });
-      }
-    }
-  }
-
-  Future<void> _saveDetectedSeriesPosterToPlaylist() async {
-    final posterUrl = _series.seriesPlaylist?.showPosterUrl;
-    if (posterUrl == null || posterUrl.isEmpty) return;
-
-    try {
-      await PlaylistPosterStorage.savePlaylistPosterOverride(
-        playlistItem: widget.playlistItem,
-        posterUrl: posterUrl,
-      );
-
-      final itemKey = PlaylistStorage.computePlaylistDedupeKey(
-        widget.playlistItem,
-      );
-      final items = await PlaylistStorage.getPlaylistItemsRaw();
-      final itemIndex = items.indexWhere(
-        (item) => PlaylistStorage.computePlaylistDedupeKey(item) == itemKey,
-      );
-
-      if (itemIndex >= 0) {
-        items[itemIndex]['posterUrl'] = posterUrl;
-        await PlaylistStorage.savePlaylistItemsRaw(items);
-      }
-    } catch (e) {
-      debugPrint('Error saving detected series poster: $e');
-    }
-  }
-
-  /// Update the playlist item's poster/cover image with the TVMaze show poster
-  Future<void> _updatePlaylistPoster(Map<String, dynamic> showInfo) async {
-    try {
-      // Extract poster URL from TVMaze show data
-      // TVMaze provides 'image' with 'medium' and 'original' URLs
-      final image = showInfo['image'];
-      String? posterUrl;
-
-      if (image != null && image is Map<String, dynamic>) {
-        // Prefer original over medium for better quality
-        posterUrl = image['original'] as String? ?? image['medium'] as String?;
-      }
-
-      if (posterUrl == null || posterUrl.isEmpty) {
-        print('No poster URL found in TVMaze show data');
-        return;
-      }
-
-      print('🎬 Updating playlist poster with: $posterUrl');
-
-      // CRITICAL: Save poster override to persistent storage
-      // This ensures the poster persists across app restarts
-      await PlaylistPosterStorage.savePlaylistPosterOverride(
-        playlistItem: widget.playlistItem,
-        posterUrl: posterUrl,
-      );
-
-      // Also update the in-memory playlist item for immediate UI update
-      final provider =
-          (widget.playlistItem['provider'] as String?) ?? 'realdebrid';
-      bool updated = false;
-
-      if (provider.toLowerCase() == 'realdebrid') {
-        final rdTorrentId = widget.playlistItem['rdTorrentId'] as String?;
-        if (rdTorrentId != null) {
-          updated = await PlaylistArtworkStorage.updatePlaylistItemPoster(
-            posterUrl,
-            rdTorrentId: rdTorrentId,
-          );
-        }
-      } else if (provider.toLowerCase() == 'torbox') {
-        final torboxTorrentId = widget.playlistItem['torboxTorrentId'];
-        if (torboxTorrentId != null) {
-          // Torbox uses integer IDs, but updatePlaylistItemPoster expects String
-          // We need to update the playlist manually
-          final items = await PlaylistStorage.getPlaylistItemsRaw();
-          final itemIndex = items.indexWhere(
-            (item) => item['torboxTorrentId'] == torboxTorrentId,
-          );
-
-          if (itemIndex >= 0) {
-            items[itemIndex]['posterUrl'] = posterUrl;
-            await PlaylistStorage.savePlaylistItemsRaw(items);
-            updated = true;
-          }
-        }
-      } else if (provider.toLowerCase() == 'pikpak') {
-        final pikpakCollectionId =
-            widget.playlistItem['pikpakFileId'] as String?;
-        if (pikpakCollectionId != null) {
-          updated = await PlaylistArtworkStorage.updatePlaylistItemPoster(
-            posterUrl,
-            pikpakCollectionId: pikpakCollectionId,
-          );
-        }
-      } else if (provider.toLowerCase() == 'premiumize') {
-        final premiumizeHash = widget.playlistItem['torrent_hash'] as String?;
-        final premiumizeItemId = widget.playlistItem['premiumizeItemId']
-            ?.toString();
-        if (premiumizeHash != null && premiumizeHash.isNotEmpty) {
-          updated = await PlaylistArtworkStorage.updatePlaylistItemPoster(
-            posterUrl,
-            premiumizeHash: premiumizeHash,
-          );
-        } else if (premiumizeItemId != null && premiumizeItemId.isNotEmpty) {
-          updated = await PlaylistArtworkStorage.updatePlaylistItemPoster(
-            posterUrl,
-            premiumizeItemId: premiumizeItemId,
-          );
-        }
-      } else if (provider.toLowerCase() == 'alldebrid') {
-        final allDebridHash = widget.playlistItem['torrent_hash'] as String?;
-        if (allDebridHash != null && allDebridHash.isNotEmpty) {
-          updated = await PlaylistArtworkStorage.updatePlaylistItemPoster(
-            posterUrl,
-            allDebridHash: allDebridHash,
-          );
-        }
-      }
-
-      if (updated) {
-        print(
-          '✅ Successfully updated playlist poster in memory and persistent storage',
-        );
-      } else {
-        print(
-          '⚠️ Updated persistent storage but in-memory update failed - poster will still persist on restart',
-        );
-      }
-    } catch (e) {
-      print('❌ Error updating playlist poster: $e');
-    }
-  }
-
   /// Build season selector dropdown
   Widget _buildSeasonSelector() {
     if (_series.seriesPlaylist == null) return const SizedBox.shrink();
@@ -1647,7 +985,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: _showFixMetadataDialog,
+              onTap: _sections.seriesMetadata.showFixMetadataDialog,
               borderRadius: app.shape.br(8),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -1687,7 +1025,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     // Determine which episode to scroll to (if any)
     // Use _isScrollScheduled flag to prevent duplicate scroll scheduling during rebuilds
     if (_scroll.targetEpisodeIndex == null && !_scroll.isScrollScheduled) {
-      _scroll.targetEpisodeIndex = _determineInitialEpisodeIndex(season);
+      _scroll.targetEpisodeIndex = _sections.progress
+          .determineInitialEpisodeIndex(season);
 
       // Schedule auto-scroll after the list is built
       // IMPORTANT: Always schedule the callback - hasClients will be checked inside
@@ -1839,7 +1178,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               () {
                 _episode.episodeLongPressTriggered = true;
                 _episode.lastEpisodeLongPressTime = DateTime.now();
-                _toggleWatchedState(episode);
+                _sections.watched.toggleWatchedState(episode);
               },
             );
 
@@ -1903,7 +1242,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                       : () => _playEpisode(episode),
                   onLongPress: _episode.isAndroidTv
                       ? null
-                      : () => _toggleWatchedState(episode),
+                      : () => _sections.watched.toggleWatchedState(episode),
                   child: isMobile
                       ? _buildMobileEpisodeCard(
                           episode,
@@ -2096,7 +1435,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
           // Right: Watched button
           GestureDetector(
-            onTap: () => _toggleWatchedState(episode),
+            onTap: () => _sections.watched.toggleWatchedState(episode),
             child: Container(
               width: 30,
               height: 30,
@@ -2263,7 +1602,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
           // Right: Mark as watched button
           GestureDetector(
-            onTap: () => _toggleWatchedState(episode),
+            onTap: () => _sections.watched.toggleWatchedState(episode),
             child: Container(
               width: 36,
               height: 36,
@@ -2394,94 +1733,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     );
   }
 
-  /// Toggle the watched state of an episode
-  Future<void> _toggleWatchedState(SeriesEpisode episode) async {
-    if (_series.seriesPlaylist == null) return;
-
-    // Cloud-playlist rows are intentionally local-only: they have file/folder
-    // identity but no reliable tracker title identity. Tracker-aware catalog
-    // and detail actions fan out through WatchedActionCoordinator instead.
-
-    // Get the series title for storage
-    final String? seriesTitle =
-        _series.seriesPlaylist!.seriesTitle ??
-        widget.playlistItem['title'] as String?;
-
-    if (seriesTitle == null || seriesTitle.isEmpty) {
-      print('❌ Cannot toggle watched state: No series title available');
-      return;
-    }
-
-    // Get episode details
-    final season = episode.seriesInfo.season ?? 1;
-    final episodeNum = episode.seriesInfo.episode ?? 1;
-    final imdbId =
-        _series.seriesPlaylist?.imdbId ??
-        widget.playlistItem['imdbId'] as String?;
-
-    try {
-      // Check current watched state
-      final isCurrentlyFinished =
-          await EpisodeProgressStorage.isEpisodeFinished(
-            seriesTitle: seriesTitle,
-            season: season,
-            episode: episodeNum,
-            imdbId: imdbId,
-          );
-
-      if (isCurrentlyFinished) {
-        // Episode is marked as watched, unmark it
-        print('🔄 Unmarking as watched: $seriesTitle S${season}E$episodeNum');
-        await EpisodeCompletionStorage.unmarkEpisodeAsFinished(
-          seriesTitle: seriesTitle,
-          season: season,
-          episode: episodeNum,
-          imdbId: imdbId,
-        );
-      } else {
-        // Episode is not watched, mark it as finished
-        print('✅ Marking as watched: $seriesTitle S${season}E$episodeNum');
-        await EpisodeCompletionStorage.markEpisodeAsFinished(
-          seriesTitle: seriesTitle,
-          season: season,
-          episode: episodeNum,
-          imdbId: imdbId,
-        );
-      }
-
-      // Reload the progress to update the UI
-      await _reloadProgress();
-
-      // Show a snackbar to confirm the action
-      // Note: isCurrentlyFinished is the OLD state before toggle, so we invert the message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isCurrentlyFinished
-                  ? 'Episode marked as unwatched'
-                  : 'Episode marked as watched',
-            ),
-            duration: const Duration(seconds: 2),
-            backgroundColor: isCurrentlyFinished
-                ? const Color(0xFF6366F1)
-                : const Color(0xFF4CAF50),
-          ),
-        );
-      }
-    } catch (e) {
-      print('❌ Error toggling watched state: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating watched state: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   /// Play episode from OTT view with full playlist support
   Future<void> _playEpisode(SeriesEpisode episode) async {
     if (_catalog.rootContent == null || !mounted) return;
@@ -2574,7 +1825,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // Reload progress after returning from video player
       if (mounted) {
-        await _reloadProgress();
+        await _sections.progress.reloadProgress();
       }
     } catch (e) {
       print('❌ Error playing episode: $e');
@@ -2585,7 +1836,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Reload progress even if an error occurred
       // (user might have watched part of video before error)
       if (mounted) {
-        await _reloadProgress();
+        await _sections.progress.reloadProgress();
       }
 
       if (mounted) {
@@ -3279,20 +2530,22 @@ Map<String, Object?> playlistContentTestAccess(
     'navigateIntoFolder': s._sections.navigation.navigateIntoFolder,
     'navigateUp': s._sections.navigation.navigateUp,
     'playFile': s._playFile,
-    'toggleSearch': s._toggleSearch,
-    'performSearch': s._performSearch,
-    'getProgressForFile': s._getProgressForFile,
-    'determineInitialSeason': s._determineInitialSeason,
-    'determineInitialEpisodeIndex': s._determineInitialEpisodeIndex,
-    'reloadProgress': s._reloadProgress,
-    'saveImdbIdToPlaylist': s._saveImdbIdToPlaylist,
-    'parseSeriesPlaylist': s._parseSeriesPlaylist,
-    'showFixMetadataDialog': s._showFixMetadataDialog,
-    'saveDetectedSeriesPosterToPlaylist': s._saveDetectedSeriesPosterToPlaylist,
-    'updatePlaylistPoster': s._updatePlaylistPoster,
+    'toggleSearch': s._sections.search.toggleSearch,
+    'performSearch': s._sections.search.performSearch,
+    'getProgressForFile': s._sections.progress.getProgressForFile,
+    'determineInitialSeason': s._sections.progress.determineInitialSeason,
+    'determineInitialEpisodeIndex':
+        s._sections.progress.determineInitialEpisodeIndex,
+    'reloadProgress': s._sections.progress.reloadProgress,
+    'saveImdbIdToPlaylist': s._sections.seriesMetadata.saveImdbIdToPlaylist,
+    'parseSeriesPlaylist': s._sections.seriesMetadata.parseSeriesPlaylist,
+    'showFixMetadataDialog': s._sections.seriesMetadata.showFixMetadataDialog,
+    'saveDetectedSeriesPosterToPlaylist':
+        s._sections.posters.saveDetectedSeriesPosterToPlaylist,
+    'updatePlaylistPoster': s._sections.posters.updatePlaylistPoster,
     'scrollToEpisode': s._scrollToEpisode,
     'formatAirDate': formatAirDate,
-    'toggleWatchedState': s._toggleWatchedState,
+    'toggleWatchedState': s._sections.watched.toggleWatchedState,
     'playEpisode': s._playEpisode,
     'playRealDebridPlaylist': s._playRealDebridPlaylist,
     'playAllDebridPlaylist': s._playAllDebridPlaylist,

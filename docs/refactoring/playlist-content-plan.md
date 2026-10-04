@@ -753,6 +753,20 @@ identities against the observed branch baselines and approved additions.
   recapture of the original is unnecessary. A moved-code Linux comparison
   will use this same locally available calibrated image after step 6.
 
+- Step 4: search, progress, watched actions, series/Fix Metadata, poster
+  writes and private dormant progress move into six reviewed records.
+  Provider/profile ownership, writes after handoff, mounted checks and
+  original unsafe continuations are preserved. Facade: 2,569 lines.
+  `step4-*` versus `base4` passes: 172 focused/source/shape identities, all
+  six manifest self-tests, analyzer comparison with no additions, CI
+  format/allowlist, all 17 warnings, architecture/size/storage checks.
+  The source reader accepts only whitespace around registered live getters
+  after Dart formatting splits a receiver; its 26 source guards pass on
+  original `6e23a3c5` as well as moved code. Frozen method bodies and all
+  assertions remain unchanged. An initial original-reader invocation with
+  a misspelled test path is retained as `step4-attempt1-original-*`; the
+  corrected run proves all 26 original guards.
+
 
 ## Found, not fixed
 
