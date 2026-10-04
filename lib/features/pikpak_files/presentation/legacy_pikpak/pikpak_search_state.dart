@@ -1,6 +1,7 @@
 import 'package:debrify/features/pikpak_files/models/pikpak_search_result.dart';
 import 'package:flutter/material.dart';
 
+// Search state (for folder browsing mode)
 class PikpakSearchState {
   bool isSearchActive = false;
 

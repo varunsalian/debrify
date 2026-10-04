@@ -10,6 +10,7 @@ typedef PikpakSelectionActionsDeps = ({
   void Function(VoidCallback) setState,
 });
 
+// --- Multi-select helpers ---
 class PikpakSelectionActions {
   PikpakSelectionActions(this._deps);
   final PikpakSelectionActionsDeps _deps;

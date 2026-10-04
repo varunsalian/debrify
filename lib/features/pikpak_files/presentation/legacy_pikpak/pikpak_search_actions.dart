@@ -15,6 +15,7 @@ typedef PikpakSearchActionsDeps = ({
   PikpakCatalogState catalogState,
 });
 
+// ============ Search Methods ============
 class PikpakSearchActions {
   PikpakSearchActions(this._deps);
   final PikpakSearchActionsDeps _deps;

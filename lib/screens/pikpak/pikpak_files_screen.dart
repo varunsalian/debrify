@@ -69,31 +69,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     ),
   );
 
-  // TV content focus handler (stored for proper unregistration)
-
-  // Add link state
-
-  // Pagination state
-
-  // Folder navigation state
-
-  // View mode state (per-folder persistence during session)
-
-  // Virtual folder navigation for Series Arrange mode
-
-  // e.g., "Season 1"
-  // Files in virtual Season
-
-  // Cache for recursive file listings (avoid repeated API calls)
-
-  // Focus nodes for TV/DPAD navigation
-
-  // Flag to focus first item after data loads (set by TV content focus handler)
-
-  // Multi-select state
-
-  // Search state (for folder browsing mode)
-
   @override
   void initState() {
     super.initState();
@@ -176,18 +151,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     super.dispose();
   }
 
-  // --- Multi-select helpers ---
-
-  // ========== VIEW MODE TRANSFORMATION METHODS ==========
-
-  // ============ Search Methods ============
-
   @override
   Widget build(BuildContext context) => _sections.rootLayout.build(context);
-
-  // ============================================================================
-  // Add Link Dialog
-  // ============================================================================
 }
 
 /// Original-code characterization seam: fresh state and real action tear-offs.

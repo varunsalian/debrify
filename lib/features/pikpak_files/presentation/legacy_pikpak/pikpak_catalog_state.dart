@@ -1,3 +1,4 @@
+// Pagination state
 class PikpakCatalogState {
   final List<Map<String, dynamic>> files = [];
 

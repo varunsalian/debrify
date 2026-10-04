@@ -18,6 +18,9 @@ typedef PikpakLinkActionsDeps = ({
   Future<void> Function() refreshFiles,
 });
 
+// ============================================================================
+// Add Link Dialog
+// ============================================================================
 class PikpakLinkActions {
   PikpakLinkActions(this._deps);
   final PikpakLinkActionsDeps _deps;

@@ -1,3 +1,4 @@
+// Folder navigation state
 class PikpakNavigationState {
   String? currentFolderId;
 

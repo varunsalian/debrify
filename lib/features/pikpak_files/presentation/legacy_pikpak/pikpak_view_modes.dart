@@ -18,6 +18,7 @@ typedef PikpakViewModesDeps = ({
   BuildContext Function() context,
 });
 
+// ========== VIEW MODE TRANSFORMATION METHODS ==========
 class PikpakViewModes {
   PikpakViewModes(this._deps);
   final PikpakViewModesDeps _deps;

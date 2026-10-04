@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+// TV content focus handler (stored for proper unregistration)
+// Focus nodes for TV/DPAD navigation
+// Flag to focus first item after data loads (set by TV content focus handler)
 class PikpakFocusState {
   final ScrollController scrollController = ScrollController();
 

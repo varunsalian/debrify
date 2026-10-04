@@ -1,3 +1,4 @@
+// Multi-select state
 class PikpakSelectionState {
   bool isSelectionMode = false;
 

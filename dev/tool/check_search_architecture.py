@@ -25,7 +25,7 @@ SETTINGS_FACADE = "lib/screens/settings_screen.dart"
 SETTINGS_COMPLETE = True
 IPTV_COMPLETE = True
 TORBOX_COMPLETE = True
-PIKPAK_COMPLETE = False
+PIKPAK_COMPLETE = True
 PIKPAK_FACADE = "lib/screens/pikpak/pikpak_files_screen.dart"
 PIKPAK_BRIDGE = "lib/features/pikpak_files/presentation/legacy_pikpak/"
 DEBRID_COMPLETE = True
@@ -94,6 +94,7 @@ TORRENT_PLAYBACK_PIPELINES = {
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
     FACADE,
+    PIKPAK_FACADE,
     DEBRID_FACADE,
     IPTV_FACADE,
     # Temporary forwarding-only bridge, with its own 400-line cap.
