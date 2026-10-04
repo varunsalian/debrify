@@ -334,7 +334,21 @@ As in the PikPak plan, with these points:
    (sqflite ffi; `SharedPreferences` mocks; `ProfileRuntime`,
    `DeviceKeyProvider` resets; `AppStorage.debugOverride`;
    `IptvCatalogDb.debugDirectoryOverride`, **a separate directory per
-   profile/test** for catalog isolation cases, never one shared override;
+   profile/test** for catalog isolation cases, never one shared override.
+   The override is global and an open connection stays on its old directory
+   (`iptv_catalog_db.dart:722–727`), so each handoff awaits `closeScope()`,
+   replaces the override, and reopens before incoming-profile work; tests
+   assert distinct database paths and inspect both files. (Alternatively,
+   use the normal profile storage paths under `AppStorage.debugOverride` and
+   exercise the production handoff.)
+   **Refresh isolation:** seed refresh interval `0` for the profiles in
+   manual-loop tests (explicit discovery then returns immediately while
+   `force: true` refreshes stay enabled, as in
+   `test/iptv_catalog_refresh_service_test.dart:410`); dispose timers and
+   drain outstanding work before closing databases.
+   **Parser isolation:** pass `--parser-package <isolated package_config.json>`
+   (`check_verbatim_moves.py:347`) to every manifest run, from a package
+   initialized with the pinned lockfile (as in PikPak Progress);
    `ProfileRegistry` with a committed profile; `MemoryDeviceSecretCipher`;
    IO inside `tester.runAsync`; closing the media DB in teardown). Add
    `MockClient` for fetch and authenticate (feasible: the downloads run on
@@ -356,9 +370,9 @@ As in the PikPak plan, with these points:
    | 5 Edit | Credential and URL changes: the catalog keys removed, hidden groups forgotten for the set difference, the rebuilt playlist's fields. |
    | 6 Refresh | Manual-loop cases run with automatic discovery disabled; discovery is tested separately. Full-call source guards pin `force: true, priority: true`; behaviour pins request order for Xtream and M3U, per-section failure, termination on a stale scope, and that the busy set passed to the two-pane is the same `_refreshingIds` object throughout. |
    | 7 Lists | Create, rename, delete (cancel and confirm), the sheet's actions and the omitted moves at the ends. |
-   | 8 Settings | Each setter's persisted key and value, the style write's `noteExternalWrite` order, the auto-refresh interval and its double `refreshDue()`, max concurrent staying device-wide. Recording on the desktop host: the actual desktop recording rows, scheduled-recording counts, the device-wide limit, and the absence of the Android engine and battery controls. Platform predicates are never bypassed; the accessor may test the resume-flag clearing and the non-Android `false` from `LiveRecordingService` (`_invokeBool`, `live_recording_service.dart:885`; `Platform.isAndroid` at page 685). Android engine and battery behaviour is pending device verification. |
+   | 8 Settings | Each setter's persisted key and value, the style write's `noteExternalWrite` order, the auto-refresh interval and its `refreshDue()` invocation sites (two for a nonzero interval: the service's own and the page's; one for Off, which skips the service's; network effects tested separately, since dedupe means two invocations need not mean two downloads), max concurrent staying device-wide. Recording on the desktop host: the actual desktop recording rows, scheduled-recording counts, the device-wide limit, and the absence of the Android engine and battery controls. Platform predicates are never bypassed; the accessor may test the resume-flag clearing and the non-Android `false` from `LiveRecordingService` (`_invokeBool`, `live_recording_service.dart:885`; `Platform.isAndroid` at page 685). Android engine and battery behaviour is pending device verification. |
    | 9 Catalog DB | Source guards: no `runExclusive` in the page; `forgetHiddenGroups` unawaited; `hiddenGroupCounts` inside `setState`. |
-   | 10 Profile | Four distinct, observable scenarios, each asserting the actual stored writes and grants for **both** profiles: (a) a real gate remount gives fresh owners, and an in-flight removal returns at its `mounted` check (1164) with no snackbar; (b) the mounted State's scope is replaced during the shared confirmation: "Nothing was removed", nothing written; (c) a stale scope rejected before the body starts (`runIfCurrent` pre-check): no write; (d) a body held mid-operation across a switch: the captured scope at the storage and action boundaries (the `StateError` path is characterized, not fixed). Captured scope is tested at those boundaries, not by post-frame inheritance. |
+   | 10 Profile | Four distinct, observable scenarios, each asserting the actual stored writes and grants for **both** profiles: (a) a real gate remount gives fresh owners, and an in-flight removal returns at its `mounted` check (1164) with no snackbar; (b) the mounted State's scope is replaced during the shared confirmation: "Nothing was removed", nothing written; (c) a stale scope rejected before the body starts (`runIfCurrent` pre-check): no write; (d) a body held mid-operation across a switch, per held operation and boundary: captured-scope preference setters completing for the originating profile; `setIptvPlaylistsAndReload` persisting and then throwing at its live-scope check (`iptv_playlist_storage.dart:168–177`); and each caller's own error handling. `runIfCurrent` checks only before entering the body, so there's no blanket mid-action `StateError`. Captured scope is tested at those boundaries, not by post-frame inheritance. |
    | 11 D-pad | The form arrow chains, tab-bar keys, playlist tile chains, back button keys, TV entry focus in both layouts, focus repair after remove, the shared-delete dialog's key-repeat swallow (existing test kept), the dialogs' TV autofocus. |
    | 12 Identity | Through the accessor: `_refreshingIds` is the same object the two-pane receives, before and after a refresh. |
 
@@ -414,8 +428,11 @@ becomes strict.
 Claude merges the shared registration files by **union** with the other
 worktrees' changes: architecture-check registrations, shape and theme
 manifests, source guards, CI paths and analyzer inventories; size ratchets
-only ever lower. Claude then verifies the merged tree (manifests, guards,
-analyzer, focused tests) before claiming parity.
+only ever lower. Claude then verifies the merged committed tree (manifests,
+guards, analyzer, focused tests) and runs and records a **full-suite
+comparison on it** (AGENTS.md: full suite at cross-feature integration
+gates), keeping test and diagnostic identities and accounting explicitly for
+each parallel branch's additions, before claiming parity.
 
 ## Definition of done
 
@@ -463,8 +480,10 @@ All pre-existing; the extraction keeps each exactly.
 - File import has no double-submit guard ("Browse Files" stays enabled
   while a pick or parse is in flight), and its 5 MiB warning measures
   decoded characters, not bytes.
-- A profile change mid-action raises an unhandled `StateError` for callers
-  that drop the `_runProfileAction` future.
+- A stale scope rejected by `runIfCurrent`'s pre-body check raises an
+  unhandled `StateError` for callers that drop the `_runProfileAction`
+  future; later continuations aren't re-checked, and
+  `setIptvPlaylistsAndReload` can throw after it has persisted.
 - Post-frame callbacks scheduled inside a profile-action body run outside
   the captured scope.
 - Some profile-action bodies use `context` or `setState` before a fresh
@@ -479,7 +498,8 @@ All pre-existing; the extraction keeps each exactly.
   updates; `_reloadLists` has no ordering guard.
 - `_loadSettings` has no error handling, so a storage throw can leave the
   spinner.
-- Auto-refresh triggers `refreshDue()` twice.
+- With a nonzero interval, auto-refresh invokes `refreshDue()` twice (the
+  service and the page).
 - `build()` writes `_twoPaneActive` and `_phoneSection` (a scoped exception,
   above).
 - Dialogs opened from the IPTV page's plain `MaterialPageRoute` that don't
