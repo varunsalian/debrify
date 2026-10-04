@@ -1022,6 +1022,19 @@ As in the PikPak plan, with these specifics:
   or editing the inventory would weaken that check. No WebDAV code, assertion or
   failure entry changes; the original whole baseline already observes it.
 
+### Gate 1 — committed source after step 0b
+
+- Source `0a9ec24736b43c6244d15901dd52cba48efe7be2`, tested tree
+  `34abc7614d8cb4318111b396b786553a4e24e11e`: unfiltered full suite
+  10,701 success / 13 failure / 28 error / 20 skipped. Every outcome identity
+  equals the latest original `base4`; comparison PASS, zero additions/removals
+  or changed outcomes. Same SDK, stable committed tree, no overlay/untracked
+  inputs. `gate1.env.json`, `gate1-full-identity-audit.json` and comparison logs
+  preserve the evidence in `playback_settings/`.
+- Historical helper replay still reports its original stale failure inventory;
+  the exact observed original comparison is authoritative. No failure inventory,
+  assertion or analyzer allowlist changes. This commit records evidence only.
+
 ## Found, not fixed
 
 All of these are pre-existing, and the extraction keeps each one exactly.
