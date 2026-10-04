@@ -200,6 +200,68 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  // Playback settings: every remaining destination and the facade, at zero.
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_core_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_defaults_card.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_external_section.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_font_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_ios_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_ios_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_linux_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_linux_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_mac_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_mac_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_appearance.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_mode_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_section.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_setters.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_rows_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_sections.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_settings_layout.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_settings_load.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_settings_test_access.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_rows_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_setters.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_values_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_video_section.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_vr_section.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_vr_setters.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_vr_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_windows_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_windows_state.dart':
+      0,
+  'lib/screens/settings/external_player_settings_page.dart': 0,
   'lib/features/playback_settings/presentation/playback_setting_dropdown.dart':
       1,
   'lib/features/playback_settings/presentation/playback_dropdown_setting.dart':

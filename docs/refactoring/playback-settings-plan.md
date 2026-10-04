@@ -924,7 +924,7 @@ As in the PikPak plan, with these specifics:
   Review every field entry against the dependency report before pinning handles.
 - Keep initState/dispose whole in State, including original analytics, the
   initial load, all 36 listener closures and the 42 ordered disposals followed
-  by super. Exact comment multiset proof: 196 original/current comments.
+  by super. Exact comment multiset proof: 192 original/current comments.
   Trailing field comments move with their own fields, including orphan groups.
 - Conservative checker decision: the frozen accessor needs an opt-in borrowed
   receiver rule after fields move. Normalize only its exact registered paths
