@@ -942,6 +942,22 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   Full-suite gate 2 follows from the clean committed completion checkpoint,
   against both the latest catalog base and gate 1.
 
+- Step 6 completion commit: `70b6e892`. **Full-suite gate 2 PASS** against both
+  latest `catalog_detail/base0b-final-rerun` (tested tree
+  `2ea453f3e96c3a8de209f0cb99954a3df83382af`) and gate 1: exactly 11,172 successes /
+  13 failures / 28 errors / 20 skips; every old identity unchanged, no new
+  failures, missing tests, newly skipped tests or additions. Full suite paths
+  `[]`, flags `--no-pub`, `--concurrency=2`; same SDK as both references.
+  Clean committed tested tree `d88b19bb76b7b93f6e8fab0ab8ccf3ed1554cfba`, no
+  untracked inputs or tree drift. Evidence `gate2.jsonl`, `gate2.env.json`,
+  `gate2-vs-base0b-final-rerun.txt`, `gate2-vs-gate1.txt`. This final evidence
+  commit changes documentation only; gate-2 application/test/tool/CI inputs stay
+  byte-identical. All steps 0, 0L, 0b, 1–6 and both gates complete; stop here.
+- Pending: Android TV device D-pad/focus/hold-OK; real host playback handoffs
+  from all five callers and real tracker accounts; native/platform integration
+  checks and remote CI when Claude pushes. No push or branch switch performed.
+  All 24 found-not-fixed items below remain outside this move-only scope.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
