@@ -1057,6 +1057,7 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_cast_avatar.dart': 0,
   'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_bound_sources.dart': 0,
   'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart': 0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart': 0,
   'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart': 0,
   'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_primary_action.dart': 0,
   'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_resources.dart': 0,

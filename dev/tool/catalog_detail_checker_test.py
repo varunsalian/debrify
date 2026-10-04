@@ -82,8 +82,12 @@ def self_test(package=None):
             changed=copy.deepcopy(lookup);changed[key]['tokens']=[{'text':v,'offset':i,'comment':v.startswith(('//','/*'))} for i,v in enumerate(values[:start]+bad+values[end:])];changed[key]['formatCommas']=[]
             assert check_contracts(changed,rows,source,{**config,'catalog_call_receivers':[],'catalog_live_reads':[],'catalog_host_assignments':[spec]}),'Accepted assigned host callback mutation'
     rail=config['catalog_rail_callback'];key,node=located(rail['member']);values=tokens(node)
-    for label,bad in [('wrapper','() => _openMetadataRecommendation'),('receiver','secondInstance._openMetadataRecommendation'),('member','_playPrimary')]:
-        changed=dict(sources);text=node['text'].replace(located(rail['target'])[1]['name'],bad,1)
+    target_name=located(rail['target'])[1]['name']
+    callback=re.search(r'(?:[A-Za-z_]\w*\.)*'+re.escape(target_name)+r'\b',node['text']);assert callback
+    callback_text=callback.group()
+    raw_host='_deps.onRecommendationTap()' if '_deps.' in node['text'] else 'widget.onRecommendationTap'
+    for label,bad in [('wrapper','(item) => '+callback_text+'(item)'),('receiver','secondInstance.'+target_name),('member',raw_host)]:
+        changed=dict(sources);text=node['text'][:callback.start()]+bad+node['text'][callback.end():]
         changed[key[0]]=sources[key[0]][:node['start']]+text+sources[key[0]][node['end']:]
         mutated=all_nodes(parse(changed,package))
         assert check_contracts(mutated,rows,source,{**config,'catalog_call_receivers':[],'catalog_live_reads':[],'catalog_host_assignments':[]}),'Accepted rail '+label
@@ -94,6 +98,22 @@ def self_test(package=None):
         assert replacement!=node['text']
         changed[key[0]]=sources[key[0]][:node['start']]+replacement+sources[key[0]][node['end']:]
         assert verify(changed),'Accepted changed live bound-source setter scaffold'
+
+    for spec in config.get('plain_sections',[]):
+        if spec['owner']!='CatalogDetailMetadata':continue
+        for name,before,after in [('mounted','_deps.mounted()','!_deps.mounted()'),('setState','_deps.setState','(fn) => _deps.setState(fn)')]:
+            key=(spec['file'],spec['owner'],name);node=lookup[key];changed=dict(sources)
+            replacement=node['text'].replace(before,after,1);assert replacement!=node['text']
+            changed[key[0]]=sources[key[0]][:node['start']]+replacement+sources[key[0]][node['end']:]
+            assert verify(changed),'Accepted changed metadata State forwarding getter '+name
+    key=(source,'_CatalogItemDetailScreenState','onMetadataPolicyChanged')
+    if located('_CatalogItemDetailScreenState.onMetadataPolicyChanged')[0]!=key:
+        node=lookup[key];changed=dict(sources)
+        changed[source]=sources[source][:node['start']]+node['text'].replace('@override','',1)+sources[source][node['end']:]
+        assert verify(changed),'Accepted missing facade override annotation'
+        mutate('_CatalogItemDetailScreenState.onMetadataPolicyChanged','override on moved policy body',lambda s:'@override\n  '+s)
+        mutate('_CatalogItemDetailScreenState._loadEnrichedMeta','borrowed mixin callback receiver',lambda s:s.replace('_deps.refreshMetadataPresentation','otherDeps.refreshMetadataPresentation',1))
+        mutate('_CatalogItemDetailScreenState._loadEnrichedMeta','wrapped borrowed mixin callback',lambda s:s.replace('_deps.refreshMetadataPresentation();','(() => _deps.refreshMetadataPresentation())();',1))
 
     state='_CatalogItemDetailScreenState.'
     for member,op,expected in [('initState','addListener',3),('dispose','removeListener',3),('initState','addPlaybackReturnListener',1),('dispose','removePlaybackReturnListener',1),('dispose','unsubscribe',1)]:

@@ -312,6 +312,11 @@ def normalize(values, rows, row=None):
             continue
         if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
+            # Config-scoped borrowed mixin callbacks have a frozen dependency
+            # field and composition binding, but no original owned declaration.
+            if (value in {'_deps', 'deps'}
+                    and target in CONFIG.get('dependency_callback_members', [])):
+                i += 2; continue
             getter_alias = CONFIG.get('live_getter_aliases', {}).get(target)
             if (getter_alias and target in live_getters
                     and values[i + 3:i + 5] == ['(', ')']):
@@ -367,7 +372,9 @@ def declaration_tokens(node, rows, row, *, original=False):
                 values[i + 2:i + 2] = ['layout', ',']
                 i += 2
             i += 1
-    if 'layout_body' in row['allowed_edits'] and values[:2] == ['@', 'override']:
+    if ('layout_body' in row['allowed_edits']
+            or (key in CONFIG.get('retained_override_bodies', [])
+                and 'retained_forwarder' in row['allowed_edits'].split(','))) and values[:2] == ['@', 'override']:
         del values[:2]
     return named_exception_tokens(values, row)
 

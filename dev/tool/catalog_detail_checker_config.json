@@ -209,6 +209,7 @@
       "owner": "CatalogDetailParts",
       "names": [
         "resources",
+        "metadata",
         "watchlist",
         "primaryAction",
         "boundSources",
@@ -221,6 +222,9 @@
     "_parts.resources": "CatalogDetailResources",
     "_deps.parts.resources": "CatalogDetailResources",
     "_f": "CatalogDetailResources",
+    "_parts.metadata": "CatalogDetailMetadata",
+    "_deps.parts.metadata": "CatalogDetailMetadata",
+    "_m": "CatalogDetailMetadata",
     "_parts.watchlist": "CatalogDetailWatchlist",
     "_deps.parts.watchlist": "CatalogDetailWatchlist",
     "_w": "CatalogDetailWatchlist",
@@ -246,6 +250,10 @@
     {
       "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_resources.dart",
       "owner": "CatalogDetailResources"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart",
+      "owner": "CatalogDetailMetadata"
     },
     {
       "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_watchlist.dart",
@@ -276,6 +284,7 @@
   "callback_instances": {
     "_CatalogItemDetailScreenState": "$State",
     "CatalogDetailResources": "$State.parts.resources",
+    "CatalogDetailMetadata": "$State.parts.metadata",
     "CatalogDetailWatchlist": "$State.parts.watchlist",
     "CatalogDetailPrimaryAction": "$State.parts.primaryAction",
     "CatalogDetailBoundSources": "$State.parts.boundSources"
@@ -284,6 +293,9 @@
     "_parts.resources": "$State.parts.resources",
     "_deps.parts.resources": "$State.parts.resources",
     "_f": "$State.parts.resources",
+    "_parts.metadata": "$State.parts.metadata",
+    "_deps.parts.metadata": "$State.parts.metadata",
+    "_m": "$State.parts.metadata",
     "_parts.watchlist": "$State.parts.watchlist",
     "_deps.parts.watchlist": "$State.parts.watchlist",
     "_w": "$State.parts.watchlist",
@@ -1417,5 +1429,11 @@
       "name": "hasBoundSource",
       "key": "hasBoundSource="
     }
+  ],
+  "dependency_callback_members": [
+    "refreshMetadataPresentation"
+  ],
+  "retained_override_bodies": [
+    "_CatalogItemDetailScreenState.onMetadataPolicyChanged"
   ]
 }

@@ -301,6 +301,21 @@
     {
       "file": "lib/screens/catalog_item_detail_screen.dart",
       "owner": "_CatalogItemDetailScreenState",
+      "name": "_m",
+      "tokens": [
+        "CatalogDetailMetadata",
+        "get",
+        "_m",
+        "=>",
+        "_parts",
+        ".",
+        "metadata",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/catalog_item_detail_screen.dart",
+      "owner": "_CatalogItemDetailScreenState",
       "name": "_w",
       "tokens": [
         "CatalogDetailWatchlist",
@@ -737,6 +752,17 @@
     {
       "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
       "owner": "CatalogDetailParts",
+      "name": "metadata",
+      "tokens": [
+        "final",
+        "CatalogDetailMetadata",
+        "metadata",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
       "name": "watchlist",
       "tokens": [
         "final",
@@ -782,6 +808,13 @@
         "=",
         "CatalogDetailResources",
         "(",
+        ")",
+        ",",
+        "metadata",
+        "=",
+        "CatalogDetailMetadata",
+        "(",
+        "deps",
         ")",
         ",",
         "watchlist",
@@ -1648,6 +1681,67 @@
         ".",
         "_deps",
         ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart",
+      "owner": "CatalogDetailMetadata",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "CatalogDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart",
+      "owner": "CatalogDetailMetadata",
+      "name": "CatalogDetailMetadata",
+      "tokens": [
+        "CatalogDetailMetadata",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart",
+      "owner": "CatalogDetailMetadata",
+      "name": "mounted",
+      "tokens": [
+        "bool",
+        "get",
+        "mounted",
+        "=>",
+        "_deps",
+        ".",
+        "mounted",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart",
+      "owner": "CatalogDetailMetadata",
+      "name": "setState",
+      "tokens": [
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "get",
+        "setState",
+        "=>",
+        "_deps",
+        ".",
+        "setState",
         ";"
       ]
     }

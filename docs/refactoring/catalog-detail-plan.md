@@ -869,6 +869,30 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   `gate1-xtream-timeout-investigation.json`. Gate 2 uses the same flags and
   compares both the latest base and gate 1.
 
+- Gate 1 evidence commit: `154d6de0`. Step 4: the 18 metadata declarations move
+  together, including the interleaved recommendation method/doc, identity map,
+  profile/revision generations, loader-art emissions, parents guide and accent.
+  The facade retains its exact policy override as a forwarder and original
+  metadata getter. Every entry's actual dependency wiring was reviewed before
+  pinning. Facade 1,511 lines; metadata owner 265; all destinations below 500.
+- Step 4 checks PASS: all 11 manifests/self-tests on their own originals,
+  catalog 135 leaves; architecture, size, storage, CI format, shape 29, Classic
+  theme 238, light-ink, scoped allowlist and root analyzer comparison. Strict
+  comparison has zero additions; the accepted curly info relocates by identity.
+  All 122 focused identities pass against `base0b-final-rerun`; all five macOS
+  and five Linux originals pass strictly with unchanged hashes/stable trees.
+  Evidence `step4-checks.json`, `step4-final-linux-strict.env.json`.
+- Step 4 decisions: exactly pinned `mounted`/`setState` forwarding getters keep
+  long original guards on one line without braces or suppression; inversion and
+  wrapping negatives reject changes. Config-scoped borrowed-mixin callback and
+  retained-override-body handling preserve the exact callback binding and the
+  facade's original annotated signature; wrong receiver/wrapper/annotation
+  negatives pass. The rail fixture now mutates the complete moved callback
+  expression, with valid wrapper, alternate receiver and raw-host swaps; no
+  assertion was removed. Initial rejected lint/checker/fixture evidence remains.
+  The other ten passing manifest results were reused on unchanged inputs within
+  this step after the catalog-only fixture correction.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
