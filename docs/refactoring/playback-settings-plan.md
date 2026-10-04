@@ -804,6 +804,84 @@ As in the PikPak plan, with these specifics:
   explicit pattern convention. No push, branch switch, dependency upgrade,
   behavior fix, assertion weakening or allowlist growth is authorized.
 
+
+### Step 0 — original characterization preparation
+
+- Frozen all 214 original leaves and the 133-field owner membership in the
+  dependency report; normal facade simulation is 351 lines, so the final cap
+  remains 400. Accessor seam has 191 keys, fresh collection snapshots and real
+  action/setter tear-offs. Accessor-only full `base2` compares exactly with
+  `base`, and its whole analyzer adds/removes no identities.
+- Original characterization covers 123 new identities across values, views,
+  actions, interactions, committed-profile boundaries, acquisition timing and
+  source guards. The original-focused draft is 145 successes and the one
+  observed pre-existing profile storage-adapter guard failure; comparison with
+  `base` passes with only added passing identities. Final staged proof and
+  `base3` are recorded before extraction. Five macOS original PNGs were captured
+  before extraction; only original capture uses golden update flags.
+- Three original-code mutations fail their exact tests: swapped first disposals,
+  reordered listeners, and negated subtitle-bold publication. The original
+  source is restored byte-for-byte. Font import/remove cases also pass with
+  random ordering seed 731. No proved assertion was weakened.
+- Conservative fixture decisions: real host detection runs in `tester.runAsync`;
+  one stable device-preferences object lives per isolate; dropped `loadFonts`
+  work drains before resetting caches; font cleanup uses existing public APIs.
+  Preference acquisition replacement has a separate isolate. The gate fixture
+  uses existing deterministic test typography and invokes picker actions in the
+  real async zone. Down at the macOS command field's lower boundary stays there;
+  Up exits. Incoming/outgoing aspect values are explicitly seeded separately.
+- The original profile hazards are now reproduced: before acquisition a setter
+  captures B; an already-issued renderer write lands in A and the next write
+  rejects its stale session; a pending font picker imports device-wide and selects
+  in B after its route pop. Idle picker handoff pops the pushed route by identity,
+  disposes the State, preserves A, and opens a new State reading/writing B.
+- The URL-launcher test interface is promoted from the already-locked transitive
+  2.3.2 version to an exact dev dependency; no version or runtime dependency
+  changes. Concurrent Flutter commands initially collided in ephemeral pub-get
+  cleanup; subsequent checks use `--no-pub` after this worktree's completed get.
+- The retained-preamble checker extension is opt-in, with a real original join
+  positive and complete partition/callback negatives. Every named callback
+  rejects closures, same-class receiver swaps, wrong members and missing named
+  arguments. The original 36-listener and 42-resource sequences, predicates,
+  detection/read order, unsupported branch, TV aspect key, navigation and helper
+  hashes remain pinned. TV input/redaction guards and explicit per-directory
+  theme registry entries are extended additively. Linux capture script resolves
+  this checkpoint by its exact subject and passes shell syntax checks.
+
+
+### Step 0 — frozen original evidence
+
+- Full `playback_settings/base3`: **10,700 successes / 13 failures / 28 errors /
+  20 skips**, PASS against `base2`. The unfiltered identity audit verifies all
+  prior outcomes exactly and exactly 123 added successes; staged tested tree
+  `a7d92d14d0fa50b9b8b8fa3a9c3a03d9c69b203e`, no untracked inputs or tree changes.
+  `original-freeze` separately proves every characterization identity on the
+  unchanged formatted original/accessor. The source guard pins the unsupported
+  branch body independently of the named root-build annotation exception.
+- Root analyzer is unchanged (1,635 records). Original root/strict evidence is
+  combined by maximum: 1,652 records. Per-symbol proof: 12 current / 29 original
+  strict, zero additions and zero scaffold diagnostics. CI format: 1,473 files,
+  zero changes. Scoped CI analyze and the unchanged five-warning allowlist pass.
+  All six manifests/self-tests pass with the isolated parser, including all
+  214 playback leaves, every named callback and the real partition fixtures.
+  Architecture, sizes, storage keys/references and staged diff pass.
+- Exact retained-State callback aliases permit the legal public record field
+  `openPlayerSettings` while preserving `_openPlayerSettings` as the State's
+  actual tear-off. Direct positive, closure and receiver negatives prove this
+  configuration-scoped spelling; other configs retain their behavior. Fresh CI
+  clones initialize the source guard's own pinned, isolated parser package.
+- CI selector decision: the pre-existing known-failure inventory names the
+  WebDAV hot-merge suite but its concrete test list omitted that file. Add its
+  existing path (no code/assertion/failure-list change) so the CI command can
+  exercise both already-observed listed failures. The full baseline already
+  contains those exact identities. Full-suite historical helper discrepancies
+  remain historical evidence, never accepted with a record/update flag.
+- Actual CI behavior command passes: 3,157 successes and the two unchanged
+  listed failures. The concrete selector repair is additive. Context-guard
+  checks are enabled for every receiver-qualified manifest row, and the final
+  real-config/self-test replay passes. Historical full-suite helper replay
+  still reports original discrepancies; no failure inventory is changed.
+
 ## Found, not fixed
 
 All of these are pre-existing, and the extraction keeps each one exactly.

@@ -240,6 +240,21 @@ def normalize(values, rows, row=None):
     i = 0
     while i < len(values):
         value = values[i]
+        # A named record cannot have a private field name. This exact borrowed
+        # callback alias preserves the retained State member's identity; it is
+        # opt-in and never erases a closure or an arbitrary receiver path.
+        borrowed = CONFIG.get('borrowed_member_aliases', {})
+        matched_alias = False
+        for path, original_name in borrowed.items():
+            expression = re.split(r'(\.)', path)
+            if values[i:i + len(expression)] == expression:
+                original_row = next(r for r in rows if r['original_name'] == original_name)
+                out.append(original_row['new_name'])
+                i += len(expression)
+                matched_alias = True
+                break
+        if matched_alias:
+            continue
         # A member qualification needs braces in a formerly simple string
         # interpolation. Canonicalize only an otherwise identical single read.
         if value == '${':
@@ -534,6 +549,9 @@ def partition_virtual(current, spec, lookup, sources, package=None):
     initializer order are independently checked. Re-parsing restores original
     callback scope numbering across slice files and local-to-member functions.
     """
+    if spec.get('retained_preamble_join'):
+        from playback_settings_partition import virtual
+        return virtual(current, spec, lookup, sources, package)
     from check_verbatim_moves import parse
     path, owner = spec['builder_file'], spec['builder_class']
     constructor = lookup[(path, owner, owner)]
@@ -580,6 +598,9 @@ def partition_virtual(current, spec, lookup, sources, package=None):
 
 
 def check_partition(before, current, spec, lookup, rows, package=None, row=None):
+    if spec.get('retained_preamble_join'):
+        from playback_settings_partition import check_partition as retained_check
+        return retained_check(before, current, spec, lookup, rows, package, row)
     errors = []
     original = partition_elements(before)
     slices = spec['slices']
