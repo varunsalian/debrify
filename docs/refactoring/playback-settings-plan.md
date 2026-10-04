@@ -1074,6 +1074,23 @@ As in the PikPak plan, with these specifics:
   Shape totals 20/four, floor 488; frozen characterization, PNG/helper hashes
   unchanged. Linux tests remain non-strict at this checkpoint as planned.
 
+### Linux prerequisite — verified originals and strict tests
+
+- Original artifacts remain separately committed at `a69da7c8`, from exact
+  checkpoint `7bf567c9`. Reverified all five hashes and original capture/strict
+  logs and calibrated Linux provenance; no PNG changes.
+- Before moving `build`, Linux golden comparison is strict by default. Sole
+  frozen-test delta is `requireLinux` false → true, byte-proved against step 0b;
+  original strict capture already passed with the equivalent true define.
+  No golden body/assertion changes or recapture. macOS views 27/27 pass,
+  affected test analyzer zero diagnostics.
+- Calibrated `debrify-flutter:3.44.8`, linux/amd64: current step-5 source plus
+  the flag passes all five original PNG comparisons without update flags.
+  Read-only archive of this dedicated worktree's staged tree was tested in
+  the disposable container; host source/lock/goldens unchanged. Exact tree,
+  image ID, hashes and logs are in `linux-strict-prerequisite.json` and related
+  evidence. This separate commit closes the prerequisite before step 6.
+
 ## Found, not fixed
 
 All of these are pre-existing, and the extraction keeps each one exactly.

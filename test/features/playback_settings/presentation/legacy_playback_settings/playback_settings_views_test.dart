@@ -19,7 +19,7 @@ import '../../../../support/playback_settings_fixture.dart';
 
 const requireLinux = bool.fromEnvironment(
   'PLAYBACK_SETTINGS_REQUIRE_ORIGINAL_LINUX',
-  defaultValue: false,
+  defaultValue: true,
 );
 const captureLinux = bool.fromEnvironment(
   'PLAYBACK_SETTINGS_CAPTURE_ORIGINAL_LINUX',
