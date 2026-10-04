@@ -33,7 +33,11 @@ void main() {
             .where((n) => !n.startsWith('_'))
             .toList();
     final exported =
-        RegExp(r"^export '[^']+' show ([^;]+);", multiLine: true, dotAll: true)
+        RegExp(
+              r"^export '[^']+'\s+show\s+([^;]+);",
+              multiLine: true,
+              dotAll: true,
+            )
             .allMatches(source)
             .expand((m) => m[1]!.split(',').map((n) => n.trim()))
             .toList();
@@ -47,7 +51,10 @@ void main() {
       expect(declarations, isEmpty);
       expect(
         source
-            .replaceAll(RegExp(r"export '[^']+' show [^;]+;", dotAll: true), '')
+            .replaceAll(
+              RegExp(r"export '[^']+'\s+show\s+[^;]+;", dotAll: true),
+              '',
+            )
             .trim(),
         isEmpty,
       );

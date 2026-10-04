@@ -959,6 +959,26 @@ change below.
   default; retain every frozen assertion and original PNG. This separate L commit
   contains no builder moves. Both future extraction gates compare with base6.
 
+### Step 0c — original proof for formatted-export namespace parsing
+
+- Step 1 exposed a lexical gap in the frozen surface reader: its export regex
+  accepted only a space before `show`, while normal Dart formatting wraps the
+  required long export URIs. Restored all uncommitted extraction changes before
+  correcting the two regexes to accept Dart whitespace. Every assertion remains
+  unchanged: exact 18 names, exact count, each physical declaration present,
+  and final facade containing only exports. No application behavior changed.
+- Original code (lib/pubspec inputs still equal R) passes all 49 characterizations,
+  including strict macOS originals. Recorded two real assertion-failing ORIGINAL
+  mutations: renamed public metrics declaration (missing name), and an added
+  wrapped export (19 names). The second proves the corrected reader detects a
+  duplicate that the earlier regex silently missed; neither failed to compile.
+  Evidence: own `step0c-original-{focused,namespace-mutation,wrapped-export-mutation}`.
+- Decision: original-proof checkpoint before resuming extraction, then a new
+  full-suite original base7. Linux capture provenance remains `439a1be5`: golden
+  fixtures, renderer and application are unchanged; the supplied PNGs are kept
+  byte-identical. No recapture or assertion weakening. Incomplete step1 attempts
+  are retained as investigation evidence and are not claimed as passed checks.
+
 ## Found, not fixed
 
 All pre-existing; the move keeps each exactly.
