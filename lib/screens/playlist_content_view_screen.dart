@@ -4,8 +4,10 @@ import 'package:debrify/features/playlist_content/application/playlist_content_f
 import 'package:debrify/features/playlist_content/application/playlist_content_sort_policy.dart';
 import 'package:debrify/features/playlist_content/models/playlist_content_search_result.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_catalog_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_cloud_launches.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_cloud_loading.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_content_loading.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_debrid_launches.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_dormant.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_focus_state.dart';
@@ -13,6 +15,7 @@ import 'package:debrify/features/playlist_content/presentation/legacy_playlist_c
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_navigation.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_navigation_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_ott_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_play_entries.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_playlist_order.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_posters.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_progress.dart';
@@ -26,22 +29,8 @@ import 'package:debrify/features/playlist_content/presentation/legacy_playlist_c
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_watched.dart';
 import 'package:debrify/models/rd_file_node.dart';
 import 'package:debrify/models/series_playlist.dart';
-import 'package:debrify/models/webdav_item.dart';
-import 'package:debrify/screens/video_player/models/playlist_entry.dart';
-import 'package:debrify/services/alldebrid_service.dart';
 import 'package:debrify/services/analytics_service.dart';
-import 'package:debrify/services/debrid_service.dart';
 import 'package:debrify/services/main_page_bridge.dart';
-import 'package:debrify/services/pikpak_api_service.dart';
-import 'package:debrify/services/premiumize_service.dart';
-import 'package:debrify/services/storage/alldebrid_storage.dart';
-import 'package:debrify/services/storage/premiumize_storage.dart';
-import 'package:debrify/services/storage/real_debrid_storage.dart';
-import 'package:debrify/services/storage/torbox_storage.dart';
-import 'package:debrify/services/storage/webdav_server_storage.dart';
-import 'package:debrify/services/torbox_service.dart';
-import 'package:debrify/services/video_player_launcher.dart';
-import 'package:debrify/services/webdav_service.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/file_utils.dart';
 import 'package:debrify/utils/formatters.dart';
@@ -137,6 +126,31 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       navigationState: _navigation,
       playlistItem: () => widget.playlistItem,
     ));
+    sections.playEntriesSlot = PlaylistContentPlayEntries((
+      catalogState: _catalog,
+      context: () => context,
+      applySortedPlaylistOrder: (List<RDFileNode> videoFiles) =>
+          sections.playlistOrder.applySortedPlaylistOrder(videoFiles),
+      playlistItem: () => widget.playlistItem,
+      playRealDebridPlaylist: (List<RDFileNode> videoFiles, int startIndex) =>
+          sections.debridLaunches.playRealDebridPlaylist(
+            videoFiles,
+            startIndex,
+          ),
+      playTorboxPlaylist: (List<RDFileNode> videoFiles, int startIndex) =>
+          sections.debridLaunches.playTorboxPlaylist(videoFiles, startIndex),
+      playPikPakPlaylist: (List<RDFileNode> videoFiles, int startIndex) =>
+          sections.cloudLaunches.playPikPakPlaylist(videoFiles, startIndex),
+      playWebDavPlaylist: (List<RDFileNode> videoFiles, int startIndex) =>
+          sections.cloudLaunches.playWebDavPlaylist(videoFiles, startIndex),
+      playPremiumizePlaylist: (List<RDFileNode> videoFiles, int startIndex) =>
+          sections.cloudLaunches.playPremiumizePlaylist(videoFiles, startIndex),
+      playAllDebridPlaylist: (List<RDFileNode> videoFiles, int startIndex) =>
+          sections.debridLaunches.playAllDebridPlaylist(videoFiles, startIndex),
+      mounted: () => mounted,
+      reloadProgress: () => sections.progress.reloadProgress(),
+      navigationState: _navigation,
+    ));
     sections.searchSlot = PlaylistContentSearch((
       setState: setState,
       searchState: _search,
@@ -176,6 +190,29 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       mounted: () => mounted,
       context: () => context,
     ));
+    sections.debridLaunchesSlot = PlaylistContentDebridLaunches((
+      playlistItem: () => widget.playlistItem,
+      seriesState: _series,
+      mounted: () => mounted,
+      onPlaybackStarted: () => widget.onPlaybackStarted,
+      context: () => context,
+      convertToPlaylistViewMode: (FolderViewMode mode) =>
+          sections.viewModes.convertToPlaylistViewMode(mode),
+      navigationState: _navigation,
+      catalogState: _catalog,
+      loadAllDebridContent: () =>
+          sections.contentLoading.loadAllDebridContent(),
+    ));
+    sections.cloudLaunchesSlot = PlaylistContentCloudLaunches((
+      seriesState: _series,
+      playlistItem: () => widget.playlistItem,
+      mounted: () => mounted,
+      onPlaybackStarted: () => widget.onPlaybackStarted,
+      context: () => context,
+      convertToPlaylistViewMode: (FolderViewMode mode) =>
+          sections.viewModes.convertToPlaylistViewMode(mode),
+      navigationState: _navigation,
+    ));
     return sections;
   }
 
@@ -213,101 +250,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     _focus.searchButtonFocusNode.dispose();
     _focus.searchClearFocusNode.dispose();
     super.dispose();
-  }
-
-  /// Play a file with full playlist support
-  Future<void> _playFile(RDFileNode file) async {
-    if (file.isFolder || _catalog.rootContent == null) return;
-
-    try {
-      // Show loading dialog
-      final app = AppThemeScope.of(context);
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          // A MODAL ground, which is why it is cloud.dialogSurface and not
-          // playlist.card — legacy spells both #1E293B.
-          backgroundColor: app.cloud.dialogSurface,
-          content: const Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Preparing playlist…'),
-            ],
-          ),
-        ),
-      );
-
-      // Get all video files from the entire tree
-      final allFiles = _catalog.rootContent!.getAllFiles();
-      final videoFiles = allFiles
-          .where((node) => FileUtils.isVideoFile(node.name))
-          .toList();
-
-      if (videoFiles.isEmpty) {
-        if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-        return;
-      }
-
-      // Apply Sort A-Z sorting if in sortedAZ mode
-      // Use EXACT same sorting logic as UI view mode (_applySortedView)
-      _sections.playlistOrder.applySortedPlaylistOrder(videoFiles);
-
-      // Find the selected file index
-      int startIndex = 0;
-      for (int i = 0; i < videoFiles.length; i++) {
-        if (videoFiles[i].name == file.name &&
-            videoFiles[i].path == file.path) {
-          startIndex = i;
-          break;
-        }
-      }
-
-      final provider =
-          ((widget.playlistItem['provider'] as String?) ?? 'realdebrid')
-              .toLowerCase();
-
-      if (provider == 'realdebrid') {
-        await _playRealDebridPlaylist(videoFiles, startIndex);
-      } else if (provider == 'torbox') {
-        await _playTorboxPlaylist(videoFiles, startIndex);
-      } else if (provider == 'pikpak') {
-        await _playPikPakPlaylist(videoFiles, startIndex);
-      } else if (provider == 'webdav') {
-        await _playWebDavPlaylist(videoFiles, startIndex);
-      } else if (provider == 'premiumize') {
-        await _playPremiumizePlaylist(videoFiles, startIndex);
-      } else if (provider == 'alldebrid') {
-        await _playAllDebridPlaylist(videoFiles, startIndex);
-      }
-
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      // Reload progress after returning from video player
-      if (mounted) {
-        await _sections.progress.reloadProgress();
-      }
-    } catch (e) {
-      print('❌ Error playing file: $e');
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      // Reload progress even if an error occurred
-      // (user might have watched part of video before error)
-      if (mounted) {
-        await _sections.progress.reloadProgress();
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to play file: $e')));
-      }
-    }
   }
 
   /// Build the search bar widget
@@ -468,7 +410,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       color: app.playlist.card,
       child: InkWell(
-        onTap: () => _playFile(node),
+        onTap: () => _sections.playEntries.playFile(node),
         child: Stack(
           children: [
             Padding(
@@ -703,7 +645,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             if (isFolder) {
               _sections.navigation.navigateIntoFolder(node);
             } else if (isVideo) {
-              _playFile(node);
+              _sections.playEntries.playFile(node);
             }
             return null;
           },
@@ -717,7 +659,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             if (isFolder) {
               _sections.navigation.navigateIntoFolder(node);
             } else if (isVideo) {
-              _playFile(node);
+              _sections.playEntries.playFile(node);
             }
           },
           child: Stack(
@@ -1204,7 +1146,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             // Short press - play episode
             if (!_episode.episodeLongPressTriggered &&
                 timeSinceLongPress > 300) {
-              _playEpisode(episode);
+              _sections.playEntries.playEpisode(episode);
             }
             _episode.episodeLongPressTriggered = false;
             _episode.episodeKeyDownReceived = false;
@@ -1239,7 +1181,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 child: InkWell(
                   onTap: _episode.isAndroidTv
                       ? null
-                      : () => _playEpisode(episode),
+                      : () => _sections.playEntries.playEpisode(episode),
                   onLongPress: _episode.isAndroidTv
                       ? null
                       : () => _sections.watched.toggleWatchedState(episode),
@@ -1732,737 +1674,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       ),
     );
   }
-
-  /// Play episode from OTT view with full playlist support
-  Future<void> _playEpisode(SeriesEpisode episode) async {
-    if (_catalog.rootContent == null || !mounted) return;
-
-    try {
-      // Show loading dialog
-      final app = AppThemeScope.of(context);
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          // A MODAL ground, which is why it is cloud.dialogSurface and not
-          // playlist.card — legacy spells both #1E293B.
-          backgroundColor: app.cloud.dialogSurface,
-          content: const Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Preparing playlist…'),
-            ],
-          ),
-        ),
-      );
-
-      // Get all video files from the entire tree
-      final allFiles = _catalog.rootContent!.getAllFiles();
-      final videoFiles = allFiles
-          .where((node) => FileUtils.isVideoFile(node.name))
-          .toList();
-
-      if (videoFiles.isEmpty) {
-        if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-        return;
-      }
-
-      // Apply Sort A-Z sorting if in sortedAZ mode
-      // Use EXACT same sorting logic as UI view mode (_applySortedView)
-      _sections.playlistOrder.applySortedPlaylistOrder(videoFiles);
-
-      // Find the selected episode index
-      // The approach differs based on view mode:
-      // - sortedAZ: Sorting changes indices, so we MUST find by filename
-      // - raw/series/collection: originalIndex is still accurate (faster and more reliable)
-      int startIndex = 0;
-      if (_navigation.currentViewMode == FolderViewMode.sortedAZ) {
-        // After sorting, indices change - must find by filename
-        for (int i = 0; i < videoFiles.length; i++) {
-          if (videoFiles[i].name == episode.filename) {
-            startIndex = i;
-            break;
-          }
-        }
-      } else {
-        // Raw/Series/Collection modes: originalIndex is still correct
-        if (episode.originalIndex >= 0 &&
-            episode.originalIndex < videoFiles.length) {
-          startIndex = episode.originalIndex;
-        } else {
-          // Fallback: try to match by filename
-          for (int i = 0; i < videoFiles.length; i++) {
-            if (videoFiles[i].name == episode.filename) {
-              startIndex = i;
-              break;
-            }
-          }
-        }
-      }
-
-      final provider =
-          ((widget.playlistItem['provider'] as String?) ?? 'realdebrid')
-              .toLowerCase();
-
-      if (provider == 'realdebrid') {
-        await _playRealDebridPlaylist(videoFiles, startIndex);
-      } else if (provider == 'torbox') {
-        await _playTorboxPlaylist(videoFiles, startIndex);
-      } else if (provider == 'pikpak') {
-        await _playPikPakPlaylist(videoFiles, startIndex);
-      } else if (provider == 'webdav') {
-        await _playWebDavPlaylist(videoFiles, startIndex);
-      } else if (provider == 'premiumize') {
-        await _playPremiumizePlaylist(videoFiles, startIndex);
-      } else if (provider == 'alldebrid') {
-        await _playAllDebridPlaylist(videoFiles, startIndex);
-      }
-
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      // Reload progress after returning from video player
-      if (mounted) {
-        await _sections.progress.reloadProgress();
-      }
-    } catch (e) {
-      print('❌ Error playing episode: $e');
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      // Reload progress even if an error occurred
-      // (user might have watched part of video before error)
-      if (mounted) {
-        await _sections.progress.reloadProgress();
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
-      }
-    }
-  }
-
-  /// Play Real-Debrid playlist
-  Future<void> _playRealDebridPlaylist(
-    List<RDFileNode> videoFiles,
-    int startIndex,
-  ) async {
-    final String? apiKey = await RealDebridStorage.getApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('Please set your Real-Debrid API key in Settings');
-    }
-
-    final rdTorrentId = widget.playlistItem['rdTorrentId'] as String?;
-    if (rdTorrentId == null) {
-      throw Exception('No Real-Debrid torrent ID found');
-    }
-
-    final info = await DebridService.getTorrentInfo(apiKey, rdTorrentId);
-    final links = (info['links'] as List<dynamic>?) ?? [];
-
-    // Build playlist entries
-    final List<PlaylistEntry> entries = [];
-    for (int i = 0; i < videoFiles.length; i++) {
-      final file = videoFiles[i];
-      final linkIndex = file.linkIndex ?? i;
-
-      if (linkIndex >= links.length) continue;
-
-      if (i == startIndex) {
-        // Unrestrict the first file
-        try {
-          final unrestrictResult = await DebridService.unrestrictLink(
-            apiKey,
-            links[linkIndex],
-          );
-          final url = unrestrictResult['download']?.toString() ?? '';
-          entries.add(
-            PlaylistEntry(
-              url: url,
-              title: file.name,
-              relativePath: file.relativePath ?? file.path,
-              rdTorrentId: rdTorrentId,
-              rdLinkIndex: linkIndex,
-              sizeBytes: file.bytes,
-              provider: 'realdebrid',
-            ),
-          );
-        } catch (_) {
-          entries.add(
-            PlaylistEntry(
-              url: '',
-              title: file.name,
-              relativePath: file.relativePath ?? file.path,
-              restrictedLink: links[linkIndex],
-              rdTorrentId: rdTorrentId,
-              rdLinkIndex: linkIndex,
-              sizeBytes: file.bytes,
-              provider: 'realdebrid',
-            ),
-          );
-        }
-      } else {
-        entries.add(
-          PlaylistEntry(
-            url: '',
-            title: file.name,
-            relativePath: file.relativePath ?? file.path,
-            restrictedLink: links[linkIndex],
-            rdTorrentId: rdTorrentId,
-            rdLinkIndex: linkIndex,
-            sizeBytes: file.bytes,
-            provider: 'realdebrid',
-          ),
-        );
-      }
-    }
-
-    if (entries.isEmpty) {
-      throw Exception('No playable files found');
-    }
-
-    final String initialVideoUrl = entries[startIndex].url;
-    final String seriesTitle =
-        _series.seriesPlaylist?.seriesTitle ??
-        widget.playlistItem['title'] as String? ??
-        'Series';
-
-    if (!mounted) return;
-
-    // Hide auto-launch overlay before launching player
-    widget.onPlaybackStarted?.call();
-    MainPageBridge.notifyPlayerLaunching();
-
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: initialVideoUrl,
-        title: seriesTitle,
-        subtitle: '${entries.length} episodes',
-        playlist: entries,
-        startIndex: startIndex,
-        rdTorrentId: rdTorrentId,
-        disableAutoResume: true,
-        viewMode: _sections.viewModes.convertToPlaylistViewMode(
-          _navigation.currentViewMode,
-        ),
-        // Pass catalog metadata for optimized TVMaze lookup
-        contentImdbId: widget.playlistItem['imdbId'] as String?,
-        contentType: widget.playlistItem['contentType'] as String?,
-        suppressTraktAutoSync: true,
-      ),
-    );
-  }
-
-  /// Play AllDebrid playlist. Each node's linkIndex maps to its locked link in
-  /// [PlaylistContentCatalogState.allDebridFiles] (populated by [PlaylistContentContentLoading.loadAllDebridContent]); the start file is
-  /// unlocked, the rest carry their locked link for lazy unlock by the player.
-  Future<void> _playAllDebridPlaylist(
-    List<RDFileNode> videoFiles,
-    int startIndex,
-  ) async {
-    final apiKey = await AllDebridStorage.getAllDebridApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('Please set your AllDebrid API key in Settings');
-    }
-    final torrentHash = widget.playlistItem['torrent_hash'] as String?;
-
-    final List<PlaylistEntry> entries = [];
-    for (int i = 0; i < videoFiles.length; i++) {
-      final file = videoFiles[i];
-      final linkIndex = file.linkIndex;
-      if (linkIndex < 0 || linkIndex >= _catalog.allDebridFiles.length) {
-        continue;
-      }
-      final lockedLink = _catalog.allDebridFiles[linkIndex].link;
-
-      String url = '';
-      if (i == startIndex) {
-        try {
-          url = await AllDebridService.unlockLink(apiKey, lockedLink);
-        } catch (_) {}
-      }
-      entries.add(
-        PlaylistEntry(
-          url: url,
-          title: file.name,
-          relativePath: file.relativePath ?? file.path,
-          provider: 'alldebrid',
-          allDebridLink: lockedLink,
-          torrentHash: torrentHash,
-          sizeBytes: file.bytes,
-        ),
-      );
-    }
-
-    if (entries.isEmpty) {
-      throw Exception('No playable files found');
-    }
-
-    final String initialVideoUrl = entries[startIndex].url;
-    final String seriesTitle =
-        _series.seriesPlaylist?.seriesTitle ??
-        widget.playlistItem['title'] as String? ??
-        'Series';
-
-    if (!mounted) return;
-    widget.onPlaybackStarted?.call();
-    MainPageBridge.notifyPlayerLaunching();
-
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: initialVideoUrl,
-        title: seriesTitle,
-        subtitle: '${entries.length} episodes',
-        playlist: entries,
-        startIndex: startIndex,
-        disableAutoResume: true,
-        viewMode: _sections.viewModes.convertToPlaylistViewMode(
-          _navigation.currentViewMode,
-        ),
-        contentImdbId: widget.playlistItem['imdbId'] as String?,
-        contentType: widget.playlistItem['contentType'] as String?,
-        suppressTraktAutoSync: true,
-      ),
-    );
-  }
-
-  /// Play Torbox playlist
-  Future<void> _playTorboxPlaylist(
-    List<RDFileNode> videoFiles,
-    int startIndex,
-  ) async {
-    final String? apiKey = await TorboxStorage.getTorboxApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('Please set your Torbox API key in Settings');
-    }
-
-    final torboxTorrentId = widget.playlistItem['torboxTorrentId'] as int?;
-    if (torboxTorrentId == null) {
-      throw Exception('No Torbox torrent ID found');
-    }
-
-    // Build playlist entries
-    final List<PlaylistEntry> entries = [];
-    for (int i = 0; i < videoFiles.length; i++) {
-      final file = videoFiles[i];
-
-      if (i == startIndex) {
-        // Get streaming URL for first file
-        try {
-          if (file.fileId != null) {
-            final url = await TorboxService.requestFileDownloadLink(
-              apiKey: apiKey,
-              torrentId: torboxTorrentId,
-              fileId: file.fileId!,
-            );
-            entries.add(
-              PlaylistEntry(
-                url: url,
-                title: file.name,
-                relativePath: cleanTorboxPath(file.path),
-                torboxTorrentId: torboxTorrentId,
-                torboxFileId: file.fileId,
-                sizeBytes: file.bytes,
-                provider: 'torbox',
-              ),
-            );
-          }
-        } catch (_) {
-          entries.add(
-            PlaylistEntry(
-              url: '',
-              title: file.name,
-              relativePath: cleanTorboxPath(file.path),
-              torboxTorrentId: torboxTorrentId,
-              torboxFileId: file.fileId,
-              sizeBytes: file.bytes,
-              provider: 'torbox',
-            ),
-          );
-        }
-      } else {
-        entries.add(
-          PlaylistEntry(
-            url: '',
-            title: file.name,
-            relativePath: cleanTorboxPath(file.path),
-            torboxTorrentId: torboxTorrentId,
-            torboxFileId: file.fileId,
-            sizeBytes: file.bytes,
-            provider: 'torbox',
-          ),
-        );
-      }
-    }
-
-    if (entries.isEmpty) {
-      throw Exception('No playable files found');
-    }
-
-    final String initialVideoUrl = entries[startIndex].url;
-    final String seriesTitle =
-        _series.seriesPlaylist?.seriesTitle ??
-        widget.playlistItem['title'] as String? ??
-        'Series';
-
-    if (!mounted) return;
-
-    // Hide auto-launch overlay before launching player
-    widget.onPlaybackStarted?.call();
-    MainPageBridge.notifyPlayerLaunching();
-
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: initialVideoUrl,
-        title: seriesTitle,
-        subtitle: '${entries.length} episodes',
-        playlist: entries,
-        startIndex: startIndex,
-        torboxTorrentId: torboxTorrentId.toString(),
-        disableAutoResume: true,
-        viewMode: _sections.viewModes.convertToPlaylistViewMode(
-          _navigation.currentViewMode,
-        ),
-        // Pass catalog metadata for optimized TVMaze lookup
-        contentImdbId: widget.playlistItem['imdbId'] as String?,
-        contentType: widget.playlistItem['contentType'] as String?,
-        suppressTraktAutoSync: true,
-      ),
-    );
-  }
-
-  /// Play PikPak playlist
-  Future<void> _playPikPakPlaylist(
-    List<RDFileNode> videoFiles,
-    int startIndex,
-  ) async {
-    final pikpak = PikPakApiService.instance;
-
-    if (!await pikpak.isAuthenticated()) {
-      throw Exception('Please login to PikPak in Settings');
-    }
-
-    // Build playlist entries
-    final List<PlaylistEntry> entries = [];
-    for (int i = 0; i < videoFiles.length; i++) {
-      final file = videoFiles[i];
-
-      // Extract PikPak file ID from the path field
-      // Format: "pikpak://fileId|fileName"
-      String? fileId;
-      final path = file.path;
-      if (path != null && path.startsWith('pikpak://')) {
-        final parts = path.substring(9).split('|');
-        if (parts.isNotEmpty) {
-          fileId = parts[0];
-        }
-      }
-
-      if (fileId == null) continue;
-
-      if (i == startIndex) {
-        // Get streaming URL for first file
-        try {
-          final fileData = await pikpak.getFileDetails(fileId);
-          final streamingUrl = pikpak.getStreamingUrl(fileData);
-          entries.add(
-            PlaylistEntry(
-              url: streamingUrl ?? '',
-              title: file.name,
-              relativePath: file.relativePath,
-              pikpakFileId: fileId,
-              sizeBytes: file.bytes,
-              provider: 'pikpak',
-            ),
-          );
-        } catch (_) {
-          entries.add(
-            PlaylistEntry(
-              url: '',
-              title: file.name,
-              relativePath: file.relativePath,
-              pikpakFileId: fileId,
-              sizeBytes: file.bytes,
-              provider: 'pikpak',
-            ),
-          );
-        }
-      } else {
-        entries.add(
-          PlaylistEntry(
-            url: '',
-            title: file.name,
-            relativePath: file.relativePath,
-            pikpakFileId: fileId,
-            sizeBytes: file.bytes,
-            provider: 'pikpak',
-          ),
-        );
-      }
-    }
-
-    if (entries.isEmpty) {
-      throw Exception('No playable files found');
-    }
-
-    final String initialVideoUrl = entries[startIndex].url;
-    final String seriesTitle =
-        _series.seriesPlaylist?.seriesTitle ??
-        widget.playlistItem['title'] as String? ??
-        'Series';
-
-    if (!mounted) return;
-
-    // Hide auto-launch overlay before launching player
-    widget.onPlaybackStarted?.call();
-    MainPageBridge.notifyPlayerLaunching();
-
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: initialVideoUrl,
-        title: seriesTitle,
-        subtitle: '${entries.length} episodes',
-        playlist: entries,
-        startIndex: startIndex,
-        pikpakCollectionId: widget.playlistItem['pikpakFileId'] as String?,
-        disableAutoResume: true,
-        viewMode: _sections.viewModes.convertToPlaylistViewMode(
-          _navigation.currentViewMode,
-        ),
-        // Pass catalog metadata for optimized TVMaze lookup
-        contentImdbId: widget.playlistItem['imdbId'] as String?,
-        contentType: widget.playlistItem['contentType'] as String?,
-        suppressTraktAutoSync: true,
-      ),
-    );
-  }
-
-  /// Play Premiumize playlist
-  Future<void> _playPremiumizePlaylist(
-    List<RDFileNode> videoFiles,
-    int startIndex,
-  ) async {
-    final infohash = (widget.playlistItem['torrent_hash'] as String?)?.trim();
-    final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('Please set your Premiumize API key in Settings');
-    }
-
-    // Cloud-browser collection: nodes carry cloud item ids in `path`. Resolve
-    // only the starting item's link up front; the rest resolve lazily.
-    if (infohash == null || infohash.isEmpty) {
-      if (videoFiles.isEmpty) throw Exception('No playable files found');
-      if (startIndex < 0 || startIndex >= videoFiles.length) startIndex = 0;
-      final startId = videoFiles[startIndex].path;
-      final startFile = startId != null
-          ? await PremiumizeService.resolveItemById(apiKey, startId)
-          : null;
-      if (startFile == null || startFile.link.isEmpty) {
-        throw Exception('Could not get Premiumize streaming URL');
-      }
-      final List<PlaylistEntry> cloudEntries = [];
-      for (int i = 0; i < videoFiles.length; i++) {
-        final file = videoFiles[i];
-        final id = file.path;
-        if (id == null) continue;
-        cloudEntries.add(
-          PlaylistEntry(
-            url: i == startIndex ? startFile.link : '',
-            title: file.name,
-            relativePath: file.relativePath,
-            provider: 'premiumize',
-            premiumizeItemId: id,
-            sizeBytes: file.bytes,
-          ),
-        );
-      }
-      if (cloudEntries.isEmpty) throw Exception('No playable files found');
-      final String seriesTitleCloud =
-          _series.seriesPlaylist?.seriesTitle ??
-          widget.playlistItem['title'] as String? ??
-          'Series';
-      if (!mounted) return;
-      widget.onPlaybackStarted?.call();
-      MainPageBridge.notifyPlayerLaunching();
-      await VideoPlayerLauncher.push(
-        context,
-        VideoPlayerLaunchArgs(
-          videoUrl: cloudEntries[startIndex].url,
-          title: seriesTitleCloud,
-          subtitle: '${cloudEntries.length} episodes',
-          playlist: cloudEntries,
-          startIndex: startIndex,
-          disableAutoResume: true,
-          viewMode: _sections.viewModes.convertToPlaylistViewMode(
-            _navigation.currentViewMode,
-          ),
-          contentImdbId: widget.playlistItem['imdbId'] as String?,
-          contentType: widget.playlistItem['contentType'] as String?,
-          suppressTraktAutoSync: true,
-        ),
-      );
-      return;
-    }
-
-    // Re-resolve fresh direct links and index them by path for matching.
-    final resolved = await PremiumizeService.resolveFilesByHash(
-      apiKey,
-      infohash,
-    );
-    final linkByPath = <String, String>{
-      for (final f in resolved) f.path: f.link,
-    };
-
-    final List<PlaylistEntry> entries = [];
-    for (final file in videoFiles) {
-      final path = file.path;
-      if (path == null) continue;
-      entries.add(
-        PlaylistEntry(
-          url: linkByPath[path] ?? '',
-          title: file.name,
-          relativePath: file.relativePath,
-          provider: 'premiumize',
-          premiumizeHash: infohash,
-          premiumizePath: path,
-          torrentHash: infohash,
-          sizeBytes: file.bytes,
-        ),
-      );
-    }
-
-    if (entries.isEmpty) {
-      throw Exception('No playable files found');
-    }
-    if (startIndex < 0 || startIndex >= entries.length) startIndex = 0;
-
-    final String initialVideoUrl = entries[startIndex].url;
-    final String seriesTitle =
-        _series.seriesPlaylist?.seriesTitle ??
-        widget.playlistItem['title'] as String? ??
-        'Series';
-
-    if (!mounted) return;
-
-    widget.onPlaybackStarted?.call();
-    MainPageBridge.notifyPlayerLaunching();
-
-    await VideoPlayerLauncher.push(
-      context,
-      VideoPlayerLaunchArgs(
-        videoUrl: initialVideoUrl,
-        title: seriesTitle,
-        subtitle: '${entries.length} episodes',
-        playlist: entries,
-        startIndex: startIndex,
-        disableAutoResume: true,
-        viewMode: _sections.viewModes.convertToPlaylistViewMode(
-          _navigation.currentViewMode,
-        ),
-        contentImdbId: widget.playlistItem['imdbId'] as String?,
-        contentType: widget.playlistItem['contentType'] as String?,
-        suppressTraktAutoSync: true,
-      ),
-    );
-  }
-
-  /// Play WebDAV playlist
-  Future<void> _playWebDavPlaylist(
-    List<RDFileNode> videoFiles,
-    int startIndex,
-  ) async {
-    final config = await _resolveWebDavConfig();
-    if (config == null) {
-      throw Exception('WebDAV server is no longer configured');
-    }
-
-    final entries = <PlaylistEntry>[];
-    for (final file in videoFiles) {
-      final path = file.path;
-      if (path == null || path.isEmpty) continue;
-      entries.add(
-        PlaylistEntry(
-          url: WebDavService.directUrl(config, path),
-          title: file.name,
-          relativePath: file.relativePath ?? path,
-          sizeBytes: file.bytes,
-          provider: 'webdav',
-        ),
-      );
-    }
-
-    if (entries.isEmpty) {
-      throw Exception('No playable files found');
-    }
-    if (startIndex < 0 || startIndex >= entries.length) {
-      startIndex = 0;
-    }
-
-    final seriesTitle =
-        _series.seriesPlaylist?.seriesTitle ??
-        widget.playlistItem['title'] as String? ??
-        'Series';
-
-    if (!mounted) return;
-
-    widget.onPlaybackStarted?.call();
-    MainPageBridge.notifyPlayerLaunching();
-
-    final args = VideoPlayerLaunchArgs(
-      videoUrl: entries[startIndex].url,
-      title: seriesTitle,
-      subtitle: '${entries.length} episodes',
-      playlist: entries,
-      startIndex: startIndex,
-      disableAutoResume: true,
-      viewMode: _sections.viewModes.convertToPlaylistViewMode(
-        _navigation.currentViewMode,
-      ),
-      httpHeaders: WebDavService.authHeaders(config),
-      disableExternalPlayer: hasWebDavCredentials(config),
-      webDavServerId: (widget.playlistItem['webdavServerId'] ?? config.id)
-          .toString(),
-      webDavBaseUrl: (widget.playlistItem['webdavBaseUrl'] ?? config.baseUrl)
-          .toString(),
-      webDavPath:
-          (widget.playlistItem['webdavFolderPath'] ??
-                  widget.playlistItem['webdavPath'] ??
-                  '')
-              .toString(),
-      contentImdbId: widget.playlistItem['imdbId'] as String?,
-      contentType: widget.playlistItem['contentType'] as String?,
-      suppressTraktAutoSync: true,
-    );
-
-    await VideoPlayerLauncher.push(context, args);
-  }
-
-  Future<WebDavConfig?> _resolveWebDavConfig() async {
-    final serverId = (widget.playlistItem['webdavServerId'] ?? '').toString();
-    final baseUrl = (widget.playlistItem['webdavBaseUrl'] ?? '').toString();
-    final servers = await WebdavServerStorage.getWebDavServers(
-      forSettings: false,
-    );
-    for (final server in servers) {
-      if (serverId.isNotEmpty && server.id == serverId) return server;
-    }
-    for (final server in servers) {
-      if (baseUrl.isNotEmpty && server.baseUrl == baseUrl) return server;
-    }
-    if (serverId.isEmpty && baseUrl.isEmpty && servers.length == 1) {
-      return servers.first;
-    }
-    return null;
-  }
 }
 
 /// Original-code characterization seam: fresh state and real action tear-offs.
@@ -2529,7 +1740,7 @@ Map<String, Object?> playlistContentTestAccess(
     'applySeriesArrangeView': s._sections.viewModes.applySeriesArrangeView,
     'navigateIntoFolder': s._sections.navigation.navigateIntoFolder,
     'navigateUp': s._sections.navigation.navigateUp,
-    'playFile': s._playFile,
+    'playFile': s._sections.playEntries.playFile,
     'toggleSearch': s._sections.search.toggleSearch,
     'performSearch': s._sections.search.performSearch,
     'getProgressForFile': s._sections.progress.getProgressForFile,
@@ -2546,14 +1757,14 @@ Map<String, Object?> playlistContentTestAccess(
     'scrollToEpisode': s._scrollToEpisode,
     'formatAirDate': formatAirDate,
     'toggleWatchedState': s._sections.watched.toggleWatchedState,
-    'playEpisode': s._playEpisode,
-    'playRealDebridPlaylist': s._playRealDebridPlaylist,
-    'playAllDebridPlaylist': s._playAllDebridPlaylist,
-    'playTorboxPlaylist': s._playTorboxPlaylist,
-    'playPikPakPlaylist': s._playPikPakPlaylist,
-    'playPremiumizePlaylist': s._playPremiumizePlaylist,
-    'playWebDavPlaylist': s._playWebDavPlaylist,
-    'resolveWebDavConfig': s._resolveWebDavConfig,
+    'playEpisode': s._sections.playEntries.playEpisode,
+    'playRealDebridPlaylist': s._sections.debridLaunches.playRealDebridPlaylist,
+    'playAllDebridPlaylist': s._sections.debridLaunches.playAllDebridPlaylist,
+    'playTorboxPlaylist': s._sections.debridLaunches.playTorboxPlaylist,
+    'playPikPakPlaylist': s._sections.cloudLaunches.playPikPakPlaylist,
+    'playPremiumizePlaylist': s._sections.cloudLaunches.playPremiumizePlaylist,
+    'playWebDavPlaylist': s._sections.cloudLaunches.playWebDavPlaylist,
+    'resolveWebDavConfig': s._sections.cloudLaunches.resolveWebDavConfig,
     'hasWebDavCredentials': hasWebDavCredentials,
     'cleanTorboxPath': cleanTorboxPath,
     'buildPikPakFolderTree': s._sections.cloudLoading.buildPikPakFolderTree,

@@ -1,8 +1,11 @@
+import 'playlist_content_cloud_launches.dart';
 import 'playlist_content_cloud_loading.dart';
 import 'playlist_content_content_loading.dart';
+import 'playlist_content_debrid_launches.dart';
 import 'playlist_content_dormant.dart';
 import 'playlist_content_initialization.dart';
 import 'playlist_content_navigation.dart';
+import 'playlist_content_play_entries.dart';
 import 'playlist_content_playlist_order.dart';
 import 'playlist_content_posters.dart';
 import 'playlist_content_progress.dart';
@@ -26,6 +29,8 @@ class PlaylistContentSections {
   PlaylistContentCloudLoading get cloudLoading => cloudLoadingSlot!;
   PlaylistContentPlaylistOrder? playlistOrderSlot;
   PlaylistContentPlaylistOrder get playlistOrder => playlistOrderSlot!;
+  PlaylistContentPlayEntries? playEntriesSlot;
+  PlaylistContentPlayEntries get playEntries => playEntriesSlot!;
   PlaylistContentSearch? searchSlot;
   PlaylistContentSearch get search => searchSlot!;
   PlaylistContentProgress? progressSlot;
@@ -36,4 +41,8 @@ class PlaylistContentSections {
   PlaylistContentPosters get posters => postersSlot!;
   PlaylistContentWatched? watchedSlot;
   PlaylistContentWatched get watched => watchedSlot!;
+  PlaylistContentDebridLaunches? debridLaunchesSlot;
+  PlaylistContentDebridLaunches get debridLaunches => debridLaunchesSlot!;
+  PlaylistContentCloudLaunches? cloudLaunchesSlot;
+  PlaylistContentCloudLaunches get cloudLaunches => cloudLaunchesSlot!;
 }

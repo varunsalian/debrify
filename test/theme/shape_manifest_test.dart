@@ -208,9 +208,13 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/playlist_content/models/playlist_content_search_result.dart': 0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_catalog_state.dart':
       0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_cloud_launches.dart':
+      0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_cloud_loading.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_content_loading.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_debrid_launches.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_dormant.dart':
       0,
@@ -225,6 +229,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_navigation_state.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_ott_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_play_entries.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_playlist_order.dart':
       0,

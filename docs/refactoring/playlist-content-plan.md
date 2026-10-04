@@ -767,6 +767,20 @@ identities against the observed branch baselines and approved additions.
   a misspelled test path is retained as `step4-attempt1-original-*`; the
   corrected run proves all 26 original guards.
 
+- Step 5: both play entries and all seven launch sites now use three
+  reviewed playback records. Live optional playback callback and item
+  getters, dialog builder contexts, exact launch arguments, sorting,
+  provider dispatch, headers and unsafe start-index policies remain intact.
+  The two formatter-induced empty-list canPop lints receive braces only
+  around their original pop statements; exact conditions, complete raw
+  prefixes and body tokens are pinned alongside the AllDebrid continue
+  site. No context acquisition or asynchronous operation is moved.
+  Facade: 1,780 lines. `step5-*` versus `base4` passes: 172 affected identities,
+  all six manifest self-tests, no added analyzer diagnostics, CI format/
+  allowlist, all 17 warnings, architecture/size/storage checks. A clean
+  committed focused replay follows before the builder move, so its tree
+  evidence includes all three new playback files.
+
 
 ## Found, not fixed
 

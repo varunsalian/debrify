@@ -20,7 +20,7 @@ warning | unused_field | lib/features/pikpak_files/presentation/legacy_pikpak/pi
 
 # Playlist content original warnings, 17 observed occurrences; per-member proof retained.
 warning | dead_null_aware_expression | lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_content_loading.dart | The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand
-warning | dead_null_aware_expression | lib/screens/playlist_content_view_screen.dart | The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand
+warning | dead_null_aware_expression | lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_debrid_launches.dart | The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand
 warning | invalid_null_aware_operator | lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_metadata.dart | The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['
 warning | unnecessary_non_null_assertion | lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_metadata.dart | The '!' will have no effect because the receiver can't be null. Try removing the '!' operator
 warning | unnecessary_null_comparison | lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_metadata.dart | The operand can't be 'null', so the condition is always 'true'. Remove the condition
