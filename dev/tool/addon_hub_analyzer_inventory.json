@@ -1,0 +1,159 @@
+{
+  "baseline": "227712b2",
+  "source_sha256": "04031f38e572942191ffad37cc5b1f4b526b7440eb6f6067a29a1de845d63b84",
+  "strict_config_sha256": "ad5f181d4ebe1ea5e8b8fff618aece2fec66befa5d552e042c465a9d4feed0e8",
+  "procedure": "Maximum observed counts of original strict and exactly manifest-public-rename probes. No moved-code updates.",
+  "probe_diagnostic_counts": [
+    4,
+    21
+  ],
+  "identities": [
+    {
+      "original_member": "<imports>",
+      "severity": "info",
+      "rule": "directives_ordering",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_AddonHubScreenState._emptyState",
+      "severity": "info",
+      "rule": "prefer_const_constructors",
+      "message": "Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_AddonInfo._AddonInfo",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_AddonMeta._AddonMeta",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_AddonOptionsSheet._AddonOptionsSheet",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_AddonTitleLine._AddonTitleLine",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_AddonTitleLine.build",
+      "severity": "info",
+      "rule": "prefer_const_constructors",
+      "message": "Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_CapabilityChip._CapabilityChip",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_EngineActionPill._EngineActionPill",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_EngineRow._EngineRow",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_EngineRow.build",
+      "severity": "info",
+      "rule": "prefer_const_constructors",
+      "message": "Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_FocusCard._FocusCard",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_HubActionButton._HubActionButton",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_HubDialog._HubDialog",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_HubDialogButton._HubDialogButton",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_InstalledRow._InstalledRow",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_MarketButton._MarketButton",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_MarketRow._MarketRow",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_OptionTile._OptionTile",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_StatusPill._StatusPill",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_WarningChip._WarningChip",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    }
+  ]
+}

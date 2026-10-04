@@ -1,0 +1,349 @@
+{
+  "allowed_edits": [
+    "receiver",
+    "rename",
+    "state_callback",
+    "context_guard",
+    "unchanged",
+    "root_build_forwarder",
+    "retained_forwarder",
+    "formatter_if_braces"
+  ],
+  "baseline": "227712b2",
+  "source": "lib/screens/addons/addon_hub_screen.dart",
+  "feature": "lib/features/addon_hub",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": true,
+  "receivers": [
+    "AddonHubBody",
+    "AddonHubEngineActions",
+    "AddonHubEngineList",
+    "AddonHubEngineLoading",
+    "AddonHubEngineState",
+    "AddonHubFilterBar",
+    "AddonHubFilters",
+    "AddonHubInstallActions",
+    "AddonHubInstalledList",
+    "AddonHubInstalledState",
+    "AddonHubLayout",
+    "AddonHubLoading",
+    "AddonHubManagement",
+    "AddonHubMarketList",
+    "AddonHubMarketState",
+    "AddonHubMenus",
+    "AddonHubNavigation",
+    "AddonHubNavigationState",
+    "_deps",
+    "deps"
+  ],
+  "receiver_paths": {},
+  "receiver_owners": {},
+  "additional_owners": [],
+  "required_nodes": [],
+  "live_getter_callbacks": [],
+  "annotation_exceptions": {},
+  "sidecars": {
+    "scaffolding": "dev/tool/addon_hub_scaffolding.json",
+    "context_exceptions": "dev/tool/addon_hub_context_exceptions.json"
+  },
+  "lifecycle": [
+    "_AddonHubScreenState.initState",
+    "_AddonHubScreenState.dispose"
+  ],
+  "test_accessors": [
+    {
+      "name": "addonHubTestAccess",
+      "tokens_file": "dev/tool/addon_hub_test_accessor.json",
+      "required": true
+    }
+  ],
+  "self_test_module": "addon_hub_checker_test",
+  "seams": [],
+  "plain_sections": [],
+  "forwarders": {
+    "_AddonHubScreenState.build": {
+      "receiver": "_sections.layout"
+    }
+  },
+  "named_exceptions": {
+    "root_build_forwarder": [
+      "_AddonHubScreenState.build",
+      "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_layout.dart",
+      "root_build_forwarder: plan-approved plain AddonHubLayout; whole original build with only dependency receivers and removal of @override; exact annotated State single-expression forwarder"
+    ]
+  },
+  "token_rules": [
+    {
+      "original_name": "_AddonHubScreenState.build",
+      "allowed_edit": "root_build_forwarder",
+      "difference_prefix": "root_build_forwarder:",
+      "before": [
+        "@",
+        "override"
+      ],
+      "after": []
+    }
+  ],
+  "callback_instances": {
+    "_AddonHubScreenState": "$State"
+  },
+  "callback_receiver_aliases": {},
+  "callback_closure_binding": true,
+  "callback_identities": [
+    {
+      "name": "addons listener",
+      "callback_member": "_AddonHubScreenState._onAddonsChanged",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState.initState",
+          "call": "addAddonsChangedListener",
+          "argument": 0
+        },
+        {
+          "member": "_AddonHubScreenState.dispose",
+          "call": "removeAddonsChangedListener",
+          "argument": 0
+        }
+      ]
+    },
+    {
+      "name": "engines listener",
+      "callback_member": "_AddonHubScreenState._onEnginesChanged",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 2,
+          "occurrence": 0
+        },
+        {
+          "member": "_AddonHubScreenState.dispose",
+          "call": "removeListener",
+          "argument": 0
+        }
+      ]
+    },
+    {
+      "name": "stored TV focus handler",
+      "callback_member": "_AddonHubScreenState._tvFocusHandler",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState.initState",
+          "call": "registerTvContentFocusHandler",
+          "argument": 1
+        },
+        {
+          "member": "_AddonHubScreenState.dispose",
+          "call": "unregisterTvContentFocusHandler",
+          "argument": 1
+        }
+      ]
+    },
+    {
+      "name": "page key",
+      "callback_member": "_AddonHubScreenState._onPageKey",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState.build",
+          "call": "Focus",
+          "argument": "onKeyEvent"
+        }
+      ]
+    },
+    {
+      "name": "search toggle",
+      "callback_member": "_AddonHubScreenState._toggleSearch",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState._buildFilterBar",
+          "call": "_HubActionButton",
+          "argument": "onTap",
+          "count": 5,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "search down",
+      "callback_member": "_AddonHubScreenState._focusFirstRow",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState._buildSearchField",
+          "call": "TvTextField",
+          "argument": "onDownArrow"
+        }
+      ]
+    },
+    {
+      "name": "engine refresh",
+      "callback_member": "_AddonHubScreenState._loadEngines",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState._buildFilterBar",
+          "call": "_HubActionButton",
+          "argument": "onTap",
+          "count": 5,
+          "occurrence": 4
+        },
+        {
+          "member": "_AddonHubScreenState._buildEngineList",
+          "call": "_HubActionButton",
+          "argument": "onTap"
+        }
+      ]
+    },
+    {
+      "name": "metadata selected",
+      "callback_member": "_AddonHubScreenState._setMetadataProvider",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState._buildMetadataProviderSetting",
+          "call": "StremioDropdown",
+          "argument": "onSelected"
+        }
+      ]
+    },
+    {
+      "name": "installed options closure",
+      "callback_member": "_AddonHubScreenState._showOptions",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState._buildInstalledList",
+          "call": "_InstalledRow",
+          "argument": "onTap"
+        }
+      ],
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "items",
+            "[",
+            "i",
+            "]"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "market install closure",
+      "callback_member": "_AddonHubScreenState._installFromMarket",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState._buildMarketListBody",
+          "call": "_MarketRow",
+          "argument": "onInstall"
+        }
+      ],
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "m"
+          ],
+          [
+            "navIndex"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "market configure closure",
+      "callback_member": "_AddonHubScreenState._configureInBrowser",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState._buildMarketListBody",
+          "call": "_MarketRow",
+          "argument": "onConfigure"
+        }
+      ],
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "m"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "search submit closure",
+      "callback_member": "_AddonHubScreenState._focusFirstRow",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState._buildSearchField",
+          "call": "TvTextField",
+          "argument": "onSubmitted"
+        }
+      ],
+      "closure": {
+        "parameters": [
+          "(",
+          "_",
+          ")"
+        ],
+        "arguments": []
+      }
+    },
+    {
+      "name": "market retry closure",
+      "callback_member": "_AddonHubScreenState._loadMarket",
+      "sites": [
+        {
+          "member": "_AddonHubScreenState._buildMarketListBody",
+          "call": "_HubActionButton",
+          "argument": "onTap"
+        }
+      ],
+      "closure": {
+        "parameters": [
+          "(",
+          ")"
+        ],
+        "arguments": [
+          [
+            "_source"
+          ],
+          [
+            "force",
+            ":",
+            "true"
+          ]
+        ]
+      }
+    }
+  ],
+  "co_located_declarations": [
+    [
+      "_FocusCard",
+      "_FocusCardState"
+    ],
+    [
+      "_MarketButton",
+      "_MarketButtonState"
+    ],
+    [
+      "_OptionTile",
+      "_OptionTileState"
+    ],
+    [
+      "_HubActionButton",
+      "_HubActionButtonState"
+    ],
+    [
+      "_HubDialogButton",
+      "_HubDialogButtonState"
+    ]
+  ]
+}

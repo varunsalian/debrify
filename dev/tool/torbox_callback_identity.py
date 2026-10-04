@@ -68,7 +68,7 @@ def callback_argument(call, site):
 
 
 def check_callback_identities(lookup, rows, source_path, config):
-    from check_settings_moves import tokens
+    from check_settings_moves import tokens, normalize
     specs = config.get('callback_identities', [])
     if not specs:
         return []
@@ -152,7 +152,37 @@ def check_callback_identities(lookup, rows, source_path, config):
                 if len(calls) != count:
                     raise ValueError(f"expected {count} {call_name} calls, got {len(calls)}")
                 for call in ([calls[occurrence]] if occurrence is not None else calls):
-                    resolved.append(identity(callback_argument(call, site), node['owner'], getter=is_getter))
+                    expr = callback_argument(call, site)
+                    closure = spec.get('closure')
+                    if closure is not None:
+                        if config.get('callback_closure_binding') is not True:
+                            raise ValueError('closure binding requires config opt-in')
+                        parameters = closure['parameters']
+                        if expr[:len(parameters) + 1] != [*parameters, '=>']:
+                            raise ValueError('closure parameter list or arrow changed')
+                        body = expr[len(parameters) + 1:]
+                        if body.count('=>') or '(' not in body or body[-1:] != [')']:
+                            raise ValueError('closure must invoke exactly its bound member')
+                        opening = body.index('(')
+                        invoked = body[:opening]
+                        # Validate the receiver BEFORE normalization, using the
+                        # same instance/member resolution as direct tear-offs.
+                        bound = identity(invoked, node['owner'])
+                        calls_in_body = arguments(body, invoked[-1])
+                        if len(calls_in_body) != 1:
+                            raise ValueError('closure invocation shape changed')
+                        actual = [normalize(arg, rows) for arg in calls_in_body[0]]
+                        expected = [normalize(arg, rows) for arg in closure['arguments']]
+                        if actual != expected:
+                            raise ValueError('closure argument tokens changed')
+                        # No enclosing wrapper, chained invocation, or suffix.
+                        if body != [*invoked, '(', *sum(
+                            [arg + ([','] if i + 1 < len(calls_in_body[0]) else [])
+                             for i, arg in enumerate(calls_in_body[0])], []), ')']:
+                            raise ValueError('closure invocation is wrapped or chained')
+                        resolved.append(bound)
+                    else:
+                        resolved.append(identity(expr, node['owner'], getter=is_getter))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
         if 'callback_member' in spec:

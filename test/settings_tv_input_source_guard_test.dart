@@ -6,6 +6,7 @@ void main() {
   test('settings dialogs never bypass the TV-safe text field', () {
     final paths = [
       File('lib/screens/settings_screen.dart'),
+      File('lib/screens/addons/addon_hub_screen.dart'),
       File('lib/screens/settings/external_player_settings_page.dart'),
       File('lib/screens/settings/iptv_settings_page.dart'),
       ...Directory('lib/features/playback_settings')

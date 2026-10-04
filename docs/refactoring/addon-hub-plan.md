@@ -553,6 +553,70 @@ committed tree**, reconciling each branch's approved additions.
   probes use identical generated inputs and `--no-pub`. The facade has zero
   root diagnostics. `git diff --check` passes.
 
+- Step 0 original-only work is frozen before any extraction. The approved
+  accessor is the sole application delta (3,416 + 58 = 3,474 lines including
+  its separating blank line); exact bytes are retained for the Linux capture
+  comparison. Its token sidecar covers the live tear-offs, fresh snapshots and
+  TV setter. The temporary facade ratchet exits with steps 1–7.
+- Baselines `base` and `base2` have identical identities: 10,984 successes,
+  13 failures, 28 errors and 20 skips; seam-only comparison passes. Evidence
+  records SDK, HEAD, staged/tested trees and untracked inputs. The original
+  proof worktree is detached at `227712b2` **inside this worktree** under
+  `.dart_tool/addon_hub/original`; only test/tool overlays and the frozen seam
+  are applied there. Parser packages remain checkout-local and explicitly
+  supplied, including source-contract probes.
+- Conservative fixture decisions: fresh close-tracking zone clients share one
+  request log; only warm cases preseed through forced existing marketplace APIs.
+  Four cache-cold files run in distinct isolates without setup fetches. Asset
+  futures are cleared between test zones; real filesystem/database operations
+  dispatch through `runAsync`, with the timeout case deliberately using fake
+  time. Teardown releases owned test gates before disposal. Draft failures and
+  corrected fixture assumptions remain in evidence; no accepted baseline or
+  golden is updated to admit a regression.
+- Original characterization: 119 affected tests pass, including the six
+  existing metadata tests, unconditional TV source guard and six macOS pixel
+  scenes. Scoped test analysis has no issues. Pixel goldens are captured only
+  from the unchanged original; Linux capture remains pending Claude's handoff.
+  `capture_addon_hub_linux_goldens.sh` resolves the exact step-0 subject and
+  checks every application file against step 0a plus the byte-exact accessor;
+  the empty `.gitkeep` directory marker is explicitly excluded as non-code.
+- Observed original behavior resolves plan arithmetic/service ambiguities:
+  metadata constraints are viewport minus 82 (border included), so 581/582
+  join the requested widths. Legacy addon order remains z9/Cinemeta/a2;
+  committed graph order is the registry's stored label order (Alpha/Cinemeta/
+  Zulu), with resource ids as keys. Committed addon mutations notify
+  `remote_webdav_sync_registry_records_v1`; legacy preference and metadata
+  writes retain their own logical keys. A same-profile picker action pops the
+  pushed hub without changing the current session. All are preserved.
+- The strict original probe observes four infos (three original const sites
+  plus import qualification ordering); the rename-only probe observes 21
+  (17 public-constructor key infos plus those four). The frozen inventory uses
+  per-symbol maxima, never sums. No production const or suppressions are added.
+  The dependency report covers all 127 leaves with planned destinations and
+  source bindings; destination wiring is reviewed and pinned when introduced.
+
+- Step 0 validation closes on original code: `base3` has 11,096 successes,
+  13 failures, 28 errors and 20 skips. Comparison against `base2` passes:
+  exactly 112 new accepted characterization identities, no new failures,
+  missing tests or new skips; the recorded tree is stable with no untracked
+  inputs. Detached-original `original-characterization` passes all 119
+  affected tests on its stable staged overlay. All ten real-config manifest
+  self-tests pass on the isolated parser, including the opt-in closure
+  extension and its individual identity/argument negatives. Existing configs
+  remain unchanged. Format, size, architecture, storage, shape/floor, runtime
+  source guards, CI analyzer and analyzer allowlist pass. Whole analysis has
+  zero added identities against `base-analyze`; removed duplicate/generated
+  diagnostics are retained as evidence (1,664 → 1,651). No allowlist changes.
+- Mutation evidence is recorded against the restored detached original for
+  all nine required mutations (`original-mutation-proofs.json`), each with
+  its rejected test identity and tested tree. The initial harness wrongly
+  expected `suite_evidence run` itself to return the Flutter failure code;
+  corrected proof checks recorded outcomes, as the tool's verdict is always
+  the comparison. No mutation is accepted and no application move occurred.
+  Failed command attempts (including a wrong runtime-guard path) remain in
+  this feature's evidence; corrected commands pass. Step 0b will record the
+  original-only proof closure and the latest `base4` before gate 1.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
