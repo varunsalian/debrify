@@ -386,6 +386,8 @@ void main() {
       (t) async {
         await iptvSettingsCase(t, (f) async {
           await f.mount(t);
+          final callsBefore =
+              IptvCatalogRefreshService.debugRefreshDueInvocations;
           late Future<void> work;
           await t.runAsync(() async {
             work = f.member('pickAutoRefresh')() as Future<void>;
@@ -416,6 +418,10 @@ void main() {
               hours,
             );
           });
+          expect(
+            IptvCatalogRefreshService.debugRefreshDueInvocations - callsBefore,
+            hours == 0 ? 1 : 2,
+          );
           expect(
             f.requests.map((r) => r.url.toString()).toList(),
             hours == 0 ? <String>[] : ['https://fixture.invalid/z9.m3u'],

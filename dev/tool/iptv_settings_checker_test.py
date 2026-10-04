@@ -26,6 +26,29 @@ def self_test(package=None):
     assert not check(original, sources, rows, source, package, context_guard=True, config=config)
     print('IPTV settings real configuration positive: PASS')
 
+    # An interpolated subtitle precedes a direct callback, just as in the hub.
+    # Invoke the identity checker alone so the verbatim checker cannot mask it.
+    interpolated = ['SettingsTile', '(', 'subtitle', ':', "'prefix", '${', 'count', '}', "suffix'", ',', 'onTap', ':', '_pickAutoRefresh', ')']
+    assert arguments(['RadioListTile', '<', 'String', '>', '(', 'onChanged', ':', '_setStartupMode', ')'], 'RadioListTile') == [[['onChanged', ':', '_setStartupMode']]]
+    parsed = arguments(interpolated, 'SettingsTile')
+    assert len(parsed) == 1
+    assert callback_argument(parsed[0], {'named_argument': 'onTap'}) == ['_pickAutoRefresh']
+    hub_row = next(r for r in rows if r['original_name'] == '_IptvSettingsPageState._buildPhoneHub')
+    hub_key = (hub_row['destination_file'], hub_row['destination_class'], hub_row['new_name'])
+    if hub_key not in lookup:
+        hub_key = (source, '_IptvSettingsPageState', '_buildPhoneHub')
+    fixture_config = copy.deepcopy(config)
+    fixture_config['callback_identities'] = [{'name': 'interpolated argument callback', 'callback_member': '_IptvSettingsPageState._pickAutoRefresh', 'sites': [{'member': '_IptvSettingsPageState._buildPhoneHub', 'call': 'SettingsTile', 'named_argument': 'onTap'}]}]
+    mutated = copy.deepcopy(lookup)
+    mutated[hub_key]['tokens'] = [{'text': t, 'offset': i} for i, t in enumerate(interpolated)]
+    mutated[hub_key]['formatCommas'] = []
+    assert not check_callback_identities(mutated, rows, source, fixture_config)
+    for callback in ['wrongCallback', 'secondInstance._pickAutoRefresh', '() => _pickAutoRefresh()']:
+        poisoned = [callback if t == '_pickAutoRefresh' else t for t in interpolated]
+        mutated[hub_key]['tokens'] = [{'text': t, 'offset': i} for i, t in enumerate(poisoned)]
+        assert check_callback_identities(mutated, rows, source, fixture_config), callback
+    print('IPTV settings interpolated-argument positive and identity negatives: PASS')
+
     def located(name):
         row = next((r for r in rows if r['original_name'] == name), None)
         if row is None:
@@ -87,14 +110,19 @@ def self_test(package=None):
                 mutated = copy.deepcopy(lookup)
                 count = 0
                 for i, value in enumerate(values[:-1]):
-                    if value != call_name or values[i + 1] != '(':
+                    if value != call_name:
+                        continue
+                    opening = i + 1
+                    if values[opening] == '<':
+                        opening = values.index('>', opening) + 1
+                    if values[opening] != '(':
                         continue
                     if count != site.get('occurrence', 0):
                         count += 1
                         continue
                     if 'named_argument' in site:
                         marker = [site['named_argument'], ':', *arg]
-                        start = next(j for j in range(i + 2, len(values)) if values[j:j + len(marker)] == marker)
+                        start = next(j for j in range(opening + 1, len(values)) if values[j:j + len(marker)] == marker)
                         if label == 'missing argument':
                             end = start + len(marker)
                             if values[end:end + 1] == [',']:
@@ -106,7 +134,7 @@ def self_test(package=None):
                     else:
                         # Observer/listener sites have one positional argument.
                         assert site['argument'] == 0
-                        start = i + 2
+                        start = opening + 1
                         poisoned = values[:start] + replacement + values[start + len(arg):]
                     mutated[key]['tokens'] = [{'text': t, 'offset': j} for j, t in enumerate(poisoned)]
                     mutated[key]['formatCommas'] = []

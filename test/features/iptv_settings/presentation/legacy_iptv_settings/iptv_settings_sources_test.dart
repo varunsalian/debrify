@@ -16,6 +16,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../../support/iptv_settings_fixture.dart';
+import '../../../../support/iptv_settings_removal_probe.dart';
+import '../../../../support/iptv_settings_held_boundaries.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 Future<void> seedCatalog(IptvSettingsFixture f, IptvPlaylist playlist) async {
   final key = IptvCatalogKey.forPlaylist(playlist, 'live')!;
@@ -70,6 +74,10 @@ void main() {
             tester,
             () => f.member('loadSettings')() as Future<void>,
           );
+          await tester.runAsync(() => seedRemovalProbe(f));
+          final numberingBefore = (await tester.runAsync(
+            () => removalProbeState(target.id),
+          ))!;
           final beforeLists = f.member('playlists');
           final twoPane =
               tester.widget(
@@ -102,6 +110,9 @@ void main() {
               isTrue,
             );
             expect(await IptvHistoryStorage.getIptvWatchHistory(), isEmpty);
+            final after = await removalProbeState(target.id);
+            assertArchivedNumbering(numberingBefore, after);
+            expect(after['categoryOrders'], 0);
             if (!local) {
               final key = IptvCatalogKey.forPlaylist(target, 'live')!;
               expect(IptvCatalogDb.snapshot(key), isNull);
@@ -166,6 +177,152 @@ void main() {
       }, sources: [iptvFixtureSource('z9')]);
     },
   );
+
+  for (final boundary in [
+    'default',
+    'catalog',
+    'local-category',
+    'media-category',
+    'favorites',
+    'history',
+  ]) {
+    testWidgets(
+      'removal failure at $boundary preserves exactly the preceding effects',
+      (t) async {
+        final local = boundary == 'local-category';
+        await iptvSettingsCase(t, (f) async {
+          await f.mount(t);
+          final target = f.playlists.single;
+          await f.action(
+            t,
+            () => f.member('setDefaultPlaylist')(target) as Future<void>,
+          );
+          await t.runAsync(() async {
+            await seedRemovalProbe(f);
+            if (!local) {
+              IptvCatalogDb.setGroupHidden(
+                IptvCatalogKey.forPlaylist(target, 'live')!,
+                'News',
+                true,
+              );
+            }
+            final list = await IptvFavoritesStorage.createIptvList('Survivor');
+            await IptvFavoritesStorage.setIptvChannelInList(
+              list,
+              'https://fixture.invalid/live.ts',
+              true,
+              playlistId: target.id,
+              channelName: 'Café',
+            );
+            await IptvHistoryStorage.recordIptvWatch(
+              'https://fixture.invalid/live.ts',
+              playlistId: target.id,
+              channelName: 'Café',
+            );
+            if (local) {
+              await IptvCatalogDb.setCategoryOrder(
+                IptvCatalogKey.forLocalCategoryOrder(target.id),
+                ['News'],
+              );
+            }
+          });
+          final before = (await t.runAsync(
+            () => removalProbeState(target.id),
+          ))!;
+          IptvHeldPreferences? failedAdapter;
+          if (boundary == 'default') {
+            final prefs = (await t.runAsync(SharedPreferences.getInstance))!;
+            final adapter = IptvHeldPreferences({
+              for (final key in prefs.getKeys())
+                'flutter.$key': prefs.get(key)!,
+            });
+            failedAdapter = adapter;
+            adapter.failRemoveKey =
+                'flutter.p.${f.ownerId}.g.1.iptv_default_playlist';
+            SharedPreferencesStorePlatform.instance = adapter;
+          } else {
+            await t.runAsync(() => installRemovalFailure(boundary));
+          }
+          await f.action(
+            t,
+            () => f.member('removePlaylist')(target) as Future<void>,
+          );
+          await t.runAsync(() async {
+            expect(await IptvPlaylistStorage.getIptvPlaylists(), isEmpty);
+            expect(await IptvPlaylistStorage.getIptvDefaultPlaylist(), isNull);
+            if (failedAdapter != null) {
+              expect(
+                (await failedAdapter
+                    .getAll())['flutter.p.${f.ownerId}.g.1.iptv_default_playlist'],
+                target.id,
+              );
+            }
+            final after = await removalProbeState(target.id);
+            assertArchivedNumbering(before, after);
+            expect(
+              after['categoryOrders'],
+              ['default', 'catalog', 'media-category'].contains(boundary)
+                  ? before['categoryOrders']
+                  : 0,
+            );
+            expect(
+              after['memberships'],
+              [
+                    'default',
+                    'catalog',
+                    'media-category',
+                    'favorites',
+                  ].contains(boundary)
+                  ? before['memberships']
+                  : 0,
+            );
+            expect(after['history'], local ? 0 : before['history']);
+            expect(
+              (await IptvFavoritesStorage.getIptvLists()).any(
+                (l) => l.name == 'Survivor',
+              ),
+              isTrue,
+            );
+            if (!local) {
+              final key = IptvCatalogKey.forPlaylist(target, 'live')!;
+              expect(
+                IptvCatalogDb.snapshot(key),
+                ['default', 'catalog'].contains(boundary) ? isNotNull : isNull,
+              );
+              expect(
+                IptvCatalogDb.hiddenGroups(key),
+                ['default', 'catalog'].contains(boundary)
+                    ? isNotEmpty
+                    : isEmpty,
+              );
+            } else {
+              expect(
+                IptvCatalogDb.savedCategoryOrder(
+                  IptvCatalogKey.forLocalCategoryOrder(target.id),
+                ),
+                ['News'],
+              );
+            }
+          });
+          expect(f.playlists, local ? isEmpty : hasLength(1));
+          expect(
+            f.member('defaultPlaylistId'),
+            boundary == 'default' ? target.id : isNull,
+          );
+          await t.pump(const Duration(seconds: 4));
+          await t.pump(const Duration(milliseconds: 300));
+          expect(
+            find.text(
+              local
+                  ? 'Removed "${target.name}"'
+                  : 'Could not remove "${target.name}". Please try again.',
+            ),
+            findsOneWidget,
+          );
+        }, sources: [iptvFixtureSource('z9', local: local)]);
+      },
+    );
+  }
 
   for (final change in ['url', 'username', 'password']) {
     testWidgets(
@@ -335,6 +492,15 @@ void main() {
                 )
                 .toList();
             if (xtream) {
+              expect(actions, [
+                'get_live_streams',
+                'get_live_categories',
+                'live-probe',
+                'get_vod_streams',
+                if (!failed) 'get_vod_categories',
+                'get_series',
+                'get_series_categories',
+              ]);
               expect(
                 actions.where((a) => !a.endsWith('_categories')).toList(),
                 [

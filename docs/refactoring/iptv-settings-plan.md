@@ -52,7 +52,9 @@ and `SETTINGS_COMPLETE` rejects `TEMP(settings)`. The settings plan excluded
 the pages under `lib/screens/settings/`.
 
 **Out of scope:** `iptv_settings_two_pane.dart` (2,231 lines, its own file),
-the IPTV services, storage, catalog DB and the recording services. The
+the IPTV services, storage, catalog DB and the recording services (the
+Step 0b review explicitly authorizes an assertion-only refresh entry-count
+probe; the operational service body remains unchanged). The
 facade State keeps its single `_twoPaneKey` (`GlobalKey<IptvSettingsTwoPaneState>`);
 moved bodies borrow that exact key (contract 2).
 
@@ -575,9 +577,76 @@ each parallel branch's additions, before claiming parity.
   retained as failed evidence, followed by corrected runs; nothing was
   accepted with a record/update regression command.
 
+- Step 0b independent review closure (before any Step 3 moves): the shared
+  interpolation fix `def4e304` is cherry-picked as `c0f5fb87`, retaining Claude's
+  trailer and adding the required Codex trailer. The named-argument resolver
+  also recognizes typed constructors, necessary for the two original
+  `RadioListTile<String>` sites. Hub `SettingsTile` count is 12; Channel order
+  is occurrence 3, Auto-refresh occurrence 1. Both startup radio callbacks are
+  pinned. Real-config checks exercise interpolated arguments, wrong members,
+  wrong receivers, closures and missing arguments, with the resolver itself
+  tested independently of token/scaffold failures.
+- P2 removal coverage now reads durable numbering aliases/namespaces and
+  preserved assignments, and actual per-source category-channel orders.
+  Six later failure boundaries use the real preference adapter or SQLite
+  triggers (default, catalog deletion, tolerated local category-order cleanup,
+  media category orders, favorites/list membership and history); each pins
+  prior persisted effects, retained UI state and the original message.
+  The previous damaged-catalog failure case and assertions remain.
+- Contract 9 pins `if (!mounted) return; setState(_reloadHiddenCounts)` after
+  the hidden-categories route returns. Widget tests open/pop that actual route,
+  change its switch and check counts/badges, reject a stale Category order
+  opening with its exact message, and push/pop the actual Channel order page.
+  Scenario (c) now invokes the real style setter before publishing the incoming
+  scope, proving no physical preference writes for either profile, unchanged
+  cached values, stored connections and grants, and the original StateError.
+- P3 closes body-space 900×420 wide / 900×419 narrow (the viewport adds the
+  scaffold's 56-pixel AppBar); rail DOWN/TV entry asserts `iptv-2p-rail-0`.
+  Surplus node disposal, last-row/empty playlist and list focus repair, sheet
+  Rename/Delete persistence and exact interleaved Xtream requests are covered.
+  The runExclusive guard scans the whole facade and every destination.
+  TV text-field scanning includes the feature conditionally so the original
+  checkpoint remains runnable. An assertion-only, visible-for-testing service
+  entry counter proves refreshDue invocations: two nonzero / one Off, including
+  the early-return invocation. No service ordering, awaits or release behavior
+  changes; the same probe is installed on the original proof tree.
+- Golden decision: keep the checkpoint-owned fixture and PNGs byte-identical.
+  The original SettingsPageScaffold already wraps the page in settingsPageTheme
+  (`settings_widgets.dart`); import/edit dialogs explicitly wrap that theme too.
+  ThemeData.dark() remains the host's ambient fallback, preserving the actual
+  original caller. The golden loop changes only missing, non-strict Linux
+  reporting to markTestSkipped; rendering/capture inputs stay unchanged, so
+  the Linux capture at `8a6e1cf9` remains applicable. No golden update is used.
+- Original proof is a new detached worktree at exactly `8a6e1cf9`, nested under
+  this dedicated worktree. The facade matches that commit byte-for-byte; every
+  changed/new characterization passes there (124 total, 15 added identities).
+  Eleven deliberate application mutations are rejected by these tests; the
+  interpolation-opener regression is separately rejected by its isolated
+  resolver fixture. Mutation JSON, per-run tree env files and immutable input
+  hashes are in `iptv_settings/`. All seven manifests/self-tests, architecture,
+  size/storage, exact CI format/analyzer and strict allowlist pass. Final whole
+  analyzer: 1,642, zero added/removed against Step 2; per-symbol strict check:
+  11 original destination diagnostics, zero additions. Draft failed evidence
+  is retained; corrections pin original behavior and remove only new test lint.
+
+- Latest full baseline is `iptv_settings/base4`: 10,701 successes, the same
+  13 failures / 28 errors / 20 skips; PASS versus base3 with exactly 15
+  added successes, zero new failures/missing/new skips/fixes. Original
+  checkpoint HEAD `8a6e1cf9`, stable staged tested tree
+  `fbe271ddfb3a5f3b15a1b039f98b0d4a19ae8b55`, no untracked inputs. The original facade
+  is byte-identical to the checkpoint; frozen original body JSON, all four
+  macOS PNGs and the golden fixture are unchanged. `step0b-final` on moved
+  code: 146 successes / the same observed direct-SharedPreferences source
+  guard failure; PASS versus base4, zero additions or missing/newly skipped
+  identities. Stable staged tree `d2d2bb843f701da344d6292366877cf2d1e3f972`;
+  all characterization/helper/PNG inputs match the original proof byte-for-byte.
+  Both planned extraction gates will compare against base4.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
+- A failed default-preference remove retains the physical stored value while
+  SharedPreferences clears its cached value; the facade default field remains.
 - Removing an ordinary playlist has no confirmation and no in-flight guard;
   the removal sequence isn't transactional, and its catch-all reports
   failure after partial changes.

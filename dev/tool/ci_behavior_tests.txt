@@ -168,3 +168,4 @@ test/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_sour
 test/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_sources_test.dart
 test/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_views_test.dart
 test/profiles/connection_secret_editor_repair_test.dart
+test/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_review_entries_test.dart

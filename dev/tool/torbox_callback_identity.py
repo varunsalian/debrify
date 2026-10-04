@@ -10,10 +10,22 @@ import re
 def arguments(values, method):
     found = []
     for i, value in enumerate(values[:-1]):
-        if value != method or values[i + 1] != '(':
+        if value != method:
+            continue
+        opening = i + 1
+        if values[opening] == '<':
+            # Typed widget constructor calls retain their type arguments.
+            generic_depth = 0
+            while opening < len(values):
+                token = values[opening]
+                generic_depth += token.count('<') - token.count('>')
+                opening += 1
+                if generic_depth == 0:
+                    break
+        if opening >= len(values) or values[opening] != '(':
             continue
         depth, current, args = 0, [], []
-        for token in values[i + 2:]:
+        for token in values[opening + 1:]:
             if token == ')' and depth == 0:
                 if current:
                     args.append(current)

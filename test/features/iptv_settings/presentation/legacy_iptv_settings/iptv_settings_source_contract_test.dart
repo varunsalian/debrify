@@ -92,7 +92,27 @@ void main() {
         compact(load),
         contains('_ensureFocusNodes();_reloadHiddenCounts();'),
       );
-      for (final body in bodies.keys.map(iptvSettingsOriginalMember)) {
+      final hidden = compact(
+        iptvSettingsOriginalMember(
+          '_IptvSettingsPageState._openHiddenCategories',
+        ),
+      );
+      expect(
+        hidden,
+        contains('if(!mounted)return;setState(_reloadHiddenCounts);'),
+      );
+      final allSources = [
+        File('lib/screens/settings/iptv_settings_page.dart'),
+        if (Directory('lib/features/iptv_settings').existsSync())
+          ...Directory('lib/features/iptv_settings')
+              .listSync(recursive: true)
+              .whereType<File>()
+              .where((f) => f.path.endsWith('.dart')),
+      ];
+      for (final body in [
+        ...bodies.keys.map(iptvSettingsOriginalMember),
+        ...allSources.map((f) => f.readAsStringSync()),
+      ]) {
         expect(body, isNot(contains('runExclusive')));
       }
     },

@@ -8,7 +8,10 @@ import 'package:debrify/screens/profiles/profile_gate.dart';
 import 'package:debrify/screens/profiles/profile_wall_screen.dart';
 import 'package:debrify/screens/settings/iptv_settings_page.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/storage/iptv_playlist_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+
+import '../../../../support/iptv_settings_held_boundaries.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:flutter/material.dart';
@@ -176,16 +179,19 @@ void main() {
       await iptvSettingsCase(t, (f) async {
         await t.runAsync(f.grantSource);
         await f.mount(t);
-        var entered = false;
+        final prefs = (await t.runAsync(SharedPreferences.getInstance))!;
+        final before = {
+          for (final key in prefs.getKeys()) key: prefs.get(key)!,
+        };
+        final adapter = IptvHeldPreferences({
+          for (final entry in before.entries)
+            'flutter.${entry.key}': entry.value,
+        });
+        SharedPreferencesStorePlatform.instance = adapter;
         Object? error;
         var done = false;
         await t.runAsync(() async {
-          final work =
-              f.member('runProfileAction')(() async {
-                    entered = true;
-                    await IptvPlaylistStorage.setIptvPlaylists([]);
-                  })
-                  as Future<void>;
+          final work = f.member('setIptvStyle')('classic') as Future<void>;
           f.outstanding.add(
             work.then(
               (_) {
@@ -208,7 +214,11 @@ void main() {
         });
         await f.until(t, () => done);
         expect(error, isA<StateError>());
-        expect(entered, isFalse);
+        expect(adapter.writes, isEmpty);
+        expect({
+          for (final key in prefs.getKeys()) key: prefs.get(key)!,
+        }, before);
+        expect(f.member('iptvStyle'), isNot('classic'));
         await t.runAsync(() => unchangedBoth(f, f.connectionId!));
       }, sources: [iptvFixtureSource('z9')]);
     },

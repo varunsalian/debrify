@@ -37,7 +37,7 @@ void main() {
     testWidgets('layout mounts from available space $size', (tester) async {
       await iptvSettingsCase(tester, (f) async {
         await f.mount(tester, size: size);
-        final wide = size.width >= 900 && size.height > 420;
+        final wide = size.width >= 900 && size.height >= 420;
         expect(f.member('twoPaneActive'), wide);
         expect(
           find.byType(IptvSettingsTwoPane),
@@ -52,6 +52,24 @@ void main() {
         );
       });
     });
+  }
+
+  for (final bodyHeight in [420.0, 419.0]) {
+    testWidgets(
+      'layout body boundary 900×$bodyHeight retains inclusive threshold',
+      (tester) async {
+        await iptvSettingsCase(tester, (f) async {
+          // SettingsPageScaffold's AppBar consumes kToolbarHeight above the body.
+          await f.mount(tester, size: Size(900, bodyHeight + kToolbarHeight));
+          final wide = bodyHeight >= 420;
+          expect(f.member('twoPaneActive'), wide);
+          expect(
+            find.byType(IptvSettingsTwoPane),
+            wide ? findsOneWidget : findsNothing,
+          );
+        });
+      },
+    );
   }
 
   testWidgets(
@@ -202,6 +220,10 @@ void main() {
         await tester.pump();
         expect(FocusManager.instance.primaryFocus, isNot(same(back)));
         expect(FocusManager.instance.primaryFocus?.context, isNotNull);
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'iptv-2p-rail-0',
+        );
       });
     },
   );
@@ -232,6 +254,7 @@ void main() {
             );
           }
           if (wide && add) expect(primary, same(f.member('urlTabFocusNode')));
+          if (wide && !add) expect(primary.debugLabel, 'iptv-2p-rail-0');
         });
       });
     }
@@ -494,7 +517,7 @@ void main() {
       );
       if (Platform.isLinux && !capture && !strict && !golden.existsSync()) {
         // Authorized only before the separately verified Linux originals commit.
-        debugPrint('Pending original IPTV settings Linux golden: $view');
+        markTestSkipped('Pending original IPTV settings Linux golden: $view');
         return;
       }
       if (Platform.isLinux && !capture) expect(golden.existsSync(), isTrue);

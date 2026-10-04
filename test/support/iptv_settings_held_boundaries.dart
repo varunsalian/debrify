@@ -8,6 +8,14 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 class IptvHeldPreferences extends InMemorySharedPreferencesStore {
   IptvHeldPreferences(super.data) : super.withData();
   final writes = <({String key, Object value})>[];
+  String? failRemoveKey;
+
+  @override
+  Future<bool> remove(String key) async {
+    if (key == failRemoveKey) throw StateError('removal probe default');
+    return super.remove(key);
+  }
+
   String? holdKey;
   Completer<void>? entered;
   Completer<void>? release;

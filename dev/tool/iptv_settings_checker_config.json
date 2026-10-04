@@ -309,8 +309,8 @@
           "member": "_IptvSettingsPageState._buildPhoneHub",
           "call": "SettingsTile",
           "named_argument": "onTap",
-          "count": 9,
-          "occurrence": 0
+          "count": 12,
+          "occurrence": 3
         }
       ]
     },
@@ -415,6 +415,45 @@
           "named_argument": "onTap",
           "count": 3,
           "occurrence": 2
+        }
+      ]
+    },
+    {
+      "name": "_buildPhoneHub SettingsTile 1 onTap",
+      "callback_member": "_IptvSettingsPageState._pickAutoRefresh",
+      "sites": [
+        {
+          "member": "_IptvSettingsPageState._buildPhoneHub",
+          "call": "SettingsTile",
+          "named_argument": "onTap",
+          "count": 12,
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildStartupView RadioListTile 0 onChanged",
+      "callback_member": "_IptvSettingsPageState._setStartupMode",
+      "sites": [
+        {
+          "member": "_IptvSettingsPageState._buildStartupView",
+          "call": "RadioListTile",
+          "named_argument": "onChanged",
+          "count": 2,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildStartupView RadioListTile 1 onChanged",
+      "callback_member": "_IptvSettingsPageState._setStartupMode",
+      "sites": [
+        {
+          "member": "_IptvSettingsPageState._buildStartupView",
+          "call": "RadioListTile",
+          "named_argument": "onChanged",
+          "count": 2,
+          "occurrence": 1
         }
       ]
     }
