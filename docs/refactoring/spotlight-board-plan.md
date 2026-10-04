@@ -1323,6 +1323,86 @@ decomposition; bug fixes and behaviour changes, including everything below.
 - Formatted facade: **451**. Physical AST breakdown: imports export 13, widget docs 185, state header 3, lifecycle 142, forwarders overrides 26, bindings 54, composition 11, retained original bodies 0, remaining 17 (sum 451); detailed spans in `step7-cap.json`.
 - All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step7-focused.*` includes full end-of-run tree provenance before this Progress edit.
 
+### Full-suite gate 2 and completion
+
+- Gate 2 tested committed step 7 `27f116735348cd36fdac384e31415391be7668a4`,
+  tree `c55f3616868d8e85bb5fac72b4fb15c9746eeebb`, using
+  `suite_evidence.py run spotlight_board/gate2 --no-pub --concurrency=4`.
+  Start/end HEAD and tree match, with no untracked inputs or worktree
+  snapshot. `gate2.env.json` records complete end-of-run tree provenance.
+- Latest authoritative base is original-characterized **base3**, HEAD
+  `97d79c07b260ec039ea1aa4dcdcd4eb9476621f0`, tested tree
+  `8457e625239a4d79292465a2c607dd1381391738`. Accepted gate 1 is
+  `d0c77a6005147e32a9bdac1adc8ff3bd2bb3bcc9`, tested tree
+  `300ee747cc1d1ed590b3d0ef70b5f99b49575bd3`. All three runs have
+  **11,130 PASS / 13 pre-existing failures / 28 pre-existing errors /
+  20 unchanged skips**. Both helper comparisons and the independent
+  complete identity-set comparisons pass: no new failures, missing or
+  added identities, or newly skipped tests. Evidence:
+  `gate2-compare-{base3,gate1-final}.txt`,
+  `gate2-full-identity-comparison.json` and `completion-evidence.json`,
+  all exclusively in the `spotlight_board/` evidence namespace.
+- Final facade: **451 physical lines**, enforced as the measured cap
+  within the approved 460 design maximum. Arithmetic: imports/export 13
+  + widget/docs 185 + State header 3 + lifecycle 142 +
+  forwarders/overrides 26 + live bindings 54 + composition 11 +
+  remaining blank/comment lines 17 = **451**. No retained original
+  rendering bodies or TEMP cross-calls remain. All **29** destination
+  files and the facade are registered; every destination is at most 500
+  lines except the sole `_buildCard` layout file, **585**. The documented
+  exit for that exception remains a separate card decomposition.
+- Final checks: all ten manifests and self-tests with isolated parser
+  packages; real architecture positives/negatives, sizes, storage keys
+  and references, shape (3, facade 0), unchanged theme surface, LF
+  manifests, CI format/analyze and analyzer allowlist pass. Strict
+  rule/symbol/message comparison: **17 inventoried infos, zero additions,
+  errors or warnings**. Whole analyzer: **1,661** diagnostics vs original
+  **1,657**, with zero outside-slice additions and only the four anticipated
+  public-widget key infos covered by the frozen inventory. All per-entry
+  wiring reviews are complete. Six strict macOS and six strict Linux
+  original goldens pass. Golden bytes and characterization assertions were
+  never updated to accept a regression.
+- Progress decisions are preserved above: AST-token source-reader
+  correction; the declaration-scoped named-record formatter comma;
+  logo placement inside the cache-owning bridge; original State setter
+  and virtual warm-up-provider callback identities; the temporary
+  25-line step-3 binding growth; collision-free `cardMoving` with
+  original/current full-file causal and mutation proofs; eager route-owned
+  records and cached plain sections. No alternative layout, compressed
+  formatting, deleted comment, new playback seam or behavior change was
+  introduced. Ambient trailers remain decoration; contract 13 remains
+  source-guard-only, and all timing, mount and stop code stays verbatim.
+- **Found, not fixed:** the 13 original issues listed below, the observed
+  base3 test failures/errors and inventoried diagnostics remain unchanged.
+  The rejected first gate-1 evidence is retained; its extraction regression
+  was corrected before the accepted fresh gate. No baseline or failure
+  allowlist was weakened and no flaky acceptance was used for that defect.
+- **Pending device verification:** hero trailer start/stop on Android TV,
+  tvOS and desktop; desktop single-decoder handoff; card trailers;
+  Android TV D-pad, hold-OK and insertion anchor; unchanged entry-lag burst
+  with no keep-alive. Remote CI remains pending; no push was performed.
+  Claude's semantic union integration and checks on the merged tree remain
+  pending. This final evidence update changes documentation only, so the
+  committed gate-2 application/test/tool inputs remain applicable.
+
+| Checkpoint | Commit |
+| --- | --- |
+| Step 0 format-only approved reference R | `a65ad81a` |
+| Step 0 original characterization (b) | `54b4afa5` |
+| Step 0b review corrections and original proofs | `97d79c07` |
+| Step 0b base3 evidence and measured-cap stop | `63b396dd` |
+| Reviewed amendment documentation | `3f812727`, `0c8e795c` |
+| Step 0c tooling/manifest and complete composition probe | `b46b514e` |
+| Step 1 public types and metrics | `9d6e90ba` |
+| Separate strict Linux originals, before builder moves | `487efa2e` |
+| Step 2 card and rendering widgets | `aa29343a` |
+| Step 3 route-owned state and live view | `e1d22c65` |
+| Step 4 hero lifecycle, first gate rejected | `8e385c17` |
+| Step 4b field binding correction, accepted gate 1 | `d0c77a60` |
+| Step 5 selection, scroll and movement | `c8e5ea46` |
+| Step 6 rendering, strict original goldens | `910b8f1d` |
+| Step 7 completed facade/CI, accepted gate 2 | `27f11673` |
+
 ### Amendment after step 0b (design-reviewed before resuming)
 
 1. **Facade cap.** The hard maximum becomes 460 (see the size section); the
