@@ -781,6 +781,27 @@ identities against the observed branch baselines and approved additions.
   committed focused replay follows before the builder move, so its tree
   evidence includes all three new playback files.
 
+- Step 6: nine reviewed layout records now render the root, search, file
+  list, OTT/season selector, episode list/card and both responsive layouts.
+  State has the exact build forwarder; registered callback tear-offs retain
+  their original targets, lexical builder contexts stay lexical, and all
+  three timer protocols stay in their original builders/owners. A generator
+  collision with the external `Icons.build` constant was caught during
+  binding review and corrected before verification; the original icon stays
+  unchanged. The null-series selector's original return receives only exact
+  pinned braces for its formatter-induced lint. Four such sites are now
+  registered, with unchanged original statements and guards.
+  `step6-*` passes against `base4`: 172 identities including five macOS
+  goldens, all six manifest self-tests, no added diagnostics, CI format/
+  allowlist, all 17 warnings, architecture/size/storage checks. New files
+  were staged before these runs, so their stable tested trees include every
+  builder. Facade: 499 lines, retaining composition only until step 7.
+  Step 5's clean committed replay at `21d1d5ff`, tree
+  `df5875d68c18022c68ba543f22600ec164063290`, also passes its 172 tests,
+  complete 107-leaf comparison and local focused checks with no untracked
+  inputs or changes during the run. Strict moved-code Linux follows on
+  the committed step-6 archive in the calibrated image.
+
 
 ## Found, not fixed
 

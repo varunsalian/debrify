@@ -35,6 +35,20 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_desktop_episode.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_card.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_metadata.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_file_list.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_mobile_episode.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_ott_view.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_search_layout.dart':
+      0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_bulk_delete.dart':
       0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selected_delete.dart':
@@ -122,7 +136,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/debrify_tv/widgets/tv_focusable_card.dart': 0,
   'lib/screens/downloads_screen.dart': 2,
   'lib/screens/magic_tv_screen.dart': 7,
-  'lib/screens/playlist_content_view_screen.dart': 0,
   'lib/screens/playlist_screen.dart': 0,
   'lib/screens/premiumize/premiumize_files_screen.dart': 6,
   'lib/features/home/presentation/home_catalog_card.dart': 0,
@@ -218,6 +231,8 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_dormant.dart':
       0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_list.dart':
+      0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_state.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_focus_state.dart':
@@ -237,6 +252,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_posters.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_progress.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_root_layout.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_scroll_state.dart':
       0,
