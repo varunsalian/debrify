@@ -1033,6 +1033,52 @@ decomposition; bug fixes and behaviour changes, including everything below.
   original found-not-fixed behaviors below remain unchanged; device checks,
   remote CI and merged integration remain pending.
 
+### Step 0b — frozen base3 and stop checkpoint
+
+- Review correction commit: `97d79c07b260ec039ea1aa4dcdcd4eb9476621f0`
+  (`test(spotlight-board): step 0b close characterization review and measure
+  facade cap`). Format-only R and characterization checkpoint (b) remain
+  reachable and unchanged. This subsequent evidence checkpoint changes only
+  this Progress document; application, tests, dependencies and tooling remain
+  the inputs tested at 97d79c07.
+- Final command: `python3 dev/tool/suite_evidence.py run
+  spotlight_board/base3 --no-pub --concurrency=4`. The committed start and end
+  HEAD are 97d79c07; index/tested/end tree all equal
+  `8457e625239a4d79292465a2c607dd1381391738`, with no worktree snapshot and
+  `tree_changed_during_run: false`. `base3.env.json` records complete end
+  provenance, SDK and unchanged SHA256s of the six untracked, Linux-only
+  supplied PNGs. No application or test input changed during the run.
+- **Comparison PASS** against controlled R `base-fmt-c4`: 11,130 success,
+  13 failure, 28 error, 20 skipped; **146 added passing identities, zero new
+  failures, zero missing tests and zero newly skipped tests**. That controlled
+  R baseline also compares equal to the original default-concurrency baseline.
+  Fresh isolated original and review-commit Xtream replays both pass 10/10;
+  their JSONL/env/commands are `step0b-review-xtream-{original,current}.*`.
+  The prior failing attempts and hashed input-closure evidence remain retained.
+  No known-failure entry or assertion is changed to accept the flaky timeout.
+- All **ten** integrated manifests and their self-tests PASS with the isolated
+  parser package. The latest Spotlight log includes the actual per-build
+  section mutation as well as per-access recreation, both setter negatives,
+  both view negatives, dispose/Opacity mutations and the reader positives and
+  negatives. Final results and tool hashes are in
+  `step0b-review-final-manifest-results.json`. CI format, scoped analyzer
+  allowlist, whole-analyzer identity comparison, architecture, sizes and
+  storage checks PASS as recorded above. All six macOS goldens remain strict;
+  neither golden tests nor PNGs were changed by the review correction.
+- **Stop:** P2-4 is blocked at the measured 451-line complete facade; no
+  application extraction, step 1–7 commit or full-suite gate commit is made.
+  `base3` is the latest Spotlight baseline, not either planned gate. Both
+  gates remain pending against that base. The probe's named-record formatter
+  comma remains an explicit unresolved checker finding; no checker assertion
+  is weakened. The dependency inventory also needs the LogoOrTitle destination
+  under the documented bridge before moving it: its original DebrifyImageCache
+  access means it is not service-free. The probe follows the currently frozen
+  manifest for measurement; no production file uses that destination yet.
+  The supplied Linux originals remain hash-verified and separately untracked;
+  their dedicated commit/strict enforcement waits before any builder move.
+  Device-only trailer/decoder/TV checks, remote CI and merged integration stay
+  pending. No branch switch or push occurred.
+
 
 ## Found, not fixed
 
