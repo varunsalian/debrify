@@ -1,6 +1,6 @@
 # Playlist content dependency and wiring report
 
-Original: `67b32702`, screen blob `4fc757c7760960d30e5254b9c6809fed300d036b`. All 29 State fields and 107 original leaves have exactly one destination. Step 1 moves the pure helpers and search-result model; later entries remain planned.
+Original: `67b32702`, screen blob `4fc757c7760960d30e5254b9c6809fed300d036b`. All 29 State fields and 107 original leaves have exactly one destination. Steps 1–7 are complete: every entry moved to its destination and the facade (204 lines) keeps only the public widget, the State's lifecycle, wiring and the frozen test accessor.
 
 This is the bounded legacy stage and its exceptions/exit milestones in the plan apply. State owns lifecycle; each route constructs fresh owners. Context/mounted/item/callback bindings remain live and preserve current profile behavior. Builders keep lexical callback/build contexts. No action starts during construction.
 

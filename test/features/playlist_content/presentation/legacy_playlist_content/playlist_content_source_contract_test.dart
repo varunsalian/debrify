@@ -87,14 +87,12 @@ void main() {
       final destinations = Directory('lib/features/playlist_content');
       final combined =
           screen +
-          (destinations.existsSync()
-              ? destinations
-                    .listSync(recursive: true)
-                    .whereType<File>()
-                    .where((f) => f.path.endsWith('.dart'))
-                    .map((f) => f.readAsStringSync())
-                    .join('\n')
-              : '');
+          destinations
+              .listSync(recursive: true)
+              .whereType<File>()
+              .where((f) => f.path.endsWith('.dart'))
+              .map((f) => f.readAsStringSync())
+              .join('\n');
       expect(RegExp(r'\bprint\(').allMatches(combined), hasLength(39));
       for (final forbidden in [
         'onPlayerHandoff:',

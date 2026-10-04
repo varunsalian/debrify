@@ -921,3 +921,4 @@ are preserved above. No test timing fix is included.
 - **Dormant and redundant code:** `_loadProgressData`;
   `_applySeriesArrangeView`'s nodes are never shown; the null-aware
   operators behind the 17 warnings. A platform check sits in presentation.
+- Completion review (Claude): the facade is registered at 0 in `kExtractedShapeResidue`; the print-count scan reads the feature folder unconditionally; the deps header is current. Shared-tool note: step 0b's `path == alias` resolution in `torbox_callback_identity.py` applies to every feature's config (only looser when a callback argument is exactly a state-record alias); all other features' self-tests pass with it.
