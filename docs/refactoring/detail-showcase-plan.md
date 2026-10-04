@@ -55,8 +55,8 @@ and Progress shows each env's `paths` - Execution base: `14d173a9` on `refactor/
 - Conservative choices: no application seam, deterministic null artwork,
   equal-length cross-file alias names to avoid body reflow; all moved comments
   remain verbatim. Linux originals will be separately verified/committed at L;
-  absent originals block before builder moves. Step 0(b), strict/alias probes,
-  original characterization/mutation proofs and base-fmt are in progress. and `flags`.
+  absent originals block before builder moves. Original characterization/mutation replays and all-manifest replays will be
+  completed in the subsequent step 0b evidence checkpoint before extraction. and `flags`.
 
 ## Goal
 
@@ -647,8 +647,77 @@ change below.
 - Conservative choices: no application seam, deterministic null artwork,
   equal-length cross-file alias names to avoid body reflow; all moved comments
   remain verbatim. Linux originals will be separately verified/committed at L;
-  absent originals block before builder moves. Step 0(b), strict/alias probes,
-  original characterization/mutation proofs and base-fmt are in progress.
+  absent originals block before builder moves. Original characterization/mutation replays and all-manifest replays will be
+  completed in the subsequent step 0b evidence checkpoint before extraction.
+
+### Step 0(b) — frozen original characterization checkpoint
+
+- R / step 0(a) is `1165b624`. `base-fmt` is a full-suite run with paths `[]`
+  and flags `["--no-pub"]`: 11,093 success, 13 failure, 28 error, 20 skips;
+  every identity/outcome equals `base`. No new/fixed/missing/skipped identity.
+- First concurrent `base-fmt-analyze.txt` transiently exposed nine additional
+  unchanged-file diagnostics (generated assets, vendor lint options, existing
+  dock metrics tests). Sequential original/reference replays establish zero
+  format-induced additions. `base-fmt-analyze-replay.txt` and
+  `step0-whole-analyze-final.txt` exactly equal `base-analyze.txt` (1,666
+  diagnostic occurrences); preserve all attempted logs in the own namespace.
+- `strict-original.txt` / `strict-baseline-identities.json`: original under
+  feature rules, qualified imports only, one `_plateFill` warning, four
+  `_Badge` const infos, and two qualification-induced `directives_ordering`
+  infos at 5/21. `alias-probe.txt` has only the warning and four const infos;
+  no unused/unnecessary import, key or private-public API diagnostic. Compare
+  by maximum, never sum. No suppression or constructor changes.
+- `detail-showcase-deps.md`, LF manifest and real-config fixtures pin all 69
+  whole declarations, comment-fragment owners, State reads and per-entry wiring.
+  Fixed aliases: `_ink→sInk`, `_t→st`, `_activate→sActivate`,
+  `_keepVisible→sKeepVisible`, `_slotFill→sSlotFill`, `_Hover→SHover`,
+  `_Band→SBand`, `_LogoOrTitle→SLogoOrTitle`,
+  `_ExpandableSynopsis→SExpandableSynopsis`, `_Chip→SChip`,
+  `_MetaLine→SMetaLine`, `_HonorsLine→SHonorsLine`, `_TechLine→STechLine`,
+  `_Primary→SPrimary`, `_Circle→SCircle`. Typedef and file-aware alias entries
+  remain empty in the production config until their owner creation; the full
+  virtual split accepts all pins and rejects registration ahead of the owner.
+  Constructor consts use `showcase<Name>Constructor`, plus
+  `showcaseCircleMarkConstructor`; functions/consts use exact tear-off pins.
+- The feature-aware normalization is opt-in; code/interpolation identifiers
+  reverse aliases while comments/literal contents remain intact. Owner-local
+  alias use, changed targets (including `.mark`), class rename, changed comment,
+  added const/key, lifecycle/hold/guide, trailer wrapper, TV and axis negatives
+  reject. Callback identity is checked independently against direct original
+  expressions, including swapped model, wrong callback and wrapper negatives.
+- No guide fallback: complete strict alias probe sizes range 120–474; guide
+  474. Alias names preserve identifier length. `alias-reflow-proof.json` checks
+  all 69 declarations' raw scanner tokens/comments after actual formatting,
+  code-only reversal, with zero added commas/braces and a separate owned cache.
+- 34 new original characterization cases pass, including all four strict macOS
+  goldens, with frozen public-parts fixture, source reader and surface namespace.
+  The source reader requires one physical owner for every manifest entry;
+  final topology activates only from `DETAIL_SHOWCASE_COMPLETE = True`.
+- Golden choices: `signal`, null artwork, DPR 1, en-US, text scale 1, January
+  dates, host-owned nodes, bounded pumps (600 + 240 ms after frame dispatch).
+  `tv_movie`: 1920×1080, original page/dpad, identity focused, trailer absent.
+  `compact_series`: 390×844 direct parts (no scroll offset), season pill and
+  compact episode. `wide_series_bands`: 1280×2600 direct fixed-column parts,
+  metrics `w=1280`, `compact=false`, `touch=false`, k=1, all promised bands
+  asserted in capture bounds. `compact_guide`: 390×844, category 1 open.
+  Initial capture was only on R; later runs compare without regeneration.
+- CI behaviour list gains three direct-importer tests and seven new files. The
+  five existing related files remain 69/69 passing. Shape/theme/related guards
+  have 197 passes and the unchanged detail-theme raw-colour failure; corrected
+  profile-guard run retains the observed profile adapter guard failure. Two
+  erroneous test paths in the first invocation are retained as development
+  evidence, then rerun at their actual paths; no failure list is changed.
+- Architecture, size, CI format, scoped analyzer/12-warning allowlist, new-test
+  analyzer and diff checks pass. Source inventory: 18 bare radii, zero shape
+  tokens; theme/light ink measurements recorded, classification unchanged;
+  shape registrations wait for actual file creation at step 1. Storage member
+  map and unrelated application/importer files remain unchanged.
+- Linux capture script resolves the exact format and characterization subjects,
+  consumes all log output, requires checkpoint application hashes equal R,
+  validates Linux/amd64 and Flutter 3.44.8, records image ID/input hashes, then
+  captures once and strictly compares the originals. Linux PNGs are exclusively
+  staged/committed in L, and Linux becomes strict at L. They are never swept into
+  the characterization commit.
 
 ## Found, not fixed
 

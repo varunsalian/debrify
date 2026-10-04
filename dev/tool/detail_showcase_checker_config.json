@@ -1,0 +1,56 @@
+{
+  "baseline": "1165b624",
+  "source": "lib/widgets/detail/showcase_parts.dart",
+  "feature": "lib/features/detail_showcase",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": true,
+  "allowed_edits": [
+    "unchanged"
+  ],
+  "receivers": [],
+  "self_test_module": "detail_showcase_checker_test",
+  "type_aliases": [],
+  "file_aliases": [],
+  "additional_owners": [],
+  "callback_call_aliases": {},
+  "callback_identities": [
+    {
+      "name": "trailer callback",
+      "expected_identity": "m.onTrailer",
+      "sites": [
+        {
+          "member": "ShowcaseIdentity",
+          "call": "_Circle",
+          "named_argument": "onTap",
+          "count": 5,
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "name": "primary callback",
+      "expected_identity": "m.onPrimary",
+      "sites": [
+        {
+          "member": "ShowcaseIdentity",
+          "call": "_Primary",
+          "named_argument": "onTap",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "name": "primary hold callback",
+      "expected_identity": "m.onPrimaryLongPress",
+      "sites": [
+        {
+          "member": "ShowcaseIdentity",
+          "call": "_Primary",
+          "named_argument": "onLongPress",
+          "count": 2
+        }
+      ]
+    }
+  ]
+}

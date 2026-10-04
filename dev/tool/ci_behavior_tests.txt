@@ -221,3 +221,15 @@ test/features/merged_detail/presentation/legacy_merged_detail/merged_detail_sour
 test/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracker_test.dart
 test/features/merged_detail/presentation/legacy_merged_detail/merged_detail_trailer_test.dart
 test/features/merged_detail/presentation/legacy_merged_detail/merged_detail_views_test.dart
+
+# detail_showcase original-code characterization and direct importers
+test/detail_showcase_compact_test.dart
+test/showcase_availability_test.dart
+test/pinned_sources_controls_test.dart
+test/features/detail_showcase/presentation/detail_showcase_goldens_test.dart
+test/features/detail_showcase/presentation/detail_showcase_source_contract_test.dart
+test/features/detail_showcase/presentation/detail_showcase_surface_test.dart
+test/features/detail_showcase/presentation/showcase_band_contracts_test.dart
+test/features/detail_showcase/presentation/showcase_guide_update_test.dart
+test/features/detail_showcase/presentation/showcase_hover_focus_test.dart
+test/features/detail_showcase/presentation/showcase_primary_hold_test.dart

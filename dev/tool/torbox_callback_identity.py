@@ -189,6 +189,10 @@ def check_callback_identities(lookup, rows, source_path, config):
                     call_row = by_original.get(call_name)
                     if call_row and call_row['new_name'] in values:
                         call_name = call_row['new_name']
+                # Opt-in callee aliases retain the original private constructor.
+                call_alias = config.get('callback_call_aliases', {}).get(call_name)
+                if call_alias and call_alias in values:
+                    call_name = call_alias
                 calls = arguments(values, call_name)
                 if len(calls) != count:
                     raise ValueError(f"expected {count} {call_name} calls, got {len(calls)}")
@@ -220,6 +224,8 @@ def check_callback_identities(lookup, rows, source_path, config):
                 resolved.append(identity([expected_node['name']], expected_node['owner']))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
+        if 'expected_identity' in spec:
+            resolved.append(spec['expected_identity'])
         if resolved and len(set(resolved)) != 1:
             errors.append(f"Callback identity {spec['name']} differs: {resolved}")
     return errors
