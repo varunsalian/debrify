@@ -792,6 +792,26 @@ including everything below.
   This supplemental original checkpoint retains (b)'s exact-subject Linux
   capture reference and five unchanged golden scenes. Detached checkpoint
   proofs and a fresh full-suite base follow before extraction.
+- Supplemental checkpoint: `1f575f79`; `step0b-original-detached` passes all
+  76 identities on its clean committed tree. All 57 valid ORIGINAL mutations
+  are rejected, covering every one of the 76 identities
+  (`original-mutation-proofs.json`, zero uncovered). Each mutant env records
+  the exact tested Git tree; compiler/load failures are never accepted as
+  proof. The 11 requested review mutations are included. An unrelated
+  first-episode mutation cannot affect tracker landing at S2E1, so that case
+  instead rejects disabling the tracker landing tier; both checks are kept.
+- Both separate original macOS capture processes, first and reverse order,
+  match all five committed PNG hashes (`step0b-mac-{first,reverse}-sha256.json`).
+  Capture evidence uses the existing tree/SDK helpers and refreshes Git's
+  cached file stats after rewriting identical PNG bytes; unsuccessful end
+  snapshots are retained as incomplete attempts and are not proof.
+- Fresh full `base4` on `1f575f79`, tree
+  `e78dc3f0ac8553fc375c16e54a170c4751ce2b7f`: 11,169 successes, 13 failures, 28 errors, 20 skips.
+  Comparison with `base3` and `base-fmt` passes: no new failures, missing
+  identities or newly skipped cases; 76 added successes versus `base-fmt`.
+  `base4.env.json` has `paths: []`, `flags: ["--no-pub"]`, no untracked
+  inputs, unchanged tree. Both future gates use this latest original base.
+  Linux originals are still pending external delivery before builder moves.
 
 ## Found, not fixed
 
