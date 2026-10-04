@@ -19,6 +19,10 @@ an **isolated `--parser-package`** initialized from
 `dev/tool/verbatim_parser.pubspec.lock` in this feature's evidence namespace;
 the default shared parser cache collides across worktrees (PikPak exit 253).
 
+Revised 2026-10-04 after Codex design review round 1 (callback closures,
+operation-specific profile capture, separate engine sequences, network
+caches, viewport widths, sync effects, declaration counts).
+
 ## Goal
 
 `lib/screens/addons/addon_hub_screen.dart` is 3,415 lines: the Addons tab
@@ -26,7 +30,8 @@ the default shared parser cache collides across worktrees (PikPak exit 253).
 installed Stremio addons (toggle, rename, update, remove, details, metadata
 provider, add by URL, JSON import, update/delete all), the Official and
 Community marketplaces, Torrent Engines (install, delete, YAML import), the
-filter bar, the page D-pad policy and 24 private top-level declarations.
+filter bar, the page D-pad policy and 33 top-level declarations (32
+private).
 
 Split it into a new feature, `lib/features/addon_hub/`, **moving code
 verbatim**. The widget tree, keys, focus nodes and debug labels, build order
@@ -84,7 +89,7 @@ a tab switch disposes it) and by the metadata test.
 | 503–567 | `_focusFirstRow`, `_toggleSearch`, `_selectKind`, `_selectSource`, `_isInstalled`, `_matchesFilters` |
 | 569–1222 | actions (market install, configure, add by URL, JSON import, update all, delete all, toggle, rename, update, remove), options sheet, details, actions menu |
 | 1224–2092 | `_onPageKey`, `_hasLeftNeighbour`, `build`, header, filter bar (181, the largest member), search, body, installed list, metadata picker, market list, engine list, `_iconForEngine`, `_relativeDate`, `_emptyState` |
-| 2095–3415 | `_FocusCard`, `_kCardBg`, `_cardDecoration`, `_InstalledRow`, `_AddonInfo`, `_AddonTitleLine`, `_AddonMeta`, `_MarketRow`, `_MarketButton`, `_EngineRow`, `_EngineActionPill`, `_addonLogo`, `_StatusPill`, `_AddonOptionsSheet`, `_OptionTile`, `_HubActionButton`, `_HubDialog`, `_HubDialogButton`, `_capitalize`, `_RowNav`, `_capabilities`, `_CapabilityChip`, `_WarningChip`, `_centerInScrollable` |
+| 2095–3415 | `_FocusCard`, `_kCardBg`, `_cardDecoration`, `_InstalledRow`, `_AddonInfo`, `_AddonTitleLine`, `_AddonMeta`, `_MarketRow`, `_MarketButton`, `_EngineRow`, `_EngineActionPill`, `_addonLogo`, `_StatusPill`, `_AddonOptionsSheet`, `_OptionTile`, `_HubActionButton`, `_HubDialog`, `_HubDialogButton`, `_capitalize`, `_RowNav`, `_capabilities`, `_CapabilityChip`, `_WarningChip`, `_centerInScrollable`: 29 declarations with the five companion States (`_FocusCardState`, `_MarketButtonState`, `_OptionTileState`, `_HubActionButtonState`, `_HubDialogButtonState`) |
 
 No member exceeds 200 lines. No playback, route push, back handler, timer,
 subscription, explicit controller besides the text field, or key literal.
@@ -137,8 +142,9 @@ subscription, explicit controller besides the text field, or key literal.
      non-installed rows only (1897–1902).
    - **Metadata picker** (1621–1740): enabled `meta` addons with a
      `baseUrl`, in installed order, then the existing `providers.sort`
-     putting Cinemeta first (0 otherwise; unstable above 32 elements —
-     unchanged); `' · Recommended'` labels; Automatic last; the
+     putting Cinemeta first (0 otherwise; the pinned SDK insertion-sorts
+     lists of up to 33 elements, beyond which equal-element order is
+     unspecified — unchanged); `' · Recommended'` labels; Automatic last; the
      selected-value rule (stored `automatic`, else a stored provider value,
      else the first Cinemeta, else `automatic`).
    - **Engines:** imported in `metadata.json` order; available = remote
@@ -162,29 +168,64 @@ subscription, explicit controller besides the text field, or key literal.
    `previous` rollback. Snackbars use the messenger captured before awaits
    (except 1108, 1750); `'Exception: '` is stripped at 225, 288, 454, 596,
    679, 717.
-6. **Engine actions.** Install: blocking dialog, `downloadEngineYaml`,
-   `saveEngine`, `ConfigLoader().clearCache()`, `await
-   EngineRegistry.instance.reload()`, dismiss, `await _loadEngines()`,
-   snackbar. Delete: confirmation, then the same tail. YAML import
-   (373–459): `pickFiles(type: any, withData: true)`, extension, `loadYaml`,
-   `id`/`display_name` checks, the replace confirmation **only when the id
-   exists**, the same tail. The blocking dialog (`barrierDismissible:
-   false`) is popped through `Navigator.of(context, rootNavigator: true)`
-   only while `_blockingProgressUp && mounted`.
+6. **Engine actions**, three separate sequences:
+   - **Install** (295–326): messenger captured; blocking dialog; `await
+     downloadEngineYaml` (null throws); `await saveEngine` with **no
+     `mounted` check between download and save** (299–307);
+     `ConfigLoader().clearCache()`; `await EngineRegistry.instance.reload()`;
+     dismiss; `await _loadEngines()`; `mounted` check; snackbar. Failure:
+     dismiss, `mounted` check, red snackbar.
+   - **Delete** (328–370): confirmation; `confirmed != true || !mounted`
+     return; messenger; `await deleteEngine`; `clearCache()`; `await
+     reload()`; `await _loadEngines()`; `mounted` check; snackbar. **No
+     blocking dialog** on success or failure (the catch shows only the red
+     snackbar).
+   - **YAML import** (373–459): messenger and theme captured;
+     `pickFiles(type: any, withData: true)`; extension; bytes or
+     `xFile.readAsBytes()`; `loadYaml`; `id`/`display_name` checks; the
+     replace confirmation **only when the id exists**; `mounted` check;
+     blocking dialog; `await saveEngine`; `clearCache()`; `await reload()`;
+     dismiss; `await _loadEngines()`; `mounted` check; snackbar. Failure:
+     dismiss (a no-op when the dialog never showed), `mounted` check,
+     stripped red snackbar.
+   The blocking dialog (`barrierDismissible: false`) is popped through
+   `Navigator.of(context, rootNavigator: true)` only while
+   `_blockingProgressUp && mounted`.
 7. **Network.** Manifests through `StremioService` (top-level `http.get`);
    the marketplace singleton's session cache (`api.strem.io`; paged
    `stremio-addons.net`, up to 20 pages; the `stremio-addons.com` fallback
    with `communityFromNet` gating the attribution); engines from gitlab.com.
    **The engine network client is owned:** `_remoteEngines =
    RemoteEngineManager()` is a field initializer (default `http.Client()`,
-   replaced internally on timeout) closed by the last cleanup statement. No
-   request is added, removed or reordered.
+   closed and replaced by a new `http.Client()` on a 30 s timeout) closed by
+   the last cleanup statement. **Only the market Retry forces** (`_loadMarket(
+   _source, force: true)`, 1881). Engine refresh and Retry (`onTap:
+   _loadEngines`, 1412, 1942) never clear the manager's per-instance
+   5-minute metadata cache (`remote_engine_manager.dart:125`): a hit makes
+   no request. A miss requests `metadata.yaml` only; the GitLab `tree`
+   listing plus one request per engine file is the uncached legacy fallback
+   after a metadata failure. Market fallback: `fetchCommunity` falls back to
+   `_fetchCollection(stremio-addons.com, forceRefresh: force)`, which caches
+   under its own URL key besides `community`. No request is added, removed
+   or reordered.
 8. **Storage, profiles and sync**, all service-side: `stremio_addons_v1` or
    the resource graph, `stremio_metadata_provider_v1`, the profile `engines/`
    directory, read-only credentials; sync triggers
    (`notifyWebDavSyncLocalChange`, `'engine_definitions_changed'`) stay in
    the services. The hub captures no scope; gate remounts and tab switches
-   dispose it; services reject stale sessions. Nothing is added or removed.
+   dispose it. Capture is **operation-specific**, not a blanket rejection:
+   engine install awaits the download in the hub with no `mounted` check,
+   and `LocalEngineStorage._pinned()` captures the scope only when
+   `saveEngine` begins, so a switch during the download saves into the
+   then-active profile (outcome recorded, preserved); delete and import
+   capture when their storage call begins; `ProfilePreferences.instance()`
+   captures after `SharedPreferences.getInstance()` resolves, so the
+   metadata write targets the profile active at acquisition. Engine sync
+   (`_notify(profileId)` with the captured id) fires only on a committed
+   save or a delete that changed metadata, never on failure or cancel;
+   `LocalEngineStorage.changes` is bumped only by the incoming WebDAV
+   refresh (`webdav_sync_active_profile_refresh.dart:137`), not by local
+   mutations. Nothing is added or removed.
 9. **Clipboard and URL launching.** Configure: `launchUrl(
    externalApplication)`; on false or throw, `await Clipboard.setData` and a
    5 s snackbar. Attribution: `launchUrl`, errors swallowed. Copy URL:
@@ -259,8 +300,9 @@ subscription, explicit controller besides the text field, or key literal.
 
 As in the playlist-content and IPTV-settings plans, with these points:
 1. **Format-only step 0a.** The original isn't `dart format` clean
-   (888–891: `.fade(...)` rewraps, dropping an optional trailing comma; 2872:
-   the nested conditional splits; 3,415 → 3,416 lines). Step 0a formats it
+   (888–891: `AppThemeScope.of(ctx).fade(...)` rewraps, removing **one**
+   optional trailing comma (after `0.58`) and inserting **one** (after
+   `ctx`); 2872: the nested conditional splits; 3,415 → 3,416 lines). Step 0a formats it
    alone, proven by the AST verifier (identical structure; only
    parser-identified optional commas and whitespace; same comments, radii
    and token calls). Analyzer output is compared by identity; any
@@ -279,9 +321,20 @@ As in the playlist-content and IPTV-settings plans, with these points:
    no-`late` decision) before `initState` registers them; `_tvFocusHandler`
    stays a stored State field. Checker callback identity (receiver path plus
    member, with wrapper, receiver-swap, wrong-member and missing-argument
-   negatives) also covers `_onPageKey`, `_focusFirstRow`, `_toggleSearch`,
-   Retry/`_loadEngines`, `_showOptions`, `_installFromMarket`,
-   `_configureInBrowser` and `_setMetadataProvider`.
+   negatives) covers the **direct tear-offs** `_onPageKey` (1302),
+   `_toggleSearch` (1388), `_focusFirstRow` (`onDownArrow`, 1549),
+   `_loadEngines` (refresh 1412, Retry 1942) and `_setMetadataProvider`
+   (1718). The **argument-capturing closures** stay closures with their
+   original shape and arguments verbatim: `() => _showOptions(items[i])`
+   (1613), `() => _installFromMarket(m, navIndex)` (1920), `() =>
+   _configureInBrowser(m)` (1921), `(_) => _focusFirstRow()` (1548) and the
+   market Retry `() => _loadMarket(_source, force: true)` (1881).
+   `torbox_callback_identity.py:96` accepts only direct tear-offs and would
+   reject them, so a **config-scoped extension** (opt-in key in this
+   feature's config only; existing configs and their results unchanged)
+   compares the closure's parameter list and argument tokens verbatim and
+   resolves the **invoked member and its receiver** through the same binding
+   checks. Step 0 proves the parsed original passes before any extraction.
 5. **Owners keep initializers and types**, including the three
    between-method fields (a recorded placement decision); `_remoteEngines`
    is created and disposed through the same owner. Live `context`, `mounted`
@@ -321,6 +374,11 @@ As in the playlist-content and IPTV-settings plans, with these points:
 3. **Checker:** manifest and config, LF-only, with fixtures built from the
    **real config** and negatives for: a listener added and removed through
    different receivers or wrapped; the TV handler re-created at unregister;
+   for each closure, isolated negatives that change only the receiver,
+   only the invoked member, only an argument, or turn it into a tear-off or
+   a nested wrapper (each rejected alone); the **original-positive proof**
+   (the unmodified step-0a file through the real config with every
+   tear-off and closure spec, before any extraction);
    a reordered or dropped dispose statement; `_remoteEngines` disposed via
    another owner; lifecycle moved out of the State; a reworded comment; an
    added `const`; a split widget/State pair.
@@ -334,13 +392,18 @@ As in the playlist-content and IPTV-settings plans, with these points:
    `markNeedsBuild()` after the real check settles). The seam-only size
    raise is recorded once.
 5. **Harness** (`test/support/addon_hub_fixture.dart`, reusing
-   `profile_fixture.dart`): `invalidateCache()`, `http.runWithClient` with a
-   request-logging `MockClient` (step 0 proves the default engine client
-   resolves to the zone client). **Marketplace cache reset with existing
-   APIs only:** each case first runs `fetchOfficial`/`fetchCommunity(
-   forceRefresh: true)` under its own client, overwriting both cache keys and
-   `communityFromNet`; cache-cold cases live in their own file. No
-   production reset. Temp documents directory for engines; fakes for
+   `profile_fixture.dart`): `invalidateCache()`, `http.runWithClient` whose
+   factory returns a **fresh close-tracking** request-logging `MockClient`
+   per call into one shared log (convenience `http.get` creates and closes
+   its own client; step 0 proves the engine field's client and its timeout
+   replacement both come from the zone factory). **Marketplace cache reset
+   with existing APIs only:** each case first runs `fetchOfficial`/
+   `fetchCommunity(forceRefresh: true)` under its own client, overwriting
+   the `community` key and `communityFromNet`; a case that needs the
+   fallback forces it (net failure), refreshing the separate legacy-URL
+   entry, and no case relies on a legacy entry left by an earlier case.
+   Setup requests are logged apart from the case's. Cache-cold cases live in
+   their own file. No production reset. Temp documents directory for engines; fakes for
    `FilePicker`, `UrlLauncherPlatform` (true, false, throw), clipboard and
    `MainPageBridge` sentinels; `logo: null` market fixtures. Prove one HTTP
    fixture on the original first.
@@ -351,7 +414,11 @@ As in the playlist-content and IPTV-settings plans, with these points:
    non-alphabetical ids and names** so any sort shows; held futures for
    in-flight cases; a scheduled frame after post-frame callbacks; route
    animations drained before asserting pops; KeyDown versus KeyRepeat;
-   widths 375, 479/480, 499/500 and wide; no wall-clock engine subtitles.
+   viewport widths 375, 479/480 (filter bar, `c.maxWidth < 480`), 527/528
+   (cards: list padding leaves viewport − 48 for `c.maxWidth < 480`),
+   579/580 (metadata picker: margin plus padding leave viewport − 80 for
+   `constraints.maxWidth < 500`) and wide, or the `LayoutBuilder`
+   constraints asserted directly; no wall-clock engine subtitles.
 
    | Contract | Coverage |
    | --- | --- |
@@ -360,9 +427,10 @@ As in the playlist-content and IPTV-settings plans, with these points:
    | 3 Loads | Installed: an older held load completing last doesn't publish. Engines: held load A, then a notify or load B; A's late remote list **overwrites `_knownRemoteEngines`** and re-bumps the revision (recorded); unmount during install/delete/import reaches the unguarded `setState` (outcome recorded). Market: same-source Retry double publish, a stale error after switching back, no request on Official→Installed→Official; engines load once. |
    | 4 Ordering | Stored order shown unchanged; add and import append; remove keeps order; market order and nav indices with installed rows interleaved; metadata picker order, labels and each selected-value rule; engine, filter, chip, sheet, menu and import-result orders. |
    | 5 Addon actions | Each action's exact service effect and argument (`storageKey` versus `manifestUrl`, `revokeSharedProfiles` true/false with a borrower), confirmation presence, cancel writing nothing, snackbar text and colour, prefix stripping; metadata rollback on a failing write. |
-   | 6 Engines | Install, delete and import sequences with request lists, the blocking dialog on success and failure, replace confirmation only for an existing id. |
-   | 7 Network | Exact URLs and counts; fallback hides the attribution; Retry forces. |
-   | 8 Profile | A switch through the real gate picker disposes the hub; held `addAddon` and engine save across a switch with persisted data in **both** profiles, suppressed snackbars, the toggle's unhandled error; a same-profile switch. |
+   | 6 Engines | Install, delete and import as separate sequences with request lists; the blocking dialog on install/import success and failure; **no blocking progress at any point during delete**, including a failing delete; replace confirmation only for an existing id. |
+   | 7 Network | Exact URLs and counts; market Retry forces; engine refresh/Retry within 5 minutes is a cache hit (no request); metadata success is one `metadata.yaml` request; a metadata failure then `tree` then per-file requests in order, uncached; a timeout closes the client and later requests use a new one; fallback hides the attribution. |
+   | 8 Profile | A switch through the real gate picker disposes the hub. Held engine **download** before save across a switch, then held `saveEngine`; held `ProfilePreferences` acquisition with the switch before and after capture; held `addAddon`; each inspects persisted data in **both** profiles and the recorded outcome is preserved; suppressed snackbars; the toggle's unhandled error; a same-profile switch. |
+   | 8 Sync | A recording `webDavSyncLocalChangeSink`: engine install, import and delete notify `(originating profile, 'engine_definitions_changed')` exactly once; failed or canceled saves and no-op deletes notify nothing; addon and metadata writes notify their profile and key; an incoming WebDAV refresh bumps `LocalEngineStorage.changes` and reloads the hub, distinct from ordinary listener notifications. |
    | 9 Platform | Configure true/false/throw (clipboard text, snackbar), attribution launch, Copy URL, picker arguments. |
    | 10 D-pad | LEFT in-band versus sidebar (null still handled; ignored while searching); filter DOWN; `_focusFirstRow` per source; search arrows and submit; market button keys; post-install refocus to `fromNav`, `fromNav-1`, the search button; pool growth (never shrinks); TV setter → dropdown. Source guard: rename `TextFormField`, two `TvTextField`s, no `onKeyEvent =`. |
    | 11 Filters | Empty-`types` addons dropped under a type filter; alias-aware search; installed by id or URL; debrid chip; `_market` identical to the service list. |
@@ -475,7 +543,8 @@ All pre-existing; the extraction keeps each exactly.
 4. The shared engine revision's stale path assigns `_knownRemoteEngines`
    unguarded and re-bumps the revision (270–273).
 5. The metadata write is optimistic with no generation (1742–1757);
-   `List.sort` is unstable above 32 providers.
+   `List.sort` order for equal providers is unspecified above 33 (the
+   pinned SDK insertion-sorts up to 33).
 6. `_toggleAddon` is unawaited, unhandled and unconfirmed (860, 1037).
 7. `_updateAddon` uses `a.manifestUrl`, not `storageKey`; no try (937–960).
 8. `_addByUrl`'s `TextEditingController` is never disposed (633).
