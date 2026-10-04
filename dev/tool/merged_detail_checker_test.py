@@ -165,6 +165,16 @@ def self_test(package=None):
     assert check_type_aliases(good, [{**alias_rows[0], 'new_name': 'DifferentProbe'}], alias_config)
     print('Merged exact private widget constructor alias positive and negatives: PASS')
 
+    for alias in config.get('type_aliases', []):
+        path = alias['file']
+        name = alias['alias'][0].lower() + alias['alias'][1:] + 'Constructor'
+        exact = 'const ' + name + ' = ' + alias['original_name'] + '.new;'
+        assert sources[path].count(exact) == 1
+        changed = dict(sources)
+        changed[path] = changed[path].replace(exact, exact.replace('.new', '.other'), 1)
+        assert check(original, changed, rows, source, package, context_guard=True, config=config)
+    print('Merged exact constructor tear-off export negatives: rejected')
+
 
 
 if __name__ == '__main__':

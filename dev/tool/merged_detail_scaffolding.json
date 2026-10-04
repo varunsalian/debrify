@@ -1,3 +1,394 @@
 {
-  "scaffolds": []
+  "scaffolds": [
+    {
+      "file": "lib/features/merged_detail/presentation/merged_tracker_pill.dart",
+      "owner": "",
+      "name": "MergedTrackerPill",
+      "tokens": [
+        "typedef",
+        "MergedTrackerPill",
+        "=",
+        "_TrackerPill",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_tracker_pill.dart",
+      "owner": "",
+      "name": "mergedTrackerPillConstructor",
+      "tokens": [
+        "const",
+        "mergedTrackerPillConstructor",
+        "=",
+        "_TrackerPill",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_trailer_playing_chip.dart",
+      "owner": "",
+      "name": "MergedTrailerPlayingChip",
+      "tokens": [
+        "typedef",
+        "MergedTrailerPlayingChip",
+        "=",
+        "_TrailerPlayingChip",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_trailer_playing_chip.dart",
+      "owner": "",
+      "name": "mergedTrailerPlayingChipConstructor",
+      "tokens": [
+        "const",
+        "mergedTrailerPlayingChipConstructor",
+        "=",
+        "_TrailerPlayingChip",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_action_row.dart",
+      "owner": "",
+      "name": "MergedSheetActionRow",
+      "tokens": [
+        "typedef",
+        "MergedSheetActionRow",
+        "=",
+        "_SheetActionRow",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_action_row.dart",
+      "owner": "",
+      "name": "mergedSheetActionRowConstructor",
+      "tokens": [
+        "const",
+        "mergedSheetActionRowConstructor",
+        "=",
+        "_SheetActionRow",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_rail_edge_trap.dart",
+      "owner": "",
+      "name": "MergedRailEdgeTrap",
+      "tokens": [
+        "typedef",
+        "MergedRailEdgeTrap",
+        "=",
+        "_RailEdgeTrap",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_rail_edge_trap.dart",
+      "owner": "",
+      "name": "mergedRailEdgeTrapConstructor",
+      "tokens": [
+        "const",
+        "mergedRailEdgeTrapConstructor",
+        "=",
+        "_RailEdgeTrap",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_source_pill.dart",
+      "owner": "",
+      "name": "MergedSourcePill",
+      "tokens": [
+        "typedef",
+        "MergedSourcePill",
+        "=",
+        "_SourcePill",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_source_pill.dart",
+      "owner": "",
+      "name": "mergedSourcePillConstructor",
+      "tokens": [
+        "const",
+        "mergedSourcePillConstructor",
+        "=",
+        "_SourcePill",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_switch_row.dart",
+      "owner": "",
+      "name": "MergedSheetSwitchRow",
+      "tokens": [
+        "typedef",
+        "MergedSheetSwitchRow",
+        "=",
+        "_SheetSwitchRow",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_switch_row.dart",
+      "owner": "",
+      "name": "mergedSheetSwitchRowConstructor",
+      "tokens": [
+        "const",
+        "mergedSheetSwitchRowConstructor",
+        "=",
+        "_SheetSwitchRow",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_focus_halo.dart",
+      "owner": "",
+      "name": "MergedFocusHalo",
+      "tokens": [
+        "typedef",
+        "MergedFocusHalo",
+        "=",
+        "_FocusHalo",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_focus_halo.dart",
+      "owner": "",
+      "name": "mergedFocusHaloConstructor",
+      "tokens": [
+        "const",
+        "mergedFocusHaloConstructor",
+        "=",
+        "_FocusHalo",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_round_icon_button.dart",
+      "owner": "",
+      "name": "MergedRoundIconButton",
+      "tokens": [
+        "typedef",
+        "MergedRoundIconButton",
+        "=",
+        "_RoundIconButton",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_round_icon_button.dart",
+      "owner": "",
+      "name": "mergedRoundIconButtonConstructor",
+      "tokens": [
+        "const",
+        "mergedRoundIconButtonConstructor",
+        "=",
+        "_RoundIconButton",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_stagger_reveal.dart",
+      "owner": "",
+      "name": "MergedStaggerReveal",
+      "tokens": [
+        "typedef",
+        "MergedStaggerReveal",
+        "=",
+        "_StaggerReveal",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_stagger_reveal.dart",
+      "owner": "",
+      "name": "mergedStaggerRevealConstructor",
+      "tokens": [
+        "const",
+        "mergedStaggerRevealConstructor",
+        "=",
+        "_StaggerReveal",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_tracker_sheet_header.dart",
+      "owner": "",
+      "name": "MergedTrackerSheetHeader",
+      "tokens": [
+        "typedef",
+        "MergedTrackerSheetHeader",
+        "=",
+        "_TrackerSheetHeader",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_tracker_sheet_header.dart",
+      "owner": "",
+      "name": "mergedTrackerSheetHeaderConstructor",
+      "tokens": [
+        "const",
+        "mergedTrackerSheetHeaderConstructor",
+        "=",
+        "_TrackerSheetHeader",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_ghost_button.dart",
+      "owner": "",
+      "name": "MergedGhostButton",
+      "tokens": [
+        "typedef",
+        "MergedGhostButton",
+        "=",
+        "_GhostButton",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_ghost_button.dart",
+      "owner": "",
+      "name": "mergedGhostButtonConstructor",
+      "tokens": [
+        "const",
+        "mergedGhostButtonConstructor",
+        "=",
+        "_GhostButton",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_group_label.dart",
+      "owner": "",
+      "name": "MergedSheetGroupLabel",
+      "tokens": [
+        "typedef",
+        "MergedSheetGroupLabel",
+        "=",
+        "_SheetGroupLabel",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_group_label.dart",
+      "owner": "",
+      "name": "mergedSheetGroupLabelConstructor",
+      "tokens": [
+        "const",
+        "mergedSheetGroupLabelConstructor",
+        "=",
+        "_SheetGroupLabel",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_scroll_anchor.dart",
+      "owner": "",
+      "name": "MergedScrollAnchor",
+      "tokens": [
+        "typedef",
+        "MergedScrollAnchor",
+        "=",
+        "_ScrollAnchor",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_scroll_anchor.dart",
+      "owner": "",
+      "name": "mergedScrollAnchorConstructor",
+      "tokens": [
+        "const",
+        "mergedScrollAnchorConstructor",
+        "=",
+        "_ScrollAnchor",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_primary_button.dart",
+      "owner": "",
+      "name": "MergedPrimaryButton",
+      "tokens": [
+        "typedef",
+        "MergedPrimaryButton",
+        "=",
+        "_PrimaryButton",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_primary_button.dart",
+      "owner": "",
+      "name": "mergedPrimaryButtonConstructor",
+      "tokens": [
+        "const",
+        "mergedPrimaryButtonConstructor",
+        "=",
+        "_PrimaryButton",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_rating_strip.dart",
+      "owner": "",
+      "name": "MergedSheetRatingStrip",
+      "tokens": [
+        "typedef",
+        "MergedSheetRatingStrip",
+        "=",
+        "_SheetRatingStrip",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_rating_strip.dart",
+      "owner": "",
+      "name": "mergedSheetRatingStripConstructor",
+      "tokens": [
+        "const",
+        "mergedSheetRatingStripConstructor",
+        "=",
+        "_SheetRatingStrip",
+        ".",
+        "new",
+        ";"
+      ]
+    }
+  ]
 }

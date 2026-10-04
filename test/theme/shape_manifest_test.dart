@@ -723,7 +723,22 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/merged_detail/presentation/merged_detail_action_descriptions.dart':
       0,
   'lib/features/merged_detail/presentation/merged_detail_palette.dart': 0,
-  'lib/screens/merged_series_detail_screen.dart': 26,
+  'lib/features/merged_detail/presentation/merged_focus_halo.dart': 0,
+  'lib/features/merged_detail/presentation/merged_ghost_button.dart': 4,
+  'lib/features/merged_detail/presentation/merged_primary_button.dart': 4,
+  'lib/features/merged_detail/presentation/merged_rail_edge_trap.dart': 0,
+  'lib/features/merged_detail/presentation/merged_round_icon_button.dart': 0,
+  'lib/features/merged_detail/presentation/merged_scroll_anchor.dart': 0,
+  'lib/features/merged_detail/presentation/merged_sheet_action_row.dart': 0,
+  'lib/features/merged_detail/presentation/merged_sheet_group_label.dart': 0,
+  'lib/features/merged_detail/presentation/merged_sheet_rating_strip.dart': 3,
+  'lib/features/merged_detail/presentation/merged_sheet_switch_row.dart': 2,
+  'lib/features/merged_detail/presentation/merged_source_pill.dart': 4,
+  'lib/features/merged_detail/presentation/merged_stagger_reveal.dart': 0,
+  'lib/features/merged_detail/presentation/merged_tracker_pill.dart': 1,
+  'lib/features/merged_detail/presentation/merged_tracker_sheet_header.dart': 0,
+  'lib/features/merged_detail/presentation/merged_trailer_playing_chip.dart': 1,
+  'lib/screens/merged_series_detail_screen.dart': 7,
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(

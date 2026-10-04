@@ -961,7 +961,8 @@ def _check(original_source, sources, rows, source_path, package=None,
                 errors.append('Public widget key exception used on a non-widget: ' + name)
         new_name = mapping.get(name, name)
         headers = [d for path, unit in parsed.items() if path != '<original>'
-                   for d in unit['declarations'] if d['name'] in {name, new_name}]
+                   for d in unit['declarations'] if d['name'] in {name, new_name}
+                   and d['kind'] == 'ClassDeclarationImpl']
         if len(headers) != 1:
             errors.append('Widget class missing or duplicated: ' + name); continue
         def header(node):

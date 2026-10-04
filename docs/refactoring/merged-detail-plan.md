@@ -878,6 +878,32 @@ the behaviour suite compared against the latest recorded base.
   No diagnostic rule or comparison allowance changes.
 
 
+### Step 2 — service-free widget classes
+
+- Move 21 whole declarations into 15 files, keeping each private Widget/State,
+  constructor, default, lifecycle and runtime type. Exact public typedefs expose
+  constructors. Facade is 4,406 lines; shape remains 26 across the complete slice.
+- Conservative choice: constructor tear-off exports keep original keyless private
+  constructors intact. Dart's cross-library typedef calls otherwise report their
+  optional parameters unused. These constant exports perform no invocation or
+  initialization; their exact targets are pinned, with changed-target negatives.
+  No keys, braces, const invocations or lint suppressions are added to original
+  declarations. The header check selects concrete classes, and separately checks
+  every typedef; a typedef is not a second widget declaration.
+- All 115 focused cases pass (109 characterization plus shape and rewatch guards),
+  compared to base4 with no failed, missing or newly skipped identity. All seven
+  manifests with self-tests and local architecture, size, storage, theme, format
+  and diff checks pass. Three integrated checks span an independent merged-only
+  self-test edit; their unchanged-input reuse is recorded in
+  `step2-check-reuse.json`. The merged checker includes the new negative cases.
+- Allowlist passes with zero merged warnings. Strict comparison is PASS: 16 original
+  infos, zero additions. Whole analyzer uses the maximum of the original whole
+  analysis and original destination-lint analysis, with relocation; every slice
+  diagnostic also passes the stricter rule/symbol/message comparison. Four const
+  infos surface after moving widgets into destination lints and correspond to
+  original members. No candidate identity participates in either baseline.
+
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
