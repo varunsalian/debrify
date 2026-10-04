@@ -22,7 +22,7 @@ PLAYER_LAUNCH_FACADE = "lib/services/video_player_launcher.dart"
 SETTINGS_FACADE = "lib/screens/settings_screen.dart"
 # Step 6 enables the facade cap and rejects remaining temporary cross-calls.
 # Until then, the facade is measured only by the repo-wide shrinking ratchet.
-IPTV_SETTINGS_COMPLETE = False
+IPTV_SETTINGS_COMPLETE = True
 IPTV_SETTINGS_FACADE = "lib/screens/settings/iptv_settings_page.dart"
 IPTV_SETTINGS_BRIDGE = "lib/features/iptv_settings/presentation/legacy_iptv_settings/"
 SETTINGS_COMPLETE = True

@@ -80,7 +80,7 @@ jobs:
         with:
           name: sources-behavior-evidence
           path: |
-            /tmp/suite_evidence_check.jsonl
-            /tmp/suite_evidence_check.stderr
+            /tmp/suite_evidence_check-*.jsonl
+            /tmp/suite_evidence_check-*.stderr
             test/failures/
           retention-days: 7

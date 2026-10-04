@@ -29,8 +29,10 @@ def main():
     assert any('500-line IPTV settings' in x for x in check(pure, '// line\n' * 501))
     assert check(pure, '// TEMP(iptv_settings)\n')
     if guard.IPTV_SETTINGS_COMPLETE:
+        assert not check(guard.IPTV_SETTINGS_FACADE, '// line\n' * 400)
         assert any('400-line IPTV settings' in x for x in check(guard.IPTV_SETTINGS_FACADE, '// line\n' * 401))
         assert check(guard.IPTV_SETTINGS_FACADE, '// TEMP(iptv_settings)\n')
+        assert check(bridge, '// TEMP(iptv_settings)\n')
     print('IPTV settings real architecture positives and size/import/temporary negatives: PASS')
 
 

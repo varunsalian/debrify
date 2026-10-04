@@ -698,6 +698,20 @@ each parallel branch's additions, before claiming parity.
   strict per-symbol comparison passes. Four Linux originals pass strictly on
   that tree in the calibrated image. Evidence remains under iptv_settings/.
 
+- Step 7 source checkpoint: final 400-line facade and 500-line feature caps
+  are active, with TEMP(iptv_settings) rejection including the exact bridge.
+  Real negatives cover the 400/401 boundary and bridge/facade temporary markers;
+  those tooling fixtures also pass with original 8a6e1cf9 application code.
+  The final facade is 267 physical formatted lines; the completed source set
+  has no temporary marker, part or mixin extraction, or remaining workflow.
+  Lifecycle, observer/ticker identity, key and retained appearance/platform
+  predicates stay in State. All original input fixtures, body JSON, accessor,
+  analyzer inventory, failure allowlists, lockfile and external two-pane widget
+  match their original checkpoint bytes. CI artifact globs now match the
+  helper's per-run output names; its coverage and failure lists are unchanged.
+  Final manifests/analyzer, CI behavior, strict Linux replay and full-suite
+  gate 2 are recorded against this source checkpoint before completion.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
