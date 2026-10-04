@@ -938,6 +938,29 @@ the behaviour suite compared against the latest recorded base.
   index; that failed launcher is preserved, and every check was rerun successfully.
 
 
+### Step 4 — actions and gate 1 checkpoint
+
+- Move playback/rewatch/browse, resume arbitration, tracking/completion and
+  watchlist into four cohesive owners (187/230/174/56 lines before final qualifier
+  formatting). The State retains `_refreshAfterPlayback` and wires its callees in
+  the original order. Facade: 2,792 lines; complete-slice shape remains 26.
+- Listener pairs share the same tracking-action instance; playback-return and route
+  ownership remain the State. All host callbacks are read live and handed through
+  directly. Resume timeout, latch/stash/settle, item writes, eleven logs, launch
+  guard, destructive order, watchlist writes/rollback and mounted checks are exact.
+- Compiler-confirmed unnecessary receiver qualifiers were removed only at those
+  sites, retaining local bindings. The literal-safe source reader reverses implicit
+  owner member names while preserving named labels and external qualified reads.
+  Its 40 affected original-code cases pass before the moved-code run.
+- All 115 focused checks pass against base4. All seven manifests/self-tests,
+  architecture, sizes, storage, shape, theme, CI format and diff pass on a stable
+  tree; every original leaf and callback identity remains checked. Whole/scoped
+  analysis, allowlist and per-symbol strict comparison pass with zero additions.
+- Gate 1 will run from this committed source against the latest merged_detail/base4,
+  with other Flutter tests and parser self-tests stopped to avoid the characterized
+  concurrency-sensitive Xtream 50k timeout. Gate evidence follows separately.
+
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

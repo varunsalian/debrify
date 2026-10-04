@@ -150,7 +150,27 @@
     "_k": "MergedDetailTrackingState",
     "s._parts.trackingState": "MergedDetailTrackingState",
     "_b": "MergedDetailModelFactory",
-    "s._parts.modelFactory": "MergedDetailModelFactory"
+    "s._parts.modelFactory": "MergedDetailModelFactory",
+    "_ra": "MergedDetailResumeActions",
+    "s._parts.resumeActions": "MergedDetailResumeActions",
+    "_parts.resumeActions": "MergedDetailResumeActions",
+    "_deps.parts.resumeActions": "MergedDetailResumeActions",
+    "state._parts.resumeActions": "MergedDetailResumeActions",
+    "_wa": "MergedDetailWatchlistActions",
+    "s._parts.watchlistActions": "MergedDetailWatchlistActions",
+    "_parts.watchlistActions": "MergedDetailWatchlistActions",
+    "_deps.parts.watchlistActions": "MergedDetailWatchlistActions",
+    "state._parts.watchlistActions": "MergedDetailWatchlistActions",
+    "_pl": "MergedDetailPlaybackActions",
+    "s._parts.playbackActions": "MergedDetailPlaybackActions",
+    "_parts.playbackActions": "MergedDetailPlaybackActions",
+    "_deps.parts.playbackActions": "MergedDetailPlaybackActions",
+    "state._parts.playbackActions": "MergedDetailPlaybackActions",
+    "_ta": "MergedDetailTrackingActions",
+    "s._parts.trackingActions": "MergedDetailTrackingActions",
+    "_parts.trackingActions": "MergedDetailTrackingActions",
+    "_deps.parts.trackingActions": "MergedDetailTrackingActions",
+    "state._parts.trackingActions": "MergedDetailTrackingActions"
   },
   "receiver_owners": {
     "_MergedDetailScreenState": "_MergedDetailScreenState",
@@ -159,7 +179,11 @@
     "_r": "MergedDetailResumeState",
     "_f": "MergedDetailFocusState",
     "_k": "MergedDetailTrackingState",
-    "_b": "MergedDetailModelFactory"
+    "_b": "MergedDetailModelFactory",
+    "_ra": "MergedDetailResumeActions",
+    "_wa": "MergedDetailWatchlistActions",
+    "_pl": "MergedDetailPlaybackActions",
+    "_ta": "MergedDetailTrackingActions"
   },
   "plain_sections": [
     {
@@ -209,6 +233,22 @@
     {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
       "owner": "MergedDetailParts"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart",
+      "owner": "MergedDetailResumeActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_watchlist_actions.dart",
+      "owner": "MergedDetailWatchlistActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_playback_actions.dart",
+      "owner": "MergedDetailPlaybackActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_actions.dart",
+      "owner": "MergedDetailTrackingActions"
     }
   ],
   "callback_identities": [
@@ -961,7 +1001,11 @@
     "MergedDetailResumeState": "$State.parts.resumeState",
     "MergedDetailFocusState": "$State.parts.focusState",
     "MergedDetailTrackingState": "$State.parts.trackingState",
-    "MergedDetailModelFactory": "$State.parts.modelFactory"
+    "MergedDetailModelFactory": "$State.parts.modelFactory",
+    "MergedDetailResumeActions": "$State.parts.resumeActions",
+    "MergedDetailWatchlistActions": "$State.parts.watchlistActions",
+    "MergedDetailPlaybackActions": "$State.parts.playbackActions",
+    "MergedDetailTrackingActions": "$State.parts.trackingActions"
   },
   "callback_receiver_aliases": {
     "_parts.metadataState": "$State.parts.metadataState",
@@ -987,7 +1031,23 @@
     "_r": "$State.parts.resumeState",
     "_f": "$State.parts.focusState",
     "_k": "$State.parts.trackingState",
-    "_b": "$State.parts.modelFactory"
+    "_b": "$State.parts.modelFactory",
+    "_ra": "$State.parts.resumeActions",
+    "_parts.resumeActions": "$State.parts.resumeActions",
+    "_deps.parts.resumeActions": "$State.parts.resumeActions",
+    "state._parts.resumeActions": "$State.parts.resumeActions",
+    "_wa": "$State.parts.watchlistActions",
+    "_parts.watchlistActions": "$State.parts.watchlistActions",
+    "_deps.parts.watchlistActions": "$State.parts.watchlistActions",
+    "state._parts.watchlistActions": "$State.parts.watchlistActions",
+    "_pl": "$State.parts.playbackActions",
+    "_parts.playbackActions": "$State.parts.playbackActions",
+    "_deps.parts.playbackActions": "$State.parts.playbackActions",
+    "state._parts.playbackActions": "$State.parts.playbackActions",
+    "_ta": "$State.parts.trackingActions",
+    "_parts.trackingActions": "$State.parts.trackingActions",
+    "_deps.parts.trackingActions": "$State.parts.trackingActions",
+    "state._parts.trackingActions": "$State.parts.trackingActions"
   },
   "original_activation": {},
   "original_static_receivers": {

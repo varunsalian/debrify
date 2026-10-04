@@ -145,6 +145,16 @@ String mergedOriginalNames(String member, {String? owner}) {
           original,
         );
       }
+      if (original.startsWith('_') &&
+          original != current &&
+          (owner == null || owner == row['destination_class'])) {
+        // An implicit read of this owner's member keeps the compiler's local
+        // binding. Named-argument labels and qualified external reads stay exact.
+        code = code.replaceAll(
+          RegExp(r'(?<![\w.])' + RegExp.escape(current) + r'\b(?!\s*:)'),
+          original,
+        );
+      }
       // Only declaration names are unqualified after a move. Values always
       // use their actual owner's receiver, keeping same-named locals intact.
       if (original != current &&

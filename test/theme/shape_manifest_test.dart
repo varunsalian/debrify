@@ -732,13 +732,21 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart':
       0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_playback_actions.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart':
+      0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_state.dart':
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_simkl_descriptions.dart':
       0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_actions.dart':
+      0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart':
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_trailer_state.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_watchlist_actions.dart':
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_rec_card.dart':
       2,

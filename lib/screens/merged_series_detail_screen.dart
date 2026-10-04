@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:debrify/features/merged_detail/application/merged_detail_simkl_labels.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_ambient_still.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_cast_tile.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart';
@@ -8,9 +7,13 @@ import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_state.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart';
+import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_playback_actions.dart';
+import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_state.dart';
+import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_actions.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_trailer_state.dart';
+import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_watchlist_actions.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_rec_card.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_simkl_sheet.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_trakt_sheet.dart';
@@ -47,7 +50,6 @@ import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:debrify/services/metadata_details_service.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:debrify/services/metadata_provider_service.dart';
-import 'package:debrify/services/movie_completion_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/simkl/simkl_menu_helpers.dart';
@@ -55,9 +57,7 @@ import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/services/storage/ambient_trailer_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/services/storage/movie_progress_storage.dart';
-import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
-import 'package:debrify/services/storage/watchlist_storage.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
 import 'package:debrify/services/video_player_launcher.dart';
@@ -69,7 +69,6 @@ import 'package:debrify/theme/shipped_themes.dart' show effectiveDetailTheme;
 import 'package:debrify/theme/theme_core_resolver.dart';
 import 'package:debrify/theme/theme_overrides.dart';
 import 'package:debrify/utils/artwork_url.dart';
-import 'package:debrify/utils/episode_progress_merge.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/detail/detail_episode_cells.dart';
 import 'package:debrify/widgets/detail/detail_layout_console.dart';
@@ -79,7 +78,6 @@ import 'package:debrify/widgets/detail/detail_layout_premium.dart';
 import 'package:debrify/widgets/detail/detail_layout_showcase.dart';
 import 'package:debrify/widgets/detail/detail_layout_stage.dart';
 import 'package:debrify/widgets/detail/detail_model.dart';
-import 'package:debrify/widgets/detail/detail_primary_sources.dart';
 import 'package:debrify/widgets/detail/detail_style.dart';
 import 'package:debrify/widgets/detail/theme/detail_theme.dart';
 import 'package:debrify/widgets/episodes_panel.dart';
@@ -89,7 +87,6 @@ import 'package:debrify/widgets/metadata_franchise_rail.dart';
 import 'package:debrify/widgets/metadata_presentation_mixin.dart';
 import 'package:debrify/widgets/metadata_title_navigation.dart';
 import 'package:debrify/widgets/parents_guide_section.dart';
-import 'package:debrify/widgets/rewatch_progress_dialog.dart';
 import 'package:debrify/widgets/tracker_brand_marks.dart';
 import 'package:debrify/widgets/trakt/trakt_menu_helpers.dart';
 import 'package:flutter/material.dart';
@@ -268,16 +265,66 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   // ── Stremio-flat palette (neutral glass + gold state) ──
   late final MergedDetailParts _parts;
   _MergedDetailScreenState() {
-    final deps = MergedDetailDependencies();
+    final deps = MergedDetailDependencies(
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+      item: () => widget.item,
+      addon: () => widget.addon,
+      isTelevision: () => widget.isTelevision,
+      showQuickPlay: () => widget.showQuickPlay,
+      isTraktSource: () => widget.isTraktSource,
+      isMdblistSource: () => widget.isMdblistSource,
+      onResume: () => widget.onResume,
+      onRewatch: () => widget.onRewatch,
+      resumeInfoLoader: () => widget.resumeInfoLoader,
+      onBrowse: () => widget.onBrowse,
+      onItemSelected: () => widget.onItemSelected,
+      onQuickPlay: () => widget.onQuickPlay,
+      onBrowsePrimaryEpisodeSources: () => widget.onBrowsePrimaryEpisodeSources,
+      boundSourceCount: () => widget.boundSourceCount,
+      onSelectSource: () => widget.onSelectSource,
+      traktMenuOptions: () => widget.traktMenuOptions,
+      traktMenuBuilder: () => widget.traktMenuBuilder,
+      onTraktAction: () => widget.onTraktAction,
+      traktStatusLoader: () => widget.traktStatusLoader,
+      simklMenuOptions: () => widget.simklMenuOptions,
+      simklMenuBuilder: () => widget.simklMenuBuilder,
+      onSimklAction: () => widget.onSimklAction,
+      simklStatusLoader: () => widget.simklStatusLoader,
+      mdblistMenuOptions: () => widget.mdblistMenuOptions,
+      mdblistMenuBuilder: () => widget.mdblistMenuBuilder,
+      onMdblistAction: () => widget.onMdblistAction,
+      mdblistStatusLoader: () => widget.mdblistStatusLoader,
+      onTraktRate: () => widget.onTraktRate,
+      onSimklRate: () => widget.onSimklRate,
+      onMdblistRate: () => widget.onMdblistRate,
+      recommendationsLoader: () => widget.recommendationsLoader,
+      onRecommendationTap: () => widget.onRecommendationTap,
+      metaEnricher: () => widget.metaEnricher,
+      heroTag: () => widget.heroTag,
+      initialSeason: () => widget.initialSeason,
+      initialEpisode: () => widget.initialEpisode,
+      seasonsLoader: () => widget.seasonsLoader,
+      onPlayEpisode: () => widget.onPlayEpisode,
+      watchProgressLoader: () => widget.watchProgressLoader,
+      appMenuOptions: () => _appMenuOptions,
+      isMovie: () => _isMovie,
+      presentedItem: () => _item,
+    );
     _parts = MergedDetailParts(deps);
     deps.parts = _parts;
   }
   MergedDetailFocusState get _f => _parts.focusState;
   MergedDetailMetadataState get _m => _parts.metadataState;
   MergedDetailModelFactory get _b => _parts.modelFactory;
+  MergedDetailPlaybackActions get _pl => _parts.playbackActions;
+  MergedDetailResumeActions get _ra => _parts.resumeActions;
   MergedDetailResumeState get _r => _parts.resumeState;
+  MergedDetailTrackingActions get _ta => _parts.trackingActions;
   MergedDetailTrackingState get _k => _parts.trackingState;
   MergedDetailTrailerState get _t => _parts.trailerState;
+  MergedDetailWatchlistActions get _wa => _parts.watchlistActions;
 
   void _openMetadataRecommendation(StremioMeta item) {
     final onOpen = widget.onRecommendationTap;
@@ -347,7 +394,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   // Presentation is for rendering; source searches retain widget.item so a
   // translated display title cannot change file matching or binding queries.
   StremioMeta get _item => presentedMetadata!;
-  bool get _primaryBusy => _r.resumePending && !_r.resumeLoaded;
 
   /// The quick-actions strip to render: rebuilt against [_traktStatus] when a
   /// builder was supplied, else the static list passed in.
@@ -363,12 +409,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     for (final o in _menuOptions)
       if (!appOwnedActions.contains(o.action)) o,
   ];
-  bool get _supportsMyWatchlist =>
-      WatchlistStorage.supportsMyWatchlistItem(_item);
-  StremioMeta get _myWatchlistItem => WatchlistStorage.withMyWatchlistSource(
-    _item,
-    widget.item.sourceAddon ?? widget.addon,
-  );
 
   /// The Simkl quick-actions strip to render: rebuilt against [_simklStatus]
   /// when a builder was supplied, else the static list passed in.
@@ -382,13 +422,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   void initState() {
     super.initState();
     TrackingSourceStorage.trackingSourceRevision.addListener(
-      _onMovieProgressPolicyChanged,
+      _ta.onMovieProgressPolicyChanged,
     );
     MovieProgressStorage.movieFinishedRevision.addListener(
-      _loadLocalMovieFinished,
+      _ta.loadLocalMovieFinished,
     );
     MdblistService.instance.watchedRevision.addListener(
-      _loadLocalMovieFinished,
+      _ta.loadLocalMovieFinished,
     );
     AnalyticsService.screenView('series_detail');
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
@@ -397,172 +437,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       _loadShowcaseOpeningData();
       _loadTrailer();
       _loadAccent();
-      _loadResumeInfo();
-      _loadTraktStatus();
-      _loadSimklStatus();
-      _loadMdblistStatus();
-      _loadLocalMovieFinished();
-      _loadMyWatchlistState();
+      _ra.loadResumeInfo();
+      _ta.loadTraktStatus();
+      _ta.loadSimklStatus();
+      _ta.loadMdblistStatus();
+      _ta.loadLocalMovieFinished();
+      _wa.loadMyWatchlistState();
     });
-  }
-
-  Future<void> _guardPlay(Future<void> Function() launch) async {
-    if (_r.playLaunching || !mounted) return;
-    // Rebuild immediately so HeroTrailerBackdrop disables and tears down its
-    // engine at the button press. The resolving loader is a RawDialogRoute,
-    // which the app's PageRoute observer deliberately does not see; waiting
-    // for the eventual player-handoff signal lets the delayed trailer start
-    // (or keep playing) behind source resolution.
-    setState(() => _r.playLaunching = true);
-    try {
-      await launch();
-    } finally {
-      if (mounted) {
-        // A cancelled/failed resolve may resume autoplay after its normal
-        // delay. A successful launch remains off because the backdrop's
-        // content-player signal has independently latched _canPlay false.
-        setState(() => _r.playLaunching = false);
-      } else {
-        _r.playLaunching = false;
-      }
-    }
-  }
-
-  /// The engine-only episode promise shared by primary Play and primary hold.
-  /// See [_playPrimary] for why loader-derived coordinates are intentionally
-  /// left for the host to resolve again.
-  ({bool started, int season, int episode})? get _primaryEpisodePromise {
-    // Promise ONLY an engine-derived target ([_hasMergedEpisodeTarget]), and
-    // only a started one.
-    //
-    // The engine is the sole reason the label can disagree with the host: it
-    // advances off watched state, which the host's reconciler never reads. A
-    // label that came from the loader instead already equals what the host
-    // would work out for itself, so promising it buys nothing — and costs
-    // freshness, because these coordinates are only re-read at page open and on
-    // return from playback. Promising a loader echo would let a page left open
-    // while an episode was finished elsewhere override a fresher reconcile with
-    // the episode the user already watched.
-    //
-    // This also covers the post-playback window for free:
-    // [_refreshAfterPlayback] clears the flag before re-reading, so a press
-    // during the refresh promises nothing and the host decides — without having
-    // to block the button, which stays pressable throughout. An untouched show
-    // resolves to S01E01 with no evidence behind it, hence the started gate.
-    final season = _r.resumeSeason;
-    final episode = _r.resumeEpisode;
-    return (!_isMovie &&
-            _r.resumeStarted &&
-            _r.hasMergedEpisodeTarget &&
-            season != null &&
-            episode != null)
-        ? (started: true, season: season, episode: episode)
-        : null;
-  }
-
-  void _playPrimary() {
-    if (_primaryLabel == 'Rewatch') {
-      unawaited(_guardPlay(_rewatchTitle));
-      return;
-    }
-    final promised = _primaryEpisodePromise;
-    debugPrint(
-      '[SeriesResume] detail-primary-pressed title="${_item.name}" '
-      'label="$_primaryLabel" loaded=${_r.resumeLoaded} started=${_r.resumeStarted} '
-      'labelTarget=S${_r.resumeSeason}E${_r.resumeEpisode} '
-      'routeTarget=S${widget.initialSeason}E${widget.initialEpisode} '
-      'mergedEngineTarget=${_r.hasMergedEpisodeTarget} '
-      'loaderInFlight=${_r.resumeLoaderInFlight} '
-      'promised=${promised == null ? 'none' : 'S${promised.season}E${promised.episode}'}',
-    );
-    unawaited(_guardPlay(() => widget.onResume(promised)));
-  }
-
-  Future<void> _rewatchTitle() async {
-    final restart = widget.onRewatch;
-    if (restart == null) return;
-    final cleared = await resetProgressForRewatch(
-      context,
-      id: _item.imdbId ?? _item.id,
-      title: _item.name,
-      isMovie: _isMovie,
-      onConfirmed: () => setState(() => _r.rewatchPending = true),
-    );
-    if (!mounted) return;
-    _f.episodesPanelKey.currentState?.refreshWatchProgress();
-    if (!cleared) return;
-    ++_k.movieCompletionGeneration; // Discard reads started before the reset.
-    setState(() {
-      _r.seriesDone = false;
-      _r.rewatchPending = false;
-      _k.localMovieFinished = false;
-      _k.simklStatus = null;
-      _r.resumeStarted = false;
-      _r.resumeSeason = 1;
-      _r.resumeEpisode = 1;
-      _r.hasMergedEpisodeTarget = false;
-    });
-    await restart();
-  }
-
-  void _browsePrimarySources() {
-    unawaited(_browsePrimarySourcesAsync());
-  }
-
-  Future<void> _browsePrimarySourcesAsync() async {
-    if (_isMovie) {
-      widget.onBrowse?.call();
-      return;
-    }
-
-    final openEpisode = widget.onBrowsePrimaryEpisodeSources;
-    if (openEpisode == null) return;
-
-    final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
-    if (!mounted) return;
-
-    final canBrowsePacks =
-        widget.onTraktAction != null &&
-        _appMenuOptions.any(
-          (option) => option.action == TraktItemMenuAction.searchPacks,
-        );
-    if (!rules.preferSeriesPacks || !canBrowsePacks) {
-      await openEpisode(_primaryEpisodePromise);
-      return;
-    }
-
-    final season = _r.resumeSeason;
-    final episode = _r.resumeEpisode;
-    final choice = await showDetailPrimarySourcesSheet(
-      context,
-      title: _item.name,
-      isTelevision: widget.isTelevision,
-      episodeLabel: season == null || episode == null
-          ? null
-          : 'S${season}E$episode',
-    );
-    if (!mounted || choice == null) return;
-
-    switch (choice) {
-      case DetailPrimarySourceChoice.seasonPacks:
-        await widget.onTraktAction?.call(TraktItemMenuAction.searchPacks);
-        return;
-      case DetailPrimarySourceChoice.episode:
-        await openEpisode(_primaryEpisodePromise);
-        return;
-    }
-  }
-
-  void _quickPlayEpisode(AdvancedSearchSelection selection) {
-    final play = widget.onQuickPlay;
-    if (play == null) return;
-    unawaited(_guardPlay(() => play(selection)));
-  }
-
-  void _playDirectEpisode(TraktEpisode episode) {
-    final play = widget.onPlayEpisode;
-    if (play == null) return;
-    unawaited(_guardPlay(() => play(episode)));
   }
 
   Future<void> _loadShowcaseOpeningData() async {
@@ -618,14 +499,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // on. Mid-page the latch keeps its job: a slow stale loader still can't
     // overwrite fresher engine data.
     _r.hasMergedEpisodeTarget = false;
-    _loadResumeInfo();
+    _ra.loadResumeInfo();
     // Watched state (and thus the resume label / badges) may have changed while
     // away — re-read the Trakt status too.
-    _loadTraktStatus();
-    _loadSimklStatus();
-    _loadMdblistStatus();
-    _loadLocalMovieFinished();
-    _loadMyWatchlistState();
+    _ta.loadTraktStatus();
+    _ta.loadSimklStatus();
+    _ta.loadMdblistStatus();
+    _ta.loadLocalMovieFinished();
+    _wa.loadMyWatchlistState();
     // And the episode list's ticks/progress: episode quick-play now plays on
     // top of this screen (like Resume), so the list is still alive when the
     // player returns and must reflect the session that just ended.
@@ -634,325 +515,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // the app-action menu, so returning here is the only place that catches
     // both. Cheap — a prefs read, not a network call.
     unawaited(_loadBoundSources());
-  }
-
-  Future<void> _loadMyWatchlistState() async {
-    if (!_supportsMyWatchlist) return;
-    final saved = await WatchlistStorage.isInMyWatchlist(_myWatchlistItem);
-    if (!mounted || saved == _k.inMyWatchlist) return;
-    setState(() => _k.inMyWatchlist = saved);
-  }
-
-  Future<void> _toggleMyWatchlist() async {
-    if (!_supportsMyWatchlist) return;
-    final next = !_k.inMyWatchlist;
-    setState(() => _k.inMyWatchlist = next);
-    try {
-      await WatchlistStorage.setMyWatchlistItem(_myWatchlistItem, next);
-      if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              next ? 'Added to My Watchlist' : 'Removed from My Watchlist',
-            ),
-          ),
-        );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _k.inMyWatchlist = !next);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Couldn\'t update My Watchlist')),
-      );
-    }
-  }
-
-  /// Resolve the user's Trakt relationship to this title so the menu shows
-  /// Add ↔ Remove toggles and the hero can badge Watchlist/Collection/Watched/
-  /// rating. Silent on failure — the menu just stays add-only.
-  Future<void> _loadTraktStatus() async {
-    final loader = widget.traktStatusLoader;
-    if (loader == null) return;
-    try {
-      final status = (await loader())?.preserveWatchedFrom(_k.traktStatus);
-      if (!mounted || status == null) return;
-      setState(() => _k.traktStatus = status);
-    } catch (_) {
-    } finally {
-      // Resolved either way: a failed read is still an answered question as
-      // far as the pill is concerned — it stops saying "Checking…" and falls
-      // back to the untracked form rather than spinning forever.
-      if (mounted && !_k.traktStatusResolved) {
-        setState(() => _k.traktStatusResolved = true);
-      }
-    }
-  }
-
-  /// Resolve the user's Simkl relationship to this title — mirrors
-  /// [_loadTraktStatus] exactly.
-  Future<void> _loadSimklStatus() async {
-    final loader = widget.simklStatusLoader;
-    if (loader == null) return;
-    try {
-      final status = await loader();
-      if (!mounted || status == null) return;
-      setState(() => _k.simklStatus = status);
-    } catch (_) {
-    } finally {
-      if (mounted && !_k.simklStatusResolved) {
-        setState(() => _k.simklStatusResolved = true);
-      }
-    }
-  }
-
-  Future<void> _loadMdblistStatus() async {
-    final loader = widget.mdblistStatusLoader;
-    if (loader == null) return;
-    try {
-      final status = await loader();
-      if (!mounted || status == null) return;
-      setState(() => _k.mdblistStatus = status);
-    } catch (_) {
-    } finally {
-      if (mounted && !_k.mdblistStatusResolved) {
-        setState(() => _k.mdblistStatusResolved = true);
-      }
-    }
-  }
-
-  Future<void> _loadLocalMovieFinished() async {
-    final generation = ++_k.movieCompletionGeneration;
-    if (!_isMovie) return;
-    final imdbId =
-        _item.effectiveImdbId ?? (_item.id.startsWith('tt') ? _item.id : null);
-    if (imdbId == null || imdbId.isEmpty) return;
-    final finished = await MovieCompletionService.load(imdbId);
-    if (mounted &&
-        generation == _k.movieCompletionGeneration &&
-        finished != _k.localMovieFinished) {
-      setState(() => _k.localMovieFinished = finished);
-    }
-  }
-
-  void _onMovieProgressPolicyChanged() {
-    if (!mounted) return;
-    setState(() => _k.localMovieFinished = false);
-    _loadLocalMovieFinished();
-  }
-
-  Future<void> _loadResumeInfo() async {
-    final loader = widget.resumeInfoLoader;
-    if (loader == null) return;
-    debugPrint(
-      '[SeriesResume] detail-loader-start title="${_item.name}" '
-      'id=${_item.effectiveImdbId ?? _item.id} '
-      'routeTarget=S${widget.initialSeason}E${widget.initialEpisode} '
-      'loaded=${_r.resumeLoaded} mergedTarget=${_r.hasMergedEpisodeTarget}',
-    );
-    // setState, not a plain assignment: this runs post-frame (initState
-    // schedules it via addPostFrameCallback), and the spinner must actually
-    // be scheduled to paint — a bare write only showed it when a sibling
-    // loader happened to rebuild.
-    if (!_r.resumeLoaded && mounted) {
-      setState(() => _r.resumePending = true);
-    }
-    _r.resumeLoaderInFlight = true;
-    try {
-      // Time-boxed: the reconciler boxes its tracker fetches but the guide
-      // advance can hang on an unbounded body read — and with engine
-      // emissions now stashed pre-settle, a hung loader would spin the pill
-      // forever. A timeout throws into the catch/finally path, which applies
-      // the stashed engine target.
-      final info = await loader().timeout(const Duration(seconds: 12));
-      if (!mounted) return;
-      debugPrint(
-        '[SeriesResume] detail-loader-answer title="${_item.name}" '
-        'started=${info.started} season=${info.season} episode=${info.episode} '
-        'engineAlreadyMerged=${_r.hasMergedEpisodeTarget} '
-        'stashedEngine=${_r.pendingEngineTarget == null ? 'none' : 'S${_r.pendingEngineTarget!.season}E${_r.pendingEngineTarget!.episode}/started=${_r.pendingEngineTarget!.started}'}',
-      );
-      // Once the mounted episode engine has resolved all tracker/local
-      // progress, its coordinate is newer and richer than the host loader's
-      // cached Continue Watching snapshot. Do not let a slower stale loader
-      // overwrite (for example) E7 back to a completed E6. (Pre-settle the
-      // engine only stashes, so this guard fires solely on post-settle
-      // re-reads — e.g. didPopNext after playback.)
-      if (!_isMovie && _r.hasMergedEpisodeTarget) {
-        debugPrint(
-          '[SeriesResume] detail-loader-discarded title="${_item.name}" '
-          'reason=engine-already-authoritative',
-        );
-        return;
-      }
-      // Settle arbitration, deterministic where the old code was
-      // last-writer-wins. The reconciled loader wins whenever it found a
-      // resume: it reads the same trackers + local the engine merges, PLUS
-      // recency and the watched frontier — and it is what Play executes, so
-      // preferring it keeps the pill and the button provably in lock-step
-      // (the engine is frontier-aware but recency-blind: it would call a
-      // fresh rewatch "S5" while Play resumes the rewatched episode). The
-      // stashed engine target only settles the pill when the loader came
-      // back empty-handed — merged in-page progress beats "Start Watching".
-      final stash = _r.pendingEngineTarget;
-      _r.pendingEngineTarget = null;
-      if (!_isMovie && !info.started && stash != null && stash.started) {
-        debugPrint(
-          '[SeriesResume] detail-loader-arbitration title="${_item.name}" '
-          'winner=engine target=S${stash.season}E${stash.episode} '
-          'reason=loader-unstarted',
-        );
-        _applyEngineTarget(stash);
-        return;
-      }
-      debugPrint(
-        '[SeriesResume] detail-loader-arbitration title="${_item.name}" '
-        'winner=loader target=S${info.season}E${info.episode} '
-        'engineCandidate=${stash == null ? 'none' : 'S${stash.season}E${stash.episode}/started=${stash.started}'}',
-      );
-      setState(() {
-        _r.resumeLoaded = true;
-        _r.resumeStarted = info.started;
-        _r.resumeSeason = info.season;
-        _r.resumeEpisode = info.episode;
-      });
-    } catch (error, stackTrace) {
-      // Non-critical — leave the static label.
-      debugPrint(
-        '[SeriesResume] detail-loader-failed title="${_item.name}" '
-        'error=$error\n$stackTrace',
-      );
-    } finally {
-      _r.resumeLoaderInFlight = false;
-      if (_r.resumePending) {
-        if (mounted) {
-          setState(() => _r.resumePending = false);
-        } else {
-          _r.resumePending = false;
-        }
-      }
-      // Loader failed (or bailed) without settling: the stashed engine
-      // target is better than a pill stuck on the static label. Emissions
-      // arriving after this point direct-write (legacy) — the in-flight
-      // window is closed, so nothing can strand in the stash.
-      if (mounted && !_r.resumeLoaded) {
-        final fallback = _r.pendingEngineTarget;
-        _r.pendingEngineTarget = null;
-        if (fallback != null) _applyEngineTarget(fallback);
-      }
-    }
-  }
-
-  void _onNextEpisodeChanged(
-    EpisodeResumeTarget next, {
-    bool mutation = false,
-  }) {
-    if (!mounted || _isMovie) return;
-    debugPrint(
-      '[SeriesResume] detail-engine-emission title="${_item.name}" '
-      'target=S${next.season}E${next.episode} started=${next.started} '
-      'mutation=$mutation loaderInFlight=${_r.resumeLoaderInFlight} '
-      'labelLoaded=${_r.resumeLoaded} current=S${_r.resumeSeason}E${_r.resumeEpisode} '
-      'currentStarted=${_r.resumeStarted}',
-    );
-    // While the loader is IN FLIGHT: stash, never write. The episodes engine
-    // re-emits as each tracker fetch lands, and letting every emission write
-    // the pill strobed it through wrong states ("Start Watching" → S2E8 →
-    // S1E7) and killed the busy spinner. The loader's reconciled answer
-    // settles the pill exactly ONCE, arbitrating against this stash. A
-    // failed/absent loader closes the window, so emissions never strand.
-    // Mutations are deliberate single user actions, not strobe — they write
-    // through even mid-loader (stashing dropped their tag and let a stale
-    // settle discard them); the applied target arms the loader guard, so a
-    // later-settling loader cannot overwrite the user's mark.
-    if (_r.resumeLoaderInFlight && !_r.resumeLoaded && !mutation) {
-      _r.pendingEngineTarget = next;
-      debugPrint(
-        '[SeriesResume] detail-engine-stashed title="${_item.name}" '
-        'target=S${next.season}E${next.episode}',
-      );
-      return;
-    }
-    // Settled STARTED: the loader is authoritative (it is literally what
-    // Play executes) — only explicit in-page MUTATIONS (mark watched/
-    // unwatched) move the pill; a slower engine initial-merge landing after
-    // settle must not late-flip it (the loader-vs-engine finish order is a
-    // network race). A settle that found NO resume is different: a later
-    // started engine target upgrades it — "merged progress beats Start
-    // Watching" must not depend on which fetch finished first.
-    if (_r.resumeLoaded &&
-        _r.resumeStarted &&
-        !mutation &&
-        widget.resumeInfoLoader != null) {
-      debugPrint(
-        '[SeriesResume] detail-engine-discarded title="${_item.name}" '
-        'target=S${next.season}E${next.episode} '
-        'reason=started-loader-authoritative',
-      );
-      return;
-    }
-    if (_r.resumeLoaded &&
-        _r.resumeStarted == next.started &&
-        _r.resumeSeason == next.season &&
-        _r.resumeEpisode == next.episode) {
-      return;
-    }
-    _applyEngineTarget(next);
-  }
-
-  /// Write an engine target into the pill state (the legacy
-  /// [_onNextEpisodeChanged] body): merged playback progress outranks the
-  /// host's snapshot, so a started target also arms the loader-overwrite
-  /// guard.
-  void _applyEngineTarget(EpisodeResumeTarget next) {
-    debugPrint(
-      '[SeriesResume] detail-engine-applied title="${_item.name}" '
-      'target=S${next.season}E${next.episode} started=${next.started}',
-    );
-    setState(() {
-      // A coordinate alone is not resume evidence: an untouched show also
-      // resolves to its first episode. Only merged playback progress outranks
-      // the host's independently loaded Continue Watching snapshot.
-      _r.hasMergedEpisodeTarget = next.started;
-      _r.resumeLoaded = true;
-      _r.resumeStarted = next.started;
-      _r.resumeSeason = next.season;
-      _r.resumeEpisode = next.episode;
-    });
-  }
-
-  /// The primary-button label: "Start Watching" before any progress, otherwise
-  /// "Resume" with an OTT-style "· S3E4" tag for series. Falls back to the
-  /// static Play/Resume label until the resume state resolves.
-  String get _primaryLabel =>
-      widget.onRewatch == null && _resolvedPrimaryLabel == 'Rewatch'
-      ? 'Play'
-      : _resolvedPrimaryLabel;
-
-  String get _resolvedPrimaryLabel {
-    if (_r.rewatchPending || (!_isMovie && _r.seriesDone)) return 'Rewatch';
-    // Completion is available independently of the optional resume loader.
-    // Keep the rewatch affordance visible for movie routes that omit one.
-    if (!_r.resumeLoaded) {
-      if (_isMovie && _k.localMovieFinished) {
-        return 'Rewatch';
-      }
-      return _isMovie ? 'Play' : 'Resume';
-    }
-    if (!_r.resumeStarted) {
-      // A movie already finished on Simkl (status `completed`) has no resume
-      // session; its Play un-marks it watched so the rewatch re-enters
-      // Continue Watching — surface that intent as "Rewatch".
-      if (_isMovie && _k.localMovieFinished) {
-        return 'Rewatch';
-      }
-      return _isMovie ? 'Play' : 'Start Watching';
-    }
-    if (_isMovie || _r.resumeSeason == null || _r.resumeEpisode == null) {
-      return 'Resume';
-    }
-    return 'Resume · S${_r.resumeSeason}E${_r.resumeEpisode}';
   }
 
   /// Pull a per-title accent from the poster (preferred — posters are more
@@ -979,13 +541,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   @override
   void dispose() {
     TrackingSourceStorage.trackingSourceRevision.removeListener(
-      _onMovieProgressPolicyChanged,
+      _ta.onMovieProgressPolicyChanged,
     );
     MovieProgressStorage.movieFinishedRevision.removeListener(
-      _loadLocalMovieFinished,
+      _ta.loadLocalMovieFinished,
     );
     MdblistService.instance.watchedRevision.removeListener(
-      _loadLocalMovieFinished,
+      _ta.loadLocalMovieFinished,
     );
     appRouteObserver.unsubscribe(this);
     MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
@@ -1704,31 +1266,31 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       parentsGuide: _m.parentsGuide,
       recommendations: _m.recommendations ?? const [],
       openingDataReady: _m.showcaseOpeningDataReady,
-      primaryLabel: _primaryLabel,
-      primaryBusy: _primaryBusy,
+      primaryLabel: _ra.primaryLabel,
+      primaryBusy: _ra.primaryBusy,
       sourceCount: widget.boundSourceCount?.call(widget.item) ?? 0,
       boundSources: _b.boundSources,
       hasTrailer: _t.trailerYtId != null,
       trailerBusy: _t.trailerResolving || _t.trailerLoading,
       trailerPlaying: _t.trailerAmbientPlaying,
       hasTrakt: _traktOnlyMenuOptions.isNotEmpty,
-      traktTracked: _traktTracked,
-      traktLabel: _traktPillLabel,
+      traktTracked: _ta.traktTracked,
+      traktLabel: _ta.traktPillLabel,
       traktRating: _k.traktStatus?.rating,
       hasSimkl: _menuOptionsSimkl.isNotEmpty,
-      simklTracked: _simklTracked,
-      simklLabel: _simklPillLabel,
+      simklTracked: _ta.simklTracked,
+      simklLabel: _ta.simklPillLabel,
       simklRating: _k.simklStatus?.rating,
       hasMdblist: _menuOptionsMdblist.isNotEmpty,
-      mdblistTracked: _mdblistTracked,
-      mdblistLabel: _mdblistPillLabel,
+      mdblistTracked: _ta.mdblistTracked,
+      mdblistLabel: _ta.mdblistPillLabel,
       mdblistRating: _k.mdblistStatus?.rating,
       showPrimary: widget.showQuickPlay,
-      onPrimary: _playPrimary,
+      onPrimary: _pl.playPrimary,
       onPrimaryLongPress:
           ((_isMovie && widget.onBrowse != null) ||
               (!_isMovie && widget.onBrowsePrimaryEpisodeSources != null))
-          ? _browsePrimarySources
+          ? _pl.browsePrimarySources
           : null,
       // A movie browses the full source list the host supplies; a series
       // browses season packs — the same search the More menu's "Search
@@ -1762,7 +1324,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           ? _showMdblistQuickActionsMenu
           : null,
       inMyWatchlist: _k.inMyWatchlist,
-      onToggleMyWatchlist: _supportsMyWatchlist ? _toggleMyWatchlist : null,
+      onToggleMyWatchlist: _wa.supportsMyWatchlist
+          ? _wa.toggleMyWatchlist
+          : null,
       // Both trackers behind one affordance, for a layout whose action row has
       // no room for two branded pills. Whichever single service is configured
       // opens directly; with both, the app menu is the chooser that already
@@ -2418,89 +1982,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     return Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: parts);
   }
 
-  /// Whether Trakt holds any relationship to this title. Drives the pill's
-  /// tinted (tracked) vs. outline (untracked) form.
-  bool get _traktTracked {
-    final s = _k.traktStatus;
-    return s != null &&
-        (s.inWatchlist ||
-            s.inCollection ||
-            s.titleWatched == true ||
-            s.rating != null);
-  }
-
-  bool get _simklTracked =>
-      _k.simklStatus?.currentStatus != null || _k.simklStatus?.rating != null;
-
-  bool get _mdblistTracked {
-    final s = _k.mdblistStatus;
-    return s != null &&
-        (s.inWatchlist ||
-            s.collected ||
-            s.watched ||
-            s.completed == true ||
-            s.dropped == true ||
-            s.rating != null);
-  }
-
-  /// The live Trakt state, compressed to fit inside the pill. Trakt allows
-  /// several relationships at once, so they're joined with "·" and capped at
-  /// two — the rating rides in the pill's own compartment, not here.
-  ///
-  /// While the loader is still out this reads "Checking…" rather than "Not
-  /// tracked": the row keeps its geometry either way, and asserting the title
-  /// *isn't* on your watchlist when it is — for however long the call takes —
-  /// is worse than admitting we don't know yet.
-  String get _traktPillLabel {
-    final s = _k.traktStatus;
-    if (s == null &&
-        !_k.traktStatusResolved &&
-        widget.traktStatusLoader != null) {
-      return 'Checking…';
-    }
-    if (s == null) return 'Not tracked';
-    final parts = <String>[
-      if (s.inWatchlist) 'Watchlist',
-      if (s.inCollection) 'Collected',
-      if (s.titleWatched == true) 'Watched',
-    ];
-    if (parts.isEmpty) {
-      if (s.rating != null) return 'Rated';
-      return s.titleWatched == null ? 'Status unavailable' : 'Not tracked';
-    }
-    return parts.take(2).join(' · ');
-  }
-
-  /// Simkl is single-state by definition, so its pill never needs to join
-  /// anything — it's the one watchlist status, or nothing.
-  String get _simklPillLabel {
-    final status = _k.simklStatus?.currentStatus;
-    if (status != null) return MergedDetailSimklLabels.simklStatusLabel(status);
-    if (_k.simklStatus?.rating != null) return 'Rated';
-    if (!_k.simklStatusResolved && widget.simklStatusLoader != null) {
-      return 'Checking…';
-    }
-    return 'Not tracked';
-  }
-
-  String get _mdblistPillLabel {
-    final s = _k.mdblistStatus;
-    if (s == null &&
-        !_k.mdblistStatusResolved &&
-        widget.mdblistStatusLoader != null) {
-      return 'Checking…';
-    }
-    if (s == null) return 'Not tracked';
-    final parts = <String>[
-      if (s.inWatchlist) 'Watchlist',
-      if (s.collected) 'Collected',
-      if (s.completed == true || s.watched) 'Watched',
-      if (s.dropped == true) 'Dropped',
-    ];
-    if (parts.isEmpty) return s.rating == null ? 'Not tracked' : 'Rated';
-    return parts.take(2).join(' · ');
-  }
-
   Widget _metaText(String s) => Text(
     s,
     style: TextStyle(
@@ -2580,14 +2061,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // has no episode list to auto-focus).
         if (widget.showQuickPlay)
           MergedPrimaryButton(
-            label: _primaryLabel,
-            busy: _primaryBusy,
+            label: _ra.primaryLabel,
+            busy: _ra.primaryBusy,
             icon: Icons.play_arrow_rounded,
-            onTap: _playPrimary,
+            onTap: _pl.playPrimary,
             onLongPress:
                 ((_isMovie && widget.onBrowse != null) ||
                     (!_isMovie && widget.onBrowsePrimaryEpisodeSources != null))
-                ? _browsePrimarySources
+                ? _pl.browsePrimarySources
                 : null,
             focusNode: _f.leftEntryFocusNode,
             autofocus: widget.isTelevision && _isMovie,
@@ -2614,13 +2095,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             icon: Icons.layers_rounded,
             onTap: widget.onBrowse!,
           ),
-        if (_supportsMyWatchlist)
+        if (_wa.supportsMyWatchlist)
           MergedGhostButton(
             label: _k.inMyWatchlist ? 'In My Watchlist' : 'My Watchlist',
             icon: _k.inMyWatchlist
                 ? Icons.bookmark_rounded
                 : Icons.bookmark_add_outlined,
-            onTap: _toggleMyWatchlist,
+            onTap: _wa.toggleMyWatchlist,
           ),
         // Source binding. Takes the LEFT-entry focus node only when Play is
         // hidden (PikPak), so LEFT from an episode always lands on a live target.
@@ -2656,12 +2137,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // control both shows and changes the relationship).
         if (_traktOnlyMenuOptions.isNotEmpty && widget.onTraktAction != null)
           MergedTrackerPill(
-            mark: TraktMark(size: 21, opacity: _traktTracked ? 1 : 0.55),
+            mark: TraktMark(size: 21, opacity: _ta.traktTracked ? 1 : 0.55),
             brand: 'TRAKT',
-            state: _traktPillLabel,
+            state: _ta.traktPillLabel,
             rating: _k.traktStatus?.rating,
             accent: kTraktRed,
-            tracked: _traktTracked,
+            tracked: _ta.traktTracked,
             tooltip: 'Trakt options',
             onTap: _showQuickActionsMenu,
           ),
@@ -2669,23 +2150,23 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // so nothing here touches the button above.
         if (_menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null)
           MergedTrackerPill(
-            mark: SimklMark(size: 21, opacity: _simklTracked ? 1 : 0.55),
+            mark: SimklMark(size: 21, opacity: _ta.simklTracked ? 1 : 0.55),
             brand: 'SIMKL',
-            state: _simklPillLabel,
+            state: _ta.simklPillLabel,
             rating: _k.simklStatus?.rating,
             accent: kSimklCyan,
-            tracked: _simklTracked,
+            tracked: _ta.simklTracked,
             tooltip: 'Simkl options',
             onTap: _showSimklQuickActionsMenu,
           ),
         if (_menuOptionsMdblist.isNotEmpty && widget.onMdblistAction != null)
           MergedTrackerPill(
-            mark: MdblistMark(size: 21, opacity: _mdblistTracked ? 1 : 0.55),
+            mark: MdblistMark(size: 21, opacity: _ta.mdblistTracked ? 1 : 0.55),
             brand: 'MDBLIST',
-            state: _mdblistPillLabel,
+            state: _ta.mdblistPillLabel,
             rating: _k.mdblistStatus?.rating,
             accent: kMdblistPurple,
-            tracked: _mdblistTracked,
+            tracked: _ta.mdblistTracked,
             tooltip: 'MDBList options',
             onTap: _showMdblistQuickActionsMenu,
           ),
@@ -2837,7 +2318,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                         option.action ==
                             MdblistItemMenuAction.clearWatchProgress)
                       _refreshAfterPlayback();
-                    await _loadMdblistStatus();
+                    await _ta.loadMdblistStatus();
                     if (sheetContext.mounted) Navigator.pop(sheetContext);
                   },
                 ),
@@ -2885,7 +2366,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       // Quick-play deliberately does NOT pop: the host pushes the player on
       // top of this screen (same as the hero Resume), so playback pops back to
       // the episode list here — didPopNext then refreshes the ticks.
-      onQuickPlay: widget.onQuickPlay == null ? null : _quickPlayEpisode,
+      onQuickPlay: widget.onQuickPlay == null ? null : _pl.quickPlayEpisode,
       boundSourceCount: widget.boundSourceCount,
       onSelectSource: widget.onSelectSource,
       showChrome: false,
@@ -2899,9 +2380,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       onBack: () => Navigator.of(context).maybePop(),
       // Direct-source mode (Xtream IPTV series) — pass-throughs.
       seasonsLoader: widget.seasonsLoader,
-      onPlayEpisode: widget.onPlayEpisode == null ? null : _playDirectEpisode,
+      onPlayEpisode: widget.onPlayEpisode == null
+          ? null
+          : _pl.playDirectEpisode,
       watchProgressLoader: widget.watchProgressLoader,
-      onNextEpisodeChanged: _onNextEpisodeChanged,
+      onNextEpisodeChanged: _ra.onNextEpisodeChanged,
       onSeriesCompletedChanged: (completed) {
         if (mounted && completed != _r.seriesDone) {
           setState(() => _r.seriesDone = completed);
@@ -3287,9 +2770,9 @@ Map<String, Object?> mergedDetailTestAccess(State<MergedDetailScreen> state) {
   final s = state as _MergedDetailScreenState;
   return {
     'model': s._buildDetailModel,
-    'nextEpisode': s._onNextEpisodeChanged,
-    'loadResume': s._loadResumeInfo,
-    'rewatch': s._rewatchTitle,
+    'nextEpisode': s._parts.resumeActions.onNextEpisodeChanged,
+    'loadResume': s._parts.resumeActions.loadResumeInfo,
+    'rewatch': s._parts.playbackActions.rewatchTitle,
     'refresh': s._refreshAfterPlayback,
     'recommendations': s._parts.metadataState.recommendations,
     'recommendationOriginals': s._parts.metadataState.recommendationOriginals,
