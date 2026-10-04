@@ -195,5 +195,6 @@
   "callback_instances": {
     "_PlaylistContentViewScreenState": "$State"
   },
-  "callback_receiver_aliases": {}
+  "callback_receiver_aliases": {},
+  "source_validator_module": "playlist_content_live_bindings"
 }

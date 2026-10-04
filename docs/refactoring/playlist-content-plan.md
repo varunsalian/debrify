@@ -258,7 +258,7 @@ No member is over 200 lines (largest `_buildEpisodeCard`, 187).
 14. **Collection identity and mutable models:** Raw aliasing; `_folderPath`
     mutated in place; the WebDAV builder mutating `children`; in-place
     `SeriesPlaylist` updates; `widget.playlistItem` never refreshed.
-15. **Diagnostics.** All 18 analyzer warnings (step 0 item 7) keep firing
+15. **Diagnostics.** All 17 analyzer warnings (step 0 item 7) keep firing
     at their destinations, verified by rule and enclosing member; none may
     disappear. The 39 `print`s and their text stay.
 16. **Progress lookup and initial selection.** `_getProgressForFile`
@@ -328,7 +328,7 @@ As in the PikPak plan, with these points:
    normalization `widget.playlistItem` ↔ `playlistItem()` and
    `widget.onPlaybackStarted` ↔ `onPlaybackStarted()` (with negatives for a
    nullable return type, a copied map and a cached value), and every step
-   verifies all 18 occurrences by rule and enclosing member.
+   verifies all 17 occurrences by rule and enclosing member.
 2. **Private dormant and warned members stay private** in the section that
    owns them: `_loadProgressData` moves privately into the dormant section,
    keeping `unused_element` with its exact message. No warned member becomes
@@ -447,14 +447,14 @@ As in the PikPak plan, with these points:
    | 5 View modes | Saved mode read twice; auto seriesArrange only with nothing saved; persistence on every apply including navigation; Raw result identical to `children`; sorted order; missing folder resets; seriesArrange closes search. |
    | 6 Playback | Per site through the probe (rejection path): the HTTP log (start entry resolved only, Premiumize hash all, AllDebrid unlock errors swallowed), `onPlaybackStarted` once before the launcher's notify, the playback-stopped signal and settings snackbar. Start index through the accessor: sorted vs raw, `originalIndex` fallback, the Premiumize cloud clamp against pre-filter `videoFiles` (with a null-`path` node before the start) vs the hash and WebDAV clamps against built entries. Playlist contents (count, titles, relative paths incl. `_cleanTorboxPath` and the PikPak fallback) only through the successful-launch fixture if proven, else **pending device verification**. **Source guards** on the seven complete call expressions, the guard→callback→notify→push sequence, and all 14 `PlaylistEntry` constructions; remaining argument values (ids, flags, `viewMode`, WebDAV headers and fields) are **pending device verification**. |
    | 7 Return | With a `NavigatorObserver`, the screen pushed with each caller's construction reproduced verbatim (source guards pin both caller expressions). **Rejection path (probe):** Playlist-tab form → dialog popped before the launch, content route popped after the launcher returns; Home form → dialog popped after return, content screen still mounted. **In-app success:** the same two observations only through the proven observer-controlled fixture, else pending device verification. Native/external completion (immediate return): pending device verification. Plus the empty-list and catch paths. |
-   | 8 Watched | Mark and unmark arguments (title fallback, defaults, imdbId preference), the persisted completion, reload, snackbar text and colour, error snackbar; via the watched button (mobile and desktop widths, **TV false and TV true**: toggles both ways), the outer long-press (non-TV), D-pad hold; the outer card tap plays (non-TV) and is inert on TV. |
+   | 8 Watched | Mark and unmark arguments (defaults and imdbId preference; title fallback to the item is source-guard-only), the persisted completion, reload, snackbar text and colour, error snackbar; via the watched button (mobile and desktop widths, **TV false and TV true**: toggles both ways), the outer long-press (non-TV), D-pad hold; the outer card tap plays (non-TV) and is inert on TV. |
    | 9 Metadata | Fix Metadata with a fake dialog result: the cache-clear calls' order and counts (conditional pair; two TVMaze series clears, one transitive through `EpisodeInfoService.clearSeriesCache`) are pinned by **source guards**, since an HTTP mock can't spy on static calls; their effect is verified behaviourally through the resulting cache misses and requests; mapping, poster override and per-provider artwork or TorBox list write, forced imdbId, nulled fields, loading flag; cancel does nothing. Unforced imdbId save rules; detected-poster write; writes landing after unmount (recorded). |
    | 10 Timers/build | Fake time: auto-switch to A–Z at 2 s with persistence, timer object replaced per rebuild; missing-season post-frame `setState`; scroll retries and the 800 ms animation; `print` capture shows the per-card lines. |
    | 11 Search | Recursive video-only matches, paths, clear and close, hidden in seriesArrange. |
    | 12 D-pad | Clear-button keys, search-field arrows, file-card select/enter/space, episode KeyDown/hold 800 ms/repeat ignored/short press/300 ms suppression (host keys); via the TV setter (after the TV check settles): null outer `onTap`/`onLongPress`, the watched button still live, and the hold hint. |
-   | 13 Profile | A profile switch through the gate's picker disposes the route (handler gone, timers cancelled); two routes on the same item share no owners. Separately, with held futures and asserting persisted data **and tombstones** in both profiles (including writes the captured instance rejects): (a) a late operation (`.then` imdbId/poster save, watched toggle, Fix Metadata write) that starts after the handoff; (b) a switch between `getPlaylistItemsRaw` and `savePlaylistItemsRaw` in the poster and TorBox list writes; (c) a switch after a `ProfilePreferences` instance was acquired. Outcomes are recorded and preserved; no protection is added. |
+   | 13 Profile | A profile switch through the gate's picker disposes the route (handler gone, timers cancelled); two routes on the same item share no owners. Separately, with held futures and asserting persisted data **and tombstones** in both profiles (including writes the captured instance rejects): (a) a late operation (`.then` imdbId/poster save, watched toggle) that starts after the handoff; the Fix Metadata mapping-write variant is source-guard-only; (b) a switch between `getPlaylistItemsRaw` and `savePlaylistItemsRaw` in the poster and TorBox list writes; (c) a switch after a `ProfilePreferences` instance was acquired. Outcomes are recorded and preserved; no protection is added. |
    | 14 Identity | Through the accessor: Raw aliasing, `_folderPath` identity, `_searchResults` reassign-then-clear, `_applySortedPlaylistOrder` mutating its argument. |
-   | 16 Progress | Through the real tear-offs: `S_E` key hit; sequential key returned even when null (filename key then not consulted) vs filename fallback when the file is absent or there is no root; sortedAZ index; completion at 0.89/0.90 progress and 120,000/119,999 ms remaining, the manual `0/1` marker; `updatedAt` as int ms, numeric seconds string, ms string, ISO string, unparsable, and ties; initial season and episode index; the scheduled scroll and its 100/200/300 ms retries through `_scrollToEpisode` with an unattached controller, then the 800 ms animation once attached. |
+   | 16 Progress | Through the real tear-offs: `S_E` key hit; sequential key returned even when null (filename key then not consulted) vs filename fallback when the file is absent or there is no root; sortedAZ index; completion at 0.89/0.90 progress and 120,000/119,999 ms remaining, the manual `0/1` marker (independent predicate source-guard-only because remaining time also accepts it); `updatedAt` as int ms, numeric seconds string, ms string, ISO string, unparsable, and ties; initial season and episode index; the scheduled scroll and its 100/200/300 ms retries through `_scrollToEpisode` with an unattached controller, then the 800 ms animation once attached. |
 
    Pixel goldens (raw list, search, OTT mobile and desktop, error) on macOS
    and Linux, Linux captured by Claude from the original code. Record
@@ -464,7 +464,7 @@ As in the PikPak plan, with these points:
    swapped dispose statements, a non-recreated auto-switch timer, the
    Playlist-tab callback removed) each rejected.
 7. **Source-text inventory:**
-   - **Analyzer allowlist:** the 18 warnings — `unused_element`
+   - **Analyzer allowlist:** the 17 warnings — `unused_element`
      (`_loadProgressData`, 274), `dead_null_aware_expression` (440, 3526),
      `unnecessary_null_comparison` (832, 2212), `invalid_null_aware_operator`
      ×11 (2114–2132, 2232, 2329), `unnecessary_non_null_assertion` (2214).
@@ -472,7 +472,7 @@ As in the PikPak plan, with these points:
      at the facade path. Each moving commit relocates entries in the same
      commit; a facade entry leaves only when its last occurrence leaves.
      The checker matches sets, not counts, so the per-symbol relocation
-     comparison must also show all 18 occurrences, by rule and enclosing
+     comparison must also show all 17 occurrences, by rule and enclosing
      member, at every step.
    - **Shape:** 0 bare radii and **11 token calls** (1308, 1357, 1493, 1740,
      2540, 2545, 2777, 2820, 2873, 3033, 3224). The floor is **488 with zero
@@ -544,7 +544,7 @@ identities against the observed branch baselines and approved additions.
    both ways, `playlist_player_service.dart`, facade back-import).
 3. All manifest runs pass with self-tests; every characterization test
    passes unchanged; all seven launch-site guards are byte-identical.
-4. No new diagnostics or suppressions; all 18 warnings still fire, each
+4. No new diagnostics or suppressions; all 17 warnings still fire, each
    allowlisted at its destination with no stale entry; gate 2 passes against
    the latest base and gate 1.
 5. Local CI-equivalent checks pass; remote CI is pending until Claude
@@ -623,17 +623,74 @@ identities against the observed branch baselines and approved additions.
   provider accounts and Android TV physical remote behavior remain device
   checks. Remote CI and merged-tree integration remain pending.
 - Step 0 checks: all six configured manifests pass with self-tests using
-  the isolated playlist-content parser (107 / settings 316 / IPTV 22 /
-  TorBox 195 / Real-Debrid 173 / PikPak 128 leaves; IPTV count is recorded
-  in its checker output). Whole analyzer matches the original exactly;
+  the isolated playlist-content parser (107 / settings 316 / IPTV 384 /
+  TorBox 195 / Real-Debrid 173 / PikPak 128 leaves). Whole analyzer matches the original exactly;
   scoped allowlist, per-member warnings, clean test analyzer, format,
   architecture, size ratchet, storage keys/references, shape/source guards,
-  LF manifests and staged diff checks pass. Evidence is under
+  the new playlist-content manifest is LF-only and staged diff checks pass.
+  The pre-existing TorBox manifest uses CRLF; it remains untouched. Evidence is under
   `playlist_content/`; no known-failure list changed.
 - Linux handoff script resolves the exact step-0 subject and uses only its
   checkpoint-owned tests. Linux absence is permitted through step 5 only;
   verified PNG hashes/provenance and a separate golden commit are required
   before any builder moves in step 6.
+
+- Step 0b review closure (before any extraction): navigation persistence now
+  overwrites storage with `raw` before both sorted navigation directions.
+  Installed probes make the cloud-clamp and non-TV long-press assertions
+  observable. The cloud clamp reaches callback + screen notify before its
+  `RangeError`, without reaching launcher notify; this original behavior stays.
+  The late-metadata profile case checks show id/name and exact request count.
+  The formerly duplicate int/String timestamp tests have distinct typed names;
+  the other timestamp identities remain unchanged. New cases tap the outer
+  episode card and dispatch all six uppercase canonical provider names.
+- Coverage limits recorded by the review: manual `0/1` is **source-guard-only**
+  as an independent predicate (the remaining-time rule also accepts it).
+  Completion boundaries exercise only the episode-card copy (original 2686);
+  the search badge (1423) and file card (1646) copies rely on the verbatim checker.
+  Same-show-id Fix Metadata cache non-clearing, the 116 px mobile scroll estimate,
+  watched title fallback to the item, and profile scenario (a)'s Fix Metadata
+  mapping write starting after handoff are **source-guard-only**; no behavioral
+  characterization of those four branches is claimed. Their original method
+  bodies/calls remain guarded. The direct ProfilePreferences stale-instance
+  test is infrastructure coverage; screen scenario (c) is the interactions
+  test's stale acquisition case, not that direct preferences test.
+- TV overrides await the real async check before platform changes; false-to-false
+  setters in timer replacement and completion rendering are explicitly rebuild
+  triggers. The golden scenes/helpers/shared fixture are unchanged. ProfileFixture
+  moved unchanged from the PikPak test into `test/support/profile_fixture.dart`;
+  both its consumers are included in the original replay.
+- The main checker now invokes live binding validation for dependency records,
+  including nullable, uncached `onPlaybackStarted`; original service calls still
+  receive the map. Exact dependency-record callback aliases get a rule-level
+  positive and same-instance negative. Shared interpolation resolver commit
+  `def4e304` was cherry-picked as `456a442c` with the required Codex trailer.
+- The user's review explicitly authorizes a separate detached proof worktree at
+  `6e23a3c5`, inside this worktree's ignored `.dart_tool/playlist_content_original_proof`.
+  It supersedes the earlier same-worktree proof choice for the review cases.
+
+- Step 0b evidence: `step0b-original-proof-final` and `step0b-current` each
+  pass 163 identities (159 playlist + four affected PikPak profile cases).
+  The final awaited-long-press change is replayed separately on both inputs.
+  Six original-only behavioral mutants are rejected without invoking the checker;
+  both skipped navigation saves fail with `raw` instead of `sortedAZ`.
+  Long press additionally proves a toggle-plus-launch mutant fails its probe.
+  `base4` is the full original-code review baseline. Its comparison uses the
+  audited `base3-renamed.json`: the old duplicate's last String outcome is
+  renamed to the typed String identity, and int gains one distinct identity;
+  seven new play/tap cases are the other additions. The original base3 evidence
+  is immutable, all outcomes remain unchanged by normalization, and no failure
+  allowlist is updated. Exact mapping is checked in as
+  `playlist_content_step0b_identity_renames.json`.
+
+- Step 0b full result: `base4` versus audited `base3-renamed.json` **PASS**:
+  10,736 successes, unchanged 13 failures / 28 errors / 20 skips, eight added
+  identities and no missing/new failures or changed skips. Raw comparison's
+  sole missing spelling is exactly the documented duplicate rename; its nine
+  new spellings comprise that rename plus eight additions. All six manifests
+  and self-tests pass (107/316/384/195/173/128); whole analyzer has no added or
+  removed diagnostics, CI allowlist/format and all 17 warning occurrences pass.
+  Original checkpoint and current affected tests pass; no production move yet.
 
 
 ## Found, not fixed
@@ -691,4 +748,4 @@ All pre-existing; the extraction keeps each exactly.
   the dialog was popped pops the content screen instead.
 - **Dormant and redundant code:** `_loadProgressData`;
   `_applySeriesArrangeView`'s nodes are never shown; the null-aware
-  operators behind the 18 warnings. A platform check sits in presentation.
+  operators behind the 17 warnings. A platform check sits in presentation.

@@ -121,7 +121,7 @@ The checklist below records planned bindings. At each move, review the actual pr
 - Shape: 0 bare radii, 11 token calls; preserve the 488 floor and explicit membership per destination. 39 original print calls remain unchanged.
 - Source readers: theme p2_playlist explicit directory globs; shape manifest; frozen theme source prefix; size ratchet; architecture guard; CI format/analyze/behavior paths; analyzer allowlist. No profile redaction scan path moves.
 - 17 observed warnings by rule/member: dormant unused_element (1); TorBox load and RD play dead_null_aware_expression (2); applyViewMode and parseSeriesPlaylist unnecessary_null_comparison (2); saveImdbId (9), parseSeriesPlaylist (1), Fix Metadata (1) invalid_null_aware_operator (11); parseSeriesPlaylist unnecessary_non_null_assertion (1).
-- Original-code proofs run in this dedicated worktree before any move; no second worktree is created or touched because the user confines all execution here. A clean original checkpoint replay pins each test and the original source plus frozen accessor.
+- Step 0 originals were proven here before moves. Step 0b additionally uses the user-authorized detached checkpoint proof worktree at 6e23a3c5 under this worktree’s ignored .dart_tool directory, with changed characterization inputs recorded and the production implementation byte-identical.
 - Original source under destination lint options is tested inside this worktree with import qualification only; the strict evidence records every directive-order info.
 
 ## Wiring verification checkpoints

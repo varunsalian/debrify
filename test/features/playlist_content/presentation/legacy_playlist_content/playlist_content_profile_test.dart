@@ -158,7 +158,6 @@ void main() {
       seedSeries(f);
       await f.mount(t);
       final model = f.series;
-      final parse = f.member('parseSeriesPlaylist');
       final p = PlaylistContentProfiles();
       await t.runAsync(p.open);
       try {
@@ -202,7 +201,12 @@ void main() {
         expect((await stored(t)).single['imdbId'], 'tt42');
         expect((await stored(t)).single['posterUrl'], poster);
         expect(model.imdbId, 'tt42');
-        expect(parse, isNotNull);
+        expect(model.tvmazeShowId, 42);
+        expect(model.tvmazeShowName, 'Fixture');
+        expect(
+          f.requests.where((r) => r.url.path == '/shows/42'),
+          hasLength(1),
+        );
         expect(await t.runAsync(() => p.tombstones(p.b.profileId)), isEmpty);
         p.switchTo(p.a);
         expect((await stored(t)).single['imdbId'], isNull);

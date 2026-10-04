@@ -9,8 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../../support/playlist_content_fixture.dart';
-import '../../../pikpak_files/presentation/legacy_pikpak/pikpak_profile_test.dart'
-    show ProfileFixture;
+import '../../../../support/profile_fixture.dart';
 
 void main() {
   setUpAll(() {

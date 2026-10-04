@@ -86,6 +86,7 @@ void main() {
       final first = f.member('ottViewAutoSwitchTimer');
       expect(first.isActive, isTrue);
       await t.pump(const Duration(seconds: 1));
+      // False-to-false is only a rebuild trigger to exercise timer replacement.
       f.member('setAndroidTv')(false);
       await t.pump();
       final replacement = f.member('ottViewAutoSwitchTimer');
@@ -116,6 +117,8 @@ void main() {
           seedSeries(f);
           await f.mount(t, width: width);
           await enterOtt(t, f);
+          await f.invoke(t, () => f.member('checkIfAndroidTv')());
+          expect(f.member('isAndroidTv'), isFalse);
           f.member('setAndroidTv')(tv);
           await t.pump();
           final outer = t
@@ -190,6 +193,8 @@ void main() {
       seedSeries(f);
       await f.mount(t);
       await enterOtt(t, f);
+      await f.invoke(t, () => f.member('checkIfAndroidTv')());
+      expect(f.member('isAndroidTv'), isFalse);
       f.member('setAndroidTv')(true);
       await t.pump();
       final focus = episodeFocus(t);
@@ -247,9 +252,38 @@ void main() {
       final outer = t
           .widgetList<InkWell>(find.byType(InkWell))
           .firstWhere((w) => w.onLongPress != null);
-      outer.onLongPress!();
-      await f.until(t, () => f.progress['1_1']?['durationMs'] == 1);
-      expect(find.text('Episode marked as watched'), findsOneWidget);
+      final probe = PlaylistContentProbe(f)..install();
+      try {
+        await f.invoke(
+          t,
+          () => (outer.onLongPress as dynamic)() as Future<void>,
+        );
+        await f.until(t, () => f.progress['1_1']?['durationMs'] == 1);
+        expect(find.text('Episode marked as watched'), findsOneWidget);
+        expect(probe.calls, 0);
+      } finally {
+        probe.remove();
+      }
+    }),
+  );
+  testWidgets(
+    'non-TV outer episode card tap enters the play path',
+    (t) => playlistContentCase(t, (f) async {
+      seedSeries(f);
+      await f.mount(t, started: () => f.events.add('callback'));
+      await enterOtt(t, f);
+      final outer = t
+          .widgetList<InkWell>(find.byType(InkWell))
+          .firstWhere((w) => w.onLongPress != null && w.child is Padding);
+      final probe = PlaylistContentProbe(f)..install();
+      try {
+        await t.tap(find.byWidget(outer));
+        await f.until(t, () => probe.calls == 2);
+        expect(f.events, ['callback', 'launch 1', 'launch 2', 'stopped']);
+        expect(f.requests.last.body, 'link=https%3A%2F%2Flocked.test%2F3');
+      } finally {
+        probe.remove();
+      }
     }),
   );
   for (final scene in ['raw', 'search', 'ott_mobile', 'ott_desktop', 'error']) {

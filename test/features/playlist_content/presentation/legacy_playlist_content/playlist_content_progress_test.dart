@@ -92,8 +92,11 @@ void main() {
     '2000000000000',
     '2033-05-18T03:33:20Z',
   ]) {
+    final type = value.toString() == '2000000000000'
+        ? '${value.runtimeType} '
+        : '';
     testWidgets(
-      'latest updatedAt $value selects same season and episode',
+      'latest updatedAt $type$value selects same season and episode',
       (t) => playlistContentCase(t, (f) async {
         await f.mount(t);
         f.progress.addAll({
@@ -159,6 +162,8 @@ void main() {
           () => PaintingBinding.instance.imageCache.pendingImageCount == 0,
         );
         f.progress['1_1'] = {'positionMs': position, 'durationMs': duration};
+        // This false-to-false setter is only a rebuild trigger after cache edits.
+        // It does not override the asynchronous platform result.
         f.member('setAndroidTv')(false);
         await t.pump();
         final watched = find.byIcon(Icons.check);

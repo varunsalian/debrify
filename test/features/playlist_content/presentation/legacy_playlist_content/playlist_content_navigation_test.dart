@@ -42,6 +42,10 @@ void main() {
         ),
         'sortedAZ',
       );
+      await t.runAsync(
+        () =>
+            PlaylistPreferencesStorage.savePlaylistItemViewMode(f.item, 'raw'),
+      );
       f.member('navigateUp')();
       await t.pump();
       expect(identical(f.member('folderPath'), path), isTrue);
@@ -52,6 +56,21 @@ void main() {
         ),
         'sortedAZ',
       );
+      await t.runAsync(
+        () =>
+            PlaylistPreferencesStorage.savePlaylistItemViewMode(f.item, 'raw'),
+      );
+      f.member('navigateIntoFolder')(f.root.children.single);
+      await t.pump();
+      expect(path, ['Pack']);
+      expect(
+        await t.runAsync(
+          () => PlaylistPreferencesStorage.getPlaylistItemViewMode(f.item),
+        ),
+        'sortedAZ',
+      );
+      f.member('navigateUp')();
+      await t.pump();
       f.member('applyViewMode')(FolderViewMode.raw);
       await t.pump();
       expect(identical(f.member('currentViewNodes'), f.root.children), isTrue);

@@ -92,6 +92,43 @@ void main() {
       }),
     );
   }
+  for (final provider in [
+    'REALDEBRID',
+    'ALLDEBRID',
+    'TORBOX',
+    'PIKPAK',
+    'PREMIUMIZE',
+    'WEBDAV',
+  ]) {
+    testWidgets(
+      'play dispatch lowercases uppercase $provider',
+      (t) => playlistContentCase(t, (f) async {
+        await f.mount(
+          t,
+          provider: provider.toLowerCase(),
+          started: () => f.events.add('callback'),
+        );
+        f.item['provider'] = provider;
+        f.requests.clear();
+        final probe = PlaylistContentProbe(f)..install();
+        try {
+          await f.invoke(
+            t,
+            () => f.member('playFile')(f.root.getAllFiles()[1]),
+          );
+          await drainRoutes(t);
+          expect(probe.calls, 2);
+          expect(f.events, ['callback', 'launch 1', 'launch 2', 'stopped']);
+          expect(
+            find.text('Player settings could not be loaded. Please try again.'),
+            findsOneWidget,
+          );
+        } finally {
+          probe.remove();
+        }
+      }),
+    );
+  }
   for (final provider in ['rd', 'torbox_webdl', 'real_debrid', 'unknown']) {
     testWidgets(
       'noncanonical $provider prepares pops reloads without launching',
@@ -208,7 +245,11 @@ void main() {
       f.item['premiumizeFiles'] = [
         {'id': 'a2', 'name': 'Cloud.mkv'},
       ];
-      await f.mount(t, provider: 'premiumize');
+      await f.mount(
+        t,
+        provider: 'premiumize',
+        started: () => f.events.add('started'),
+      );
       final nodes = [
         RDFileNode(
           name: 'Skipped.mkv',
@@ -226,14 +267,21 @@ void main() {
           linkIndex: 1,
         ),
       ];
-      await t.runAsync(
-        () => expectLater(
-          f.member('playPremiumizePlaylist')(nodes, 1),
-          throwsA(isA<RangeError>()),
-        ),
-      );
-      expect(f.events, isEmpty);
-      expect(f.requests.last.url.queryParameters['id'], 'a2');
+      final probe = PlaylistContentProbe(f)..install();
+      try {
+        await t.runAsync(
+          () => expectLater(
+            f.member('playPremiumizePlaylist')(nodes, 1),
+            throwsA(isA<RangeError>()),
+          ),
+        );
+        expect(probe.calls, 1);
+        expect(probe.stops, 0);
+        expect(f.events, ['started', 'launch 1']);
+        expect(f.requests.last.url.queryParameters['id'], 'a2');
+      } finally {
+        probe.remove();
+      }
     }),
   );
   for (final provider in ['premiumize', 'webdav']) {

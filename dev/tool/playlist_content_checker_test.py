@@ -8,17 +8,7 @@ import subprocess
 from pathlib import Path
 
 
-def validate_live_item_binding(sources):
-    errors = []
-    for path, source in sources.items():
-        if 'Function() playlistItem' in source:
-            if not re.search(r'Map<String,\s*dynamic>\s+Function\(\)\s+playlistItem\s*;', source):
-                errors.append('playlistItem getter must return the original non-nullable map')
-        if 'playlistItem:' in source:
-            for binding in re.findall(r'playlistItem:\s*(\(\)\s*=>[^\n]+)', source):
-                if binding.strip().rstrip(',') != '() => widget.playlistItem':
-                    errors.append('playlistItem binding must read the live original map without copying')
-    return errors
+from playlist_content_live_bindings import validate_sources as validate_live_item_binding
 
 
 def self_test(package=None):
@@ -111,13 +101,51 @@ def self_test(package=None):
                 assert check_callback_identities(mutated, rows, source, config)
                 print('Playlist content named callback ' + spec['name'] + ': wrong label rejected')
 
-    positive = {'binding': 'final Map<String, dynamic> Function() playlistItem;\nplaylistItem: () => widget.playlistItem,\n'}
+    # A callback stored directly in a narrow dependency record is still the
+    # original tear-off. Exact aliases are allowed only with pinned wiring.
+    spec = next(s for s in config['callback_identities'] if s['name'] == 'Refresh and Retry direct tear-offs')
+    site = spec['sites'][0]
+    key, node = located(site['member'])
+    target_key, target = located(spec['callback_member'])
+    expected = config['callback_instances'].get(target['owner'], '$State') + '.' + target['name']
+    aliased = copy.deepcopy(lookup)
+    values = tokens(aliased[key])
+    calls = arguments(values, site['call'])
+    expr = callback_argument(calls[site.get('occurrence', 0)], site['argument'])
+    positions = [i for i, v in enumerate(values[:-1]) if v == site['call'] and values[i + 1] == '(']
+    start = positions[site.get('occurrence', 0)] + 2
+    position = next(i for i in range(start, len(values)) if values[i:i + len(expr)] == expr)
+    alias = ['_deps', '.', 'testAliasedCallback']
+    values[position:position + len(expr)] = alias
+    aliased[key]['tokens'] = [{'text': t, 'offset': i} for i, t in enumerate(values)]
+    aliased[key]['formatCommas'] = []
+    alias_config = copy.deepcopy(config)
+    alias_config['callback_receiver_aliases']['_deps.testAliasedCallback'] = expected
+    assert not check_callback_identities(aliased, rows, source, alias_config)
+    swapped = copy.deepcopy(aliased)
+    vals = tokens(swapped[key]); vals[position] = 'secondDepsInstance'
+    swapped[key]['tokens'] = [{'text': t, 'offset': i} for i, t in enumerate(vals)]
+    assert check_callback_identities(swapped, rows, source, alias_config)
+    print('Playlist content exact dependency-record tear-off: PASS; receiver swap rejected')
+
+    positive = {'binding': 'final Map<String, dynamic> Function() playlistItem;\nPlaylistContentFixture((\nplaylistItem: () => widget.playlistItem,\n));\n'}
     assert not validate_live_item_binding(positive)
     for label, text in [('nullable return', positive['binding'].replace('dynamic>', 'dynamic>?')),
                         ('copied map', positive['binding'].replace('() => widget.playlistItem', '() => Map<String, dynamic>.from(widget.playlistItem)')),
                         ('cached map', positive['binding'].replace('() => widget.playlistItem', '() => widget.playlistItemCached'))]:
         assert validate_live_item_binding({'binding': text}), label
         print('Playlist content live getter ' + label + ': rejected')
+
+    callback = {'binding': 'final VoidCallback? Function() onPlaybackStarted;\nPlaylistContentFixture((\nonPlaybackStarted: () => widget.onPlaybackStarted,\n));\n'}
+    assert not validate_live_item_binding(callback)
+    for label, binding in [
+        ('non-null callback', callback['binding'].replace('VoidCallback?', 'VoidCallback')),
+        ('nullable getter', callback['binding'].replace('Function()', 'Function()?')),
+        ('cached callback', callback['binding'].replace('() => widget.onPlaybackStarted', '() => cachedCallback')),
+        ('eager callback', callback['binding'].replace('() => widget.onPlaybackStarted', 'widget.onPlaybackStarted')),
+    ]:
+        assert validate_live_item_binding({'binding': binding}), label
+        print('Playlist content live onPlaybackStarted ' + label + ': rejected')
 
     from check_settings_moves import configured, check_plain_sections, check_forwarder
     row = next(r for r in rows if r['original_name'].endswith('.build'))

@@ -74,7 +74,7 @@ def check_callback_identities(lookup, rows, source_path, config):
         if '.' not in path:
             path = instances.get(owner, '$State') + '.' + path
         for alias in sorted(aliases, key=len, reverse=True):
-            if path.startswith(alias + '.'):
+            if path == alias or path.startswith(alias + '.'):
                 path = aliases[alias] + path[len(alias):]
                 break
         if path.startswith(('_owners.', '_sections.')):

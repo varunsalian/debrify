@@ -843,6 +843,10 @@ def _check(original_source, sources, rows, source_path, package=None,
     parsed = parse({'<original>': original_source, **sources}, package)
     original = original_leaves(parsed['<original>']['declarations'], split_names(rows))
     errors = missing_line_comments(original_source, sources, rows)
+    if CONFIG.get('source_validator_module'):
+        import importlib
+        validator = importlib.import_module(CONFIG['source_validator_module'])
+        errors.extend(validator.validate_sources(sources))
     errors.extend(check_named_exceptions(rows))
     errors.extend(check_lint_comments(original_source, sources))
     known = {r['original_name'] for r in rows}
