@@ -16,8 +16,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from check_settings_moves import (all_nodes, builder_context_signature, configured,
-                                  declaration_tokens, remove_context_exceptions, sidecar)
+from check_settings_moves import (all_nodes, builder_context_signature, check_context, configured,
+                                  declaration_tokens, remove_context_exceptions, sidecar,
+                                  spotlight_formatter_commas)
 from check_verbatim_moves import parse
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -74,10 +75,15 @@ def read_member(original_name, original, sources, rows, config, package):
     if comments(before) != comments(actual):
         raise ValueError('Original comments changed: ' + original_name)
     with configured(config):
+        actual = spotlight_formatter_commas(actual, row)
         sites = [s for s in sidecar('context_exceptions', 'sites', [], config=config)
                  if s['file'] == key[0] and s['owner'] == key[1] and s['method'] == key[2]]
         if sites:
             actual = remove_context_exceptions(actual, sites, rows, row)
+        if 'context_guard' in row['allowed_edits'].split(','):
+            failures = check_context(before, actual, rows, row)
+            if failures:
+                raise ValueError('Owned context guard changed: ' + original_name + '\n' + '\n'.join(failures))
         expected = declaration_tokens(before, rows, row, original=moved)
         observed = declaration_tokens(actual, rows, row)
     if expected != observed:

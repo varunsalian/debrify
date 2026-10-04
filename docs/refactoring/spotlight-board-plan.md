@@ -1086,6 +1086,50 @@ decomposition; bug fixes and behaviour changes, including everything below.
   pending. No branch switch or push occurred.
 
 
+### Step 0c — reviewed amendment tooling and complete composition
+
+- Resumed from the reviewed amendments `3f812727` and `0c8e795c`. The
+  complete compiling composition remains **451 physical facade lines**:
+  imports/export 13; widget/docs 185; State header 3; lifecycle 142;
+  forwarders/overrides 26; bindings 54; composition 11; remaining 17.
+  The enforced final cap is 451, within the 460 design maximum. No layout,
+  comment deletion or compression was introduced.
+- `spotlight_named_record_formatter_commas` identifies only the named record
+  in `SpotlightBoardState._loadShelvesAndFinishDown`: ordinal 0 of exactly
+  one record, with every original field/value/separator pinned. AST evidence
+  supplies its trailing-comma offset **before** formatter/context-prefix,
+  declaration and reader comparisons. The general named-record comma rule
+  remains unchanged. `step0c-named-record-inventory.json` records its exact
+  physical destination and offset. Full-composition positives with and
+  without that optional comma pass; changed values, another record/comma,
+  an additional token sequence and hoisted context fail the checker/reader.
+- The reader now also uses the existing owned-context ordering check before
+  exposing original text. Its simulated moves deliberately use the original
+  unformatted bodies; the real formatted bodies retain their pinned wraps.
+  Binding/header/mutation fixtures locate actual moved owners and preserve
+  all prior assertions, including valid `super` bypass negatives.
+- `_LogoOrTitle` is registered inside the exact legacy bridge, with its
+  `DebrifyImageCache.manager` dependency and lexical `build` context recorded
+  in the dependency checklist. The complete probe uses that destination.
+- Evidence under `spotlight_board/`: `step0c-real-composition-*` records the
+  compiling probe, all self-tests, **17 infos / zero warnings/errors** and
+  zero per-symbol additions; `step0c-probe-final-characterization.jsonl`
+  records **146 PASS** (49 behavior, 91 source/reader, six strict macOS
+  goldens). `step0c-original-source-frozen.*` records **91 PASS** against
+  original checkpoint (b), with identical current reader/config/AST inputs
+  and complete stable end-tree provenance. The 20 original-code behavioral
+  mutation proofs from 0b remain applicable; no Dart case changed.
+- All ten integrated manifests and their self-tests pass with explicit
+  isolated parser packages (`step0c-final-manifest-*`). The strict diagnostic
+  mapper is now durable as `check_spotlight_board_analyzer.py`, requiring an
+  explicit parser package. LF, Python compilation and diff checks pass.
+- Conservative baseline decision: no tracked `lib`, Dart test, pubspec or
+  lockfile changed (`step0c-inputs.json`); retain the frozen **base3** from
+  `97d79c07`, tested tree `8457e625239a4d79292465a2c607dd1381391738`.
+  The six supplied Linux PNGs remain untracked and untouched for their own
+  provenance/strictness commit before step 2. Device and remote CI checks
+  remain pending.
+
 ### Amendment after step 0b (design-reviewed before resuming)
 
 1. **Facade cap.** The hard maximum becomes 460 (see the size section); the

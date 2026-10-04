@@ -60,6 +60,31 @@ def without_offsets(node, offsets):
                 references=[r for r in node['references'] if r['offset'] not in offsets])
 
 
+def spotlight_formatter_commas(node, row):
+    """Validate Spotlight's one approved named-record formatter comma.
+
+    AST evidence identifies the record and its physical trailing comma. The
+    declaration, ordinal, record count and every value/separator stay pinned;
+    this does not change the general parser's optional-comma rule.
+    """
+    spec = CONFIG.get('spotlight_named_record_formatter_commas', {}).get(row['original_name'])
+    if not spec or (node['owner'], node['name']) != (row['destination_class'], row['new_name']):
+        return node
+    if CONFIG.get('feature', '').rstrip('/') != 'lib/features/spotlight_board':
+        raise ValueError('Named-record formatter extension is Spotlight-scoped')
+    records = node.get('namedRecords', [])
+    if len(records) != spec['record_count']:
+        raise ValueError('Registered named-record count changed')
+    record = records[spec['ordinal']]
+    offset = record['trailingComma']
+    values = [t['text'] for t in node['tokens']
+              if record['offset'] <= t['offset'] < record['end']
+              and not t['comment'] and t['offset'] != offset]
+    if values != spec['record_tokens']:
+        raise ValueError('Registered named-record fields, values or separators changed')
+    return dict(node, formatCommas=[*node.get('formatCommas', []), *([] if offset is None else [offset])])
+
+
 def remove_context_exceptions(node, sites, rows, row):
     """Validate each recorded addition before the ordinary verbatim/context checks.
 
@@ -1117,6 +1142,11 @@ def _check(original_source, sources, rows, source_path, package=None,
         exception_flags = set(row['allowed_edits'].split(',')) & {'context_confirmation', 'formatter_if_braces'}
         if exception_flags != {site['kind'] for site in sites + physical_sites}:
             errors.append('Context exception manifest/site coverage differs: ' + key)
+        try:
+            actual = spotlight_formatter_commas(actual, row)
+        except ValueError as error:
+            errors.append(key + ': ' + str(error))
+            continue
         if sites:
             if row['expected_difference'] != CONTEXT_EXCEPTION_DIFFERENCE:
                 errors.append('Context exception description widened: ' + key)

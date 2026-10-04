@@ -4754,5 +4754,26 @@
         "refreshMetadataPresentation"
       ]
     }
+  },
+  "spotlight_named_record_formatter_commas": {
+    "SpotlightBoardState._loadShelvesAndFinishDown": {
+      "ordinal": 0,
+      "record_count": 1,
+      "record_tokens": [
+        "(",
+        "origin",
+        ":",
+        "origin",
+        ",",
+        "at",
+        ":",
+        "DateTime",
+        ".",
+        "now",
+        "(",
+        ")",
+        ")"
+      ]
+    }
   }
 }

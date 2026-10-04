@@ -21,6 +21,8 @@ def self_test(package=None):
     lookup = all_nodes(parse(sources, package))
     assert not check(original, sources, rows, source, package, context_guard=True, config=config)
     print('Spotlight real configuration positive: PASS')
+    from spotlight_board_formatter_fixtures import self_test as formatter_self_test
+    formatter_self_test(original, sources, rows, source, config, package)
     from spotlight_board_source_reader_test import self_test as reader_self_test
     reader_self_test(package)
 
@@ -55,12 +57,22 @@ def self_test(package=None):
         elif case['mutation'] == 'rebound_trailer_start':
             body,count = re.subn(r'(onTrailerStart:\s*)(?:widget|view)\.onTrailerStop', r'\1() {}', body, count=1)
         else:
-            assert case['before'] in body, case
-            body = body.replace(case['before'],case['after'],1)
+            before_text, after_text = case['before'], case['after']
+            if before_text not in body:
+                before_text = before_text.replace('widget.', 'view.')
+                after_text = after_text.replace('widget.', 'view.')
+            if 'view.' + before_text in body:
+                before_text = 'view.' + before_text
+            assert before_text in body, case
+            body = body.replace(before_text,after_text,1)
             count = 1
         assert count == 1, case
         changed[key[0]] = changed[key[0]][:node['start']]+body+changed[key[0]][node['end']:]
-        assert check(original, changed, rows, source, package, context_guard=True, config=config), case['name']
+        try:
+            failures = check(original, changed, rows, source, package, context_guard=True, config=config)
+        except subprocess.CalledProcessError as error:
+            raise AssertionError('Invalid fixture ' + case['name'] + ': ' + error.stderr) from error
+        assert failures, case['name']
         print('Spotlight fixture '+case['name']+': rejected')
 
     # Identity checker alone: full token/scaffold failures cannot conceal a
@@ -133,9 +145,11 @@ def self_test(package=None):
     header=re.sub(r'\s+implements\s+SpotlightBoardWidgetView\s*$', '', header)
     approved=header.rstrip()+' implements SpotlightBoardWidgetView '
     probe[source]=probe[source][:declaration['start']]+approved+declaration['text'][brace:]+probe[source][declaration['end']:]
-    probe[additions['activation_file']]='abstract class SpotlightBoardWidgetView {}\n'
+    if additions['activation_file'] not in probe:
+        probe[additions['activation_file']]='abstract class SpotlightBoardWidgetView {}\n'
     probe_config=copy.deepcopy(config)
-    probe_config.setdefault('additional_owners',[]).append({'file':additions['activation_file'],'owner':'','names':['SpotlightBoardWidgetView']})
+    if additions['activation_file'] not in sources:
+        probe_config.setdefault('additional_owners',[]).append({'file':additions['activation_file'],'owner':'','names':['SpotlightBoardWidgetView']})
     assert not check(original,probe,rows,source,package,context_guard=True,config=probe_config)
     for label,replacement in [
         ('changed superclass',approved.replace('State<SpotlightBoard>','State<StatefulWidget>')),

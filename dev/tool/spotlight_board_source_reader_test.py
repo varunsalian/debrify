@@ -13,6 +13,9 @@ from spotlight_board_source_reader import ROOT, SOURCE, read_member
 
 def self_test(package):
     config = json.loads((ROOT / 'dev/tool/spotlight_board_checker_config.json').read_text())
+    # These fixtures simulate the unformatted structural move from R. Actual
+    # formatted destinations exercise their pinned wraps in the full checker.
+    config.get('sidecars', {}).pop('context_exceptions', None)
     rows = list(csv.DictReader((ROOT / 'dev/tool/spotlight_board_manifest.tsv').open(), delimiter='\t'))
     original = subprocess.check_output(['git', 'show', config['baseline'] + ':' + SOURCE], cwd=ROOT, text=True)
     nodes = all_nodes(parse({SOURCE: original}, package))
