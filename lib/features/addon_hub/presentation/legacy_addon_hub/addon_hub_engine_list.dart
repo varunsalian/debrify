@@ -10,7 +10,6 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 typedef AddonHubEngineListDeps = ({
   AddonHubEngineState engineState,
-  // TEMP(addon_hub): emptyState remains on the facade until step 6.
   Widget Function({
     required IconData icon,
     required String title,

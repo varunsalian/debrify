@@ -13,7 +13,6 @@ import 'package:url_launcher/url_launcher.dart';
 typedef AddonHubMarketListDeps = ({
   AddonHubNavigationState navigationState,
   AddonHubMarketState marketState,
-  // TEMP(addon_hub): emptyState remains on the facade until step 6.
   Widget Function({
     required IconData icon,
     required String title,

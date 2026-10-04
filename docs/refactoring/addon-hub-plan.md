@@ -842,6 +842,33 @@ committed tree**, reconciling each branch's approved additions.
   identities match base4 and pass; macOS and strict original Linux pixels
   pass (Linux 6/6), unchanged hashes and no golden-test changes.
 
+- Step 6 moves the original root layout into a plain layout section and
+  header/body/empty builders into Body; the State now has the exact annotated
+  `build(context) => _sections.layout.build(context)` forwarder. All 79 actual
+  bindings are reviewed and 79 structural leaves pinned. Three typed closures
+  defer the pure empty-state helper until Body is constructed, breaking only
+  that builder cycle; no UI/listener identity callback is wrapped. `_el` and
+  all TEMP(addon_hub) cross-calls are removed. Seven exact brace sites are
+  confined to moved methods, with no lifecycle exception.
+- A draft generator classified the original `[build]` documentation link as
+  an invoked dependency when moving the layout. It stopped before wiring the
+  cycle; its failure is retained. Comment references are now excluded from
+  receiver/dependency rewriting and the original comment stays byte-exact.
+  No accepted evidence comes from that draft.
+- Final facade physical count is 162: imports 14; public widget and its
+  original documentation 10; owners/cache/tab/TV handler 16; lifecycle 53;
+  build forwarder 2; frozen accessor 58; State shell 2; separating blank
+  lines 7. Largest feature file is 295 lines; all 32 destinations are ≤500.
+  `final-line-counts.json` records the measured breakdown.
+
+- Step 6 verification: all ten manifest/self-tests, architecture/size/storage,
+  format/diff and CI analyzer allowlist PASS. All 129 affected identities pass
+  and match base4; macOS and strict Linux goldens pass unchanged (6/6 Linux).
+  Original per-symbol strict diagnostics and whole diagnostic relocation have
+  zero additions; all three original const identities now live at their final
+  destinations. The final facade and every destination remain registered in
+  the unchanged seven-radius / 488-token, zero-slack shape inventory.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

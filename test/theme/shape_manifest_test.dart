@@ -241,6 +241,7 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/addon_hub/presentation/addon_hub_focus_card.dart': 1,
   'lib/features/addon_hub/presentation/addon_hub_installed_row.dart': 0,
   'lib/features/addon_hub/presentation/addon_hub_row_nav.dart': 0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_body.dart': 0,
   'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_composition.dart':
       0,
   'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_list.dart':
@@ -252,6 +253,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_filters.dart':
       0,
   'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_state.dart':
+      0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_layout.dart':
       0,
   'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_loading.dart':
       0,

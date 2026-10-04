@@ -13,7 +13,6 @@ typedef AddonHubInstalledListDeps = ({
   AddonHubInstalledState installedState,
   bool Function({required List<String> types, required String name})
   matchesFilters,
-  // TEMP(addon_hub): emptyState remains on the facade until step 6.
   Widget Function({
     required IconData icon,
     required String title,

@@ -66,6 +66,10 @@
     "s._sections.management": "AddonHubManagement",
     "_sections.menus": "AddonHubMenus",
     "s._sections.menus": "AddonHubMenus",
+    "_sections.layout": "AddonHubLayout",
+    "s._sections.layout": "AddonHubLayout",
+    "_sections.body": "AddonHubBody",
+    "s._sections.body": "AddonHubBody",
     "_sections.filterBar": "AddonHubFilterBar",
     "s._sections.filterBar": "AddonHubFilterBar",
     "_sections.installedList": "AddonHubInstalledList",
@@ -73,16 +77,13 @@
     "_sections.marketList": "AddonHubMarketList",
     "s._sections.marketList": "AddonHubMarketList",
     "_sections.engineList": "AddonHubEngineList",
-    "s._sections.engineList": "AddonHubEngineList",
-    "_el": "AddonHubEngineList",
-    "s._el": "AddonHubEngineList"
+    "s._sections.engineList": "AddonHubEngineList"
   },
   "receiver_owners": {
     "_installedOwner": "AddonHubInstalledState",
     "_marketOwner": "AddonHubMarketState",
     "h": "AddonHubNavigationState",
-    "_e": "AddonHubEngineState",
-    "_el": "AddonHubEngineList"
+    "_e": "AddonHubEngineState"
   },
   "additional_owners": [],
   "required_nodes": [],
@@ -156,6 +157,14 @@
       "owner": "AddonHubMenus"
     },
     {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_layout.dart",
+      "owner": "AddonHubLayout"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_body.dart",
+      "owner": "AddonHubBody"
+    },
+    {
       "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_filter_bar.dart",
       "owner": "AddonHubFilterBar"
     },
@@ -210,6 +219,8 @@
     "AddonHubInstallActions": "$State._sections.installActions",
     "AddonHubManagement": "$State._sections.management",
     "AddonHubMenus": "$State._sections.menus",
+    "AddonHubLayout": "$State._sections.layout",
+    "AddonHubBody": "$State._sections.body",
     "AddonHubFilterBar": "$State._sections.filterBar",
     "AddonHubInstalledList": "$State._sections.installedList",
     "AddonHubMarketList": "$State._sections.marketList",
@@ -224,11 +235,12 @@
     "_sections.installActions": "$State._sections.installActions",
     "_sections.management": "$State._sections.management",
     "_sections.menus": "$State._sections.menus",
+    "_sections.layout": "$State._sections.layout",
+    "_sections.body": "$State._sections.body",
     "_sections.filterBar": "$State._sections.filterBar",
     "_sections.installedList": "$State._sections.installedList",
     "_sections.marketList": "$State._sections.marketList",
-    "_sections.engineList": "$State._sections.engineList",
-    "_el": "$State._sections.engineList"
+    "_sections.engineList": "$State._sections.engineList"
   },
   "callback_closure_binding": true,
   "callback_identities": [
@@ -512,7 +524,14 @@
     "_deps.installFromMarket": "_AddonHubScreenState._installFromMarket",
     "_deps.configureInBrowser": "_AddonHubScreenState._configureInBrowser",
     "_deps.deleteEngine": "_AddonHubScreenState._deleteEngine",
-    "_deps.installEngine": "_AddonHubScreenState._installEngine"
+    "_deps.installEngine": "_AddonHubScreenState._installEngine",
+    "_deps.buildEngineList": "_AddonHubScreenState._buildEngineList",
+    "_deps.buildInstalledList": "_AddonHubScreenState._buildInstalledList",
+    "_deps.buildMarketList": "_AddonHubScreenState._buildMarketList",
+    "_deps.onPageKey": "_AddonHubScreenState._onPageKey",
+    "_deps.buildHeader": "_AddonHubScreenState._buildHeader",
+    "_deps.buildFilterBar": "_AddonHubScreenState._buildFilterBar",
+    "_deps.buildBody": "_AddonHubScreenState._buildBody"
   },
   "callback_member_aliases": {
     "_deps.loadEngines": "_AddonHubScreenState._loadEngines",
@@ -539,7 +558,14 @@
     "_deps.installFromMarket": "_AddonHubScreenState._installFromMarket",
     "_deps.configureInBrowser": "_AddonHubScreenState._configureInBrowser",
     "_deps.deleteEngine": "_AddonHubScreenState._deleteEngine",
-    "_deps.installEngine": "_AddonHubScreenState._installEngine"
+    "_deps.installEngine": "_AddonHubScreenState._installEngine",
+    "_deps.buildEngineList": "_AddonHubScreenState._buildEngineList",
+    "_deps.buildInstalledList": "_AddonHubScreenState._buildInstalledList",
+    "_deps.buildMarketList": "_AddonHubScreenState._buildMarketList",
+    "_deps.onPageKey": "_AddonHubScreenState._onPageKey",
+    "_deps.buildHeader": "_AddonHubScreenState._buildHeader",
+    "_deps.buildFilterBar": "_AddonHubScreenState._buildFilterBar",
+    "_deps.buildBody": "_AddonHubScreenState._buildBody"
   },
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in addon_hub_context_exceptions.json; original guards and statement order unchanged"
 }

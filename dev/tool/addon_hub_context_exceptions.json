@@ -1,6 +1,41 @@
 {
   "sites": [
     {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_body.dart",
+      "owner": "AddonHubBody",
+      "method": "buildBody",
+      "kind": "formatter_if_braces",
+      "body_tokens": [
+        "return",
+        "_deps",
+        ".",
+        "buildEngineList",
+        "(",
+        ")",
+        ";"
+      ],
+      "prefix_mode": "raw",
+      "prefix_tokens": [
+        "Widget",
+        "buildBody",
+        "(",
+        ")",
+        "{",
+        "if",
+        "(",
+        "_deps",
+        ".",
+        "navigationState",
+        ".",
+        "kind",
+        "==",
+        "AddonHubKind",
+        ".",
+        "engines",
+        ")"
+      ]
+    },
+    {
       "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_loading.dart",
       "owner": "AddonHubEngineLoading",
       "method": "onEnginesChanged",

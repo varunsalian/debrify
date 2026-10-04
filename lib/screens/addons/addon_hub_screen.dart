@@ -6,11 +6,7 @@ import 'package:debrify/services/engine/local_engine_storage.dart';
 import 'package:debrify/services/engine/remote_engine_manager.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/stremio_marketplace_service.dart';
-import 'package:debrify/theme/app_theme_scope.dart';
-import 'package:debrify/widgets/see_all/see_all_theme.dart';
-import 'package:debrify/features/addon_hub/models/addon_hub_kinds.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_composition.dart';
-import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_list.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_state.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_state.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_market_state.dart';
@@ -34,15 +30,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   final _marketOwner = AddonHubMarketState();
   final h = AddonHubNavigationState();
   final _e = AddonHubEngineState();
-  AddonHubEngineList get _el => _sections.engineList;
   AddonHubSections? _sectionCache;
   AddonHubSections get _sections => _sectionCache ??= createAddonHubSections(
-    (
-      context: () => context,
-      mounted: () => mounted,
-      setState: setState,
-      emptyState: _emptyState,
-    ),
+    (context: () => context, mounted: () => mounted, setState: setState),
     (
       installedState: _installedOwner,
       marketState: _marketOwner,
@@ -109,106 +99,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    return Scaffold(
-      backgroundColor: app.seeAll.bg,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.75),
-            radius: 1.35,
-            colors: [
-              Color(0xFF241E44),
-              Color(0xFF161327),
-              Color(0xFF0F0D1D),
-              kSeeAllBg,
-            ],
-            stops: [0.0, 0.38, 0.68, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          // Own scope: directional focus search never leaves the hub (the TV
-          // sidebar is reached only via _onPageKey's explicit LEFT exit, and it
-          // can still focus back INTO the hub via requestFocus).
-          child: FocusScope(
-            child: Focus(
-              canRequestFocus: false,
-              skipTraversal: true,
-              onKeyEvent: _sections.navigation.onPageKey,
-              child: FocusTraversalGroup(
-                policy: ReadingOrderTraversalPolicy(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(),
-                    _sections.filterBar.buildFilterBar(),
-                    Expanded(child: _buildBody()),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(24, 14, 24, 8),
-      child: Text(
-        'Addons',
-        style: TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.4,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    if (h.kind == AddonHubKind.engines) return _el.buildEngineList();
-    switch (h.source) {
-      case AddonHubSource.installed:
-        return _sections.installedList.buildInstalledList();
-      case AddonHubSource.official:
-      case AddonHubSource.community:
-        return _sections.marketList.buildMarketList();
-    }
-  }
-
-  Widget _emptyState({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    Widget? action,
-  }) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 44, color: Colors.white.withValues(alpha: 0.25)),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-            ),
-            if (action != null) ...[const SizedBox(height: 18), action],
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => _sections.layout.build(context);
 }
 
 @visibleForTesting

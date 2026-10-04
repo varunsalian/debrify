@@ -1,3 +1,4 @@
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_body.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_actions.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_list.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_loading.dart';
@@ -5,6 +6,7 @@ import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_h
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_filters.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_install_actions.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_list.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_layout.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_loading.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_management.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_market_list.dart';
@@ -28,6 +30,10 @@ class AddonHubSections {
   AddonHubManagement get management => managementSlot!;
   AddonHubMenus? menusSlot;
   AddonHubMenus get menus => menusSlot!;
+  AddonHubLayout? layoutSlot;
+  AddonHubLayout get layout => layoutSlot!;
+  AddonHubBody? bodySlot;
+  AddonHubBody get body => bodySlot!;
   AddonHubFilterBar? filterBarSlot;
   AddonHubFilterBar get filterBar => filterBarSlot!;
   AddonHubInstalledList? installedListSlot;

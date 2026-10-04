@@ -1,3 +1,4 @@
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_body.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_actions.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_list.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_loading.dart';
@@ -7,6 +8,7 @@ import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_h
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_install_actions.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_list.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_state.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_layout.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_loading.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_management.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_market_list.dart';
@@ -21,13 +23,6 @@ typedef AddonHubCompositionDeps = ({
   BuildContext Function() context,
   bool Function() mounted,
   void Function(VoidCallback) setState,
-  Widget Function({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    Widget? action,
-  })
-  emptyState,
 });
 
 typedef AddonHubOwners = ({
@@ -111,7 +106,18 @@ AddonHubSections createAddonHubSections(
   sections.installedListSlot = AddonHubInstalledList((
     installedState: owners.installedState,
     matchesFilters: sections.filters.matchesFilters,
-    emptyState: deps.emptyState,
+    emptyState:
+        ({
+          required IconData icon,
+          required String title,
+          required String subtitle,
+          Widget? action,
+        }) => sections.body.emptyState(
+          icon: icon,
+          title: title,
+          subtitle: subtitle,
+          action: action,
+        ),
     navigationState: owners.navigationState,
     showOptions: sections.menus.showOptions,
     context: deps.context,
@@ -121,7 +127,18 @@ AddonHubSections createAddonHubSections(
   sections.marketListSlot = AddonHubMarketList((
     navigationState: owners.navigationState,
     marketState: owners.marketState,
-    emptyState: deps.emptyState,
+    emptyState:
+        ({
+          required IconData icon,
+          required String title,
+          required String subtitle,
+          Widget? action,
+        }) => sections.body.emptyState(
+          icon: icon,
+          title: title,
+          subtitle: subtitle,
+          action: action,
+        ),
     loadMarket: sections.loading.loadMarket,
     matchesFilters: sections.filters.matchesFilters,
     isInstalled: sections.filters.isInstalled,
@@ -131,11 +148,34 @@ AddonHubSections createAddonHubSections(
   ));
   sections.engineListSlot = AddonHubEngineList((
     engineState: owners.engineState,
-    emptyState: deps.emptyState,
+    emptyState:
+        ({
+          required IconData icon,
+          required String title,
+          required String subtitle,
+          Widget? action,
+        }) => sections.body.emptyState(
+          icon: icon,
+          title: title,
+          subtitle: subtitle,
+          action: action,
+        ),
     loadEngines: sections.engineLoading.loadEngines,
     navigationState: owners.navigationState,
     deleteEngine: sections.engineActions.deleteEngine,
     installEngine: sections.engineActions.installEngine,
+  ));
+  sections.bodySlot = AddonHubBody((
+    navigationState: owners.navigationState,
+    buildEngineList: sections.engineList.buildEngineList,
+    buildInstalledList: sections.installedList.buildInstalledList,
+    buildMarketList: sections.marketList.buildMarketList,
+  ));
+  sections.layoutSlot = AddonHubLayout((
+    onPageKey: sections.navigation.onPageKey,
+    buildHeader: sections.body.buildHeader,
+    buildFilterBar: sections.filterBar.buildFilterBar,
+    buildBody: sections.body.buildBody,
   ));
   return sections;
 }
