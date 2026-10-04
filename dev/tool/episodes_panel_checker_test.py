@@ -74,6 +74,22 @@ def self_test(package=None):
         changed[key[0]] = sources[key[0]][:node['end']] + '\nint fixtureSeparatedField = 0;\n' + sources[key[0]][node['end']:]
         assert checked(changed), 'Accepted separated mid-class fields'
         print('Episodes mid-class adjacency negative: rejected')
+    # Constructor exports are lint bridges; exact target changes are rejected.
+    for path, name, target in [
+        ('lib/features/episodes_panel/presentation/episodes_panel_source_button.dart',
+         'episodesPanelSourceButtonConstructor', '_CatalogSelectSourceButton'),
+        ('lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart',
+         'episodesPanelCompactRowConstructor', '_CompactEpisodeRow'),
+    ]:
+        if config['completed_step'] >= 2:
+            key = (path, '', name)
+            node = lookup[key]
+            changed = dict(sources)
+            replacement = node['text'].replace(target + '.new', '_SeasonStepButton.new')
+            assert replacement != node['text']
+            changed[path] = sources[path][:node['start']] + replacement + sources[path][node['end']:]
+            assert checked(changed), 'Accepted changed constructor export target'
+            print('Episodes exact constructor export target:', name, 'rejected')
     deps_path = 'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart'
     if deps_path in sources:
         changed = dict(sources)

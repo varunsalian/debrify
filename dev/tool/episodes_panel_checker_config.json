@@ -146,7 +146,10 @@
   "source_locations": [
     "lib/widgets/episodes_panel.dart",
     "lib/features/episodes_panel/application/episodes_panel_policies.dart",
-    "lib/features/episodes_panel/models/episodes_panel_view.dart"
+    "lib/features/episodes_panel/models/episodes_panel_view.dart",
+    "lib/features/episodes_panel/presentation/episodes_panel_season_step.dart",
+    "lib/features/episodes_panel/presentation/episodes_panel_source_button.dart",
+    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart"
   ],
   "co_located_declarations": [
     [
@@ -160,7 +163,23 @@
       "EpisodesPanelState._showSeasonOptions"
     ]
   ],
-  "type_aliases": [],
+  "type_aliases": [
+    {
+      "original_name": "_CatalogSelectSourceButton",
+      "alias": "EpisodesPanelSourceButton",
+      "file": "lib/features/episodes_panel/presentation/episodes_panel_source_button.dart"
+    },
+    {
+      "original_name": "_SeasonStepButton",
+      "alias": "EpisodesPanelSeasonStep",
+      "file": "lib/features/episodes_panel/presentation/episodes_panel_season_step.dart"
+    },
+    {
+      "original_name": "_CompactEpisodeRow",
+      "alias": "EpisodesPanelCompactRow",
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart"
+    }
+  ],
   "borrowed_member_aliases": {
     "_deps.refreshWatchProgress": "EpisodesPanelState.refreshWatchProgress",
     "deps.refreshWatchProgress": "EpisodesPanelState.refreshWatchProgress"
@@ -435,7 +454,7 @@
       ]
     }
   ],
-  "completed_step": 1,
+  "completed_step": 2,
   "callback_whole_class_members": true,
   "adjacent_declarations": [
     [

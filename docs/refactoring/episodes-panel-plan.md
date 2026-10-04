@@ -862,6 +862,43 @@ including everything below.
   All 93 own leaves/self-tests and every other manifest/self-test pass with
   its own config/original (merged: `21320ff9`) and isolated parser/kernel.
 
+### Step 2 — private widgets
+
+- Step 1: `3b20807c`; verified Linux originals: `908edb00` (separate commit).
+  Five complete original widget/State declarations move into three files.
+  Names, constructors, defaults, keys, focus labels, callback forms and every
+  body/comment stay exact. All original call sites use their public typedefs.
+- Conservative lint decision: the step-0 single-library alias probe did not
+  exercise cross-library optional-parameter accounting. The actual split
+  exposes five `unused_element_parameter` warnings. The original-only split
+  probe copies all five declaration bodies byte-for-byte from R, imports the
+  aliases into the original rename-only engine, and proves the plan's fallback:
+  two constant constructor tear-off exports expose the SourceButton and
+  CompactRow constructors without invoking them. The season stepper needs no
+  extra export. `original-cross-library-export-proof.json` proves body identity;
+  `rename-alias-cross-library-strict-verified.txt` has one original curly info,
+  zero warnings/errors/new identities. Failed probes are retained, not accepted.
+- The five exact alias/export scaffolds are reviewed then pinned; changed
+  constructor-target negatives are added to the real configuration fixtures.
+  Redundant imports are removed rather than suppressed. Widget bodies receive
+  no new const invocation or optional key. The per-entry checklist is reviewed.
+- Temporary facade: 2,637 lines, remaining state/engine/actions/rendering with
+  the same step 3–6 exits. All six actual source locations (facade included)
+  are registered in the source reader and shape manifest; slice remains 7.
+  Theme directory registration and the facade route boundary remain unchanged.
+- Own 93-leaf checker and all manifest self-tests PASS, each with its own
+  original/config and a distinct worktree-owned parser/kernel for overlapping
+  processes. Merged remains at `21320ff9`. Scoped behavior versus `base4`
+  PASS: 180 successes, the same one pre-existing profile source-guard failure,
+  no missing/newly skipped cases; all 22 importers compile. Whole analyzer
+  relocation has zero additions/removals; strict trace has the one original
+  curly info and zero additions/warnings. CI format: 1,710 files, zero changes;
+  CI allowlist: same 12 warnings, no stale/new entry. Architecture/tree-copy
+  negatives, file sizes, storage references, LF and staged diff pass.
+  Destinations: SourceButton 138, season stepper 46, compact row 345 lines.
+  Theme remains 238; panel rendered metric remains 165 sites, 50 white lines,
+  four Theme.of calls; EpisodesScreen remains the same route boundary.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

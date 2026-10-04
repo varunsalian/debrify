@@ -1,1 +1,68 @@
-{"scaffolds": []}
+{
+  "scaffolds": [
+    {
+      "file": "lib/features/episodes_panel/presentation/episodes_panel_season_step.dart",
+      "owner": "",
+      "name": "EpisodesPanelSeasonStep",
+      "tokens": [
+        "typedef",
+        "EpisodesPanelSeasonStep",
+        "=",
+        "_SeasonStepButton",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/episodes_panel_source_button.dart",
+      "owner": "",
+      "name": "EpisodesPanelSourceButton",
+      "tokens": [
+        "typedef",
+        "EpisodesPanelSourceButton",
+        "=",
+        "_CatalogSelectSourceButton",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/episodes_panel_source_button.dart",
+      "owner": "",
+      "name": "episodesPanelSourceButtonConstructor",
+      "tokens": [
+        "const",
+        "episodesPanelSourceButtonConstructor",
+        "=",
+        "_CatalogSelectSourceButton",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart",
+      "owner": "",
+      "name": "EpisodesPanelCompactRow",
+      "tokens": [
+        "typedef",
+        "EpisodesPanelCompactRow",
+        "=",
+        "_CompactEpisodeRow",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart",
+      "owner": "",
+      "name": "episodesPanelCompactRowConstructor",
+      "tokens": [
+        "const",
+        "episodesPanelCompactRowConstructor",
+        "=",
+        "_CompactEpisodeRow",
+        ".",
+        "new",
+        ";"
+      ]
+    }
+  ]
+}
