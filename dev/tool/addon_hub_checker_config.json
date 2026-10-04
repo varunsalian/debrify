@@ -56,23 +56,33 @@
     "s._sections.engineLoading": "AddonHubEngineLoading",
     "_sections.engineActions": "AddonHubEngineActions",
     "s._sections.engineActions": "AddonHubEngineActions",
+    "_sections.navigation": "AddonHubNavigation",
+    "s._sections.navigation": "AddonHubNavigation",
+    "_sections.filters": "AddonHubFilters",
+    "s._sections.filters": "AddonHubFilters",
     "_sections.installActions": "AddonHubInstallActions",
     "s._sections.installActions": "AddonHubInstallActions",
     "_sections.management": "AddonHubManagement",
     "s._sections.management": "AddonHubManagement",
     "_sections.menus": "AddonHubMenus",
     "s._sections.menus": "AddonHubMenus",
+    "_sections.filterBar": "AddonHubFilterBar",
+    "s._sections.filterBar": "AddonHubFilterBar",
     "_sections.installedList": "AddonHubInstalledList",
     "s._sections.installedList": "AddonHubInstalledList",
-    "_l": "AddonHubEngineLoading",
-    "s._l": "AddonHubEngineLoading"
+    "_sections.marketList": "AddonHubMarketList",
+    "s._sections.marketList": "AddonHubMarketList",
+    "_sections.engineList": "AddonHubEngineList",
+    "s._sections.engineList": "AddonHubEngineList",
+    "_el": "AddonHubEngineList",
+    "s._el": "AddonHubEngineList"
   },
   "receiver_owners": {
     "_installedOwner": "AddonHubInstalledState",
     "_marketOwner": "AddonHubMarketState",
     "h": "AddonHubNavigationState",
     "_e": "AddonHubEngineState",
-    "_l": "AddonHubEngineLoading"
+    "_el": "AddonHubEngineList"
   },
   "additional_owners": [],
   "required_nodes": [],
@@ -126,6 +136,14 @@
       "owner": "AddonHubEngineActions"
     },
     {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_navigation.dart",
+      "owner": "AddonHubNavigation"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_filters.dart",
+      "owner": "AddonHubFilters"
+    },
+    {
       "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_install_actions.dart",
       "owner": "AddonHubInstallActions"
     },
@@ -138,8 +156,20 @@
       "owner": "AddonHubMenus"
     },
     {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_filter_bar.dart",
+      "owner": "AddonHubFilterBar"
+    },
+    {
       "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_list.dart",
       "owner": "AddonHubInstalledList"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_market_list.dart",
+      "owner": "AddonHubMarketList"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_list.dart",
+      "owner": "AddonHubEngineList"
     },
     {
       "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_sections.dart",
@@ -175,20 +205,30 @@
     "AddonHubLoading": "$State._sections.loading",
     "AddonHubEngineLoading": "$State._sections.engineLoading",
     "AddonHubEngineActions": "$State._sections.engineActions",
+    "AddonHubNavigation": "$State._sections.navigation",
+    "AddonHubFilters": "$State._sections.filters",
     "AddonHubInstallActions": "$State._sections.installActions",
     "AddonHubManagement": "$State._sections.management",
     "AddonHubMenus": "$State._sections.menus",
-    "AddonHubInstalledList": "$State._sections.installedList"
+    "AddonHubFilterBar": "$State._sections.filterBar",
+    "AddonHubInstalledList": "$State._sections.installedList",
+    "AddonHubMarketList": "$State._sections.marketList",
+    "AddonHubEngineList": "$State._sections.engineList"
   },
   "callback_receiver_aliases": {
     "_sections.loading": "$State._sections.loading",
     "_sections.engineLoading": "$State._sections.engineLoading",
     "_sections.engineActions": "$State._sections.engineActions",
+    "_sections.navigation": "$State._sections.navigation",
+    "_sections.filters": "$State._sections.filters",
     "_sections.installActions": "$State._sections.installActions",
     "_sections.management": "$State._sections.management",
     "_sections.menus": "$State._sections.menus",
+    "_sections.filterBar": "$State._sections.filterBar",
     "_sections.installedList": "$State._sections.installedList",
-    "_l": "$State._sections.engineLoading"
+    "_sections.marketList": "$State._sections.marketList",
+    "_sections.engineList": "$State._sections.engineList",
+    "_el": "$State._sections.engineList"
   },
   "callback_closure_binding": true,
   "callback_identities": [
@@ -449,6 +489,7 @@
   ],
   "borrowed_member_aliases": {
     "_deps.loadEngines": "_AddonHubScreenState._loadEngines",
+    "_deps.loadMarket": "_AddonHubScreenState._loadMarket",
     "_deps.loadInstalled": "_AddonHubScreenState._loadInstalled",
     "_deps.toggleAddon": "_AddonHubScreenState._toggleAddon",
     "_deps.updateAddon": "_AddonHubScreenState._updateAddon",
@@ -456,10 +497,26 @@
     "_deps.removeAddon": "_AddonHubScreenState._removeAddon",
     "_deps.importJson": "_AddonHubScreenState._importJson",
     "_deps.updateAll": "_AddonHubScreenState._updateAll",
-    "_deps.deleteAll": "_AddonHubScreenState._deleteAll"
+    "_deps.deleteAll": "_AddonHubScreenState._deleteAll",
+    "_deps.selectKind": "_AddonHubScreenState._selectKind",
+    "_deps.selectSource": "_AddonHubScreenState._selectSource",
+    "_deps.toggleSearch": "_AddonHubScreenState._toggleSearch",
+    "_deps.addByUrl": "_AddonHubScreenState._addByUrl",
+    "_deps.showActionsMenu": "_AddonHubScreenState._showActionsMenu",
+    "_deps.importEngineFromFile": "_AddonHubScreenState._importEngineFromFile",
+    "_deps.focusFirstRow": "_AddonHubScreenState._focusFirstRow",
+    "_deps.matchesFilters": "_AddonHubScreenState._matchesFilters",
+    "_deps.emptyState": "_AddonHubScreenState._emptyState",
+    "_deps.showOptions": "_AddonHubScreenState._showOptions",
+    "_deps.isInstalled": "_AddonHubScreenState._isInstalled",
+    "_deps.installFromMarket": "_AddonHubScreenState._installFromMarket",
+    "_deps.configureInBrowser": "_AddonHubScreenState._configureInBrowser",
+    "_deps.deleteEngine": "_AddonHubScreenState._deleteEngine",
+    "_deps.installEngine": "_AddonHubScreenState._installEngine"
   },
   "callback_member_aliases": {
     "_deps.loadEngines": "_AddonHubScreenState._loadEngines",
+    "_deps.loadMarket": "_AddonHubScreenState._loadMarket",
     "_deps.loadInstalled": "_AddonHubScreenState._loadInstalled",
     "_deps.toggleAddon": "_AddonHubScreenState._toggleAddon",
     "_deps.updateAddon": "_AddonHubScreenState._updateAddon",
@@ -467,7 +524,22 @@
     "_deps.removeAddon": "_AddonHubScreenState._removeAddon",
     "_deps.importJson": "_AddonHubScreenState._importJson",
     "_deps.updateAll": "_AddonHubScreenState._updateAll",
-    "_deps.deleteAll": "_AddonHubScreenState._deleteAll"
+    "_deps.deleteAll": "_AddonHubScreenState._deleteAll",
+    "_deps.selectKind": "_AddonHubScreenState._selectKind",
+    "_deps.selectSource": "_AddonHubScreenState._selectSource",
+    "_deps.toggleSearch": "_AddonHubScreenState._toggleSearch",
+    "_deps.addByUrl": "_AddonHubScreenState._addByUrl",
+    "_deps.showActionsMenu": "_AddonHubScreenState._showActionsMenu",
+    "_deps.importEngineFromFile": "_AddonHubScreenState._importEngineFromFile",
+    "_deps.focusFirstRow": "_AddonHubScreenState._focusFirstRow",
+    "_deps.matchesFilters": "_AddonHubScreenState._matchesFilters",
+    "_deps.emptyState": "_AddonHubScreenState._emptyState",
+    "_deps.showOptions": "_AddonHubScreenState._showOptions",
+    "_deps.isInstalled": "_AddonHubScreenState._isInstalled",
+    "_deps.installFromMarket": "_AddonHubScreenState._installFromMarket",
+    "_deps.configureInBrowser": "_AddonHubScreenState._configureInBrowser",
+    "_deps.deleteEngine": "_AddonHubScreenState._deleteEngine",
+    "_deps.installEngine": "_AddonHubScreenState._installEngine"
   },
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in addon_hub_context_exceptions.json; original guards and statement order unchanged"
 }

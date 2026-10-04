@@ -1,13 +1,18 @@
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_actions.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_list.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_loading.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_state.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_filter_bar.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_filters.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_install_actions.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_list.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_state.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_loading.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_management.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_market_list.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_market_state.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_menus.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_navigation.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_navigation_state.dart';
 import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_sections.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +21,13 @@ typedef AddonHubCompositionDeps = ({
   BuildContext Function() context,
   bool Function() mounted,
   void Function(VoidCallback) setState,
+  Widget Function({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    Widget? action,
+  })
+  emptyState,
 });
 
 typedef AddonHubOwners = ({
@@ -47,6 +59,19 @@ AddonHubSections createAddonHubSections(
     loadEngines: sections.engineLoading.loadEngines,
     mounted: deps.mounted,
   ));
+  sections.navigationSlot = AddonHubNavigation((
+    navigationState: owners.navigationState,
+    setState: deps.setState,
+    mounted: deps.mounted,
+    engineState: owners.engineState,
+    loadEngines: sections.engineLoading.loadEngines,
+    marketState: owners.marketState,
+    loadMarket: sections.loading.loadMarket,
+  ));
+  sections.filtersSlot = AddonHubFilters((
+    installedState: owners.installedState,
+    navigationState: owners.navigationState,
+  ));
   sections.installActionsSlot = AddonHubInstallActions((
     context: deps.context,
     installedState: owners.installedState,
@@ -70,11 +95,47 @@ AddonHubSections createAddonHubSections(
     updateAll: sections.management.updateAll,
     deleteAll: sections.management.deleteAll,
   ));
+  sections.filterBarSlot = AddonHubFilterBar((
+    navigationState: owners.navigationState,
+    selectKind: sections.navigation.selectKind,
+    selectSource: sections.navigation.selectSource,
+    setState: deps.setState,
+    toggleSearch: sections.navigation.toggleSearch,
+    addByUrl: sections.installActions.addByUrl,
+    showActionsMenu: sections.menus.showActionsMenu,
+    importEngineFromFile: sections.engineActions.importEngineFromFile,
+    loadEngines: sections.engineLoading.loadEngines,
+    focusFirstRow: sections.navigation.focusFirstRow,
+    context: deps.context,
+  ));
   sections.installedListSlot = AddonHubInstalledList((
     installedState: owners.installedState,
+    matchesFilters: sections.filters.matchesFilters,
+    emptyState: deps.emptyState,
+    navigationState: owners.navigationState,
+    showOptions: sections.menus.showOptions,
+    context: deps.context,
     setState: deps.setState,
     mounted: deps.mounted,
-    context: deps.context,
+  ));
+  sections.marketListSlot = AddonHubMarketList((
+    navigationState: owners.navigationState,
+    marketState: owners.marketState,
+    emptyState: deps.emptyState,
+    loadMarket: sections.loading.loadMarket,
+    matchesFilters: sections.filters.matchesFilters,
+    isInstalled: sections.filters.isInstalled,
+    installedState: owners.installedState,
+    installFromMarket: sections.installActions.installFromMarket,
+    configureInBrowser: sections.installActions.configureInBrowser,
+  ));
+  sections.engineListSlot = AddonHubEngineList((
+    engineState: owners.engineState,
+    emptyState: deps.emptyState,
+    loadEngines: sections.engineLoading.loadEngines,
+    navigationState: owners.navigationState,
+    deleteEngine: sections.engineActions.deleteEngine,
+    installEngine: sections.engineActions.installEngine,
   ));
   return sections;
 }

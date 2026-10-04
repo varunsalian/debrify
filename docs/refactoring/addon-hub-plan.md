@@ -813,6 +813,35 @@ committed tree**, reconciling each branch's approved additions.
   pass unchanged (Linux 6/6). No characterization assertion or failure list
   changes. Commit follows this verified batch.
 
+- Step 5 Linux prerequisite is reverified at `2b91f04f`: all six received
+  SHA-256 hashes match both the worktree PNGs and their separately committed
+  `95955bfc` bytes (`step5-linux-prerequisite.json`). Tests remain strict;
+  no golden scenario or pixel is changed.
+- Step 5 moves navigation/key policy, filters, filter bar/search, installed/
+  market/engine lists and whole market/engine rows with their private States.
+  The 71 actual dependency bindings are reviewed before final scaffold pinning;
+  UI/listener callbacks remain genuine source tear-offs or the original
+  argument-capturing closures. All six exact brace sites are in moved methods;
+  lifecycle remains receiver-only. The earlier `_l` alias is removed. A typed
+  `_el` getter to the same engine-list instance keeps the retained body's
+  one-line guard unchanged and exits in step 6. The sole retained empty-state
+  builder is bound directly from the State, marked TEMP with exit step 6.
+  Facade: 271 lines; its oversized-file baseline is removed now at ≤800.
+
+- Step 5 strict analyzer caught a redundant facade `flutter/services.dart`
+  import after key handlers moved. That failed attempt is retained. Import
+  cleanup removes it without changing a declaration; the strict inventory
+  remains frozen. All ten self-tests passed the initial step-5 tree; the final
+  import-only recheck reruns this manifest/self-tests and all shared guards,
+  reusing the other nine complete results whose inputs are unchanged.
+
+- Step 5 verification: all ten manifest/self-tests PASS (nine unchanged
+  results reused, this feature rerun, `step5-final-checks.json`); all guards,
+  format/diff and exact CI analyzer allowlist PASS. Strict original symbols
+  and whole diagnostic relocation have zero additions. All 129 affected
+  identities match base4 and pass; macOS and strict original Linux pixels
+  pass (Linux 6/6), unchanged hashes and no golden-test changes.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
