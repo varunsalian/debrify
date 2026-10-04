@@ -179,7 +179,7 @@ State remains the observer and ticker provider. It owns the one two-pane key. Al
 
 ## Per-entry wiring checklist
 
-Review every entry against actual composition before pinning scaffold tokens. Defaults, named arguments, async return types and direct callback identity are preserved; no callback runs during construction. The review status starts pending until the corresponding production entry exists.
+Review every entry against actual composition before pinning scaffold tokens. Defaults, named arguments, async return types and direct callback identity are preserved; no callback runs during construction. Every entry is now reviewed against its actual production binding through Step 6; the final checker and gate pin the completed source set.
 
 | Section | Dependency | Required binding | Review |
 | --- | --- | --- | --- |

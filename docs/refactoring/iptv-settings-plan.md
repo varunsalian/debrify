@@ -712,9 +712,53 @@ each parallel branch's additions, before claiming parity.
   Final manifests/analyzer, CI behavior, strict Linux replay and full-suite
   gate 2 are recorded against this source checkpoint before completion.
 
+- Step 7 complete; full-suite gate 2 PASS versus latest iptv_settings/base4
+  and gate 1, with every identity/outcome identical: 10,701 successes /
+  13 failures / 28 errors / 20 skips. No added, missing, fixed, newly skipped
+  or newly failing cases. Source checkpoint b3025fde has clean committed tested
+  tree b948a2ee94f6f8f8ce3d7236528f95b247781666; HEAD and tree are stable,
+  with no snapshot or untracked input. Historical test_baseline replay reports
+  the same 41 failures/errors and same 32 outside its historical list, all
+  observed on original base4; neither failure list is changed.
+- Final verification: all seven isolated-parser manifests/self-tests pass
+  (IPTV settings owns 168 leaves); named, interpolation, getter and receiver
+  identity negatives remain active. Exact CI format/analyzer/five-warning
+  allowlist, architecture/real negatives, strict sizes/storage/diff pass.
+  Whole analyzer 1,646, zero additions against original strict maximum;
+  15 per-symbol original identities. Exact CI behavior check passes with
+  3,158 successes / two unchanged known failures; its per-run output and
+  stable tree env are archived, matching the source checkpoint tree.
+  Four immutable Linux goldens pass strictly on b3025fde in the calibrated
+  image; macOS goldens pass in gate 2. Original 8a6e1cf9 pixels/fixture remain
+  unchanged, so Step 0b needs no recapture. Final source inventory is 47 files,
+  facade 267 lines, largest extracted file 371; every wiring row is reviewed.
+  Evidence: gate2.jsonl/env, gate2-vs-{base4,gate1}.txt, both gate identity/tree
+  audits, step7-checks.json, strict analyzer, ci-final.*, Linux-final provenance
+  and final-audit.json, all under iptv_settings/. This final commit changes
+  documentation only; application, tests, guards and CI remain exactly tested.
+- Commits: Step 0 8a6e1cf9; Step 1 4d220ee8; Step 2 f0b7d0c5; interpolation
+  cherry-pick c0f5fb87 (upstream def4e304, Codex trailer appended); Step 0b
+  ef4a16f4; Step 3/gate 1 d4c5187f; Step 4 4537c576; Linux originals/strictness
+  separately 5942c260; Step 5 946f3eab; Step 6 c8b81c69; Step 7 source b3025fde.
+  Gate 2's documentation evidence commit is identified by exact subject
+  test(iptv_settings): step 7 gate 2 committed-tree evidence.
+- Conservative decisions remain: preserve original profile/zone timing,
+  partial removal effects, double discovery, UI/focus quirks and build-time
+  flag writes; keep constructors' keys/const capability and all assertions;
+  retain State/legacy service bridges with their declared Riverpod/data/localization
+  exit milestones. No regression recording, allowlist growth or pixel updates.
+  Pending: Android TV D-pad, recording engine/battery on Android, real providers;
+  remote CI until a permitted push; Claude's union registration merge and
+  committed merged-tree full-suite integration gate. Stopped after gate 2;
+  no push or branch switch.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
+- The full suite retains 13 failures and 28 errors with identical original
+  identities (the gate audits enumerate them). The source-guard failure still
+  reports direct preferences opens in webdav_sync_save_feedback.dart and
+  profiles/device_key_provider.dart:7; those services are outside this slice.
 - A failed default-preference remove retains the physical stored value while
   SharedPreferences clears its cached value; the facade default field remains.
 - Removing an ordinary playlist has no confirmation and no in-flight guard;
