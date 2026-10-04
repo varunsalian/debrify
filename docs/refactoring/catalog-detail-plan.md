@@ -666,6 +666,14 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   removes it and the opt-out define in a separate provenance/asset commit.
 
 
+- Step 0L: four Linux original hashes and exact checkpoint/format application
+  objects verified from Claude's calibrated linux/amd64 Docker capture at
+  `093f4707`; supplied strict replay passed 4/4. Provenance and evidence hashes
+  are committed in `test/goldens/catalog_detail/linux-original-verification.json`.
+  Linux golden tests now require every master unconditionally: missing-master
+  skip and opt-out define removed. These four assets are committed separately.
+
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

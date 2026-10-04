@@ -106,15 +106,6 @@ void main() {
         );
         final platform = Platform.isLinux ? 'linux' : 'macos';
         final path = 'test/goldens/catalog_detail/$platform/${c.name}.png';
-        if (Platform.isLinux &&
-            !File(path).existsSync() &&
-            !autoUpdateGoldenFiles &&
-            !const bool.fromEnvironment(
-              'CATALOG_DETAIL_REQUIRE_ORIGINAL_LINUX',
-            )) {
-          markTestSkipped('Original Linux pixels pending step 0L');
-          return;
-        }
         expect(
           File(path).existsSync() || autoUpdateGoldenFiles,
           true,

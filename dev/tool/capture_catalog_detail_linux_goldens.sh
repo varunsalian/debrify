@@ -47,7 +47,7 @@ done
 flutter test --no-pub --update-goldens \
   test/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_views_test.dart \
   --plain-name 'reachable pixel golden' 2>&1 | tee "$evidence/linux-original-capture.txt"
-flutter test --no-pub --dart-define=CATALOG_DETAIL_REQUIRE_ORIGINAL_LINUX=true \
+flutter test --no-pub \
   test/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_views_test.dart \
   --plain-name 'reachable pixel golden' 2>&1 | tee "$evidence/linux-original-strict.txt"
 mkdir -p "$repo/test/goldens/catalog_detail/linux"
