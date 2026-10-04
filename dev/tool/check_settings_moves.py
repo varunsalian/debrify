@@ -719,7 +719,17 @@ def all_nodes(parsed):
         for d in unit['declarations']:
             add((path, '', d['name']), d)
             for m in d['members']:
-                add((path, d['name'], m['name']), m)
+                # An explicitly pinned scaffold getter/setter pair shares a
+                # Dart name. Keep the physical setter tokens and give only that
+                # configured setter a distinct lookup key; other configs retain
+                # the original duplicate-declaration rejection.
+                setter_keys = [spec['key'] for spec in CONFIG.get('scaffold_setter_keys', [])
+                               if (path, d['name'], m['name']) ==
+                               (spec['file'], spec['owner'], spec['name'])
+                               and [t['text'] for t in m['tokens'] if not t['comment']][:1] == ['set']]
+                if len(setter_keys) > 1:
+                    raise ValueError('Duplicate scaffold setter key registration')
+                add((path, d['name'], setter_keys[0] if setter_keys else m['name']), m)
     return found
 
 

@@ -45,11 +45,23 @@ def self_test(package=None):
             argument=values[start:end]
             # Use another real State callback, including the exact completion /
             # policy swap, so a missing-symbol error cannot explain rejection.
-            swapped = '_loadLocalMovieFinished' if argument[-1] == '_onMovieProgressPolicyChanged' else '_onMovieProgressPolicyChanged'
-            for label,replacement in [('wrapper',['(',')','=>',*argument,'(',')']),('same-class receiver swap',['secondInstance','.',argument[-1]]),('callback swap',[swapped])]:
+            _,policy=located('_CatalogItemDetailScreenState._onMovieProgressPolicyChanged')
+            _,finished=located('_CatalogItemDetailScreenState._loadLocalMovieFinished')
+            swapped=finished if argument[-1]==policy['name'] else policy
+            target=located(spec['callback_member'])[1] if 'callback_member' in spec else located('CatalogItemDetailScreen.'+spec['expected_identity'].split('.')[-1])[1]
+            if swapped['owner']==node['owner']:
+                swap_expression=[swapped['name']]
+            else:
+                instance=config['callback_instances'][swapped['owner']]
+                receiver=instance.replace('$State.parts.','_parts.' if node['owner']=='_CatalogItemDetailScreenState' else '_deps.parts.')
+                swap_expression=[]
+                for part in (receiver+'.'+swapped['name']).split('.'):
+                    if swap_expression:swap_expression.append('.')
+                    swap_expression.append(part)
+            for label,replacement in [('wrapper',['(',')','=>',*argument,'(',')']),('same-class receiver swap',['secondInstance','.',target['name'],*(['!'] if argument[-1]=='!' else [])]),('callback swap',swap_expression)]:
                 bad=values[:start]+replacement+values[end:];changed=copy.deepcopy(lookup)
                 changed[key]['tokens']=[{'text':v,'offset':i,'comment':v.startswith(('//','/*'))} for i,v in enumerate(bad)];changed[key]['formatCommas']=[]
-                assert check_callback_identities(changed,rows,source,{**config,'callback_identities':[spec],'catalog_call_receivers':[],'catalog_live_reads':[]}),'Accepted '+spec['name']+' '+label
+                assert check_callback_identities(changed,rows,source,{**config,'callback_identities':[spec],'catalog_call_receivers':[],'catalog_live_reads':[],'callback_receiver_aliases':{**config.get('callback_receiver_aliases',{}),'secondInstance':'$OtherInstance.'+target['owner']},'receiver_paths':{**config.get('receiver_paths',{}),'secondInstance':target['owner']}}),'Accepted '+spec['name']+' '+label
     from catalog_detail_callback_identity import check_contracts
     for spec in config['catalog_call_receivers']:
         key,node=located(spec['member']);values=tokens(node)
@@ -71,11 +83,18 @@ def self_test(package=None):
             assert check_contracts(changed,rows,source,{**config,'catalog_call_receivers':[],'catalog_live_reads':[],'catalog_host_assignments':[spec]}),'Accepted assigned host callback mutation'
     rail=config['catalog_rail_callback'];key,node=located(rail['member']);values=tokens(node)
     for label,bad in [('wrapper','() => _openMetadataRecommendation'),('receiver','secondInstance._openMetadataRecommendation'),('member','_playPrimary')]:
-        changed=dict(sources);text=node['text'].replace('_openMetadataRecommendation',bad,1)
+        changed=dict(sources);text=node['text'].replace(located(rail['target'])[1]['name'],bad,1)
         changed[key[0]]=sources[key[0]][:node['start']]+text+sources[key[0]][node['end']:]
         mutated=all_nodes(parse(changed,package))
         assert check_contracts(mutated,rows,source,{**config,'catalog_call_receivers':[],'catalog_live_reads':[],'catalog_host_assignments':[]}),'Accepted rail '+label
     mutate('_SimklQuickActions','reworded private comment reference',lambda s:s.replace('[_QuickActions]','[CatalogQuickActions]',1))
+    for spec in config.get('scaffold_setter_keys',[]):
+        key=(spec['file'],spec['owner'],spec['key']);node=lookup[key]
+        changed=dict(sources);replacement=node['text'].replace('writeHasBoundSource(value)','writeHasBoundSource(!value)')
+        assert replacement!=node['text']
+        changed[key[0]]=sources[key[0]][:node['start']]+replacement+sources[key[0]][node['end']:]
+        assert verify(changed),'Accepted changed live bound-source setter scaffold'
+
     state='_CatalogItemDetailScreenState.'
     for member,op,expected in [('initState','addListener',3),('dispose','removeListener',3),('initState','addPlaybackReturnListener',1),('dispose','removePlaybackReturnListener',1),('dispose','unsubscribe',1)]:
         _,node=located(state+member)
@@ -94,7 +113,8 @@ def self_test(package=None):
     mutate(state+'dispose','first two listener removals swapped',lambda s:reorder(s,r'[\w.]+\.removeListener\([\s\S]*?\);'))
     mutate(state+'dispose','last two disposals swapped',lambda s:reorder(s,r'[\w.]+\.dispose\(\);',True))
     mutate(state+'dispose','ticker after super',lambda s:s.replace('_revealCtrl.dispose();','').replace('super.dispose();','super.dispose();\n    _revealCtrl.dispose();'))
-    mutate(state+'initState','post-frame loader order',lambda s:s.replace('_loadRecommendations();','SWAP;').replace('_loadEnrichedMeta();','_loadRecommendations();').replace('SWAP;','_loadEnrichedMeta();'))
+    rec_name=located(state+'_loadRecommendations')[1]['name'];enrich_name=located(state+'_loadEnrichedMeta')[1]['name']
+    mutate(state+'initState','post-frame loader order',lambda s:s.replace(rec_name+'();','SWAP;').replace(enrich_name+'();',rec_name+'();').replace('SWAP;',enrich_name+'();'))
     for label,replacement in [('lost mixin','SingleTickerProviderStateMixin,\n        RouteAware'),('reordered mixin','RouteAware,\n        SingleTickerProviderStateMixin,\n        MetadataPresentationMixin<CatalogItemDetailScreen>')]:
         changed=dict(sources);changed[source]=re.sub(r'SingleTickerProviderStateMixin,\s*RouteAware,\s*MetadataPresentationMixin<CatalogItemDetailScreen>',replacement,sources[source],count=1)
         assert changed[source]!=sources[source] and verify(changed),label

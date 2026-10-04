@@ -26,3 +26,7 @@ warning | unnecessary_non_null_assertion | lib/features/playlist_content/present
 warning | unnecessary_null_comparison | lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_metadata.dart | The operand can't be 'null', so the condition is always 'true'. Remove the condition
 warning | unnecessary_null_comparison | lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_view_modes.dart | The operand can't be 'null', so the condition is always 'true'. Remove the condition
 warning | unused_element | lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_dormant.dart | The declaration '_loadProgressData' isn't referenced. Try removing the declaration of '_loadProgressData'
+
+# 2026-10-04 catalog_detail step 3: formatted ORIGINAL adc2e32e write-only field;
+# private field and both writers move together, strict symbol/message identity retained.
+warning | unused_field | lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_primary_action.dart | The value of the field '_simklStatus' isn't used. Try removing the field, or using it

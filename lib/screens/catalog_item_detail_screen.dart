@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:debrify/features/catalog_detail/presentation/catalog_action_row.dart';
 import 'package:debrify/features/catalog_detail/presentation/catalog_backdrop.dart';
 import 'package:debrify/features/catalog_detail/presentation/catalog_cert_badge.dart';
@@ -10,28 +12,17 @@ import 'package:debrify/features/catalog_detail/presentation/catalog_quick_actio
 import 'package:debrify/features/catalog_detail/presentation/catalog_rec_card.dart';
 import 'package:debrify/features/catalog_detail/presentation/catalog_reveal.dart';
 import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_cast_avatar.dart';
+import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_bound_sources.dart';
+import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart';
+import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart';
+import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_primary_action.dart';
+import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_resources.dart';
+import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_watchlist.dart';
 import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_mdblist_quick_actions.dart';
 import 'package:debrify/features/catalog_detail/presentation/legacy_catalog_detail/catalog_simkl_quick_actions.dart';
 import 'package:debrify/services/storage/movie_progress_storage.dart';
-import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
-import 'package:debrify/services/storage/watchlist_storage.dart';
-import '../services/metadata_provider_service.dart';
-import '../widgets/metadata_franchise_rail.dart';
-import '../widgets/metadata_title_navigation.dart';
-import '../services/metadata_preferences_service.dart';
-import '../services/profiles/profile_runtime.dart';
-import 'metadata_explore_page.dart';
-import '../services/metadata_details_service.dart';
-import '../widgets/metadata_presentation_mixin.dart';
-import 'dart:async';
-
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
-import '../theme/app_theme_scope.dart';
-import '../theme/artwork_accent.dart';
 import '../models/play_loader_art.dart';
 import '../models/stremio_addon.dart';
 import '../services/analytics_service.dart';
@@ -39,19 +30,25 @@ import '../services/app_route_observer.dart';
 import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../services/main_page_bridge.dart';
-import '../services/series_source_service.dart';
-import '../services/movie_completion_service.dart';
+import '../services/mdblist/mdblist_menu_helpers.dart';
 import '../services/mdblist/mdblist_service.dart';
-import '../widgets/rewatch_progress_dialog.dart';
+import '../services/metadata_details_service.dart';
+import '../services/metadata_preferences_service.dart';
+import '../services/metadata_provider_service.dart';
+import '../services/profiles/profile_runtime.dart';
+import '../services/simkl/simkl_menu_helpers.dart';
+import '../services/simkl/simkl_service.dart';
+import '../theme/app_theme_scope.dart';
+import '../theme/artwork_accent.dart';
+import '../utils/artwork_url.dart';
 import '../widgets/detail/theme/detail_theme.dart';
-import '../widgets/detail/detail_primary_sources.dart';
+import '../widgets/metadata_franchise_rail.dart';
+import '../widgets/metadata_presentation_mixin.dart';
+import '../widgets/metadata_title_navigation.dart';
 import '../widgets/parents_guide_section.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
-import '../services/simkl/simkl_menu_helpers.dart';
-import '../services/simkl/simkl_service.dart';
-import '../services/mdblist/mdblist_menu_helpers.dart';
-import '../utils/artwork_url.dart';
+import 'metadata_explore_page.dart';
 
 /// Cinematic detail screen for a catalog item.
 ///
@@ -164,16 +161,48 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         SingleTickerProviderStateMixin,
         RouteAware,
         MetadataPresentationMixin<CatalogItemDetailScreen> {
-  final FocusNode _playFocus = FocusNode(debugLabel: 'detail-play');
-  final FocusNode _browseFocus = FocusNode(debugLabel: 'detail-browse');
-  final FocusNode _watchlistFocus = FocusNode(debugLabel: 'detail-watchlist');
+  late final CatalogDetailParts _parts;
 
-  /// Drives the wide/TV cinematic sheet. Needed so a D-pad "up" on the top
-  /// action row can reveal the (non-focusable) eyebrow/title/meta header:
-  /// focus traversal alone stops at Play/Sources and never scrolls past it.
-  final ScrollController _wideScroll = ScrollController();
+  _CatalogItemDetailScreenState() {
+    final deps = CatalogDetailDependencies(
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+      item: () => widget.item,
+      isTelevision: () => widget.isTelevision,
+      showQuickPlay: () => widget.showQuickPlay,
+      onPlay: () => widget.onPlay,
+      onRewatch: () => widget.onRewatch,
+      onLoaderArt: () => widget.onLoaderArt,
+      resumeInfoLoader: () => widget.resumeInfoLoader,
+      onBrowse: () => widget.onBrowse,
+      onBrowsePrimaryEpisodeSources: () => widget.onBrowsePrimaryEpisodeSources,
+      enablePrimarySourcesHold: () => widget.enablePrimarySourcesHold,
+      traktMenuOptions: () => widget.traktMenuOptions,
+      onTraktAction: () => widget.onTraktAction,
+      simklMenuOptions: () => widget.simklMenuOptions,
+      onSimklAction: () => widget.onSimklAction,
+      mdblistMenuOptions: () => widget.mdblistMenuOptions,
+      onMdblistAction: () => widget.onMdblistAction,
+      simklStatusLoader: () => widget.simklStatusLoader,
+      recommendationsLoader: () => widget.recommendationsLoader,
+      onRecommendationTap: () => widget.onRecommendationTap,
+      metaEnricher: () => widget.metaEnricher,
+      presentedItem: () => _item,
+      metadataPreferences: () => metadataPreferences,
+      refreshMetadataPresentation: refreshMetadataPresentation,
+      revealController: () => _revealCtrl,
+      hasBoundSource: () => _hasBoundSource,
+      writeHasBoundSource: (value) => _hasBoundSource = value,
+    );
+    _parts = CatalogDetailParts(deps);
+    deps.parts = _parts;
+  }
 
-  bool _descriptionExpanded = false;
+  CatalogDetailResources get _f => _parts.resources;
+  CatalogDetailWatchlist get _w => _parts.watchlist;
+  CatalogDetailPrimaryAction get _p => _parts.primaryAction;
+  CatalogDetailBoundSources get _b => _parts.boundSources;
 
   /// "Watch Next" recommendations. null = not yet loaded / still loading;
   /// empty = loaded but nothing to show (rail stays hidden either way).
@@ -190,6 +219,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   List<StremioMeta>? _recommendations;
+
   final _recommendationOriginals = Map<StremioMeta, StremioMeta>.identity();
 
   /// Catalog-quality metadata fetched after first paint for a sparse item
@@ -204,16 +234,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   ImdbEnrichment? _imdbExtra;
 
   bool _imdbLoaded = false;
+
   bool _parentsGuideLoaded = false;
+
   bool _recommendationsLoaded = false;
 
   /// The item the screen renders — the enriched copy once available,
   /// otherwise whatever the host handed us.
   @override
   StremioMeta get originalMetadata => _enriched ?? widget.item;
+
   StremioMeta get _item => presentedMetadata!;
-  bool get _supportsMyWatchlist =>
-      WatchlistStorage.supportsMyWatchlistItem(_item);
 
   /// Drives the staggered entrance reveal of the content sections.
   late final AnimationController _revealCtrl;
@@ -224,41 +255,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// the accent on immediately instead of staying stale until reopen.
   late bool _hasBoundSource = widget.hasBoundSource;
 
-  /// Primary-button resume state. Until loaded the button keeps its static "Play"
-  /// label; once resolved it reads "Start Watching" (no progress) or "Resume"
-  /// (+ an "S3E4" tag for series). Re-read when the player pops back.
-  bool _resumeLoaded = false;
-  bool _resumeStarted = false;
-  int? _resumeSeason;
-  int? _resumeEpisode;
-
-  /// A resume lookup is in flight and unanswered. The primary button shows a
-  /// spinner instead of a label so it never flashes "Start Watching" before
-  /// flipping to "Resume · S1E7". Errors clear it (static label fallback).
-  bool _resumePending = false;
-  bool get _primaryBusy => _resumePending && !_resumeLoaded;
-
-  /// Live Simkl status (drives the "Rewatch" relabel). Null until
-  /// [simklStatusLoader] resolves — the button keeps "Play" until then.
-  SimklTitleStatus? _simklStatus;
-  // Completion from the selected Progress source(s), not Home tick settings.
-  bool _localMovieFinished = false;
-  bool _inMyWatchlist = false;
-
-  /// Policy-filtered completion shared across local and all three trackers.
-  bool get _isCompletedMovie => _item.type != 'series' && _localMovieFinished;
-
   @override
   void initState() {
     super.initState();
     TrackingSourceStorage.trackingSourceRevision.addListener(
-      _onMovieProgressPolicyChanged,
+      _p.onMovieProgressPolicyChanged,
     );
     MovieProgressStorage.movieFinishedRevision.addListener(
-      _loadLocalMovieFinished,
+      _p.loadLocalMovieFinished,
     );
     MdblistService.instance.watchedRevision.addListener(
-      _loadLocalMovieFinished,
+      _p.loadLocalMovieFinished,
     );
     AnalyticsService.screenView('catalog_detail');
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
@@ -279,184 +286,18 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       // the remote has a starting point. TV only — on mobile/desktop an
       // auto-applied golden focus border just looks out of place.
       if (widget.isTelevision) {
-        (widget.showQuickPlay ? _playFocus : _browseFocus).requestFocus();
+        (widget.showQuickPlay ? _f.playFocus : _f.browseFocus).requestFocus();
       }
       _loadRecommendations();
       _loadEnrichedMeta();
       _loadArtworkAccent();
       _loadParentsGuide();
       _loadImdbEnrichment();
-      _loadResumeInfo();
-      _loadSimklStatus();
-      _loadLocalMovieFinished();
-      _loadMyWatchlistState();
+      _p.loadResumeInfo();
+      _p.loadSimklStatus();
+      _p.loadLocalMovieFinished();
+      _w.loadMyWatchlistState();
     });
-  }
-
-  Future<void> _loadMyWatchlistState() async {
-    if (!_supportsMyWatchlist) return;
-    final saved = await WatchlistStorage.isInMyWatchlist(_item);
-    if (!mounted || saved == _inMyWatchlist) return;
-    setState(() => _inMyWatchlist = saved);
-  }
-
-  Future<void> _toggleMyWatchlist() async {
-    if (!_supportsMyWatchlist) return;
-    final next = !_inMyWatchlist;
-    setState(() => _inMyWatchlist = next);
-    try {
-      final sourceAddon = _item.sourceAddon ?? widget.item.sourceAddon;
-      final savedItem = sourceAddon == null
-          ? _item
-          : _item.withSourceAddon(sourceAddon);
-      await WatchlistStorage.setMyWatchlistItem(savedItem, next);
-      if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              next ? 'Added to My Watchlist' : 'Removed from My Watchlist',
-            ),
-          ),
-        );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _inMyWatchlist = !next);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Couldn\'t update My Watchlist')),
-      );
-    }
-  }
-
-  Future<void> _loadSimklStatus() async {
-    final loader = widget.simklStatusLoader;
-    if (loader == null) return;
-    try {
-      final status = await loader();
-      if (!mounted || status == null) return;
-      setState(() => _simklStatus = status);
-    } catch (_) {
-      // Non-critical — leave the plain "Play" label.
-    }
-  }
-
-  Future<void> _loadLocalMovieFinished() async {
-    final generation = ++_movieCompletionGeneration;
-    if (_item.type == 'series') return;
-    final imdbId =
-        _item.effectiveImdbId ?? (_item.id.startsWith('tt') ? _item.id : null);
-    if (imdbId == null || imdbId.isEmpty) return;
-    final finished = await MovieCompletionService.load(imdbId);
-    if (mounted &&
-        generation == _movieCompletionGeneration &&
-        finished != _localMovieFinished) {
-      setState(() => _localMovieFinished = finished);
-    }
-  }
-
-  int _movieCompletionGeneration = 0;
-
-  void _onMovieProgressPolicyChanged() {
-    if (!mounted) return;
-    setState(() => _localMovieFinished = false);
-    _loadLocalMovieFinished();
-  }
-
-  Future<void> _loadResumeInfo() async {
-    final loader = widget.resumeInfoLoader;
-    if (loader == null) return;
-    // setState, not a plain assignment — this runs from the post-init loader
-    // fan (setState-safe), and the spinner must actually be scheduled to
-    // paint rather than riding a sibling loader's rebuild.
-    if (!_resumeLoaded && mounted) {
-      setState(() => _resumePending = true);
-    }
-    try {
-      // Time-boxed: the guide advance inside the reconciler can hang on an
-      // unbounded body read; a timeout throws into catch/finally, falling
-      // back to the static label instead of spinning forever.
-      final info = await loader().timeout(const Duration(seconds: 12));
-      if (!mounted) return;
-      setState(() {
-        _resumeLoaded = true;
-        _resumeStarted = info.started;
-        _resumeSeason = info.season;
-        _resumeEpisode = info.episode;
-      });
-    } catch (_) {
-      // Non-critical — leave the static label.
-    } finally {
-      if (_resumePending) {
-        if (mounted) {
-          setState(() => _resumePending = false);
-        } else {
-          _resumePending = false;
-        }
-      }
-    }
-  }
-
-  /// The primary-button label: "Start Watching" before any progress, otherwise
-  /// "Resume" with an OTT-style "· S3E4" tag for series. Falls back to the
-  /// static "Play" until the resume state resolves.
-  String get _primaryLabel =>
-      widget.onRewatch == null && _resolvedPrimaryLabel == 'Rewatch'
-      ? 'Play'
-      : _resolvedPrimaryLabel;
-
-  String get _resolvedPrimaryLabel {
-    if (_rewatchPending) return 'Rewatch';
-    final isMovie = _item.type != 'series';
-    // Some entry points (for example the catalog browser) intentionally omit
-    // a resume loader. Local/Simkl completion is still enough to distinguish
-    // a new play from a rewatch, so do not hide that state behind the optional
-    // resume lookup.
-    if (!_resumeLoaded) return _isCompletedMovie ? 'Rewatch' : 'Play';
-    if (!_resumeStarted) {
-      if (_isCompletedMovie) return 'Rewatch';
-      return isMovie ? 'Play' : 'Start Watching';
-    }
-    if (isMovie || _resumeSeason == null || _resumeEpisode == null) {
-      return 'Resume';
-    }
-    return 'Resume · S${_resumeSeason}E$_resumeEpisode';
-  }
-
-  bool _rewatchPending = false;
-  bool _rewatchBusy = false;
-
-  Future<void> _playPrimary() async {
-    if (_rewatchBusy) return;
-    final restart = widget.onRewatch;
-    if (restart == null ||
-        _item.type == 'series' ||
-        _primaryLabel != 'Rewatch') {
-      widget.onPlay();
-      return;
-    }
-    _rewatchBusy = true;
-    try {
-      final cleared = await resetProgressForRewatch(
-        context,
-        id: _item.imdbId ?? _item.id,
-        title: _item.name,
-        isMovie: true,
-        onConfirmed: () => setState(() => _rewatchPending = true),
-      );
-      if (!mounted || !cleared) return;
-      ++_movieCompletionGeneration; // Discard reads started before the reset.
-      setState(() {
-        _rewatchPending = false;
-        _localMovieFinished = false;
-        _simklStatus = null;
-        _resumeStarted = false;
-      });
-      restart();
-    } finally {
-      _rewatchBusy = false;
-    }
   }
 
   @override
@@ -471,9 +312,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// play, and the Sources screen (also pushed above) can bind/unbind too.
   @override
   void didPopNext() {
-    _refreshBoundState();
-    _loadResumeInfo();
-    _loadLocalMovieFinished();
+    _b.refreshBoundState();
+    _p.loadResumeInfo();
+    _p.loadLocalMovieFinished();
   }
 
   /// Native-TV / DeoVR / external playback runs in its own ACTIVITY and pushes
@@ -484,27 +325,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   void _onPlaybackReturned() {
     if (!mounted) return;
     if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
-    _refreshBoundState();
-    _loadResumeInfo();
-    _loadLocalMovieFinished();
-  }
-
-  /// Re-read this title's bound-source count and flip the Play accent to match.
-  Future<void> _refreshBoundState() async {
-    final imdb = _boundKey();
-    if (imdb == null) return;
-    final bound = (await SeriesSourceService.getSources(imdb)).isNotEmpty;
-    if (mounted && bound != _hasBoundSource) {
-      setState(() => _hasBoundSource = bound);
-    }
-  }
-
-  /// The imdb key the binding store is keyed on — mirrors the host's `_imdbOf`
-  /// (a `tt…` id, whether it rode in as `imdbId` or the raw catalog id).
-  String? _boundKey() {
-    final item = widget.item;
-    final id = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
-    return (id != null && id.isNotEmpty) ? id : null;
+    _b.refreshBoundState();
+    _p.loadResumeInfo();
+    _p.loadLocalMovieFinished();
   }
 
   /// When the item arrived sparse — no year, rating, or genres, the
@@ -576,6 +399,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   }
 
   int _detailsMetadataGeneration = 0;
+
   @override
   void onMetadataPolicyChanged() {
     _detailsMetadataGeneration++;
@@ -686,21 +510,21 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   @override
   void dispose() {
     TrackingSourceStorage.trackingSourceRevision.removeListener(
-      _onMovieProgressPolicyChanged,
+      _p.onMovieProgressPolicyChanged,
     );
     MovieProgressStorage.movieFinishedRevision.removeListener(
-      _loadLocalMovieFinished,
+      _p.loadLocalMovieFinished,
     );
     MdblistService.instance.watchedRevision.removeListener(
-      _loadLocalMovieFinished,
+      _p.loadLocalMovieFinished,
     );
     appRouteObserver.unsubscribe(this);
     MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     _revealCtrl.dispose();
-    _playFocus.dispose();
-    _browseFocus.dispose();
-    _watchlistFocus.dispose();
-    _wideScroll.dispose();
+    _f.playFocus.dispose();
+    _f.browseFocus.dispose();
+    _f.watchlistFocus.dispose();
+    _f.wideScroll.dispose();
     super.dispose();
   }
 
@@ -840,7 +664,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
               context,
             ).copyWith(scrollbars: false),
             child: SingleChildScrollView(
-              controller: _wideScroll,
+              controller: _f.wideScroll,
               physics: const BouncingScrollPhysics(),
               // Don't clip the focus glow on Play/Sources/quick actions.
               clipBehavior: Clip.none,
@@ -1096,7 +920,6 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   );
 
   // ── Sections ──────────────────────────────────────────────────────────────
-
   Widget _secEyebrow(double start) => CatalogReveal(
     parent: _revealCtrl,
     start: start,
@@ -1826,9 +1649,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
               wide: true,
               dense: _tight,
               collapsedLines: _tight ? 2 : 4,
-              expanded: _descriptionExpanded,
-              onToggle: () =>
-                  setState(() => _descriptionExpanded = !_descriptionExpanded),
+              expanded: _f.descriptionExpanded,
+              onToggle: () => setState(
+                () => _f.descriptionExpanded = !_f.descriptionExpanded,
+              ),
             )
           else
             Text(
@@ -1852,8 +1676,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// is visible again. Triggered by a D-pad "up" on the top action row,
   /// where focus traversal would otherwise dead-end at Play/Sources.
   void _scrollWideToTop() {
-    if (!_wideScroll.hasClients || _wideScroll.offset <= 0) return;
-    _wideScroll.animateTo(
+    if (!_f.wideScroll.hasClients || _f.wideScroll.offset <= 0) return;
+    _f.wideScroll.animateTo(
       0,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
@@ -1872,78 +1696,30 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         showQuickPlay: widget.showQuickPlay,
         isSeries: item.type == 'series',
         hasBoundSource: _hasBoundSource,
-        playFocus: _playFocus,
-        browseFocus: _browseFocus,
-        watchlistFocus: _watchlistFocus,
+        playFocus: _f.playFocus,
+        browseFocus: _f.browseFocus,
+        watchlistFocus: _f.watchlistFocus,
         tv: widget.isTelevision,
-        playLabel: _primaryLabel,
-        playBusy: _primaryBusy,
+        playLabel: _p.primaryLabel,
+        playBusy: _p.primaryBusy,
         // TV only: the top row is the highest focusable widget, so a D-pad
         // "up" there reveals the header instead of dead-ending.
         onArrowUp: widget.isTelevision ? _scrollWideToTop : null,
-        onPlay: _playPrimary,
-        onPlayLongPress: _canBrowsePrimarySources
-            ? _browsePrimarySources
+        onPlay: _p.playPrimary,
+        onPlayLongPress: _b.canBrowsePrimarySources
+            ? _b.browsePrimarySources
             : null,
         // Neither Play nor Browse pop here: the player pushes on top of
         // this detail screen so the user returns here when playback ends.
         // Browse keeps the detail for the same reason (series drill-down
         // stacks on top). The host handles teardown via _returnToCatalogIfNeeded.
         onBrowse: widget.onBrowse,
-        inMyWatchlist: _inMyWatchlist,
-        onToggleMyWatchlist: _supportsMyWatchlist ? _toggleMyWatchlist : null,
+        inMyWatchlist: _w.inMyWatchlist,
+        onToggleMyWatchlist: _w.supportsMyWatchlist
+            ? _w.toggleMyWatchlist
+            : null,
       ),
     );
-  }
-
-  bool get _canBrowsePrimarySources =>
-      widget.enablePrimarySourcesHold &&
-      (_item.type != 'series' || widget.onBrowsePrimaryEpisodeSources != null);
-
-  void _browsePrimarySources() {
-    unawaited(_browsePrimarySourcesAsync());
-  }
-
-  Future<void> _browsePrimarySourcesAsync() async {
-    if (_item.type != 'series') {
-      widget.onBrowse();
-      return;
-    }
-
-    final openEpisode = widget.onBrowsePrimaryEpisodeSources;
-    if (openEpisode == null) return;
-
-    final rules = await QuickPlayStorage.getQuickPlayRules(isMovie: false);
-    if (!mounted) return;
-
-    final canBrowsePacks =
-        widget.onTraktAction != null &&
-        widget.traktMenuOptions.any(
-          (option) => option.action == TraktItemMenuAction.searchPacks,
-        );
-    if (!rules.preferSeriesPacks || !canBrowsePacks) {
-      await openEpisode();
-      return;
-    }
-
-    final choice = await showDetailPrimarySourcesSheet(
-      context,
-      title: _item.name,
-      isTelevision: widget.isTelevision,
-      episodeLabel: _resumeSeason == null || _resumeEpisode == null
-          ? null
-          : 'S${_resumeSeason}E$_resumeEpisode',
-    );
-    if (!mounted || choice == null) return;
-
-    switch (choice) {
-      case DetailPrimarySourceChoice.seasonPacks:
-        widget.onTraktAction?.call(TraktItemMenuAction.searchPacks);
-        return;
-      case DetailPrimarySourceChoice.episode:
-        await openEpisode();
-        return;
-    }
   }
 
   Widget _dot() => Text(

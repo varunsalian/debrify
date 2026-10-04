@@ -19,7 +19,7 @@ String catalogMemberPath(String original) {
       RegExp(
         r'^  [A-Za-z_][\w<>?, ]*\s+' +
             RegExp.escape(row['new_name']!) +
-            r'\s*(?:\(|=>|=|;)',
+            r'\s*(?:\(|=>|=|;|\{)',
         multiLine: true,
       ).hasMatch(destination.readAsStringSync())) {
     return row['destination_file']!;
@@ -27,13 +27,9 @@ String catalogMemberPath(String original) {
   return 'lib/screens/catalog_item_detail_screen.dart';
 }
 
-String catalogDetailSource() => catalogManifest()
-    .where(
-      (row) =>
-          row['original_name']!.startsWith('_CatalogItemDetailScreenState.'),
-    )
-    .map((row) => catalogOriginalMember(row['original_name']!))
-    .join('\n');
+String catalogDetailSource() =>
+    'class _CatalogItemDetailScreenState {\n'
+    '${catalogManifest().where((row) => row['original_name']!.startsWith('_CatalogItemDetailScreenState.')).map((row) => catalogOriginalMember(row['original_name']!)).join('\n')}\n}';
 
 /// Read the one declaration selected by the manifest, retaining its doc text.
 String catalogOriginalMember(String original) {
@@ -62,14 +58,14 @@ String catalogOriginalMember(String original) {
   final start = RegExp(
     r'^  (?:late\s+)?(?:final\s+)?[A-Za-z][\w<>?, ]*\s+(?:get\s+)?' +
         RegExp.escape(name) +
-        r'\s*(?:\(|=>|=|;)',
+        r'\s*(?:\(|=>|=|;|\{)',
     multiLine: true,
   ).firstMatch(source);
   if (start == null) throw StateError('Missing member $path::$name');
   final remainder = source.substring(start.start);
   final close = RegExp(r'^  }\s*$', multiLine: true).firstMatch(remainder);
   final next = RegExp(
-    r'^  (?:@override|(?:late\s+)?(?:final\s+)?[A-Za-z][\w<>?, ]*\s+(?:get\s+)?[A-Za-z_]\w*\s*(?:\(|=>|=|;))',
+    r'^  (?:@override|(?:late\s+)?(?:final\s+)?[A-Za-z][\w<>?, ]*\s+(?:get\s+)?[A-Za-z_]\w*\s*(?:\(|=>|=|;|\{))',
     multiLine: true,
   ).allMatches(remainder).skip(1).firstOrNull;
   final arrow = remainder.indexOf('=>');
@@ -91,7 +87,9 @@ String catalogOriginalMember(String original) {
     first = previousStart;
   }
   var member = source.substring(first, finish);
-  if (moved && row['allowed_edits']!.split(',').contains('layout_body')) {
+  if (moved &&
+      (row['allowed_edits']!.split(',').contains('layout_body') ||
+          row['allowed_edits']!.split(',').contains('retained_forwarder'))) {
     final facade = File(
       'lib/screens/catalog_item_detail_screen.dart',
     ).readAsStringSync();
@@ -122,6 +120,24 @@ String catalogOriginalNames(String member, {String? owner}) {
   final paths = config['receiver_paths'] as Map<String, dynamic>? ?? const {};
   String rewrite(String code, String previousCode) {
     code = code.replaceAll('_deps.setState', 'setState');
+    for (final entry
+        in (config['live_getter_aliases'] as Map<String, dynamic>? ?? const {})
+            .entries) {
+      code = code.replaceAll(
+        '_deps.${entry.key}()',
+        (entry.value as String).split('.').last,
+      );
+    }
+    for (final entry
+        in (config['borrowed_resource_aliases'] as Map<String, dynamic>? ??
+                const {})
+            .entries) {
+      code = code.replaceAll(
+        '_deps.${entry.key}',
+        (entry.value as String).split('.').last,
+      );
+    }
+
     for (final receiver in ['_deps', 'deps']) {
       for (final name in ['mounted', 'context']) {
         code = code.replaceAll('$receiver.$name()', name);

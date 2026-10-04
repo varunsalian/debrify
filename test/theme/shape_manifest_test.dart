@@ -1054,12 +1054,15 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/catalog_detail/presentation/catalog_quick_actions.dart': 1,
   'lib/features/catalog_detail/presentation/catalog_rec_card.dart': 1,
   'lib/features/catalog_detail/presentation/catalog_reveal.dart': 0,
-  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_cast_avatar.dart':
-      0,
-  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_mdblist_quick_actions.dart':
-      0,
-  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_simkl_quick_actions.dart':
-      1,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_cast_avatar.dart': 0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_bound_sources.dart': 0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart': 0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart': 0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_primary_action.dart': 0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_resources.dart': 0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_watchlist.dart': 0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_mdblist_quick_actions.dart': 0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_simkl_quick_actions.dart': 1,
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(

@@ -823,6 +823,33 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   replay was serialized after the focused run; the interrupted overlap is
   non-authoritative evidence only. No golden was updated against moved code.
 
+- Step 2 commit: `f1be4d5b`. Step 3: resource, primary-action, watchlist and
+  bound-source owners are wired once per State. The constructor captures live
+  getters and tear-offs without evaluating widget/context, services or either
+  original late field. Focus/scroll allocation order and lifecycle ownership
+  remain exact. `_simklStatus` stays private with both writers in one library;
+  its full-message destination allowlist entry is included in this commit.
+  Every moved entry's receiver and original evaluation site were reviewed.
+  Facade 1,753 lines; all destinations below 500.
+- Step 3 evidence: all 11 real-config manifests/self-tests PASS with isolated
+  parsers and their own originals; catalog 135 leaves. Structural/storage/format
+  checks, shape 29, Classic theme 238, scoped allowlist and root comparison PASS.
+  Strict comparison has zero additions to the 21 ORIGINAL identities. All 122
+  focused cases pass against `base0b-final-rerun`; five macOS and five Linux
+  originals pass strictly with unchanged hashes and stable runner trees.
+  See `step3-checks.json` and `step3-final-linux-strict.env.json`.
+- Step 3 conservative decisions: short pinned owner getters keep existing guard
+  layout without adding braces. The original private `_simklStatus` identifier
+  needs no `this.` qualification. Rejected lint candidates remain evidence;
+  neither added diagnostics nor suppressions were accepted. A catalog-scoped
+  logical setter key distinguishes the exactly pinned borrowed-bound getter and
+  setter without changing tokens or another config's duplicate rejection; its
+  write-inversion negative passes. Original State comments outside member spans
+  are also pinned. The relocated source reader retains every rewatch assertion,
+  adds declaration-local marker assertions, and passes three source-guard tests
+  on ORIGINAL (`step3-original-source-guards-fixed`). Gate 1 follows from this
+  committed application tree, against the latest step-0b base.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
