@@ -36,7 +36,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
   // Addon hub: every destination and the facade, including zero budgets.
-  'lib/screens/addons/addon_hub_screen.dart': 7,
+  'lib/features/addon_hub/presentation/addon_hub_action_button.dart': 0,
+  'lib/features/addon_hub/presentation/addon_hub_dialog.dart': 0,
+  'lib/features/addon_hub/presentation/addon_hub_option_tile.dart': 0,
+  'lib/features/addon_hub/presentation/addon_hub_options_sheet.dart': 0,
+  'lib/screens/addons/addon_hub_screen.dart': 2,
 
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_tiles.dart':
       0,
@@ -220,6 +224,9 @@ const Map<String, int> kExtractedShapeResidue = {
   // Addon hub: every destination and the facade, including zero budgets.
   'lib/features/addon_hub/application/addon_hub_labels.dart': 0,
   'lib/features/addon_hub/models/addon_hub_kinds.dart': 0,
+  'lib/features/addon_hub/presentation/addon_hub_addon_info.dart': 4,
+  'lib/features/addon_hub/presentation/addon_hub_focus_card.dart': 1,
+  'lib/features/addon_hub/presentation/addon_hub_installed_row.dart': 0,
   'lib/features/addon_hub/presentation/addon_hub_row_nav.dart': 0,
 
   // Playback settings: every remaining destination and the facade, at zero.

@@ -726,6 +726,27 @@ committed tree**, reconciling each branch's approved additions.
   relocation and exact CI analyzer allowlist PASS (12 existing warnings).
   Architecture, size, storage, formatting and staged diff checks PASS.
 
+- Step 2 moves only the whole pure widgets and each companion private State
+  to presentation files, using manifest public names at the production caller.
+  Constructors, defaults, focus nodes, layout and callback arguments remain
+  verbatim; every moved comment is preserved. Imports are cleaned only for
+  unused directives/order, with no const/key fixes. Per-entry bindings and
+  strict original identities are reviewed. Facade: 2566 lines; all workflow,
+  service state, legacy rows and builders remain for their scheduled steps.
+  Every new destination remains in the shape manifest; the 7/488 budgets
+  and zero slack are unchanged.
+
+- Step 2 verification: all ten manifest/self-tests PASS; 129 affected tests
+  PASS on the corrected shape registry and compare to `base4` PASS. Original
+  strict diagnostics relocate with zero additions; exact CI analyzer allowlist,
+  architecture, size, storage and format/diff checks PASS. macOS pixels and
+  calibrated Docker strict Linux pixels both pass (6/6 Linux, unchanged PNGs).
+  Shape placement follows token presence, not a nonzero radius budget; the
+  first guard failure caught the wrong bucket, retained as evidence, and the
+  fix preserves both assertions, the seven original bare radii and floor 488.
+  Evidence snapshot startups are serialized after a concurrent index-lock
+  collision; failed startups produced no accepted test evidence.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

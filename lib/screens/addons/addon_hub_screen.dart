@@ -1,9 +1,13 @@
-import 'package:debrify/features/addon_hub/application/addon_hub_labels.dart';
+import 'package:debrify/features/addon_hub/presentation/addon_hub_action_button.dart';
+import 'package:debrify/features/addon_hub/presentation/addon_hub_addon_info.dart';
+import 'package:debrify/features/addon_hub/presentation/addon_hub_dialog.dart';
+import 'package:debrify/features/addon_hub/presentation/addon_hub_focus_card.dart';
+import 'package:debrify/features/addon_hub/presentation/addon_hub_installed_row.dart';
+import 'package:debrify/features/addon_hub/presentation/addon_hub_options_sheet.dart';
 import 'package:debrify/features/addon_hub/models/addon_hub_kinds.dart';
 import 'package:debrify/features/addon_hub/presentation/addon_hub_row_nav.dart';
 import 'dart:convert';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
@@ -322,18 +326,18 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     final app = AppThemeScope.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => _HubDialog(
+      builder: (ctx) => AddonHubHubDialog(
         title: 'Delete engine',
         content: Text(
           'Delete "${engine.displayName}"?',
           style: TextStyle(color: app.fade(app.core.tx, 0.75)),
         ),
         actions: [
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Cancel',
             onTap: () => Navigator.of(ctx).pop(false),
           ),
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Delete',
             danger: true,
             onTap: () => Navigator.of(ctx).pop(true),
@@ -403,18 +407,18 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         if (!mounted) return;
         final replace = await showDialog<bool>(
           context: context,
-          builder: (ctx) => _HubDialog(
+          builder: (ctx) => AddonHubHubDialog(
             title: 'Engine already exists',
             content: Text(
               'Replace the existing "$engineId"?',
               style: TextStyle(color: app.fade(app.core.tx, 0.75)),
             ),
             actions: [
-              _HubDialogButton(
+              AddonHubHubDialogButton(
                 label: 'Cancel',
                 onTap: () => Navigator.of(ctx).pop(false),
               ),
-              _HubDialogButton(
+              AddonHubHubDialogButton(
                 label: 'Replace',
                 primary: true,
                 onTap: () => Navigator.of(ctx).pop(true),
@@ -627,7 +631,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     final controller = TextEditingController();
     final url = await showDialog<String>(
       context: context,
-      builder: (ctx) => _HubDialog(
+      builder: (ctx) => AddonHubHubDialog(
         title: 'Add addon',
         content: TvTextField(
           controller: controller,
@@ -648,11 +652,11 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
         ),
         actions: [
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Cancel',
             onTap: () => Navigator.of(ctx).pop(),
           ),
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Add',
             primary: true,
             onTap: () => Navigator.of(ctx).pop(controller.text.trim()),
@@ -717,7 +721,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   Future<void> _showImportResult(StremioAddonImportResult r) {
     return showDialog<void>(
       context: context,
-      builder: (ctx) => _HubDialog(
+      builder: (ctx) => AddonHubHubDialog(
         title: 'Import complete',
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -732,7 +736,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           ],
         ),
         actions: [
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Done',
             primary: true,
             onTap: () => Navigator.of(ctx).pop(),
@@ -806,7 +810,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     final hasSharedAddons = sharedCount > 0;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => _HubDialog(
+      builder: (ctx) => AddonHubHubDialog(
         title: 'Delete all addons?',
         content: Text(
           hasSharedAddons
@@ -818,11 +822,11 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           style: TextStyle(color: app.fade(app.core.tx, 0.75)),
         ),
         actions: [
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Cancel',
             onTap: () => Navigator.of(ctx).pop(false),
           ),
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Delete all',
             danger: true,
             onTap: () => Navigator.of(ctx).pop(true),
@@ -858,7 +862,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     var value = a.userAlias ?? a.name;
     final alias = await showDialog<String>(
       context: context,
-      builder: (ctx) => _HubDialog(
+      builder: (ctx) => AddonHubHubDialog(
         title: 'Rename addon',
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -888,15 +892,15 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           ],
         ),
         actions: [
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Use manifest name',
             onTap: () => Navigator.of(ctx).pop(''),
           ),
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Cancel',
             onTap: () => Navigator.of(ctx).pop(),
           ),
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Save',
             primary: true,
             onTap: () => Navigator.of(ctx).pop(value.trim()),
@@ -972,7 +976,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     final isShared = borrowerCount > 0;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => _HubDialog(
+      builder: (ctx) => AddonHubHubDialog(
         title: 'Remove addon',
         content: Text(
           isShared
@@ -983,11 +987,11 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           style: TextStyle(color: app.fade(app.core.tx, 0.75)),
         ),
         actions: [
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Cancel',
             onTap: () => Navigator.of(ctx).pop(false),
           ),
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Remove',
             danger: true,
             onTap: () => Navigator.of(ctx).pop(true),
@@ -1023,7 +1027,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (ctx) => _AddonOptionsSheet(
+      builder: (ctx) => AddonHubAddonOptionsSheet(
         addon: a,
         onToggle: () {
           Navigator.of(ctx).pop();
@@ -1055,7 +1059,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     final app = AppThemeScope.of(context);
     showDialog<void>(
       context: context,
-      builder: (ctx) => _HubDialog(
+      builder: (ctx) => AddonHubHubDialog(
         title: a.displayName,
         content: SingleChildScrollView(
           child: Column(
@@ -1093,7 +1097,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           ),
         ),
         actions: [
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Copy URL',
             onTap: () {
               Clipboard.setData(ClipboardData(text: a.manifestUrl));
@@ -1103,7 +1107,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
               );
             },
           ),
-          _HubDialogButton(
+          AddonHubHubDialogButton(
             label: 'Close',
             primary: true,
             onTap: () => Navigator.of(ctx).pop(),
@@ -1375,12 +1379,12 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           ],
           onSelected: (v) => setState(() => _typeFilter = v),
         );
-        final searchBtn = _HubActionButton(
+        final searchBtn = AddonHubHubActionButton(
           focusNode: _searchBtnFocus,
           icon: Icons.search_rounded,
           onTap: _toggleSearch,
         );
-        final addBtn = _HubActionButton(
+        final addBtn = AddonHubHubActionButton(
           focusNode: _addFocus,
           icon: Icons.add_rounded,
           label: 'Add addon',
@@ -1388,19 +1392,19 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           expand: narrow,
           onTap: _addByUrl,
         );
-        final moreBtn = _HubActionButton(
+        final moreBtn = AddonHubHubActionButton(
           focusNode: _moreFocus,
           icon: Icons.more_horiz_rounded,
           onTap: _showActionsMenu,
         );
-        final importBtn = _HubActionButton(
+        final importBtn = AddonHubHubActionButton(
           icon: Icons.file_upload_outlined,
           label: 'Import YAML',
           primary: true,
           expand: narrow,
           onTap: _importEngineFromFile,
         );
-        final refreshBtn = _HubActionButton(
+        final refreshBtn = AddonHubHubActionButton(
           icon: Icons.refresh_rounded,
           onTap: _loadEngines,
         );
@@ -1598,7 +1602,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
                   scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
                   itemCount: items.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 14),
-                  itemBuilder: (_, i) => _InstalledRow(
+                  itemBuilder: (_, i) => AddonHubInstalledRow(
                     addon: items[i],
                     focusNode: i == 0 ? _firstRowFocus : null,
                     warnDebrid:
@@ -1868,7 +1872,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         icon: Icons.cloud_off_rounded,
         title: 'Couldn\'t load addons',
         subtitle: _marketError!,
-        action: _HubActionButton(
+        action: AddonHubHubActionButton(
           icon: Icons.refresh_rounded,
           label: 'Retry',
           primary: true,
@@ -1929,7 +1933,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         icon: Icons.cloud_off_rounded,
         title: 'Couldn\'t load engines',
         subtitle: _enginesError!,
-        action: _HubActionButton(
+        action: AddonHubHubActionButton(
           icon: Icons.refresh_rounded,
           label: 'Retry',
           primary: true,
@@ -2088,339 +2092,6 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
 // ── Rows ─────────────────────────────────────────────────────────────────────
 
-/// Focus wrapper giving a card the purple DPAD ring + activate-key handling.
-class _FocusCard extends StatefulWidget {
-  final VoidCallback onTap;
-  final Widget Function(bool focused) builder;
-  final FocusNode? focusNode;
-  const _FocusCard({
-    required this.onTap,
-    required this.builder,
-    this.focusNode,
-  });
-
-  @override
-  State<_FocusCard> createState() => _FocusCardState();
-}
-
-class _FocusCardState extends State<_FocusCard> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (f) {
-        setState(() => _focused = f);
-        if (f) _centerInScrollable(context);
-      },
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        // A small scale pop makes DPAD focus feel tactile. Compositor-only
-        // transform on one layer — cheap even on weak TV GPUs.
-        child: AnimatedScale(
-          scale: _focused ? 1.008 : 1.0,
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOutCubic,
-          child: widget.builder(_focused),
-        ),
-      ),
-    );
-  }
-}
-
-/// Flat, borderless Stremio-style card. The border slot is a CONSTANT 2px (a
-/// changing width feeds into Container's layout padding and reflows the list —
-/// the "shake"); unfocused it's transparent so the card reads clean and flat.
-const Color _kCardBg = Color(0xFF191B28);
-
-BoxDecoration _cardDecoration(bool focused) => BoxDecoration(
-  color: _kCardBg,
-  borderRadius: BorderRadius.circular(12),
-  border: Border.all(
-    width: 2,
-    color: focused ? kSeeAllAccent : Colors.transparent,
-  ),
-);
-
-class _InstalledRow extends StatelessWidget {
-  final StremioAddon addon;
-  final VoidCallback onTap;
-  final FocusNode? focusNode;
-  final bool warnDebrid;
-  const _InstalledRow({
-    required this.addon,
-    required this.onTap,
-    this.focusNode,
-    this.warnDebrid = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final chevron = Icon(
-      Icons.chevron_right_rounded,
-      size: 26,
-      color: Colors.white.withValues(alpha: 0.3),
-    );
-    return _FocusCard(
-      onTap: onTap,
-      focusNode: focusNode,
-      builder: (focused) => LayoutBuilder(
-        builder: (context, c) {
-          // On a phone-width card the logo + status pill + chevron leave the
-          // info column too narrow (name/type truncate, chips wrap into a tall
-          // stack). Below the breakpoint, keep only the logo + title + status
-          // in a header row and let the type/chips/description use the full
-          // width beneath. Wide (tablet/desktop/TV) keeps the single-row look.
-          final narrow = c.maxWidth < 480;
-          final meta = _AddonMeta(
-            types: addon.types,
-            resources: addon.resources,
-            description: addon.description,
-            warnDebrid: warnDebrid,
-          );
-          return Container(
-            decoration: _cardDecoration(focused),
-            padding: EdgeInsets.symmetric(
-              horizontal: narrow ? 16 : 22,
-              vertical: narrow ? 16 : 20,
-            ),
-            child: narrow
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          // Compact logo + version-under-name: the header row
-                          // also carries the pill and chevron, so every fixed
-                          // pixel here comes straight out of the name's width.
-                          _addonLogo(null, size: 44),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: _AddonTitleLine(
-                              name: addon.displayName,
-                              version: addon.version,
-                              stacked: true,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          _StatusPill(
-                            enabled: addon.enabled,
-                            reconnect: addon.connectionResourceSecretPending,
-                          ),
-                          const SizedBox(width: 4),
-                          chevron,
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      meta,
-                    ],
-                  )
-                : Row(
-                    children: [
-                      _addonLogo(null),
-                      const SizedBox(width: 20),
-                      Expanded(
-                        child: _AddonInfo(
-                          name: addon.displayName,
-                          version: addon.version,
-                          types: addon.types,
-                          resources: addon.resources,
-                          description: addon.description,
-                          warnDebrid: warnDebrid,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      _StatusPill(
-                        enabled: addon.enabled,
-                        reconnect: addon.connectionResourceSecretPending,
-                      ),
-                      const SizedBox(width: 8),
-                      chevron,
-                    ],
-                  ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Shared name/version/types/description column, matching the Stremio addons
-/// screen: title with a small muted version beside it, muted type line,
-/// capability chips (what the addon actually provides), then a two-line
-/// description.
-class _AddonInfo extends StatelessWidget {
-  final String name;
-  final String? version;
-  final List<String> types;
-  final List<String> resources;
-  final String? description;
-
-  /// Show a "Needs debrid" hint — this addon provides streams but no debrid
-  /// provider is configured, so its torrents can't play (debrify has no P2P).
-  final bool warnDebrid;
-
-  const _AddonInfo({
-    required this.name,
-    required this.version,
-    required this.types,
-    required this.resources,
-    required this.description,
-    this.warnDebrid = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _AddonTitleLine(name: name, version: version),
-        const SizedBox(height: 4),
-        _AddonMeta(
-          types: types,
-          resources: resources,
-          description: description,
-          warnDebrid: warnDebrid,
-        ),
-      ],
-    );
-  }
-}
-
-/// The name + muted version, on one baseline-aligned line. Extracted so the
-/// narrow card layout can hoist it into a header row (beside the logo / status)
-/// while the rest of the info flows full-width below.
-class _AddonTitleLine extends StatelessWidget {
-  final String name;
-  final String? version;
-
-  /// When true, the version sits on its own line *under* the name instead of
-  /// beside it — the narrow header row can't afford to give the version a
-  /// fixed slice of the name's width.
-  final bool stacked;
-
-  const _AddonTitleLine({
-    required this.name,
-    required this.version,
-    this.stacked = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final nameText = Text(
-      name,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontSize: 17,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -0.2,
-      ),
-    );
-    final versionText = (version != null && version!.isNotEmpty)
-        ? Text(
-            'v.$version',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.38),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          )
-        : null;
-
-    if (stacked) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          nameText,
-          if (versionText != null) ...[const SizedBox(height: 2), versionText],
-        ],
-      );
-    }
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        Flexible(child: nameText),
-        if (versionText != null) ...[const SizedBox(width: 10), versionText],
-      ],
-    );
-  }
-}
-
-/// The type line, capability chips and description — everything below the
-/// title. Kept separate so the narrow layout can give it the full card width
-/// (chips no longer wrap into a tall stack in a squeezed column).
-class _AddonMeta extends StatelessWidget {
-  final List<String> types;
-  final List<String> resources;
-  final String? description;
-  final bool warnDebrid;
-  const _AddonMeta({
-    required this.types,
-    required this.resources,
-    required this.description,
-    this.warnDebrid = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          types.isEmpty ? 'Addon' : types.map(addonHubCapitalize).join(' & '),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.42),
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        if (addonHubCapabilities(resources).isNotEmpty || warnDebrid) ...[
-          const SizedBox(height: 9),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final cap in addonHubCapabilities(resources))
-                _CapabilityChip(label: cap.$1, highlight: cap.$2),
-              if (warnDebrid) const _WarningChip(label: 'Needs debrid'),
-            ],
-          ),
-        ],
-        if (description != null && description!.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            description!,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.62),
-              fontSize: 13,
-              height: 1.35,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
 class _MarketRow extends StatelessWidget {
   final MarketplaceAddon addon;
   final bool installed;
@@ -2469,14 +2140,14 @@ class _MarketRow extends StatelessWidget {
         // Install/Configure buttons drop to their own row (where they get room
         // instead of squeezing the info column).
         final narrow = c.maxWidth < 480;
-        final meta = _AddonMeta(
+        final meta = AddonHubAddonMeta(
           types: addon.types,
           resources: addon.resources,
           description: addon.description,
           warnDebrid: warnDebrid,
         );
         return Container(
-          decoration: _cardDecoration(false),
+          decoration: addonHubCardDecoration(false),
           padding: EdgeInsets.symmetric(
             horizontal: narrow ? 16 : 22,
             vertical: narrow ? 16 : 20,
@@ -2487,10 +2158,10 @@ class _MarketRow extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        _addonLogo(addon.logo, size: 44),
+                        addonHubLogo(addon.logo, size: 44),
                         const SizedBox(width: 14),
                         Expanded(
-                          child: _AddonTitleLine(
+                          child: AddonHubAddonTitleLine(
                             name: addon.name,
                             version: addon.version,
                             stacked: true,
@@ -2509,10 +2180,10 @@ class _MarketRow extends StatelessWidget {
                 )
               : Row(
                   children: [
-                    _addonLogo(addon.logo),
+                    addonHubLogo(addon.logo),
                     const SizedBox(width: 20),
                     Expanded(
-                      child: _AddonInfo(
+                      child: AddonHubAddonInfo(
                         name: addon.name,
                         version: addon.version,
                         types: addon.types,
@@ -2647,7 +2318,7 @@ class _MarketButtonState extends State<_MarketButton> {
       focusNode: widget.focusNode,
       onFocusChange: (f) {
         setState(() => _focused = f);
-        if (f) _centerInScrollable(context);
+        if (f) addonHubCenterInScrollable(context);
       },
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
@@ -2724,11 +2395,11 @@ class _EngineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _FocusCard(
+    return AddonHubFocusCard(
       onTap: onTap,
       focusNode: focusNode,
       builder: (focused) => Container(
-        decoration: _cardDecoration(focused),
+        decoration: addonHubCardDecoration(focused),
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
         child: Row(
           children: [
@@ -2832,532 +2503,9 @@ class _EngineActionPill extends StatelessWidget {
   }
 }
 
-/// Addon logo, Stremio-style: the image (or a plain muted puzzle piece) sits
-/// directly on the card — no tinted chip behind it.
-Widget _addonLogo(String? url, {double size = 64}) => SizedBox(
-  width: size,
-  height: size,
-  child: (url != null && url.isNotEmpty)
-      ? ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: CachedNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.contain,
-            memCacheWidth: 192,
-            errorWidget: (_, __, ___) => Icon(
-              Icons.extension_rounded,
-              color: Colors.white38,
-              size: size * 0.72,
-            ),
-          ),
-        )
-      : Icon(Icons.extension_rounded, color: Colors.white38, size: size * 0.72),
-);
-
-class _StatusPill extends StatelessWidget {
-  final bool enabled;
-  final bool reconnect;
-  const _StatusPill({required this.enabled, this.reconnect = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = reconnect
-        ? Colors.amber
-        : enabled
-        ? kSeeAllAccent2
-        : Colors.white.withValues(alpha: 0.4);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        reconnect ? 'RECONNECT' : (enabled ? 'ON' : 'OFF'),
-        style: TextStyle(
-          color: color,
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-}
-
 // ── Options bottom sheet ─────────────────────────────────────────────────────
 
-class _AddonOptionsSheet extends StatelessWidget {
-  final StremioAddon addon;
-  final VoidCallback onToggle;
-  final VoidCallback onUpdate;
-  final VoidCallback? onRename;
-  final VoidCallback onDetails;
-  final VoidCallback onRemove;
-
-  const _AddonOptionsSheet({
-    required this.addon,
-    required this.onToggle,
-    required this.onUpdate,
-    this.onRename,
-    required this.onDetails,
-    required this.onRemove,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 14),
-              decoration: BoxDecoration(
-                color: app.fade(app.core.tx, 0.2),
-                borderRadius: app.shape.br(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                addon.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            _OptionTile(
-              autofocus: true,
-              icon: addon.enabled
-                  ? Icons.visibility_off_rounded
-                  : Icons.visibility_rounded,
-              label: addon.enabled ? 'Disable' : 'Enable',
-              onTap: onToggle,
-            ),
-            if (!addon.connectionResourceSecretPending)
-              _OptionTile(
-                icon: Icons.sync_rounded,
-                label: 'Update',
-                onTap: onUpdate,
-              ),
-            if (onRename != null)
-              _OptionTile(
-                icon: Icons.drive_file_rename_outline_rounded,
-                label: 'Rename',
-                onTap: onRename!,
-              ),
-            _OptionTile(
-              icon: Icons.info_outline_rounded,
-              label: 'View details',
-              onTap: onDetails,
-            ),
-            _OptionTile(
-              icon: Icons.delete_outline_rounded,
-              label: 'Remove',
-              danger: true,
-              onTap: onRemove,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OptionTile extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool danger;
-  final bool autofocus;
-  const _OptionTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-    this.autofocus = false,
-  });
-
-  @override
-  State<_OptionTile> createState() => _OptionTileState();
-}
-
-class _OptionTileState extends State<_OptionTile> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final color = widget.danger ? const Color(0xFFEF4444) : app.core.tx;
-    return Focus(
-      autofocus: widget.autofocus,
-      onFocusChange: (f) => setState(() => _focused = f),
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 3),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-          decoration: BoxDecoration(
-            color: _focused
-                ? app.fade(app.seeAll.accent, 0.14)
-                : Colors.transparent,
-            borderRadius: app.shape.br(11),
-            border: Border.all(
-              color: _focused ? app.seeAll.accent : Colors.transparent,
-              width: _focused ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(widget.icon, size: 20, color: color),
-              const SizedBox(width: 14),
-              Text(
-                widget.label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ── Buttons & dialog chrome ──────────────────────────────────────────────────
-
-/// A pill button that matches the Discover chrome: panel fill, purple focus ring;
-/// [primary] fills with the accent tint.
-class _HubActionButton extends StatefulWidget {
-  final IconData icon;
-  final String? label;
-  final VoidCallback onTap;
-  final bool primary;
-  final FocusNode? focusNode;
-
-  /// Fill the parent's width with centred content (narrow filter bar rows)
-  /// instead of hugging the icon+label.
-  final bool expand;
-
-  const _HubActionButton({
-    required this.icon,
-    required this.onTap,
-    this.label,
-    this.primary = false,
-    this.focusNode,
-    this.expand = false,
-  });
-
-  @override
-  State<_HubActionButton> createState() => _HubActionButtonState();
-}
-
-class _HubActionButtonState extends State<_HubActionButton> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    // Primary = solid accent (like Stremio's filled "Add addon"); others sit on
-    // the quiet panel fill. Border is a constant 2px — width changes feed into
-    // Container's layout and shake the whole filter row on focus moves.
-    final app = AppThemeScope.of(context);
-    final Color fill;
-    final Color borderColor;
-    // Primary's label/ring sit ON the accent fill; the quiet variant's sit on
-    // the panel fill, which is page ink's ground.
-    final Color ink;
-    if (widget.primary) {
-      fill = _focused ? app.seeAll.accent2 : app.seeAll.accent;
-      ink = app.inkOn(app.seeAll.accent);
-      borderColor = _focused ? ink : Colors.transparent;
-    } else {
-      fill = app.seeAll.panel;
-      borderColor = _focused ? app.seeAll.accent : app.seeAll.line;
-      ink = app.core.tx;
-    }
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (f) => setState(() => _focused = f),
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: widget.label == null ? 10 : 16,
-              vertical: 9,
-            ),
-            decoration: BoxDecoration(
-              color: fill,
-              borderRadius: app.shape.br(11),
-              border: Border.all(width: 2, color: borderColor),
-            ),
-            child: Row(
-              mainAxisSize: widget.expand ? MainAxisSize.max : MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(widget.icon, size: 17, color: ink),
-                if (widget.label != null) ...[
-                  const SizedBox(width: 7),
-                  Text(
-                    widget.label!,
-                    style: TextStyle(
-                      color: ink,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A dark-glass dialog matching the hub theme (AlertDialog styling gets awkward
-/// against the purple palette, so we roll a minimal one).
-class _HubDialog extends StatelessWidget {
-  final String title;
-  final Widget content;
-  final List<Widget> actions;
-  const _HubDialog({
-    required this.title,
-    required this.content,
-    required this.actions,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    return Dialog(
-      backgroundColor: app.seeAll.panel,
-      shape: RoundedRectangleBorder(
-        borderRadius: app.shape.br(18),
-        side: BorderSide(color: app.seeAll.line),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 16),
-            content,
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                for (final a in actions) ...[a, const SizedBox(width: 8)],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HubDialogButton extends StatefulWidget {
-  final String label;
-  final VoidCallback onTap;
-  final bool primary;
-  final bool danger;
-  const _HubDialogButton({
-    required this.label,
-    required this.onTap,
-    this.primary = false,
-    this.danger = false,
-  });
-
-  @override
-  State<_HubDialogButton> createState() => _HubDialogButtonState();
-}
-
-class _HubDialogButtonState extends State<_HubDialogButton> {
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    Color fill;
-    Color textColor;
-    if (widget.danger) {
-      fill = const Color(0xFFEF4444).withValues(alpha: 0.16);
-      textColor = const Color(0xFFEF4444);
-    } else if (widget.primary) {
-      fill = app.fade(app.seeAll.accent, 0.20);
-      textColor = app.core.tx;
-    } else {
-      fill = Colors.transparent;
-      textColor = app.fade(app.core.tx, 0.75);
-    }
-    final borderColor = _focused
-        ? app.seeAll.accent
-        : (widget.primary || widget.danger
-              ? app.seeAll.accentBorder
-              : app.seeAll.line);
-    return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent && isActivateKey(event.logicalKey)) {
-          widget.onTap();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: fill,
-            borderRadius: app.shape.br(10),
-            // Constant width — see _HubActionButton (focus resize = shake).
-            border: Border.all(
-              width: 2,
-              color: widget.danger && !_focused
-                  ? const Color(0xFFEF4444).withValues(alpha: 0.4)
-                  : borderColor,
-            ),
-          ),
-          child: Text(
-            widget.label,
-            style: TextStyle(
-              color: textColor,
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A small pill stating one thing an addon provides (Streams / Catalog / …).
-class _CapabilityChip extends StatelessWidget {
-  final String label;
-  final bool highlight;
-  const _CapabilityChip({required this.label, required this.highlight});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: highlight
-            ? kSeeAllAccent.withValues(alpha: 0.18)
-            : Colors.white.withValues(alpha: 0.055),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(
-          color: highlight
-              ? kSeeAllAccentBorder
-              : Colors.white.withValues(alpha: 0.10),
-        ),
-      ),
-      child: Text(
-        label.toUpperCase(),
-        style: TextStyle(
-          color: highlight
-              ? kSeeAllAccent2
-              : Colors.white.withValues(alpha: 0.7),
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-}
-
-/// An amber caveat chip (e.g. "Needs debrid") — a heads-up, not a capability.
-class _WarningChip extends StatelessWidget {
-  final String label;
-  const _WarningChip({required this.label});
-
-  static const Color _amber = Color(0xFFF6B94A);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: _amber.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: _amber.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.info_outline_rounded, size: 11, color: _amber),
-          const SizedBox(width: 4),
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              color: _amber,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Scroll the focused row toward the vertical centre of its list. The framework
-/// only nudges a newly-focused item to the nearest edge (so DPAD-down parks it
-/// at the bottom); this keeps it centred instead. [ensureVisible] clamps to the
-/// valid scroll range, so the first rows still rest at the top and the last at
-/// the bottom — only the middle is actually centred.
-void _centerInScrollable(BuildContext context) {
-  final scrollable = Scrollable.maybeOf(context);
-  if (scrollable == null) return;
-  Scrollable.ensureVisible(
-    context,
-    alignment: 0.5,
-    alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-    duration: const Duration(milliseconds: 260),
-    curve: Curves.easeOutCubic,
-  );
-}
 
 @visibleForTesting
 Map<String, Object?> addonHubTestAccess(State state) {
