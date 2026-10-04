@@ -654,6 +654,8 @@ each parallel branch's additions, before claiming parity.
 
 - Step 4 complete: affected suite 146 successes / unchanged source-guard failure, PASS against base4 with zero added/missing/new skips/failures; stable staged tested tree 42bd8c37b7dd6fddc4e628e39a80c294509dd390. All seven manifests/self-tests, architecture/negatives, strict sizes/storage, exact CI format/analyzer/five-warning allowlist and diff pass. Whole analyzer 1,645, zero additions against original strict maximum; 14 per-symbol original identities. The final source reader passes all four unchanged cases against original 8a6e1cf9, and the updated real-config interpolation/checker fixtures pass there too. Original assertions, body JSON, fixture and PNGs are unchanged.
 
+- Linux prerequisite complete in a separate assets/strictness commit before any Step 5 move. All four immutable SHA-256 values match linux-original-sha256.txt and exact checkpoint 8a6e1cf9; supplied capture and original strict replay each pass. The committed Step 4 application (4537c576) plus only the strictness test overlay passes all four Linux pixels in calibrated image sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a (linux/amd64, Flutter 3.44.8); no regeneration. Snapshot/source tree, overlay hash, image and runner provenance are recorded. Linux is now always strict, including without a dart-define. The changed strict test passes the same four identities on original 8a6e1cf9, with unchanged fixture and rendering; base4 filtered-identity audit passes. Step 0b changed only skip reporting, so no original recapture is needed. The external Actions spending limit leaves remote CI pending.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

@@ -512,9 +512,10 @@ void main() {
       const capture = bool.fromEnvironment(
         'IPTV_SETTINGS_CAPTURE_ORIGINAL_LINUX',
       );
-      const strict = bool.fromEnvironment(
-        'IPTV_SETTINGS_REQUIRE_ORIGINAL_LINUX',
-      );
+      // Verified checkpoint originals are committed separately; Linux is strict.
+      final strict =
+          Platform.isLinux ||
+          const bool.fromEnvironment('IPTV_SETTINGS_REQUIRE_ORIGINAL_LINUX');
       if (Platform.isLinux && !capture && !strict && !golden.existsSync()) {
         // Authorized only before the separately verified Linux originals commit.
         markTestSkipped('Pending original IPTV settings Linux golden: $view');
