@@ -228,15 +228,25 @@ const Map<String, int> kExtractedShapeResidue = {
       3,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart':
       0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_enrichment.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_metadata.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_mode.dart':
+      0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_parts.dart':
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart':
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_resources.dart':
       0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_seasons.dart':
+      0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart':
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_watched_actions.dart':
       0,
   // Playback settings: every remaining destination and the facade, at zero.
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart':

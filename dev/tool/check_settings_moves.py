@@ -272,7 +272,7 @@ def normalize(values, rows, row=None):
                     and values[i + 4:i + 7] == ['(', ')', '}']):
                 target = values[i + 3]
                 alias = CONFIG.get('live_getter_aliases', {}).get(target)
-                out.extend(['$', alias.split('.')[-1] if alias else mapping.get(target, target)])
+                out.extend(['$', mapping.get(alias.split('.')[-1], alias.split('.')[-1]) if alias else mapping.get(target, target)])
                 i += 7
                 continue
             path = receiver_path_match(values, i + 1)
@@ -315,7 +315,7 @@ def normalize(values, rows, row=None):
             getter_alias = CONFIG.get('live_getter_aliases', {}).get(target)
             if (getter_alias and target in live_getters
                     and values[i + 3:i + 5] == ['(', ')']):
-                out.append(getter_alias.split('.')[-1]); i += 5; continue
+                out.append(mapping.get(getter_alias.split('.')[-1], getter_alias.split('.')[-1])); i += 5; continue
             borrowed = CONFIG.get('borrowed_resource_aliases', {}).get(target)
             if borrowed:
                 out.append(borrowed.split('.')[-1]); i += 3; continue
@@ -980,9 +980,13 @@ def _check(original_source, sources, rows, source_path, package=None,
     for alias, member in CONFIG.get('live_getter_aliases', {}).items():
         declared = original.get(member)
         retained = next((r for r in rows if r['original_name'] == member), None)
+        staged = CONFIG.get('retained_getter_steps', {}).get(member)
+        in_place = all_nodes(parsed).get((source_path, *member.rsplit('.', 1))) if staged else None
+        is_retained = retained and (retained['destination_file'] == source_path or (
+            staged == int(retained.get('step', -1))
+            and int(CONFIG.get('completed_step', -1)) < staged and in_place is not None))
         if (not declared or declared['parameters'] is not None
-                or declared['bodyOffset'] is None or not retained
-                or retained['destination_file'] != source_path
+                or declared['bodyOffset'] is None or not is_retained
                 or alias not in CONFIG.get('live_getter_callbacks', [])):
             errors.append('Live getter alias must name one retained facade getter: ' + alias)
     for alias, member in CONFIG.get('borrowed_resource_aliases', {}).items():

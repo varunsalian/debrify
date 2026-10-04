@@ -982,6 +982,40 @@ including everything below.
   failure, zero missing/newly skipped identities; all 22 importers compile.
   Its env records no untracked inputs or tree changes.
 
+### Step 4 — episode engine and gate 1 checkpoint
+
+- Step 3: `635e1b46`. Progress load/publish, tracker auth and MDBList refresh,
+  watched fan-out/ratings, seasons, episode mode, enrichment and metadata move
+  to their manifest owners. Their bodies, comments, guard/await ordering,
+  direct-source gates, cached-vs-fresh auth and in-place mutations are unchanged.
+  Metadata's two mid-class fields remain immediately before policy change.
+- Short private record accessors retain the exact owned records. Sections also
+  borrow `mounted` through a pure live getter returning `_deps.mounted()`, so
+  deep unbraced guards keep their original formatting without adding braces.
+  Complete accessor bodies are pinned; replacing the live mounted value with
+  a cached false value is rejected. External `node.context` stays untouched.
+- The root `_custom` getter stays in the facade until step 6. Its temporary
+  typed callback evaluates the original getter at every original site.
+  Config-scoped `retained_getter_steps` requires the exact original getter,
+  its actual facade presence and a future declared exit step. Expiry and a
+  missing getter are independently rejected. Renamed live aliases normalize
+  to their manifest name; other configs' behavior is unchanged and all pass.
+- Facade: 1,403 lines; imports/export/spacing 39, widget 134, composition 53,
+  lifecycle/public methods 85, State header/spacing 33, remaining original
+  members 1,059. All 18 source locations are registered; every destination
+  is below 500. Wiring is reviewed before pinning. Shape remains 7, theme 238.
+- All own/other manifests and self-tests PASS with isolated packages/kernels,
+  including merged at `21320ff9`. Architecture negatives, sizes, storage,
+  CI format/allowlist, strict and whole relocation comparisons PASS: the one
+  original curly info, zero new diagnostics, same 12 CI warnings. Completion
+  fixtures first prove the actual staged marker fails premature completion,
+  then remove only that named marker inside their synthetic completion copy;
+  production guards stay unconditional and unchanged.
+- Affected behavior versus `base5` PASS: 1,270 successes and the same original
+  profile raw-preferences source-guard failure; all 85 characterization cases
+  and 22 importers pass. No untracked inputs/tree changes. Full-suite gate 1
+  follows on this clean committed checkpoint, with no scoped suite paths.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

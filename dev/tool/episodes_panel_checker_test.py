@@ -104,6 +104,15 @@ def self_test(package=None):
             changed[source] = sources[source][:node['start']] + swapped + sources[source][node['end']:]
             assert checked(changed), 'Accepted borrowed record accessor swap'
             print('Episodes borrowed accessor same-class record swap:', name, 'rejected')
+    if config['completed_step'] >= 4:
+        key = ('lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart', 'EpisodesPanelProgress', 'mounted')
+        node = lookup[key]
+        changed = dict(sources)
+        cached = node['text'].replace('_deps.mounted()', 'false')
+        assert cached != node['text']
+        changed[key[0]] = sources[key[0]][:node['start']] + cached + sources[key[0]][node['end']:]
+        assert checked(changed), 'Accepted cached borrowed mounted value'
+        print('Episodes borrowed mounted live getter cached value: rejected')
     deps_path = 'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart'
     if config['completed_step'] >= 3:
         key, node = located('EpisodesPanelState.EpisodesPanelState')
@@ -115,6 +124,16 @@ def self_test(package=None):
         from check_settings_moves import check_live_widget_factory
         assert check_live_widget_factory(all_nodes(parse(changed, package)), config)
         print('Episodes actual factory cached widget property: rejected independently')
+    if config['completed_step'] in (4, 5):
+        expired = copy.deepcopy(config)
+        expired['completed_step'] = 6
+        failures = check(original, sources, rows, source, package, context_guard=True, config=expired)
+        assert any('Live getter alias must name one retained facade getter' in error for error in failures)
+        missing = dict(sources)
+        key, node = located('EpisodesPanelState._custom')
+        missing[key[0]] = sources[key[0]][:node['start']] + sources[key[0]][node['end']:]
+        assert any('Live getter alias must name one retained facade getter' in error for error in checked(missing))
+        print('Episodes staged live getter expired step and missing original facade getter: rejected')
     # The actual config's factory is exercised even before composition lands.
     from check_settings_moves import check_live_widget_factory
     fixture_config = {**config, 'completed_step': 3}

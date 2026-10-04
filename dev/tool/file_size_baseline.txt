@@ -21,7 +21,7 @@
 269 lib/screens/pikpak/pikpak_files_screen.dart
 3415 lib/screens/addons/addon_hub_screen.dart
 3394 lib/widgets/detail/showcase_parts.dart
-2605 lib/widgets/episodes_panel.dart
+1403 lib/widgets/episodes_panel.dart
 3076 lib/widgets/trakt/trakt_results_view.dart
 3035 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
 2875 lib/services/playlist_player_service.dart

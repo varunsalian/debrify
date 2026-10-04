@@ -40,6 +40,8 @@ class EpisodesPanelDeps {
   final ValueChanged<bool>? Function() onSeriesCompletedChanged;
   final Widget Function(BuildContext, EpisodesPanelView)? Function()
   contentBuilder;
+  // TEMP(episodes_panel): root getter stays in the facade until step 6.
+  final bool Function() custom;
   EpisodesPanelDeps({
     required this.context,
     required this.mounted,
@@ -68,5 +70,6 @@ class EpisodesPanelDeps {
     required this.onNextEpisodeChanged,
     required this.onSeriesCompletedChanged,
     required this.contentBuilder,
+    required this.custom,
   });
 }

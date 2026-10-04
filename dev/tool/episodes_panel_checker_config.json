@@ -21,7 +21,9 @@
   },
   "named_exceptions": {},
   "annotation_exceptions": {},
-  "live_getter_callbacks": [],
+  "live_getter_callbacks": [
+    "custom"
+  ],
   "live_widget_getters": [
     "show",
     "initialSeason",
@@ -157,11 +159,16 @@
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart",
+    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_enrichment.dart",
+    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_metadata.dart",
+    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_mode.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_parts.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_resources.dart",
+    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_seasons.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart",
-    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart"
+    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart",
+    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_watched_actions.dart"
   ],
   "co_located_declarations": [
     [
@@ -477,7 +484,7 @@
       ]
     }
   ],
-  "completed_step": 3,
+  "completed_step": 4,
   "callback_whole_class_members": true,
   "adjacent_declarations": [
     [
@@ -528,6 +535,18 @@
       "owner": "EpisodesPanelAuth"
     },
     {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_enrichment.dart",
+      "owner": "EpisodesPanelEnrichment"
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_metadata.dart",
+      "owner": "EpisodesPanelMetadata"
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_mode.dart",
+      "owner": "EpisodesPanelMode"
+    },
+    {
       "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart",
       "owner": "EpisodesPanelProgress"
     },
@@ -536,12 +555,20 @@
       "owner": "EpisodesPanelResources"
     },
     {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_seasons.dart",
+      "owner": "EpisodesPanelSeasons"
+    },
+    {
       "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart",
       "owner": "EpisodesPanelServices"
     },
     {
       "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart",
       "owner": "EpisodesPanelViewState"
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_watched_actions.dart",
+      "owner": "EpisodesPanelWatchedActions"
     },
     {
       "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart",
@@ -558,5 +585,11 @@
       "owner": "EpisodesPanelState",
       "name": "EpisodesPanelState"
     }
+  },
+  "live_getter_aliases": {
+    "custom": "EpisodesPanelState._custom"
+  },
+  "retained_getter_steps": {
+    "EpisodesPanelState._custom": 6
   }
 }

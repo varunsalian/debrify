@@ -16,27 +16,16 @@ import 'package:debrify/models/custom_series_identity.dart';
 import 'package:debrify/models/media_identity.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
-import 'package:debrify/services/diagnostic_log.dart';
-import 'package:debrify/services/local_series_completion_service.dart';
-import 'package:debrify/services/mdblist/mdblist_continue_watching_service.dart';
 import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
-import 'package:debrify/services/mdblist/mdblist_models.dart';
-import 'package:debrify/services/metadata_episode_service.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
-import 'package:debrify/services/native_series_metadata_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/season_watched_service.dart';
-import 'package:debrify/services/storage/episode_resume_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
-import 'package:debrify/services/tvmaze_service.dart';
-import 'package:debrify/services/watched_action_coordinator.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/episode_progress_merge.dart';
-import 'package:debrify/utils/series_rewatch.dart';
 import 'package:debrify/utils/tv_keys.dart';
-import 'package:debrify/widgets/detail/detail_style.dart';
 import 'package:debrify/widgets/detail/theme/detail_theme.dart';
 import 'package:debrify/widgets/episode_tile.dart';
 import 'package:debrify/widgets/season_action_region.dart';
@@ -219,9 +208,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       onNextEpisodeChanged: () => widget.onNextEpisodeChanged,
       onSeriesCompletedChanged: () => widget.onSeriesCompletedChanged,
       contentBuilder: () => widget.contentBuilder,
+      custom: () => _custom,
     );
-    final progress = EpisodesPanelProgress();
-    final auth = EpisodesPanelAuth();
+    final progress = EpisodesPanelProgress(_deps);
+    final auth = EpisodesPanelAuth(_deps);
     final resources = EpisodesPanelResources();
     _parts = EpisodesPanelParts(
       _deps,
@@ -244,23 +234,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// that targets a widget only the classic tree contains.
   bool get _custom => widget.contentBuilder != null;
 
-  bool get _isTraktAuthenticated =>
-      _a.traktAuthenticated &&
-      !CustomSeriesIdentity.isCustom((_s.selectedShow ?? widget.show).imdbId);
-
-  bool get _isSimklAuthenticated =>
-      _a.simklAuthenticated &&
-      !CustomSeriesIdentity.isCustom((_s.selectedShow ?? widget.show).imdbId);
-
-  bool get _isMdblistAuthenticated =>
-      _a.mdblistAuthenticated &&
-      !CustomSeriesIdentity.isCustom((_s.selectedShow ?? widget.show).imdbId);
-
   @override
   void initState() {
     super.initState();
-    MetadataPreferencesService.revision.addListener(_episodePolicyChanged);
-    ProfileRuntime.scope.addListener(_episodePolicyChanged);
+    MetadataPreferencesService.revision.addListener(
+      _parts.metadata.episodePolicyChanged,
+    );
+    ProfileRuntime.scope.addListener(_parts.metadata.episodePolicyChanged);
     // The custom season-dropdown key handler deliberately traps Up/Left/Right
     // for the standalone route's single-row header. When hosted chromeless
     // (merged page), leave it to default directional focus so Up escapes to the
@@ -269,11 +249,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       _r.episodeSeasonDropdownFocusNode.onKeyEvent =
           _handleEpisodeSeasonDropdownKeyEvent;
     }
-    _resolveTraktAuth();
-    _resolveSimklAuth();
-    _resolveMdblistAuth();
-    _sv.mdblistService.playbackRevision.addListener(_onMdblistPlaybackRevision);
-    _enterEpisodeMode(
+    _a.resolveTraktAuth();
+    _a.resolveSimklAuth();
+    _a.resolveMdblistAuth();
+    _sv.mdblistService.playbackRevision.addListener(
+      _a.onMdblistPlaybackRevision,
+    );
+    _parts.mode.enterEpisodeMode(
       widget.show,
       initialSeason: widget.initialSeason,
       initialEpisode: widget.initialEpisode,
@@ -282,11 +264,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   @override
   void dispose() {
-    MetadataPreferencesService.revision.removeListener(_episodePolicyChanged);
-    ProfileRuntime.scope.removeListener(_episodePolicyChanged);
+    MetadataPreferencesService.revision.removeListener(
+      _parts.metadata.episodePolicyChanged,
+    );
+    ProfileRuntime.scope.removeListener(_parts.metadata.episodePolicyChanged);
     _a.mdblistRefreshToken++;
     _sv.mdblistService.playbackRevision.removeListener(
-      _onMdblistPlaybackRevision,
+      _a.onMdblistPlaybackRevision,
     );
     _r.episodeScrollController.dispose();
     _r.episodeBackButtonFocusNode.dispose();
@@ -298,549 +282,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     super.dispose();
   }
 
-  /// Load episode watch progress for the selected show.
-  ///
-  /// Merges two sources so both local (in-app, offline) and Trakt-tracked
-  /// watches are reflected — the old inline Trakt episode view only read Trakt,
-  /// the old catalog view only read local storage; a series opened from
-  /// Discover→Trakt needs both. All three sources key episodes as
-  /// `'<season>-<episode>'`, so they merge directly.
-  Future<void> _loadEpisodeWatchProgress(
-    StremioMeta show,
-    int generation,
-  ) async {
-    final policy = (await TrackingSourcePolicy.load()).forContent(
-      show.progressId,
-    );
-    if (!mounted || generation != _s.episodeModeGeneration) return;
-    _p.trackingPolicy = policy;
-    // Direct-source mode: the host owns progress (URL-keyed player positions
-    // mapped to S-E), and none of the IMDb-keyed sources below can know these
-    // episodes.
-    final progressLoader = widget.watchProgressLoader;
-    if (progressLoader != null) {
-      try {
-        final map = await progressLoader();
-        if (!mounted || generation != _s.episodeModeGeneration) return;
-        _logEpisodeProgress(
-          map,
-          {'direct_local': map},
-          {'direct_local': 'loaded'},
-        );
-        setState(() => _p.episodeWatchProgress = map);
-      } catch (e) {
-        debugPrint('EpisodesPanel: direct progress fetch failed: $e');
-      }
-      return;
-    }
-
-    final imdbId = show.progressId;
-    if (imdbId == null) return;
-
-    // Ticks and bars BOTH follow the Progress source (2026-08-27 decision —
-    // supersedes ticks-always-merged): each source contributes only when the
-    // policy admits it, so one map serves rendering and resume arbitration.
-    final merged = <String, double>{
-      if (policy.progressFrom(TrackingSource.local))
-        ...await EpisodeResumeStorage.getEpisodeWatchProgressByImdbId(imdbId),
-    };
-    if (!mounted || generation != _s.episodeModeGeneration) return;
-
-    final inputs = <String, Map<String, double>>{'local': Map.of(merged)};
-    final statuses = <String, String>{
-      for (final source in TrackingSource.values)
-        source.name: policy.progressFrom(source)
-            ? 'not_connected'
-            : 'excluded_by_policy',
-      'local': policy.progressFrom(TrackingSource.local)
-          ? 'loaded'
-          : 'excluded_by_policy',
-    };
-
-    // Overlay Trakt state when connected — gated on auth like the Simkl block
-    // below (fresh storage read, not a raced field). The fetches were already
-    // empty no-ops without a token, but they logged "failed (null)" on every
-    // refresh — indistinguishable from a real API failure, which sent a whole
-    // debugging session chasing a phantom credential after a disconnect.
-    if (policy.progressFrom(TrackingSource.trakt) &&
-        await _sv.traktService.isAuthenticated()) {
-      if (!mounted || generation != _s.episodeModeGeneration) return;
-      try {
-        final watched = await _sv.traktService.fetchWatchedShowEpisodes(imdbId);
-        if (!mounted || generation != _s.episodeModeGeneration) return;
-        final playback = await _sv.traktService.fetchEpisodePlaybackProgress(
-          imdbId,
-        );
-        if (!mounted || generation != _s.episodeModeGeneration) return;
-
-        // Fully-watched episodes win outright.
-        inputs['trakt'] = {...playback, for (final key in watched) key: 100.0};
-        statuses['trakt'] = 'loaded';
-        for (final key in watched) {
-          merged[key] = 100.0;
-        }
-        // Partial playback overlays, but never downgrades a completed episode
-        // and only when it's meaningful and higher than what we already have.
-        for (final entry in playback.entries) {
-          final existing = merged[entry.key] ?? 0;
-          if (existing >= 100.0) continue;
-          if (entry.value > 5.0 && entry.value > existing) {
-            merged[entry.key] = entry.value;
-          }
-        }
-      } catch (e) {
-        statuses['trakt'] = 'error';
-        debugPrint('EpisodesPanel: Trakt episode progress fetch failed: $e');
-      }
-    }
-
-    // Overlay Simkl state — a third source, same merge rules as Trakt's
-    // (watched wins outright, partials only raise). Skipped entirely when
-    // Simkl isn't connected so disconnected users pay zero extra calls.
-    //
-    // Asked FRESH rather than read off [_isSimklAuthenticated]: that field is
-    // resolved concurrently from initState, and this loader used to win the
-    // race against it — silently skipping the Simkl overlay on first open.
-    // It only STARTED losing when the profiles/at-rest-encryption work turned
-    // the token read from one SharedPreferences hop into ProfilePreferences +
-    // SecretVault, which is exactly when "no ticks on a fresh install with
-    // only Simkl history" was reported (2026-08-16). Nothing re-runs this
-    // loader when the field flips later, so losing the race wasn't a delay —
-    // it was a miss. One storage read here keeps the no-API-when-disconnected
-    // intent without racing anybody; the field keeps gating the episode MENU
-    // rows, where by open-time it has long settled.
-    if (policy.progressFrom(TrackingSource.simkl) &&
-        await _sv.simklService.isAuthenticated()) {
-      try {
-        final watched = await _sv.simklService.fetchWatchedShowEpisodes(imdbId);
-        if (!mounted || generation != _s.episodeModeGeneration) return;
-        final playback = await _sv.simklService.fetchEpisodePlaybackProgress(
-          imdbId,
-        );
-        if (!mounted || generation != _s.episodeModeGeneration) return;
-
-        inputs['simkl'] = {...playback, for (final key in watched) key: 100.0};
-        statuses['simkl'] = 'loaded';
-        for (final key in watched) {
-          merged[key] = 100.0;
-        }
-        for (final entry in playback.entries) {
-          final existing = merged[entry.key] ?? 0;
-          if (existing >= 100.0) continue;
-          if (entry.value > 5.0 && entry.value > existing) {
-            merged[entry.key] = entry.value;
-          }
-        }
-      } catch (e) {
-        statuses['simkl'] = 'error';
-        debugPrint('EpisodesPanel: Simkl episode progress fetch failed: $e');
-      }
-    }
-
-    if ((MediaIdentity.isImdb(imdbId) || MediaIdentity.isNative(imdbId)) &&
-        await _sv.mdblistService.isAuthenticated()) {
-      if (policy.progressFrom(TrackingSource.mdblist)) {
-        try {
-          final result = await _sv.mdblistService.fetchShowEpisodeProgress(
-            imdbId,
-          );
-          if (!mounted || generation != _s.episodeModeGeneration) return;
-          if (result.isUsable) {
-            inputs['mdblist'] = Map.of(result.data!);
-            statuses['mdblist'] = 'loaded';
-            for (final entry in result.data!.entries) {
-              final existing = merged[entry.key] ?? 0;
-              if (entry.value >= 100 || entry.value > existing) {
-                merged[entry.key] = entry.value;
-              }
-            }
-          } else {
-            statuses['mdblist'] = 'unavailable';
-          }
-        } catch (e) {
-          statuses['mdblist'] = 'error';
-          debugPrint(
-            'EpisodesPanel: MDBList episode progress fetch failed: $e',
-          );
-        }
-      }
-      try {
-        final result = await _sv.mdblistService.fetchShowEpisodeRatings(imdbId);
-        if (!mounted || generation != _s.episodeModeGeneration) return;
-        if (result.isUsable) {
-          _p.episodeMdblistRatings = result.data!;
-        }
-      } catch (e) {
-        debugPrint('EpisodesPanel: MDBList episode ratings fetch failed: $e');
-      }
-    }
-
-    if (mounted && generation == _s.episodeModeGeneration) {
-      final next = _mergedUpNext(merged, _s.trackerNextRaw);
-      _logEpisodeProgress(merged, inputs, statuses, next: next);
-      setState(() {
-        _p.episodeWatchProgress = merged;
-        _s.nextEpisode = next;
-      });
-      if (next != null) _publishNextEpisode(next);
-      _publishSeriesCompletion();
-    }
-  }
-
-  /// Refresh-time diagnostics; never logs tokens, URLs, or episode titles.
-  void _logEpisodeProgress(
-    Map<String, double> merged,
-    Map<String, Map<String, double>> inputs,
-    Map<String, String> statuses, {
-    EpisodeCoordinate? next,
-  }) {
-    final keys = <String>{
-      ...merged.keys,
-      for (final input in inputs.values) ...input.keys,
-      for (final season in _s.episodeSeasons)
-        for (final episode in season.episodes)
-          '${episode.season}-${episode.number}',
-    };
-    final refresh = DateTime.now().microsecondsSinceEpoch;
-    for (final key in keys) {
-      final coordinate = RegExp(r'^(\d+)[_-](\d+)$').firstMatch(key);
-      if (coordinate == null) continue;
-      final season = int.parse(coordinate.group(1)!);
-      final episode = int.parse(coordinate.group(2)!);
-      final progress = merged[key] ?? 0;
-      final winners = inputs.entries
-          .where((entry) {
-            final value = entry.value[key];
-            return value != null &&
-                value > 0 &&
-                value == progress &&
-                (!const ['trakt', 'simkl'].contains(entry.key) || value > 5);
-          })
-          .map((entry) => entry.key)
-          .toList();
-      final fields = <String, Object?>{
-        'refresh': refresh,
-        'season': season,
-        'episode': episode,
-        'display_percent': progress,
-        'watched': progress >= 100,
-        'up_next': next?.season == season && next?.episode == episode,
-        'winning_sources': DiagnosticLabel(
-          winners.isEmpty ? 'none' : winners.join('+'),
-        ),
-        for (final entry in statuses.entries)
-          '${entry.key}_status': DiagnosticLabel(entry.value),
-        for (final entry in inputs.entries)
-          '${entry.key}_percent': entry.value[key],
-      };
-      DiagnosticLog.instance.recordEvent(
-        source: 'episode_progress',
-        event: 'detail_merge',
-        fields: fields,
-      );
-      debugPrint(
-        'EpisodeProgress: refresh=$refresh S${season}E$episode '
-        'inputs=${{for (final entry in inputs.entries) entry.key: entry.value[key]}} '
-        'status=$statuses displayed=$progress winners=${winners.join('+')} '
-        'watched=${progress >= 100} upNext=${fields['up_next']}',
-      );
-    }
-  }
-
-  ({int season, int episode})? _mergedUpNext(
-    Map<String, double> progress,
-    ({int season, int episode})? trackerNext,
-  ) => mergedEpisodeUpNext(
-    episodes: [
-      for (final season in _s.episodeSeasons)
-        for (final episode in season.episodes)
-          (season: episode.season, episode: episode.number),
-    ],
-    progress: progress,
-    trackerNext: trackerNext,
-  );
-
-  void _publishNextEpisode(EpisodeCoordinate next, {bool mutation = false}) {
-    widget.onNextEpisodeChanged?.call(
-      episodeResumeTarget(next: next, progress: _p.episodeWatchProgress),
-      mutation: mutation,
-    );
-  }
-
-  void _publishSeriesCompletion() {
-    widget.onSeriesCompletedChanged?.call(
-      !_isDirectSource &&
-          isSeriesFullyWatched({
-            for (final s in _s.episodeSeasons)
-              s.number: s.episodes.map((e) => e.number),
-          }, _p.episodeWatchProgress),
-    );
-  }
-
-  void _onMdblistPlaybackRevision() {
-    if (!mounted || _isDirectSource) return;
-    MdblistContinueWatchingService.instance.invalidate();
-    final token = ++_a.mdblistRefreshToken;
-    unawaited(_refreshAfterMdblistMutation(token));
-  }
-
-  Future<void> _refreshAfterMdblistMutation(int token) async {
-    // A successful stop is reported while the player route may still cover the
-    // detail page. Do not discard that notification; wait for the pop instead.
-    for (var attempt = 0; attempt < 20; attempt++) {
-      if (!mounted || token != _a.mdblistRefreshToken) return;
-      if (ModalRoute.of(context)?.isCurrent ?? true) break;
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    }
-    if (!mounted || token != _a.mdblistRefreshToken) return;
-    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
-
-    // MDBList's /scrobble/stop response can precede /sync/watched becoming
-    // readable, so an immediate refetch can paint pre-mutation data — wait out
-    // the propagation window and do ONE authoritative refresh. (This used to
-    // refresh immediately AND again after the delay; the first pass only ever
-    // showed data the second pass replaced, at double the tracker requests.)
-    await Future<void>.delayed(const Duration(milliseconds: 750));
-    if (!mounted || token != _a.mdblistRefreshToken) return;
-    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
-    await refreshWatchProgress();
-  }
-
   /// Re-read watch progress (local + Trakt) for the current show. Called by the
   /// merged detail host when the player pops back onto it, so the just-watched
   /// episode's tick/progress bar updates without leaving the list.
   Future<void> refreshWatchProgress() async {
     final show = _s.selectedShow;
     if (show == null) return;
-    await _loadEpisodeWatchProgress(show, _s.episodeModeGeneration);
-  }
-
-  /// Direct-source mode (see [EpisodesPanel.seasonsLoader]) — episodes are
-  /// playable URLs with no IMDb identity, so every IMDb-keyed pathway is off.
-  bool get _isDirectSource => widget.seasonsLoader != null;
-
-  /// Resolve whether a Trakt account is connected (gates the episode menu).
-  Future<void> _resolveTraktAuth() async {
-    if (_isDirectSource) return; // no IMDb id — the Trakt menu can't act
-    final authed = await _sv.traktService.isAuthenticated();
-    if (mounted && authed != _isTraktAuthenticated) {
-      setState(() => _a.traktAuthenticated = authed);
-    }
-  }
-
-  /// Resolve whether a Simkl account is connected — mirrors [_resolveTraktAuth].
-  Future<void> _resolveSimklAuth() async {
-    if (_isDirectSource) return; // mirrors _resolveTraktAuth
-    final authed = await _sv.simklService.isAuthenticated();
-    if (mounted && authed != _isSimklAuthenticated) {
-      setState(() => _a.simklAuthenticated = authed);
-    }
-  }
-
-  Future<void> _resolveMdblistAuth() async {
-    if (_isDirectSource) return;
-    final authed = await _sv.mdblistService.isAuthenticated();
-    if (mounted && authed != _isMdblistAuthenticated) {
-      setState(() => _a.mdblistAuthenticated = authed);
-    }
-  }
-
-  /// Everywhere a watched-state change will be written: the connected
-  /// trackers, plus this device's own playback storage — always on unwatch
-  /// (local completion is a tick source only the app can clear), on watch only
-  /// when it is the sole store available. Shared by the action itself and the
-  /// menu row's subtitle, so what the row promises IS what the action does.
-  List<String> _watchedSyncTargets({required bool watched}) {
-    final show = _s.selectedShow;
-    final imdb = show == null ? '' : (show.progressId ?? show.id);
-    final targets = <String>[
-      if (_isTraktAuthenticated &&
-          _p.trackingPolicy.scrobbles(TrackingSource.trakt))
-        'Trakt',
-      if (_isSimklAuthenticated &&
-          _p.trackingPolicy.scrobbles(TrackingSource.simkl))
-        'Simkl',
-      if (_isMdblistAuthenticated &&
-          (MediaIdentity.isImdb(imdb) || MediaIdentity.isNative(imdb)) &&
-          _p.trackingPolicy.scrobbles(TrackingSource.mdblist))
-        'MDBList',
-      'this device',
-    ];
-    return targets;
-  }
-
-  /// Set an episode's watched state everywhere at once: local playback
-  /// storage plus every connected tracker. The ticks this panel paints are an
-  /// OR-union of all of those sources (see [_loadEpisodeWatchProgress]), so a
-  /// per-provider action can never make an unwatch stick — whichever source
-  /// wasn't cleared resurrects the tick when the union is re-merged on the
-  /// next panel open (2026-08-24 report: episodes unwatched on Trakt AND
-  /// Simkl kept re-ticking on detail re-entry).
-  Future<void> _setEpisodeWatchedEverywhere(
-    TraktEpisode episode, {
-    required bool watched,
-  }) async {
-    final show = _s.selectedShow;
-    if (show == null) return;
-    final showImdbId = show.progressId ?? show.id;
-    final key = '${episode.season}-${episode.number}';
-    final targets = _watchedSyncTargets(watched: watched);
-    final result = await WatchedActionCoordinator.setEpisodeWatched(
-      imdbId: showImdbId,
-      seriesTitle: show.name,
-      season: episode.season,
-      episode: episode.number,
-      watched: watched,
-    );
-    final failed = result.failedTargets;
-
-    if (!mounted) return;
-    MdblistContinueWatchingService.instance.invalidate();
-    // Only move the tick if some store actually changed — when every write
-    // failed, an optimistic update would paint a state that silently reverts
-    // on the next re-merge. (Unwatch always changes at least local storage.)
-    final done = targets.where((t) => !failed.contains(t)).toList();
-    // Guide ticks follow the Progress source, so the optimistic update only
-    // sticks when this action reached a source the guide actually renders —
-    // otherwise the next re-merge would silently revert it.
-    final rendersHere =
-        _p.trackingPolicy.isSmart ||
-        (_p.trackingPolicy.progressFrom(TrackingSource.local) &&
-            done.contains('this device')) ||
-        (_p.trackingPolicy.progressFrom(TrackingSource.trakt) &&
-            done.contains('Trakt')) ||
-        (_p.trackingPolicy.progressFrom(TrackingSource.simkl) &&
-            done.contains('Simkl')) ||
-        (_p.trackingPolicy.progressFrom(TrackingSource.mdblist) &&
-            done.contains('MDBList'));
-    if (done.isNotEmpty && rendersHere) {
-      setState(() {
-        if (watched) {
-          _p.episodeWatchProgress[key] = 100.0;
-        } else {
-          _p.episodeWatchProgress.remove(key);
-        }
-        _s.nextEpisode = _mergedUpNext(
-          _p.episodeWatchProgress,
-          _s.trackerNextRaw,
-        );
-      });
-      final next = _s.nextEpisode;
-      if (next != null) _publishNextEpisode(next, mutation: true);
-      _publishSeriesCompletion();
-    }
-    final label =
-        'Marked as ${watched ? 'Watched' : 'Unwatched'}'
-        '${done.isEmpty ? '' : ' on ${EpisodesPanelPolicies.joinNames(done)}'}';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          failed.isEmpty ? label : '$label — failed on ${failed.join(', ')}',
-        ),
-        backgroundColor: failed.isEmpty
-            ? const Color(0xFF34D399)
-            : const Color(0xFFEF4444),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  /// Handle the episode quick-strip / long-press menu against Trakt. The
-  /// watched-state actions route through [_setEpisodeWatchedEverywhere] — the
-  /// tick is a multi-source union, so they must never act on Trakt alone.
-  Future<void> _onEpisodeMenuAction(
-    TraktEpisode episode,
-    TraktEpisodeMenuAction action,
-  ) async {
-    final show = _s.selectedShow;
-    if (show == null) return;
-    final showImdbId = show.progressId ?? show.id;
-    bool success = false;
-    String actionLabel = '';
-
-    switch (action) {
-      case TraktEpisodeMenuAction.markWatched:
-        return _setEpisodeWatchedEverywhere(episode, watched: true);
-      case TraktEpisodeMenuAction.markUnwatched:
-        return _setEpisodeWatchedEverywhere(episode, watched: false);
-      case TraktEpisodeMenuAction.rate:
-        if (!mounted) return;
-        final rating = await showTraktRatingDialog(context);
-        if (rating == null) return;
-        actionLabel = 'Rated $rating/10';
-        success = await _sv.traktService.rateEpisode(
-          showImdbId,
-          episode.season,
-          episode.number,
-          rating,
-        );
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(success ? actionLabel : 'Failed: $actionLabel'),
-        backgroundColor: success
-            ? const Color(0xFF34D399)
-            : const Color(0xFFEF4444),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  Future<void> _onEpisodeMdblistMenuAction(
-    TraktEpisode episode,
-    MdblistEpisodeMenuAction action,
-  ) async {
-    final show = _s.selectedShow;
-    if (show == null) return;
-    final imdb = show.progressId ?? show.id;
-    if (!MediaIdentity.isImdb(imdb) && !MediaIdentity.isNative(imdb)) return;
-    final ids = MdblistMediaIds.forContent(imdb);
-    final key = '${episode.season}-${episode.number}';
-    bool success;
-    String label;
-    switch (action) {
-      case MdblistEpisodeMenuAction.markWatched:
-        return _setEpisodeWatchedEverywhere(episode, watched: true);
-      case MdblistEpisodeMenuAction.markUnwatched:
-        return _setEpisodeWatchedEverywhere(episode, watched: false);
-      case MdblistEpisodeMenuAction.rate:
-        if (!mounted) return;
-        final rating = await showMdblistRatingDialog(context);
-        if (rating == null) return;
-        success = await _sv.mdblistService.rateTitle(
-          ids,
-          'episode',
-          rating,
-          season: episode.season,
-          episode: episode.number,
-        );
-        label = 'Rated $rating/10 on MDBList';
-        if (success && mounted) {
-          setState(() => _p.episodeMdblistRatings[key] = rating);
-        }
-      case MdblistEpisodeMenuAction.removeRating:
-        success = await _sv.mdblistService.removeRating(
-          ids,
-          'episode',
-          season: episode.season,
-          episode: episode.number,
-        );
-        label = 'Removed rating from MDBList';
-        if (success && mounted) {
-          setState(() => _p.episodeMdblistRatings.remove(key));
-        }
-    }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(success ? label : 'Failed: $label'),
-        backgroundColor: success
-            ? const Color(0xFF34D399)
-            : const Color(0xFFEF4444),
-      ),
-    );
+    await _p.loadEpisodeWatchProgress(show, _s.episodeModeGeneration);
   }
 
   // ── Episode drill-down ──────────────────────────────────────────────────
@@ -857,677 +305,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       posterUrl: show.poster,
     );
     widget.onItemSelected?.call(selection);
-  }
-
-  /// Build the season list from the title's own addon or built-in guide.
-  /// The built-in guide includes its own Trakt fallback; other addons and
-  /// placeholder sources fall back to Trakt here.
-  Future<List<TraktSeason>> _fetchSeasons(StremioMeta show) async {
-    // 0) Direct-source mode: the loader is the only season source — a failure
-    //    surfaces the retry panel rather than falling through to fetchers
-    //    that cannot know this show.
-    final directLoader = widget.seasonsLoader;
-    if (directLoader != null) {
-      try {
-        return await directLoader();
-      } catch (e) {
-        debugPrint('EpisodesPanel: direct seasons fetch failed: $e');
-        return [];
-      }
-    }
-
-    // 1) The title's own addon, or built-in metadata for tracker cards.
-    if (widget.addon.id == NativeSeriesMetadataService.addon.id ||
-        MediaIdentity.isNative(show.id) ||
-        widget.addon.baseUrl.isNotEmpty ||
-        widget.addon.manifestUrl.isNotEmpty) {
-      try {
-        final videos = await _sv.stremioService.fetchSeriesMeta(
-          widget.addon,
-          show.id,
-        );
-        final seasons = _groupVideosIntoSeasons(videos);
-        if (seasons.isNotEmpty ||
-            widget.addon.id == NativeSeriesMetadataService.addon.id) {
-          return seasons;
-        }
-      } catch (e) {
-        debugPrint('EpisodesPanel: addon meta fetch failed: $e');
-      }
-    }
-
-    // 2) Trakt public seasons API (no auth required; keyed off the IMDb id).
-    if (CustomSeriesIdentity.isCustom(show.imdbId)) return [];
-    final traktId = show.progressId ?? show.id;
-    if (MediaIdentity.isImdb(traktId)) {
-      try {
-        final raw = await _sv.traktService.fetchShowSeasons(traktId);
-        // Dedupe by season number: a malformed response can yield >1 season
-        // that both default to number 0, which would give the season dropdown
-        // two items with the same value and trip its assertion. seen.add()
-        // returns false for a number already present, dropping the duplicate.
-        final seen = <int>{};
-        final seasons =
-            raw
-                .map((s) => TraktSeason.fromJson(s))
-                // Keep Specials (season 0); drop negatives and duplicate numbers.
-                .where(
-                  (s) =>
-                      s.number >= 0 &&
-                      s.episodes.isNotEmpty &&
-                      seen.add(s.number),
-                )
-                .toList()
-              ..sort(seasonsSpecialsLast);
-        if (seasons.isNotEmpty) return seasons;
-      } catch (e) {
-        debugPrint('EpisodesPanel: Trakt seasons fetch failed: $e');
-      }
-    }
-
-    return [];
-  }
-
-  /// Group raw Stremio addon meta `videos` into seasons, sorted by season then
-  /// episode with Specials (season 0) last. Returns an empty list when there is
-  /// nothing usable (null/empty input).
-  List<TraktSeason> _groupVideosIntoSeasons(
-    List<Map<String, dynamic>>? videos,
-  ) {
-    if (videos == null || videos.isEmpty) return [];
-
-    final seasonMap = <int, List<TraktEpisode>>{};
-    for (final v in videos) {
-      final seasonRaw = v['season'];
-      final seasonNum = seasonRaw is int
-          ? seasonRaw
-          : (seasonRaw is num ? seasonRaw.toInt() : null);
-      // Keep Specials (season 0); drop only invalid/negative season numbers.
-      if (seasonNum == null || seasonNum < 0) continue;
-
-      final epRaw = v['number'] ?? v['episode'];
-      final epNum = epRaw is int
-          ? epRaw
-          : (epRaw is num ? epRaw.toInt() : null);
-      if (epNum == null) continue;
-
-      final title = (v['title'] as String?) ?? (v['name'] as String?) ?? '';
-      final overview = v['overview'] as String?;
-      final released = v['released'] as String?;
-      final thumbnail = EpisodesPanelPolicies.downsizeMetahubThumb(
-        v['thumbnail'] as String?,
-      );
-      final ratingRaw = v['imdbRating'] ?? v['rating'];
-      final rating = ratingRaw is num
-          ? ratingRaw.toDouble()
-          : (ratingRaw is String ? double.tryParse(ratingRaw) : null);
-
-      final episode = TraktEpisode(
-        season: seasonNum,
-        number: epNum,
-        title: title,
-        overview: overview,
-        firstAired: released,
-        thumbnailUrl: thumbnail,
-        rating: rating,
-        stremioVideoId: v['id']?.toString(),
-      );
-
-      seasonMap.putIfAbsent(seasonNum, () => []);
-      seasonMap[seasonNum]!.add(episode);
-    }
-
-    if (seasonMap.isEmpty) return [];
-
-    return seasonMap.entries.map((e) {
-      final episodes = e.value..sort((a, b) => a.number.compareTo(b.number));
-      return TraktSeason(
-        number: e.key,
-        episodeCount: episodes.length,
-        episodes: episodes,
-      );
-    }).toList()..sort(seasonsSpecialsLast);
-  }
-
-  void _enterEpisodeMode(
-    StremioMeta show, {
-    int? initialSeason,
-    int? initialEpisode,
-  }) async {
-    final generation = ++_s.episodeModeGeneration;
-    try {
-      show = await _sv.stremioService.scopeSeriesProgress(show, widget.addon);
-    } on StateError {
-      if (mounted && generation == _s.episodeModeGeneration) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not verify series episodes. Please retry.'),
-          ),
-        );
-      }
-      return;
-    }
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(
-      show.progressId,
-    );
-    if (!mounted || generation != _s.episodeModeGeneration) return;
-    _p.trackingPolicy = trackingPolicy;
-
-    setState(() {
-      _s.selectedShow = show;
-      _s.isLoadingEpisodes = true;
-      _s.episodesUnavailable = false;
-      _s.episodeSeasons = [];
-      _p.episodeMdblistRatings = {};
-      _s.selectedSeasonNumber = initialSeason ?? 1;
-      _s.nextEpisode = null;
-      _s.trackerNextRaw = null;
-    });
-
-    // Load watch progress (non-blocking; generation-guarded). The "up next"
-    // marker is resolved inline below since it also drives where we land.
-    // Direct-source mode awaits this future before landing — progress is its
-    // only resume signal (there is no Trakt next-episode for these shows).
-    final progressFuture = _loadEpisodeWatchProgress(show, generation);
-
-    for (final node in _r.episodeFocusNodes) {
-      node.dispose();
-    }
-    _r.episodeFocusNodes.clear();
-
-    try {
-      // The seasons fetch, Trakt's "next episode" lookup, and (on the Trakt
-      // path) the TVMaze thumbnail map are independent — fire all of them now
-      // instead of serializing three network round trips before content shows.
-      // Each side future swallows its own errors so a failure can neither
-      // bubble to the outer catch nor go unhandled if we bail on a stale
-      // generation before awaiting it.
-      final seasonsFuture = _fetchSeasons(show);
-
-      // Trakt "next episode" — drives the up-next tile highlight and the
-      // landing target. Instant/null without a Trakt account (no token → no
-      // request). Direct-source shows have no Trakt identity — skip outright
-      // rather than fire a request keyed on a sentinel id.
-      final nextEpisodeFuture =
-          _isDirectSource || !trackingPolicy.progressFrom(TrackingSource.trakt)
-          ? Future<({int season, int episode})?>.value(null)
-          : _sv.traktService
-                .fetchNextEpisode(show.progressId ?? show.id)
-                .catchError((Object e) {
-                  debugPrint('EpisodesPanel: next-episode fetch failed: $e');
-                  return null;
-                });
-
-      // Trakt-sourced items carry a stub addon (no base URL) and their
-      // episodes arrive without stills — warm the TVMaze map alongside the
-      // seasons fetch so tiles can show real stills at (or right after) first
-      // paint instead of swapping in seconds later. Direct-source episodes
-      // bring their own stills (or none) — TVMaze can't know them.
-      final addonHasMeta =
-          widget.addon.baseUrl.isNotEmpty ||
-          widget.addon.manifestUrl.isNotEmpty;
-      final prefetchedThumbs = (addonHasMeta || _isDirectSource)
-          ? null
-          : _fetchTvmazeThumbMap(show.effectiveImdbId);
-
-      final seasons = await seasonsFuture;
-      if (!mounted || generation != _s.episodeModeGeneration) return;
-
-      if (seasons.isEmpty) {
-        setState(() {
-          _s.isLoadingEpisodes = false;
-          _s.episodesUnavailable = true;
-        });
-        return;
-      }
-
-      final imdbId = show.progressId;
-      if (!_isDirectSource && imdbId != null && imdbId.isNotEmpty) {
-        unawaited(
-          LocalSeriesCompletionService.instance.recordEpisodeInventory(
-            imdbId: imdbId,
-            seriesTitle: show.name,
-            seasons: seasons,
-          ),
-        );
-      }
-
-      // Resolve where to land (season + episode to auto-switch and scroll to),
-      // mirroring the old home episode view. Priority:
-      //   1. explicit initialSeason/initialEpisode (deep links, calendar)
-      //   2. Trakt's "next episode" — the cross-device resume point
-      //   3. this device's last-played episode (local storage)
-      //   4. first season, first episode
-      // Each tier supplies both fields together so season/episode never mix
-      // across sources.
-      int? effectiveSeason = initialSeason;
-      int? effectiveEpisode = initialEpisode;
-
-      // 2. Trakt "next episode" — already in flight (fired alongside the
-      //    seasons fetch above); errors resolve to null there, so this await
-      //    can never bubble to the outer catch and drop us to torrent search.
-      final nextEpisode = await nextEpisodeFuture;
-      if (!mounted || generation != _s.episodeModeGeneration) return;
-      // Keep the raw value for the up-next highlight (it self-limits to a
-      // displayed tile). Only adopt it as the landing target when its season is
-      // actually present, so we never scroll to the wrong episode in season 1.
-      _s.nextEpisode = nextEpisode;
-      _s.trackerNextRaw = nextEpisode;
-      if (effectiveSeason == null &&
-          effectiveEpisode == null &&
-          nextEpisode != null &&
-          seasons.any((s) => s.number == nextEpisode.season)) {
-        effectiveSeason = nextEpisode.season;
-        effectiveEpisode = nextEpisode.episode;
-      }
-
-      // 3a. Direct-source resume — from the host's progress map (the only
-      //     signal these shows have): land on the last started episode, or
-      //     the one after it when it's essentially finished.
-      if (_isDirectSource &&
-          effectiveSeason == null &&
-          effectiveEpisode == null) {
-        await progressFuture;
-        if (!mounted || generation != _s.episodeModeGeneration) return;
-        final target = _directLandingTarget(seasons);
-        if (target != null) {
-          effectiveSeason = target.season;
-          effectiveEpisode = target.episode;
-        }
-      }
-
-      // 3. Last-played (local) fallback — by IMDb id, then by title.
-      if (!_isDirectSource &&
-          trackingPolicy.progressFrom(TrackingSource.local) &&
-          effectiveSeason == null &&
-          effectiveEpisode == null) {
-        final imdbId = show.progressId;
-        if (imdbId != null) {
-          final lastPlayed =
-              await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(imdbId);
-          if (!mounted || generation != _s.episodeModeGeneration) return;
-          if (lastPlayed != null) {
-            effectiveSeason = lastPlayed['season'] as int?;
-            effectiveEpisode = lastPlayed['episode'] as int?;
-          }
-        }
-        if (!MediaIdentity.isNative(show.progressId) &&
-            !CustomSeriesIdentity.isCustom(show.imdbId) &&
-            effectiveSeason == null &&
-            effectiveEpisode == null) {
-          final byTitle = await EpisodeResumeStorage.getLastPlayedEpisode(
-            seriesTitle: show.name,
-          );
-          if (!mounted || generation != _s.episodeModeGeneration) return;
-          if (byTitle != null) {
-            effectiveSeason = byTitle['season'] as int?;
-            effectiveEpisode = byTitle['episode'] as int?;
-          }
-        }
-      }
-
-      // Pick the target season: prefer the resolved season if it exists
-      final targetSeason =
-          (effectiveSeason != null &&
-              seasons.any((s) => s.number == effectiveSeason))
-          ? seasons.firstWhere((s) => s.number == effectiveSeason)
-          : seasons.first;
-
-      // Build focus nodes for target season
-      for (int i = 0; i < targetSeason.episodes.length; i++) {
-        _r.episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
-      }
-
-      // The stored/next-up episode number is only meaningful inside the season
-      // it came from. When the resolved season fell back to `seasons.first`
-      // (because the remembered one no longer exists), carrying the episode
-      // number across would land on an unrelated episode of season 1.
-      final landedInTargetSeason =
-          effectiveSeason == null || effectiveSeason == targetSeason.number;
-      final landingEpisode = (landedInTargetSeason && effectiveEpisode != null)
-          ? targetSeason.episodes
-                .where((e) => e.number == effectiveEpisode)
-                .firstOrNull
-          : null;
-
-      setState(() {
-        _s.episodeSeasons = seasons;
-        _s.nextEpisode = _mergedUpNext(
-          _p.episodeWatchProgress,
-          _s.trackerNextRaw,
-        );
-        _s.selectedSeasonNumber = targetSeason.number;
-        _s.isLoadingEpisodes = false;
-        _s.landing = landingEpisode ?? targetSeason.episodes.firstOrNull;
-        _s.focusIntent = EpisodeFocusIntent.landing;
-        _s.viewGeneration++;
-      });
-      _episodeMetadataBaselines
-        ..clear()
-        ..addEntries(seasons.map((season) => MapEntry(season.number, season)));
-      unawaited(_loadSelectedEpisodeMetadata());
-      final mergedNext = _s.nextEpisode;
-      _publishSeriesCompletion();
-      if (mergedNext != null) {
-        _publishNextEpisode(mergedNext);
-      }
-
-      // Fill in per-episode thumbnails from TVMaze for any episode that didn't
-      // come with one (Trakt-sourced items have none; addon items keep theirs).
-      // Non-blocking — and on the Trakt path the map was prefetched alongside
-      // the seasons, so stills usually land within a frame of first paint.
-      // Both enrichments are IMDb-keyed, so direct-source shows skip them.
-      if (!_isDirectSource) {
-        _enrichEpisodeThumbnails(
-          show,
-          seasons,
-          generation,
-          prefetched: prefetchedThumbs,
-        );
-
-        // Backfill per-episode ratings from Trakt when the addon didn't supply
-        // real ones (Cinemeta sends rating:0). Non-blocking — ratings pop in.
-        _enrichEpisodeRatings(show, seasons, generation);
-      }
-
-      // Scroll to (and focus) the target episode once its tile is built.
-      // Robust against variable EpisodeTile height + lazy ListView building
-      // (the old fixed focusIndex*128 estimate is wrong for the new tile).
-      // A custom arrangement owns its own scrollable and FocusNodes, so the
-      // engine's reveal would target widgets that do not exist there. The
-      // layout reveals `view.landing` itself, driven by `focusIntent`.
-      if (!_custom) {
-        final targetEpIndex = effectiveEpisode != null
-            ? targetSeason.episodes.indexWhere(
-                (e) => e.number == effectiveEpisode,
-              )
-            : -1;
-        _scrollFocusEpisode(
-          targetEpIndex < 0 ? 0 : targetEpIndex,
-          targetSeason.episodes.length,
-          generation,
-        );
-      }
-    } catch (e) {
-      if (!mounted || generation != _s.episodeModeGeneration) return;
-      debugPrint('EpisodesPanel: Episode fetch failed: $e');
-      setState(() {
-        _s.isLoadingEpisodes = false;
-        _s.episodesUnavailable = true;
-      });
-    }
-  }
-
-  /// Direct-source landing: the last episode (in season/episode order, with
-  /// the same Specials-last rule the list renders in) that has any progress —
-  /// advanced to the next episode when it's essentially finished (≥95%). Null
-  /// when nothing has been started, leaving the default first-episode landing.
-  ({int season, int episode})? _directLandingTarget(List<TraktSeason> seasons) {
-    final flat = [for (final s in seasons) ...s.episodes];
-    int lastStarted = -1;
-    for (var i = 0; i < flat.length; i++) {
-      final p =
-          _p.episodeWatchProgress['${flat[i].season}-${flat[i].number}'] ?? 0;
-      if (p > 0) lastStarted = i;
-    }
-    if (lastStarted < 0) return null;
-    final p =
-        _p.episodeWatchProgress['${flat[lastStarted].season}-${flat[lastStarted].number}'] ??
-        0;
-    final target = (p >= 95 && lastStarted + 1 < flat.length)
-        ? flat[lastStarted + 1]
-        : flat[lastStarted];
-    return (season: target.season, episode: target.number);
-  }
-
-  /// Backfill per-episode ratings from Trakt's public seasons API, keyed off
-  /// the show's IMDb id. Runs only when NO episode already has a real rating —
-  /// i.e. an addon like Cinemeta returned `rating: 0` for everything. This is
-  /// exactly the rating source the Trakt fallback path uses, applied on top of
-  /// the addon's richer metadata (thumbnails, overviews, air dates). Best-effort
-  /// and non-blocking: any failure just leaves ratings unshown.
-  Future<void> _enrichEpisodeRatings(
-    StremioMeta show,
-    List<TraktSeason> seasons,
-    int generation,
-  ) async {
-    // Nothing to do if the episodes already carry real ratings.
-    final hasRealRating = seasons.any(
-      (s) => s.episodes.any((e) => (e.rating ?? 0) > 0),
-    );
-    if (hasRealRating) return;
-
-    final imdbId = show.progressId ?? show.id;
-    if (!MediaIdentity.isImdb(imdbId)) return;
-
-    try {
-      final raw = await _sv.traktService.fetchShowSeasons(imdbId);
-      if (!mounted || generation != _s.episodeModeGeneration) return;
-
-      // Build lookup: "S-E" → rating (only real, >0 ratings).
-      final ratingMap = <String, double>{};
-      for (final s in raw.map((s) => TraktSeason.fromJson(s))) {
-        for (final e in s.episodes) {
-          final r = e.rating;
-          if (r != null && r > 0) ratingMap['${e.season}-${e.number}'] = r;
-        }
-      }
-      if (ratingMap.isEmpty) return;
-
-      var changed = false;
-      for (final season in seasons) {
-        for (final episode in season.episodes) {
-          if ((episode.rating ?? 0) > 0) continue;
-          final r = ratingMap['${episode.season}-${episode.number}'];
-          if (r != null) {
-            episode.rating = r;
-            changed = true;
-          }
-        }
-      }
-
-      if (changed && mounted && generation == _s.episodeModeGeneration) {
-        setState(() {});
-        unawaited(_loadSelectedEpisodeMetadata());
-      }
-    } catch (e) {
-      debugPrint('EpisodesPanel: Trakt rating enrichment failed: $e');
-    }
-  }
-
-  /// Fetch the TVMaze `"S-E"` → still-URL map for [imdbId]. Never throws —
-  /// resolves to null when TVMaze doesn't know the show or the fetch fails,
-  /// so it's safe to fire-and-forget before its consumer exists.
-  Future<Map<String, String>?> _fetchTvmazeThumbMap(String? imdbId) async {
-    if (imdbId == null) return null;
-    try {
-      final showData = await TVMazeService.lookupByImdbId(imdbId);
-      final tvmazeId = showData?['id'] as int?;
-      if (tvmazeId == null) return null;
-
-      final tvmazeEpisodes = await TVMazeService.getEpisodes(tvmazeId);
-      if (tvmazeEpisodes.isEmpty) return null;
-
-      final imageMap = <String, String>{};
-      for (final ep in tvmazeEpisodes) {
-        final s = ep['season'] as int?;
-        final e = ep['number'] as int?;
-        final image = ep['image'] as Map<String, dynamic>?;
-        final url =
-            image?['medium'] as String? ?? image?['original'] as String?;
-        if (s != null && e != null && url != null) {
-          imageMap['$s-$e'] = url;
-        }
-      }
-      return imageMap.isEmpty ? null : imageMap;
-    } catch (e) {
-      debugPrint('EpisodesPanel: TVMaze thumbnail fetch failed: $e');
-      return null;
-    }
-  }
-
-  /// Fill in per-episode thumbnails from TVMaze, keyed off the show's IMDb id.
-  ///
-  /// Only episodes that arrived without a thumbnail are touched, so addon
-  /// meta-provided stills are preserved and Trakt-sourced episodes (which have
-  /// none) get filled. Best-effort: any failure leaves the show-poster
-  /// fallback in place. [prefetched] is the map fired alongside the seasons
-  /// fetch on the Trakt path; when absent (addon path that still came up
-  /// short) the fetch happens here.
-  Future<void> _enrichEpisodeThumbnails(
-    StremioMeta show,
-    List<TraktSeason> seasons,
-    int generation, {
-    Future<Map<String, String>?>? prefetched,
-  }) async {
-    // Nothing to do if every episode already has a thumbnail (addon path).
-    final needsThumbnails = seasons.any(
-      (s) => s.episodes.any(
-        (e) => e.thumbnailUrl == null || e.thumbnailUrl!.isEmpty,
-      ),
-    );
-    if (!needsThumbnails) return;
-
-    final imageMap =
-        await (prefetched ?? _fetchTvmazeThumbMap(show.effectiveImdbId));
-    if (imageMap == null) return;
-    if (!mounted || generation != _s.episodeModeGeneration) return;
-
-    var changed = false;
-    for (final season in seasons) {
-      for (final episode in season.episodes) {
-        if (episode.thumbnailUrl != null && episode.thumbnailUrl!.isNotEmpty) {
-          continue;
-        }
-        final url = imageMap['${episode.season}-${episode.number}'];
-        if (url != null) {
-          episode.thumbnailUrl = url;
-          changed = true;
-        }
-      }
-    }
-
-    if (changed) {
-      setState(() {});
-      unawaited(_loadSelectedEpisodeMetadata());
-    }
-  }
-
-  /// Robustly brings episode [epIndex] into view.
-  ///
-  /// The episode list is a lazy ListView with variable-height tiles, so a
-  /// single fixed/proportional jump is unreliable — an off-screen target
-  /// tile isn't built, leaving its FocusNode contextless. This re-reads
-  /// scroll metrics each frame and converges (the builder's maxScrollExtent
-  /// grows as more rows lay out). Once the tile exists: on TV focus it (the
-  /// tile self-centers via EpisodeTile.onFocusChange and shows the focus
-  /// border for the remote); on mobile/desktop just scroll it into view
-  /// without focusing — an auto-applied golden focus border there looks out
-  /// of place. Bounded so it can never spin.
-  void _scrollFocusEpisode(int epIndex, int episodeCount, int generation) {
-    const int maxAttempts = 16;
-    void attempt(int n) {
-      if (!mounted || generation != _s.episodeModeGeneration) return;
-      if (epIndex < 0 || epIndex >= _r.episodeFocusNodes.length) return;
-      final node = _r.episodeFocusNodes[epIndex];
-      // Once a tile has been built and scrolled back out, the node keeps a
-      // stale context; treating that as "present" would stop converging and
-      // focus/scroll a defunct element.
-      if (detailNodeMounted(node)) {
-        if (widget.isTelevision) {
-          node.requestFocus();
-        } else {
-          Scrollable.ensureVisible(
-            node.context!,
-            alignment: 0.5,
-            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOutCubic,
-          );
-        }
-        return;
-      }
-      if (n >= maxAttempts || !_r.episodeScrollController.hasClients) {
-        if (widget.isTelevision) node.requestFocus(); // best effort, then stop
-        return;
-      }
-      final pos = _r.episodeScrollController.position;
-      final ratio = episodeCount > 1 ? epIndex / (episodeCount - 1) : 0.0;
-      final target = (pos.maxScrollExtent * ratio).clamp(
-        0.0,
-        pos.maxScrollExtent,
-      );
-      if ((target - pos.pixels).abs() > 1.0) {
-        _r.episodeScrollController.jumpTo(target);
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) => attempt(n + 1));
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => attempt(0));
-  }
-
-  final _episodeMetadataBaselines = <int, TraktSeason>{};
-
-  int _episodeMetadataGeneration = 0;
-
-  void _episodePolicyChanged() {
-    _episodeMetadataGeneration++;
-    if (!mounted) return;
-    setState(() {
-      _s.episodeSeasons = [
-        for (final season in _s.episodeSeasons)
-          _episodeMetadataBaselines[season.number] ?? season,
-      ];
-      _refreshMetadataLanding();
-      // Presentation changes preserve the season view and its focus/scroll.
-    });
-    unawaited(_loadSelectedEpisodeMetadata());
-  }
-
-  void _refreshMetadataLanding() {
-    final landing = _s.landing;
-    if (landing == null) return;
-    final season = _s.episodeSeasons
-        .where((s) => s.number == landing.season)
-        .firstOrNull;
-    _s.landing = season?.episodes
-        .where((e) => e.number == landing.number)
-        .firstOrNull;
-  }
-
-  Future<void> _loadSelectedEpisodeMetadata() async {
-    if (_isDirectSource || _s.episodeSeasons.isEmpty) return;
-    final generation = _s.episodeModeGeneration;
-    final selected = _s.selectedSeasonNumber;
-    final index = _s.episodeSeasons.indexWhere((s) => s.number == selected);
-    if (index < 0) return;
-    final original = _episodeMetadataBaselines.putIfAbsent(
-      selected,
-      () => _s.episodeSeasons[index],
-    );
-    final metadataGeneration = ++_episodeMetadataGeneration;
-    final scope = ProfileRuntime.scope.value;
-    try {
-      final result = await MetadataEpisodeService.instance.present(
-        widget.show,
-        original,
-      );
-      if (!mounted ||
-          generation != _s.episodeModeGeneration ||
-          selected != _s.selectedSeasonNumber ||
-          scope != ProfileRuntime.scope.value ||
-          metadataGeneration != _episodeMetadataGeneration ||
-          identical(result, _s.episodeSeasons[index])) {
-        return;
-      }
-      setState(() {
-        _s.episodeSeasons = [
-          for (final s in _s.episodeSeasons) s.number == selected ? result : s,
-        ];
-        _refreshMetadataLanding();
-        // Presentation changes preserve the season view and its focus/scroll.
-      });
-    } catch (_) {}
   }
 
   void _onSeasonChanged(int? seasonNumber) {
@@ -1558,7 +335,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       _s.focusIntent = EpisodeFocusIntent.seasonControl;
       _s.viewGeneration++;
     });
-    unawaited(_loadSelectedEpisodeMetadata());
+    unawaited(_parts.metadata.loadSelectedEpisodeMetadata());
   }
 
   void _onEpisodeTap(TraktEpisode episode) {
@@ -1833,7 +610,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // per DPAD move on the weak TV GPU.
     final t = DetailThemeScope.maybeOf(context);
     return SeasonActionRegion(
-      onOptions: _isDirectSource
+      onOptions: _a.isDirectSource
           ? null
           : () => _showSeasonOptions(_s.selectedSeasonNumber),
       onTap: () async {
@@ -1973,7 +750,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                           : null,
                     ),
                   ),
-                  onPressed: () => _enterEpisodeMode(
+                  onPressed: () => _parts.mode.enterEpisodeMode(
                     show,
                     initialSeason: widget.initialSeason,
                     initialEpisode: widget.initialEpisode,
@@ -2046,10 +823,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                   _s.nextEpisode!.episode == episode.number,
               onPlay: () => _onEpisodeQuickPlay(episode),
               onSources: () => _onEpisodeTap(episode),
-              onMenuAction: _isTraktAuthenticated
-                  ? (action) => _onEpisodeMenuAction(episode, action)
+              onMenuAction: _a.isTraktAuthenticated
+                  ? (action) => _parts.watchedActions.onEpisodeMenuAction(
+                      episode,
+                      action,
+                    )
                   : null,
-              onTrackerOptions: _isSimklAuthenticated || _isMdblistAuthenticated
+              onTrackerOptions:
+                  _a.isSimklAuthenticated || _a.isMdblistAuthenticated
                   ? () => _showEpisodeOptions(episode)
                   : null,
             ),
@@ -2126,9 +907,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       options: _showEpisodeOptions,
       stepSeason: _stepSeason,
       selectSeason: (n) => _onSeasonChanged(n),
-      seasonOptions: _isDirectSource ? null : _showSeasonOptions,
+      seasonOptions: _a.isDirectSource ? null : _showSeasonOptions,
       onLeftEdge: widget.onFocusLeftEdge,
-      onRetry: () => _enterEpisodeMode(
+      onRetry: () => _parts.mode.enterEpisodeMode(
         show,
         initialSeason: widget.initialSeason,
         initialEpisode: widget.initialEpisode,
@@ -2157,7 +938,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   final _seasonRetries = SeasonWatchedRetryState();
 
   Future<void> _showSeasonOptions(int number) async {
-    if (_isDirectSource || _seasonActionBusy) return;
+    if (_a.isDirectSource || _seasonActionBusy) return;
     final show = _s.selectedShow;
     if (show == null) return;
     _seasonActionBusy = true;
@@ -2189,7 +970,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           .where((s) => s.number == number)
           .firstOrNull;
       if (season == null || season.episodes.isEmpty) {
-        final seasons = await _fetchSeasons(show);
+        final seasons = await _parts.seasons.fetchSeasons(show);
         season = seasons.where((s) => s.number == number).firstOrNull;
       }
       if (!mounted) return;
@@ -2511,38 +1292,55 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           // connected — a locally-finished episode needs it too. The subtitle
           // names every destination up front, so the fan-out is the row's
           // stated contract rather than a surprise.
-          if (!watched && !_isDirectSource)
+          if (!watched && !_a.isDirectSource)
             tile(
               Icons.check_circle_rounded,
               'Mark as Watched',
-              () => _setEpisodeWatchedEverywhere(episode, watched: true),
-              subtitle: _watchedSyncTargets(watched: true).length > 1
-                  ? 'On ${EpisodesPanelPolicies.joinNames(_watchedSyncTargets(watched: true))}'
+              () => _parts.watchedActions.setEpisodeWatchedEverywhere(
+                episode,
+                watched: true,
+              ),
+              subtitle:
+                  _parts.watchedActions
+                          .watchedSyncTargets(watched: true)
+                          .length >
+                      1
+                  ? 'On ${EpisodesPanelPolicies.joinNames(_parts.watchedActions.watchedSyncTargets(watched: true))}'
                   : null,
             ),
-          if (watched && !_isDirectSource)
+          if (watched && !_a.isDirectSource)
             tile(
               Icons.visibility_off_rounded,
               'Mark as Unwatched',
-              () => _setEpisodeWatchedEverywhere(episode, watched: false),
-              subtitle: _watchedSyncTargets(watched: false).length > 1
+              () => _parts.watchedActions.setEpisodeWatchedEverywhere(
+                episode,
+                watched: false,
+              ),
+              subtitle:
+                  _parts.watchedActions
+                          .watchedSyncTargets(watched: false)
+                          .length >
+                      1
                   ? 'Clears it on '
-                        '${EpisodesPanelPolicies.joinNames(_watchedSyncTargets(watched: false))} — '
+                        '${EpisodesPanelPolicies.joinNames(_parts.watchedActions.watchedSyncTargets(watched: false))} — '
                         'all at once, so the tick can\'t come back'
                   : null,
             ),
-          if (_isTraktAuthenticated)
+          if (_a.isTraktAuthenticated)
             tile(
               Icons.star_rounded,
               'Rate on Trakt',
-              () => _onEpisodeMenuAction(episode, TraktEpisodeMenuAction.rate),
+              () => _parts.watchedActions.onEpisodeMenuAction(
+                episode,
+                TraktEpisodeMenuAction.rate,
+              ),
             ),
-          if (_isMdblistAuthenticated) ...[
+          if (_a.isMdblistAuthenticated) ...[
             if (_p.episodeMdblistRatings[key] == null)
               tile(
                 Icons.star_rounded,
                 'Rate on MDBList',
-                () => _onEpisodeMdblistMenuAction(
+                () => _parts.watchedActions.onEpisodeMdblistMenuAction(
                   episode,
                   MdblistEpisodeMenuAction.rate,
                 ),
@@ -2551,7 +1349,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
               tile(
                 Icons.star_outline_rounded,
                 'Remove MDBList rating (${_p.episodeMdblistRatings[key]}/10)',
-                () => _onEpisodeMdblistMenuAction(
+                () => _parts.watchedActions.onEpisodeMdblistMenuAction(
                   episode,
                   MdblistEpisodeMenuAction.removeRating,
                 ),
