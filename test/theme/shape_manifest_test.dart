@@ -726,6 +726,12 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_focus_state.dart':
       0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_menus.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_actions.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_loading.dart':
+      0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_state.dart':
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart':
@@ -743,6 +749,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_actions.dart':
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_trailer_actions.dart':
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_trailer_state.dart':
       0,

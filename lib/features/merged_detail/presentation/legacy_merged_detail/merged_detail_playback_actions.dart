@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_focus_state.dart';
+import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_menus.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_state.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart';
@@ -16,12 +17,12 @@ import 'package:flutter/material.dart';
 class MergedDetailPlaybackActions {
   final MergedDetailDependencies _deps;
   MergedDetailPlaybackActions(this._deps);
-  List<TraktMenuOption> get _appMenuOptions => _deps.appMenuOptions();
   bool get _isMovie => _deps.isMovie();
   StremioMeta get _item => _deps.presentedItem();
   bool get mounted => _deps.mounted();
   void Function(VoidCallback) get setState => _deps.setState;
   MergedDetailFocusState get _f => _deps.parts.focusState;
+  MergedDetailMenus get _mn => _deps.parts.menus;
   MergedDetailResumeActions get _ra => _deps.parts.resumeActions;
   MergedDetailResumeState get _r => _deps.parts.resumeState;
   MergedDetailTrackingState get _k => _deps.parts.trackingState;
@@ -143,7 +144,7 @@ class MergedDetailPlaybackActions {
 
     final canBrowsePacks =
         _deps.onTraktAction() != null &&
-        _appMenuOptions.any(
+        _mn.appMenuOptions.any(
           (option) => option.action == TraktItemMenuAction.searchPacks,
         );
     if (!rules.preferSeriesPacks || !canBrowsePacks) {

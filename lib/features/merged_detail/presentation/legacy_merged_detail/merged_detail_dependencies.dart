@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
+import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
 import 'package:debrify/services/mdblist/mdblist_models.dart';
@@ -75,9 +76,12 @@ class MergedDetailDependencies {
   final Future<List<TraktSeason>> Function()? Function() seasonsLoader;
   final Future<void> Function(TraktEpisode episode)? Function() onPlayEpisode;
   final Future<Map<String, double>> Function()? Function() watchProgressLoader;
-  final List<TraktMenuOption> Function() appMenuOptions;
   final bool Function() isMovie;
   final StremioMeta Function() presentedItem;
+  final void Function() refreshAfterPlayback;
+  final String Function() style;
+  final MetadataPreferences Function() metadataPreferences;
+  final VoidCallback refreshMetadataPresentation;
   MergedDetailDependencies({
     required this.context,
     required this.mounted,
@@ -121,8 +125,11 @@ class MergedDetailDependencies {
     required this.seasonsLoader,
     required this.onPlayEpisode,
     required this.watchProgressLoader,
-    required this.appMenuOptions,
     required this.isMovie,
     required this.presentedItem,
+    required this.refreshAfterPlayback,
+    required this.style,
+    required this.metadataPreferences,
+    required this.refreshMetadataPresentation,
   });
 }

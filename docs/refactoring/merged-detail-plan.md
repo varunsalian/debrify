@@ -972,6 +972,31 @@ the behaviour suite compared against the latest recorded base.
   documentation only. No baseline or assertion is updated to accept a regression.
 
 
+### Step 5 — metadata, trailer, sources and menus
+
+- Move metadata loading/policy, metadata exploration, trailer pipeline and the
+  four menus to their manifest owners; recommendation opening occupies its original
+  position before the recommendation fields in the metadata-state owner. Bound
+  sources/loading share the model factory and retain their interleaved doc fragments.
+  Facade: 2,136 lines. New owners are 34–293 lines; shape stays 26.
+- The State retains its mixin override as an exact policy forwarder. The existing
+  `layout_body` structural mode is enabled for its moved body only; its annotation
+  remains required on the facade. Source guards reconstruct that actual annotation
+  plus the actual destination body, preserving the complete original assertion.
+- All generations, captured profile/revision checks, reset/load order, cache
+  retention, uncancelled safety timer, trailer selection/promotion/launcher arguments,
+  pop/act sequencing, source read/write identity and mounted checks remain exact.
+  No service/player/panel implementation or persisted format changes.
+- All 115 focused cases pass against base4; the 40 affected reader cases also pass
+  on original code. All seven integrated manifests/self-tests, architecture, sizes,
+  storage, shape, theme, CI format and diff pass on a stable tree. Whole/scoped/strict
+  analyzer and allowlist pass with zero additions. The four accepted formatting
+  infos now trace by original rule/symbol/message to metadata-state and menu owners.
+- Linux originals are already verified and committed in their separate checkpoint.
+  Step 6 may proceed; the current Linux rendering will also be checked locally in
+  the calibrated image, without generating or updating any golden.
+
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

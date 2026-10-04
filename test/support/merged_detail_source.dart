@@ -90,7 +90,23 @@ String mergedOriginalMember(String original) {
   }
   final header = source.substring(start.start, source.indexOf('\n', start.end));
   final finish = header.contains('=>') ? arrowEnd + 1 : start.end + end.end;
-  final member = source.substring(first, finish);
+  var member = source.substring(first, finish);
+  if (moved && row['allowed_edits']!.split(',').contains('layout_body')) {
+    final facade = File(
+      'lib/screens/merged_series_detail_screen.dart',
+    ).readAsStringSync();
+    final originalName = original.split('.').last;
+    final annotation = RegExp(
+      r'^  (@override\s*\n)  [A-Za-z][\w<>?, ]*\s+' +
+          RegExp.escape(originalName) +
+          r'\s*\(',
+      multiLine: true,
+    ).firstMatch(facade);
+    if (annotation == null) {
+      throw StateError('Missing facade override $original');
+    }
+    member = '${annotation[1]}$member';
+  }
   return mergedOriginalNames(member, owner: owner);
 }
 

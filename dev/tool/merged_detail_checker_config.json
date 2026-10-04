@@ -7,7 +7,8 @@
     "unchanged",
     "live_getter_callback",
     "root_build_forwarder",
-    "retained_forwarder"
+    "retained_forwarder",
+    "layout_body"
   ],
   "baseline": "21320ff9264fb7b1072b7682665058982a763dec",
   "source": "lib/screens/merged_series_detail_screen.dart",
@@ -66,7 +67,11 @@
   "token_rules": [],
   "additional_owners": [],
   "required_nodes": [],
-  "forwarders": {},
+  "forwarders": {
+    "_MergedDetailScreenState.onMetadataPolicyChanged": {
+      "receiver": "_parts.metadataLoading"
+    }
+  },
   "lifecycle": [
     "_MergedDetailScreenState.initState",
     "_MergedDetailScreenState.didChangeDependencies",
@@ -170,7 +175,27 @@
     "s._parts.trackingActions": "MergedDetailTrackingActions",
     "_parts.trackingActions": "MergedDetailTrackingActions",
     "_deps.parts.trackingActions": "MergedDetailTrackingActions",
-    "state._parts.trackingActions": "MergedDetailTrackingActions"
+    "state._parts.trackingActions": "MergedDetailTrackingActions",
+    "_mn": "MergedDetailMenus",
+    "s._parts.menus": "MergedDetailMenus",
+    "_parts.menus": "MergedDetailMenus",
+    "_deps.parts.menus": "MergedDetailMenus",
+    "state._parts.menus": "MergedDetailMenus",
+    "_ml": "MergedDetailMetadataLoading",
+    "s._parts.metadataLoading": "MergedDetailMetadataLoading",
+    "_parts.metadataLoading": "MergedDetailMetadataLoading",
+    "_deps.parts.metadataLoading": "MergedDetailMetadataLoading",
+    "state._parts.metadataLoading": "MergedDetailMetadataLoading",
+    "_tr": "MergedDetailTrailerActions",
+    "s._parts.trailerActions": "MergedDetailTrailerActions",
+    "_parts.trailerActions": "MergedDetailTrailerActions",
+    "_deps.parts.trailerActions": "MergedDetailTrailerActions",
+    "state._parts.trailerActions": "MergedDetailTrailerActions",
+    "_ma": "MergedDetailMetadataActions",
+    "s._parts.metadataActions": "MergedDetailMetadataActions",
+    "_parts.metadataActions": "MergedDetailMetadataActions",
+    "_deps.parts.metadataActions": "MergedDetailMetadataActions",
+    "state._parts.metadataActions": "MergedDetailMetadataActions"
   },
   "receiver_owners": {
     "_MergedDetailScreenState": "_MergedDetailScreenState",
@@ -183,7 +208,11 @@
     "_ra": "MergedDetailResumeActions",
     "_wa": "MergedDetailWatchlistActions",
     "_pl": "MergedDetailPlaybackActions",
-    "_ta": "MergedDetailTrackingActions"
+    "_ta": "MergedDetailTrackingActions",
+    "_mn": "MergedDetailMenus",
+    "_ml": "MergedDetailMetadataLoading",
+    "_tr": "MergedDetailTrailerActions",
+    "_ma": "MergedDetailMetadataActions"
   },
   "plain_sections": [
     {
@@ -249,6 +278,22 @@
     {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_actions.dart",
       "owner": "MergedDetailTrackingActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_menus.dart",
+      "owner": "MergedDetailMenus"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_loading.dart",
+      "owner": "MergedDetailMetadataLoading"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_trailer_actions.dart",
+      "owner": "MergedDetailTrailerActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_actions.dart",
+      "owner": "MergedDetailMetadataActions"
     }
   ],
   "callback_identities": [
@@ -1005,7 +1050,11 @@
     "MergedDetailResumeActions": "$State.parts.resumeActions",
     "MergedDetailWatchlistActions": "$State.parts.watchlistActions",
     "MergedDetailPlaybackActions": "$State.parts.playbackActions",
-    "MergedDetailTrackingActions": "$State.parts.trackingActions"
+    "MergedDetailTrackingActions": "$State.parts.trackingActions",
+    "MergedDetailMenus": "$State.parts.menus",
+    "MergedDetailMetadataLoading": "$State.parts.metadataLoading",
+    "MergedDetailTrailerActions": "$State.parts.trailerActions",
+    "MergedDetailMetadataActions": "$State.parts.metadataActions"
   },
   "callback_receiver_aliases": {
     "_parts.metadataState": "$State.parts.metadataState",
@@ -1047,7 +1096,24 @@
     "_ta": "$State.parts.trackingActions",
     "_parts.trackingActions": "$State.parts.trackingActions",
     "_deps.parts.trackingActions": "$State.parts.trackingActions",
-    "state._parts.trackingActions": "$State.parts.trackingActions"
+    "state._parts.trackingActions": "$State.parts.trackingActions",
+    "_mn": "$State.parts.menus",
+    "_parts.menus": "$State.parts.menus",
+    "_deps.parts.menus": "$State.parts.menus",
+    "state._parts.menus": "$State.parts.menus",
+    "$State.parts.menus._refreshAfterPlayback": "$State._refreshAfterPlayback",
+    "_ml": "$State.parts.metadataLoading",
+    "_parts.metadataLoading": "$State.parts.metadataLoading",
+    "_deps.parts.metadataLoading": "$State.parts.metadataLoading",
+    "state._parts.metadataLoading": "$State.parts.metadataLoading",
+    "_tr": "$State.parts.trailerActions",
+    "_parts.trailerActions": "$State.parts.trailerActions",
+    "_deps.parts.trailerActions": "$State.parts.trailerActions",
+    "state._parts.trailerActions": "$State.parts.trailerActions",
+    "_ma": "$State.parts.metadataActions",
+    "_parts.metadataActions": "$State.parts.metadataActions",
+    "_deps.parts.metadataActions": "$State.parts.metadataActions",
+    "state._parts.metadataActions": "$State.parts.metadataActions"
   },
   "original_activation": {},
   "original_static_receivers": {
