@@ -120,6 +120,13 @@ def check_callback_identities(lookup, rows, source_path, config):
     errors = []
 
     def node_for(original):
+        if original not in by_original and config.get('callback_whole_class_members', False):
+            owner, _, name = original.rpartition('.')
+            row = by_original[owner]
+            key = (row['destination_file'], row['new_name'], name)
+            if key in lookup:
+                return lookup[key]
+            return lookup[(source_path, owner, name)]
         row = by_original[original]
         key = (row['destination_file'], row['destination_class'], row['new_name'])
         if key in lookup:
@@ -180,8 +187,21 @@ def check_callback_identities(lookup, rows, source_path, config):
                         node = piece_node
                         count = site['piece_count']
                         occurrence = site['piece_occurrence']
-                call_name = site['call']
                 values = tokens(node)
+                if 'assignment_property' in site:
+                    # Opt-in assignment sites keep the original direct tear-off.
+                    # The whole leaf separately pins the LHS and statement order.
+                    property_name = site['assignment_property']
+                    matches = [i for i, value in enumerate(values[:-1])
+                               if value == property_name and values[i + 1] == '=']
+                    if len(matches) != count:
+                        raise ValueError('assignment site count changed: ' + property_name)
+                    selected = [matches[occurrence]] if occurrence is not None else matches
+                    for i in selected:
+                        end = values.index(';', i + 2)
+                        resolved.append(identity(values[i + 2:end], node['owner']))
+                    continue
+                call_name = site['call']
                 if 'call_member' in site:
                     call_name = node_for(site['call_member'])['name']
                 else:
@@ -189,7 +209,41 @@ def check_callback_identities(lookup, rows, source_path, config):
                     call_row = by_original.get(call_name)
                     if call_row and call_row['new_name'] in values:
                         call_name = call_row['new_name']
+                if site.get('invocation', False):
+                    # A zero-argument borrowed callback must still resolve to
+                    # its State receiver, never to a section's implementation.
+                    indices = [i for i, value in enumerate(values[:-2])
+                               if value == call_name and values[i + 1:i + 3] == ['(', ')']]
+                    if len(indices) != count:
+                        raise ValueError('invocation site count changed: ' + call_name)
+                    for i in ([indices[occurrence]] if occurrence is not None else indices):
+                        start = i
+                        while start >= 2 and values[start - 1] == '.':
+                            start -= 2
+                        if site.get('invocation_statement', False):
+                            if (values[start - 1:start] not in (['await'], [';'], ['{'], ['}'])
+                                    or values[i + 3:i + 4] != [';']):
+                                raise ValueError('borrowed invocation must remain a direct statement')
+                        resolved.append(identity(values[start:i + 1], node['owner']))
+                    continue
                 calls = arguments(values, call_name)
+                if 'notifier' in site:
+                    # Check the notifier BEFORE normalizing member receivers.
+                    # Field moves allow only the registered owner qualification.
+                    from check_settings_moves import normalize
+                    expected = normalize(re.split(r'(\.)', site['notifier']), rows)
+                    indices = [i for i, value in enumerate(values[:-1])
+                               if value == call_name and values[i + 1] == '(']
+                    if len(indices) != len(calls):
+                        raise ValueError('notifier call inventory changed')
+                    for i in ([indices[occurrence]] if occurrence is not None else indices):
+                        start = i - 2
+                        if start < 0 or values[i - 1] != '.':
+                            raise ValueError('notifier call has no receiver')
+                        while start >= 2 and values[start - 1] == '.':
+                            start -= 2
+                        if normalize(values[start:i - 1], rows) != expected:
+                            raise ValueError('notifier expression changed: ' + site['notifier'])
                 if len(calls) != count:
                     raise ValueError(f"expected {count} {call_name} calls, got {len(calls)}")
                 for call in ([calls[occurrence]] if occurrence is not None else calls):
@@ -214,6 +268,8 @@ def check_callback_identities(lookup, rows, source_path, config):
                     resolved.append(identity(expr, node['owner'], getter=is_getter))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
+        if 'expected_identity' in spec:
+            resolved.append(spec['expected_identity'])
         if 'callback_member' in spec:
             try:
                 expected_node = node_for(spec['callback_member'])

@@ -813,6 +813,29 @@ def normalized_accessor_tokens(values, spec, rows):
     return result
 
 
+def check_live_widget_factory(lookup, config):
+    """Opt-in exact live getters at the one State composition boundary."""
+    spec = config.get('live_widget_factory')
+    if not spec or config.get('completed_step', 0) < spec['active_step']:
+        return []
+    node = lookup.get((spec['file'], spec['owner'], spec['member']))
+    if node is None:
+        return ['Missing live widget factory']
+    from torbox_callback_identity import arguments, argument_expression
+    calls = arguments(tokens(node), spec['call'])
+    if len(calls) != 1:
+        return ['Live widget factory must be constructed once per State']
+    errors = []
+    for property_name in config['live_widget_getters']:
+        try:
+            expression = argument_expression(calls[0], property_name)
+        except (KeyError, ValueError, IndexError):
+            expression = []
+        if expression != ['(', ')', '=>', 'widget', '.', property_name]:
+            errors.append('Widget getter must read current widget: ' + property_name)
+    return errors
+
+
 def check_scaffolds(lookup, scaffolds):
     errors = []
     for scaffold in scaffolds:
@@ -983,6 +1006,29 @@ def _check(original_source, sources, rows, source_path, package=None,
                              else None)
         if len(set(locations)) != 1 or locations[0] is None:
             errors.append('Co-located declarations split: ' + str(pair))
+    # Opt-in original declaration contracts: exact owner adjacency and bytes.
+    for group in CONFIG.get('adjacent_declarations', []):
+        locations = []
+        for original_name in group:
+            row = next(r for r in rows if r['original_name'] == original_name)
+            key = (row['destination_file'], row['destination_class'], row['new_name'])
+            if key not in lookup:
+                owner, _, name = original_name.rpartition('.')
+                key = (source_path, owner, name)
+            locations.append(key)
+        members = sorted((node for key, node in lookup.items()
+                          if key[:2] == locations[0][:2]), key=lambda node: node['start'])
+        adjacent_names = [node['name'] for node in members]
+        expected = [key[2] for key in locations]
+        if (any(key[:2] != locations[0][:2] for key in locations)
+                or not any(adjacent_names[i:i + len(expected)] == expected
+                           for i in range(len(adjacent_names) - len(expected) + 1))):
+            errors.append('Original declaration adjacency changed: ' + str(group))
+    for name, reference_path in CONFIG.get('byte_identical_declarations', {}).items():
+        node = lookup.get((source_path, '', name))
+        expected = (ROOT / reference_path).read_text().rstrip()
+        if node is None or node['text'].rstrip() != expected:
+            errors.append('Public declaration bytes changed: ' + name)
     errors.extend(check_plain_sections(lookup))
     errors.extend(check_type_aliases(lookup, rows, CONFIG))
     from torbox_callback_identity import check_callback_identities
@@ -990,6 +1036,7 @@ def _check(original_source, sources, rows, source_path, package=None,
     partitions = sidecar('partitions', 'partitions', {})
     scaffolds = sidecar('scaffolding', 'scaffolds', []) if source_path == CONFIG['source'] else []
     errors.extend(check_scaffolds(lookup, scaffolds))
+    errors.extend(check_live_widget_factory(lookup, CONFIG))
     active_partitions = [partitions[r['original_name']] for r in rows
                          if r['original_name'] in partitions
                          and (r['destination_file'], r['destination_class'], r['new_name']) in lookup]

@@ -1,0 +1,134 @@
+class EpisodesPanel extends StatefulWidget {
+  /// The series to browse.
+  final StremioMeta show;
+
+  /// Optional explicit season to land on (deep links / calendar).
+  final int? initialSeason;
+
+  /// Optional explicit episode to land on (deep links / calendar).
+  final int? initialEpisode;
+
+  /// The addon used to fetch series meta (replaces the host's selected addon).
+  final StremioAddon addon;
+
+  /// Whether running on Android TV (disables animations, changes focus flow).
+  final bool isTelevision;
+
+  /// Whether to show the Quick Play button on episode tiles.
+  final bool showQuickPlay;
+
+  /// Whether this series was opened from a Trakt context (e.g. Discover→Trakt).
+  /// When true, episode Sources/Play carry the Trakt scrobble flag + Trakt
+  /// resume position so playback syncs to Trakt exactly like the old home
+  /// episode view. Left false for plain catalog/addon items so their scrobble
+  /// stays governed by the user's Tracking scrobble selection.
+  final bool isTraktSource;
+  final bool isMdblistSource;
+
+  /// Callback when user selects an episode (Sources) or the series falls back
+  /// to a direct search.
+  final void Function(AdvancedSearchSelection selection)? onItemSelected;
+
+  /// Callback when user quick-plays an episode.
+  final void Function(AdvancedSearchSelection selection)? onQuickPlay;
+
+  /// Returns the number of bound sources for [show] (host-owned state).
+  final int Function(StremioMeta show)? boundSourceCount;
+
+  /// Callback when user taps the Select Source button. When null, the button
+  /// is hidden. Returns a Future that completes when the source picker/editor
+  /// closes, so the header's bound-source count can refresh in place.
+  final Future<void> Function(StremioMeta show)? onSelectSource;
+
+  /// Invoked when the built-in back affordance is activated. When null the back
+  /// button still renders but does nothing (the host owns dismissal).
+  final VoidCallback? onBack;
+
+  /// Invoked immediately before a terminal [AdvancedSearchSelection] is
+  /// dispatched (episode picked / quick-play / fallback search). The host uses
+  /// this to pop its route stack down to where the result should appear and to
+  /// mark that a selection — rather than a plain back-out — occurred.
+  final VoidCallback? onBeforeTerminalDispatch;
+
+  /// Whether to render the built-in filters bar (back button + title + season
+  /// dropdown + Select Source). The standalone [EpisodesScreen] route keeps it
+  /// (true). The merged series page supplies its own hero + source binding and
+  /// hosts the panel chromeless (false) — only a slim season selector remains
+  /// above the list when there is more than one season.
+  final bool showChrome;
+
+  /// Stremio-style compact mode (merged series page): render episodes as compact
+  /// single-focus rows (thumbnail · number+title · date · watched) with a
+  /// pinned "‹ Prev · Season ▾ · Next ›" header, instead of the large
+  /// [EpisodeTile] cards + filters bar. A single focus target per row keeps DPAD
+  /// clean in the two-pane layout — OK plays, Right opens the per-episode
+  /// options menu (Sources / Watched / Rate), Left/Up/Down traverse normally.
+  final bool compact;
+
+  /// Compact mode only: invoked when the user presses LEFT on an episode row, so
+  /// the host can move focus to a stable target in its left pane (its Play /
+  /// source button) instead of letting geometry pick a random mid-column item.
+  final VoidCallback? onFocusLeftEdge;
+
+  /// Direct-source mode (Xtream IPTV series): the sole season/episode source.
+  /// When set, the Stremio-addon meta and Trakt season fetches are skipped
+  /// entirely, along with every IMDb-keyed enrichment (TVMaze stills, Trakt
+  /// ratings/next-episode, Trakt/Simkl episode menus) — these shows have no
+  /// IMDb identity. Episodes are expected to carry [TraktEpisode.playbackUrl].
+  final Future<List<TraktSeason>> Function()? seasonsLoader;
+
+  /// Direct-source mode: play an episode outright (the host launches its
+  /// player on top of the page, like quick-play). When set, episode taps and
+  /// quick-plays route here instead of building an [AdvancedSearchSelection].
+  final void Function(TraktEpisode episode)? onPlayEpisode;
+
+  /// Direct-source mode: resolves the `'<season>-<episode>'` → percent (0-100)
+  /// watch-progress map, replacing the IMDb-keyed local/Trakt/Simkl merge.
+  final Future<Map<String, double>> Function()? watchProgressLoader;
+
+  /// Publishes the merged next-to-watch coordinate and whether it represents
+  /// real playback (rather than the default first episode) to the detail hero.
+  /// [mutation] marks emissions caused by an explicit in-page user action
+  /// (mark watched/unwatched) — the detail pill applies those after its
+  /// loader has settled, while plain re-merge emissions (slower tracker
+  /// fetches landing) must not late-flip a settled pill.
+  final void Function(EpisodeResumeTarget next, {bool mutation})?
+  onNextEpisodeChanged;
+  final ValueChanged<bool>? onSeriesCompletedChanged;
+
+  /// Alternate arrangement. Null (the default) keeps today's rendering exactly;
+  /// when set, the panel renders ONLY what this returns — no chrome of its own —
+  /// and suppresses its internal scroll/focus side effects, which target widgets
+  /// that a custom tree does not contain.
+  final Widget Function(BuildContext, EpisodesPanelView)? contentBuilder;
+
+  const EpisodesPanel({
+    super.key,
+    required this.show,
+    required this.addon,
+    this.initialSeason,
+    this.initialEpisode,
+    this.isTelevision = false,
+    this.showQuickPlay = true,
+    this.isTraktSource = false,
+    this.isMdblistSource = false,
+    this.onItemSelected,
+    this.onQuickPlay,
+    this.boundSourceCount,
+    this.onSelectSource,
+    this.onBack,
+    this.onBeforeTerminalDispatch,
+    this.showChrome = true,
+    this.compact = false,
+    this.onFocusLeftEdge,
+    this.seasonsLoader,
+    this.onPlayEpisode,
+    this.watchProgressLoader,
+    this.onNextEpisodeChanged,
+    this.onSeriesCompletedChanged,
+    this.contentBuilder,
+  });
+
+  @override
+  State<EpisodesPanel> createState() => EpisodesPanelState();
+}

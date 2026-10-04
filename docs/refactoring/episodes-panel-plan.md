@@ -718,6 +718,67 @@ including everything below.
   checker fixtures, original proofs and golden capture precede extraction.
 
 
+### Step 0 — characterization checkpoint (b)
+
+- R is `92339749` (`style(episodes-panel): format the original episodes panel`).
+  Application files remain identical to R: `lib`, `pubspec.yaml` and
+  `pubspec.lock` are unchanged. No seam is needed. The exact-subject Linux
+  script verifies all three Git object hashes before constructing its owned
+  original checkout; it consumes the complete Git log under `pipefail`.
+- `original-characterization-final`: all 76 new cases pass on ORIGINAL code,
+  including complete watched/rating requests and UTC action-window timestamps,
+  in-place progress-map observation, profile-local watch/unwatch isolation,
+  all landing tiers and dedicated progress policies, original lifecycle and
+  surfaces, same-key replacements, MDBList route/timer supersession, stale
+  retries and metadata, Classic route/key dispatch, compact keys, season
+  short/held OK, provider disabling, busy/retry state and five golden scenes.
+  Existing callers are untouched. `step0-importers` compiles all 22 original
+  importing libraries and the public State/view/enum types.
+- Five macOS originals have exact size, focus and readiness assertions in
+  `episodes_panel_goldens_test.dart`; `original-mac-reverse` captures them in
+  a separate process in reversed order. All five PNGs are byte-identical
+  (`mac-original-{first,reverse}-sha256.json`). The options scene uses the
+  compact panel's actual options gesture; its sheet autofocus is Play. The
+  unavailable scene pins two failed addon requests, the failed public Trakt
+  fallback (`extended=episodes,full`), and zero TVMaze requests. Other scenes
+  pin one addon request plus the availability probe and IMDb lookup. No image
+  URL or network artwork is present. The fixture uses 20 × 50 ms bounded
+  settling frames; options adds 400 ms. Linux remains non-strict only while
+  originals are absent and the completed step is below 6; presence, capture
+  or require-original flags make it strict without rewriting frozen tests.
+- Conservative fixture decisions: MDBList's cached client resolves the current
+  fixture through the live HTTP zone; all three singleton scopes reset in
+  setup/teardown, TVMaze resets inside that zone, and addon/native IDs are
+  unique. Simkl's complete fixed query is asserted, and Trakt playback
+  fixtures include authoritative pagination headers. Local landing fixtures
+  seed the persisted format through profile preferences, preserving the
+  storage ownership guard. Same-session scope republishing retains the
+  valid generation/epoch and tests metadata and cached auth separately.
+- The 93-leaf manifest/dependency inventory owns every original declaration,
+  resource, live read and comment fragment. Wiring remains pending at each
+  owning step; scaffolds are empty until reviewed. Private typedef exports
+  are selected by the rename/alias strict probe: exactly the original 19
+  infos (18 ordering, one curly), zero warnings/errors and no new diagnostic
+  identity; baseline/probe combine by maximum. Shadowed field reads in the
+  throwaway probe alone are qualified so the rename cannot bind a local.
+  `step0-analyzer-comparison.txt`: zero added/removed diagnostics, PASS.
+- The real-config checker passes and rejects each listener removal, wrappers,
+  same-class receiver swaps, distinct policy owners, disposal order, added
+  hook, debug label, State refresh replacement, terminal order, quick/item
+  swap, comment/const/public-byte changes and separated mid-class fields.
+  Its opt-in live factory has a positive and all 23 cached-getter negatives,
+  plus a missing-factory negative. Shared additions are config-scoped; each
+  other manifest is checked with its own original/config (merged: `21320ff9`).
+  Overlapping fixture checks use a second worktree-owned parser/kernel.
+- Architecture, sizes, storage-reference fixtures, LF manifests, Dart format,
+  shell syntax and staged diff checks pass. CI coverage adds the three
+  requested existing suites and all nine new suites; no known-failure entry
+  is added. This checkpoint freezes tests and application identity; detached
+  checkpoint proofs, ORIGINAL-only mutation evidence and `base3` follow
+  before any extraction. Linux originals are captured externally from this
+  exact checkpoint and committed separately when delivered.
+
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
