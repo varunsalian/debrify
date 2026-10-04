@@ -24,6 +24,9 @@
     "formatter_if_braces",
     "production_api_annotation",
     "layout_body",
+    "formatter_if_braces",
+    "production_api_annotation",
+    "layout_body",
     "formatter_if_braces"
   ],
   "receivers": [
@@ -98,7 +101,14 @@
     "SpotlightBoardCadence": "SpotlightBoardCadence",
     "SpotlightBoardMovement": "SpotlightBoardMovement",
     "SpotlightBoardSelection": "SpotlightBoardSelection",
-    "SpotlightBoardFocus": "SpotlightBoardFocus"
+    "SpotlightBoardFocus": "SpotlightBoardFocus",
+    "SpotlightBoardRootLayout": "SpotlightBoardRootLayout",
+    "SpotlightBoardWideHero": "SpotlightBoardWideHero",
+    "SpotlightBoardHeroBackdrop": "SpotlightBoardHeroBackdrop",
+    "SpotlightBoardShelves": "SpotlightBoardShelves",
+    "SpotlightBoardCompactHero": "SpotlightBoardCompactHero",
+    "SpotlightBoardHeroForeground": "SpotlightBoardHeroForeground",
+    "SpotlightBoardHeroIdentity": "SpotlightBoardHeroIdentity"
   },
   "receiver_owners": {
     "_sections.selection": "SpotlightBoardSelection",
@@ -136,7 +146,14 @@
     "SpotlightBoardCadence": "SpotlightBoardCadence",
     "SpotlightBoardMovement": "SpotlightBoardMovement",
     "SpotlightBoardSelection": "SpotlightBoardSelection",
-    "SpotlightBoardFocus": "SpotlightBoardFocus"
+    "SpotlightBoardFocus": "SpotlightBoardFocus",
+    "SpotlightBoardRootLayout": "SpotlightBoardRootLayout",
+    "SpotlightBoardWideHero": "SpotlightBoardWideHero",
+    "SpotlightBoardHeroBackdrop": "SpotlightBoardHeroBackdrop",
+    "SpotlightBoardShelves": "SpotlightBoardShelves",
+    "SpotlightBoardCompactHero": "SpotlightBoardCompactHero",
+    "SpotlightBoardHeroForeground": "SpotlightBoardHeroForeground",
+    "SpotlightBoardHeroIdentity": "SpotlightBoardHeroIdentity"
   },
   "sidecars": {
     "scaffolding": "dev/tool/spotlight_board_scaffolding.json",
@@ -4836,8 +4853,5 @@
   "spotlight_state_field_bindings": [
     "_CardState",
     "SpotlightBoardState"
-  ],
-  "borrowed_member_aliases": {
-    "_deps.shelfExtent": "SpotlightBoardState._shelfExtent"
-  }
+  ]
 }

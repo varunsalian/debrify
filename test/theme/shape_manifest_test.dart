@@ -216,6 +216,20 @@ const Map<String, int> kShapeResidue = {
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
   // Spotlight board: facade and every destination, preserving three radii.
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_compact_hero.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_backdrop.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_foreground.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_identity.dart':
+      1,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_root_layout.dart':
+      1,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_wide_hero.dart':
+      0,
   'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_focus.dart':
       0,
   'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart':
@@ -255,7 +269,7 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/spotlight_board/presentation/spotlight_hero_open_pill.dart': 1,
   'lib/features/spotlight_board/presentation/spotlight_shelf_title_link.dart':
       0,
-  'lib/widgets/home/spotlight_board.dart': 2,
+  'lib/widgets/home/spotlight_board.dart': 0,
   'lib/features/spotlight_board/presentation/spotlight_board_metrics.dart': 0,
   'lib/features/spotlight_board/presentation/spotlight_board_types.dart': 0,
 

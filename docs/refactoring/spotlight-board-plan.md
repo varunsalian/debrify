@@ -1291,6 +1291,21 @@ decomposition; bug fixes and behaviour changes, including everything below.
 - Formatted facade: **1576**. Physical AST breakdown: imports export 30, widget docs 185, state header 3, lifecycle 142, forwarders overrides 24, bindings 54, composition 12, retained original bodies 1090, remaining 36 (sum 1576); detailed spans in `step5-cap.json`.
 - All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step5-focused.*` includes full end-of-run tree provenance before this Progress edit.
 
+### Step 6 — board and hero/shelf rendering
+
+- Previous checkpoint: `c8e5ea46`.
+- Moved root build/board, compact and wide hero painting, backdrop,
+  foreground/identity and shelves. The facade has its original public build
+  forwarder, lifecycle, live bindings and cached composition. Removed the
+  temporary shelf-extent callback as both callers now share the shelf
+  section. No TEMP cross-call remains. Per-entry wiring reviewed before
+  pinning. Repaint boundaries, decode sizes, rebuild boundaries, const and
+  all original comments are unchanged. Six strict Linux goldens pass in the
+  calibrated original image, with source/image/PNG hashes recorded in
+  step6-linux-strict-inputs.json; all six macOS originals pass too.
+- Formatted facade: **451**. Physical AST breakdown: imports export 13, widget docs 185, state header 3, lifecycle 142, forwarders overrides 26, bindings 54, composition 11, retained original bodies 0, remaining 17 (sum 451); detailed spans in `step6-cap.json`.
+- All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step6-focused.*` includes full end-of-run tree provenance before this Progress edit.
+
 ### Amendment after step 0b (design-reviewed before resuming)
 
 1. **Facade cap.** The hard maximum becomes 460 (see the size section); the

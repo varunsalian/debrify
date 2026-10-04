@@ -580,10 +580,6 @@
         "heroWarmupProvider",
         ":",
         "heroWarmupProvider",
-        ",",
-        "shelfExtent",
-        ":",
-        "_shelfExtent",
         ")",
         ";"
       ]
@@ -828,19 +824,6 @@
         "class",
         "SpotlightBoardDependencies",
         "{",
-        "// TEMP(spotlight_board): borrowed State callbacks until their planned step.",
-        "final",
-        "double",
-        "Function",
-        "(",
-        "SpotlightShelf",
-        "section",
-        ",",
-        "SpotlightBoardMetrics",
-        "m",
-        ")",
-        "shelfExtent",
-        ";",
         "final",
         "SpotlightBoardWidgetView",
         "view",
@@ -926,13 +909,64 @@
         "this",
         ".",
         "heroWarmupProvider",
-        ",",
-        "this",
-        ".",
-        "shelfExtent",
         ")",
         ";",
         "}"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_foreground.dart",
+      "owner": "SpotlightBoardHeroForeground",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightBoardDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_foreground.dart",
+      "owner": "SpotlightBoardHeroForeground",
+      "name": "SpotlightBoardHeroForeground",
+      "tokens": [
+        "SpotlightBoardHeroForeground",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_foreground.dart",
+      "owner": "SpotlightBoardHeroForeground",
+      "name": "view",
+      "tokens": [
+        "SpotlightBoardWidgetView",
+        "get",
+        "view",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_foreground.dart",
+      "owner": "SpotlightBoardHeroForeground",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightBoardSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
       ]
     },
     {
@@ -1181,6 +1215,34 @@
         "SpotlightBoardFocus",
         "focus",
         ";",
+        "final",
+        "SpotlightBoardRootLayout",
+        "rootLayout",
+        ";",
+        "final",
+        "SpotlightBoardCompactHero",
+        "compactHero",
+        ";",
+        "final",
+        "SpotlightBoardWideHero",
+        "wideHero",
+        ";",
+        "final",
+        "SpotlightBoardHeroBackdrop",
+        "heroBackdrop",
+        ";",
+        "final",
+        "SpotlightBoardHeroForeground",
+        "heroForeground",
+        ";",
+        "final",
+        "SpotlightBoardHeroIdentity",
+        "heroIdentity",
+        ";",
+        "final",
+        "SpotlightBoardShelves",
+        "shelves",
+        ";",
         "SpotlightBoardSections",
         "(",
         "SpotlightBoardDependencies",
@@ -1235,6 +1297,55 @@
         "(",
         "deps",
         ")",
+        ",",
+        "rootLayout",
+        "=",
+        "SpotlightBoardRootLayout",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "compactHero",
+        "=",
+        "SpotlightBoardCompactHero",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "wideHero",
+        "=",
+        "SpotlightBoardWideHero",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "heroBackdrop",
+        "=",
+        "SpotlightBoardHeroBackdrop",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "heroForeground",
+        "=",
+        "SpotlightBoardHeroForeground",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "heroIdentity",
+        "=",
+        "SpotlightBoardHeroIdentity",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "shelves",
+        "=",
+        "SpotlightBoardShelves",
+        "(",
+        "deps",
+        ")",
         ";",
         "}"
       ]
@@ -1285,18 +1396,6 @@
         "String",
         ")",
         "heroWarmupProvider",
-        ",",
-        "required",
-        "double",
-        "Function",
-        "(",
-        "SpotlightShelf",
-        "section",
-        ",",
-        "SpotlightBoardMetrics",
-        "m",
-        ")",
-        "shelfExtent",
         "}",
         ")",
         "{",
@@ -1316,8 +1415,6 @@
         "setState",
         ",",
         "heroWarmupProvider",
-        ",",
-        "shelfExtent",
         ")",
         ";",
         "final",
@@ -1399,6 +1496,146 @@
     {
       "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_focus.dart",
       "owner": "SpotlightBoardFocus",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightBoardSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_wide_hero.dart",
+      "owner": "SpotlightBoardWideHero",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightBoardDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_wide_hero.dart",
+      "owner": "SpotlightBoardWideHero",
+      "name": "SpotlightBoardWideHero",
+      "tokens": [
+        "SpotlightBoardWideHero",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_wide_hero.dart",
+      "owner": "SpotlightBoardWideHero",
+      "name": "view",
+      "tokens": [
+        "SpotlightBoardWidgetView",
+        "get",
+        "view",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_wide_hero.dart",
+      "owner": "SpotlightBoardWideHero",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightBoardOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_wide_hero.dart",
+      "owner": "SpotlightBoardWideHero",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightBoardSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_backdrop.dart",
+      "owner": "SpotlightBoardHeroBackdrop",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightBoardDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_backdrop.dart",
+      "owner": "SpotlightBoardHeroBackdrop",
+      "name": "SpotlightBoardHeroBackdrop",
+      "tokens": [
+        "SpotlightBoardHeroBackdrop",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_backdrop.dart",
+      "owner": "SpotlightBoardHeroBackdrop",
+      "name": "view",
+      "tokens": [
+        "SpotlightBoardWidgetView",
+        "get",
+        "view",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_backdrop.dart",
+      "owner": "SpotlightBoardHeroBackdrop",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightBoardOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_backdrop.dart",
+      "owner": "SpotlightBoardHeroBackdrop",
       "name": "_sections",
       "tokens": [
         "SpotlightBoardSections",
@@ -1603,6 +1840,131 @@
       ]
     },
     {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_compact_hero.dart",
+      "owner": "SpotlightBoardCompactHero",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightBoardDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_compact_hero.dart",
+      "owner": "SpotlightBoardCompactHero",
+      "name": "SpotlightBoardCompactHero",
+      "tokens": [
+        "SpotlightBoardCompactHero",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_compact_hero.dart",
+      "owner": "SpotlightBoardCompactHero",
+      "name": "view",
+      "tokens": [
+        "SpotlightBoardWidgetView",
+        "get",
+        "view",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_compact_hero.dart",
+      "owner": "SpotlightBoardCompactHero",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightBoardOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_compact_hero.dart",
+      "owner": "SpotlightBoardCompactHero",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightBoardSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_identity.dart",
+      "owner": "SpotlightBoardHeroIdentity",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightBoardDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_identity.dart",
+      "owner": "SpotlightBoardHeroIdentity",
+      "name": "SpotlightBoardHeroIdentity",
+      "tokens": [
+        "SpotlightBoardHeroIdentity",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_identity.dart",
+      "owner": "SpotlightBoardHeroIdentity",
+      "name": "view",
+      "tokens": [
+        "SpotlightBoardWidgetView",
+        "get",
+        "view",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_identity.dart",
+      "owner": "SpotlightBoardHeroIdentity",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightBoardSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ]
+    },
+    {
       "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card_layout.dart",
       "owner": "SpotlightBoardCardLayout",
       "name": "cardState",
@@ -1643,6 +2005,76 @@
         ".",
         "setState",
         ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart",
+      "owner": "SpotlightBoardShelves",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightBoardDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart",
+      "owner": "SpotlightBoardShelves",
+      "name": "SpotlightBoardShelves",
+      "tokens": [
+        "SpotlightBoardShelves",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart",
+      "owner": "SpotlightBoardShelves",
+      "name": "view",
+      "tokens": [
+        "SpotlightBoardWidgetView",
+        "get",
+        "view",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart",
+      "owner": "SpotlightBoardShelves",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightBoardOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart",
+      "owner": "SpotlightBoardShelves",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightBoardSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
         ";"
       ]
     },
@@ -1735,6 +2167,76 @@
     {
       "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
       "owner": "SpotlightBoardHeroArt",
+      "name": "_sections",
+      "tokens": [
+        "SpotlightBoardSections",
+        "get",
+        "_sections",
+        "=>",
+        "_deps",
+        ".",
+        "sections",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_root_layout.dart",
+      "owner": "SpotlightBoardRootLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "SpotlightBoardDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_root_layout.dart",
+      "owner": "SpotlightBoardRootLayout",
+      "name": "SpotlightBoardRootLayout",
+      "tokens": [
+        "SpotlightBoardRootLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_root_layout.dart",
+      "owner": "SpotlightBoardRootLayout",
+      "name": "view",
+      "tokens": [
+        "SpotlightBoardWidgetView",
+        "get",
+        "view",
+        "=>",
+        "_deps",
+        ".",
+        "view",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_root_layout.dart",
+      "owner": "SpotlightBoardRootLayout",
+      "name": "_owners",
+      "tokens": [
+        "SpotlightBoardOwners",
+        "get",
+        "_owners",
+        "=>",
+        "_deps",
+        ".",
+        "owners",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_root_layout.dart",
+      "owner": "SpotlightBoardRootLayout",
       "name": "_sections",
       "tokens": [
         "SpotlightBoardSections",

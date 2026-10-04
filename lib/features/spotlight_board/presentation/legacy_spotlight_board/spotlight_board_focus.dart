@@ -68,7 +68,7 @@ class SpotlightBoardFocus {
         .take(row)
         .fold<double>(
           0,
-          (sum, shelf) => sum + _deps.shelfExtent(shelf, metrics),
+          (sum, shelf) => sum + _sections.shelves.shelfExtent(shelf, metrics),
         );
     // A lazy list's maximum is only an estimate until distant rows mount.
     // Let layout clamp this exact offset, rather than stopping at that estimate.

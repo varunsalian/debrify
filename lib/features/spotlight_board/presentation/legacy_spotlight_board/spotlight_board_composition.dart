@@ -1,14 +1,19 @@
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_bindings.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_cadence.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_compact_hero.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_focus.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_backdrop.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_foreground.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_identity.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_warmup.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_owners.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_root_layout.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection.dart';
-import 'package:debrify/features/spotlight_board/presentation/spotlight_board_metrics.dart';
-import 'package:debrify/features/spotlight_board/presentation/spotlight_board_types.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_wide_hero.dart';
 import 'package:flutter/material.dart';
 
 class SpotlightBoardSections {
@@ -19,6 +24,13 @@ class SpotlightBoardSections {
   final SpotlightBoardAmbient ambient;
   final SpotlightBoardMovement movement;
   final SpotlightBoardFocus focus;
+  final SpotlightBoardRootLayout rootLayout;
+  final SpotlightBoardCompactHero compactHero;
+  final SpotlightBoardWideHero wideHero;
+  final SpotlightBoardHeroBackdrop heroBackdrop;
+  final SpotlightBoardHeroForeground heroForeground;
+  final SpotlightBoardHeroIdentity heroIdentity;
+  final SpotlightBoardShelves shelves;
   SpotlightBoardSections(SpotlightBoardDependencies deps)
     : selection = SpotlightBoardSelection(deps),
       heroArt = SpotlightBoardHeroArt(deps),
@@ -26,7 +38,14 @@ class SpotlightBoardSections {
       cadence = SpotlightBoardCadence(deps),
       ambient = SpotlightBoardAmbient(deps),
       movement = SpotlightBoardMovement(deps),
-      focus = SpotlightBoardFocus(deps);
+      focus = SpotlightBoardFocus(deps),
+      rootLayout = SpotlightBoardRootLayout(deps),
+      compactHero = SpotlightBoardCompactHero(deps),
+      wideHero = SpotlightBoardWideHero(deps),
+      heroBackdrop = SpotlightBoardHeroBackdrop(deps),
+      heroForeground = SpotlightBoardHeroForeground(deps),
+      heroIdentity = SpotlightBoardHeroIdentity(deps),
+      shelves = SpotlightBoardShelves(deps);
 }
 
 SpotlightBoardSections createSpotlightBoardSections({
@@ -36,8 +55,6 @@ SpotlightBoardSections createSpotlightBoardSections({
   required bool Function() mounted,
   required void Function(VoidCallback) setState,
   required ImageProvider Function(String) heroWarmupProvider,
-  required double Function(SpotlightShelf section, SpotlightBoardMetrics m)
-  shelfExtent,
 }) {
   final deps = SpotlightBoardDependencies(
     view,
@@ -46,7 +63,6 @@ SpotlightBoardSections createSpotlightBoardSections({
     mounted,
     setState,
     heroWarmupProvider,
-    shelfExtent,
   );
   final sections = SpotlightBoardSections(deps);
   deps.bindSections(sections);
