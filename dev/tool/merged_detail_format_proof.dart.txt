@@ -1,0 +1,111 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:analyzer/dart/ast/token.dart';
+
+class OptionalCommas extends RecursiveAstVisitor<void> {
+  final String source;
+  final List<Map<String, Object>> sites = [];
+  OptionalCommas(this.source);
+  void collect(AstNode node, {bool beforeOptionalEnd = false}) {
+    final end = beforeOptionalEnd ? node.endToken.previous! : node.endToken;
+    final comma = end.previous;
+    if (comma?.lexeme == ',') {
+      sites.add({
+        'offset': source.substring(0, comma!.offset).runes.length,
+        'line': '\n'.allMatches(source.substring(0, comma.offset)).length + 1,
+        'node': node.runtimeType.toString(),
+        'owner':
+            node
+                .thisOrAncestorOfType<ClassMember>()
+                ?.toSource()
+                .split('\n')
+                .first ??
+            '',
+      });
+    }
+  }
+
+  @override
+  void visitArgumentList(ArgumentList node) {
+    collect(node);
+    super.visitArgumentList(node);
+  }
+
+  @override
+  void visitFormalParameterList(FormalParameterList node) {
+    collect(node);
+    if (['}', ']'].contains(node.endToken.previous?.lexeme))
+      collect(node, beforeOptionalEnd: true);
+    super.visitFormalParameterList(node);
+  }
+
+  @override
+  void visitListLiteral(ListLiteral node) {
+    collect(node);
+    super.visitListLiteral(node);
+  }
+
+  @override
+  void visitSetOrMapLiteral(SetOrMapLiteral node) {
+    collect(node);
+    super.visitSetOrMapLiteral(node);
+  }
+
+  @override
+  void visitRecordLiteral(RecordLiteral node) {
+    if (node.fields.length > 1 &&
+        node.fields.every((f) => f is! RecordLiteralNamedField))
+      collect(node);
+    super.visitRecordLiteral(node);
+  }
+
+  @override
+  void visitRecordTypeAnnotation(RecordTypeAnnotation node) {
+    if (node.namedFields != null) collect(node.namedFields!);
+    super.visitRecordTypeAnnotation(node);
+  }
+}
+
+void main() {
+  final sources = jsonDecode(stdin.readLineSync()!) as Map<String, dynamic>;
+  final output = <String, Object>{};
+  for (final entry in sources.entries) {
+    final source = entry.value as String;
+    final positions = <int>[0];
+    var point = 0;
+    for (final rune in source.runes) {
+      if (rune > 0xffff) positions.add(point);
+      positions.add(++point);
+    }
+    final parsed = parseString(content: source, throwIfDiagnostics: false);
+    if (parsed.errors.isNotEmpty)
+      throw StateError('${entry.key}: ${parsed.errors}');
+    final visitor = OptionalCommas(source);
+    parsed.unit.accept(visitor);
+    final tokens = <Map<String, Object>>[];
+    var token = parsed.unit.beginToken;
+    while (true) {
+      Token? comment = token.precedingComments;
+      while (comment != null) {
+        tokens.add({
+          'text': comment.lexeme,
+          'offset': positions[comment.offset],
+          'comment': true,
+        });
+        comment = comment.next;
+      }
+      if (token.isEof) break;
+      tokens.add({
+        'text': token.lexeme,
+        'offset': positions[token.offset],
+        'comment': false,
+      });
+      token = token.next!;
+    }
+    output[entry.key] = {'tokens': tokens, 'optionalCommas': visitor.sites};
+  }
+  stdout.write(jsonEncode(output));
+}

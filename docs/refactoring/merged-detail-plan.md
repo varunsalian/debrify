@@ -551,7 +551,86 @@ the behaviour suite compared against the latest recorded base.
 
 ## Progress
 
-(empty)
+### Step 0 — blocked at formatted-original analyzer parity
+
+- Execution base is `def4e30423c9d8344eeb340c665afc2ee866c11f`, clean
+  `refactor/merged-detail` in the dedicated merged-detail worktree. Ran
+  `flutter pub get` here first; the lockfile is unchanged. Flutter 3.44.8 /
+  Dart 3.12.2. No branch switch, push, or changes to another checkout.
+  All evidence uses the requested `refactor-evidence/merged_detail/`
+  namespace. The tool-only analyzer 14.3.0 parser and kernels are isolated
+  under this worktree's `.dart_tool/merged_detail_parser/`.
+- Untouched full suite `merged_detail/base` identifies committed HEAD
+  `def4e304` and tree `d3c663da804069a0bc24ba39f3d2faa4fca6b6f2`:
+  10,577 successes / 13 failures / 28 errors / 20 skips. No overlay,
+  untracked input, or tree change during the run. Its whole-repo analyzer
+  is recorded, including existing dependency-package test errors.
+- Format-only checkpoint is `21320ff9264fb7b1072b7682665058982a763dec`
+  (`style(merged): format the original merged detail screen`). Production
+  changes are only formatter whitespace and the 25 optional commas. The
+  existing rewatch test retains all expectations; only the merged listener
+  sites use declaration-scoped matching, with exact notifier, operation and
+  callback, arbitrary whitespace and one optional trailing comma. Catalog
+  checks are unchanged. The planned size ceiling is 5,630, up from 5,532;
+  no source responsibility has moved.
+- `format-proof.json`: whole-file scanner tokens, comments and literals
+  match after removing only AST-identified optional formatter commas.
+  Every added comma is listed by AST node and owner; exactly 25. Comment,
+  literal and required singleton-record comma negatives are rejected.
+  `dart format --output=none --set-exit-if-changed` is idempotent for the
+  screen and changed test. The reproducible proof tool is
+  `dev/tool/merged_detail_format_proof.py`, requiring `--original`,
+  `--formatted`, `--parser-package` and `--output`; its kernel stays beside
+  the explicitly supplied parser configuration.
+- All three existing rewatch identities pass on both unformatted and
+  formatted production source. `format-rewatch-site-negatives-final`
+  records 51 successes: the three existing cases plus original/formatted
+  positives and negatives at each of the four sites. Each site rejects
+  deletion, closure wrapping, notifier swap, callback swap, and movement
+  outside its lifecycle declaration. The reproducing fixture is
+  `dev/tool/merged_detail_format_guard_test.dart.txt`; copy it to
+  `.dart_tool/merged_detail_step0/rewatch_guard_test.dart` and save the exact
+  `git show def4e304:lib/screens/merged_series_detail_screen.dart` text as
+  `.dart_tool/merged_detail_step0/unformatted-original.txt` before running.
+- `merged_detail/base-fmt` ran on clean committed `21320ff9`. Exactly the
+  same 10,577 / 13 / 28 / 20 outcomes as `base`, with every identity and
+  outcome equal, no additions/missing/new skips, and stable committed trees.
+  `base-fmt-comparison.txt` is PASS. These are Step 0 baselines, not gates.
+- **Required analyzer parity is FAIL.** The formatter changes four existing
+  one-line guarded statements into multiline statements, exposing
+  `curly_braces_in_flow_control_structures` infos in
+  `_openMetadataRecommendation`, `_showQuickActionsMenu`,
+  `_showSimklQuickActionsMenu`, and `_showMdblistQuickActionsMenu`. This
+  contradicts Step 0 item 2's required equal analyzer identities and the
+  predicted 38 strict infos: original strict analysis has 38, formatted
+  strict analysis has 42. No warning or error is new in this screen.
+  The exact source still passes the token/comment/literal proof.
+- Initial whole analyzer runs overlapped Flutter test-asset rebuilding and
+  reported changing multiplicities. They remain historical evidence.
+  Serial `flutter analyze --no-pub` replay, with the exact unformatted
+  facade temporarily restored and then restored to the committed formatted
+  bytes in `finally`, confirms 1,635 original / 1,639 formatted diagnostics:
+  **exactly those four added infos and zero removals**. Each run records its
+  actual tested tree; the original replay accurately records its source
+  overlay. `format-analyzer-parity.json` records FAIL and the four owners.
+  An intervening transient `git stash create` failure interrupted the first
+  serial script after the original run; the formatted source was restored,
+  and the formatted serial run was completed separately with stable tree
+  evidence. No evidence was relabeled as a passing parity check.
+- Conservative decision: preserve the format-only checkpoint and stop
+  before dependent extraction. Adding braces would widen the format-only
+  proof beyond the authorized comma/whitespace edits; suppressing or
+  allowlisting the four infos would evade the required parity check. No
+  such change, diagnostic acceptance, assertion weakening, `--record`, or
+  `--update` was made. File-size and staged diff checks pass.
+- **Pending:** completion of Step 0 (dependency report, move manifest,
+  real-config checker fixtures, accessor and original-code worktree
+  characterization, CI registrations, and Linux capture script/checkpoint),
+  Steps 1–7, both full-suite gates, and Linux originals/strict verification.
+  The facade remains 5,630 formatted physical lines. All 20 Found, not fixed
+  items below remain untouched. Device-only checks, remote CI and Claude's
+  eventual semantic integration remain pending; no migration parity is
+  claimed.
 
 ## Found, not fixed
 
