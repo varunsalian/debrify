@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:debrify/features/merged_detail/presentation/merged_detail_palette.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/imdb_enrichment_service.dart';
 import 'package:debrify/widgets/detail/showcase_parts.dart';
@@ -38,7 +39,7 @@ void main() {
             var compact = false;
             var touch = false;
             if (scene == 'tv_movie') {
-              child = f.page(value: f.model(trailer: false));
+              child = f.page(value: f.model(trailer: false, allActions: true));
               promised.add(find.byType(ShowcaseIdentity));
             } else if (scene == 'compact_series') {
               compact = touch = true;
@@ -169,7 +170,13 @@ void main() {
             }
             await t.pumpWidget(
               f.host(
-                RepaintBoundary(key: const ValueKey('capture'), child: child),
+                RepaintBoundary(
+                  key: const ValueKey('capture'),
+                  child: ColoredBox(
+                    color: MergedDetailPalette.bg,
+                    child: child,
+                  ),
+                ),
                 size: size,
                 compact: compact,
                 touch: touch,
@@ -180,6 +187,12 @@ void main() {
               f.primary.requestFocus();
               await showcasePump(t);
               expect(f.primary.hasFocus, isTrue);
+              expect(
+                find.byWidgetPredicate(
+                  (w) => w.runtimeType.toString() == '_Circle',
+                ),
+                findsNWidgets(7),
+              );
             }
             if (scene == 'compact_guide') {
               await t.tap(find.text('Category 1'));

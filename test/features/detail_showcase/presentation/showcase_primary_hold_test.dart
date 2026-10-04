@@ -4,6 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../support/detail_showcase_fixture.dart';
 
 void main() {
+  testWidgets('primary focus dispatches the host focused callback', (t) async {
+    await showcaseCase(t, (f) async {
+      await t.pumpWidget(f.host(f.identity()));
+      await showcasePump(t);
+      f.actions.first.requestFocus();
+      await t.pump();
+      f.calls.clear();
+      f.primary.requestFocus();
+      await t.pump();
+      expect(f.primary.hasFocus, isTrue);
+      expect(f.calls, ['focused']);
+    });
+  });
+
   testWidgets('OK activates once and a 600 ms hold calls only long press', (
     t,
   ) async {

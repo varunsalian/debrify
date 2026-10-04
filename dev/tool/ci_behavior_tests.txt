@@ -233,3 +233,4 @@ test/features/detail_showcase/presentation/showcase_band_contracts_test.dart
 test/features/detail_showcase/presentation/showcase_guide_update_test.dart
 test/features/detail_showcase/presentation/showcase_hover_focus_test.dart
 test/features/detail_showcase/presentation/showcase_primary_hold_test.dart
+test/features/detail_showcase/presentation/showcase_identity_actions_test.dart

@@ -814,6 +814,61 @@ change below.
   no push, no regression acceptance, no found behaviour fixed beyond the
   authorized formatter cleanup. Stop and report this prerequisite.
 
+### Further step 0b — independent review closure on ORIGINAL
+
+- The independent step-0 review supersedes the earlier golden host and Linux
+  capture checkpoint. Keep production application exactly R `1165b624`;
+  no builder move, application edit, dependency change or assertion removal.
+  New exact capture subject: `test(detail-showcase): step 0b review
+  characterization checkpoint`. Record original proofs and latest full-suite
+  base after that commit; old bases/proofs remain historical evidence.
+- P1 coverage: guide-card D-pad Select reveals then hides the focused category's
+  spoilers; recommendation pointer/Select callbacks receive the identical item;
+  all eight identity buttons have ordered positions/labels and independent
+  pointer/Select callbacks; the real page's action count mounts eight nodes;
+  explicit primary refocus dispatches `focused`; wide TV season tapping selects
+  the tapped season rather than the current season.
+- P2 coverage: hover entry/exit and equivalent keyboard focus lift on source,
+  guide, recommendation, universe, DYK entry and DYK remainder cards; hover never
+  focuses the node. Compact season popup selected Text uses the actual scoped
+  accent, and unselected Text remains white.
+- User decision: recapture all four macOS originals with `MergedDetailPalette.bg`
+  (`0xFF0B0B0E`, production root Scaffold at
+  `merged_detail_root_layout.dart:108`) painted **inside** the capture boundary.
+  This captures the real detail surface rather than a white ancestor or a
+  transparent boundary. `tv_movie` has seven callback-populated circles, no
+  trailer, and keeps primary focus. The separate action test renders all eight.
+  Old macOS PNGs are retained in `superseded-macos-capture-887b1a8f/`; Claude's
+  old Linux evidence is retained in `superseded-linux-capture-887b1a8f/` and is
+  superseded, not usable at L. Original-only capture and subsequent strict
+  replay pass; dark compact guide/TV originals inspected visually.
+- P3 coverage: unknown severity preserves its uppercase word and all eight
+  empty meter segments (card + plate); an initially empty category list mounts
+  no band/scrollable in either layout; ambient fade duration is pinned to 550 ms.
+  The known focused-to-empty update/clamp edge case remains found-not-fixed.
+  Lazy hold/dispose ordering remain **source-guard (S)** class per the plan;
+  ambient fade duration is also S. Interaction/hover cases are widget behavior
+  tests; golden mutations are pixel assertions. Do not label S as runtime proof.
+- The mutation runner adds a recorded negative for every new test, separately
+  exercises recommendation pointer/Select, swaps complete Explore/More blocks,
+  rewires More, changes the real page action count, drops each card's own hover
+  lift, and changes each dark scene's ink. Failure PNGs are archived under the
+  run's own evidence namespace and the `failures/` folder is removed after each
+  mutation, including error paths; original bytes are restored in `finally`.
+- Linux script now independently captures the exact new checkpoint in **two
+  clean detached worktrees**, each beginning without Linux PNGs or the other
+  checkout's build cache. It compares all four SHA256s and PNG bytes and strictly
+  replays both captures before copying files into this worktree. The second
+  capture/hash/strict logs and `reproduction=independent-second-worktree-byte-identical`
+  provenance supplement the five required files. Application hashes must equal
+  R. No early-exit awk or shared parser/kernel cache is introduced.
+- Development characterization: 49/49 passing (15 added cases), unchanged
+  original application. First severity development run observed two meters;
+  the new test was corrected before freezing to assert both and all eight
+  segments. Existing frozen assertions remain. `ci_behavior_tests.txt` gains
+  only the new identity-actions test. New committed original replay, fresh
+  mutation proofs and full-suite latest base are recorded below when complete.
+
 ## Found, not fixed
 
 All pre-existing; the move keeps each exactly.

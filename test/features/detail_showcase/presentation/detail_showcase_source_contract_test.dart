@@ -157,6 +157,10 @@ void main() {
     );
     expect(showcaseDeclaration('ShowcaseAmbient'), contains('alpha: 0.58'));
     expect(
+      showcaseDeclaration('ShowcaseAmbient'),
+      contains('milliseconds: 550'),
+    );
+    expect(
       showcaseDeclaration('ShowcaseStickyLogo'),
       contains('memCacheWidth: (420 * m.k).round()'),
     );

@@ -2,7 +2,7 @@
 # Capture ONLY the characterized original; never regenerate against moved code.
 set -euo pipefail
 repo="$(git rev-parse --show-toplevel)"
-checkpoint_subject='test(detail-showcase): step 0 original-code characterization checkpoint'
+checkpoint_subject='test(detail-showcase): step 0b review characterization checkpoint'
 format_subject='style(showcase): format the original showcase parts'
 # Consume all git-log output: an early awk exit causes SIGPIPE under pipefail.
 checkpoint="$(git log --format='%H %s' HEAD | awk -v subject="$checkpoint_subject" 'substr($0,42)==subject {print substr($0,1,40)}')"
@@ -13,6 +13,10 @@ for revision in "$checkpoint" "$reference"; do
     exit 1
   fi
 done
+if [[ -n "$(git ls-tree -r --name-only "$checkpoint" -- test/goldens/detail_showcase/linux)" ]]; then
+  echo 'Original capture checkpoint must not already contain Linux PNGs.' >&2
+  exit 1
+fi
 for input in lib pubspec.yaml pubspec.lock; do
   if [[ "$(git rev-parse "$checkpoint:$input")" != "$(git rev-parse "$reference:$input")" ]]; then
     echo "Checkpoint application differs from format-only original: $input" >&2
@@ -31,8 +35,14 @@ flutter --version > "$evidence/linux-original-sdk.txt"
 grep -E '^Flutter 3\.44\.8 ' "$evidence/linux-original-sdk.txt" >/dev/null
 capture_root="$(mktemp -d "$repo/.dart_tool/detail_showcase_linux_original.XXXXXX")"
 rmdir "$capture_root"
+reproduction_root="$(mktemp -d "$repo/.dart_tool/detail_showcase_linux_reproduction.XXXXXX")"
+rmdir "$reproduction_root"
+cleanup() {
+  git -C "$repo" worktree remove --force "$capture_root" 2>/dev/null || true
+  git -C "$repo" worktree remove --force "$reproduction_root" 2>/dev/null || true
+}
+trap cleanup EXIT
 git worktree add --detach "$capture_root" "$checkpoint"
-trap 'git -C "$repo" worktree remove --force "$capture_root"' EXIT
 cd "$capture_root"
 [[ "$(git rev-parse HEAD)" == "$checkpoint" ]]
 flutter pub get
@@ -42,13 +52,33 @@ flutter test --no-pub --dart-define=DETAIL_SHOWCASE_CAPTURE_ORIGINAL_LINUX=true 
   --update-goldens "$test_path" 2>&1 | tee "$evidence/linux-original-capture.txt"
 flutter test --no-pub --dart-define=DETAIL_SHOWCASE_REQUIRE_ORIGINAL_LINUX=true \
   "$test_path" 2>&1 | tee "$evidence/linux-original-strict.txt"
+sha256sum test/goldens/detail_showcase/linux/*.png | tee "$evidence/linux-original-sha256.txt"
+# A second clean checkout starts with no Linux PNGs or first-run build/cache.
+# Capture independently, then compare bytes; a replay of fresh PNGs alone is
+# not evidence that two original renders reproduce one another.
+git -C "$repo" worktree add --detach "$reproduction_root" "$checkpoint"
+cd "$reproduction_root"
+[[ "$(git rev-parse HEAD)" == "$checkpoint" ]]
+[[ ! -d test/goldens/detail_showcase/linux ]]
+flutter pub get
+[[ "$(git hash-object pubspec.lock)" == "$(git rev-parse "$checkpoint:pubspec.lock")" ]]
+flutter test --no-pub --dart-define=DETAIL_SHOWCASE_CAPTURE_ORIGINAL_LINUX=true \
+  --update-goldens "$test_path" 2>&1 | tee "$evidence/linux-original-reproduction-capture.txt"
+sha256sum test/goldens/detail_showcase/linux/*.png | tee "$evidence/linux-original-reproduction-sha256.txt"
+cmp "$evidence/linux-original-sha256.txt" "$evidence/linux-original-reproduction-sha256.txt"
+for scene in tv_movie compact_series wide_series_bands compact_guide; do
+  cmp "$capture_root/test/goldens/detail_showcase/linux/$scene.png" \
+    "test/goldens/detail_showcase/linux/$scene.png"
+done
+flutter test --no-pub --dart-define=DETAIL_SHOWCASE_REQUIRE_ORIGINAL_LINUX=true \
+  "$test_path" 2>&1 | tee "$evidence/linux-original-reproduction-strict.txt"
 mkdir -p "$repo/test/goldens/detail_showcase/linux"
 for scene in tv_movie compact_series wide_series_bands compact_guide; do
   cp "test/goldens/detail_showcase/linux/$scene.png" "$repo/test/goldens/detail_showcase/linux/$scene.png"
 done
-sha256sum test/goldens/detail_showcase/linux/*.png | tee "$evidence/linux-original-sha256.txt"
 {
   printf 'checkpoint=%s\nreference=%s\nimage_id=%s\nplatform=linux/amd64\n' "$checkpoint" "$reference" "$image_id"
+  printf 'reproduction=independent-second-worktree-byte-identical\n'
   for input in lib test pubspec.yaml pubspec.lock; do
     printf '%s=%s\n' "$input" "$(git rev-parse "$checkpoint:$input")"
   done

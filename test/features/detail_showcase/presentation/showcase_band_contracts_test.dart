@@ -1,4 +1,6 @@
 import 'package:debrify/services/imdb_enrichment_service.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/widgets/detail/showcase_parts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +8,84 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../support/detail_showcase_fixture.dart';
 
 void main() {
+  testWidgets('recommendation pointer and Select dispatch the identical item', (
+    t,
+  ) async {
+    await showcaseCase(t, (f) async {
+      const item = StremioMeta(
+        id: 'tt-rec',
+        type: 'movie',
+        name: 'Original rec',
+      );
+      final selected = <StremioMeta>[];
+      final node = f.node('rec');
+      await t.pumpWidget(
+        f.host(
+          ShowcaseRecs(items: const [item], nodes: [node], onTap: selected.add),
+        ),
+      );
+      await showcasePump(t);
+      final card = find.byWidgetPredicate(
+        (w) => w.runtimeType.toString() == '_Poster',
+      );
+      await t.tap(card);
+      expect(selected, hasLength(1));
+      expect(selected.single, same(item));
+      node.requestFocus();
+      await showcasePump(t);
+      await t.sendKeyEvent(LogicalKeyboardKey.select);
+      expect(selected, hasLength(2));
+      expect(selected.last, same(item));
+    }, television: true);
+  });
+
+  testWidgets('wide TV season tap dispatches the tapped season number', (
+    t,
+  ) async {
+    await showcaseCase(t, (f) async {
+      await t.pumpWidget(
+        f.host(ShowcaseSeasons(view: f.view(), nodes: f.nodes(2, 'season'))),
+      );
+      await showcasePump(t);
+      expect(find.text('Season 1'), findsOneWidget);
+      expect(find.text('Season 2'), findsOneWidget);
+      await t.tap(find.text('Season 1'));
+      expect(f.calls, ['season:1']);
+    }, television: true);
+  });
+
+  testWidgets('compact season popup selected text uses the theme accent', (
+    t,
+  ) async {
+    await showcaseCase(t, (f) async {
+      await t.pumpWidget(
+        f.host(
+          ShowcaseSeasons(view: f.view(), nodes: f.nodes(2, 'season')),
+          size: const Size(390, 844),
+          compact: true,
+          touch: true,
+        ),
+      );
+      await showcasePump(t);
+      await t.tap(find.text('Season 2'));
+      await showcasePump(t);
+      final popup = find.byType(PopupMenuItem<int>);
+      expect(popup, findsNWidgets(2));
+      final selected = find.descendant(
+        of: popup,
+        matching: find.text('Season 2'),
+      );
+      final other = find.descendant(of: popup, matching: find.text('Season 1'));
+      expect(
+        t.widget<Text>(selected).style!.color,
+        AppThemeScope.of(t.element(find.byType(ShowcaseSeasons))).core.accent,
+      );
+      expect(t.widget<Text>(other).style!.color, Colors.white);
+      await t.tap(other);
+      await showcasePump(t);
+    }, size: const Size(390, 844));
+  });
+
   test('wide touch scale and scope notification preserve all input axes', () {
     expect(const ShowcaseMetrics(1280, touch: true).k, closeTo(4 / 3, 0.00001));
     expect(const ShowcaseMetrics(1920, touch: true).k, 1.5);
