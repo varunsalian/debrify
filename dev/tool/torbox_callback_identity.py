@@ -10,10 +10,22 @@ import re
 def arguments(values, method):
     found = []
     for i, value in enumerate(values[:-1]):
-        if value != method or values[i + 1] != '(':
+        if value != method:
+            continue
+        opening = i + 1
+        if values[opening] == '<':
+            # Typed widget constructor calls retain their type arguments.
+            generic_depth = 0
+            while opening < len(values):
+                token = values[opening]
+                generic_depth += token.count('<') - token.count('>')
+                opening += 1
+                if generic_depth == 0:
+                    break
+        if opening >= len(values) or values[opening] != '(':
             continue
         depth, current, args = 0, [], []
-        for token in values[i + 2:]:
+        for token in values[opening + 1:]:
             if token == ')' and depth == 0:
                 if current:
                     args.append(current)
@@ -53,6 +65,7 @@ def check_callback_identities(lookup, rows, source_path, config):
     by_original = {row['original_name']: row for row in rows}
     aliases = config.get('callback_receiver_aliases', {})
     instances = config.get('callback_instances', {})
+    getter_aliases = config.get('callback_getter_aliases', {})
     errors = []
 
     def node_for(original):
@@ -63,11 +76,13 @@ def check_callback_identities(lookup, rows, source_path, config):
         owner, _, name = original.rpartition('.')
         return lookup[(source_path, owner, name)]
 
-    def identity(expr, owner):
+    def identity(expr, owner, *, getter=False):
         expr = list(expr)
         if expr[-1:] == ['!']:
             expr.pop()
         path = ''.join(expr)
+        if getter and path in getter_aliases:
+            path = getter_aliases[path]
         if not re.fullmatch(r'[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*', path):
             raise ValueError('callback must be a direct tear-off: ' + path)
         if path.startswith('this.'):
@@ -81,6 +96,9 @@ def check_callback_identities(lookup, rows, source_path, config):
         if '.' not in path:
             path = instances.get(owner, '$State') + '.' + path
         for alias in sorted(aliases, key=len, reverse=True):
+            if path == alias:
+                path = aliases[alias]
+                break
             if path.startswith(alias + '.'):
                 path = aliases[alias] + path[len(alias):]
                 break
@@ -90,6 +108,13 @@ def check_callback_identities(lookup, rows, source_path, config):
 
     for spec in specs:
         resolved = []
+        # Getter detection only; a missing callback member is reported by the
+        # guarded lookup below, so a failed lookup here must not raise.
+        try:
+            expected_node = node_for(spec['callback_member']) if 'callback_member' in spec else None
+        except (KeyError, ValueError, IndexError):
+            expected_node = None
+        is_getter = expected_node is not None and expected_node['parameters'] is None
         for site in spec['sites']:
             try:
                 node = node_for(site['member'])
@@ -105,13 +130,19 @@ def check_callback_identities(lookup, rows, source_path, config):
                         count = site['piece_count']
                         occurrence = site['piece_occurrence']
                 call_name = site['call']
+                values = tokens(node)
                 if 'call_member' in site:
                     call_name = node_for(site['call_member'])['name']
-                calls = arguments(tokens(node), call_name)
+                else:
+                    # A manifest-renamed callee is looked up under its new name.
+                    call_row = by_original.get(call_name)
+                    if call_row and call_row['new_name'] in values:
+                        call_name = call_row['new_name']
+                calls = arguments(values, call_name)
                 if len(calls) != count:
                     raise ValueError(f"expected {count} {call_name} calls, got {len(calls)}")
                 for call in ([calls[occurrence]] if occurrence is not None else calls):
-                    resolved.append(identity(callback_argument(call, site), node['owner']))
+                    resolved.append(identity(callback_argument(call, site), node['owner'], getter=is_getter))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
         if 'callback_member' in spec:

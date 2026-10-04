@@ -1,0 +1,110 @@
+{
+  "baseline": "4f3ee3b3",
+  "source_sha256": "54b5a326c4d0768d2e4f3f07d44002cfd83fcfb3b3d37fd25c1411f8d3210577",
+  "strict_config_sha256": "ad5f181d4ebe1ea5e8b8fff618aece2fec66befa5d552e042c465a9d4feed0e8",
+  "procedure": "maximum observed counts of strict-original and manifest-public-rename-only probes; no moved-code updates",
+  "probe_diagnostic_counts": [
+    15,
+    24
+  ],
+  "identities": [
+    {
+      "original_member": "<imports>",
+      "severity": "info",
+      "rule": "directives_ordering",
+      "message": "Sort directive sections alphabetically. Try sorting the directives",
+      "maximum_count": 9
+    },
+    {
+      "original_member": "_EditPlaylistDialog._EditPlaylistDialog",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_FocusableIconButton._FocusableIconButton",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_FocusablePlaylistTile._FocusablePlaylistTile",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_FocusableSettingsTile._FocusableSettingsTile",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_IptvListSettingsRow._IptvListSettingsRow",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_IptvSettingsPageState._buildStartupView",
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "message": "'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement",
+      "maximum_count": 2
+    },
+    {
+      "original_member": "_IptvSettingsPageState._buildStartupView",
+      "severity": "info",
+      "rule": "deprecated_member_use",
+      "message": "'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement",
+      "maximum_count": 2
+    },
+    {
+      "original_member": "_IptvSettingsPageState._refreshPlaylistForProfile",
+      "severity": "info",
+      "rule": "prefer_const_constructors",
+      "message": "Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_IptvSettingsPageState.build",
+      "severity": "info",
+      "rule": "prefer_const_constructors",
+      "message": "Use 'const' with the constructor to improve performance. Try adding the 'const' keyword to the constructor invocation",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_PlaylistNameDialog._PlaylistNameDialog",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_TvFocusableBackButton._TvFocusableBackButton",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_TvFocusableButton._TvFocusableButton",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    },
+    {
+      "original_member": "_TvFocusableTabBar._TvFocusableTabBar",
+      "severity": "info",
+      "rule": "use_key_in_widget_constructors",
+      "message": "Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor",
+      "maximum_count": 1
+    }
+  ]
+}

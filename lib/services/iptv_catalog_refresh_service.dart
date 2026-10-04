@@ -103,8 +103,15 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
     }
   }
 
+  @visibleForTesting
+  static int debugRefreshDueInvocations = 0;
+
   /// A due check is cheap: only catalog metadata is read, never channel lists.
   Future<void> refreshDue() async {
+    assert(() {
+      debugRefreshDueInvocations++;
+      return true;
+    }());
     if (kIsWeb || _checking || (_started && !_canSchedule)) return;
     _checking = true;
     final scope = ProfileRuntime.scope.value;

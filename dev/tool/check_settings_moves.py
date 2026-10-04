@@ -67,7 +67,9 @@ def remove_context_exceptions(node, sites, rows, row):
     their approved sites. All original statements still compare to the baseline.
     This never canonicalizes an unregistered guard or a general pair of braces.
     """
-    code = [t for t in node['tokens'] if not t['comment']]
+    formatting_commas = set(node.get('formatCommas', []))
+    code = [t for t in node['tokens']
+            if not t['comment'] and t['offset'] not in formatting_commas]
     values = [t['text'] for t in code]
     acquisitions = [i for i in range(len(code)) if is_context_acquisition(values, i)]
     removed, anchors = set(), []
@@ -94,8 +96,8 @@ def remove_context_exceptions(node, sites, rows, row):
                 if site.get('prefix_tokens') is None:
                     raise ValueError('Repeated formatter if body needs a recorded prefix')
                 matches = [i for i in matches if (
-                    tokens(node, end=code[i]['offset']) if site.get('prefix_mode') == 'raw'
-                    else normalize(tokens(node, end=code[i]['offset']), rows, row)
+                    tokens(without_offsets(node, removed), end=code[i]['offset']) if site.get('prefix_mode') == 'raw'
+                    else normalize(tokens(without_offsets(node, removed), end=code[i]['offset']), rows, row)
                 ) == site['prefix_tokens']]
             if len(matches) != 1:
                 raise ValueError('Recorded formatter if body changed or is not wrapped exactly once')
@@ -258,6 +260,15 @@ def normalize(values, rows, row=None):
         # A member qualification needs braces in a formerly simple string
         # interpolation. Canonicalize only an otherwise identical single read.
         if value == '${':
+            if (values[i + 1:i + 2] and values[i + 1] in RECEIVERS
+                    and values[i + 2:i + 3] == ['.']
+                    and values[i + 3:i + 4] and values[i + 3] in live_getters
+                    and values[i + 4:i + 7] == ['(', ')', '}']):
+                target = values[i + 3]
+                alias = CONFIG.get('live_getter_aliases', {}).get(target)
+                out.extend(['$', alias.split('.')[-1] if alias else mapping.get(target, target)])
+                i += 7
+                continue
             path = receiver_path_match(values, i + 1)
             if path:
                 member = i + 1 + path[0] + 1
@@ -288,6 +299,13 @@ def normalize(values, rows, row=None):
                 continue
         if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
+            getter_alias = CONFIG.get('live_getter_aliases', {}).get(target)
+            if (getter_alias and target in live_getters
+                    and values[i + 3:i + 5] == ['(', ')']):
+                out.append(getter_alias.split('.')[-1]); i += 5; continue
+            borrowed = CONFIG.get('borrowed_resource_aliases', {}).get(target)
+            if borrowed:
+                out.append(borrowed.split('.')[-1]); i += 3; continue
             if target in mapped or target in {'mounted', 'setState', 'context'} | set(CONFIG.get('live_widget_getters', [])):
                 if value in {'_deps', 'deps'} and target in live_getters and values[i + 3:i + 5] == ['(', ')']:
                     out.append(target); i += 5; continue
@@ -890,9 +908,35 @@ def _check(original_source, sources, rows, source_path, package=None,
     errors.extend(check_named_exceptions(rows))
     errors.extend(check_lint_comments(original_source, sources))
     known = {r['original_name'] for r in rows}
+    for alias, member in CONFIG.get('live_getter_aliases', {}).items():
+        declared = original.get(member)
+        retained = next((r for r in rows if r['original_name'] == member), None)
+        if (not declared or declared['parameters'] is not None
+                or declared['bodyOffset'] is None or not retained
+                or retained['destination_file'] != source_path
+                or alias not in CONFIG.get('live_getter_callbacks', [])):
+            errors.append('Live getter alias must name one retained facade getter: ' + alias)
+    for alias, member in CONFIG.get('borrowed_resource_aliases', {}).items():
+        declaration = original.get(member)
+        retained = next((r for r in rows if r['original_name'] == member), None)
+        if (not declaration or not declaration['variables'] or len(declaration['variables']) != 1
+                or not retained or retained['destination_file'] != source_path
+                or retained['new_name'] != member.split('.')[-1]):
+            errors.append('Borrowed resource alias must name one unchanged facade field: ' + alias)
     if set(original) != known:
         return ['Settings manifest coverage differs: ' + str(sorted(set(original) ^ known))]
     lookup = all_nodes(parsed)
+    for pair in CONFIG.get('co_located_declarations', []):
+        locations = []
+        for name in pair:
+            row = next(r for r in rows if r['original_name'] == name)
+            destination = (row['destination_file'], row['destination_class'], row['new_name'])
+            old_owner, _, old_name = name.rpartition('.')
+            locations.append(destination[0] if destination in lookup
+                             else source_path if (source_path, old_owner, old_name or name) in lookup
+                             else None)
+        if len(set(locations)) != 1 or locations[0] is None:
+            errors.append('Co-located declarations split: ' + str(pair))
     errors.extend(check_plain_sections(lookup))
     from torbox_callback_identity import check_callback_identities
     errors.extend(check_callback_identities(lookup, rows, source_path, CONFIG))

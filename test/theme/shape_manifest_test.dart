@@ -37,6 +37,9 @@ import 'package:flutter_test/flutter_test.dart';
 const Map<String, int> kShapeResidue = {
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_tiles.dart':
       0,
+  'lib/features/iptv_settings/presentation/iptv_settings_playlist_name_dialog.dart':
+      0,
+  'lib/features/iptv_settings/presentation/iptv_settings_tv_tab_bar.dart': 0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_bulk_delete.dart':
       0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selected_delete.dart':
@@ -140,7 +143,6 @@ const Map<String, int> kShapeResidue = {
   // "Found, not fixed"). The guard stays armed against further growth.
   'lib/screens/settings/filter_settings_page.dart': 2,
   'lib/screens/settings/iptv_hidden_categories_page.dart': 1,
-  'lib/screens/settings/iptv_settings_page.dart': 2,
   'lib/screens/settings/iptv_settings_two_pane.dart': 7,
   'lib/screens/settings/provider_settings_page.dart': 0,
   'lib/screens/settings/quick_play_settings_page.dart': 0,
@@ -281,6 +283,90 @@ const Map<String, int> kExtractedShapeResidue = {
       2,
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_ios_section.dart':
       2,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_root_layout.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_category_views.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_layout_actions.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_list_views.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_phone_hub.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_preferences_views.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_recording_view.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_forms.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_views.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_two_pane.dart':
+      0,
+
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_catalog_actions.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_list_row.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_lists_actions.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_preferences_actions.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_recording_actions.dart':
+      0,
+
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_xtream_add.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_url_add.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_sources_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_removal.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_refresh.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_edit.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_sections.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_recording_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_profile_actions.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_preferences_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_load_settings.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_layout_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_input_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_focus_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_focus_actions.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_file_import.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_feedback.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_edit_dialog.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_composition.dart':
+      0,
+  'lib/screens/settings/iptv_settings_page.dart': 0,
+  'lib/features/iptv_settings/presentation/iptv_settings_focusable_tile.dart':
+      0,
+  'lib/features/iptv_settings/presentation/iptv_settings_dialog_button_style.dart':
+      0,
+  'lib/features/iptv_settings/presentation/iptv_settings_back_button.dart': 0,
+  'lib/features/iptv_settings/presentation/iptv_settings_icon_button.dart': 0,
+  'lib/features/iptv_settings/presentation/iptv_shared_source_delete_dialog.dart':
+      0,
+  'lib/features/iptv_settings/presentation/iptv_settings_playlist_tile.dart': 1,
+  'lib/features/iptv_settings/presentation/iptv_settings_tv_button.dart': 1,
+  'lib/features/iptv_settings/models/iptv_settings_phone_section.dart': 0,
+  'lib/features/iptv_settings/models/iptv_settings_playlist_edit.dart': 0,
+  'lib/features/iptv_settings/application/normalize_xtream_server_url.dart': 0,
 
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_workflows_composition.dart':
       0,

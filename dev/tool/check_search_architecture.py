@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -20,8 +20,10 @@ STORAGE_ENUM_FILES = ('lib/models/ambient_trailer_surface.dart', 'lib/models/tv_
 PLAYBACK_FACADE = "lib/services/torrent_playback_service.dart"
 PLAYER_LAUNCH_FACADE = "lib/services/video_player_launcher.dart"
 SETTINGS_FACADE = "lib/screens/settings_screen.dart"
-# Step 6 enables the facade cap and rejects remaining temporary cross-calls.
-# Until then, the facade is measured only by the repo-wide shrinking ratchet.
+# Step 7 enabled the facade cap and the TEMP(iptv_settings) rejection.
+IPTV_SETTINGS_COMPLETE = True
+IPTV_SETTINGS_FACADE = "lib/screens/settings/iptv_settings_page.dart"
+IPTV_SETTINGS_BRIDGE = "lib/features/iptv_settings/presentation/legacy_iptv_settings/"
 SETTINGS_COMPLETE = True
 IPTV_COMPLETE = True
 TORBOX_COMPLETE = True
@@ -294,6 +296,8 @@ LEGACY_PLAYBACK_BRIDGES = (
     DEBRID_BRIDGE,
     PIKPAK_BRIDGE,
     PLAYBACK_SETTINGS_BRIDGE,
+    # Bounded move-only settings bridge; exit: IPTV settings data contracts.
+    IPTV_SETTINGS_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -339,6 +343,16 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the {limit}-line settings extraction limit")
         if "TEMP(settings)" in source and (SETTINGS_COMPLETE or not relative.startswith(SETTINGS_BRIDGE)):
             problems.append("temporary settings cross-call outside the staged legacy bridge")
+    if relative.startswith("lib/features/iptv_settings/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line IPTV settings extraction limit")
+        if "TEMP(iptv_settings)" in source and (IPTV_SETTINGS_COMPLETE or not relative.startswith(IPTV_SETTINGS_BRIDGE)):
+            problems.append("temporary IPTV settings cross-call outside the staged legacy bridge")
+    if IPTV_SETTINGS_COMPLETE and relative == IPTV_SETTINGS_FACADE:
+        if lines > 400:
+            problems.append(f"{lines} lines exceeds the 400-line IPTV settings facade limit")
+        if "TEMP(iptv_settings)" in source:
+            problems.append("temporary IPTV settings cross-call remains in the facade")
     if relative.startswith("lib/features/iptv/"):
         if lines > 500:
             problems.append(f"{lines} lines exceeds the 500-line IPTV extraction limit")
@@ -438,6 +452,18 @@ def violations(path: Path) -> list[str]:
                     target = resolved.relative_to(ROOT).as_posix()
             if relative.startswith("lib/features/playback_settings/") and not relative.startswith(PLAYBACK_SETTINGS_BRIDGE) and target.startswith("lib/services/"):
                 problems.append("playback settings outside the legacy bridge imports a service")
+            if relative.startswith("lib/features/iptv_settings/"):
+                if target == IPTV_SETTINGS_FACADE:
+                    problems.append("IPTV settings feature imports its facade")
+                if not relative.startswith(IPTV_SETTINGS_BRIDGE) and target.startswith("lib/services/"):
+                    problems.append("IPTV settings service import outside the exact legacy bridge")
+            if target.startswith("lib/features/") and relative.startswith("lib/features/"):
+                own_feature = relative.split("/")[2]
+                other_feature = target.split("/")[2]
+                if ((own_feature == "iptv_settings" and other_feature in ("settings", "iptv", "playback_settings")) or
+                        (other_feature == "iptv_settings" and own_feature in ("settings", "iptv", "playback_settings"))):
+                    if not target.startswith(f"lib/features/{other_feature}/models/"):
+                        problems.append("IPTV settings/settings/IPTV/playback settings implementation cross-import")
             if relative.startswith("lib/features/iptv/application/") and target.startswith("lib/services/"):
                 problems.append("pure IPTV application helper imports a legacy service")
             if relative.startswith("lib/features/torbox_downloads/application/") and target.startswith("lib/services/"):
@@ -517,6 +543,8 @@ def main() -> int:
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)
     if PLAYBACK_SETTINGS_COMPLETE:
         paths.add(ROOT / PLAYBACK_SETTINGS_FACADE)
+    if IPTV_SETTINGS_COMPLETE:
+        paths.add(ROOT / IPTV_SETTINGS_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:

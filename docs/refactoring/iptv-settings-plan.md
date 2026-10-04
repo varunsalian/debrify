@@ -52,7 +52,9 @@ and `SETTINGS_COMPLETE` rejects `TEMP(settings)`. The settings plan excluded
 the pages under `lib/screens/settings/`.
 
 **Out of scope:** `iptv_settings_two_pane.dart` (2,231 lines, its own file),
-the IPTV services, storage, catalog DB and the recording services. The
+the IPTV services, storage, catalog DB and the recording services (the
+Step 0b review explicitly authorizes an assertion-only refresh entry-count
+probe; the operational service body remains unchanged). The
 facade State keeps its single `_twoPaneKey` (`GlobalKey<IptvSettingsTwoPaneState>`);
 moved bodies borrow that exact key (contract 2).
 
@@ -469,11 +471,296 @@ each parallel branch's additions, before claiming parity.
 
 ## Progress
 
-(empty)
+- Step 0 complete (commit recorded by its exact checkpoint subject) on `refactor/iptv-settings`, baseline `4f3ee3b3`.
+  `flutter pub get` ran here first; Flutter 3.44.8 / Dart 3.12.2, no dependency
+  or lockfile changes. Original facade: 4,480 lines; seam-only facade: 4,585.
+- Original full suite `iptv_settings/base`: 10,577 successes, 13 failures,
+  28 errors, 20 skipped. Seam-only `base2` has exactly the same identities
+  and outcomes; comparison PASS. The historical failure file was not used
+  to accept failures that passed in these observed runs.
+- Original-code proofs use a disposable detached `4f3ee3b3` worktree nested
+  under this authorized worktree's ignored `.dart_tool/iptv_settings_original`.
+  No pre-existing worktree or main-checkout source was accessed or modified.
+  Evidence is in the authorized common `refactor-evidence/iptv_settings/`
+  namespace. The parser is separately pinned there with the checked-in lock;
+  every manifest command explicitly supplies its isolated `--parser-package`.
+- The frozen accessor returns actual fields and method tear-offs; no service,
+  clock, constructor, or platform predicate seam. The seam-only 105-line size
+  increase is recorded once; later size ratchets only lower. The TV text-field
+  guard includes the original facade before characterization.
+- Original strict probe: 15 infos (9 directive-order, 2 const, 4 deprecated
+  Radio arguments). Manifest public-renames-only probe: 24 infos, adding
+  exactly nine widget-key constructor identities. Neither probe edits const
+  capability, constructor keys, bodies, or lint configuration. Import URI
+  qualification only; corrected preliminary URI probes are retained as
+  preliminary evidence, not accepted baselines. The checked-in symbol
+  inventory combines counts by maximum, never sum; the per-symbol checker
+  rejects any other identity or scaffold diagnostic.
+- Dependency report and all 168 manifest leaves have explicit destinations
+  and a per-entry wiring checklist. Callback checks have additive named-
+  argument resolution; real-config fixtures mutate every identity site's
+  member, receiver, closure wrapper and missing argument, plus disposal,
+  observer, ticker/mixins, profile-body boundaries and paired dialog ownership.
+- Characterization uses real profile paths, independent catalog files, actual
+  registry resources/grants, persisted preference adapters and sealed saves.
+  IO runs outside the fake clock; automatic refresh interval 0 isolates manual
+  loops. Actions/timers drain and dialogs close before owned databases do.
+  Profile cases cover gate remount, mounted confirmation replacement, pre-body
+  rejection and held preference/playlist/removal saves with each caller's
+  observed handling. No blanket mid-body authorization guard was invented.
+- Decisions: keep the original narrow source-form overflow; golden sub-section
+  is Startup at the required 400×800 viewport. Interactive narrow form tests
+  use 800×1,000 without changing app layout thresholds. Back keys lacking a
+  Flutter test Android raw-key mapping exercise the real focused key handler;
+  Enter, Select and Escape use dispatched key events. Dialog TV autofocus
+  targets Save/Import when initially valid, matching the original buttons.
+- Latest baseline is `iptv_settings/base3`: 10,686 successes, the same 13
+  failures / 28 errors / 20 skips; PASS versus base2 with exactly 109 added
+  successful identities and no regressions/missing/new skips. Original proof
+  `original-characterization`: 131 successes / the same observed direct-SharedPreferences
+  source-guard failure; PASS against base3. Its tested staged tree is
+  `af981a48385d3819f9b032e93feb4f609630ac72`, with no untracked inputs or tree
+  change; all 14 new test/body/helper/PNG inputs are byte-identical here.
+- All seven manifest/self-test runs PASS (Settings 316, IPTV 384, TorBox 195,
+  Debrid 173, PikPak 128, player-launch 154, IPTV-settings 168 leaves).
+  Whole analyzer: 1,635 diagnostics, zero additions/removals; new tests/helpers
+  have zero diagnostics. Exact CI format (1,473 files), scoped analyzer and
+  strict five-warning allowlist PASS. Architecture, strict sizes, storage
+  references/self-tests/314 keys, shell syntax and staged diff checks PASS.
+  No assertion, known-failure file, warning allowlist or lint suppression was
+  weakened. Four original macOS PNGs were captured then strictly replayed;
+  the evidence namespace records their immutable input hashes.
+- Linux capture script resolves the exact checkpoint subject and uses only
+  that checkpoint's tests and fixture. Linux originals remain pending and
+  non-strict until verified, separately committed and strictly replayed before
+  any step-5 builder moves. Android engine/battery, physical Android TV and
+  provider accounts remain device-only pending checks. Remote CI and merged-
+  tree integration are pending Claude; no push or branch switch.
+
+- Step 1 complete: enum and edit value object are public models; the pure
+  normalizer is a top-level application function. Production calls and the
+  frozen accessor point directly to it. Exact bridge/import/500-line rules
+  are registered with real positive and negative architecture checks; facade
+  completion cap remains staged for Step 7. Theme, TV and shape readers cover
+  the three destinations. Facade ratchet: 4,524 lines.
+  `step1`: 131 successes / the unchanged observed source-guard failure, PASS
+  versus latest base3, zero added/missing/newly skipped identities or new
+  failures. Staged tested tree `491a7f551d71b7c10ffc944ab10be6b5b523b783`, no untracked
+  inputs or change during run. All seven manifest/self-tests, exact CI format
+  and analysis/five-warning allowlist, architecture/negative fixtures, sizes,
+  storage references/self-tests/314 keys, capture-shell syntax and diff PASS.
+  Whole analyzer remains 1,635, zero added/removed; per-symbol strict evidence
+  PASS. All 109 characterization assertions and four PNGs remain unchanged.
+
+- Step 2 complete: seven pure private widgets become manifest-named public
+  widgets; their private State classes, constructor keys/const capability,
+  lifecycle, focus and handlers stay verbatim. The shared-delete dialog and
+  State moved together; the facade re-exports its unchanged public name. The
+  shared button style has one presentation owner. Sixteen whole declarations
+  moved to nine files (14–371 lines); the facade ratchet is 3,284 lines.
+  Pure widgets import no services. Import-only cleanup removed unused and
+  redundant directives; the two unlinked prose class references stay verbatim
+  to satisfy the existing comment-preservation check. All five shape-token
+  calls now live in registered presentation files, with both bare radii
+  transferred and the token-free facade moved to the extracted residue map;
+  the 488 floor and all assertions remain unchanged.
+  `step2-final`: 131 successes / the unchanged source-guard failure, PASS
+  versus base3; all 109 characterizations/four strict macOS PNGs unchanged.
+  Stable staged tested tree `ab887dbecd3d028a0f76acc25e9cb2228333ac9c`; no untracked
+  inputs or change during run. All seven manifests/self-tests and corrected
+  real-config positives/callback negatives PASS. Exact CI format, scoped
+  analyzer/five-warning allowlist, architecture/negatives, sizes, storage and
+  diff PASS. Whole analyzer 1,642: seven observed constructor-key infos from
+  the original rename-only probe; zero additions against the 1,655-diagnostic
+  maximum-combined strict-original inventory, and per-symbol check PASS (11
+  current page/destination identities). Preliminary registration failures are
+  retained as failed evidence, followed by corrected runs; nothing was
+  accepted with a record/update regression command.
+
+- Step 0b independent review closure (before any Step 3 moves): the shared
+  interpolation fix `def4e304` is cherry-picked as `c0f5fb87`, retaining Claude's
+  trailer and adding the required Codex trailer. The named-argument resolver
+  also recognizes typed constructors, necessary for the two original
+  `RadioListTile<String>` sites. Hub `SettingsTile` count is 12; Channel order
+  is occurrence 3, Auto-refresh occurrence 1. Both startup radio callbacks are
+  pinned. Real-config checks exercise interpolated arguments, wrong members,
+  wrong receivers, closures and missing arguments, with the resolver itself
+  tested independently of token/scaffold failures.
+- P2 removal coverage now reads durable numbering aliases/namespaces and
+  preserved assignments, and actual per-source category-channel orders.
+  Six later failure boundaries use the real preference adapter or SQLite
+  triggers (default, catalog deletion, tolerated local category-order cleanup,
+  media category orders, favorites/list membership and history); each pins
+  prior persisted effects, retained UI state and the original message.
+  The previous damaged-catalog failure case and assertions remain.
+- Contract 9 pins `if (!mounted) return; setState(_reloadHiddenCounts)` after
+  the hidden-categories route returns. Widget tests open/pop that actual route,
+  change its switch and check counts/badges, reject a stale Category order
+  opening with its exact message, and push/pop the actual Channel order page.
+  Scenario (c) now invokes the real style setter before publishing the incoming
+  scope, proving no physical preference writes for either profile, unchanged
+  cached values, stored connections and grants, and the original StateError.
+- P3 closes body-space 900×420 wide / 900×419 narrow (the viewport adds the
+  scaffold's 56-pixel AppBar); rail DOWN/TV entry asserts `iptv-2p-rail-0`.
+  Surplus node disposal, last-row/empty playlist and list focus repair, sheet
+  Rename/Delete persistence and exact interleaved Xtream requests are covered.
+  The runExclusive guard scans the whole facade and every destination.
+  TV text-field scanning includes the feature conditionally so the original
+  checkpoint remains runnable. An assertion-only, visible-for-testing service
+  entry counter proves refreshDue invocations: two nonzero / one Off, including
+  the early-return invocation. No service ordering, awaits or release behavior
+  changes; the same probe is installed on the original proof tree.
+- Golden decision: keep the checkpoint-owned fixture and PNGs byte-identical.
+  The original SettingsPageScaffold already wraps the page in settingsPageTheme
+  (`settings_widgets.dart`); import/edit dialogs explicitly wrap that theme too.
+  ThemeData.dark() remains the host's ambient fallback, preserving the actual
+  original caller. The golden loop changes only missing, non-strict Linux
+  reporting to markTestSkipped; rendering/capture inputs stay unchanged, so
+  the Linux capture at `8a6e1cf9` remains applicable. No golden update is used.
+- Original proof is a new detached worktree at exactly `8a6e1cf9`, nested under
+  this dedicated worktree. The facade matches that commit byte-for-byte; every
+  changed/new characterization passes there (124 total, 15 added identities).
+  Eleven deliberate application mutations are rejected by these tests; the
+  interpolation-opener regression is separately rejected by its isolated
+  resolver fixture. Mutation JSON, per-run tree env files and immutable input
+  hashes are in `iptv_settings/`. All seven manifests/self-tests, architecture,
+  size/storage, exact CI format/analyzer and strict allowlist pass. Final whole
+  analyzer: 1,642, zero added/removed against Step 2; per-symbol strict check:
+  11 original destination diagnostics, zero additions. Draft failed evidence
+  is retained; corrections pin original behavior and remove only new test lint.
+
+- Latest full baseline is `iptv_settings/base4`: 10,701 successes, the same
+  13 failures / 28 errors / 20 skips; PASS versus base3 with exactly 15
+  added successes, zero new failures/missing/new skips/fixes. Original
+  checkpoint HEAD `8a6e1cf9`, stable staged tested tree
+  `fbe271ddfb3a5f3b15a1b039f98b0d4a19ae8b55`, no untracked inputs. The original facade
+  is byte-identical to the checkpoint; frozen original body JSON, all four
+  macOS PNGs and the golden fixture are unchanged. `step0b-final` on moved
+  code: 146 successes / the same observed direct-SharedPreferences source
+  guard failure; PASS versus base4, zero additions or missing/newly skipped
+  identities. Stable staged tree `d2d2bb843f701da344d6292366877cf2d1e3f972`;
+  all characterization/helper/PNG inputs match the original proof byte-for-byte.
+  Both planned extraction gates will compare against base4.
+
+- Step 3 implementation: six per-State resource/state owners and ten narrow workflow sections now own load/add/import/Xtream/remove/edit/refresh/default, profile authorization, focus repair and feedback. The edit dialog and private State moved together. Actual callbacks are stable section tear-offs; State getters stay live. Lifecycle observer/ticker identity and disposal order remain verbatim. The facade is 2,003 lines; bridge files are 15–327 lines. Wiring rows for this checkpoint are reviewed.
+- Step 3 conservative decisions: recording/layout receivers r/l keep the lifecycle guards within the original formatter width. One source-edit cancellation return requires formatter braces after receiver qualification; its exact original condition, prior tokens and return are registered, with no new guard or await. Borrowed-resource alias normalization is opt-in and validates the unchanged facade field; a real wrong-key fixture fails. The frozen source-body reader uses that exact alias and formatter site; assertions/body JSON are unchanged.
+- Linux originals have arrived from 8a6e1cf9: four SHA-256 values match the supplied evidence, capture and original strict replay each pass four goldens in the calibrated linux/amd64 Flutter 3.44.8 container. These pending Linux-only PNG inputs stay separate from Step 3 and are not read by the macOS gate; their immutable hashes are recorded alongside gate provenance. They will be committed separately and made strict before Step 5.
+
+- Step 3 validation corrections: exact CI format found an unformatted file-import continuation; formatting changes whitespace only. Architecture found the declared bridge absent from the shared legacy-bridge tuple. It now uses the same exact service-import exception as the other reviewed bridges; pure views, sibling paths, HTTP and facade/implementation cross-imports remain forbidden, with stronger real positive/negative checks. Interrupted preliminary gate logs are retained and never accepted; the complete gate is restarted only on this corrected stable tree.
+
+- Step 3 complete; full-suite gate 1 PASS against latest base4: exactly 10,701 successes / 13 failures / 28 errors / 20 skips, no added/missing/fixed/newly skipped/new failures. Stable staged tested tree 2bdef2b5138918d95f6374de1690c6b12588826c; the only untracked inputs are the four separately hashed, unused-on-macOS Linux PNGs. The unchanged historical helper replays completed JSON: 41 failures/errors, the same 32 absent from its historical list; no failure list changes. All seven manifest/self-tests, exact CI format and analyzer/strict five-warning allowlist, architecture/stronger negatives, sizes/storage/diff pass. Whole analyzer 1,644, zero additions versus original strict maximum; per-symbol check 13 original identities. CI behavior check passes: 3,158 successes / two known failures. The source-body reader passes all four unchanged guards on 8a6e1cf9 and current code. Gate/env/audit and final-checks evidence are under iptv_settings/.
+
+- Step 4 implementation: lists and their row, catalog entry points/counts, preference setters/pickers and recording actions now use their actual sections. Live list getters replace the temporary facade delegates; profile closures and unwrapped device-wide recording actions are unchanged. The facade ratchet is 1,418 lines. Thirteen formatter-only if braces are individually pinned, with no new conditions or await changes. The shared validator now ignores only parser-identified formatting commas and accounts for earlier approved brace removals when validating a later full prefix. The frozen reader selects the complete recorded prefix and preserves the unchanged 27-body assertions. Failed draft tooling runs remain evidence; no regression was accepted.
+
+- Step 4 complete: affected suite 146 successes / unchanged source-guard failure, PASS against base4 with zero added/missing/new skips/failures; stable staged tested tree 42bd8c37b7dd6fddc4e628e39a80c294509dd390. All seven manifests/self-tests, architecture/negatives, strict sizes/storage, exact CI format/analyzer/five-warning allowlist and diff pass. Whole analyzer 1,645, zero additions against original strict maximum; 14 per-symbol original identities. The final source reader passes all four unchanged cases against original 8a6e1cf9, and the updated real-config interpolation/checker fixtures pass there too. Original assertions, body JSON, fixture and PNGs are unchanged.
+
+- Linux prerequisite complete in a separate assets/strictness commit before any Step 5 move. All four immutable SHA-256 values match linux-original-sha256.txt and exact checkpoint 8a6e1cf9; supplied capture and original strict replay each pass. The committed Step 4 application (4537c576) plus only the strictness test overlay passes all four Linux pixels in calibrated image sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a (linux/amd64, Flutter 3.44.8); no regeneration. Snapshot/source tree, overlay hash, image and runner provenance are recorded. Linux is now always strict, including without a dart-define. The changed strict test passes the same four identities on original 8a6e1cf9, with unchanged fixture and rendering; base4 filtered-identity audit passes. Step 0b changed only skip reporting, so no original recapture is needed. The external Actions spending limit leaves remote CI pending.
+
+- Step 5 complete: form builders, child views, phone hub, two-pane layout and
+  layout actions use their actual sections; facade ratchet 361 lines. The new
+  section is IptvSettingsTwoPaneLayout to avoid the existing widget's name.
+  One deferred phone-hub dispatch closes the composition cycle; other methods
+  bind direct tear-offs, and original getters read live values lazily. Exact
+  callback/getter aliases are checked with isolated positive/negative cases,
+  including rejection of method calls even with a getter alias. Canonical
+  interpolation and the retained appearance getter have narrow registrations.
+  One additional formatter-only if brace is pinned (15 total); no guards change.
+  Every entry's actual wiring is reviewed in the dependency report.
+- Step 5 verification: all seven manifests/self-tests and local CI-equivalent
+  checks pass; affected suite 146 successes / unchanged source-guard failure,
+  PASS versus base4, on stable staged tree 105ac825f5d614f737505391b8628d1b7bc404ae.
+  Whole analyzer 1,645, zero additions; 14 original per-symbol identities.
+  Checker and all four unchanged frozen source guards pass on original
+  8a6e1cf9. Original fixtures, analyzer inventory and macOS PNGs match bytewise.
+  All four immutable Linux goldens pass strictly on that final formatted tree
+  in the calibrated image. The failed repeat lacked discarded Docker package
+  dependencies; restoring them in the isolated worktree cache resolves it.
+  The draft CI format finding was two leading blank lines from import cleanup;
+  final exact CI format passes. Failed draft logs are retained, never accepted.
+  Final checks, comparisons, tree env and Linux provenance use iptv_settings/.
+
+- Step 6 complete: the exact annotated State build forwards its original
+  context argument to plain RootLayout; only the implementation's @override
+  is removed through the named exception. The retained forwarder is required.
+  Live State mounted/setState, the same key, actual owners and section
+  tear-offs are reviewed per entry. Layout writes and the post-frame rebuild
+  retain their original timing; the build-side-effect exception still applies.
+  Facade ratchet 267 lines. Duplicate/import-order draft diagnostics were
+  corrected by import-only edits; URI targets keep the existing screen widget.
+  The frozen reader reconstructs only the explicitly registered implementation
+  annotation while the checker pins State's annotated forwarder. All 27-body
+  assertions and the frozen JSON remain unchanged; four source cases pass on
+  original 8a6e1cf9. Draft failures are preserved and never accepted.
+- Step 6 verification: affected 146 successes / unchanged source-guard failure,
+  PASS versus base4 on stable staged tree 7b156ec3525b7527cbec7bd21df96a4d0ac5636c.
+  All seven manifest/self-tests and repaired exact CI checks pass, including
+  the unchanged five-warning allowlist. Whole analyzer 1646, zero additions;
+  strict per-symbol comparison passes. Four Linux originals pass strictly on
+  that tree in the calibrated image. Evidence remains under iptv_settings/.
+
+- Step 7 source checkpoint: final 400-line facade and 500-line feature caps
+  are active, with TEMP(iptv_settings) rejection including the exact bridge.
+  Real negatives cover the 400/401 boundary and bridge/facade temporary markers;
+  those tooling fixtures also pass with original 8a6e1cf9 application code.
+  The final facade is 267 physical formatted lines; the completed source set
+  has no temporary marker, part or mixin extraction, or remaining workflow.
+  Lifecycle, observer/ticker identity, key and retained appearance/platform
+  predicates stay in State. All original input fixtures, body JSON, accessor,
+  analyzer inventory, failure allowlists, lockfile and external two-pane widget
+  match their original checkpoint bytes. CI artifact globs now match the
+  helper's per-run output names; its coverage and failure lists are unchanged.
+  Final manifests/analyzer, CI behavior, strict Linux replay and full-suite
+  gate 2 are recorded against this source checkpoint before completion.
+
+- Step 7 complete; full-suite gate 2 PASS versus latest iptv_settings/base4
+  and gate 1, with every identity/outcome identical: 10,701 successes /
+  13 failures / 28 errors / 20 skips. No added, missing, fixed, newly skipped
+  or newly failing cases. Source checkpoint b3025fde has clean committed tested
+  tree b948a2ee94f6f8f8ce3d7236528f95b247781666; HEAD and tree are stable,
+  with no snapshot or untracked input. Historical test_baseline replay reports
+  the same 41 failures/errors and same 32 outside its historical list, all
+  observed on original base4; neither failure list is changed.
+- Final verification: all seven isolated-parser manifests/self-tests pass
+  (IPTV settings owns 168 leaves); named, interpolation, getter and receiver
+  identity negatives remain active. Exact CI format/analyzer/five-warning
+  allowlist, architecture/real negatives, strict sizes/storage/diff pass.
+  Whole analyzer 1,646, zero additions against original strict maximum;
+  15 per-symbol original identities. Exact CI behavior check passes with
+  3,158 successes / two unchanged known failures; its per-run output and
+  stable tree env are archived, matching the source checkpoint tree.
+  Four immutable Linux goldens pass strictly on b3025fde in the calibrated
+  image; macOS goldens pass in gate 2. Original 8a6e1cf9 pixels/fixture remain
+  unchanged, so Step 0b needs no recapture. Final source inventory is 47 files,
+  facade 267 lines, largest extracted file 371; every wiring row is reviewed.
+  Evidence: gate2.jsonl/env, gate2-vs-{base4,gate1}.txt, both gate identity/tree
+  audits, step7-checks.json, strict analyzer, ci-final.*, Linux-final provenance
+  and final-audit.json, all under iptv_settings/. This final commit changes
+  documentation only; application, tests, guards and CI remain exactly tested.
+- Commits: Step 0 8a6e1cf9; Step 1 4d220ee8; Step 2 f0b7d0c5; interpolation
+  cherry-pick c0f5fb87 (upstream def4e304, Codex trailer appended); Step 0b
+  ef4a16f4; Step 3/gate 1 d4c5187f; Step 4 4537c576; Linux originals/strictness
+  separately 5942c260; Step 5 946f3eab; Step 6 c8b81c69; Step 7 source b3025fde.
+  Gate 2's documentation evidence commit is identified by exact subject
+  test(iptv_settings): step 7 gate 2 committed-tree evidence.
+- Conservative decisions remain: preserve original profile/zone timing,
+  partial removal effects, double discovery, UI/focus quirks and build-time
+  flag writes; keep constructors' keys/const capability and all assertions;
+  retain State/legacy service bridges with their declared Riverpod/data/localization
+  exit milestones. No regression recording, allowlist growth or pixel updates.
+  Pending: Android TV D-pad, recording engine/battery on Android, real providers;
+  remote CI until a permitted push; Claude's union registration merge and
+  committed merged-tree full-suite integration gate. Stopped after gate 2;
+  no push or branch switch.
 
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
+- The full suite retains 13 failures and 28 errors with identical original
+  identities (the gate audits enumerate them). The source-guard failure still
+  reports direct preferences opens in webdav_sync_save_feedback.dart and
+  profiles/device_key_provider.dart:7; those services are outside this slice.
+- A failed default-preference remove retains the physical stored value while
+  SharedPreferences clears its cached value; the facade default field remains.
 - Removing an ordinary playlist has no confirmation and no in-flight guard;
   the removal sequence isn't transactional, and its catch-all reports
   failure after partial changes.
@@ -504,4 +791,8 @@ All pre-existing; the extraction keeps each exactly.
   above).
 - Dialogs opened from the IPTV page's plain `MaterialPageRoute` that don't
   wrap `settingsPageTheme` themselves use the ambient theme.
+- The 400-pixel narrow source form has pre-existing tab-row overflow; it is
+  retained. URL/Xtream stale post-persistence throws can retain busy flags.
 - Stale comments (133; `lib/theme/app_looks.dart:22`).
+
+- Completion review (Claude): the TV text-field, print-redaction and runExclusive scans now include `lib/features/iptv_settings` unconditionally (the `existsSync` guards were removed, which only tightens them); the refresh service doc comment returned to `refreshDue()`; stale doc/comment references updated. The owner fields `r` and `l` keep their names because the checker config refers to them (cosmetic follow-up).
