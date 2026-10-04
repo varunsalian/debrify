@@ -496,9 +496,12 @@ As in the merged-detail and spotlight plans, plus:
    `GET /lookup/shows?imdb=<unique id>` → 404. TVMaze expectations are
    **per case/scene**: a case that performs thumbnail enrichment asserts the
    probe and lookup requests in the log, so a cached or "unavailable"
-   short-circuit fails instead of passing silently; a case that never
-   reaches enrichment (e.g. the empty-season/unavailable branch, which
-   returns before it) asserts **zero** TVMaze requests.
+   short-circuit fails instead of passing silently; a case in which no
+   thumbnail prefetch was launched **and** subsequent enrichment was skipped
+   (e.g. the specified unavailable fixture: failing addon meta, prefetch
+   disabled, failing Trakt fallback) asserts **zero** TVMaze requests. An
+   empty-season case whose Trakt stub addon starts prefetch before the
+   seasons await (1168) is not covered by that rule and pins its own log.
    Recording host callbacks. Fake time
    mounted outside `runAsync`, IO inside; bounded pumps, no `pumpAndSettle`;
    schedule a frame after post-frame callbacks. Prove one fixture on (a)
