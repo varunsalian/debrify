@@ -1180,6 +1180,24 @@ decomposition; bug fixes and behaviour changes, including everything below.
   identities and all macOS behavior are unchanged. Linux enforcement is now
   stronger. Builder moves may proceed.
 
+### Step 2 — card and small rendering widgets
+
+- Linux prerequisite is `487efa2e`. Moved the title link, open pill, logo,
+  card and card State to their registered destinations. The logo remains
+  inside the bridge with its original image-cache dependency. The card's
+  bound layout owner preserves `cardState`, its own injected setter and
+  physical context sites. No timing, decode, boundary, const or comment
+  changes. Card State is 368 lines; `_buildCard`'s single documented
+  layout-file exception is 585 lines. Facade ratchet: **2,505**.
+- All ten manifests with self-tests, architecture negatives, sizes,
+  storage references, shape (total 3), theme, CI format/analyze and analyzer
+  allowlist pass. Strict symbol comparison: 17 inventoried infos, zero
+  additions, errors or warnings. Six strict Linux goldens match the original
+  bytes. Focused evidence `step2-focused.*` records 176 passing identities
+  and the unchanged profile source-guard failure; comparison with original
+  base3 passes. End-of-run full tree provenance is recorded before this
+  Progress edit. Per-entry wiring checklist reviewed before scaffold pinning.
+
 ### Amendment after step 0b (design-reviewed before resuming)
 
 1. **Facade cap.** The hard maximum becomes 460 (see the size section); the

@@ -11,7 +11,8 @@
     "state_callback",
     "context_guard",
     "live_getter_callback",
-    "retained_forwarder"
+    "retained_forwarder",
+    "formatter_if_braces"
   ],
   "receivers": [
     "_deps",
@@ -69,7 +70,8 @@
     "_owners.navigation": "SpotlightBoardNavigationState",
     "_owners.scroll": "SpotlightBoardScrollState",
     "_owners.constants": "SpotlightBoardConstantsState",
-    "cardState": "SpotlightBoardCardState"
+    "cardState": "SpotlightBoardCardState",
+    "_layout": "SpotlightBoardCardLayout"
   },
   "receiver_owners": {
     "_sections.selection": "SpotlightBoardSelection",
@@ -91,10 +93,12 @@
     "_owners.navigation": "SpotlightBoardNavigationState",
     "_owners.scroll": "SpotlightBoardScrollState",
     "_owners.constants": "SpotlightBoardConstantsState",
-    "cardState": "SpotlightBoardCardState"
+    "cardState": "SpotlightBoardCardState",
+    "_layout": "SpotlightBoardCardLayout"
   },
   "sidecars": {
-    "scaffolding": "dev/tool/spotlight_board_scaffolding.json"
+    "scaffolding": "dev/tool/spotlight_board_scaffolding.json",
+    "context_exceptions": "dev/tool/spotlight_board_context_exceptions.json"
   },
   "lifecycle": [
     "SpotlightBoardState.didChangeDependencies",
@@ -4775,5 +4779,6 @@
         ")"
       ]
     }
-  }
+  },
+  "context_exception_difference": "formatter_if_braces: unchanged original statement; physical prefix frozen"
 }

@@ -37,7 +37,7 @@ SPOTLIGHT_BOARD_BRIDGE = "lib/features/spotlight_board/presentation/legacy_spotl
 # Only the whole original _buildCard method may exceed 500. Measure at creation;
 # exit: a separately reviewed behavior-level card decomposition with goldens.
 SPOTLIGHT_BOARD_SIZE_EXCEPTIONS = {
-    SPOTLIGHT_BOARD_BRIDGE + "spotlight_board_card_layout.dart": 0,
+    SPOTLIGHT_BOARD_BRIDGE + "spotlight_board_card_layout.dart": 585,
 }
 PLAYLIST_CONTENT_COMPLETE = True
 PLAYLIST_CONTENT_FACADE = "lib/screens/playlist_content_view_screen.dart"

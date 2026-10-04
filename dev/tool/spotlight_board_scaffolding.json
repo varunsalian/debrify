@@ -1,3 +1,79 @@
 {
-  "scaffolds": []
+  "scaffolds": [
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card_layout.dart",
+      "owner": "SpotlightBoardCardLayout",
+      "name": "cardState",
+      "tokens": [
+        "final",
+        "SpotlightBoardCardState",
+        "cardState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card_layout.dart",
+      "owner": "SpotlightBoardCardLayout",
+      "name": "setState",
+      "tokens": [
+        "final",
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "setState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card_layout.dart",
+      "owner": "SpotlightBoardCardLayout",
+      "name": "SpotlightBoardCardLayout",
+      "tokens": [
+        "SpotlightBoardCardLayout",
+        "(",
+        "this",
+        ".",
+        "cardState",
+        ",",
+        "this",
+        ".",
+        "setState",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+      "owner": "SpotlightBoardCardState",
+      "name": "_cachedLayout",
+      "tokens": [
+        "SpotlightBoardCardLayout",
+        "?",
+        "_cachedLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+      "owner": "SpotlightBoardCardState",
+      "name": "_layout",
+      "tokens": [
+        "SpotlightBoardCardLayout",
+        "get",
+        "_layout",
+        "=>",
+        "_cachedLayout",
+        "??=",
+        "SpotlightBoardCardLayout",
+        "(",
+        "this",
+        ",",
+        "setState",
+        ")",
+        ";"
+      ]
+    }
+  ]
 }

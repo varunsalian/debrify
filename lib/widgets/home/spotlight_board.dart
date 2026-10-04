@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'dart:math' show max;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_logo_or_title.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_board_metrics.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_board_types.dart';
+import 'package:debrify/features/spotlight_board/presentation/spotlight_hero_open_pill.dart';
+import 'package:debrify/features/spotlight_board/presentation/spotlight_shelf_title_link.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
@@ -10,31 +14,19 @@ import '../../models/metadata_preferences.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/debrify_image_cache.dart';
 import '../../services/diagnostic_log.dart';
-import '../../services/metadata_preferences_service.dart';
-import '../../services/profiles/profile_runtime.dart';
-import '../../services/stremio_service.dart';
-import '../../theme/app_focus.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
-import '../../theme/widgets/focus_expression.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/artwork_url.dart';
-import '../../utils/dialog_tap_guard.dart';
 import '../../utils/dominant_color.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/spotlight_interaction_policy.dart';
-import '../../utils/tv_keys.dart';
-import '../collections/collection_focus_art.dart';
-import '../collections/collection_focus_glow.dart';
 import '../metadata_presentation_mixin.dart';
-import '../movie_watched_badge.dart';
-import '../recoverable_network_image.dart';
 import 'home_row_focus.dart';
 import 'midnight_rain_background.dart';
 import 'moonlit_ocean_background.dart';
 import 'row_tag_pill.dart';
 import 'snowy_mountain_background.dart';
-import 'spotlight_card_trailer.dart';
 
 export 'package:debrify/features/spotlight_board/presentation/spotlight_board_types.dart';
 
@@ -226,17 +218,17 @@ class SpotlightBoard extends StatefulWidget {
 
 class SpotlightBoardState extends State<SpotlightBoard>
     with MetadataPresentationMixin<SpotlightBoard> {
-  final Set<_CardState> _visibleCards = {};
+  final Set<SpotlightBoardCardState> _visibleCards = {};
   final Set<BuildContext> _scrollingSources = {};
   Size? _selectionViewport;
   Object? _scrollRowId;
-  _CardState? _selectedCard;
+  SpotlightBoardCardState? _selectedCard;
   bool _largeCardInteractions = false;
   bool _selectionQueued = false;
   bool _selectionFromScroll = false;
   bool _scrollInterruptedPreview = false;
 
-  void _registerCard(_CardState card) {
+  void _registerCard(SpotlightBoardCardState card) {
     _visibleCards.add(card);
     if (_largeCardInteractions &&
         (_selectedCard == null || _selectionFromScroll)) {
@@ -244,7 +236,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     }
   }
 
-  void _unregisterCard(_CardState card) {
+  void _unregisterCard(SpotlightBoardCardState card) {
     _visibleCards.remove(card);
     if (identical(_selectedCard, card)) _selectedCard = null;
     if (_largeCardInteractions && _scrollingSources.isNotEmpty) {
@@ -252,21 +244,21 @@ class SpotlightBoardState extends State<SpotlightBoard>
     }
   }
 
-  void _selectCard(_CardState? card, {required bool scrolling}) {
+  void _selectCard(SpotlightBoardCardState? card, {required bool scrolling}) {
     // Changing widths during a drag can collapse a short row's scroll extent
     // and cancel the gesture. Hold painted widths until scrolling settles.
     for (final visible in _visibleCards) {
-      if (visible.mounted) visible._freezeScrollWidth(scrolling);
+      if (visible.mounted) visible.freezeScrollWidth(scrolling);
     }
     final previous = _selectedCard;
     _selectedCard = card;
     if (!identical(previous, card) && previous?.mounted == true) {
-      previous!._setWideSelection(false, moving: false);
+      previous!.setWideSelection(false, moving: false);
     }
-    card?._setWideSelection(true, moving: scrolling);
+    card?.setWideSelection(true, moving: scrolling);
   }
 
-  void _interactWithCard(_CardState card, bool active) {
+  void _interactWithCard(SpotlightBoardCardState card, bool active) {
     if (!_largeCardInteractions) return;
     // Hover can change as cards move beneath a stationary pointer.
     // Only scroll completion may release the moving state.
@@ -281,10 +273,10 @@ class SpotlightBoardState extends State<SpotlightBoard>
     } else if (!_selectionFromScroll && identical(_selectedCard, card)) {
       // Hover and keyboard focus can overlap. Losing either one must not
       // hide the cursor while the other still owns this card.
-      if (card._f || card._h) return;
-      _CardState? focused;
+      if (card.f || card.h) return;
+      SpotlightBoardCardState? focused;
       for (final candidate in _visibleCards) {
-        if (candidate.mounted && candidate._f) {
+        if (candidate.mounted && candidate.f) {
           focused = candidate;
           break;
         }
@@ -349,18 +341,18 @@ class SpotlightBoardState extends State<SpotlightBoard>
 
       if (_scrollInterruptedPreview) {
         _scrollInterruptedPreview = false;
-        _selectedCard?._setWideSelection(true, moving: true);
+        _selectedCard?.setWideSelection(true, moving: true);
       }
       // Desktop scrolling must not replace the pointer with the touch
       // reading cursor. MouseRegion also updates when content moves under
       // a stationary pointer; its callbacks queue another selection pass.
       if (_pointerOwnsScrollSelection) {
-        _CardState? hovered;
-        _CardState? focused;
+        SpotlightBoardCardState? hovered;
+        SpotlightBoardCardState? focused;
         for (final card in _visibleCards) {
           if (!card.mounted || !card.widget.largeInteractions) continue;
-          if (card._h) hovered = card;
-          if (card._f) focused = card;
+          if (card.h) hovered = card;
+          if (card.f) focused = card;
         }
         _selectionFromScroll = false;
         _selectCard(
@@ -376,7 +368,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
       final bounds = Offset.zero & render.size;
       final readingY = bounds.height * 0.6;
       final readingX = _lastMetrics?.gutter ?? 24;
-      _CardState? nearest;
+      SpotlightBoardCardState? nearest;
       double bestRow = double.infinity;
       double bestColumn = double.infinity;
       for (final card in _visibleCards) {
@@ -1833,7 +1825,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
       mainAxisSize: MainAxisSize.min,
       children: [
         Center(
-          child: _LogoOrTitle(
+          child: SpotlightBoardLogoOrTitle(
             url: item.logo,
             name: item.name,
             align: TextAlign.center,
@@ -1855,7 +1847,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
         // The CTA the mock promises. "Open" rather than "Play": it routes to
         // the detail page (the same thing OK does on TV) — a button that says
         // Play and then shows a detail page would be a lie.
-        _HeroOpenPill(
+        SpotlightHeroOpenPill(
           onTap: () {
             final addon = widget.heroAddon;
             if (addon != null) _openHero();
@@ -2197,7 +2189,12 @@ class SpotlightBoardState extends State<SpotlightBoard>
       crossAxisAlignment: cross,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _LogoOrTitle(url: item.logo, name: item.name, align: align, scale: m.k),
+        SpotlightBoardLogoOrTitle(
+          url: item.logo,
+          name: item.name,
+          align: align,
+          scale: m.k,
+        ),
         const SizedBox(height: 9),
         Text(
           [
@@ -2340,7 +2337,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           )
-        : _ShelfTitleLink(
+        : SpotlightShelfTitleLink(
             title: section.title,
             style: style,
             fontSize: fontSize,
@@ -2467,7 +2464,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
               ),
               itemCount: section.items.length,
               separatorBuilder: (_, __) => SizedBox(width: m.gap),
-              itemBuilder: (context, c) => _Card(
+              itemBuilder: (context, c) => SpotlightBoardCard(
                 rowId: section.id ?? i,
                 largeInteractions: _largeCardInteractions,
                 register: _registerCard,
@@ -2503,1067 +2500,6 @@ class SpotlightBoardState extends State<SpotlightBoard>
           ),
         ),
       ],
-    );
-  }
-}
-
-/// A row heading that leads somewhere: the title with the reference's chevron
-/// set immediately after the words, the pair acting as one tap target.
-///
-/// The placement is the whole point. Our other boards park a "See All" pill
-/// out at the row's trailing edge, where it reads as a button laid across the
-/// row; Apple hangs a chevron off the last word, so the heading itself becomes
-/// the door. It is also quieter than the words it follows — the heading is
-/// already held at 0.84 of the ink, and this sits under that again — so it
-/// points somewhere without competing with the posters beneath it.
-///
-/// Sized off the heading rather than fixed: the icon box has to run larger
-/// than the type for the drawn chevron to match its cap height, since the
-/// glyph fills a little over half its box.
-///
-/// Pointer surfaces only. TV never builds this (see [SpotlightBoard.dpad]),
-/// and a shelf with no See-All draws a plain heading — the reference leaves
-/// its own dead-end rows bare too.
-class _ShelfTitleLink extends StatefulWidget {
-  final String title;
-  final TextStyle style;
-  final double fontSize;
-  final VoidCallback onTap;
-
-  const _ShelfTitleLink({
-    required this.title,
-    required this.style,
-    required this.fontSize,
-    required this.onTap,
-  });
-
-  @override
-  State<_ShelfTitleLink> createState() => _ShelfTitleLinkState();
-}
-
-class _ShelfTitleLinkState extends State<_ShelfTitleLink> {
-  bool _hover = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    // Rests under the heading and comes up to meet it on hover — the whole
-    // hover story, since a fill or an underline here would put chrome back
-    // on a heading whose point is that it has none.
-    final chevron = app.core.tx.withValues(alpha: _hover ? 0.84 : 0.5);
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Flexible + one line: a long row title ellipsizes instead of
-            // wrapping under itself or shoving the chevron off the gutter.
-            Flexible(
-              child: Text(
-                widget.title,
-                style: widget.style,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            SizedBox(width: widget.fontSize * 0.18),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: widget.fontSize * 1.25,
-              color: chevron,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Logo art when it exists and is light enough to see; the title otherwise.
-class _LogoOrTitle extends StatelessWidget {
-  final String? url;
-  final String name;
-  final TextAlign align;
-
-  /// `_M.k` — 1.0 on TV and compact, the wide-touch correction elsewhere.
-  final double scale;
-
-  const _LogoOrTitle({
-    required this.url,
-    required this.name,
-    required this.align,
-    this.scale = 1.0,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Text(
-      name,
-      maxLines: 2,
-      textAlign: align,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        fontSize: 39 * scale,
-        height: 1,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.8,
-        color: Colors.white,
-      ),
-    );
-    if (url == null || url!.isEmpty) return text;
-    final corner = align == TextAlign.right
-        ? Alignment.bottomRight
-        : align == TextAlign.center
-        ? Alignment.bottomCenter
-        : Alignment.bottomLeft;
-    // A RESERVED slot, not a maximum.
-    //
-    // This was a `ConstrainedBox(maxWidth: 235, maxHeight: 60)`, which sizes
-    // itself to whatever is inside it. Before the art lands there is nothing
-    // inside it, so the slot collapsed and the identity below sat higher up;
-    // when the logo arrived a second or two later the block reflowed and
-    // everything settled into a different place. The column is anchored by its
-    // BOTTOM, so the whole identity moved, not just the logo.
-    //
-    // Holding the box at full size from the first frame means the art fades
-    // into a space already shaped for it and nothing else moves.
-    return SizedBox(
-      width: 235 * scale,
-      height: 60 * scale,
-      child: CachedNetworkImage(
-        imageUrl: url!,
-        fit: BoxFit.contain,
-        alignment: corner,
-        cacheManager: DebrifyImageCache.manager,
-        memCacheWidth: 520,
-        placeholder: (_, __) => const SizedBox.shrink(),
-        // The title has to earn its way into the same slot rather than
-        // resizing it — scaleDown only shrinks, so short titles keep their
-        // intended weight.
-        //
-        // The inner width is what makes that bearable: FittedBox offers its
-        // child unbounded width, so without it `maxLines: 2` never wraps and a
-        // long title is scaled down as one very long line.
-        errorWidget: (_, __, ___) => Align(
-          alignment: corner,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: corner,
-            child: SizedBox(width: 235 * scale, child: text),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The compact hero's one button — white pill, black glyph, the phone idiom.
-class _HeroOpenPill extends StatelessWidget {
-  final VoidCallback onTap;
-  const _HeroOpenPill({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 42,
-        padding: const EdgeInsets.symmetric(horizontal: 26),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(21),
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.play_arrow_rounded, size: 20, color: Colors.black),
-            SizedBox(width: 6),
-            Text(
-              'Open',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.black,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Card extends StatefulWidget {
-  final Object? rowId;
-  final bool largeInteractions;
-  final void Function(_CardState)? register;
-  final void Function(_CardState)? unregister;
-  final void Function(_CardState, bool)? onInteraction;
-  final SpotlightCard card;
-  final FocusNode? node;
-
-  /// The ROW's height. Width follows from the shape's aspect, so a shelf that
-  /// mixes posters and channel tiles keeps one baseline.
-  final double height;
-  final double expandedHeight;
-  final double caption;
-  final double radius;
-
-  /// Compact: the caption sits BELOW the art (small art can't afford an
-  /// overlay eating its bottom quarter — the measured Apple phone idiom).
-  /// Wide keeps the overlay-on-gradient the TV mock specifies.
-  final bool captionBelow;
-  final double captionBlock;
-
-  /// False = no caption in EITHER position (and no caption gradient bed) —
-  /// the caption-free catalog card off TV, where the art is the label. The
-  /// progress bar is independent of this and always paints.
-  final bool showCaption;
-
-  /// False suppresses only title/rating text. Subtitles such as episode
-  /// context remain available when a shelf has useful card metadata.
-  final bool showTitleAndRating;
-  final bool expandOnFocus;
-  final bool forceParallax;
-  final bool trailerEnabled;
-  final double trailerVolume;
-  final VoidCallback? onTrailerStart;
-
-  /// Pointer hover lifts the card — desktop only. OFF on TV: an Apple TV
-  /// trackpad delivers pointer events (see main.dart), and a hover lift
-  /// independent of DPAD focus would put two cursors on a board that had
-  /// exactly one at HEAD.
-  final bool hoverable;
-
-  /// Selects the input that owns an optional card preview: hover on a pointer
-  /// board, focus on a DPAD board. This deliberately does not use `_f || _h`:
-  /// a desktop card that retains keyboard focus while the pointer rests on a
-  /// different card must not leave a second live stream decoding offscreen.
-  final bool dpad;
-
-  /// Announces a pointer-owned live preview before it mounts, so the board
-  /// can release the hero trailer's single video-output lease first.
-  final void Function(Object owner, bool active)?
-  onDesktopPreviewActivityChanged;
-
-  const _Card({
-    this.rowId,
-    this.largeInteractions = false,
-    this.register,
-    this.unregister,
-    this.onInteraction,
-    required this.card,
-    required this.node,
-    required this.height,
-    required this.expandedHeight,
-    required this.caption,
-    this.radius = 7,
-    this.captionBelow = false,
-    this.captionBlock = 0,
-    this.showCaption = true,
-    this.showTitleAndRating = true,
-    this.expandOnFocus = false,
-    this.forceParallax = false,
-    this.trailerEnabled = false,
-    this.trailerVolume = 0,
-    this.onTrailerStart,
-    this.hoverable = false,
-    this.dpad = true,
-    this.onDesktopPreviewActivityChanged,
-  });
-
-  @override
-  State<_Card> createState() => _CardState();
-}
-
-class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
-  double _paintedGrowth = 1;
-  double? _scrollGrowth;
-
-  void _freezeScrollWidth(bool scrolling) {
-    if (scrolling == (_scrollGrowth != null)) return;
-    setState(() => _scrollGrowth = scrolling ? _paintedGrowth : null);
-  }
-
-  bool _wideSelected = false;
-  bool _moving = false;
-  bool get _activeCard => widget.largeInteractions ? _wideSelected : _f;
-  bool? _lastReducedMotion;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final reduced = MediaQuery.disableAnimationsOf(context);
-    if (_lastReducedMotion != null &&
-        _lastReducedMotion != reduced &&
-        widget.largeInteractions) {
-      _trailerAttempted = false;
-      _armCardTrailer();
-    }
-    _lastReducedMotion = reduced;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    widget.register?.call(this);
-  }
-
-  void _setWideSelection(bool selected, {required bool moving}) {
-    if (_wideSelected == selected && _moving == moving) return;
-    setState(() {
-      _wideSelected = selected;
-      _moving = moving;
-    });
-    _armCardTrailer();
-    _loadFocusedDescription();
-    _reportDesktopPreviewActivity(_previewActive);
-  }
-
-  @override
-  StremioMeta? get originalMetadata => widget.card.metadata;
-  bool _f = false;
-  Timer? _trailerDwell;
-  bool _trailerRequested = false;
-  bool _trailerPlaying = false;
-  bool _trailerAttempted = false;
-  bool _hideTrailerText = false;
-  Timer? _trailerTextTimer;
-
-  void _armCardTrailer() {
-    _trailerDwell?.cancel();
-    _trailerTextTimer?.cancel();
-    _hideTrailerText = false;
-    if (!_activeCard || _moving) _trailerAttempted = false;
-    _trailerRequested = false;
-    _trailerPlaying = false;
-    if (_trailerAttempted ||
-        !_activeCard ||
-        _moving ||
-        !_canExpand ||
-        !widget.trailerEnabled ||
-        MediaQuery.disableAnimationsOf(context))
-      return;
-    _trailerDwell = Timer(const Duration(seconds: 2), () {
-      if (!mounted ||
-          !_activeCard ||
-          _moving ||
-          !widget.trailerEnabled ||
-          !_canExpand ||
-          ModalRoute.of(context)?.isCurrent == false ||
-          !TickerMode.of(context) ||
-          (WidgetsBinding.instance.lifecycleState != null &&
-              WidgetsBinding.instance.lifecycleState !=
-                  AppLifecycleState.resumed))
-        return;
-      widget.onTrailerStart?.call();
-      _trailerAttempted = true;
-      setState(() => _trailerRequested = true);
-    });
-  }
-
-  Timer? _descriptionTimer;
-  String? _resolvedDescription;
-  Object? _descriptionScope;
-  int _descriptionRequest = 0;
-
-  void _loadFocusedDescription() {
-    _descriptionTimer?.cancel();
-    final request = ++_descriptionRequest;
-    final item = originalMetadata;
-    if (!_canExpand || !_activeCard || _moving || item == null) return;
-    final scope = ProfileRuntime.scope.value;
-    bool current() =>
-        mounted &&
-        _activeCard &&
-        _canExpand &&
-        request == _descriptionRequest &&
-        identical(originalMetadata, item) &&
-        ProfileRuntime.scope.value == scope;
-    _descriptionTimer = Timer(const Duration(milliseconds: 300), () async {
-      try {
-        final prefs = await MetadataPreferencesService.loadForBackground(
-          isCurrent: current,
-        );
-        if (prefs == null || !current()) return;
-        if (prefs.provider(MetadataCategory.information) !=
-                MetadataPreferences.current &&
-            !prefs.fallback)
-          return;
-        if ((heroPresentation?.description ?? '').trim().isNotEmpty) return;
-        final imdb = item.effectiveImdbId;
-        if (imdb == null) return;
-        final details = await StremioService.instance.fetchMetaDetails(
-          imdbId: imdb,
-          type: item.type,
-        );
-        if (!current()) return;
-        final description = details?.description?.trim();
-        if (description == null || description.isEmpty) return;
-        setState(() {
-          _resolvedDescription = description;
-          _descriptionScope = scope;
-        });
-      } catch (_) {
-        // Optional metadata must never interrupt remote navigation.
-      }
-    });
-  }
-
-  /// DPAD centre is a key gesture, not a pointer long-press. Keep the short
-  /// press for opening Details, but let a held press reach the card's options
-  /// action (Continue Watching's preference-aware Play/Remove handler).
-  late final TvHoldOk _hold = TvHoldOk(
-    onTap: () => widget.card.onOpen(),
-    onHold: () => widget.card.onOptions?.call(),
-  );
-
-  /// Pointer hover — desktop's focus. Kept SEPARATE from [_f] and OR-ed at
-  /// paint, so a pointer wandering off a card can never erase a real focus
-  /// visual that a keyboard put there.
-  bool _h = false;
-
-  final Object _previewOwner = Object();
-  bool _previewActivityReported = false;
-
-  bool get _previewActive => widget.largeInteractions
-      ? _wideSelected && !_moving
-      : widget.dpad
-      ? _f
-      : _h || (widget.card.previewOnKeyboardFocus && _f);
-
-  void _setHover(bool hovered) {
-    if (_h == hovered) return;
-    setState(() => _h = hovered);
-    if (widget.largeInteractions) widget.onInteraction?.call(this, hovered);
-    _reportDesktopPreviewActivity(_previewActive);
-  }
-
-  void _reportDesktopPreviewActivity(bool active) {
-    final report =
-        active &&
-        !widget.dpad &&
-        (widget.card.previewBuilder != null ||
-            widget.card.collectionVideoUrl != null ||
-            (_canExpand && widget.trailerEnabled));
-    if (_previewActivityReported == report) return;
-    _previewActivityReported = report;
-    widget.onDesktopPreviewActivityChanged?.call(_previewOwner, report);
-  }
-
-  @override
-  void didUpdateWidget(_Card oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.card.metadata?.id != widget.card.metadata?.id ||
-        oldWidget.card.metadata?.type != widget.card.metadata?.type) {
-      _trailerAttempted = false;
-    }
-    if (oldWidget.card.metadata?.id != widget.card.metadata?.id ||
-        oldWidget.card.metadata?.type != widget.card.metadata?.type ||
-        oldWidget.largeInteractions != widget.largeInteractions ||
-        oldWidget.expandOnFocus != widget.expandOnFocus ||
-        oldWidget.trailerEnabled != widget.trailerEnabled) {
-      _armCardTrailer();
-    }
-    if (!identical(oldWidget.card.metadata, widget.card.metadata) ||
-        oldWidget.expandOnFocus != widget.expandOnFocus) {
-      _resolvedDescription = null;
-      _loadFocusedDescription();
-    }
-    final shouldReport =
-        _previewActive &&
-        !widget.dpad &&
-        (widget.card.previewBuilder != null ||
-            widget.card.collectionVideoUrl != null ||
-            (_canExpand && widget.trailerEnabled));
-    if (_previewActivityReported && !shouldReport) {
-      _previewActivityReported = false;
-      oldWidget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
-    } else if (!_previewActivityReported && shouldReport) {
-      _previewActivityReported = true;
-      widget.onDesktopPreviewActivityChanged?.call(_previewOwner, true);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.unregister?.call(this);
-    _trailerDwell?.cancel();
-    _trailerTextTimer?.cancel();
-    _descriptionTimer?.cancel();
-    _descriptionRequest++;
-    _hold.reset();
-    if (_previewActivityReported) {
-      widget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
-    }
-    super.dispose();
-  }
-
-  bool get _canExpand =>
-      widget.expandOnFocus &&
-      (widget.dpad || widget.largeInteractions) &&
-      (widget.card.metadata?.type == 'movie' ||
-          widget.card.metadata?.type == 'series') &&
-      !widget.captionBelow;
-
-  @override
-  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    // Focused title cards use the same landscape width and growth stages,
-    // regardless of the resting poster preference.
-    tween: Tween(
-      end:
-          _scrollGrowth ??
-          (_canExpand && _activeCard && !_moving
-              ? (widget.expandedHeight *
-                        SpotlightCardShape.wide.aspect /
-                        (widget.height * widget.card.shape.aspect)) *
-                    (_trailerPlaying ? 1.38 : 1.18)
-              : 1.0),
-    ),
-    duration: _scrollGrowth != null || MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : _trailerPlaying
-        ? const Duration(milliseconds: 700)
-        : Duration(milliseconds: PlatformUtil.isAndroidTvCached ? 160 : 220),
-    curve: Curves.easeOutCubic,
-    builder: (context, growth, _) => _buildCard(context, growth),
-  );
-
-  Widget _buildCard(BuildContext context, double growth) {
-    _paintedGrowth = growth;
-    final app = AppThemeScope.of(context);
-    final c = widget.card;
-    final expanded = _canExpand && _activeCard && !_moving;
-    final w = widget.height * c.shape.aspect * growth;
-    // Keep the row's baseline and height; only widen the selected poster.
-    // The width uses landscape-rail sizing rather than the taller poster.
-    final height = widget.height;
-    // Decode at the card's own PHYSICAL width plus the 10% focus growth —
-    // never a fixed constant. The hardcoded 400/800 decoded ~1.7× oversized
-    // on a TV board, and the TV image cache is byte-capped (56MB, see
-    // _capImageCache): measured on the Mi Box 2026-08-19, oversized
-    // landscape stills meant the cache held 39 images while 47 were live,
-    // so every DPAD step into an evicted row re-decoded and re-uploaded —
-    // the sometimes-laggy navigation. Right-sizing fits a screenful with
-    // headroom and makes each upload cheaper.
-    // A stable decode size avoids creating a new cached image every animation
-    // frame. Eligible cards reserve their expanded resolution once.
-    final decodeW =
-        ((expanded ? widget.expandedHeight : widget.height) *
-                (expanded ? SpotlightCardShape.wide.aspect : c.shape.aspect) *
-                (_canExpand && !PlatformUtil.isAndroidTvCached ? 1.18 : 1.0) *
-                MediaQuery.devicePixelRatioOf(context) *
-                1.1)
-            .round()
-            .clamp(100, 1000);
-    final meta = presentedMetadata;
-    final suppliedDescription = (heroPresentation?.description ?? '').trim();
-    final allowDescriptionFallback =
-        metadataPreferences.provider(MetadataCategory.information) ==
-            MetadataPreferences.current ||
-        metadataPreferences.fallback;
-    final description = !expanded
-        ? ''
-        : suppliedDescription.isNotEmpty
-        ? suppliedDescription
-        : allowDescriptionFallback &&
-              _descriptionScope == ProfileRuntime.scope.value
-        ? (_resolvedDescription ?? '')
-        : '';
-    final showDescription = description.isNotEmpty;
-    final changed = meta != null && !identical(meta, originalMetadata);
-    final artwork = expanded && c.shape != SpotlightCardShape.wide
-        ? SpotlightCard(
-            metadata: c.metadata,
-            title: c.title,
-            onOpen: c.onOpen,
-            shape: SpotlightCardShape.wide,
-            episodeArtwork: c.episodeArtwork,
-            image: c.episodeArtwork ? c.image : c.metadata?.background,
-            fallbackImage: c.image,
-          )
-        : c;
-    final pending =
-        !artwork.episodeArtwork &&
-        metadataArtworkPending(
-          artwork.shape == SpotlightCardShape.wide
-              ? MetadataCategory.backgrounds
-              : MetadataCategory.posters,
-        );
-    final url = pending
-        ? null
-        : artwork.imageForPresentation(meta, metadataPreferences);
-    final displayedTitle = changed ? meta.name : c.title;
-    final fallbackUrl = artwork.imageErrorFallback(meta, metadataPreferences);
-    Widget artPlaceholder() => Center(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Text(
-          displayedTitle,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: TextStyle(color: app.core.tx.withValues(alpha: 0.5)),
-        ),
-      ),
-    );
-    final contained = c.shape.fit == BoxFit.contain;
-    // The caption's second line — kind and/or rating, dot-joined. One line
-    // whatever it carries, so the caption bed math stays two-state.
-    final metaLine = [
-      if ((c.subtitle ?? '').isNotEmpty) c.subtitle!,
-      if (widget.showTitleAndRating && (c.rating ?? 0) > 0)
-        '★ ${c.rating!.toStringAsFixed(1)}',
-    ].join(' · ');
-    final hasTitle = widget.showTitleAndRating && displayedTitle.isNotEmpty;
-    final hasSubtitle = metaLine.isNotEmpty;
-    final hasCaptionContent = hasTitle || hasSubtitle || showDescription;
-    final preview = c.previewBuilder;
-    // Exactly one card owns the decoder: desktop follows the pointer, TV
-    // follows the remote cursor. The preview is unmounted immediately when it
-    // stops being active, which tears its player down instead of leaving a
-    // decoder alive for every card crossed while browsing.
-    final previewActive = _previewActive;
-
-    // The gradient remains part of the artwork so it covers and clips to the
-    // whole poster as that poster grows. Only the glyph layer is counter-
-    // scaled. 1.2 is Flutter's normal line box; 33 is the existing 26 + 7
-    // vertical padding around those lines.
-    final captionLineHeight = widget.caption * 1.2;
-    final captionBedHeight =
-        (showDescription ? height : 33.0) +
-        (hasTitle ? captionLineHeight : 0) +
-        (hasSubtitle ? captionLineHeight * 0.85 : 0);
-
-    // Apple platforms map this Flutter family token to SF Pro Text. Android
-    // TV keeps Debrify's Inter face, but shares the same optical treatment.
-    // The caption is supplied to ParallaxFocus as a fixed-scale foreground:
-    // it stays attached to the physical card without scaling its small glyphs
-    // or letting the travelling glare wash through them.
-    final tvCaptionFamily = PlatformUtil.isTvOS ? 'CupertinoSystemText' : null;
-    final overlayCaption =
-        widget.captionBelow ||
-            (!widget.showCaption && !showDescription) ||
-            !hasCaptionContent
-        ? null
-        : IgnorePointer(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: SizedBox(
-                width: double.infinity,
-                child: Padding(
-                  padding: expanded
-                      ? const EdgeInsets.fromLTRB(12, 10, 12, 10)
-                      : const EdgeInsets.fromLTRB(7, 26, 7, 7),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: expanded
-                        ? CrossAxisAlignment.start
-                        : CrossAxisAlignment.center,
-                    children: [
-                      if (hasTitle)
-                        Text(
-                          displayedTitle,
-                          maxLines: 1,
-                          textAlign: TextAlign.center,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: tvCaptionFamily,
-                            fontSize: widget.caption,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white.withValues(alpha: 0.96),
-                          ),
-                        ),
-                      if (hasSubtitle)
-                        Text(
-                          metaLine,
-                          maxLines: 1,
-                          textAlign: TextAlign.center,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: tvCaptionFamily,
-                            fontSize: widget.caption * 0.85,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white.withValues(alpha: 0.72),
-                          ),
-                        ),
-                      if (showDescription) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          description,
-                          maxLines: height >= 180 ? 3 : 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: tvCaptionFamily,
-                            fontSize: (widget.caption * 0.75).clamp(10.5, 12.0),
-                            fontWeight: FontWeight.w400,
-                            height: 1.35,
-                            // Paint alpha avoids an offscreen opacity layer.
-                            color: Colors.white.withValues(
-                              alpha: ((growth - 1) / 0.18).clamp(0.0, 1.0),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-
-    final art = ParallaxFocus(
-      forceEnabled: widget.forceParallax,
-      focused: widget.largeInteractions ? _wideSelected : _f || _h,
-      radius: BorderRadius.circular(widget.radius),
-      // Expanded paragraphs stay in screen space, above every focus/glare
-      // transform. Counter-scaling still leaves text under the 3D transform.
-      fixedScaleForeground: expanded ? null : overlayCaption,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(widget.radius),
-        child: SizedBox(
-          width: w,
-          height: height,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Both plates step AWAY from the page, toward the ink, so a
-              // card still reads as a card whatever the Background is set to —
-              // and a contained mark gets the bigger step, because a channel
-              // logo needs more of a backing than an empty poster slot does.
-              //
-              // The contained one used to DARKEN instead, so light-on-
-              // transparent logos had something to sit on. That is degenerate
-              // on a black ground — `lerp(black, black)` is black — and an
-              // entire row of channels went invisible while still being
-              // painted. A step toward the ink works on any ground, and a light
-              // mark still reads on it because the step is small.
-              ColoredBox(
-                color: Color.lerp(
-                  app.home.bg,
-                  app.core.tx,
-                  contained ? 0.10 : 0.045,
-                )!,
-              ),
-              if (c.coverEmoji != null)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: FittedBox(
-                      child: Text(
-                        c.coverEmoji!,
-                        style: const TextStyle(fontSize: 64),
-                      ),
-                    ),
-                  ),
-                ),
-              if ((url == null || url.isEmpty) && c.metadata != null)
-                artPlaceholder(),
-              if (url != null && url.isNotEmpty)
-                Padding(
-                  // The breathing room around a contained mark keys off the
-                  // SHORTER side: on a wide channel tile a width-derived
-                  // inset would eat a quarter of the height.
-                  padding: EdgeInsets.all(
-                    contained ? (w < height ? w : height) * 0.14 : 0,
-                  ),
-                  child: RecoverableNetworkImage(
-                    imageUrl: url,
-                    fit: c.shape.fit,
-                    cacheManager: DebrifyImageCache.manager,
-                    memCacheWidth: decodeW,
-                    // Android TV used to POP (Duration.zero): a board mount
-                    // once landed 20-30 posters inside a few seconds, and
-                    // that many concurrent per-frame opacity composites was
-                    // the first-seconds jank a MiBox reports. The lazy board
-                    // ended that era — only the on-screen shelves' art lands
-                    // at once now — and the bare pop reads as art snapping
-                    // in. A short fade over the plate is the soft landing;
-                    // still well under the package's 500/1000 defaults,
-                    // whose long placeholder cross-fade is the part a weak
-                    // GPU actually pays for.
-                    fadeInDuration: PlatformUtil.isAndroidTvCached
-                        ? const Duration(milliseconds: 220)
-                        : const Duration(milliseconds: 180),
-                    fadeOutDuration: PlatformUtil.isAndroidTvCached
-                        ? const Duration(milliseconds: 180)
-                        : const Duration(milliseconds: 100),
-                    placeholder: (_, __) => artPlaceholder(),
-                    errorWidget: (_, __, ___) =>
-                        fallbackUrl != null &&
-                            fallbackUrl.isNotEmpty &&
-                            fallbackUrl != url
-                        ? RecoverableNetworkImage(
-                            imageUrl: fallbackUrl,
-                            fit: c.shape.fit,
-                            cacheManager: DebrifyImageCache.manager,
-                            memCacheWidth: decodeW,
-                            fadeInDuration: const Duration(milliseconds: 220),
-                            placeholder: (_, __) => artPlaceholder(),
-                            errorWidget: (_, __, ___) => artPlaceholder(),
-                          )
-                        : artPlaceholder(),
-                  ),
-                ),
-              if (c.collectionGifUrl != null || c.collectionVideoUrl != null)
-                CollectionFocusArt(
-                  gifUrl: c.collectionGifUrl,
-                  videoUrl: c.collectionVideoUrl,
-                  focused: previewActive,
-                  applyGifPreference: true,
-                ),
-              if (preview != null && previewActive)
-                // The art stays underneath until the first live frame lands,
-                // so a channel card never flashes to an empty/black plate
-                // while a stream resolves or buffers.
-                IgnorePointer(child: preview(context)),
-              if (_trailerRequested &&
-                  _activeCard &&
-                  !_moving &&
-                  _canExpand &&
-                  widget.trailerEnabled)
-                SpotlightCardTrailer(
-                  key: ValueKey(c.metadata!.id),
-                  item: c.metadata!,
-                  volume: widget.trailerVolume,
-                  onPlayingChanged: (playing) {
-                    if (!mounted ||
-                        !_activeCard ||
-                        _moving ||
-                        !_trailerRequested ||
-                        _trailerPlaying == playing)
-                      return;
-                    setState(() => _trailerPlaying = playing);
-                    _trailerTextTimer?.cancel();
-                    if (playing) {
-                      _trailerTextTimer = Timer(const Duration(seconds: 2), () {
-                        if (mounted && _activeCard && _trailerPlaying) {
-                          setState(() => _hideTrailerText = true);
-                        }
-                      });
-                    } else {
-                      setState(() => _hideTrailerText = false);
-                    }
-                  },
-                ),
-              // Keep the gradient with the art: it must still grow to the
-              // poster's full width and remain inside its rounded clip. The
-              // text itself is the fixed-scale foreground above. No caption,
-              // no bed — a gradient under nothing just dims the art.
-              if (!widget.captionBelow && overlayCaption != null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: captionBedHeight,
-                  child: const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [Color(0xDB000000), Color(0x00000000)],
-                      ),
-                    ),
-                  ),
-                ),
-              if ((c.progress ?? 0) > 0 && (c.progress ?? 0) < 100)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: LinearProgressIndicator(
-                    value: c.progress! / 100,
-                    minHeight: 2,
-                    backgroundColor: Colors.black.withValues(alpha: 0.45),
-                    valueColor: const AlwaysStoppedAnimation(Colors.white),
-                  ),
-                ),
-              if (c.watchedImdbId != null && c.watchedImdbId!.isNotEmpty)
-                Positioned(
-                  top: 7,
-                  right: 7,
-                  child: MovieWatchedBadge(
-                    imdbId: c.watchedImdbId!,
-                    contentType: c.watchedContentType ?? 'movie',
-                    compact: true,
-                    tickPolicyScoped: true,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    // The parallax lift is this card's only cursor, and it is a THEME
-    // expression — under any other look ParallaxFocus returns the art
-    // untouched, so a focused card would be indistinguishable from a resting
-    // one (the Classic-look + Spotlight-layout combination shipped exactly
-    // that). Off-parallax the theme paints the cursor it asked for instead —
-    // CardFocusRise's delegation, from the other side. NOT unconditional
-    // FocusExpressionBox: its parallax arm clips the glare at the theme's
-    // scaled radius, and Spotlight's 0.7 shape scale would shrink the
-    // shipped look's clip from 7 to 4.9.
-    final cursor =
-        widget.forceParallax || app.focus.expression == FocusExpression.parallax
-        ? art
-        : FocusExpressionBox(
-            focused: widget.largeInteractions ? _wideSelected : _f || _h,
-            radius: widget.radius,
-            child: art,
-          );
-
-    final focusArt = CollectionFocusGlow(
-      active: widget.largeInteractions ? _wideSelected : _f || _h,
-      enabled: c.focusGlowEnabled,
-      imageUrl: c.image,
-      radius: widget.radius,
-      child: cursor,
-    );
-
-    // Keep this wrapper mounted on both focus states: swapping Stack for its
-    // child destroys ParallaxFocus's spring exactly when it should animate.
-    final cursored = Stack(
-      fit: StackFit.passthrough,
-      children: [
-        focusArt,
-        if (expanded && overlayCaption != null)
-          Positioned.fill(
-            child: AnimatedOpacity(
-              key: ValueKey('spotlight-trailer-text-${c.metadata?.id}'),
-              opacity: _hideTrailerText ? 0 : 1,
-              duration: MediaQuery.disableAnimationsOf(context)
-                  ? Duration.zero
-                  : const Duration(milliseconds: 300),
-              child: overlayCaption,
-            ),
-          ),
-      ],
-    );
-
-    // Compact: art + its caption below, one Column — the caption is part of
-    // the card so the tap target covers both. Keep the same metadata line as
-    // the wide overlay; changing orientation must not change information.
-    final card = widget.captionBelow
-        ? SizedBox(
-            width: w,
-            child: Column(
-              children: [
-                cursored,
-                SizedBox(
-                  height: widget.captionBlock,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (hasTitle)
-                          Text(
-                            displayedTitle,
-                            maxLines: 1,
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: widget.caption,
-                              height: 1.15,
-                              color: app.core.tx.withValues(alpha: 0.72),
-                            ),
-                          ),
-                        if (hasSubtitle)
-                          Text(
-                            metaLine,
-                            maxLines: 1,
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: widget.caption * 0.85,
-                              height: 1.2,
-                              fontWeight: FontWeight.w500,
-                              color: app.core.tx.withValues(alpha: 0.52),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          )
-        : cursored;
-
-    // The gesture layer is UNCONDITIONAL now. It used to hang off the focus
-    // wrapper, so a card whose row had run out of focus nodes silently lost
-    // its tap — invisible on TV (DPAD never reaches an un-noded card),
-    // real on touch. The hover layer is NOT unconditional — see [hoverable].
-    final tappable = GestureDetector(
-      onTap: () {
-        if (DialogTapGuard.shouldIgnoreTap()) return;
-        c.onOpen();
-      },
-      onLongPress: c.onOptions,
-      child: card,
-    );
-    final interactive = widget.hoverable
-        ? MouseRegion(
-            onEnter: (_) => _setHover(true),
-            onExit: (_) => _setHover(false),
-            child: tappable,
-          )
-        : tappable;
-
-    if (widget.node == null) return interactive;
-    return Focus(
-      focusNode: widget.node,
-      // Same rule as the hero: a cell is reached ONLY by the board's
-      // explicit walk (requestFocus), never by geometric search. Without
-      // this, the shell's LEFT fallback (focusInDirection before the
-      // sidebar) could land on another row's cells — including cached
-      // off-screen ones a scrolled ListView keeps alive to the LEFT of
-      // column 0 — so LEFT-at-the-edge only opened the sidebar when no
-      // neighbouring row happened to be scrolled.
-      skipTraversal: true,
-      onFocusChange: (v) {
-        setState(() => _f = v);
-        if (widget.largeInteractions) {
-          // Effective selection owns trailer updates when hover and focus overlap.
-          widget.onInteraction?.call(this, v);
-        } else {
-          _armCardTrailer();
-        }
-        _loadFocusedDescription();
-        _reportDesktopPreviewActivity(_previewActive);
-        if (!v) _hold.reset();
-        if (v && context.findRenderObject() is RenderBox) {
-          Scrollable.ensureVisible(
-            context,
-            alignment: 0.5,
-            // Snap on TV — the detail rails' rule: a held key retargets an
-            // in-flight glide every repeat, so the cursor perpetually
-            // trails the press, and every glide frame is scroll paint a
-            // MiBox-class GPU visibly drops. Pointer/touch keeps the glide.
-            duration: PlatformUtil.isAndroidTvCached
-                ? Duration.zero
-                : const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-          );
-        }
-      },
-      onKeyEvent: (_, e) {
-        final k = e.logicalKey;
-        if (!isActivateOrSpaceKey(k)) return KeyEventResult.ignored;
-        if (widget.dpad && c.onOptions != null) return _hold.handle(e);
-        if (e is KeyDownEvent) c.onOpen();
-        // Own the complete activation sequence so repeats cannot bubble into
-        // an ancestor shortcut after this card accepted the initial press.
-        return KeyEventResult.handled;
-      },
-      child: interactive,
     );
   }
 }
