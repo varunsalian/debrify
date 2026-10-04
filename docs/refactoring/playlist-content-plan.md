@@ -143,7 +143,8 @@ No member is over 200 lines (largest `_buildEpisodeCard`, 187).
    depth-over-4 throw and the cached flat fallback; Premiumize
    `resolveFilesByHash` or the cloud tree with no network; WebDAV with no
    network. `_loadContent`'s unguarded `setState`s (318, 346) stay.
-5. **View modes.** `_applyViewMode` persists on **every** call (unawaited
+5. **View modes.** When a root exists (it returns immediately otherwise,
+   801), `_applyViewMode` persists on **every** call (unawaited
    `savePlaylistItemViewMode`, 852), including folder navigation and the
    auto-switch; seriesArrange closes search; a missing folder resets to root;
    Raw assigns `currentFolder.children` itself (840, aliasing);
@@ -248,8 +249,10 @@ No member is over 200 lines (largest `_buildEpisodeCard`, 187).
     2424–2431) read through one instance and `savePlaylistItemsRaw`
     reacquires preferences to save, so a switch between read and save can
     write the old profile's list into the new one; the save also records
-    deletion tombstones for keys missing from its re-read previous list
-    (`playlist_storage.dart:32`). The route sits above `ProfileGate` and is
+    deletion tombstones for **previous keys absent from the replacement list**
+    (`playlist_storage.dart:43`), so saving stale profile-A data into
+    profile B tombstones B's displaced entries (fixtures use disjoint
+    profile lists to show it). The route sits above `ProfileGate` and is
     disposed by the picker's `popUntil`. These outcomes are characterized
     and preserved; no scoping or protection is added or removed.
 14. **Collection identity and mutable models:** Raw aliasing; `_folderPath`
@@ -398,7 +401,11 @@ As in the PikPak plan, with these points:
    reset and `initializeLegacy`, `SecretVault.debugReset`), seeded API keys
    and WebDAV servers, `http.runWithClient` with a `MockClient` per provider
    host and `api.tvmaze.com` (resolve each base URL from the services; JSON
-   bodies), sqflite ffi only if the first fixture proves it necessary. Items
+   bodies), sqflite ffi only if the first fixture proves it necessary.
+   **Metadata isolation:** before recording requests, prepare the
+   process-wide TVMaze caches and availability and the `EpisodeInfoService`
+   state through their existing APIs, and cancel or drain their timers in
+   teardown, so one case can't suppress another's requests. Items
    carry no `poster`. Launch fixtures omit `imdbId`/`contentType` unless a
    case needs them (the launcher writes continue-watching and seeds trackers
    for catalog ids). **Launch probe (rejection path only):** the
@@ -441,7 +448,7 @@ As in the PikPak plan, with these points:
    | 6 Playback | Per site through the probe (rejection path): the HTTP log (start entry resolved only, Premiumize hash all, AllDebrid unlock errors swallowed), `onPlaybackStarted` once before the launcher's notify, the playback-stopped signal and settings snackbar. Start index through the accessor: sorted vs raw, `originalIndex` fallback, the Premiumize cloud clamp against pre-filter `videoFiles` (with a null-`path` node before the start) vs the hash and WebDAV clamps against built entries. Playlist contents (count, titles, relative paths incl. `_cleanTorboxPath` and the PikPak fallback) only through the successful-launch fixture if proven, else **pending device verification**. **Source guards** on the seven complete call expressions, the guard→callback→notify→push sequence, and all 14 `PlaylistEntry` constructions; remaining argument values (ids, flags, `viewMode`, WebDAV headers and fields) are **pending device verification**. |
    | 7 Return | With a `NavigatorObserver`, the screen pushed with each caller's construction reproduced verbatim (source guards pin both caller expressions). **Rejection path (probe):** Playlist-tab form → dialog popped before the launch, content route popped after the launcher returns; Home form → dialog popped after return, content screen still mounted. **In-app success:** the same two observations only through the proven observer-controlled fixture, else pending device verification. Native/external completion (immediate return): pending device verification. Plus the empty-list and catch paths. |
    | 8 Watched | Mark and unmark arguments (title fallback, defaults, imdbId preference), the persisted completion, reload, snackbar text and colour, error snackbar; via the watched button (mobile and desktop widths, **TV false and TV true**: toggles both ways), the outer long-press (non-TV), D-pad hold; the outer card tap plays (non-TV) and is inert on TV. |
-   | 9 Metadata | Fix Metadata with a fake dialog result: cache-clear calls in order (conditional pair; two TVMaze series clears, one transitive through `EpisodeInfoService.clearSeriesCache`, in expected counts), mapping, poster override and per-provider artwork or TorBox list write, forced imdbId, nulled fields, loading flag; cancel does nothing. Unforced imdbId save rules; detected-poster write; writes landing after unmount (recorded). |
+   | 9 Metadata | Fix Metadata with a fake dialog result: the cache-clear calls' order and counts (conditional pair; two TVMaze series clears, one transitive through `EpisodeInfoService.clearSeriesCache`) are pinned by **source guards**, since an HTTP mock can't spy on static calls; their effect is verified behaviourally through the resulting cache misses and requests; mapping, poster override and per-provider artwork or TorBox list write, forced imdbId, nulled fields, loading flag; cancel does nothing. Unforced imdbId save rules; detected-poster write; writes landing after unmount (recorded). |
    | 10 Timers/build | Fake time: auto-switch to A–Z at 2 s with persistence, timer object replaced per rebuild; missing-season post-frame `setState`; scroll retries and the 800 ms animation; `print` capture shows the per-card lines. |
    | 11 Search | Recursive video-only matches, paths, clear and close, hidden in seriesArrange. |
    | 12 D-pad | Clear-button keys, search-field arrows, file-card select/enter/space, episode KeyDown/hold 800 ms/repeat ignored/short press/300 ms suppression (host keys); via the TV setter (after the TV check settles): null outer `onTap`/`onLongPress`, the watched button still live, and the hold hint. |
@@ -523,7 +530,9 @@ registered features), the analyzer allowlist (no stale or missing entry,
 per-symbol comparison), every manifest run with self-tests, the CI format,
 analyze and behaviour-test lists, `file_size_baseline.txt` ratchet and the
 shape floor (`kShapeResidue`/`kExtractedShapeResidue` membership and the
-total), plus the affected tests.
+total), plus the affected tests, and a **full-suite run on the merged
+committed tree** (AGENTS.md: cross-feature integration gate), reconciling test
+identities against the observed branch baselines and approved additions.
 
 ## Definition of done
 
@@ -576,7 +585,8 @@ All pre-existing; the extraction keeps each exactly.
 - **AllDebrid re-uploads the magnet** on every open and refresh; Premiumize
   hash resolves twice; PikPak lists 100 per folder with no paging,
   sequentially, throwing beyond depth 4 (fallback tree: null `relativePath`).
-- **seriesArrange with no videos** spins and re-parses on every build.
+- **seriesArrange with no videos** spins and re-parses on every build, once
+  the view has nodes (empty view nodes show "No files found" first, 1608).
 - **Builder side effects:** the timer recreated per build, the nested
   `setState`, the unguarded post-frame `setState`, per-card `print`s with
   titles and progress, O(n² log n) progress lookups.
@@ -587,8 +597,9 @@ All pre-existing; the extraction keeps each exactly.
   toggle that *starts* after the handoff writes the then-active profile.
   A `ProfilePreferences` instance acquired before the switch rejects its
   later access, but the playlist read-modify-writes reacquire preferences
-  to save, so a switch between read and save can copy the old profile's
-  list (and its tombstones) into the new profile.
+  to save, so a switch between read and save can write the old profile's
+  list into the new profile, tombstoning the new profile's displaced
+  entries.
 - **Sequential progress lookup** returns a null `0_n` hit without trying the
   filename key; Fix Metadata clears the TVMaze series cache twice; the
   watched button stays tappable on TV while the card's tap and long-press
