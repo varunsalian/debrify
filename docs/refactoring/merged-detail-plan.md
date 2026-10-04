@@ -1001,7 +1001,7 @@ the behaviour suite compared against the latest recorded base.
 
 - Move the complete build/model/body/pane/key-handler/hero/action/episode/rail
   leaves to their reviewed manifest owners. The facade is 434 formatted lines;
-  all 50 feature files are below 500. Public widget bytes, the two lazy fields,
+  all 49 feature Dart files are below 500. Public widget bytes, the two lazy fields,
   mixins, original lifecycle order and direct action tear-offs remain exact.
   Composition captures live getters and constructs inert owners once per route;
   it reads no widget, context, lazy field or service during construction.
@@ -1027,6 +1027,39 @@ the behaviour suite compared against the latest recorded base.
   hashes remain unchanged. That run preceded only the source-reader correction;
   application, view-test, fixture and golden inputs are identical. The separate
   original-golden commit remains separate. No golden was generated or updated.
+
+
+### Step 7 — completion guards and Gate 2 checkpoint
+
+- Enable `MERGED_DETAIL_COMPLETE`: the facade cap is 450 lines and every
+  `TEMP(merged_detail)` marker is rejected. Retain the exact legacy bridge,
+  feature-to-facade/service/other-feature import bans, and every prior completed
+  feature flag. Sixteen positive/negative probes verify these actual rules.
+- CI format/analyzer scopes now include the facade; the format scope lists all
+  four `test/support/merged_detail_*.dart` helpers explicitly. Behavior paths and
+  the five exact known-failure identities retain the approved Step 0 inventory.
+  No analyzer allowance or unrelated failure entry changes.
+- Acceptance proof: 235 manifest entries; byte-identical public surface; 434-line
+  facade; 49 feature Dart files, maximum 346 lines; unchanged Home/Xtream callers,
+  profile/stale-runtime/theme source guards and storage map; all 11 characterization
+  files byte-identical to the separate original-Linux checkpoint.
+- All seven integrated manifest/self-test runs, architecture, size, storage,
+  theme, light-ink, CI formatting and diff pass on the stable Step 7 source tree.
+  Whole/scoped/strict analyzer comparisons and allowlist pass. Sixteen original
+  infos remain: 11 const suggestions, one deprecated member, four accepted
+  format-induced curly suggestions, traced by original rule/symbol/message.
+  Only the 26 original import-order infos disappear through sorted imports.
+- Shape stays 26; the registered theme surface stays 750 sites. Linux input
+  parity proves all 2,080 application/dependency/config/view/fixture/golden inputs
+  match the strict tested archive. No missing-golden bypass remains.
+- Production State contains only retained lifecycle/mixins/lazy fields, live
+  metadata overrides, exact forwarders, inert composition and the frozen accessor.
+  Legacy-stage exceptions retain their named exit migrations (Riverpod route/profile
+  state, data contracts/playback bridge, TV capabilities, localization, shared focus).
+- The local CI behavior list and full-suite Gate 2 run next from this committed
+  source, serially. Gate 2 must compare with latest `merged_detail/base4` and Gate 1;
+  the following evidence commit changes documentation only. Device, remote-CI and
+  Claude's semantic integration checks remain pending.
 
 
 ## Found, not fixed
