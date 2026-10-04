@@ -121,6 +121,14 @@ String iptvSettingsOriginalMember(String originalName) {
       (entry.value as String).split('.').last,
     );
   }
+  for (final entry
+      in (config['live_getter_aliases'] as Map<String, dynamic>? ?? const {})
+          .entries) {
+    member = member.replaceAll(
+      '_deps.${entry.key}()',
+      (entry.value as String).split('.').last,
+    );
+  }
   // These are exactly the registered live State callbacks. Builder/dialog
   // contexts remain source text and the verbatim checker checks their scope.
   member = member.replaceAll(RegExp(r'\b_deps\s*\.\s*setState\b'), 'setState');

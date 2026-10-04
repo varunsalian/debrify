@@ -85,7 +85,16 @@
     "_sections.preferencesActions": "IptvSettingsPreferencesActions",
     "_sections.catalogActions": "IptvSettingsCatalogActions",
     "_sections.listsActions": "IptvSettingsListsActions",
-    "_sections.recordingActions": "IptvSettingsRecordingActions"
+    "_sections.recordingActions": "IptvSettingsRecordingActions",
+    "_sections.layoutActions": "IptvSettingsLayoutActions",
+    "_sections.categoryViews": "IptvSettingsCategoryViews",
+    "_sections.listViews": "IptvSettingsListViews",
+    "_sections.sourceViews": "IptvSettingsSourceViews",
+    "_sections.sourceForms": "IptvSettingsSourceForms",
+    "_sections.twoPane": "IptvSettingsTwoPaneLayout",
+    "_sections.phoneHub": "IptvSettingsPhoneHub",
+    "_sections.preferencesViews": "IptvSettingsPreferencesViews",
+    "_sections.recordingView": "IptvSettingsRecordingView"
   },
   "receiver_owners": {
     "_focus": "IptvSettingsFocusOwner",
@@ -175,6 +184,42 @@
     {
       "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_recording_actions.dart",
       "owner": "IptvSettingsRecordingActions"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_layout_actions.dart",
+      "owner": "IptvSettingsLayoutActions"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_category_views.dart",
+      "owner": "IptvSettingsCategoryViews"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_list_views.dart",
+      "owner": "IptvSettingsListViews"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_views.dart",
+      "owner": "IptvSettingsSourceViews"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_forms.dart",
+      "owner": "IptvSettingsSourceForms"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_two_pane.dart",
+      "owner": "IptvSettingsTwoPaneLayout"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_phone_hub.dart",
+      "owner": "IptvSettingsPhoneHub"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_preferences_views.dart",
+      "owner": "IptvSettingsPreferencesViews"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_recording_view.dart",
+      "owner": "IptvSettingsRecordingView"
     }
   ],
   "callback_identities": [
@@ -589,9 +634,69 @@
     "IptvSettingsPreferencesActions": "$State._sections.preferencesActions",
     "IptvSettingsCatalogActions": "$State._sections.catalogActions",
     "IptvSettingsListsActions": "$State._sections.listsActions",
-    "IptvSettingsRecordingActions": "$State._sections.recordingActions"
+    "IptvSettingsRecordingActions": "$State._sections.recordingActions",
+    "IptvSettingsLayoutActions": "$State._sections.layoutActions",
+    "IptvSettingsCategoryViews": "$State._sections.categoryViews",
+    "IptvSettingsListViews": "$State._sections.listViews",
+    "IptvSettingsSourceViews": "$State._sections.sourceViews",
+    "IptvSettingsSourceForms": "$State._sections.sourceForms",
+    "IptvSettingsPhoneHub": "$State._sections.phoneHub",
+    "IptvSettingsPreferencesViews": "$State._sections.preferencesViews",
+    "IptvSettingsRecordingView": "$State._sections.recordingView",
+    "IptvSettingsTwoPaneLayout": "$State._sections.twoPane"
   },
-  "callback_receiver_aliases": {},
+  "callback_receiver_aliases": {
+    "_deps.ensureFocusNodes": "$State._sections.focusActions.ensureFocusNodes",
+    "_deps.reloadHiddenCounts": "$State._sections.catalogActions.reloadHiddenCounts",
+    "_deps.runProfileAction": "$State._sections.profileActions.runProfileAction",
+    "_deps.showSnackBar": "$State._sections.feedback.showSnackBar",
+    "_deps.catalogOwnerReferencesFor": "$State._sections.catalogActions.catalogOwnerReferencesFor",
+    "_deps.catalogKeysFor": "$State._sections.catalogActions.catalogKeysFor",
+    "_deps.focusAndReveal": "$State._sections.focusActions.focusAndReveal",
+    "_deps.buildPhoneHub": "$State._sections.phoneHub.buildPhoneHub",
+    "_deps.buildSourcesView": "$State._sections.sourceViews.buildSourcesView",
+    "_deps.buildListsView": "$State._sections.listViews.buildListsView",
+    "_deps.buildCategoryOrderView": "$State._sections.categoryViews.buildCategoryOrderView",
+    "_deps.buildHiddenView": "$State._sections.categoryViews.buildHiddenView",
+    "_deps.buildStartupView": "$State._sections.preferencesViews.buildStartupView",
+    "_deps.buildChannelPreviewView": "$State._sections.preferencesViews.buildChannelPreviewView",
+    "_deps.buildContinueWatchingView": "$State._sections.preferencesViews.buildContinueWatchingView",
+    "_deps.buildRecordingView": "$State._sections.recordingView.buildRecordingView",
+    "_deps.openHiddenCategories": "$State._sections.catalogActions.openHiddenCategories",
+    "_deps.openCategoryOrder": "$State._sections.catalogActions.openCategoryOrder",
+    "_deps.listNodeAt": "$State._sections.listsActions.listNodeAt",
+    "_deps.renameList": "$State._sections.listsActions.renameList",
+    "_deps.moveList": "$State._sections.listsActions.moveList",
+    "_deps.deleteList": "$State._sections.listsActions.deleteList",
+    "_deps.createList": "$State._sections.listsActions.createList",
+    "_deps.setDefaultPlaylist": "$State._sections.sourceRefresh.setDefaultPlaylist",
+    "_deps.refreshPlaylist": "$State._sections.sourceRefresh.refreshPlaylist",
+    "_deps.editPlaylist": "$State._sections.sourceEdit.editPlaylist",
+    "_deps.removePlaylist": "$State._sections.sourceRemoval.removePlaylist",
+    "_deps.focusContentAfterTabSwitch": "$State._sections.focusActions.focusContentAfterTabSwitch",
+    "_deps.buildUrlTabContent": "$State._sections.sourceForms.buildUrlTabContent",
+    "_deps.buildFileTabContent": "$State._sections.sourceForms.buildFileTabContent",
+    "_deps.buildXcTabContent": "$State._sections.sourceForms.buildXcTabContent",
+    "_deps.addPlaylist": "$State._sections.urlAdd.addPlaylist",
+    "_deps.importFromFile": "$State._sections.fileImport.importFromFile",
+    "_deps.addXtreamCodes": "$State._sections.xtreamAdd.addXtreamCodes",
+    "_deps.pickAutoRefresh": "$State._sections.preferencesActions.pickAutoRefresh",
+    "_deps.openChannelOrder": "$State._sections.catalogActions.openChannelOrder",
+    "_deps.showListActions": "$State._sections.listsActions.showListActions",
+    "_deps.setStartupEnabled": "$State._sections.preferencesActions.setStartupEnabled",
+    "_deps.setStartupMode": "$State._sections.preferencesActions.setStartupMode",
+    "_deps.pickStartupChannel": "$State._sections.preferencesActions.pickStartupChannel",
+    "_deps.setChannelPreviewEnabled": "$State._sections.preferencesActions.setChannelPreviewEnabled",
+    "_deps.setTrackContinueWatching": "$State._sections.preferencesActions.setTrackContinueWatching",
+    "_deps.setIptvStyle": "$State._sections.preferencesActions.setIptvStyle",
+    "_deps.setPlayerGuideStyle": "$State._sections.preferencesActions.setPlayerGuideStyle",
+    "_deps.openScheduledRecordings": "$State._sections.recordingActions.openScheduledRecordings",
+    "_deps.pickMaxConcurrent": "$State._sections.recordingActions.pickMaxConcurrent",
+    "_deps.requestBatteryExemption": "$State._sections.recordingActions.requestBatteryExemption",
+    "_deps.enterPhoneSection": "$State._sections.layoutActions.enterPhoneSection",
+    "_deps.openIptvStylePicker": "$State._sections.preferencesActions.openIptvStylePicker",
+    "_deps.openPlayerGuidePicker": "$State._sections.preferencesActions.openPlayerGuidePicker"
+  },
   "co_located_declarations": [
     [
       "IptvSharedSourceDeleteDialog",
@@ -601,5 +706,16 @@
   "borrowed_resource_aliases": {
     "twoPaneKey": "_IptvSettingsPageState._twoPaneKey"
   },
-  "context_exception_difference": "formatter_if_braces: only recorded original if bodies; no guard, ordering or behavior change"
+  "context_exception_difference": "formatter_if_braces: only recorded original if bodies; no guard, ordering or behavior change",
+  "callback_getter_aliases": {
+    "_deps.customLists()": "$State._sections.listsActions.customLists",
+    "_deps.hideableSources()": "$State._sections.catalogActions.hideableSources",
+    "_deps.categoryOrderSources()": "$State._sections.catalogActions.categoryOrderSources",
+    "_deps.startupChannelLabel()": "$State._sections.preferencesActions.startupChannelLabel",
+    "_deps.lastLiveChannelLabel()": "$State._sections.preferencesActions.lastLiveChannelLabel",
+    "_deps.appearanceVisible()": "$State._appearanceVisible"
+  },
+  "live_getter_aliases": {
+    "appearanceVisible": "_IptvSettingsPageState._appearanceVisible"
+  }
 }

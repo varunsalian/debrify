@@ -245,6 +245,15 @@ def normalize(values, rows, row=None):
         # A member qualification needs braces in a formerly simple string
         # interpolation. Canonicalize only an otherwise identical single read.
         if value == '${':
+            if (values[i + 1:i + 2] and values[i + 1] in RECEIVERS
+                    and values[i + 2:i + 3] == ['.']
+                    and values[i + 3:i + 4] and values[i + 3] in live_getters
+                    and values[i + 4:i + 7] == ['(', ')', '}']):
+                target = values[i + 3]
+                alias = CONFIG.get('live_getter_aliases', {}).get(target)
+                out.extend(['$', alias.split('.')[-1] if alias else mapping.get(target, target)])
+                i += 7
+                continue
             path = receiver_path_match(values, i + 1)
             if path:
                 member = i + 1 + path[0] + 1
@@ -275,6 +284,10 @@ def normalize(values, rows, row=None):
                 continue
         if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
+            getter_alias = CONFIG.get('live_getter_aliases', {}).get(target)
+            if (getter_alias and target in live_getters
+                    and values[i + 3:i + 5] == ['(', ')']):
+                out.append(getter_alias.split('.')[-1]); i += 5; continue
             borrowed = CONFIG.get('borrowed_resource_aliases', {}).get(target)
             if borrowed:
                 out.append(borrowed.split('.')[-1]); i += 3; continue
@@ -851,6 +864,14 @@ def _check(original_source, sources, rows, source_path, package=None,
     errors.extend(check_named_exceptions(rows))
     errors.extend(check_lint_comments(original_source, sources))
     known = {r['original_name'] for r in rows}
+    for alias, member in CONFIG.get('live_getter_aliases', {}).items():
+        declared = original.get(member)
+        retained = next((r for r in rows if r['original_name'] == member), None)
+        if (not declared or declared['parameters'] is not None
+                or declared['bodyOffset'] is None or not retained
+                or retained['destination_file'] != source_path
+                or alias not in CONFIG.get('live_getter_callbacks', [])):
+            errors.append('Live getter alias must name one retained facade getter: ' + alias)
     for alias, member in CONFIG.get('borrowed_resource_aliases', {}).items():
         declaration = original.get(member)
         retained = next((r for r in rows if r['original_name'] == member), None)

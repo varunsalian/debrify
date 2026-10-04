@@ -656,6 +656,29 @@ each parallel branch's additions, before claiming parity.
 
 - Linux prerequisite complete in a separate assets/strictness commit before any Step 5 move. All four immutable SHA-256 values match linux-original-sha256.txt and exact checkpoint 8a6e1cf9; supplied capture and original strict replay each pass. The committed Step 4 application (4537c576) plus only the strictness test overlay passes all four Linux pixels in calibrated image sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a (linux/amd64, Flutter 3.44.8); no regeneration. Snapshot/source tree, overlay hash, image and runner provenance are recorded. Linux is now always strict, including without a dart-define. The changed strict test passes the same four identities on original 8a6e1cf9, with unchanged fixture and rendering; base4 filtered-identity audit passes. Step 0b changed only skip reporting, so no original recapture is needed. The external Actions spending limit leaves remote CI pending.
 
+- Step 5 complete: form builders, child views, phone hub, two-pane layout and
+  layout actions use their actual sections; facade ratchet 361 lines. The new
+  section is IptvSettingsTwoPaneLayout to avoid the existing widget's name.
+  One deferred phone-hub dispatch closes the composition cycle; other methods
+  bind direct tear-offs, and original getters read live values lazily. Exact
+  callback/getter aliases are checked with isolated positive/negative cases,
+  including rejection of method calls even with a getter alias. Canonical
+  interpolation and the retained appearance getter have narrow registrations.
+  One additional formatter-only if brace is pinned (15 total); no guards change.
+  Every entry's actual wiring is reviewed in the dependency report.
+- Step 5 verification: all seven manifests/self-tests and local CI-equivalent
+  checks pass; affected suite 146 successes / unchanged source-guard failure,
+  PASS versus base4, on stable staged tree 105ac825f5d614f737505391b8628d1b7bc404ae.
+  Whole analyzer 1,645, zero additions; 14 original per-symbol identities.
+  Checker and all four unchanged frozen source guards pass on original
+  8a6e1cf9. Original fixtures, analyzer inventory and macOS PNGs match bytewise.
+  All four immutable Linux goldens pass strictly on that final formatted tree
+  in the calibrated image. The failed repeat lacked discarded Docker package
+  dependencies; restoring them in the isolated worktree cache resolves it.
+  The draft CI format finding was two leading blank lines from import cleanup;
+  final exact CI format passes. Failed draft logs are retained, never accepted.
+  Final checks, comparisons, tree env and Linux provenance use iptv_settings/.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

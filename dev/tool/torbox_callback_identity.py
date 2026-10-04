@@ -65,6 +65,7 @@ def check_callback_identities(lookup, rows, source_path, config):
     by_original = {row['original_name']: row for row in rows}
     aliases = config.get('callback_receiver_aliases', {})
     instances = config.get('callback_instances', {})
+    getter_aliases = config.get('callback_getter_aliases', {})
     errors = []
 
     def node_for(original):
@@ -75,11 +76,13 @@ def check_callback_identities(lookup, rows, source_path, config):
         owner, _, name = original.rpartition('.')
         return lookup[(source_path, owner, name)]
 
-    def identity(expr, owner):
+    def identity(expr, owner, *, getter=False):
         expr = list(expr)
         if expr[-1:] == ['!']:
             expr.pop()
         path = ''.join(expr)
+        if getter and path in getter_aliases:
+            path = getter_aliases[path]
         if not re.fullmatch(r'[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*', path):
             raise ValueError('callback must be a direct tear-off: ' + path)
         if path.startswith('this.'):
@@ -87,6 +90,9 @@ def check_callback_identities(lookup, rows, source_path, config):
         if '.' not in path:
             path = instances.get(owner, '$State') + '.' + path
         for alias in sorted(aliases, key=len, reverse=True):
+            if path == alias:
+                path = aliases[alias]
+                break
             if path.startswith(alias + '.'):
                 path = aliases[alias] + path[len(alias):]
                 break
@@ -96,6 +102,8 @@ def check_callback_identities(lookup, rows, source_path, config):
 
     for spec in specs:
         resolved = []
+        expected_node = node_for(spec['callback_member']) if 'callback_member' in spec else None
+        is_getter = expected_node is not None and expected_node['parameters'] is None
         for site in spec['sites']:
             try:
                 node = node_for(site['member'])
@@ -108,7 +116,7 @@ def check_callback_identities(lookup, rows, source_path, config):
                 if len(calls) != site.get('count', 1):
                     raise ValueError(f"expected {site.get('count', 1)} {site['call']} calls, got {len(calls)}")
                 for call in ([calls[site['occurrence']]] if 'occurrence' in site else calls):
-                    resolved.append(identity(callback_argument(call, site), node['owner']))
+                    resolved.append(identity(callback_argument(call, site), node['owner'], getter=is_getter))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
         if 'callback_member' in spec:

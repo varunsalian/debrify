@@ -58,6 +58,54 @@ def self_test(package=None):
         assert check_callback_identities(mutated, rows, source, fixture_config), replacement
     print('IPTV settings interpolated-argument positive and identity negatives: PASS')
 
+    # Narrow dependency records bind the original receiver's tear-off, or read
+    # an original getter lazily. Check these aliases without scaffold/token
+    # checks, on both original and moved trees.
+    for getter in (False, True):
+        member = 'value' if getter else 'action'
+        owner = 'BoundSection'
+        synthetic_rows = [
+            {'original_name': '_State.site', 'destination_file': 'bound.dart',
+             'destination_class': owner, 'new_name': 'site'},
+            {'original_name': '_State.' + member, 'destination_file': 'bound.dart',
+             'destination_class': owner, 'new_name': member},
+        ]
+        canonical = '$State._sections.bound.' + member
+        bound_config = {
+            'callback_instances': {owner: '$State._sections.bound'},
+            'callback_receiver_aliases': {'_deps.' + member: canonical},
+            'callback_getter_aliases': {'_deps.' + member + '()': canonical},
+            'callback_identities': [{'name': 'bound ' + member,
+                'callback_member': '_State.' + member,
+                'sites': [{'member': '_State.site', 'call': 'Tile',
+                           'named_argument': 'value'}]}],
+        }
+        expression = ['_deps', '.', member] + (['(', ')'] if getter else [])
+        def bound_lookup(argument):
+            values = ['Tile', '(', 'value', ':', *argument, ')']
+            return {
+                ('bound.dart', owner, 'site'): {'owner': owner,
+                    'tokens': [{'text': t, 'offset': i} for i, t in enumerate(values)],
+                    'formatCommas': []},
+                ('bound.dart', owner, member): {'owner': owner, 'name': member,
+                    'parameters': None if getter else '()'},
+            }
+        assert not check_callback_identities(bound_lookup(expression), synthetic_rows, source, bound_config)
+        invalid = [
+            ['_deps', '.', 'wrong'],
+            ['secondInstance', '.', member],
+            ['(', ')', '=>', *expression],
+            [],
+            ['_deps', '.', member, '(', 'unexpected', ')'],
+        ]
+        if not getter:
+            # Even a registered getter alias must never turn a method call
+            # into a valid tear-off.
+            invalid.append(['_deps', '.', member, '(', ')'])
+        for argument in invalid:
+            assert check_callback_identities(bound_lookup(argument), synthetic_rows, source, bound_config), argument
+    print('IPTV settings bound tear-off/live-getter positives and isolated negatives: PASS')
+
     def located(name):
         row = next((r for r in rows if r['original_name'] == name), None)
         if row is None:
