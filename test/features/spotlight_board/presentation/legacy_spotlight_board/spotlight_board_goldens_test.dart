@@ -5,13 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../../support/spotlight_board_fixture.dart';
 
-const requireLinux = bool.fromEnvironment(
-  'SPOTLIGHT_BOARD_REQUIRE_ORIGINAL_LINUX',
-);
-const captureLinux = bool.fromEnvironment(
-  'SPOTLIGHT_BOARD_CAPTURE_ORIGINAL_LINUX',
-);
-
 void main() {
   for (final scene in [
     (
@@ -87,13 +80,7 @@ void main() {
         final file = File(
           'test/goldens/spotlight_board/$platform/${scene.name}.png',
         );
-        if (Platform.isLinux &&
-            !captureLinux &&
-            !requireLinux &&
-            !file.existsSync()) {
-          return;
-        }
-        if (Platform.isLinux && requireLinux) {
+        if (Platform.isLinux) {
           expect(
             file.existsSync(),
             isTrue,

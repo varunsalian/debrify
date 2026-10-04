@@ -1157,6 +1157,29 @@ decomposition; bug fixes and behaviour changes, including everything below.
 - The supplied Linux originals remain separate; their provenance/strictness
   commit is next, before the first builder move.
 
+### Linux originals — separate prerequisite before step 2
+
+- Step 1 is `9d6e90ba`. Verified all six supplied PNG hashes against
+  `linux-original-sha256.txt`, and verified original checkpoint (b)
+  `54b4afa559b1341f6aece38c47072e0b2c8164e0` has the same `lib`, pubspec and
+  lock blobs as approved R. Supplied capture/strict/revision/run evidence is
+  retained unchanged under `spotlight_board/`.
+- Removed the Linux missing-file skip and opt-in flags. Linux now always
+  asserts the original file exists and compares every scene. Scene setup,
+  expectations, fixture, fonts, sizes and PNG bytes are unchanged; no
+  recapture or update acceptance occurred.
+- The calibrated `debrify-flutter:3.44.8` linux/amd64 image
+  `sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`
+  passes all **six strict Linux** comparisons on step-1 code before any
+  builder move. `linux-originals-landing-{inputs.json,strict.txt}` records
+  inputs, original provenance and results. The copy, package and build caches
+  are inside this worktree or the disposable container. Six strict macOS
+  comparisons also pass (`linux-originals-macos.*`). This dedicated commit
+  contains only the six originals, strictness enforcement and this record.
+- Latest full-suite base remains original-characterized base3; the six test
+  identities and all macOS behavior are unchanged. Linux enforcement is now
+  stronger. Builder moves may proceed.
+
 ### Amendment after step 0b (design-reviewed before resuming)
 
 1. **Facade cap.** The hard maximum becomes 460 (see the size section); the
