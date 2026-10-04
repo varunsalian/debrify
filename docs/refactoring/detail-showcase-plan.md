@@ -941,6 +941,24 @@ change below.
   pending. Final report commit changes only Progress; its application/tests
   equal `439a1be5`. Root branch unchanged and clean; no push. Stop at this handoff.
 
+### Step L — supplied original Linux checkpoint verified
+
+- Verified all four supplied PNG SHA256s and dimensions against both independent
+  captures from `439a1be5`, plus both capture and both strict replay logs (4/4
+  each). Application/lib and pubspec inputs equal format-only `1165b624`;
+  characterized test tree is `21af0a96e23e519a113eca833960326f16699a98`.
+- Provenance: linux/amd64, Flutter 3.44.8 / Dart 3.12.2, calibrated image
+  `sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`,
+  local Docker capture. Evidence: own `detail_showcase/linux-original-*`,
+  reproduction files, Dockerfile and `step-L-verification.json`.
+- Linux hashes: tv_movie `622f489000682914f88ea3dd9f3afcbf69defec57ae5a031f93827545037bccc`;
+  compact_series `66574249bae4c127192e91e77e984b081038b3a308452b136c232f28005368d2`;
+  wide_series_bands `db696a270be27d73a986c4a6ce6b05d9b52623a30702217710191e439cd120c7`;
+  compact_guide `1becde95506ac84ed35433a355e657d162628bf35819517bb892f414e8dfa443`.
+- Decision: enable strict Linux by default through the single planned environment
+  default; retain every frozen assertion and original PNG. This separate L commit
+  contains no builder moves. Both future extraction gates compare with base6.
+
 ## Found, not fixed
 
 All pre-existing; the move keeps each exactly.

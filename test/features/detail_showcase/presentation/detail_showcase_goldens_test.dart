@@ -12,6 +12,7 @@ const captureLinux = bool.fromEnvironment(
 );
 const requireLinux = bool.fromEnvironment(
   'DETAIL_SHOWCASE_REQUIRE_ORIGINAL_LINUX',
+  defaultValue: true,
 );
 
 void main() {
