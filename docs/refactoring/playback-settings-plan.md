@@ -1055,6 +1055,25 @@ As in the PikPak plan, with these specifics:
   affected shape, focused, CI and whole-analyzer checks were rerun successfully.
   Frozen step-0b characterization, original PNGs and helper hashes are unchanged.
 
+### Step 5 — builders and platform partition
+
+- Moved all 13 step-5 entries and split the external list into the exact five
+  configured whole-element ranges. E1 remains inline; join has no theme/t locals;
+  each piece retains both original locals where used. Join borrows only core and
+  the five real piece tear-offs. The step-0b real join scratch compile and strict
+  analyzer proof already passed; production join adds zero diagnostics now.
+- Per-entry/piece wiring reviewed before pinning (`step5-wiring-review.json`):
+  live State context, lexical builder contexts, original owner instances, real
+  setter/action tear-offs, live completion options getter. No new widget classes,
+  consts, combined platform cards or navigation changes. Original comment-token
+  multiset remains exactly 192. All 35 callback sites and negatives pass.
+- Facade 660 lines; largest feature file 433 (subtitle section), composition
+  372, external join 36. Six manifests/self-tests, local CI, focused `base4`
+  comparison, whole analyzer/max comparison and strict symbol comparison PASS.
+  Focused outcomes remain 146 successes plus the same original guard failure.
+  Shape totals 20/four, floor 488; frozen characterization, PNG/helper hashes
+  unchanged. Linux tests remain non-strict at this checkpoint as planned.
+
 ## Found, not fixed
 
 All of these are pre-existing, and the extraction keeps each one exactly.

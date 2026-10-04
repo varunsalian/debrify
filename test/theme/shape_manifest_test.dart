@@ -35,7 +35,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
-  'lib/screens/settings/external_player_settings_page.dart': 16,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_tiles.dart':
+      0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_bulk_delete.dart':
       0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selected_delete.dart':
@@ -204,6 +205,20 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/playback_settings/presentation/playback_dropdown_setting.dart':
       1,
   'lib/features/playback_settings/presentation/playback_checkbox_tile.dart': 2,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_windows_section.dart':
+      2,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_section.dart':
+      1,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_mode_option.dart':
+      3,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_night_mode_section.dart':
+      3,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_mac_section.dart':
+      3,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_linux_section.dart':
+      2,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_ios_section.dart':
+      2,
 
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_workflows_composition.dart':
       0,
