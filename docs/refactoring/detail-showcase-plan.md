@@ -890,10 +890,56 @@ change below.
   SHA256/byte comparison and two strict replay protocol remains unchanged.
   Application/pubspec/lock hashes must still equal R. Four strict development
   goldens pass without regeneration after the original-only capture.
-- Record a clean committed original replay, fresh mutation proofs and latest
-  full-suite `base6` on this final checkpoint before stopping. Checkpoint/base
-  hashes and comparisons follow below. Old review evidence and base5 remain
-  available; no regression acceptance, application change, branch switch or push.
+- Final capture checkpoint: **`439a1be5`**, exact subject above. `lib` remains
+  `283bb5e83f819343c30c08137bf8bf98f899b0c8` (R), with unchanged pubspec/lock.
+  Test tree `21af0a96e23e519a113eca833960326f16699a98`; committed whole tree
+  `fef548abf46ab22e9979bea914888b92a3dadc6c`. Detached committed original replay
+  passes **49/49**. `review-step0b-viewport/original-checkpoint.json` records all
+  four PNG hashes/dimensions; full compact-guide framing inspected visually.
+- `review-step0b-viewport/step0b-original-mutations.json`: **all 36 mutations
+  freshly rerun**, each rejected by a named assertion, no reused logs or
+  compilation/loading failure. `new-test-mutation-coverage.json` maps each of
+  the 15 added identities to its rejection. S/pixel/widget classifications are
+  explicit. Five pixel diff folders are archived in the owned evidence folder;
+  original application/guard files restored and proof tree clean, no `failures/`.
+- **Latest ORIGINAL full-suite base is `detail_showcase/base6` at `439a1be5`.**
+  **11,142 success / 13 failure / 28 error / 20 skipped**. PASS against base5
+  (all identities/outcomes identical), base4/base3 (exactly 15 added passing
+  identities) and base/base-fmt (exactly 49 added passing identities); zero
+  missing, changed, newly skipped, new failures or fixed previous failures.
+  `base6-comparison.json` records the comparisons and env: Flutter 3.44.8 /
+  Dart 3.12.2, `paths=[]`, `flags=["--no-pub"]`, original committed tree above
+  start/end equal, no snapshot/untracked inputs/tree change. This supersedes
+  earlier originals for both future gates; neither extraction gate has run.
+- All **11 manifests/self-tests freshly pass**, each with its own configuration
+  and original baseline (merged detail `21320ff9`). Logs/fingerprints are in
+  `review-step0b/all-manifests.json`; all checker inputs/application leaves are
+  unchanged between `de904b55` and `439a1be5`. These runs share only the owned
+  `.dart_tool/detail_showcase_parser`, serialized, with its own kernel. They
+  overlap no other parser/kernel run using that package. Suite-evidence runs
+  and index operations remain serialized; no commit or git add overlaps a run.
+- CI format passes (1,701 files), scoped analyzer/12-warning allowlist passes,
+  whole analyzer exactly matches the original's 1,666 occurrences by identity.
+  Final affected tests/helpers analyze/format clean. Architecture 1,261 files,
+  sizes 2,321 files/173 ratchets, LF/diff, shell/Python syntax, documentation
+  links and unchanged approved plan text outside Progress all verified.
+  Strict lint/alias probes and inventories remain applicable: application
+  bytes equal R; source/shape/theme registrations are unchanged (18 literal
+  radii, zero shape calls, `details_themed` 65 files/750 sites, light ink zero
+  PRIMARY). No failure list, suppression, dependency or application code changed.
+- **BLOCKED: Linux goldens.** Old `887b1a8f` Linux evidence is superseded.
+  No current Linux PNGs/provenance are present. Claude must capture exactly
+  **`439a1be5`** with the updated script, supplying both independent capture/
+  strict logs and reproduction hashes as well as the five required files.
+  Step L verifies these against the new checkpoint/R and commits separately,
+  enables strict Linux, then steps 1–5 and both gates resume against base6.
+- Current original facade still **3,425 lines** (20 imports occupying 21 lines,
+  plus 3,404 remaining lines); pure export facade/final count remain pending.
+  Found-not-fixed behavior unchanged, including the focused-to-empty guide
+  clamp edge case; no original bug fixed. Device (Android TV/Apple TV/playback
+  handoff), remote CI, completion Linux replay and integrated-tree checks remain
+  pending. Final report commit changes only Progress; its application/tests
+  equal `439a1be5`. Root branch unchanged and clean; no push. Stop at this handoff.
 
 ## Found, not fixed
 
