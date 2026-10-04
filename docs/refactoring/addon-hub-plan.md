@@ -900,6 +900,40 @@ committed tree**, reconciling each branch's approved additions.
   da6bc0b4, exact CI path placement and valid docs/capture-shell syntax.
   Gate 2 now runs on the committed final source tree.
 
+- Gate 2: committed `0018d1e7`, tested tree
+  `34303532e37316515535981c5591fed1228b893d`, no snapshot/untracked inputs or
+  tree change. `gate2` versus both latest original `base4` (`da6bc0b4`) and
+  `gate1` PASS: 11,098 success, 13 failure, 28 error, 20 skipped; zero added,
+  missing or newly skipped identities, zero new failures or fixes. Historical
+  helper replay still returns the identical original verdict/failure set;
+  no known-failure list or analyzer inventory grows. Gate envs record the
+  same Flutter 3.44.8 / Dart 3.12.2 throughout.
+- Whole-unit comment audit additionally proves all 185 original comment
+  tokens survive exactly, including group banners and inline comments outside
+  declaration spans. Only manifest bracketed doc-symbol links are normalized;
+  there is no whitespace/text normalization (`final-all-comment-proof.json`).
+- Completion documentation changes only this plan after the gate; every
+  application, test, checker, dependency and other non-plan input remains
+  identical to the committed gate-2 tree (`final-head-equivalence.json`).
+  Final facade is 162 lines, largest destination 295; all bounded legacy
+  exceptions retain their stated later Riverpod/data/platform/localization
+  exit milestones. Stop after gate 2; no branch switch or push.
+
+| Step | Commit |
+| --- | --- |
+| 0a format-only | `227712b2` |
+| 0 original characterization | `8c5981a4` |
+| 0b initial original proof closures | `26e69f67`, `a7da3fe4` |
+| Separate verified Linux originals | `95955bfc` |
+| 0b independent review closure / latest original base | `da6bc0b4` |
+| 1 pure kinds/helpers/row pool | `8f3b61f7` |
+| 2 pure widgets | `28a679d8` |
+| 3 owners/loads/engines / gate 1 | `9f84dd5f` |
+| 4 addon actions/menus/metadata | `2b91f04f` |
+| 5 navigation/filters/lists/rows | `2033b568` |
+| 6 body/layout/build forwarder | `eb2759cc` |
+| 7 final guards/docs / gate 2 | `0018d1e7` |
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
