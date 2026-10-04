@@ -1070,6 +1070,46 @@ change below.
   base7 (`5753dee2`, full-suite paths `[]`, flags `["--no-pub"]`) remains the
   gate comparison reference; S-class hold/dispose guards remain source guards.
 
+### Step 4 — extraction checkpoint
+
+- Previous step commit `786cd167`. Whole declarations, comments, constructor
+  signatures, constness, private runtime names, callback expressions and State
+  lifecycle remain verbatim after registered code-only alias reversal.
+- Measured sizes: showcase_cast.dart 144; showcase_did_you_know.dart 202; showcase_episodes.dart 437; showcase_grounds.dart 205; showcase_guide.dart 474; showcase_identity.dart 293; showcase_identity_actions.dart 263; showcase_identity_readouts.dart 374; showcase_metrics.dart 122; showcase_notes.dart 140; showcase_recs.dart 120; showcase_seasons.dart 234; showcase_sources.dart 183; showcase_style.dart 200; showcase_universe.dart 158. Remaining facade: 24 lines;
+  size ratchet lowered/removed at this checkpoint. Every created destination
+  and the facade are registered in the shape manifest; exact slice total 18.
+  Theme sites remain 750; light-ink candidates 5, PRIMARY 0.
+- The guide is 474 lines, so the 15-file layout needs no fallback or size exception. All 69 per-entry wiring rows are complete. The original is now a pure 18-name facade: 12 export directives spanning 24 physical lines, zero comments, zero blank lines or declarations. Its size ratchet is removed; shape residue is zero in the facade. Completion rules activate only at step 5.
+- Evidence `detail_showcase/step4/`: every integrated manifest (11) and
+  self-test passed using each config/original baseline, including merged_detail
+  `21320ff9`, with one dedicated parser-package/kernel per overlapping run.
+  Whole-analyzer relocation has zero additions against ORIGINAL identities;
+  strict per-symbol comparison retains one original warning and four infos,
+  and removes the two qualification-induced ordering infos (max, never sum).
+  Architecture, sizes, CI format, complete scoped analyzer/allowlist (13 warnings),
+  LF detail manifest, unchanged other manifests and staged diff passed.
+  Frozen characterizations plus existing related tests: 118 passes; four strict
+  macOS originals unchanged. Theme/shape guards 128 success / 1 original failure;
+  profile guards 17 success / 1 original failure, exact base7 identities.
+- Decision: no incidental behavior fixes or lint suppressions. The original
+  base7 (`5753dee2`, full-suite paths `[]`, flags `["--no-pub"]`) remains the
+  gate comparison reference; S-class hold/dispose guards remain source guards.
+
+### Gate 1 — committed full-suite parity
+
+- Gate commit `786cd1673c2da23719ac3725b5e71e44d2af4f57`; tested tree `dc22f26c17298bef24c8b64f5474637f623c584a`;
+  application lib `0062114fb7490090046c63bb4eeb76d364c3bca7`, test `ad2e053406e9084d2c5c419f0cdd35eab2127fef`.
+  Full suite paths `[]`, flags `["--no-pub"]`, Flutter 3.44.8 / Dart 3.12.2.
+  HEAD/index/tested/end trees match, no snapshot or untracked input and no
+  changes during the run. Evidence: `gate1.jsonl`, `.env.json`, `gate1-audit.json`
+  and comparisons with base7 and base6 in this plan's own evidence namespace.
+- 11,142 success / 13 failure / 28 error / 20 skipped. Every outcome and test
+  identity equals both originals: zero new failures/errors, missing tests,
+  new skips, additions, fixes or changed old outcomes. The full-suite runner's
+  expected exit 1 is the original 13/28 set; both baseline comparisons PASS.
+- Frozen-input audit at step 4 verifies all eight test files, both helpers and
+  all eight PNGs byte-identical to original `5753dee2`. No golden regenerated.
+
 ## Found, not fixed
 
 All pre-existing; the move keeps each exactly.

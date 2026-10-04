@@ -201,12 +201,18 @@ PRESENTATION_BRIDGE_IMPORTS = {
         'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
         'lib/services/imdb_enrichment_service.dart': {'CastMember'},
     },
+    'lib/features/detail_showcase/presentation/showcase_did_you_know.dart': {
+        'lib/services/imdb_enrichment_service.dart': {'DidYouKnowEntry'},
+    },
     'lib/features/detail_showcase/presentation/showcase_episodes.dart': {
         'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
         'lib/services/trakt/trakt_episode_model.dart': {'TraktEpisode'},
     },
     'lib/features/detail_showcase/presentation/showcase_grounds.dart': {
         'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_guide.dart': {
+        'lib/services/imdb_parents_guide_service.dart': {'ParentsGuideResult', 'ParentsGuideCategory', 'ParentsGuideItem'},
     },
     'lib/features/detail_showcase/presentation/showcase_identity_readouts.dart': {
         'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
@@ -216,6 +222,10 @@ PRESENTATION_BRIDGE_IMPORTS = {
     },
     'lib/features/detail_showcase/presentation/showcase_sources.dart': {
         'lib/services/series_source_service.dart': {'SeriesSource'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_universe.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+        'lib/services/imdb_enrichment_service.dart': {'UniverseTitle'},
     },
     # End detail showcase imports.
     # Immutable session identity declaration only; no static state or I/O.
