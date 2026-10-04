@@ -119,8 +119,13 @@ void main() {
               style,
             );
           }
-          expect(f.model.item.name, 'Original Movie');
-          expect(f.model.isMovie, true);
+          if (type != null) {
+            final model = (t.widget(find.byType(type)) as dynamic).model;
+            expect(model.item.name, 'Original Movie');
+            expect(model.isMovie, true);
+          } else {
+            expect(find.text('Play'), findsOneWidget);
+          }
         });
       },
     );
@@ -179,9 +184,9 @@ void main() {
           );
         }
         await f.mount(t, style: c.style, size: c.size);
-        expect(f.model.openingDataReady, true);
-        expect(f.model.trailerBusy, false);
-        expect(f.model.hasTrailer, false);
+        expect(f.observation.openingDataReady, true);
+        expect(f.observation.trailerBusy, false);
+        expect(f.observation.hasTrailer, false);
         final reveals = find.byWidgetPredicate(
           (w) => w.runtimeType.toString().endsWith('StaggerReveal'),
         );
@@ -248,6 +253,7 @@ void main() {
       f.heldRecommendations!.complete([]);
       await f.finishOpening(t);
       f.next((season: 1, episode: 2, started: true), mutation: true);
+      await t.pump();
       await t.pump();
       for (final key in [
         'recommendationOriginals',

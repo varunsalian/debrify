@@ -5639,8 +5639,6 @@ Map<String, Object?> mergedDetailTestAccess(State<MergedDetailScreen> state) {
     'loadResume': s._loadResumeInfo,
     'rewatch': s._rewatchTitle,
     'refresh': s._refreshAfterPlayback,
-    'loadBoundSources': s._loadBoundSources,
-    'loadTrailer': s._loadTrailer,
     'recommendations': s._recommendations,
     'recommendationOriginals': s._recommendationOriginals,
     'backdropKey': s._backdropKey,

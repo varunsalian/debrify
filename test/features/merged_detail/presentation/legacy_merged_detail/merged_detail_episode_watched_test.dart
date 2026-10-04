@@ -55,7 +55,7 @@ void main() {
                   ],
                 },
               };
-            } else if (r.url.host.contains('simkl')) {
+            } else if (r.url.host == 'api.simkl.com') {
               switch (r.url.path) {
                 case '/sync/watched':
                   body = [
@@ -128,7 +128,7 @@ void main() {
               WatchProgressSource.smart,
             );
           });
-          await f.mount(t);
+          await f.mount(t, style: 'classic');
           await f.until(
             t,
             () =>
@@ -178,22 +178,51 @@ void main() {
               .where(
                 (r) =>
                     r.method != 'GET' &&
-                    !(r.url.host.contains('simkl') &&
+                    !(r.url.host == 'api.simkl.com' &&
                         r.url.path == '/sync/watched'),
               )
-              .map((r) => '${r.method} ${r.url.path}')
+              .map((r) => '${r.method} ${r.url.host}${r.url.path}')
               .toList();
           expect(
             writes,
             failure
-                ? ['POST /sync/history']
-                : ['POST /sync/history', 'DELETE /sync/playback/981'],
+                ? ['POST api.simkl.com/sync/history']
+                : [
+                    'POST api.simkl.com/sync/history',
+                    'DELETE api.simkl.com/sync/playback/981',
+                  ],
           );
+          final history = f.requests.singleWhere(
+            (r) => r.method == 'POST' && r.url.path == '/sync/history',
+          );
+          expect(history.url.host, 'api.simkl.com');
+          final episodeBody = {
+            'shows': [
+              {
+                'ids': {'imdb': id},
+                'seasons': [
+                  {
+                    'number': 1,
+                    'episodes': [
+                      {'number': 1},
+                    ],
+                  },
+                ],
+              },
+            ],
+          };
+          expect(jsonDecode(history.body), episodeBody);
           if (!failure) {
+            final deletion = f.requests.singleWhere(
+              (r) => r.method == 'DELETE',
+            );
+            expect(deletion.url.host, 'api.simkl.com');
+            expect(deletion.body, isEmpty);
             expect(
               f.requests.where(
                 (r) =>
                     r.method == 'GET' &&
+                    r.url.host == 'api.simkl.com' &&
                     r.url.path == '/sync/playback/episodes',
               ),
               hasLength(1),
@@ -257,13 +286,18 @@ void main() {
                   .where(
                     (r) =>
                         r.method != 'GET' &&
-                        !(r.url.host.contains('simkl') &&
+                        !(r.url.host == 'api.simkl.com' &&
                             r.url.path == '/sync/watched'),
                   )
-                  .map((r) => '${r.method} ${r.url.path}')
+                  .map((r) => '${r.method} ${r.url.host}${r.url.path}')
                   .toList(),
-              ['POST /sync/history/remove'],
+              ['POST api.simkl.com/sync/history/remove'],
             );
+            final removal = f.requests.singleWhere(
+              (r) => r.method == 'POST' && r.url.path == '/sync/history/remove',
+            );
+            expect(removal.url.host, 'api.simkl.com');
+            expect(jsonDecode(removal.body), episodeBody);
             await t.runAsync(() async {
               expect(
                 await MergedEpisodeProgressStorage.getMergedFinishedEpisodes(
@@ -276,7 +310,7 @@ void main() {
           }
           await t.pumpWidget(const SizedBox.shrink());
           SimklService.instance.resetProfileScope();
-          await f.mount(t);
+          await f.mount(t, style: 'classic');
           await f.until(
             t,
             () =>

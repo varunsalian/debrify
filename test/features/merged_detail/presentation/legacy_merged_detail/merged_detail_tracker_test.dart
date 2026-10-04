@@ -4,6 +4,7 @@ import 'package:debrify/services/trakt/trakt_service.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/services/mdblist/mdblist_models.dart';
 import 'package:flutter/material.dart';
+import 'package:debrify/services/main_page_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import '../../../../support/merged_detail_fixture.dart';
 
@@ -38,13 +39,13 @@ void main() {
         f.heldSimklStatus = null;
         f.heldMdblistStatus = null;
         f.traktStatus = const TraktTitleStatus();
-        (f.access['refresh'] as void Function())();
+        MainPageBridge.notifyPlaybackReturned();
         await f.until(t, () => f.model.traktLabel == 'Status unavailable');
         expect(f.model.traktTracked, false);
         f.traktStatus = const TraktTitleStatus(rating: 8);
         f.simklStatus = const SimklTitleStatus(rating: 7);
         f.mdblistStatus = const MdblistTitleStatus(id: 1, rating: 6);
-        (f.access['refresh'] as void Function())();
+        MainPageBridge.notifyPlaybackReturned();
         await f.until(t, () => f.model.mdblistLabel == 'Rated');
         expect(
           [f.model.traktLabel, f.model.simklLabel, f.model.mdblistLabel],

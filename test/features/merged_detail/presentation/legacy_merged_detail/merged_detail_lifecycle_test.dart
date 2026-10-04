@@ -70,7 +70,9 @@ void main() {
   );
   for (final name in ['tracking source', 'movie finished', 'MDBList watched']) {
     testWidgets(
-      '$name mutation increments once before unmount and does no read afterward',
+      name == 'tracking source'
+          ? 'tracking source reloads while mounted and does not publish after unmount'
+          : '$name mutation increments once before unmount and does no read afterward',
       (t) async {
         await mergedDetailCase(t, (f) async {
           f.xtream = true;

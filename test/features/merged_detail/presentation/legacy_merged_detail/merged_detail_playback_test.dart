@@ -42,19 +42,35 @@ void main() {
     (t) async {
       await mergedDetailCase(t, (f) async {
         f.xtream = true;
+        f.item = const StremioMeta(
+          id: 'tt0099917',
+          imdbId: 'tt0099917',
+          type: 'series',
+          name: 'Original Unenriched Series',
+        );
+        f.metaEnricher = (id, type) async => const StremioMeta(
+          id: 'tt0099917',
+          type: 'series',
+          name: 'Enriched Series',
+          description: 'A differing enriched description.',
+          year: '2026',
+        );
         await f.mount(t, style: 'console');
+        await f.until(t, () => f.observation.item.name == 'Enriched Series');
+        expect(find.text('Enriched Series'), findsOneWidget);
         expect(find.byType(DetailConsole), findsNothing);
         expect(find.byType(EpisodesPanel), findsOneWidget);
         final p = f.panel;
         expect(p.show, same(f.item));
+        expect(p.show, isNot(same(f.observation.item)));
         expect(p.showQuickPlay, true);
         expect(p.showChrome, false);
         expect(p.compact, true);
         final screen = t.widget<MergedDetailScreen>(find.byKey(f.key));
         expect(p.boundSourceCount, same(screen.boundSourceCount));
         expect(p.onSelectSource, same(screen.onSelectSource));
-        expect(p.seasonsLoader, equals(f.seasonsLoader));
-        expect(p.watchProgressLoader, equals(f.progressLoader));
+        expect(p.seasonsLoader, same(screen.seasonsLoader));
+        expect(p.watchProgressLoader, same(screen.watchProgressLoader));
         expect(p.onFocusLeftEdge, isNotNull);
         expect(f.calls.where((c) => c == 'seasons').toList(), ['seasons']);
         expect(f.calls.where((c) => c == 'progress').toList(), ['progress']);
@@ -65,7 +81,9 @@ void main() {
         expect(f.directEpisodes, [same(f.episodes[1])]);
         expect(f.observer.events.length, routeCount);
         f.next((season: 1, episode: 2, started: true), mutation: true);
-        f.model.onPrimary();
+        await t.pump();
+        expect(find.text('Resume · S1E2'), findsOneWidget);
+        await t.tap(find.text('Resume · S1E2'));
         await f.until(t, () => f.calls.contains('resumePlay'));
         expect(f.promises, [(started: true, season: 1, episode: 2)]);
       });
@@ -119,6 +137,7 @@ void main() {
       );
       await f.mount(t);
       f.next((season: 2, episode: 8, started: true), mutation: true);
+      await t.pump();
       f.model.onPrimaryLongPress!();
       await f.until(t, () => f.calls.contains('episodeBrowse'));
       expect(f.promises, [(started: true, season: 2, episode: 8)]);

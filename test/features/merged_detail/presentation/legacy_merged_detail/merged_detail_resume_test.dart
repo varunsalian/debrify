@@ -13,6 +13,7 @@ void main() {
       expect(f.model.primaryLabel, 'Resume');
       expect(f.model.primaryBusy, true);
       f.next((season: 2, episode: 8, started: true));
+      await t.pump();
       expect(f.model.primaryLabel, 'Resume');
       expect(f.model.primaryBusy, true);
       f.heldResume!.complete((started: false, season: null, episode: null));
@@ -30,10 +31,12 @@ void main() {
         f.heldResume = Completer<MergedResume>();
         await f.mount(t);
         f.next((season: 2, episode: 8, started: true));
+        await t.pump();
         f.heldResume!.complete((started: true, season: 1, episode: 7));
         await f.until(t, () => !f.model.primaryBusy);
         expect(f.model.primaryLabel, 'Resume · S1E7');
         f.next((season: 3, episode: 9, started: true));
+        await t.pump();
         expect(f.model.primaryLabel, 'Resume · S1E7');
         f.model.onPrimary();
         await f.until(t, () => f.calls.contains('resumePlay'));
@@ -48,6 +51,7 @@ void main() {
         f.heldResume = Completer<MergedResume>();
         await f.mount(t);
         f.next((season: 4, episode: 5, started: true), mutation: true);
+        await t.pump();
         expect(f.model.primaryLabel, 'Resume · S4E5');
         f.heldResume!.complete((started: true, season: 1, episode: 2));
         await f.until(t, () => !f.model.primaryBusy);
@@ -65,6 +69,7 @@ void main() {
       f.heldResume = Completer<MergedResume>();
       await f.mount(t);
       f.next((season: 2, episode: 6, started: true));
+      await t.pump();
       f.heldResume!.completeError(StateError('fixture failure'));
       await f.until(t, () => !f.model.primaryBusy);
       expect(f.model.primaryLabel, 'Resume · S2E6');
@@ -75,6 +80,7 @@ void main() {
       f.heldResume = Completer<MergedResume>();
       await f.mount(t);
       f.next((season: 5, episode: 3, started: true));
+      await t.pump();
       await t.pump(const Duration(seconds: 10));
       expect(f.model.primaryBusy, true);
       await t.pump(const Duration(seconds: 2));
@@ -92,6 +98,7 @@ void main() {
       await mergedDetailCase(t, (f) async {
         await f.mount(t);
         f.next((season: 1, episode: 1, started: false), mutation: true);
+        await t.pump();
         expect(f.model.primaryLabel, 'Start Watching');
         f.model.onPrimary();
         await f.until(t, () => f.calls.contains('resumePlay'));
@@ -104,8 +111,10 @@ void main() {
       await f.mount(t);
       expect(f.model.primaryLabel, 'Start Watching');
       f.next((season: 2, episode: 3, started: true));
+      await t.pump();
       expect(f.model.primaryLabel, 'Resume · S2E3');
       f.next((season: 2, episode: 4, started: true), mutation: true);
+      await t.pump();
       expect(f.model.primaryLabel, 'Resume · S2E4');
     });
   });
@@ -120,6 +129,7 @@ void main() {
         );
         await f.mount(t);
         f.next((season: 3, episode: 4, started: true), mutation: true);
+        await t.pump();
         expect(f.model.primaryLabel, 'Play');
         f.model.onPrimary();
         await f.until(t, () => f.calls.contains('resumePlay'));

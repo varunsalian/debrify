@@ -23,6 +23,7 @@ import 'package:debrify/services/app_route_observer.dart';
 import 'package:debrify/utils/episode_progress_merge.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/detail/detail_model.dart';
+import 'package:debrify/widgets/detail/detail_layout_console.dart';
 import 'package:debrify/widgets/episodes_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,6 +49,7 @@ class MergedObserver extends NavigatorObserver {
 
 class MergedDetailFixture {
   final key = GlobalKey<State<MergedDetailScreen>>();
+  WidgetTester? _tester;
   final navigator = GlobalKey<NavigatorState>();
   final observer = MergedObserver();
   final calls = <String>[];
@@ -81,6 +83,7 @@ class MergedDetailFixture {
   bool failResume = false;
   bool xtream = false, television = false, restart = true, quick = true;
   int count = 2;
+  bool severalSeasons = false;
   bool paused = false;
   bool menus = false, showPrimary = true, canSelectSource = true;
   TraktTitleStatus? traktStatus;
@@ -92,6 +95,7 @@ class MergedDetailFixture {
   Future<void> Function(StremioMeta)? onSelectSource;
   Future<void> Function(String)? onAction;
   Future<void> Function()? onRestart;
+  Future<StremioMeta?> Function(String, String)? metaEnricher;
 
   Map<String, double> progress = {};
   Future<http.Response> Function(http.Request)? onRequest;
@@ -100,7 +104,14 @@ class MergedDetailFixture {
     TraktEpisode(season: 1, number: 2, title: 'Second'),
   ];
   Map<String, Object?> get access => mergedDetailTestAccess(key.currentState!);
-  DetailModel get model => (access['model'] as DetailModel Function())();
+
+  /// The model wired into the mounted production view; actions use this only.
+  DetailModel get model =>
+      _tester!.widget<DetailConsole>(find.byType(DetailConsole)).model;
+
+  /// Read-only observations for Classic, which does not build a DetailModel.
+  /// Classic actions must be dispatched through rendered widgets.
+  DetailModel get observation => (access['model'] as DetailModel Function())();
   EpisodesPanel get panel =>
       find.byType(EpisodesPanel).evaluate().single.widget as EpisodesPanel;
   void next(EpisodeResumeTarget target, {bool mutation = false}) =>
@@ -125,7 +136,11 @@ class MergedDetailFixture {
 
   Future<List<TraktSeason>> seasonsLoader() async {
     calls.add('seasons');
-    return [TraktSeason(number: 1, episodeCount: 2, episodes: episodes)];
+    return [
+      TraktSeason(number: 1, episodeCount: 2, episodes: episodes),
+      if (severalSeasons)
+        TraktSeason(number: 2, episodeCount: 0, episodes: const []),
+    ];
   }
 
   Future<Map<String, double>> progressLoader() async {
@@ -167,11 +182,12 @@ class MergedDetailFixture {
 
   Future<void> mount(
     WidgetTester t, {
-    String style = 'classic',
+    String style = 'console',
     Size size = const Size(1200, 900),
     bool wait = true,
     bool pushed = false,
   }) async {
+    _tester = t;
     t.view.physicalSize = size;
     t.view.devicePixelRatio = 1;
     PlatformUtil.debugSetAndroidTvCached(television);
@@ -180,6 +196,7 @@ class MergedDetailFixture {
       key: key,
       item: item,
       addon: addon,
+      metaEnricher: metaEnricher,
       isTelevision: television,
       showQuickPlay: showPrimary,
       onResume: (promise) async {
@@ -307,7 +324,10 @@ class MergedDetailFixture {
   }
 
   Future<void> finishOpening(WidgetTester t) async {
-    await until(t, () => model.openingDataReady && calls.contains('mdblist'));
+    await until(
+      t,
+      () => observation.openingDataReady && calls.contains('mdblist'),
+    );
     // The post-frame callback does not request a frame. Fixed bounded pumps
     // explicitly paint the completed fake futures and finish reveal delays.
     for (var frame = 0; frame < 12; frame++) {

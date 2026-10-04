@@ -23,7 +23,8 @@ void main() {
       await mergedDetailCase(t, (f) async {
         f.xtream = true;
         f.television = true;
-        await f.mount(t);
+        f.severalSeasons = true;
+        await f.mount(t, style: 'classic');
         final info = f.access['infoPane'] as FocusScopeNode;
         final episodes = f.access['episodesPane'] as FocusScopeNode;
         final entry = f.access['leftEntry'] as FocusNode;
@@ -39,6 +40,11 @@ void main() {
         await t.pump();
 
         expect(info.hasFocus, true);
+        await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await t.pump();
+        expect(FocusManager.instance.primaryFocus, same(back));
+        entry.requestFocus();
+        await t.pump();
         for (var key = 0; key < 8 && !episodes.hasFocus; key++) {
           expect(
             infoWidget.onKeyEvent!(
@@ -51,6 +57,17 @@ void main() {
           await t.pump();
         }
         expect(episodes.hasFocus, true);
+        // Season-header controls let the event reach the pane handler.
+        final header = episodes.traversalDescendants.firstWhere(
+          (n) => n.debugLabel == 'catalog-ep-season',
+        );
+        header.requestFocus();
+        await t.pump();
+        await t.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await t.pump();
+        expect(info.hasFocus, true);
+        header.requestFocus();
+        await t.pump();
         for (var key = 0; key < 8 && !info.hasFocus; key++) {
           expect(
             episodesWidget.onKeyEvent!(
@@ -108,7 +125,7 @@ void main() {
               name: 'Original Focus Movie',
             );
           }
-          await f.mount(t);
+          await f.mount(t, style: 'classic');
           final row = find.byWidgetPredicate(
             (w) => w is Focus && w.child is Wrap && w.onKeyEvent != null,
           );
@@ -149,7 +166,7 @@ void main() {
             await t.pump();
             expect(FocusManager.instance.primaryFocus, same(buttons[i]));
           }
-          widget.onKeyEvent!(node, press(LogicalKeyboardKey.arrowRight));
+          await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
           await t.pump();
           if (movie) {
             expect(FocusManager.instance.primaryFocus, same(buttons.last));
@@ -174,7 +191,7 @@ void main() {
             name: 'Original Rec $i',
           ),
         );
-        await f.mount(t);
+        await f.mount(t, style: 'classic');
         final cards = find.byWidgetPredicate(
           (w) => w.runtimeType.toString() == '_RecCard',
         );
@@ -190,6 +207,22 @@ void main() {
         dynamic last = traps.last;
         expect(first.trapLeft, true);
         expect(last.trapRight, true);
+        final firstCard = cards.evaluate().first.widget;
+        final cardContext = t.element(
+          find
+              .descendant(
+                of: find.byWidget(firstCard),
+                matching: find.byType(GestureDetector),
+              )
+              .first,
+        );
+        final railNode = Focus.of(cardContext);
+        railNode.requestFocus();
+        await t.pump();
+        expect(FocusManager.instance.primaryFocus, same(railNode));
+        await t.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await t.pump();
+        expect(FocusManager.instance.primaryFocus, same(railNode));
         for (final pair in [
           (first, LogicalKeyboardKey.arrowLeft),
           (last, LogicalKeyboardKey.arrowRight),
@@ -230,7 +263,7 @@ void main() {
           f.xtream = true;
           f.showPrimary = false;
           f.canSelectSource = source;
-          await f.mount(t);
+          await f.mount(t, style: 'classic');
           expect(f.panel.onFocusLeftEdge, source ? isNotNull : isNull);
           if (source) {
             f.panel.onFocusLeftEdge!();

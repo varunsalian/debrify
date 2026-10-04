@@ -27,6 +27,9 @@ def main():
     parser.add_argument('--original-worktree', type=Path, required=True)
     parser.add_argument('--parser-package', type=Path, required=True)
     parser.add_argument('--only')
+    parser.add_argument('--cases', type=Path, default=ROOT / 'dev/tool/merged_detail_original_mutations.json')
+    parser.add_argument('--positive', action='append', help='Original positive evidence label (repeatable)')
+    parser.add_argument('--evidence-prefix', default='original')
     parser.add_argument('--start',type=int,default=0)
     args = parser.parse_args()
     original = args.original_worktree.resolve()
@@ -37,15 +40,16 @@ def main():
     ast = parse({FACADE: pristine}, args.parser_package.resolve())
     state = next(n for n in ast[FACADE]['declarations'] if n['name'] == '_MergedDetailScreenState')
     nodes = {n['name']: n for n in state['members']}
-    cases = json.loads((ROOT / 'dev/tool/merged_detail_original_mutations.json').read_text())
-    positive, _ = outcomes(evidence_dir() / 'merged_detail/original-characterization-final4.jsonl')
-    retention, _ = outcomes(evidence_dir() / 'merged_detail/original-metadata-retention2.jsonl')
-    positive.update(retention)
+    cases = json.loads(args.cases.read_text())
+    positive = {}
+    for name in args.positive or ['merged_detail/original-characterization-final4', 'merged_detail/original-metadata-retention2']:
+        positive.update(outcomes(evidence_dir() / (name + '.jsonl'))[0])
+    positive = {key: value for key, value in positive.items() if key.split('::')[0].startswith(TESTS)}
     assert set(positive.values()) == {'success'}
     covered = set()
     results = []
     if args.start or args.only:
-        results=json.loads((evidence_dir()/'merged_detail/original-mutations-progress.json').read_text())
+        results=json.loads((evidence_dir()/f'merged_detail/{args.evidence_prefix}-mutations-progress.json').read_text())
         covered=set().union(*(set(r['rejected_by']) for r in results))
     for index, case in enumerate(cases):
         if index < args.start or (args.only and args.only not in case['label']):
@@ -89,7 +93,7 @@ def main():
                 assert before.count(edit['before']) == edit.get('count', 1), edit
                 changes[path] = before.replace(edit['before'], edit['after'])
         saved = {path: (original / path).read_bytes() for path in changes}
-        label = f'merged_detail/original-negative-{index:02d}-{case["label"]}'
+        label = f'merged_detail/{args.evidence_prefix}-negative-{index:02d}-{case["label"]}'
         try:
             for path, text in changes.items():
                 (original / path).write_text(text)
@@ -114,16 +118,16 @@ def main():
             results=[r for r in results if r['label']!=label]
             results.append(result)
             covered=set().union(*(set(r['rejected_by']) for r in results))
-            (evidence_dir() / 'merged_detail/original-mutations-progress.json').write_text(json.dumps(results, indent=2) + '\n')
+            (evidence_dir() / f'merged_detail/{args.evidence_prefix}-mutations-progress.json').write_text(json.dumps(results, indent=2) + '\n')
             print('PASS ' + case['label'], flush=True)
         finally:
             for path, data in saved.items():
                 (original / path).write_bytes(data)
         assert (original / FACADE).read_text() == pristine
-    output = evidence_dir() / 'merged_detail/original-mutations.json'
+    output = evidence_dir() / f'merged_detail/{args.evidence_prefix}-mutations.json'
     output.write_text(json.dumps({'original_revision': revision, 'results': results,
                                   'covered': sorted(covered), 'uncovered': sorted(set(positive) - covered)}, indent=2) + '\n')
-    print(f'{len(results)} production mutations rejected; {len(covered)}/{len(positive)} original guard identities exercised')
+    print(f'{len(results)} guard mutations rejected; {len(covered)}/{len(positive)} original guard identities exercised')
 
 
 if __name__ == '__main__':

@@ -199,6 +199,8 @@ void main() {
         );
         await f.mount(t);
         expect(f.model.primaryLabel, 'Play');
+        // The no-restart branch is deliberately unreachable from the Play UI.
+        // This direct probe characterizes its defensive early return only.
         await (f.access['rewatch'] as Future<void> Function())();
         await t.runAsync(() async {
           expect(await MovieProgressStorage.isMovieFinished(f.item.id), true);
@@ -216,6 +218,7 @@ void main() {
           f.menus = true;
           await f.mount(t);
           f.next((season: 2, episode: 8, started: true), mutation: true);
+          await t.pump();
           f.calls.clear();
           f.model.onPrimaryLongPress!();
           await f.until(

@@ -739,6 +739,95 @@ the behaviour suite compared against the latest recorded base.
   assertion; `original-metadata-frozen` re-proves its four cases on original
   production code. The four accepted production infos remain unmodified.
 
+### Step 0b — independent review closure
+
+- Step 1 was uncommitted. Its helper moves and registrations are saved under
+  this worktree's ignored `.dart_tool/merged_detail_step1_pending/`; the facade
+  and tracked registrations were restored to `4b65c7cf` before this revision.
+  Nothing moves in Step 0b. The only production-seam change removes the unused
+  `loadTrailer` and `loadBoundSources` entries (27 lines, facade 5,657).
+- P2-1: non-Xtream action fixtures explicitly default to Console and obtain
+  the mounted `DetailConsole.model`. Classic's model accessor is read-only
+  observation; primary/watchlist actions tap rendered labels. All alternate
+  style checks read their actual mounted model. After engine emissions, tests
+  paint the scheduled frame before re-reading the view's model.
+- P2-2/3: hosted episode writes pin the Simkl host and complete IMDb/S1E1
+  bodies; playback reads and paused-session deletion pin their host. The panel
+  probe waits for visibly enriched metadata, proves original and presented
+  objects differ, and compares its loaders with the exact screen fields using
+  `same()`. Its Classic primary action is a real tap.
+- P2-4: configured trailer children run `flutter test --dart-define=...`
+  directly. Child source and reporter output live in a unique system temp
+  directory and are removed in `finally`; the parent asserts only child
+  outcomes. No nested suite-evidence run, SDK-version assertion, or shared
+  evidence mutation remains in the test.
+- P2-5 conservative original-behavior decision: successful IMDb enrichment is
+  cached for the process lifetime by `ImdbEnrichmentService._cache`, with no
+  reset seam. The retained-title cases now start from non-null extra, assert
+  null synchronously on policy/profile notification, and await republication
+  of the same cached object with exactly zero additional non-ParentsGuide
+  GraphQL requests. Separate policy/profile cases start with an unsuccessful,
+  uncached fetch, then require exactly one additional request, its IMDb body,
+  and the rendered model's new rating. Requiring an extra network request for
+  the cached title would contradict original behavior; no cache is changed.
+- P3: actual keyboard dispatch covers the info pane, episodes pane, action row
+  and rail trap, preserving the direct branch/result checks. A two-season
+  fixture renders the real season dropdown. Tracking-source detachment is
+  checker-only because its callback checks `mounted` before reading; its test
+  title now claims only mounted reload and no publication after unmount. Movie
+  and MDBList removal-deletion mutations must fail generation observations.
+- Watchlist retention uses a recording store: its actual saved IMDb row,
+  original storage key/value and exact write list survive policy/profile
+  refresh; rendered watchlist/resume labels remain. SharedPreferences caches
+  reads, so this is persistence/retention evidence, not a claim of instrumented
+  per-read detachment. Tracker refresh uses `MainPageBridge` notification.
+  The direct accessor rewatch call is documented as a defensive early-return
+  probe: the no-restart branch cannot be selected by the Play UI.
+- Source contracts preserve literal whitespace and distinguish interpolation
+  boundaries; code formatting and optional commas remain tolerated. The
+  relocated listener negative now starts the misplaced site on its own line.
+  Four of nine post-frame loaders have recording host callbacks in the order
+  test (`resume`, `trakt`, `simkl`, `mdblist`); the remaining five and the entire
+  invocation order are pinned by the original `initState` source guard.
+- The five Linux originals copied by Claude stay untracked and outside Step
+  0b. Their hash/provenance verification and separate commit remain required
+  before Step 6; the exact Step 0 characterization checkpoint stays `4b65c7cf`.
+
+- Original proofs: `original-step0b-final` passes all 109 cases on the owned
+  detached `21320ff9` worktree. After switching the getter to the review's
+  exact `WidgetTester.widget<DetailConsole>(...).model`, its 40 affected cases
+  pass again in `original-step0b-rendered-model`. `original-step0b-frozen`
+  passes 43 metadata/source cases and all 48 listener-format positives and
+  negatives, including the newly multiline relocation sites.
+- `step0b-original-mutations.json`: all 49 guard mutations rejected, 109/109
+  characterization identities exercised, zero uncovered. This is 48 original
+  production mutations plus one regression mutation of the test canonicalizer.
+  `step0b-named-mutation-assertions.json` verifies actual assertion failures for
+  all nine appended review-specific mutations; no compilation/loading failure
+  is accepted. The mounted-model primary swap is re-proved on the final getter.
+  `step0b-original-production-proof.json` proves the facade's original bytes
+  unchanged, with only the two removed accessor entries differing from Step 0.
+- `merged_detail/base4` is the latest base: 10,686 successes, 13 failures,
+  28 errors, 20 skips. Comparison with base3 passes with exactly three added
+  passing identities, no new failure, missing identity, newly skipped test or
+  fixed failure. The user-requested tracking-source title rename has one exact
+  correspondence in `step0b-identity-correspondence.json`; the derived
+  `base3-step0b-identities.json` retains every original outcome and its source
+  hash/SDK/tree provenance. No failure allowance or assertion is changed.
+- All seven integrated manifests with self-tests pass, as do architecture,
+  sizes, storage keys/references, theme, light-ink, CI format and staged diff.
+  Stable runs are reused after cleanup limited to test scaffolds; the one
+  IPTV run whose tree changed during execution is rerun on the final tree.
+  Whole analyzer `step0b-analyze` has exactly the formatted original's 1,639
+  diagnostic identities/multiplicities, zero additions/removals. Scoped
+  allowlist passes; strict comparison retains the maximum original baseline
+  of 42, including all four format-induced identities, with zero additions.
+  New test-support lint findings were fixed and the affected original-code
+  proofs rerun; accepted production infos remain untouched.
+- The full-suite tested tree is frozen; the subsequent checkpoint edit is
+  this Progress report only. Proof summary: `step0b-proof-summary.json`.
+
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

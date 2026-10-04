@@ -3,9 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import '../../../../support/merged_detail_source.dart';
 
-String canonical(String source) => source
-    .replaceAllMapped(RegExp(r',\s*([)\]}])'), (m) => m[1]!)
-    .replaceAll(RegExp(r'\s+'), '');
+String canonical(String source) => mergedCanonicalSource(source);
 
 void main() {
   test(
@@ -23,6 +21,22 @@ void main() {
         File(
           'dev/tool/merged_detail_public_surface.txt',
         ).readAsStringSync().trimRight(),
+      );
+    },
+  );
+  test(
+    'source canonicalization preserves literal whitespace and interpolation boundaries',
+    () {
+      expect(canonical("call( 'two words', )"), canonical("call('two words')"));
+      expect(
+        canonical("call('two words')"),
+        isNot(canonical("call('twowords')")),
+      );
+      expect(canonical(r"'${name}Suffix'"), isNot(canonical(r"'$nameSuffix'")));
+      expect(canonical(r"'${name}'"), canonical(r"'$name'"));
+      expect(
+        canonical("call(r'two words')"),
+        isNot(canonical("call(r'twowords')")),
       );
     },
   );
@@ -53,9 +67,7 @@ void main() {
   for (final entry in lazy.entries) {
     test('original lazy declaration and body specification ${entry.key}', () {
       final path = mergedMemberPath('_MergedDetailScreenState.${entry.key}');
-      final source = path == 'lib/screens/merged_series_detail_screen.dart'
-          ? File(path).readAsStringSync()
-          : mergedOriginalNames(File(path).readAsStringSync());
+      final source = mergedOriginalNames(File(path).readAsStringSync());
       expect(canonical(source), contains(canonical(entry.value as String)));
     });
   }

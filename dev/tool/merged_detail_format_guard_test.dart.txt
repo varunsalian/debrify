@@ -81,7 +81,7 @@ void main() {
             if (mutation == 'move outside declaration') {
               changed = changed.replaceFirst(
                 '  void initState()',
-                '  void misplaced() { $site }\n  void initState()',
+                '  void misplaced() {\n    $site\n  }\n  void initState()',
               );
             }
             expect(

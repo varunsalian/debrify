@@ -11,7 +11,34 @@ import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import '../../../../support/merged_detail_fixture.dart';
+
+class RecordingWatchlistStore extends InMemorySharedPreferencesStore {
+  RecordingWatchlistStore(super.data) : super.withData();
+  final watchlistWrites = <String>[];
+  @override
+  Future<bool> setValue(String type, String key, Object value) async {
+    if (key.endsWith('my_watchlist_v1')) {
+      watchlistWrites.add('set:$key');
+    }
+    return super.setValue(type, key, value);
+  }
+
+  @override
+  Future<bool> remove(String key) async {
+    if (key.endsWith('my_watchlist_v1')) {
+      watchlistWrites.add('remove:$key');
+    }
+    return super.remove(key);
+  }
+
+  Future<Map<String, Object>> watchlistRows() async => {
+    for (final entry in (await getAll()).entries)
+      if (entry.key.endsWith('my_watchlist_v1')) entry.key: entry.value,
+  };
+}
 
 void main() {
   for (final profile in [false, true]) {
@@ -25,6 +52,11 @@ void main() {
                 MetadataCategory.information: MetadataPreferences.tmdb,
               },
             ),
+          );
+          f.item = const StremioMeta(
+            id: 'merged-rec-movie',
+            type: 'movie',
+            name: 'Original Recommendations',
           );
           final stale = Completer<List<StremioMeta>>();
           final fresh = Completer<List<StremioMeta>>();
@@ -71,12 +103,18 @@ void main() {
           final cards = t
               .widgetList(
                 find.byWidgetPredicate(
-                  (w) => w.runtimeType.toString() == '_RecCard',
+                  (w) => w.runtimeType.toString() == '_ConsolePoster',
                 ),
               )
               .toList();
           expect(cards, hasLength(2));
-          (cards[1] as dynamic).onTap();
+          await t.tap(
+            find.descendant(
+              of: find.byWidget(cards[1]),
+              matching: find.byType(InkWell),
+            ),
+          );
+          await t.pump();
           expect(f.openedRecommendations, [same(originals[1])]);
           stale.complete([
             const StremioMeta(
@@ -112,6 +150,10 @@ void main() {
             name: 'Original Retention Series',
           );
           f.xtream = true;
+          final store = RecordingWatchlistStore(
+            await SharedPreferencesStorePlatform.instance.getAll(),
+          );
+          SharedPreferencesStorePlatform.instance = store;
           f.traktStatus = const TraktTitleStatus(rating: 8);
           f.simklStatus = const SimklTitleStatus(rating: 7);
           f.mdblistStatus = const MdblistTitleStatus(id: 1, rating: 6);
@@ -187,18 +229,22 @@ void main() {
           await f.mount(t);
           await f.until(
             t,
-            () => f.model.imdbExtra != null && f.model.parentsGuide != null,
+            () =>
+                f.observation.imdbExtra != null &&
+                f.observation.parentsGuide != null,
           );
-          expect(f.model.imdbExtra!.rating, 8.7);
+          expect(f.observation.imdbExtra!.rating, 8.7);
           expect(
             find.byWidgetPredicate(
               (w) => w.runtimeType.toString() == '_CastTile',
             ),
             findsNWidgets(12),
           );
-          final parents = f.model.parentsGuide;
+          final parents = f.observation.parentsGuide;
           f.next((season: 2, episode: 3, started: true), mutation: true);
-          f.model.onToggleMyWatchlist!();
+          await t.pump();
+          expect(find.text('My Watchlist'), findsOneWidget);
+          await t.tap(find.text('My Watchlist'));
           await f.until(
             t,
             () => find
@@ -206,9 +252,24 @@ void main() {
                 .evaluate()
                 .isNotEmpty,
           );
+          expect(find.text('In My Watchlist'), findsOneWidget);
+          final persisted = await store.watchlistRows();
+          expect(persisted, hasLength(1));
+          final saved = jsonDecode(persisted.values.single as String) as List;
+          expect((saved.single as Map)['item']['id'], id);
+          expect(store.watchlistWrites, hasLength(1));
+          final writesBefore = [...store.watchlistWrites];
+          final imdb = f.observation.imdbExtra;
+          final extraRequests = f.requests
+              .where(
+                (r) =>
+                    r.url.host == 'graphql.imdb.com' &&
+                    !r.body.contains('query ParentsGuide'),
+              )
+              .length;
           final generation = f.access['metadataGeneration'] as int;
           final trailer = f.access['trailerGeneration'] as int;
-          final source = f.model.boundSources.single;
+          final source = f.observation.boundSources.single;
           final parentsRequests = f.requests
               .where(
                 (r) =>
@@ -227,6 +288,8 @@ void main() {
           } else {
             MetadataPreferencesService.revision.value++;
           }
+          // Observe synchronously, before the cached future can republish.
+          expect(f.observation.imdbExtra, isNull);
           await f.until(
             t,
             () => f.access['metadataGeneration'] == generation + 1,
@@ -236,14 +299,22 @@ void main() {
           final empty = f.access['recommendations'] as List;
           empty.add(f.item);
           empty.removeLast();
-          expect(f.model.parentsGuide, same(parents));
-          expect(f.model.primaryLabel, 'Resume · S2E3');
+          expect(f.observation.parentsGuide, same(parents));
+          expect(f.observation.primaryLabel, 'Resume · S2E3');
           expect(
-            [f.model.traktRating, f.model.simklRating, f.model.mdblistRating],
+            [
+              f.observation.traktRating,
+              f.observation.simklRating,
+              f.observation.mdblistRating,
+            ],
             [8, 7, 6],
           );
-          expect(f.model.inMyWatchlist, true);
-          expect(f.model.boundSources.single, same(source));
+          expect(f.observation.inMyWatchlist, true);
+          expect(find.text('In My Watchlist'), findsOneWidget);
+          expect(find.text('Resume · S2E3'), findsOneWidget);
+          expect(await store.watchlistRows(), persisted);
+          expect(store.watchlistWrites, writesBefore);
+          expect(f.observation.boundSources.single, same(source));
           expect(
             f.calls
                 .where(
@@ -268,8 +339,87 @@ void main() {
             hasLength(parentsRequests),
           );
           f.heldRecommendations!.complete([]);
+          await f.until(t, () => f.observation.imdbExtra != null);
+          expect(f.observation.imdbExtra!.rating, 8.7);
+          expect(f.observation.imdbExtra, same(imdb));
+          expect(
+            f.requests.where(
+              (r) =>
+                  r.url.host == 'graphql.imdb.com' &&
+                  !r.body.contains('query ParentsGuide'),
+            ),
+            hasLength(extraRequests),
+          );
+        });
+      },
+    );
+  }
+  for (final profile in [false, true]) {
+    testWidgets(
+      '${profile ? 'profile' : 'policy'} reload retries uncached IMDb extra with exactly one GraphQL request',
+      (t) async {
+        await mergedDetailCase(t, (f) async {
+          await MetadataPreferencesService.save(MetadataPreferences());
+          final id = profile ? 'tt0088823' : 'tt0088824';
+          f.item = StremioMeta(
+            id: id,
+            imdbId: id,
+            type: 'movie',
+            name: 'Uncached IMDb Extra',
+          );
+          var succeed = false;
+          var extras = 0;
+          f.onRequest = (r) async {
+            if (r.url.host != 'graphql.imdb.com') {
+              return http.Response('{}', 404);
+            }
+            if (r.body.contains('query ParentsGuide')) {
+              return http.Response('{}', 404);
+            }
+            extras++;
+            return http.Response(
+              jsonEncode({
+                'data': {
+                  'title': {
+                    'ratingsSummary': {
+                      'aggregateRating': 8.9,
+                      'voteCount': 456,
+                    },
+                  },
+                },
+              }),
+              succeed ? 200 : 500,
+            );
+          };
+          await f.mount(t);
+          await f.until(t, () => extras == 1);
+          expect(f.model.imdbExtra, isNull);
+          final before = extras;
+          succeed = true;
+          if (profile) {
+            ProfileRuntime.scope.value = ProfileScope(
+              profileId: 'merged-extra-next',
+              dataGeneration: 1,
+              sessionEpoch: 1,
+            );
+          } else {
+            MetadataPreferencesService.revision.value++;
+          }
+          expect(f.observation.imdbExtra, isNull);
           await f.until(t, () => f.model.imdbExtra != null);
-          expect(f.model.imdbExtra!.rating, 8.7);
+          expect(extras, before + 1);
+          expect(f.model.imdbExtra!.rating, 8.9);
+          final requests = f.requests
+              .where(
+                (r) =>
+                    r.url.host == 'graphql.imdb.com' &&
+                    !r.body.contains('query ParentsGuide'),
+              )
+              .toList();
+          expect(requests, hasLength(before + 1));
+          expect((jsonDecode(requests.last.body) as Map)['variables'], {
+            'id': id,
+          });
         });
       },
     );
