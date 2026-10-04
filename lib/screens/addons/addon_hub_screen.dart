@@ -885,10 +885,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
             Text(
               'Manifest name: ${a.name}',
               style: TextStyle(
-                color: AppThemeScope.of(ctx).fade(
-                  AppThemeScope.of(ctx).core.tx,
-                  0.58,
-                ),
+                color: AppThemeScope.of(
+                  ctx,
+                ).fade(AppThemeScope.of(ctx).core.tx, 0.58),
                 fontSize: 12,
               ),
             ),
@@ -2869,7 +2868,9 @@ class _StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = reconnect
         ? Colors.amber
-        : enabled ? kSeeAllAccent2 : Colors.white.withValues(alpha: 0.4);
+        : enabled
+        ? kSeeAllAccent2
+        : Colors.white.withValues(alpha: 0.4);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(

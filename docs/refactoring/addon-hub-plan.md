@@ -537,6 +537,22 @@ committed tree**, reconciling each branch's approved additions.
 
 ## Progress
 
+- Step 0a starts at `fcf13373` in this dedicated worktree. `flutter pub get`
+  completed first; Flutter 3.44.8 / Dart 3.12.2; no dependency or lock changes.
+  The format-only original grows 3,415 → 3,416 lines. AST declaration structure,
+  tokens except exactly two parser-identified optional commas, comments, seven
+  bare radii and 13 shape calls are unchanged (`addon_hub/format-proof.json`).
+  The temporary oversized facade retains all responsibilities until steps 1–7;
+  this documented format raise exits through the planned extraction ratchets.
+  All parser/kernel caches live inside this worktree; shared evidence writes
+  are confined to `refactor-evidence/addon_hub/`. No branch switch or push.
+
+- Step 0a validation: six existing metadata tests pass; stable whole analyzer
+  comparison has zero added/removed identities. Initial concurrent analyzer
+  attempts are retained as inconclusive build-input evidence; both stable
+  probes use identical generated inputs and `--no-pub`. The facade has zero
+  root diagnostics. `git diff --check` passes.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
