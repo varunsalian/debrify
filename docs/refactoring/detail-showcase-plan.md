@@ -246,7 +246,13 @@ from a cross-file one. This plan therefore adds an **opt-in, file-aware
 alias-use validator** (a new config key, absent from every other manifest's
 config) covering widget, function and const aliases: in the owner file each
 alias appears only in its own declaration and uses keep the private name; in
-every other file only the alias appears. Declarations are pinned
+every other file only the alias appears. The validator and the reversal
+operate on **code identifiers and interpolation expressions only**: comment
+and string-literal contents are preserved byte-for-byte (immutable comments
+still name `_t` in metrics, `_ink` in grounds and `_SeverityMark` in
+episodes). Fixtures with an active alias prove that an unchanged private
+name inside a comment passes and that an alias substituted into that
+comment fails. Declarations are pinned
 **separately** and token-exactly: each typedef by `check_type_aliases`, and
 **every constructor target** (`showcaseXConstructor = _X.new`, and
 `showcaseCircleMarkConstructor = _Circle.mark`) and each function/const
@@ -345,7 +351,11 @@ As in the merged-detail and spotlight plans, plus:
    `lib/features/analysis_options.yaml` in a detached worktree in ignored
    `.dart_tool/`, qualifying import URIs only. Expected: 1 warning
    (`_plateFill`), 4 `prefer_const_constructors` infos (`_Badge(label: 'UP
-   NEXT')`, fmt 1648, 1651, 1821, 1824), 0 `directives_ordering`. A throwaway
+   NEXT')`, fmt 1648, 1651, 1821, 1824), and 2 `directives_ordering`
+   infos at import lines 5 and 21 that come from the import-URI qualification
+   itself (round-2 probe). They are recorded by identity as
+   qualification-induced (not formatter-induced) and must disappear once the
+   destination imports are sorted. A throwaway
    **alias probe** applies exactly the manifest's split, aliases and imports
    and must report 0 `use_key_in_widget_constructors`, 0
    `library_private_types_in_public_api` and no unused/unnecessary import;
@@ -475,10 +485,12 @@ As in the merged-detail and spotlight plans, plus:
 8. **Source-text inventory.**
    - **Shape:** 18 bare literal radii, 0 `app.shape.` calls (orig 1034, 1415,
      1454, 1605, 1610, 1683, 1768, 1782, 1842, 2360, 2362, 2438, 2571, 2616,
-     2657, 2714, 2944, 2946); formatting keeps 18. From step 1 register
-     **every destination and the facade** (zero-count files included) in
-     `kExtractedShapeResidue`, never `kShapeResidue`; the slice totals 18 at
-     every checkpoint and the facade ends at 0. The 488 token floor is
+     2657, 2714, 2944, 2946); formatting keeps 18. Register each destination
+     in `kExtractedShapeResidue` (never `kShapeResidue`) **in the commit
+     that creates it**, zero-count files included, and the facade from step
+     1 (the manifest test rejects nonexistent registered files). Because the
+     residue check is an upper bound, every checkpoint also measures and
+     asserts the slice total of exactly 18 and the facade ends at 0. The 488 token floor is
      unaffected.
    - **Theme:** `theme_surface_manifest.txt:11` (`details_themed`) gains an
      explicit `lib/features/detail_showcase/presentation/*.dart` pattern (no
