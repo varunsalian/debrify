@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -25,6 +25,9 @@ SETTINGS_FACADE = "lib/screens/settings_screen.dart"
 SETTINGS_COMPLETE = True
 IPTV_COMPLETE = True
 TORBOX_COMPLETE = True
+PLAYBACK_SETTINGS_COMPLETE = False
+PLAYBACK_SETTINGS_FACADE = "lib/screens/settings/external_player_settings_page.dart"
+PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_playback_settings/"
 PIKPAK_COMPLETE = True
 PIKPAK_FACADE = "lib/screens/pikpak/pikpak_files_screen.dart"
 PIKPAK_BRIDGE = "lib/features/pikpak_files/presentation/legacy_pikpak/"
@@ -95,6 +98,7 @@ TORRENT_PLAYBACK_PIPELINES = {
 COMPOSITION_ROOTS = {
     FACADE,
     PIKPAK_FACADE,
+    PLAYBACK_SETTINGS_FACADE,
     DEBRID_FACADE,
     IPTV_FACADE,
     # Temporary forwarding-only bridge, with its own 400-line cap.
@@ -289,6 +293,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     TORBOX_BRIDGE,
     DEBRID_BRIDGE,
     PIKPAK_BRIDGE,
+    PLAYBACK_SETTINGS_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -364,6 +369,16 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line Real-Debrid facade limit")
         if "TEMP(debrid)" in source:
             problems.append("temporary Real-Debrid cross-call remains in the facade")
+    if relative.startswith("lib/features/playback_settings/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line playback settings extraction limit")
+        if "TEMP(playback_settings)" in source and (PLAYBACK_SETTINGS_COMPLETE or not relative.startswith(PLAYBACK_SETTINGS_BRIDGE)):
+            problems.append("temporary playback settings cross-call outside the staged legacy bridge")
+    if PLAYBACK_SETTINGS_COMPLETE and relative == PLAYBACK_SETTINGS_FACADE:
+        if lines > 400:
+            problems.append(f"{lines} lines exceeds the 400-line playback settings facade limit")
+        if "TEMP(playback_settings)" in source:
+            problems.append("temporary playback settings cross-call remains in the facade")
     if relative.startswith("lib/features/pikpak_files/"):
         if lines > 500:
             problems.append(f"{lines} lines exceeds the 500-line PikPak extraction limit")
@@ -421,6 +436,8 @@ def violations(path: Path) -> list[str]:
                 resolved = (path.parent / uri).resolve()
                 if resolved.is_relative_to(ROOT):
                     target = resolved.relative_to(ROOT).as_posix()
+            if relative.startswith("lib/features/playback_settings/") and not relative.startswith(PLAYBACK_SETTINGS_BRIDGE) and target.startswith("lib/services/"):
+                problems.append("playback settings outside the legacy bridge imports a service")
             if relative.startswith("lib/features/iptv/application/") and target.startswith("lib/services/"):
                 problems.append("pure IPTV application helper imports a legacy service")
             if relative.startswith("lib/features/torbox_downloads/application/") and target.startswith("lib/services/"):
@@ -472,6 +489,10 @@ def violations(path: Path) -> list[str]:
                     other = target.split("/")[2]
                     if own != other and other in ("debrid_downloads", "torbox_downloads", "pikpak_files"):
                         problems.append("PikPak/Real-Debrid/TorBox cross-feature import")
+                if own == "playback_settings" and target == PLAYBACK_SETTINGS_FACADE:
+                    problems.append("playback settings feature imports its facade")
+                if target.startswith("lib/features/") and {own, target.split("/")[2]} in ({"playback_settings", "settings"}, {"playback_settings", "iptv_settings"}) and "/models/" not in target:
+                    problems.append("playback/settings cross-feature import outside models")
                 if own == "pikpak_files" and target == PIKPAK_FACADE:
                     problems.append("PikPak feature imports the files facade")
                 if own == "debrid_downloads" and target == DEBRID_FACADE:
@@ -494,6 +515,8 @@ def main() -> int:
         if not p.name.endswith(GENERATED_SUFFIXES)
     }
     paths.update(ROOT / p for p in EXTRACTED_ELSEWHERE)
+    if PLAYBACK_SETTINGS_COMPLETE:
+        paths.add(ROOT / PLAYBACK_SETTINGS_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:

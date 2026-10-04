@@ -882,6 +882,26 @@ As in the PikPak plan, with these specifics:
   real-config/self-test replay passes. Historical full-suite helper replay
   still reports original discrepancies; no failure inventory is changed.
 
+### Step 1 — parameter-only row builders
+
+- Move the three generic row builders into public presentation functions. Their
+  original dependency report is parameter-only; real production callers use
+  the new functions and the three separate Shortcuts/Actions bodies remain exact.
+  No owner/composition scaffold is introduced in this step.
+- Register the feature, exact legacy bridge prefix, 500-line file limits,
+  service/import boundaries and bidirectional settings/IPTV-settings bans.
+  Final facade cap/TEMP rejection remains scheduled for step 7.
+- All six manifests plus self-tests pass, including 214 playback leaves and
+  all 35 callback identities/negative fixtures. Focused `step1` compares PASS
+  against `base3`: 145 successes and the same original profile source failure.
+  Strict-symbol proof: zero additions/scaffold diagnostics; max-combined whole
+  analyzer comparison PASS. CI format, scoped analyzer/unchanged allowlist,
+  behavior selector, architecture, sizes, storage and staged diff pass.
+- Facade ratchet is lowered to 4,231 lines. Exact shape ownership moves four
+  radii into the three functions: total remains 20 radii/four token calls and
+  floor 488. Original characterization/fixture/helper/macOS PNG hashes match.
+  Linux artifacts supplied during this step remain outside this source commit.
+
 ## Found, not fixed
 
 All of these are pre-existing, and the extraction keeps each one exactly.

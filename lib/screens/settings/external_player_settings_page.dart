@@ -1,4 +1,24 @@
 import 'dart:io';
+
+import 'package:debrify/features/playback_settings/presentation/playback_checkbox_tile.dart';
+import 'package:debrify/features/playback_settings/presentation/playback_dropdown_setting.dart';
+import 'package:debrify/features/playback_settings/presentation/playback_setting_dropdown.dart';
+import 'package:debrify/models/android_video_renderer_mode.dart';
+import 'package:debrify/models/content_display_match_mode.dart';
+import 'package:debrify/screens/settings/debrify_tv_player_style_page.dart';
+import 'package:debrify/screens/settings/play_loader_style_page.dart';
+import 'package:debrify/screens/settings/playback_settings_section.dart';
+import 'package:debrify/screens/settings/player_dock_page.dart';
+import 'package:debrify/screens/settings/player_guide_style_page.dart';
+import 'package:debrify/screens/settings/subtitle_priority_page.dart';
+import 'package:debrify/screens/settings/tv_player_controls_style_page.dart';
+import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
+import 'package:debrify/screens/video_player/services/network_tuning.dart';
+import 'package:debrify/screens/video_player/services/subtitle_settings_service.dart';
+import 'package:debrify/services/analytics_service.dart';
+import 'package:debrify/services/android_native_downloader.dart';
+import 'package:debrify/services/external_player_service.dart';
+import 'package:debrify/services/skip_segment_service.dart';
 import 'package:debrify/services/storage/external_player_storage.dart';
 import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/player_network_storage.dart';
@@ -6,32 +26,15 @@ import 'package:debrify/services/storage/player_settings_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/skip_segments_storage.dart';
 import 'package:debrify/services/storage/subtitle_settings_storage.dart';
+import 'package:debrify/services/subtitle_font_service.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/utils/deovr_utils.dart' as deovr;
+import 'package:debrify/utils/platform_util.dart';
+import 'package:debrify/utils/tv_keys.dart';
+import 'package:debrify/widgets/tv_text_field.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:file_picker/file_picker.dart';
-import '../../services/external_player_service.dart';
-import '../../services/android_native_downloader.dart';
-import '../../services/subtitle_font_service.dart';
-import '../../services/analytics_service.dart';
-import '../../services/skip_segment_service.dart';
-import '../../models/android_video_renderer_mode.dart';
-import '../../models/content_display_match_mode.dart';
-import '../video_player/services/network_tuning.dart';
-import '../../utils/deovr_utils.dart' as deovr;
-import '../video_player/services/subtitle_settings_service.dart';
-import '../../utils/platform_util.dart';
-import '../../utils/tv_keys.dart';
-import '../../widgets/tv_text_field.dart';
-import 'widgets/settings_widgets.dart';
-import '../../theme/app_theme_scope.dart';
-
-import 'playback_settings_section.dart';
-import 'subtitle_priority_page.dart';
-import 'player_dock_page.dart';
-import 'tv_player_controls_style_page.dart';
-import 'debrify_tv_player_style_page.dart';
-import 'player_guide_style_page.dart';
-import 'play_loader_style_page.dart';
 
 /// One category inside Settings → Playback. Keeps the existing storage and
 /// platform-specific controls shared across the four destinations.
@@ -1937,293 +1940,6 @@ class _ExternalPlayerSettingsPageState
     );
   }
 
-  Widget _buildDropdownSetting(
-    BuildContext context, {
-    required String label,
-    required String value,
-    required Map<String, String> items,
-    required Function(String) onChanged,
-    FocusNode? focusNode,
-    bool isFocused = false,
-    bool enabled = true,
-  }) {
-    final t = AppThemeScope.of(context).settings;
-    final theme = Theme.of(context);
-
-    return Shortcuts(
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-      },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          NextFocusIntent: CallbackAction<NextFocusIntent>(
-            onInvoke: (intent) {
-              // Directional (non-wrapping): DOWN on the last row must not
-              // jump back to the top of the page.
-              FocusScope.of(context).focusInDirection(TraversalDirection.down);
-              return null;
-            },
-          ),
-          PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-            onInvoke: (intent) {
-              FocusScope.of(context).focusInDirection(TraversalDirection.up);
-              return null;
-            },
-          ),
-        },
-        child: Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: Text(
-                label,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: enabled ? null : t.dim2,
-                ),
-              ),
-            ),
-            Expanded(
-              flex: 3,
-              // Snap, don't tween — animated focus decorations jank TVs.
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: t.panel2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: enabled && isFocused ? t.accent : t.line,
-                    width: enabled && isFocused ? 2 : 1,
-                  ),
-                  boxShadow: enabled && isFocused
-                      ? [
-                          BoxShadow(
-                            color: t.accent.withValues(alpha: 0.25),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: value,
-                    focusNode: focusNode,
-                    isExpanded: true,
-                    icon: Icon(
-                      Icons.keyboard_arrow_down,
-                      color: enabled ? t.dim : t.dim2,
-                    ),
-                    items: items.entries
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e.key,
-                            child: Text(
-                              e.value,
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: enabled
-                        ? (v) {
-                            if (v != null) onChanged(v);
-                          }
-                        : null,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCheckboxTile(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required bool value,
-    required Function(bool) onChanged,
-    FocusNode? focusNode,
-    bool isFocused = false,
-  }) {
-    final t = AppThemeScope.of(context).settings;
-    final theme = Theme.of(context);
-
-    return Shortcuts(
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-      },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          NextFocusIntent: CallbackAction<NextFocusIntent>(
-            onInvoke: (intent) {
-              // Directional (non-wrapping): DOWN on the last row must not
-              // jump back to the top of the page.
-              FocusScope.of(context).focusInDirection(TraversalDirection.down);
-              return null;
-            },
-          ),
-          PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-            onInvoke: (intent) {
-              FocusScope.of(context).focusInDirection(TraversalDirection.up);
-              return null;
-            },
-          ),
-        },
-        // Snap, don't tween — animated focus decorations jank TVs.
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: isFocused ? t.panel2 : null,
-            border: isFocused ? Border.all(color: t.accent, width: 2) : null,
-            boxShadow: isFocused
-                ? [
-                    BoxShadow(
-                      color: t.accent.withValues(alpha: 0.25),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : null,
-          ),
-          child: InkWell(
-            focusNode: focusNode,
-            onTap: () => onChanged(!value),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  // The row's InkWell is the single focus stop — the inner
-                  // Checkbox must not add a second DPAD stop.
-                  ExcludeFocus(
-                    child: Checkbox(
-                      value: value,
-                      onChanged: (v) => onChanged(v ?? false),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Text(
-                          subtitle,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: t.dim,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSettingDropdown(
-    BuildContext context, {
-    required String label,
-    required int value,
-    required List<String> items,
-    required Function(int) onChanged,
-    FocusNode? focusNode,
-    bool isFocused = false,
-  }) {
-    final t = AppThemeScope.of(context).settings;
-    final theme = Theme.of(context);
-
-    return Shortcuts(
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.arrowDown): NextFocusIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowUp): PreviousFocusIntent(),
-      },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          NextFocusIntent: CallbackAction<NextFocusIntent>(
-            onInvoke: (intent) {
-              // Directional (non-wrapping): DOWN on the last row must not
-              // jump back to the top of the page.
-              FocusScope.of(context).focusInDirection(TraversalDirection.down);
-              return null;
-            },
-          ),
-          PreviousFocusIntent: CallbackAction<PreviousFocusIntent>(
-            onInvoke: (intent) {
-              FocusScope.of(context).focusInDirection(TraversalDirection.up);
-              return null;
-            },
-          ),
-        },
-        child: Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: Text(label, style: theme.textTheme.bodyMedium),
-            ),
-            Expanded(
-              flex: 3,
-              // Snap, don't tween — animated focus decorations jank TVs.
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: t.panel2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isFocused ? t.accent : t.line,
-                    width: isFocused ? 2 : 1,
-                  ),
-                  boxShadow: isFocused
-                      ? [
-                          BoxShadow(
-                            color: t.accent.withValues(alpha: 0.25),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int>(
-                    value: value.clamp(0, items.length - 1),
-                    focusNode: focusNode,
-                    isExpanded: true,
-                    icon: Icon(Icons.keyboard_arrow_down, color: t.dim),
-                    items: List.generate(items.length, (index) {
-                      return DropdownMenuItem<int>(
-                        value: index,
-                        child: Text(items[index]),
-                      );
-                    }),
-                    onChanged: (v) {
-                      if (v != null) onChanged(v);
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _defaultsCard(String title, String subtitle, List<Widget> children) {
     final theme = Theme.of(context);
     final t = AppThemeScope.of(context).settings;
@@ -2368,7 +2084,7 @@ class _ExternalPlayerSettingsPageState
               // paint the row and then drop it.
               if (PlatformUtil.isPhone) ...[
                 const SizedBox(height: 4),
-                _buildCheckboxTile(
+                buildCheckboxTile(
                   context,
                   title: 'Open the player in portrait',
                   subtitle:
@@ -2405,7 +2121,7 @@ class _ExternalPlayerSettingsPageState
                   style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
                 ),
                 const SizedBox(height: 16),
-                _buildSettingDropdown(
+                buildSettingDropdown(
                   context,
                   label: 'Mark movies watched at',
                   value: _completionThresholdIndex(_movieCompletionThreshold),
@@ -2417,7 +2133,7 @@ class _ExternalPlayerSettingsPageState
                   isFocused: _movieCompletionThresholdFocused,
                 ),
                 const SizedBox(height: 12),
-                _buildSettingDropdown(
+                buildSettingDropdown(
                   context,
                   label: 'Mark episodes watched at',
                   value: _completionThresholdIndex(_episodeCompletionThreshold),
@@ -2456,7 +2172,7 @@ class _ExternalPlayerSettingsPageState
                   style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
                 ),
                 const SizedBox(height: 8),
-                _buildCheckboxTile(
+                buildCheckboxTile(
                   context,
                   title: 'Skip intros & credits',
                   subtitle:
@@ -2467,7 +2183,7 @@ class _ExternalPlayerSettingsPageState
                   isFocused: _skipSegmentsEnabledFocused,
                 ),
                 const SizedBox(height: 12),
-                _buildDropdownSetting(
+                buildDropdownSetting(
                   context,
                   label: 'Timestamp provider',
                   value: _skipSegmentProvider,
@@ -2516,7 +2232,7 @@ class _ExternalPlayerSettingsPageState
                   style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
                 ),
                 const SizedBox(height: 16),
-                _buildDropdownSetting(
+                buildDropdownSetting(
                   context,
                   label: 'Connection patience',
                   value: _netPatience,
@@ -2526,7 +2242,7 @@ class _ExternalPlayerSettingsPageState
                   isFocused: _netPatienceFocused,
                 ),
                 const SizedBox(height: 12),
-                _buildDropdownSetting(
+                buildDropdownSetting(
                   context,
                   label: 'Stream buffer',
                   value: _netBuffer,
@@ -2562,7 +2278,7 @@ class _ExternalPlayerSettingsPageState
     return [
       _defaultsCard('Picture & decoding', 'Default picture fit and device compatibility', [
         // Default Aspect
-        _buildSettingDropdown(
+        buildSettingDropdown(
           context,
           label: 'Default Aspect',
           value: _defaultAspectIndex,
@@ -2574,7 +2290,7 @@ class _ExternalPlayerSettingsPageState
         const SizedBox(height: 12),
 
         if (_isAndroidTv || PlatformUtil.isTvOS) ...[
-          _buildDropdownSetting(
+          buildDropdownSetting(
             context,
             label: 'Match content display',
             value: _contentDisplayMatchMode.storageKey,
@@ -2620,7 +2336,7 @@ class _ExternalPlayerSettingsPageState
         // switch rather than trying to auto-detect it.
         if (Platform.isAndroid && _isAndroidTv) ...[
           const SizedBox(height: 12),
-          _buildDropdownSetting(
+          buildDropdownSetting(
             context,
             label: 'IPTV decoder',
             value: _iptvDecoderMode,
@@ -2653,7 +2369,7 @@ class _ExternalPlayerSettingsPageState
         // platforms have different decoder APIs entirely.
         if (Platform.isAndroid && !_isAndroidTv) ...[
           const SizedBox(height: 12),
-          _buildDropdownSetting(
+          buildDropdownSetting(
             context,
             label: 'Video renderer',
             value: _androidVideoRendererMode.storageKey,
@@ -2688,7 +2404,7 @@ class _ExternalPlayerSettingsPageState
         // clean-reading format, most likely.
         if (PlatformUtil.isTvOS) ...[
           const SizedBox(height: 4),
-          _buildCheckboxTile(
+          buildCheckboxTile(
             context,
             title: 'Force software video decoding',
             subtitle:
@@ -2713,7 +2429,7 @@ class _ExternalPlayerSettingsPageState
         'Language and sound output for the built-in player',
         [
           // Default Audio Language
-          _buildSettingDropdown(
+          buildSettingDropdown(
             context,
             label: 'Default Audio',
             value: _audioLanguageIndex,
@@ -2731,7 +2447,7 @@ class _ExternalPlayerSettingsPageState
           // the player screen.
           if (Platform.isAndroid) ...[
             const SizedBox(height: 4),
-            _buildCheckboxTile(
+            buildCheckboxTile(
               context,
               title: 'Allow system audio effects',
               subtitle:
@@ -2746,7 +2462,7 @@ class _ExternalPlayerSettingsPageState
             // Opt-in: a route that misreports support plays
             // silence, and only the user knows their chain.
             const SizedBox(height: 4),
-            _buildCheckboxTile(
+            buildCheckboxTile(
               context,
               title: 'Audio passthrough (AC3 · EAC3 · DTS core)',
               subtitle:
@@ -2765,7 +2481,7 @@ class _ExternalPlayerSettingsPageState
           // Opt-in until AirPlay/spatial routes are proven.
           if (PlatformUtil.isTvOS || PlatformUtil.isIosMobile) ...[
             const SizedBox(height: 4),
-            _buildCheckboxTile(
+            buildCheckboxTile(
               context,
               title: 'Multichannel audio (LPCM over HDMI)',
               subtitle:
@@ -2785,7 +2501,7 @@ class _ExternalPlayerSettingsPageState
           // waiting on a custom build.
           if (PlatformUtil.isTvOS) ...[
             const SizedBox(height: 4),
-            _buildCheckboxTile(
+            buildCheckboxTile(
               context,
               title: 'Force stereo audio',
               subtitle:
@@ -2799,7 +2515,7 @@ class _ExternalPlayerSettingsPageState
               isFocused: _tvosForceStereoFocused,
             ),
             const SizedBox(height: 4),
-            _buildCheckboxTile(
+            buildCheckboxTile(
               context,
               title: 'Use the previous audio engine',
               subtitle:
@@ -2993,7 +2709,7 @@ class _ExternalPlayerSettingsPageState
         'Preferred language and timing for the built-in player',
         [
           // Default Subtitle Language
-          _buildSettingDropdown(
+          buildSettingDropdown(
             context,
             label: 'Default Subtitle',
             value: _subtitleLanguageIndex,
@@ -3005,7 +2721,7 @@ class _ExternalPlayerSettingsPageState
           ),
 
           const SizedBox(height: 4),
-          _buildCheckboxTile(
+          buildCheckboxTile(
             context,
             title: 'Subtitles when audio differs',
             subtitle:
@@ -3019,7 +2735,7 @@ class _ExternalPlayerSettingsPageState
           ),
 
           const SizedBox(height: 4),
-          _buildCheckboxTile(
+          buildCheckboxTile(
             context,
             title: 'Forced subtitles only',
             subtitle:
@@ -3037,7 +2753,7 @@ class _ExternalPlayerSettingsPageState
           // (see PlatformUtil.supportsSubtitleAutoSync).
           if (PlatformUtil.supportsSubtitleAutoSync) ...[
             const SizedBox(height: 4),
-            _buildCheckboxTile(
+            buildCheckboxTile(
               context,
               title: 'Auto-sync addon subtitles (experimental)',
               subtitle:
@@ -3074,7 +2790,7 @@ class _ExternalPlayerSettingsPageState
               const SizedBox(height: 16),
 
               // Size
-              _buildSettingDropdown(
+              buildSettingDropdown(
                 context,
                 label: 'Size',
                 value: _subtitleSizeIndex,
@@ -3086,7 +2802,7 @@ class _ExternalPlayerSettingsPageState
               const SizedBox(height: 12),
 
               // Style
-              _buildSettingDropdown(
+              buildSettingDropdown(
                 context,
                 label: 'Style',
                 value: _subtitleStyleIndex,
@@ -3098,7 +2814,7 @@ class _ExternalPlayerSettingsPageState
               const SizedBox(height: 12),
 
               // Color
-              _buildSettingDropdown(
+              buildSettingDropdown(
                 context,
                 label: 'Color',
                 value: _subtitleColorIndex,
@@ -3110,7 +2826,7 @@ class _ExternalPlayerSettingsPageState
               const SizedBox(height: 12),
 
               // Background
-              _buildSettingDropdown(
+              buildSettingDropdown(
                 context,
                 label: 'Background',
                 value: _subtitleBgIndex,
@@ -3122,7 +2838,7 @@ class _ExternalPlayerSettingsPageState
               const SizedBox(height: 12),
 
               // Font
-              _buildSettingDropdown(
+              buildSettingDropdown(
                 context,
                 label: 'Font',
                 value: _subtitleFontIndex,
@@ -3136,7 +2852,7 @@ class _ExternalPlayerSettingsPageState
               const SizedBox(height: 12),
 
               // Bold
-              _buildSettingDropdown(
+              buildSettingDropdown(
                 context,
                 label: 'Bold',
                 value: _subtitleBold ? 1 : 0,
@@ -4177,7 +3893,7 @@ class _ExternalPlayerSettingsPageState
                     const SizedBox(height: 16),
 
                     // Screen Type dropdown
-                    _buildDropdownSetting(
+                    buildDropdownSetting(
                       context,
                       label: 'Screen Type',
                       value: _vrDefaultScreenType,
@@ -4189,7 +3905,7 @@ class _ExternalPlayerSettingsPageState
                     const SizedBox(height: 12),
 
                     // Stereo Mode dropdown
-                    _buildDropdownSetting(
+                    buildDropdownSetting(
                       context,
                       label: 'Stereo Mode',
                       value: _vrDefaultStereoMode,
@@ -4203,7 +3919,7 @@ class _ExternalPlayerSettingsPageState
               ),
               const Divider(height: 1),
               // Checkboxes
-              _buildCheckboxTile(
+              buildCheckboxTile(
                 context,
                 title: 'Auto-detect format from filename',
                 subtitle: 'Parse filename for VR markers (180, 360, SBS, etc.)',
@@ -4212,7 +3928,7 @@ class _ExternalPlayerSettingsPageState
                 focusNode: _autoDetectFocusNode,
                 isFocused: _autoDetectFocused,
               ),
-              _buildCheckboxTile(
+              buildCheckboxTile(
                 context,
                 title: 'Show format selection dialog',
                 subtitle: 'Confirm VR format before launching DeoVR',
