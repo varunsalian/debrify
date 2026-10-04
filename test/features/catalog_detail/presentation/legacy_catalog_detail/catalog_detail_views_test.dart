@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:http/http.dart' as http;
+import '../../../../support/catalog_detail_metadata_responses.dart';
 import 'package:debrify/widgets/shimmer.dart';
 import 'package:debrify/widgets/trakt/trakt_menu_helpers.dart';
 import 'package:flutter/material.dart';
@@ -120,6 +122,79 @@ void main() {
       });
     });
   }
+  testWidgets('R reachable pixel golden tv_movie_rich', (t) async {
+    await catalogDetailCase(t, (f) async {
+      f.item = f.meta(
+        name: 'Rich Original Catalog',
+        background: 'https://catalog-fixture.invalid/rich-backdrop.png',
+        poster: '',
+      );
+      f.recommendations = [
+        f.meta(id: 'rich-rec-one', name: 'Rich Recommendation One', poster: ''),
+        f.meta(id: 'rich-rec-two', name: 'Rich Recommendation Two', poster: ''),
+      ];
+      f.traktOptions = buildTraktAddOnlyMenuOptions(
+        isMovie: true,
+        isSeries: false,
+      ).take(2).toList();
+      f.onRequest = (r) async => catalogParentsRequest(r)
+          ? catalogParentsResponse()
+          : catalogImdbRequest(r)
+          ? catalogRichImdbResponse()
+          : http.Response('{}', 404);
+      await f.mount(t, size: const Size(1600, 1500), wait: false);
+      await f.until(
+        t,
+        () =>
+            t
+                .widgetList<RawImage>(find.byType(RawImage))
+                .any((w) => w.image != null) &&
+            find.byType(Shimmer).evaluate().isEmpty &&
+            find.text('Rich Actor').evaluate().isNotEmpty &&
+            find.text('Sex & Nudity').evaluate().isNotEmpty &&
+            find.text('Rich Recommendation One').evaluate().isNotEmpty,
+      );
+      await t.pump();
+      for (var i = 0; i < 12; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byType(Shimmer), findsNothing);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'detail-play');
+      expect(find.text('PG-13'), findsOneWidget);
+      expect(find.text('87'), findsOneWidget);
+      for (final marker in [
+        'Rich Actor',
+        'Sex & Nudity',
+        'Rich Recommendation One',
+        f.traktOptions.first.caption,
+      ]) {
+        expect(find.text(marker), findsWidgets);
+        expect(
+          t
+              .getRect(find.text(marker).first)
+              .overlaps(const Rect.fromLTWH(0, 0, 1600, 1500)),
+          true,
+          reason:
+              'Rich fixture section must be in the captured viewport: $marker',
+        );
+      }
+      expect(f.requests.where(catalogImdbRequest), hasLength(1));
+      expect(f.requests.where(catalogParentsRequest), hasLength(1));
+      final platform = Platform.isLinux ? 'linux' : 'macos';
+      final path = 'test/goldens/catalog_detail/$platform/tv_movie_rich.png';
+      expect(
+        File(path).existsSync() || autoUpdateGoldenFiles,
+        true,
+        reason: 'Missing original golden $path',
+      );
+      await expectLater(
+        find.byKey(const ValueKey('catalog-canvas')),
+        matchesGoldenFile(
+          '../../../../goldens/catalog_detail/$platform/tv_movie_rich.png',
+        ),
+      );
+    });
+  });
   testWidgets(
     'R tight desktop layout keeps title actions and completed reveal',
     (t) async {

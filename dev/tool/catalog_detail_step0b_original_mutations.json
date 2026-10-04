@@ -1,0 +1,223 @@
+[
+  {
+    "label": "initial-watchlist-disabled",
+    "tests": [
+      "catalog_detail_review"
+    ],
+    "must_fail": [
+      "initial saved watchlist"
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState._loadMyWatchlistState",
+        "before": "if (!_supportsMyWatchlist) return;",
+        "after": "if (true) return;"
+      }
+    ],
+    "plain_name": "initial saved watchlist"
+  },
+  {
+    "label": "parents-publication-omitted",
+    "tests": [
+      "catalog_detail_review"
+    ],
+    "must_fail": [
+      "held uncached parents"
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState._loadParentsGuide",
+        "before": "_parentsGuide = guide;",
+        "after": "_parentsGuide = null;"
+      }
+    ],
+    "plain_name": "held uncached parents"
+  },
+  {
+    "label": "accent-publication-disabled",
+    "tests": [
+      "catalog_detail_review"
+    ],
+    "must_fail": [
+      "fixture served poster"
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState._loadArtworkAccent",
+        "before": "setState(() => _artworkAccent = normaliseAccentFor(raw, app));",
+        "after": "if (false) setState(() => _artworkAccent = normaliseAccentFor(raw, app));"
+      }
+    ],
+    "plain_name": "fixture served poster"
+  },
+  {
+    "label": "back-callback-omitted",
+    "tests": [
+      "catalog_detail_review"
+    ],
+    "must_fail": [
+      "catalog back above Cover"
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState._buildBody",
+        "before": "onTap: () => Navigator.of(context).pop(),",
+        "after": "onTap: () {},"
+      }
+    ],
+    "plain_name": "catalog back above Cover"
+  },
+  {
+    "label": "back-spurious-resume-read",
+    "tests": [
+      "catalog_detail_review"
+    ],
+    "must_fail": [
+      "catalog back above Cover"
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState._buildBody",
+        "before": "onTap: () => Navigator.of(context).pop(),",
+        "after": "onTap: () { _loadResumeInfo(); Navigator.of(context).pop(); },"
+      }
+    ],
+    "plain_name": "catalog back above Cover"
+  },
+  {
+    "label": "tracking-listener-not-detached",
+    "tests": [
+      "catalog_detail_review"
+    ],
+    "must_fail": [
+      "three completion notifiers"
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState.dispose",
+        "before": "    TrackingSourceStorage.trackingSourceRevision.removeListener(\n      _onMovieProgressPolicyChanged,\n    );",
+        "after": ""
+      }
+    ],
+    "plain_name": "three completion notifiers"
+  },
+  {
+    "label": "movie-listener-not-detached",
+    "tests": [
+      "catalog_detail_review"
+    ],
+    "must_fail": [
+      "three completion notifiers"
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState.dispose",
+        "before": "    MovieProgressStorage.movieFinishedRevision.removeListener(\n      _loadLocalMovieFinished,\n    );",
+        "after": ""
+      }
+    ],
+    "plain_name": "three completion notifiers"
+  },
+  {
+    "label": "mdblist-listener-not-detached",
+    "tests": [
+      "catalog_detail_review"
+    ],
+    "must_fail": [
+      "three completion notifiers"
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState.dispose",
+        "before": "    MdblistService.instance.watchedRevision.removeListener(\n      _loadLocalMovieFinished,\n    );",
+        "after": ""
+      }
+    ],
+    "plain_name": "three completion notifiers"
+  },
+  {
+    "label": "configured-actor-omitted",
+    "tests": [
+      "catalog_detail_tmdb"
+    ],
+    "must_fail": [
+      "TMDB credits success"
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState._loadImdbEnrichment",
+        "before": "_imdbExtra = extra;",
+        "after": "_imdbExtra = extra?.withCredits(cast: const [], director: extra.director);"
+      }
+    ],
+    "plain_name": "TMDB credits success"
+  },
+  {
+    "label": "rich-original-pixels-recolored",
+    "tests": [
+      "catalog_detail_views"
+    ],
+    "must_fail": [
+      "reachable pixel golden tv_movie_rich"
+    ],
+    "edits": [
+      {
+        "member": "_BackdropState.build",
+        "before": "Color(0x44000000)",
+        "after": "Color(0xCC00FF00)"
+      }
+    ],
+    "plain_name": "reachable pixel golden tv_movie_rich"
+  },
+  {
+    "label": "pending-unmounted-recommendation-host-dispatch",
+    "tests": [
+      "catalog_detail_lifecycle"
+    ],
+    "must_fail": [
+      "held uncached loaders released after unmount"
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState._loadRecommendations",
+        "before": "      if (mounted && valid()) {",
+        "after": "      widget.onPlay();\n      if (mounted && valid()) {"
+      }
+    ],
+    "plain_name": "held uncached loaders released after unmount"
+  },
+  {
+    "label": "recommendation-mounted-guard-dropped",
+    "tests": [
+      "catalog_detail_source_contract"
+    ],
+    "must_fail": [
+      "S original _loadRecommendations "
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState._loadRecommendations",
+        "before": "        mounted &&\n",
+        "after": ""
+      }
+    ],
+    "plain_name": "S original _loadRecommendations "
+  },
+  {
+    "label": "source-loader-order-swapped",
+    "tests": [
+      "catalog_detail_source_contract"
+    ],
+    "must_fail": [
+      "S original initState "
+    ],
+    "edits": [
+      {
+        "member": "_CatalogItemDetailScreenState.initState",
+        "before": "      _loadRecommendations();\n      _loadEnrichedMeta();",
+        "after": "      _loadEnrichedMeta();\n      _loadRecommendations();"
+      }
+    ],
+    "plain_name": "S original initState "
+  }
+]

@@ -183,28 +183,30 @@ void main() {
       });
     },
   );
-  testWidgets(
-    'R held uncached loaders released after unmount publish nothing',
-    (t) async {
-      await catalogDetailCase(t, (f) async {
-        f.heldResume = Completer<CatalogResume>();
-        f.heldRecommendations = Completer();
-        await f.mount(t, wait: false);
-        await f.close(t);
-        f.calls.clear();
-        f.heldResume!.complete((started: true, season: 1, episode: 2));
-        f.heldRecommendations!.complete([
-          f.meta(name: 'Unmounted Recommendation'),
-        ]);
-        await t.pump();
-        await t.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 50)),
-        );
-        await t.pump();
-        expect(find.text('Unmounted Recommendation'), findsNothing);
-        expect(f.calls, isEmpty);
-        expect(t.takeException(), isNull);
-      });
-    },
-  );
+  testWidgets('R held uncached loaders released after unmount publish nothing', (
+    t,
+  ) async {
+    await catalogDetailCase(t, (f) async {
+      f.heldResume = Completer<CatalogResume>();
+      f.heldRecommendations = Completer();
+      await f.mount(t, wait: false);
+      expect(f.heldResume!.isCompleted, false);
+      expect(f.calls.where((c) => c == 'resume'), ['resume']);
+      // Unmount before the 12 s timeout. Release both genuinely pending reads.
+      await f.close(t, drain: Duration.zero);
+      f.calls.clear();
+      f.heldResume!.complete((started: true, season: 1, episode: 2));
+      f.heldRecommendations!.complete([
+        f.meta(name: 'Unmounted Recommendation'),
+      ]);
+      await t.pump();
+      await t.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await t.pump();
+      expect(find.text('Unmounted Recommendation'), findsNothing);
+      expect(f.calls, isEmpty);
+      expect(t.takeException(), isNull);
+    });
+  });
 }

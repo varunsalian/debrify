@@ -47,9 +47,13 @@ def main():
     p.add_argument('--original-worktree', type=Path, required=True)
     p.add_argument('--parser-package', type=Path, required=True)
     p.add_argument('--positive', default='catalog_detail/original-characterization-final')
+    p.add_argument('--cases', type=Path, default=ROOT / 'dev/tool/catalog_detail_original_mutations.json')
+    p.add_argument('--evidence-prefix', default='original')
+    p.add_argument('--coverage-fragment', action='append', default=[])
     p.add_argument('--start', type=int, default=0)
     p.add_argument('--only')
     a = p.parse_args()
+    assert a.evidence_prefix.replace('-', '').replace('_', '').isalnum()
     original = a.original_worktree.resolve()
     assert original == ROOT / '.dart_tool/catalog_detail_original'
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=original, text=True).strip()
@@ -63,14 +67,18 @@ def main():
         nodes[declaration['name']] = declaration
         for member in declaration.get('members', []):
             nodes[declaration['name'] + '.' + member['name']] = member
-    cases = json.loads((ROOT / 'dev/tool/catalog_detail_original_mutations.json').read_text())
+    cases = json.loads(a.cases.read_text())
     evidence = evidence_dir()
     positive = outcomes(evidence / (a.positive + '.jsonl'))[0]
     positive = {k: v for k, v in positive.items() if k.split('::')[0].startswith(TESTS)}
     assert set(positive.values()) == {'success'}
     positive_env = json.loads((evidence / (a.positive + '.env.json')).read_text())
     assert not positive_env['tree_changed_during_run'] and not positive_env['untracked_paths']
-    progress = evidence / 'catalog_detail/original-mutations-progress.json'
+    required = {k for k in positive if not a.coverage_fragment or any(f in k for f in a.coverage_fragment)}
+    assert required
+    for fragment in a.coverage_fragment:
+        assert any(fragment in k for k in required), fragment
+    progress = evidence / f'catalog_detail/{a.evidence_prefix}-mutations-progress.json'
     results = json.loads(progress.read_text()) if (a.start or a.only) and progress.exists() else []
     fixture_paths = sorted((original / 'test/goldens/catalog_detail').rglob('*.png'))
     fixture_hashes = {str(f.relative_to(original)): hashlib.sha256(f.read_bytes()).hexdigest() for f in fixture_paths}
@@ -97,7 +105,7 @@ def main():
                 versions[member] = replacement
             else:
                 changed = replacement
-        label = f'catalog_detail/original-negative-{index:02d}-{case["label"]}'
+        label = f'catalog_detail/{a.evidence_prefix}-negative-{index:02d}-{case["label"]}'
         try:
             (original / FACADE).write_text(changed)
             command = ['python3', 'dev/tool/suite_evidence.py', 'run', label,
@@ -129,9 +137,10 @@ def main():
     output = {'original_revision': revision, 'execution_base': EXECUTION_BASE,
               'positive': a.positive, 'positive_tested_tree': positive_env['tested_tree'],
               'fixture_sha256': fixture_hashes, 'results': results,
-              'covered': sorted(covered), 'uncovered': sorted(set(positive) - covered)}
-    (evidence / 'catalog_detail/original-mutations.json').write_text(json.dumps(output, indent=2) + '\n')
-    print(f'{len(results)} mutations rejected; {len(covered)}/{len(positive)} original test identities exercised')
+              'cases': str(a.cases), 'required': sorted(required),
+              'covered': sorted(covered), 'uncovered': sorted(required - covered)}
+    (evidence / f'catalog_detail/{a.evidence_prefix}-mutations.json').write_text(json.dumps(output, indent=2) + '\n')
+    print(f'{len(results)} mutations rejected; {len(covered & required)}/{len(required)} required original test identities exercised')
     assert not output['uncovered'], output['uncovered']
 
 

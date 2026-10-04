@@ -3,16 +3,19 @@
 set -euo pipefail
 repo="$(git rev-parse --show-toplevel)"
 format_subject='style(catalog): format the original catalog detail screen'
-checkpoint_subject='test(catalog): step 0 original-code characterization checkpoint'
+checkpoint_subject='test(catalog): step 0b original-code review checkpoint'
 resolve_subject() {
   local expected="$1"
-  local revision
-  revision="$(git log -1 --format=%H --fixed-strings --grep="$expected" HEAD)"
-  if [[ -z "$revision" || "$(git show -s --format=%s "$revision")" != "$expected" ]]; then
-    printf 'Missing exact subject: %s\n' "$expected" >&2
-    exit 1
-  fi
-  printf '%s\n' "$revision"
+  local history revision subject
+  history="$(git log --format=%H%x09%s HEAD)"
+  while IFS=$'\t' read -r revision subject; do
+    if [[ "$subject" == "$expected" ]]; then
+      printf '%s\n' "$revision"
+      return 0
+    fi
+  done <<< "$history"
+  printf 'Missing exact subject: %s\n' "$expected" >&2
+  exit 1
 }
 formatted="$(resolve_subject "$format_subject")"
 checkpoint="$(resolve_subject "$checkpoint_subject")"
@@ -44,15 +47,17 @@ git diff --exit-code -- pubspec.lock
 for input in lib pubspec.yaml pubspec.lock; do
   [[ "$(git rev-parse "HEAD:$input")" == "$(git rev-parse "$formatted:$input")" ]]
 done
+git ls-files -z 'test/goldens/catalog_detail/linux/*.png' | xargs -0 sha256sum > "$capture_root/.dart_tool/existing-linux.sha256"
 flutter test --no-pub --update-goldens \
   test/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_views_test.dart \
-  --plain-name 'reachable pixel golden' 2>&1 | tee "$evidence/linux-original-capture.txt"
+  --plain-name 'reachable pixel golden tv_movie_rich' 2>&1 | tee "$evidence/linux-rich-original-capture.txt"
 flutter test --no-pub \
   test/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_views_test.dart \
-  --plain-name 'reachable pixel golden' 2>&1 | tee "$evidence/linux-original-strict.txt"
+  --plain-name 'reachable pixel golden' 2>&1 | tee "$evidence/linux-rich-original-strict.txt"
+sha256sum --check "$capture_root/.dart_tool/existing-linux.sha256"
 mkdir -p "$repo/test/goldens/catalog_detail/linux"
-cp test/goldens/catalog_detail/linux/*.png "$repo/test/goldens/catalog_detail/linux/"
-sha256sum test/goldens/catalog_detail/linux/*.png | tee "$evidence/linux-original-sha256.txt"
-printf '%s\n' "$checkpoint" | tee "$evidence/linux-original-revision.txt"
-printf '%s\n' "$formatted" > "$evidence/linux-original-format-revision.txt"
-printf '%s\n' 'Four ORIGINAL Linux goldens copied. Verify provenance and hashes, commit separately, then make the Linux test always strict. Never regenerate against moved code.'
+cp test/goldens/catalog_detail/linux/tv_movie_rich.png "$repo/test/goldens/catalog_detail/linux/"
+sha256sum test/goldens/catalog_detail/linux/tv_movie_rich.png | tee "$evidence/linux-rich-original-sha256.txt"
+printf '%s\n' "$checkpoint" | tee "$evidence/linux-rich-original-revision.txt"
+printf '%s\n' "$formatted" > "$evidence/linux-rich-original-format-revision.txt"
+printf '%s\n' 'Rich ORIGINAL Linux golden copied; five strict originals passed. Verify provenance and hashes and commit this asset separately. Never regenerate against moved code.'

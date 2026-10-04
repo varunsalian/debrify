@@ -629,8 +629,8 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   no changed original identity, missing test or newly skipped test. Runner flags
   are recorded separately (`--no-pub`); its full-suite paths list is empty.
   Tested tree `176bae456cf23a5671a88e318c640674c3f516f7` is stable.
-  This is the latest catalog base for both later gates. Gate 1 and gate 2 have
-  not run yet. Every new concrete test and the three already-passing original
+  This was the latest catalog base at step 0; step 0b below replaces it for
+  both later gates. Gate 1 and gate 2 have not run yet. Every new concrete test and the three already-passing original
   hold cases are on the CI list; the known-failure list is unchanged.
 - Step 0 inventories: original shape has 29 bare-radius sites and no tokens;
   theme remains 238 sites (formatting alone raises its measured line total to
@@ -660,18 +660,112 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
 - Linux handoff script uses the exact named checkpoint and format-only original,
   verifies their application objects match, captures in an owned detached
   worktree and replays strict originals before copying four PNGs. `bash -n`
-  passes; it has no early-exit producer pipeline. Linux originals are not yet
-  present, so step 0L and all moves remain pending. Until original pixels arrive,
-  the Linux-only missing-master skip exists solely for this checkpoint; step 0L
-  removes it and the opt-out define in a separate provenance/asset commit.
+  passes; it has no early-exit producer pipeline. At the step-0 checkpoint,
+  Linux originals were absent and step 0L and all moves remained pending. The
+  Linux-only missing-master skip existed solely for that checkpoint; step 0L
+  below removed it and the opt-out define in a separate provenance/asset commit.
 
 
-- Step 0L: four Linux original hashes and exact checkpoint/format application
+- Step 0L (`66025710`): four Linux original hashes and exact checkpoint/format application
   objects verified from Claude's calibrated linux/amd64 Docker capture at
   `093f4707`; supplied strict replay passed 4/4. Provenance and evidence hashes
   are committed in `test/goldens/catalog_detail/linux-original-verification.json`.
   Linux golden tests now require every master unconditionally: missing-master
   skip and opt-out define removed. These four assets are committed separately.
+
+
+- Step 0b independent review (application remains format-only ORIGINAL):
+  five new executable cases cover initially saved watchlist state, an uncached
+  held parents-guide response, a fixture-served non-empty poster publishing a
+  non-null artwork accent, Back from a catalog above Cover without a
+  `didPopNext` resume read, and all three completion notifiers' `hasListeners`
+  becoming false after close. Existing listener source guards remain enforced.
+  A test-only dynamic getter reads Flutter's protected public listener probe on
+  the borrowed singleton instances; no production seam or analyzer suppression.
+- Conservative poster fixture decision: serve and decode the fixed PNG through
+  the recording HTTP fixture, then prime Flutter's exact 32 px image-cache key.
+  The unchanged production `DominantColorCache`, pixel extraction, theme
+  normalization and `ArtworkAccentScope` publication execute normally. Native
+  disk caching is outside this view-publication test; its stalled draft is not
+  parity evidence. Each poster URL and metadata id is unique to its fixture.
+- The existing held-unmount case now closes with zero fake-clock drain, asserts
+  its resume loader has started and remains pending, then releases both reads
+  before the 12 s timeout. All original assertions stay. The configured-TMDB
+  credits child also asserts `Configured Actor`. The full nine-loader invocation
+  order is explicitly class **S**, pinned by `initState`; the five recorded host
+  emissions are **O**, an observed asynchronous sequence. Private swallowed
+  post-dispose updates are not claimed observable from the no-error assertion.
+- Fifth macOS master: `tv_movie_rich`, captured only on ORIGINAL and replayed
+  strictly, includes fixture recommendations, cast, IMDb certificate/metascore,
+  quick actions and parents guide. Readiness requires each section; viewport
+  assertions ensure it is in the captured 1600 x 1500 surface. It uses the same
+  fixed 1.2 s timeline; all eight existing platform masters retain their bytes.
+  Rich Linux ORIGINAL is still pending; its test is strict and has no skip.
+- Step 0b original proof: 79/79 positive identities in
+  `catalog_detail/step0b-original-characterization-final-format`; 13 additional
+  assertion-rejected mutations in
+  `catalog_detail/step0b-final-original-mutations.json` cover all six new
+  identities, both strengthened cases, and the mounted-guard and loader-order
+  S contracts. Combined with unchanged step-0 negatives, all 79 identities are
+  covered. Mutation fixtures/pixels are immutable and production bytes restored.
+  `step0b-original-checkpoint-proof.json` records application object equality,
+  fixture hashes, capture provenance and stable original positive tree
+  `25bba9fed00eb4ccea7a809af52863fe3b88c43b`. The direct protected-getter draft
+  added three analyzer warnings; it was rejected, replaced by the test-only
+  probe, and all positives and negatives rerun on the final fixture bytes.
+- Rich Linux handoff: capture script resolves exact subjects via the first
+  matching `%H%x09%s` history row, rejecting substrings and avoiding producer
+  SIGPIPE under `pipefail`. It selects exact
+  `test(catalog): step 0b original-code review checkpoint`, verifies lib/pubspec
+  objects equal the format-only original, captures only the new rich master,
+  strictly replays all five, and verifies the existing four Linux hashes. New
+  evidence uses `linux-rich-original-*`; it copies only the rich PNG. Preserve
+  the separate Linux asset commit boundary after Claude supplies it.
+- Intermediate full-suite base `catalog_detail/base0b`: 11,172 successes /
+  13 failures / 28 errors / 20 skips, versus `base2` exactly six passing
+  additions and every previous identity/outcome unchanged; no missing test or
+  new skip. Runner flags are separately `--no-pub`, paths empty, tested tree
+  `0dc9e71fb050321285650c5b3d47b5f41385abf5` stable with no untracked inputs.
+  This pass precedes fixture normalization; the final base is recorded below.
+  `step0b-base-comparison.txt` and `step0b-base-verdict.json` retain the result.
+- Step 0b analyzer: root remains 1,667 identities, zero additions/removals;
+  CI allowlist matches all 12 existing entries; all eight characterization
+  files and six support helpers have zero diagnostics; strict catalog remains
+  the same 21 identities, zero additions/removals. The exact-import temporary
+  strict config is removed. Application objects remain identical to format-only
+  ORIGINAL, and the facade remains 3,561 lines with its recorded breakdown.
+- Step 0b checker closure: all eleven manifests and their self-tests pass with
+  their own configs/original baselines and the isolated parser. Architecture,
+  size, storage map/bodies/keys/references (including self-tests), theme and
+  light-ink checks pass with unchanged inventories; original shape is still
+  29 bare-radius sites / zero tokens. CI format plus facade, all six helpers
+  and the changed TMDB fixture text passes. That fixture's pre-existing compact
+  formatting was normalized; parser proof confirms unchanged declaration
+  tokens/comments/literals apart from formatter commas. Originals and all
+  thirteen negatives were rerun after normalization. Check commands/results
+  are in `step0b-checks.json`; resolver substring/first-match negatives and
+  Bash syntax pass. No CI failure or analyzer allowlist entry was added.
+- Full-suite candidate `base0b-final` after fixture normalization was rejected:
+  one additional teardown failure in unchanged
+  `iptv_catalog_refresh_service_test` (first movie search: download directory
+  still present). No failure-list change or assertion edit. All catalog cases
+  passed. The IPTV file then passed 12/12 here and 12/12 in ORIGINAL. Its test
+  and service bytes equal the execution base. Inferred timing risk: teardown's
+  resumed notification launches unawaited discovery of VOD/series/live, waits a
+  fixed 150 ms and does not await those discovered jobs; disposal cancels timers,
+  not a running download. This unchanged-slice risk is found, not fixed. The
+  rejected comparison is retained in `step0b-base-final-rejected.txt`.
+- **Latest catalog base:** `catalog_detail/base0b-final-rerun` after all final
+  fixture bytes: 11,172 successes / 13 failures / 28 errors / 20 skips. Versus
+  `base2`, exactly six passing additions and every old identity unchanged;
+  versus the intermediate `base0b`, identical outcomes. No missing/newly skipped
+  test. The IPTV first-search case passes again. Same default full suite with
+  flags separately `--no-pub`, paths empty; stable tested tree
+  `2ea453f3e96c3a8de209f0cb99954a3df83382af`, zero untracked inputs. Both later gates
+  compare against this base; gate 2 also against gate 1. Final evidence:
+  `step0b-base-final-comparison.txt` and `step0b-base-final-verdict.json`.
+  Steps 1–6 and both gates remain pending. Stop after the named step-0b checkpoint
+  for ORIGINAL rich Linux; no builders or application responsibilities moved.
 
 
 ## Found, not fixed

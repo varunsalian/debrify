@@ -219,10 +219,13 @@ class CatalogDetailFixture {
     await until(t, () => calls.contains('resume'));
   }
 
-  Future<void> close(WidgetTester t) async {
+  Future<void> close(
+    WidgetTester t, {
+    Duration drain = const Duration(seconds: 13),
+  }) async {
     if (closed++ == 0) {
       await t.pumpWidget(const SizedBox.shrink());
-      await t.pump(const Duration(seconds: 13));
+      await t.pump(drain);
       await t.pump();
       t.view.reset();
       PlatformUtil.debugSetAndroidTvCached(null);
