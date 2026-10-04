@@ -515,8 +515,8 @@ each parallel branch's additions, before claiming parity.
 - Latest baseline is `iptv_settings/base3`: 10,686 successes, the same 13
   failures / 28 errors / 20 skips; PASS versus base2 with exactly 109 added
   successful identities and no regressions/missing/new skips. Original proof
-  `original-characterization`: 131 successes / the same observed profile log
-  guard failure; PASS against base3. Its tested staged tree is
+  `original-characterization`: 131 successes / the same observed direct-SharedPreferences
+  source-guard failure; PASS against base3. Its tested staged tree is
   `af981a48385d3819f9b032e93feb4f609630ac72`, with no untracked inputs or tree
   change; all 14 new test/body/helper/PNG inputs are byte-identical here.
 - All seven manifest/self-test runs PASS (Settings 316, IPTV 384, TorBox 195,
@@ -534,6 +534,21 @@ each parallel branch's additions, before claiming parity.
   any step-5 builder moves. Android engine/battery, physical Android TV and
   provider accounts remain device-only pending checks. Remote CI and merged-
   tree integration are pending Claude; no push or branch switch.
+
+- Step 1 complete: enum and edit value object are public models; the pure
+  normalizer is a top-level application function. Production calls and the
+  frozen accessor point directly to it. Exact bridge/import/500-line rules
+  are registered with real positive and negative architecture checks; facade
+  completion cap remains staged for Step 7. Theme, TV and shape readers cover
+  the three destinations. Facade ratchet: 4,524 lines.
+  `step1`: 131 successes / the unchanged observed source-guard failure, PASS
+  versus latest base3, zero added/missing/newly skipped identities or new
+  failures. Staged tested tree `491a7f551d71b7c10ffc944ab10be6b5b523b783`, no untracked
+  inputs or change during run. All seven manifest/self-tests, exact CI format
+  and analysis/five-warning allowlist, architecture/negative fixtures, sizes,
+  storage references/self-tests/314 keys, capture-shell syntax and diff PASS.
+  Whole analyzer remains 1,635, zero added/removed; per-symbol strict evidence
+  PASS. All 109 characterization assertions and four PNGs remain unchanged.
 
 ## Found, not fixed
 
@@ -571,4 +586,3 @@ All pre-existing; the extraction keeps each exactly.
 - The 400-pixel narrow source form has pre-existing tab-row overflow; it is
   retained. URL/Xtream stale post-persistence throws can retain busy flags.
 - Stale comments (133; `lib/theme/app_looks.dart:22`).
-

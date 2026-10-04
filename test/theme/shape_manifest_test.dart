@@ -199,6 +199,10 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/iptv_settings/models/iptv_settings_phone_section.dart': 0,
+  'lib/features/iptv_settings/models/iptv_settings_playlist_edit.dart': 0,
+  'lib/features/iptv_settings/application/normalize_xtream_server_url.dart': 0,
+
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_workflows_composition.dart':
       0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_state.dart':

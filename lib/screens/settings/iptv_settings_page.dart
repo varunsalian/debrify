@@ -1,3 +1,6 @@
+import 'package:debrify/features/iptv_settings/models/iptv_settings_phone_section.dart';
+import 'package:debrify/features/iptv_settings/models/iptv_settings_playlist_edit.dart';
+import 'package:debrify/features/iptv_settings/application/normalize_xtream_server_url.dart';
 import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 
@@ -46,23 +49,6 @@ import 'iptv_settings_two_pane.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_looks.dart';
 import '../../theme/app_theme_scope.dart';
-
-/// The narrow (phone / small-window) layout's destinations. The wide layout
-/// keeps its rail + pane; this is the phone-native equivalent — a hub page of
-/// section rows, each opening a focused sub-view inside the SAME route (back
-/// returns to the hub via PopScope, so section state and the add-form
-/// controllers survive the trip).
-enum _PhoneSection {
-  hub,
-  sources,
-  lists,
-  categoryOrder,
-  hidden,
-  startup,
-  channelPreview,
-  continueWatching,
-  recording,
-}
 
 class IptvSettingsPage extends StatefulWidget {
   const IptvSettingsPage({super.key, this.openAddSource = false});
@@ -258,10 +244,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   // Ids of playlists currently being refreshed (re-fetched from source)
   final Set<String> _refreshingIds = {};
 
-  /// Where the narrow layout is (see [_PhoneSection]). The wide layout never
-  /// reads it and forces it back to [_PhoneSection.hub] so a resize can't
+  /// Where the narrow layout is (see [IptvSettingsPhoneSection]). The wide layout never
+  /// reads it and forces it back to [IptvSettingsPhoneSection.hub] so a resize can't
   /// strand back-handling in a sub-view that no longer renders.
-  _PhoneSection _phoneSection = _PhoneSection.hub;
+  IptvSettingsPhoneSection _phoneSection = IptvSettingsPhoneSection.hub;
 
   /// The hub's first row (Sources) — DOWN from the back button and the
   /// narrow TV entry both land here, mirroring how the old single column
@@ -283,7 +269,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   /// focused row is about to unmount, which would strand DPAD on the bare
   /// FocusScope — hand it to the new view's first control instead. Touch
   /// keeps its no-focus-ring behavior (the guard below never fires there).
-  void _enterPhoneSection(_PhoneSection section) {
+  void _enterPhoneSection(IptvSettingsPhoneSection section) {
     setState(() => _phoneSection = section);
     if (!PlatformUtil.isAndroidTvCached) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -305,7 +291,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _tabController.addListener(_onTabChanged);
     // An "Add playlist" deep-link lands on the Sources sub-view, where the
     // add forms live — the hub would be an extra hop the user didn't ask for.
-    if (widget.openAddSource) _phoneSection = _PhoneSection.sources;
+    if (widget.openAddSource) _phoneSection = IptvSettingsPhoneSection.sources;
     _loadSettings();
   }
 
@@ -753,7 +739,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         // Narrow: an add-source deep-link opened straight onto the Sources
         // sub-view where the URL tab is mounted; a normal entry sits on the
         // hub, whose first row is the landing.
-        if (_phoneSection == _PhoneSection.sources) {
+        if (_phoneSection == IptvSettingsPhoneSection.sources) {
           _urlTabFocusNode.requestFocus();
         } else {
           _hubSourcesFocusNode.requestFocus();
@@ -972,39 +958,6 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     }
   }
 
-  /// Normalize a user-entered Xtream server URL: add a scheme when missing,
-  /// strip a trailing get.php/player_api.php endpoint and any query, and drop a
-  /// trailing slash — keeping a base path so panels behind a path prefix still
-  /// work. Returns null when the input has no valid host. Shared by add and
-  /// edit so both accept the same pasted forms.
-  String? _normalizeXtreamServerUrl(String raw) {
-    var serverUrl = raw.trim();
-    if (serverUrl.isEmpty) return null;
-    if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
-      serverUrl = 'http://$serverUrl';
-    }
-    final serverUri = Uri.tryParse(serverUrl);
-    if (serverUri == null || serverUri.host.isEmpty) return null;
-    final pathSegments = serverUri.pathSegments
-        .where((s) => s.isNotEmpty)
-        .toList();
-    if (pathSegments.isNotEmpty && pathSegments.last.endsWith('.php')) {
-      pathSegments.removeLast();
-    }
-    serverUrl = Uri(
-      scheme: serverUri.scheme,
-      // Keep basic-auth credentials if the pasted URL carried them.
-      userInfo: serverUri.userInfo.isEmpty ? null : serverUri.userInfo,
-      host: serverUri.host,
-      port: serverUri.hasPort ? serverUri.port : null,
-      pathSegments: pathSegments,
-    ).toString();
-    if (serverUrl.endsWith('/')) {
-      serverUrl = serverUrl.substring(0, serverUrl.length - 1);
-    }
-    return serverUrl;
-  }
-
   Future<void> _addXtreamCodes() =>
       _runProfileAction(_addXtreamCodesForProfile);
 
@@ -1028,7 +981,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       return;
     }
 
-    final serverUrl = _normalizeXtreamServerUrl(server);
+    final serverUrl = normalizeXtreamServerUrl(server);
     if (serverUrl == null) {
       _showSnackBar('Please enter a valid server URL');
       return;
@@ -1699,7 +1652,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       _runProfileAction(() => _editPlaylistForProfile(playlist));
 
   Future<void> _editPlaylistForProfile(IptvPlaylist playlist) async {
-    final result = await showDialog<_PlaylistEdit>(
+    final result = await showDialog<IptvSettingsPlaylistEdit>(
       context: context,
       builder: (context) => Theme(
         data: settingsPageTheme(context),
@@ -1726,7 +1679,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // Normalize an edited Xtream server URL the same way add does.
     String? newServerUrl = playlist.serverUrl;
     if (playlist.isXtreamCodes) {
-      newServerUrl = _normalizeXtreamServerUrl(result.serverUrl ?? '');
+      newServerUrl = normalizeXtreamServerUrl(result.serverUrl ?? '');
       if (newServerUrl == null) {
         _showSnackBar('Please enter a valid server URL');
         return;
@@ -2056,22 +2009,22 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       // back and the AppBar back go through maybePop, so one gesture
       // contract covers both. The wide layout always sits on `hub` (the
       // LayoutBuilder below forces it), so it pops normally.
-      canPop: _phoneSection == _PhoneSection.hub,
+      canPop: _phoneSection == IptvSettingsPhoneSection.hub,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop || !mounted) return;
-        _enterPhoneSection(_PhoneSection.hub);
+        _enterPhoneSection(IptvSettingsPhoneSection.hub);
       },
       child: SettingsPageScaffold(
         title: switch (_phoneSection) {
-          _PhoneSection.hub => 'IPTV Playlists',
-          _PhoneSection.sources => 'Sources',
-          _PhoneSection.lists => 'Channel Lists',
-          _PhoneSection.categoryOrder => 'Category Order',
-          _PhoneSection.hidden => 'Hidden Categories',
-          _PhoneSection.startup => 'Startup',
-          _PhoneSection.channelPreview => 'Channel Preview',
-          _PhoneSection.continueWatching => 'Continue Watching',
-          _PhoneSection.recording => 'Recording',
+          IptvSettingsPhoneSection.hub => 'IPTV Playlists',
+          IptvSettingsPhoneSection.sources => 'Sources',
+          IptvSettingsPhoneSection.lists => 'Channel Lists',
+          IptvSettingsPhoneSection.categoryOrder => 'Category Order',
+          IptvSettingsPhoneSection.hidden => 'Hidden Categories',
+          IptvSettingsPhoneSection.startup => 'Startup',
+          IptvSettingsPhoneSection.channelPreview => 'Channel Preview',
+          IptvSettingsPhoneSection.continueWatching => 'Continue Watching',
+          IptvSettingsPhoneSection.recording => 'Recording',
         },
         leading: _TvFocusableBackButton(
           focusNode: _backButtonFocusNode,
@@ -2084,7 +2037,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               _twoPaneKey.currentState?.focusRail();
               return;
             }
-            if (_phoneSection != _PhoneSection.sources) {
+            if (_phoneSection != IptvSettingsPhoneSection.sources) {
               // The back button swallows DOWN whenever a handler exists, so
               // hand focus somewhere real: whichever view is up, its first
               // focusable row (on the hub that's the Sources row).
@@ -2119,8 +2072,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             // PopScope's canPop and the scaffold title), so a bare field
             // assignment would leave them stale indefinitely — schedule a
             // rebuild for them.
-            if (twoPane && _phoneSection != _PhoneSection.hub) {
-              _phoneSection = _PhoneSection.hub;
+            if (twoPane && _phoneSection != IptvSettingsPhoneSection.hub) {
+              _phoneSection = IptvSettingsPhoneSection.hub;
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) setState(() {});
               });
@@ -2217,15 +2170,16 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         canRequestFocus: false,
         skipTraversal: true,
         child: switch (_phoneSection) {
-          _PhoneSection.hub => _buildPhoneHub(),
-          _PhoneSection.sources => _buildSourcesView(),
-          _PhoneSection.lists => _buildListsView(),
-          _PhoneSection.categoryOrder => _buildCategoryOrderView(),
-          _PhoneSection.hidden => _buildHiddenView(),
-          _PhoneSection.startup => _buildStartupView(),
-          _PhoneSection.channelPreview => _buildChannelPreviewView(),
-          _PhoneSection.continueWatching => _buildContinueWatchingView(),
-          _PhoneSection.recording => _buildRecordingView(),
+          IptvSettingsPhoneSection.hub => _buildPhoneHub(),
+          IptvSettingsPhoneSection.sources => _buildSourcesView(),
+          IptvSettingsPhoneSection.lists => _buildListsView(),
+          IptvSettingsPhoneSection.categoryOrder => _buildCategoryOrderView(),
+          IptvSettingsPhoneSection.hidden => _buildHiddenView(),
+          IptvSettingsPhoneSection.startup => _buildStartupView(),
+          IptvSettingsPhoneSection.channelPreview => _buildChannelPreviewView(),
+          IptvSettingsPhoneSection.continueWatching =>
+            _buildContinueWatchingView(),
+          IptvSettingsPhoneSection.recording => _buildRecordingView(),
         },
       ),
     );
@@ -2263,7 +2217,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   ? 'None yet — add your first playlist'
                   : '${_playlists.length} '
                         '${_playlists.length == 1 ? 'source' : 'sources'}',
-              onTap: () async => _enterPhoneSection(_PhoneSection.sources),
+              onTap: () async =>
+                  _enterPhoneSection(IptvSettingsPhoneSection.sources),
             ),
             SettingsTile(
               icon: Icons.update_rounded,
@@ -2279,7 +2234,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   ? 'Favorites only'
                   : 'Favorites + ${_customLists.length} '
                         '${_customLists.length == 1 ? 'list' : 'lists'}',
-              onTap: () async => _enterPhoneSection(_PhoneSection.lists),
+              onTap: () async =>
+                  _enterPhoneSection(IptvSettingsPhoneSection.lists),
             ),
             SettingsTile(
               icon: Icons.reorder_rounded,
@@ -2293,7 +2249,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                 title: 'Category order',
                 subtitle: 'Arrange categories by source',
                 onTap: () async =>
-                    _enterPhoneSection(_PhoneSection.categoryOrder),
+                    _enterPhoneSection(IptvSettingsPhoneSection.categoryOrder),
               ),
             if (_hideableSources.isNotEmpty)
               SettingsTile(
@@ -2304,7 +2260,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                     : '$hiddenTotal '
                           '${hiddenTotal == 1 ? 'category' : 'categories'} '
                           'hidden',
-                onTap: () async => _enterPhoneSection(_PhoneSection.hidden),
+                onTap: () async =>
+                    _enterPhoneSection(IptvSettingsPhoneSection.hidden),
               ),
             SettingsTile(
               icon: Icons.rocket_launch_rounded,
@@ -2314,7 +2271,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   : _startupMode == StartupIptvStorage.startupIptvModeLast
                   ? 'Last watched channel'
                   : _startupChannelLabel,
-              onTap: () async => _enterPhoneSection(_PhoneSection.startup),
+              onTap: () async =>
+                  _enterPhoneSection(IptvSettingsPhoneSection.startup),
             ),
             SettingsTile(
               icon: Icons.ondemand_video_rounded,
@@ -2323,7 +2281,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   ? 'On · uses a provider stream while browsing'
                   : 'Off · no stream until you press Watch',
               onTap: () async =>
-                  _enterPhoneSection(_PhoneSection.channelPreview),
+                  _enterPhoneSection(IptvSettingsPhoneSection.channelPreview),
             ),
             SettingsTile(
               icon: Icons.history_toggle_off_rounded,
@@ -2332,7 +2290,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   ? 'Tracking movies and series'
                   : 'Off',
               onTap: () async =>
-                  _enterPhoneSection(_PhoneSection.continueWatching),
+                  _enterPhoneSection(IptvSettingsPhoneSection.continueWatching),
             ),
             // The looks land on the same standalone pickers the Appearance
             // settings section uses — one implementation per pref.
@@ -2362,7 +2320,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                           ? 'Engine on'
                           : 'Engine on · $_scheduledCount scheduled')
                     : 'Player-tied',
-                onTap: () async => _enterPhoneSection(_PhoneSection.recording),
+                onTap: () async =>
+                    _enterPhoneSection(IptvSettingsPhoneSection.recording),
               ),
           ],
         ),
@@ -3528,26 +3487,6 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
   }
 }
 
-/// The edited values a [_EditPlaylistDialog] returns. Only the fields relevant
-/// to the playlist's type are populated; the caller rebuilds the playlist.
-class _PlaylistEdit {
-  const _PlaylistEdit({
-    required this.name,
-    required this.url,
-    required this.serverUrl,
-    required this.username,
-    required this.password,
-    required this.epgUrl,
-  });
-
-  final String name;
-  final String url; // M3U URL playlists only
-  final String? serverUrl; // Xtream only
-  final String? username; // Xtream only
-  final String? password; // Xtream only
-  final String? epgUrl;
-}
-
 /// Confirmation used when an Admin removes a source granted to other profiles.
 /// Public so its remote-key contract can be covered without bootstrapping the
 /// entire profile-backed settings page in a widget test.
@@ -3786,7 +3725,7 @@ class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
       return;
     }
     Navigator.of(context).pop(
-      _PlaylistEdit(
+      IptvSettingsPlaylistEdit(
         name: _nameController.text.trim(),
         url: _urlController.text.trim(),
         serverUrl: _isXtream ? _serverController.text.trim() : null,
@@ -4563,7 +4502,7 @@ Map<String, dynamic> iptvSettingsTestAccess(State state) {
     'openScheduledRecordings': s._openScheduledRecordings,
     'requestBatteryExemption': s._requestBatteryExemption,
     'runProfileAction': s._runProfileAction,
-    'normalizeXtreamServerUrl': s._normalizeXtreamServerUrl,
+    'normalizeXtreamServerUrl': normalizeXtreamServerUrl,
     'loadSettings': s._loadSettings,
     'catalogKeysFor': s._catalogKeysFor,
     'catalogOwnerReferencesFor': s._catalogOwnerReferencesFor,
@@ -4580,6 +4519,6 @@ Map<String, dynamic> iptvSettingsTestAccess(State state) {
     'lastLiveChannelLabel': s._lastLiveChannelLabel,
     'lifecycle': s.didChangeAppLifecycleState,
     'enterPhoneSection': (String name) =>
-        s._enterPhoneSection(_PhoneSection.values.byName(name)),
+        s._enterPhoneSection(IptvSettingsPhoneSection.values.byName(name)),
   };
 }
