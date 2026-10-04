@@ -1066,6 +1066,40 @@ including everything below.
   profile source-guard failure; all 85 cases and 22 importers pass. Env has no
   untracked inputs or tree changes. LF and staged/unstaged diff checks PASS.
 
+
+### Step 6 — root, Classic and compact builders
+
+- Step 5: `86cbaaac`. Five committed Linux originals from `908edb00` still
+  hash-equal the delivered checkpoint `989718fa`/R provenance; prerequisite
+  verification is recorded in `step6-linux-prerequisite.json`.
+- Root build/view/custom getter, Classic chrome/content and compact
+  header/content/index move to their manifest owners. State's only rendering
+  is the exact build forwarder. Both staged getter callbacks and their
+  `TEMP(episodes_panel)` markers are removed; original getter reads now target
+  their moved owners at the same sites. No key, const constructor or State
+  hook is added. The public widget stays byte-identical.
+- A nested Builder keeps its local `context`; its State-owned `setState`
+  uses the live callback, including inside that Builder. All bodies/callers
+  and live bindings are reviewed before scaffold pinning. Navigation accessor
+  negatives follow the actual borrower after builders leave State; they still
+  reject a different same-class owner.
+- Facade: 281 lines (`step6-facade-breakdown.json`): widget 134, composition
+  52, lifecycle/public/forwarders 62, State header/spacing 11,
+  imports/export/spacing 22; no original rendering/action members remain.
+  All 25 actual locations and the facade are registered, every destination
+  is below 500. The oversized baseline entry is removed. Shape is 7, facade
+  residue 0; explicit per-directory theme patterns remain at 238.
+
+- Host verification: all own/other manifests with self-tests PASS using isolated
+  packages/kernels and each original/config (merged `21320ff9`). Architecture
+  fixtures, sizes, storage, CI format/allowlist, strict and whole relocation
+  comparisons PASS: the same original curly info, no new diagnostics or
+  suppressions, same 12 unrelated CI warnings. Scoped behavior versus `base5`
+  PASS: 1,270 successes plus the original profile source-guard failure; all
+  85 characterization cases, five macOS goldens and 22 importers pass. No
+  untracked inputs/tree changes. Linux strict comparison follows on the clean
+  committed step 6 tree without a capture/update flag.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

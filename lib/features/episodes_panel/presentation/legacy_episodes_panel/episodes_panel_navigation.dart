@@ -50,7 +50,8 @@ class EpisodesPanelNavigation {
       _r.episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
     }
 
-    if (!_deps.custom() && _r.episodeScrollController.hasClients) {
+    if (!_deps.parts.rootLayout.custom &&
+        _r.episodeScrollController.hasClients) {
       _r.episodeScrollController.jumpTo(0);
     }
 
@@ -173,7 +174,7 @@ class EpisodesPanelNavigation {
 
   void stepSeason(int delta) {
     if (_s.episodeSeasons.isEmpty) return;
-    final i = _deps.currentSeasonIndex();
+    final i = _deps.parts.compactLayout.currentSeasonIndex;
     final ni = (i < 0 ? 0 : i) + delta;
     if (ni < 0 || ni >= _s.episodeSeasons.length) return;
     onSeasonChanged(_s.episodeSeasons[ni].number);
@@ -182,7 +183,7 @@ class EpisodesPanelNavigation {
     // season dropdown so the remote stays live.
     // Classic parks focus on its always-present dropdown; a custom arrangement
     // has no such node, and its own season control keeps focus already.
-    if (_deps.custom()) return;
+    if (_deps.parts.rootLayout.custom) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _r.episodeSeasonDropdownFocusNode.requestFocus();
     });

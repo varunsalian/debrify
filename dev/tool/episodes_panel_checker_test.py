@@ -95,15 +95,24 @@ def self_test(package=None):
             assert checked(changed), 'Accepted changed constructor export target'
             print('Episodes exact constructor export target:', name, 'rejected')
     if config['completed_step'] >= 3:
-        for name, part in [('_s', 'viewState'), ('_r', 'resources')] + ([('_n', 'navigation')] if config['completed_step'] >= 5 else []):
-            key = (source, 'EpisodesPanelState', name)
+        accessors = [
+            ((source, 'EpisodesPanelState', '_s'), '_parts.viewState'),
+            ((source, 'EpisodesPanelState', '_r'), '_parts.resources'),
+        ]
+        if config['completed_step'] >= 5:
+            # The navigation borrower moves out of State with the builders.
+            state_key = (source, 'EpisodesPanelState', '_n')
+            key = state_key if state_key in lookup else next(
+                key for key in sorted(lookup) if key[2] == '_n')
+            accessors.append((key, '_parts.navigation' if key == state_key else '_deps.parts.navigation'))
+        for key, receiver in accessors:
             node = lookup[key]
             changed = dict(sources)
-            swapped = node['text'].replace('_parts.' + part, 'secondParts.' + part)
+            swapped = node['text'].replace(receiver, 'secondParts.' + receiver.split('.')[-1])
             assert swapped != node['text']
-            changed[source] = sources[source][:node['start']] + swapped + sources[source][node['end']:]
+            changed[key[0]] = sources[key[0]][:node['start']] + swapped + sources[key[0]][node['end']:]
             assert checked(changed), 'Accepted borrowed record accessor swap'
-            print('Episodes borrowed accessor same-class record swap:', name, 'rejected')
+            print('Episodes borrowed accessor same-class record swap:', key[1:], 'rejected')
     if config['completed_step'] >= 4:
         key = ('lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart', 'EpisodesPanelProgress', 'mounted')
         node = lookup[key]

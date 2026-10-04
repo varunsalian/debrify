@@ -216,13 +216,19 @@ const Map<String, int> kShapeResidue = {
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
   // Episodes panel move-only slice: seven original bare radii.
-  'lib/widgets/episodes_panel.dart': 3,
+  'lib/widgets/episodes_panel.dart': 0,
   'lib/features/episodes_panel/application/episodes_panel_policies.dart': 0,
   'lib/features/episodes_panel/models/episodes_panel_view.dart': 0,
   'lib/features/episodes_panel/presentation/episodes_panel_season_step.dart': 0,
   'lib/features/episodes_panel/presentation/episodes_panel_source_button.dart':
       1,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_classic_chrome.dart':
+      3,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_classic_content.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_layout.dart':
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart':
       3,
@@ -243,6 +249,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart':
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_resources.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_root_layout.dart':
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_season_options.dart':
       0,

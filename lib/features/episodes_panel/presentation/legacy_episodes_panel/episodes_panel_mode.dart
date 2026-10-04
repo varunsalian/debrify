@@ -273,7 +273,7 @@ class EpisodesPanelMode {
       // A custom arrangement owns its own scrollable and FocusNodes, so the
       // engine's reveal would target widgets that do not exist there. The
       // layout reveals `view.landing` itself, driven by `focusIntent`.
-      if (!_deps.custom()) {
+      if (!_deps.parts.rootLayout.custom) {
         final targetEpIndex = effectiveEpisode != null
             ? targetSeason.episodes.indexWhere(
                 (e) => e.number == effectiveEpisode,

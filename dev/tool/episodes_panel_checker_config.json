@@ -21,10 +21,7 @@
   },
   "named_exceptions": {},
   "annotation_exceptions": {},
-  "live_getter_callbacks": [
-    "custom",
-    "currentSeasonIndex"
-  ],
+  "live_getter_callbacks": [],
   "live_widget_getters": [
     "show",
     "initialSeason",
@@ -159,6 +156,9 @@
     "lib/features/episodes_panel/presentation/episodes_panel_season_step.dart",
     "lib/features/episodes_panel/presentation/episodes_panel_source_button.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart",
+    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_classic_chrome.dart",
+    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_classic_content.dart",
+    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_layout.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_enrichment.dart",
@@ -169,6 +169,7 @@
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_parts.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_resources.dart",
+    "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_root_layout.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_season_options.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_seasons.dart",
     "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart",
@@ -490,7 +491,7 @@
       ]
     }
   ],
-  "completed_step": 5,
+  "completed_step": 6,
   "callback_whole_class_members": true,
   "adjacent_declarations": [
     [
@@ -541,6 +542,18 @@
       "owner": "EpisodesPanelAuth"
     },
     {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_classic_chrome.dart",
+      "owner": "EpisodesPanelClassicChrome"
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_classic_content.dart",
+      "owner": "EpisodesPanelClassicContent"
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_layout.dart",
+      "owner": "EpisodesPanelCompactLayout"
+    },
+    {
       "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_enrichment.dart",
       "owner": "EpisodesPanelEnrichment"
     },
@@ -567,6 +580,10 @@
     {
       "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_resources.dart",
       "owner": "EpisodesPanelResources"
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_root_layout.dart",
+      "owner": "EpisodesPanelRootLayout"
     },
     {
       "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_season_options.dart",
@@ -603,13 +620,5 @@
       "owner": "EpisodesPanelState",
       "name": "EpisodesPanelState"
     }
-  },
-  "live_getter_aliases": {
-    "custom": "EpisodesPanelState._custom",
-    "currentSeasonIndex": "EpisodesPanelState._currentSeasonIndex"
-  },
-  "retained_getter_steps": {
-    "EpisodesPanelState._custom": 6,
-    "EpisodesPanelState._currentSeasonIndex": 6
   }
 }
