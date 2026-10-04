@@ -18,7 +18,7 @@ import '../../../../support/addon_hub_fixture.dart';
 
 const requireLinux = bool.fromEnvironment(
   'ADDON_HUB_REQUIRE_ORIGINAL_LINUX',
-  defaultValue: false,
+  defaultValue: true,
 );
 const captureLinux = bool.fromEnvironment(
   'ADDON_HUB_CAPTURE_ORIGINAL_LINUX',

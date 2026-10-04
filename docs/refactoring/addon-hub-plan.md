@@ -643,6 +643,17 @@ committed tree**, reconciling each branch's approved additions.
   comparison base. An early baseline attempt begun before this documentation
   commit is retained as incomplete; it is not used as evidence.
 
+- Linux originals received separately: all six supplied SHA-256 values match
+  the PNGs; capture revision is `8c5981a4`, strict original run is 6/6 PASS.
+  Provenance: calibrated `debrify-flutter:3.44.8` linux/amd64 Ubuntu 24.04,
+  official Flutter 3.44.8 archive and libsqlite3-dev under Colima; calibration
+  passed all 14 GitHub-captured TorBox/Debrid originals. Remote Actions remains
+  unavailable (spending limit). Evidence: `linux-original-*` and
+  `linux-provenance-verified.json` in this feature namespace. Assets are
+  committed separately; only the Linux strict-default flag changes, with
+  the six scenarios and macOS originals unchanged. Local Linux execution
+  after extraction remains pending a reachable calibrated runner.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
