@@ -744,7 +744,18 @@ void main() {
           'remove its entry if the file was deleted',
         );
       }
-      final found = _radius.allMatches(file.readAsStringSync()).length;
+      var source = file.readAsStringSync();
+      // Playback's extraction changes indentation; tall formatting can add a
+      // trailing comma to the same literal call. Preserve its original count.
+      if (entry.key.startsWith('lib/features/playback_settings/') ||
+          entry.key ==
+              'lib/screens/settings/external_player_settings_page.dart') {
+        source = source.replaceAllMapped(
+          RegExp(r'(BorderRadius\.circular\(\s*[0-9]+(?:\.[0-9]+)?\s*),'),
+          (match) => match.group(1)!,
+        );
+      }
+      final found = _radius.allMatches(source).length;
       if (found > entry.value) {
         grew.add('${entry.key}: ${entry.value} → $found');
       }

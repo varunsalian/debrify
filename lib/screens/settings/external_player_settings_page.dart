@@ -1,12 +1,15 @@
 import 'dart:io';
 
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_core_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_ios_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_linux_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_mac_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_night_mode_section.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_rows_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_sections.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_rows_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_section.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_values_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_vr_state.dart';
@@ -29,19 +32,12 @@ import 'package:debrify/screens/video_player/services/subtitle_settings_service.
 import 'package:debrify/services/analytics_service.dart';
 import 'package:debrify/services/external_player_service.dart';
 import 'package:debrify/services/skip_segment_service.dart';
-import 'package:debrify/services/storage/local_completion_storage.dart';
-import 'package:debrify/services/storage/player_network_storage.dart';
-import 'package:debrify/services/storage/player_settings_storage.dart';
-import 'package:debrify/services/storage/quick_play_storage.dart';
-import 'package:debrify/services/storage/skip_segments_storage.dart';
-import 'package:debrify/services/storage/subtitle_settings_storage.dart';
 import 'package:debrify/services/subtitle_font_service.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/deovr_utils.dart' as deovr;
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/utils/tv_keys.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -88,7 +84,6 @@ class _ExternalPlayerSettingsPageState
     mounted: () => mounted,
     context: () => context,
     section: () => widget.section,
-    loadFonts: _loadFonts,
   );
 
   @override
@@ -378,407 +373,6 @@ class _ExternalPlayerSettingsPageState
     _rows.netPatienceFocusNode.dispose();
     _rows.netBufferFocusNode.dispose();
     super.dispose();
-  }
-
-  // DeoVR settings setters
-  Future<void> _setVrDefaultScreenType(String screenType) async {
-    setState(() => _vr.vrDefaultScreenType = screenType);
-    await QuickPlayStorage.setQuickPlayVrDefaultScreenType(screenType);
-  }
-
-  Future<void> _setVrDefaultStereoMode(String stereoMode) async {
-    setState(() => _vr.vrDefaultStereoMode = stereoMode);
-    await QuickPlayStorage.setQuickPlayVrDefaultStereoMode(stereoMode);
-  }
-
-  Future<void> _setVrAutoDetectFormat(bool autoDetect) async {
-    setState(() => _vr.vrAutoDetectFormat = autoDetect);
-    await QuickPlayStorage.setQuickPlayVrAutoDetectFormat(autoDetect);
-  }
-
-  Future<void> _setVrShowDialog(bool showDialog) async {
-    setState(() => _vr.vrShowDialog = showDialog);
-    await QuickPlayStorage.setQuickPlayVrShowDialog(showDialog);
-  }
-
-  // Debrify Player settings setters
-  Future<void> _setDefaultAspectIndex(int index) async {
-    setState(() => _values.defaultAspectIndex = index);
-    // Use platform-specific storage key
-    if (_values.isAndroidTv) {
-      await PlayerSettingsStorage.setPlayerDefaultAspectIndexTv(index);
-    } else {
-      await PlayerSettingsStorage.setPlayerDefaultAspectIndex(index);
-    }
-  }
-
-  Future<void> _setNightModeIndex(int index) async {
-    setState(() => _values.nightModeIndex = index);
-    await PlayerSettingsStorage.setPlayerNightModeIndex(index);
-  }
-
-  Future<void> _setSystemAudioEffects(bool enabled) async {
-    setState(() => _values.systemAudioEffects = enabled);
-    await PlayerSettingsStorage.setPlayerSystemAudioEffects(enabled);
-  }
-
-  Future<void> _setTvosForceSoftwareDecode(bool enabled) async {
-    setState(() => _values.tvosForceSoftwareDecode = enabled);
-    await PlayerSettingsStorage.setTvosForceSoftwareDecode(enabled);
-  }
-
-  Future<void> _setTvosForceStereo(bool enabled) async {
-    setState(() => _values.tvosForceStereo = enabled);
-    await PlayerSettingsStorage.setTvosForceStereoAudio(enabled);
-  }
-
-  Future<void> _setTvosLegacyAudioOutput(bool enabled) async {
-    setState(() => _values.tvosLegacyAudioOutput = enabled);
-    await PlayerSettingsStorage.setTvosLegacyAudioOutput(enabled);
-  }
-
-  Future<void> _setAudioPassthrough(bool enabled) async {
-    setState(() => _values.audioPassthrough = enabled);
-    await PlayerSettingsStorage.setAudioPassthroughEnabled(enabled);
-  }
-
-  Future<void> _setAppleMultichannel(bool enabled) async {
-    setState(() => _values.appleMultichannel = enabled);
-    await PlayerSettingsStorage.setAppleMultichannelAudio(enabled);
-  }
-
-  Future<void> _setAndroidVideoRendererMode(String storageKey) async {
-    final mode = AndroidVideoRendererMode.fromStorage(storageKey);
-    setState(() => _values.androidVideoRendererMode = mode);
-    await PlayerSettingsStorage.setAndroidVideoRendererMode(mode);
-  }
-
-  Future<void> _setContentDisplayMatchMode(String storageKey) async {
-    final mode = ContentDisplayMatchMode.fromStorage(storageKey);
-    setState(() => _values.contentDisplayMatchMode = mode);
-    await PlayerNetworkStorage.setContentDisplayMatchMode(mode);
-  }
-
-  Future<void> _setIptvDecoderMode(String value) async {
-    setState(() => _values.iptvDecoderMode = value);
-    await PlayerNetworkStorage.setIptvDecoderMode(value);
-  }
-
-  Future<void> _setStartPortrait(bool enabled) async {
-    setState(() => _values.startPortrait = enabled);
-    await PlayerSettingsStorage.setPlayerStartPortrait(enabled);
-  }
-
-  Future<void> _setSubtitleOnlyForeignAudio(bool enabled) async {
-    setState(() => _sub.subtitleOnlyForeignAudio = enabled);
-    await SubtitleSettingsStorage.setSubtitleOnlyForeignAudio(enabled);
-  }
-
-  Future<void> _setSubtitleForcedOnly(bool enabled) async {
-    setState(() => _sub.subtitleForcedOnly = enabled);
-    await SubtitleSettingsStorage.setSubtitleForcedOnly(enabled);
-  }
-
-  Future<void> _setSubtitleAutoSync(bool enabled) async {
-    setState(() => _sub.subtitleAutoSync = enabled);
-    await SubtitleSettingsStorage.setSubtitleAutoSyncEnabled(enabled);
-  }
-
-  List<int> get _completionThresholdOptions =>
-      LocalCompletionStorage.localCompletionThresholdOptions;
-
-  int _completionThresholdIndex(int value) {
-    final index = _completionThresholdOptions.indexOf(value);
-    return index < 0
-        ? _completionThresholdOptions.indexOf(
-            LocalCompletionStorage.defaultLocalCompletionThreshold,
-          )
-        : index;
-  }
-
-  Future<void> _setMovieCompletionThresholdIndex(int index) async {
-    final value = _completionThresholdOptions[index];
-    setState(() => _values.movieCompletionThreshold = value);
-    await LocalCompletionStorage.setMovieCompletionThreshold(value);
-  }
-
-  Future<void> _setEpisodeCompletionThresholdIndex(int index) async {
-    final value = _completionThresholdOptions[index];
-    setState(() => _values.episodeCompletionThreshold = value);
-    await LocalCompletionStorage.setEpisodeCompletionThreshold(value);
-  }
-
-  Future<void> _setSkipSegmentsEnabled(bool enabled) async {
-    setState(() => _values.skipSegmentsEnabled = enabled);
-    await SkipSegmentsStorage.setSkipSegmentsEnabled(enabled);
-  }
-
-  Future<void> _setSkipSegmentProvider(String provider) async {
-    setState(() => _values.skipSegmentProvider = provider);
-    await SkipSegmentsStorage.setSkipSegmentProvider(provider);
-  }
-
-  Future<void> _setNetPatience(String value) async {
-    setState(() => _values.netPatience = value);
-    await PlayerNetworkStorage.setNetworkConnectPatience(value);
-  }
-
-  Future<void> _setNetBuffer(String value) async {
-    setState(() => _values.netBuffer = value);
-    await PlayerNetworkStorage.setNetworkBufferSize(value);
-  }
-
-  Future<void> _setDefaultSubtitleLanguage(String? languageCode) async {
-    setState(() => _sub.defaultSubtitleLanguage = languageCode);
-    await SubtitleSettingsStorage.setDefaultSubtitleLanguage(languageCode);
-  }
-
-  Future<void> _setDefaultAudioLanguage(String? languageCode) async {
-    setState(() => _sub.defaultAudioLanguage = languageCode);
-    await SubtitleSettingsStorage.setDefaultAudioLanguage(languageCode);
-  }
-
-  Future<void> _setSubtitleSizeIndex(int index) async {
-    setState(() => _sub.subtitleSizeIndex = index);
-    await SubtitleSettingsService.instance.setSizeIndex(index);
-  }
-
-  Future<void> _setSubtitleStyleIndex(int index) async {
-    setState(() => _sub.subtitleStyleIndex = index);
-    await SubtitleSettingsService.instance.setStyleIndex(index);
-  }
-
-  Future<void> _setSubtitleColorIndex(int index) async {
-    setState(() => _sub.subtitleColorIndex = index);
-    await SubtitleSettingsService.instance.setColorIndex(index);
-  }
-
-  Future<void> _setSubtitleBgIndex(int index) async {
-    setState(() => _sub.subtitleBgIndex = index);
-    await SubtitleSettingsService.instance.setBgIndex(index);
-  }
-
-  Future<void> _setSubtitleFontIndex(int index) async {
-    setState(() => _sub.subtitleFontIndex = index);
-    await SubtitleFontService.instance.setFontIndex(index);
-  }
-
-  Future<void> _setSubtitleBold(bool value) async {
-    setState(() => _sub.subtitleBold = value);
-    await SubtitleSettingsService.instance.setBold(value);
-  }
-
-  Future<void> _loadFonts() async {
-    final allFonts = await SubtitleFontService.instance.getAllFonts();
-    final selectedIndex = await SubtitleFontService.instance
-        .getSelectedFontIndex();
-    if (mounted) {
-      setState(() {
-        _sub.allFonts = allFonts;
-        _sub.subtitleFontIndex = selectedIndex;
-      });
-    }
-  }
-
-  Future<void> _importCustomFont() async {
-    try {
-      // FileType.any instead of custom: Android's MIME mapping for `ttf`/`otf`
-      // is unreliable and throws PlatformException("Unsupported filter"). We
-      // validate the extension ourselves below.
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        allowMultiple: false,
-      );
-
-      if (result == null || result.files.isEmpty) return;
-
-      final file = result.files.first;
-      // Reject only a clearly-wrong extension; if the picker's display name has
-      // no extension (some Android SAF providers), let the font service try it
-      // rather than wrongly rejecting a valid font.
-      final lowerName = file.name.toLowerCase();
-      final hasExtension = lowerName.contains('.');
-      if (hasExtension &&
-          !lowerName.endsWith('.ttf') &&
-          !lowerName.endsWith('.otf')) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please select a .ttf or .otf font file'),
-            ),
-          );
-        }
-        return;
-      }
-      if (file.path == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not access selected file')),
-          );
-        }
-        return;
-      }
-
-      final newFont = await SubtitleFontService.instance.importCustomFont(
-        file.path!,
-        file.name,
-      );
-
-      if (newFont != null) {
-        await _loadFonts();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Font "${newFont.label}" imported successfully'),
-            ),
-          );
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to import font')),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error importing font: $e')));
-      }
-    }
-  }
-
-  Future<void> _removeCustomFont(SubtitleFont font) async {
-    await SubtitleFontService.instance.removeCustomFont(font.id);
-    await _loadFonts();
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Font "${font.label}" removed')));
-    }
-  }
-
-  // Aspect labels
-  List<String> get _aspectLabels => _values.isAndroidTv
-      ? ['Fit', 'Fill', 'Zoom', 'Cinema Zoom']
-      : [
-          'Contain',
-          'Cover',
-          'Fit Width',
-          'Fit Height',
-          '16:9',
-          '4:3',
-          '21:9',
-          '1:1',
-          '3:2',
-          '5:4',
-          'Cinema Zoom',
-        ];
-
-  static const List<String> _nightModeLabels = [
-    'Off',
-    'Low',
-    'Medium',
-    'High',
-    'Higher',
-    'Extreme',
-    'Max',
-    'Sleeping Baby',
-  ];
-
-  // Subtitle language options: (code, label)
-  static const List<(String?, String)> _subtitleLanguageOptions = [
-    (null, 'No Preference'),
-    ('off', 'Off'),
-    ('en', 'English'),
-    ('es', 'Spanish'),
-    ('fr', 'French'),
-    ('de', 'German'),
-    ('it', 'Italian'),
-    ('pt', 'Portuguese'),
-    ('pt-BR', 'Portuguese (Brazil)'),
-    ('ru', 'Russian'),
-    ('ja', 'Japanese'),
-    ('ko', 'Korean'),
-    ('zh', 'Chinese'),
-    ('ar', 'Arabic'),
-    ('hi', 'Hindi'),
-    ('te', 'Telugu'),
-    ('nl', 'Dutch'),
-    ('pl', 'Polish'),
-    ('tr', 'Turkish'),
-    ('sv', 'Swedish'),
-    ('da', 'Danish'),
-    ('no', 'Norwegian'),
-    ('fi', 'Finnish'),
-    ('et', 'Estonian'),
-    ('hr', 'Croatian'),
-    ('sr', 'Serbian'),
-    ('bs', 'Bosnian'),
-    ('mk', 'Macedonian'),
-    ('sl', 'Slovenian'),
-    ('cs', 'Czech'),
-    ('sk', 'Slovak'),
-    ('hu', 'Hungarian'),
-    ('ro', 'Romanian'),
-    ('bg', 'Bulgarian'),
-    ('uk', 'Ukrainian'),
-    ('el', 'Greek'),
-    ('lv', 'Latvian'),
-    ('lt', 'Lithuanian'),
-    ('he', 'Hebrew'),
-    ('fa', 'Persian'),
-    ('th', 'Thai'),
-    ('vi', 'Vietnamese'),
-    ('id', 'Indonesian'),
-    ('ms', 'Malay'),
-    ('bn', 'Bengali'),
-    ('ta', 'Tamil'),
-    ('mr', 'Marathi'),
-    ('gu', 'Gujarati'),
-    ('kn', 'Kannada'),
-    ('ml', 'Malayalam'),
-    ('pa', 'Punjabi'),
-  ];
-
-  int get _subtitleLanguageIndex {
-    final idx = _subtitleLanguageOptions.indexWhere(
-      (opt) => opt.$1 == _sub.defaultSubtitleLanguage,
-    );
-    return idx >= 0 ? idx : 0;
-  }
-
-  // Audio language options: (code, label) - no "Off" option for audio
-  static const List<(String?, String)> _audioLanguageOptions = [
-    (null, 'No Preference'),
-    ('en', 'English'),
-    ('es', 'Spanish'),
-    ('fr', 'French'),
-    ('de', 'German'),
-    ('it', 'Italian'),
-    ('pt', 'Portuguese'),
-    ('ru', 'Russian'),
-    ('ja', 'Japanese'),
-    ('ko', 'Korean'),
-    ('zh', 'Chinese'),
-    ('ar', 'Arabic'),
-    ('hi', 'Hindi'),
-    ('te', 'Telugu'),
-    ('nl', 'Dutch'),
-    ('pl', 'Polish'),
-    ('tr', 'Turkish'),
-    ('sv', 'Swedish'),
-    ('da', 'Danish'),
-    ('no', 'Norwegian'),
-    ('fi', 'Finnish'),
-  ];
-
-  int get _audioLanguageIndex {
-    final idx = _audioLanguageOptions.indexWhere(
-      (opt) => opt.$1 == _sub.defaultAudioLanguage,
-    );
-    return idx >= 0 ? idx : 0;
   }
 
   Widget _buildPlayerTile(ExternalPlayer player) {
@@ -1328,7 +922,7 @@ class _ExternalPlayerSettingsPageState
                       'phone landscape. The player\'s rotate button '
                       'switches to landscape whenever you want it.',
                   value: _values.startPortrait,
-                  onChanged: _setStartPortrait,
+                  onChanged: _sections.playerSetters.setStartPortrait,
                   focusNode: _rows.startPortraitFocusNode,
                   isFocused: _rows.startPortraitFocused,
                 ),
@@ -1360,13 +954,14 @@ class _ExternalPlayerSettingsPageState
                 buildSettingDropdown(
                   context,
                   label: 'Mark movies watched at',
-                  value: _completionThresholdIndex(
+                  value: _sections.playerSetters.completionThresholdIndex(
                     _values.movieCompletionThreshold,
                   ),
-                  items: _completionThresholdOptions
+                  items: _sections.playerSetters.completionThresholdOptions
                       .map((value) => '$value%')
                       .toList(),
-                  onChanged: _setMovieCompletionThresholdIndex,
+                  onChanged:
+                      _sections.playerSetters.setMovieCompletionThresholdIndex,
                   focusNode: _subRows.movieCompletionThresholdFocusNode,
                   isFocused: _subRows.movieCompletionThresholdFocused,
                 ),
@@ -1374,13 +969,15 @@ class _ExternalPlayerSettingsPageState
                 buildSettingDropdown(
                   context,
                   label: 'Mark episodes watched at',
-                  value: _completionThresholdIndex(
+                  value: _sections.playerSetters.completionThresholdIndex(
                     _values.episodeCompletionThreshold,
                   ),
-                  items: _completionThresholdOptions
+                  items: _sections.playerSetters.completionThresholdOptions
                       .map((value) => '$value%')
                       .toList(),
-                  onChanged: _setEpisodeCompletionThresholdIndex,
+                  onChanged: _sections
+                      .playerSetters
+                      .setEpisodeCompletionThresholdIndex,
                   focusNode: _subRows.episodeCompletionThresholdFocusNode,
                   isFocused: _subRows.episodeCompletionThresholdFocused,
                 ),
@@ -1418,7 +1015,7 @@ class _ExternalPlayerSettingsPageState
                   subtitle:
                       'Show a button during supported intros and outros. Playback is never skipped automatically.',
                   value: _values.skipSegmentsEnabled,
-                  onChanged: _setSkipSegmentsEnabled,
+                  onChanged: _sections.playerSetters.setSkipSegmentsEnabled,
                   focusNode: _subRows.skipSegmentsEnabledFocusNode,
                   isFocused: _subRows.skipSegmentsEnabledFocused,
                 ),
@@ -1428,7 +1025,7 @@ class _ExternalPlayerSettingsPageState
                   label: 'Timestamp provider',
                   value: _values.skipSegmentProvider,
                   items: SkipSegmentProviders.availableLabels,
-                  onChanged: _setSkipSegmentProvider,
+                  onChanged: _sections.playerSetters.setSkipSegmentProvider,
                   focusNode: _subRows.skipSegmentProviderFocusNode,
                   isFocused: _subRows.skipSegmentProviderFocused,
                   enabled: _values.skipSegmentsEnabled,
@@ -1477,7 +1074,7 @@ class _ExternalPlayerSettingsPageState
                   label: 'Connection patience',
                   value: _values.netPatience,
                   items: NetworkTuning.patienceOptions,
-                  onChanged: _setNetPatience,
+                  onChanged: _sections.playerSetters.setNetPatience,
                   focusNode: _rows.netPatienceFocusNode,
                   isFocused: _rows.netPatienceFocused,
                 ),
@@ -1487,7 +1084,7 @@ class _ExternalPlayerSettingsPageState
                   label: 'Stream buffer',
                   value: _values.netBuffer,
                   items: NetworkTuning.bufferOptions,
-                  onChanged: _setNetBuffer,
+                  onChanged: _sections.playerSetters.setNetBuffer,
                   focusNode: _rows.netBufferFocusNode,
                   isFocused: _rows.netBufferFocused,
                 ),
@@ -1522,8 +1119,9 @@ class _ExternalPlayerSettingsPageState
           context,
           label: 'Default Aspect',
           value: _values.defaultAspectIndex,
-          items: _aspectLabels,
-          onChanged: (index) => _setDefaultAspectIndex(index),
+          items: _sections.videoSection.aspectLabels,
+          onChanged: (index) =>
+              _sections.playerSetters.setDefaultAspectIndex(index),
           focusNode: _rows.aspectFocusNode,
           isFocused: _rows.aspectFocused,
         ),
@@ -1538,7 +1136,7 @@ class _ExternalPlayerSettingsPageState
               for (final mode in ContentDisplayMatchMode.values)
                 mode.storageKey: mode.label,
             },
-            onChanged: _setContentDisplayMatchMode,
+            onChanged: _sections.playerSetters.setContentDisplayMatchMode,
             focusNode: _rows.contentDisplayMatchFocusNode,
             isFocused: _rows.contentDisplayMatchFocused,
           ),
@@ -1585,7 +1183,7 @@ class _ExternalPlayerSettingsPageState
               'hardware': 'Hardware',
               'software': 'Software',
             },
-            onChanged: _setIptvDecoderMode,
+            onChanged: _sections.playerSetters.setIptvDecoderMode,
             focusNode: _rows.iptvDecoderFocusNode,
             isFocused: _rows.iptvDecoderFocused,
           ),
@@ -1617,7 +1215,7 @@ class _ExternalPlayerSettingsPageState
               for (final mode in AndroidVideoRendererMode.values)
                 mode.storageKey: mode.label,
             },
-            onChanged: _setAndroidVideoRendererMode,
+            onChanged: _sections.playerSetters.setAndroidVideoRendererMode,
             focusNode: _rows.androidVideoRendererFocusNode,
             isFocused: _rows.androidVideoRendererFocused,
           ),
@@ -1653,7 +1251,7 @@ class _ExternalPlayerSettingsPageState
                 '4K may stutter. Applies from the next '
                 'playback.',
             value: _values.tvosForceSoftwareDecode,
-            onChanged: _setTvosForceSoftwareDecode,
+            onChanged: _sections.playerSetters.setTvosForceSoftwareDecode,
             focusNode: _rows.tvosForceSwDecodeFocusNode,
             isFocused: _rows.tvosForceSwDecodeFocused,
           ),
@@ -1672,10 +1270,14 @@ class _ExternalPlayerSettingsPageState
           buildSettingDropdown(
             context,
             label: 'Default Audio',
-            value: _audioLanguageIndex,
-            items: _audioLanguageOptions.map((opt) => opt.$2).toList(),
+            value: _sections.audioSection.audioLanguageIndex,
+            items: PlaybackAudioSection.audioLanguageOptions
+                .map((opt) => opt.$2)
+                .toList(),
             onChanged: (index) =>
-                _setDefaultAudioLanguage(_audioLanguageOptions[index].$1),
+                _sections.subtitleSetters.setDefaultAudioLanguage(
+                  PlaybackAudioSection.audioLanguageOptions[index].$1,
+                ),
             focusNode: _rows.defaultAudioLangFocusNode,
             isFocused: _rows.defaultAudioLangFocused,
           ),
@@ -1694,7 +1296,7 @@ class _ExternalPlayerSettingsPageState
                   'Let equalizer apps (Wavelet, Dolby, etc.) process playback. '
                   'Changes the audio output — restart playback to apply.',
               value: _values.systemAudioEffects,
-              onChanged: _setSystemAudioEffects,
+              onChanged: _sections.playerSetters.setSystemAudioEffects,
               focusNode: _rows.systemAudioEffectsFocusNode,
               isFocused: _rows.systemAudioEffectsFocused,
             ),
@@ -1711,7 +1313,7 @@ class _ExternalPlayerSettingsPageState
                   'that supports it — if you hear silence, turn '
                   'this off. Restart playback to apply.',
               value: _values.audioPassthrough,
-              onChanged: _setAudioPassthrough,
+              onChanged: _sections.playerSetters.setAudioPassthrough,
               focusNode: _rows.audioPassthroughFocusNode,
               isFocused: _rows.audioPassthroughFocused,
             ),
@@ -1729,7 +1331,7 @@ class _ExternalPlayerSettingsPageState
                   'the connected receiver supports it, instead '
                   'of stereo. Restart playback to apply.',
               value: _values.appleMultichannel,
-              onChanged: _setAppleMultichannel,
+              onChanged: _sections.playerSetters.setAppleMultichannel,
               focusNode: _rows.appleMultichannelFocusNode,
               isFocused: _rows.appleMultichannelFocused,
             ),
@@ -1750,7 +1352,7 @@ class _ExternalPlayerSettingsPageState
                   'surround sound is noisy or distorted. '
                   'Restart playback to apply.',
               value: _values.tvosForceStereo,
-              onChanged: _setTvosForceStereo,
+              onChanged: _sections.playerSetters.setTvosForceStereo,
               focusNode: _rows.tvosForceStereoFocusNode,
               isFocused: _rows.tvosForceStereoFocused,
             ),
@@ -1765,7 +1367,7 @@ class _ExternalPlayerSettingsPageState
                   'the current one misbehaves. Restart '
                   'playback to apply.',
               value: _values.tvosLegacyAudioOutput,
-              onChanged: _setTvosLegacyAudioOutput,
+              onChanged: _sections.playerSetters.setTvosLegacyAudioOutput,
               focusNode: _rows.tvosLegacyAudioFocusNode,
               isFocused: _rows.tvosLegacyAudioFocused,
             ),
@@ -1807,116 +1409,128 @@ class _ExternalPlayerSettingsPageState
                   style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
                 ),
                 const SizedBox(height: 16),
-                ...List.generate(_nightModeLabels.length, (index) {
-                  final isSelected = _values.nightModeIndex == index;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Focus(
-                      // Observer only: the InkWell below is the
-                      // focus stop; a focusable wrapper would make
-                      // each row cost two DPAD presses.
-                      canRequestFocus: false,
-                      skipTraversal: true,
-                      onKeyEvent: (node, event) {
-                        if (event is KeyDownEvent) {
-                          if (isActivateKey(event.logicalKey)) {
-                            _setNightModeIndex(index);
-                            return KeyEventResult.handled;
+                ...List.generate(
+                  PlaybackNightModeSection.nightModeLabels.length,
+                  (index) {
+                    final isSelected = _values.nightModeIndex == index;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Focus(
+                        // Observer only: the InkWell below is the
+                        // focus stop; a focusable wrapper would make
+                        // each row cost two DPAD presses.
+                        canRequestFocus: false,
+                        skipTraversal: true,
+                        onKeyEvent: (node, event) {
+                          if (event is KeyDownEvent) {
+                            if (isActivateKey(event.logicalKey)) {
+                              _sections.playerSetters.setNightModeIndex(index);
+                              return KeyEventResult.handled;
+                            }
                           }
-                        }
-                        return KeyEventResult.ignored;
-                      },
-                      child: Builder(
-                        builder: (context) {
-                          final isFocused = Focus.of(context).hasFocus;
-                          return InkWell(
-                            onTap: () => _setNightModeIndex(index),
-                            borderRadius: BorderRadius.circular(8),
-                            // Snap, don't tween (TV GPU rule).
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? t.panel2
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: isFocused
-                                      ? t.accent
-                                      : isSelected
-                                      ? t.accent
-                                      : t.line,
-                                  width: isFocused || isSelected ? 2 : 1,
-                                ),
-                                boxShadow: isFocused
-                                    ? [
-                                        BoxShadow(
-                                          color: t.accent.withValues(
-                                            alpha: 0.25,
-                                          ),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: Row(
-                                children: [
-                                  // Single focus stop per row —
-                                  // keep the Radio off the DPAD
-                                  // traversal order.
-                                  ExcludeFocus(
-                                    child: Radio<int>(
-                                      value: index,
-                                      groupValue: _values.nightModeIndex,
-                                      onChanged: (v) => _setNightModeIndex(v!),
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _nightModeLabels[index],
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      fontWeight: isSelected || isFocused
-                                          ? FontWeight.w600
-                                          : FontWeight.normal,
-                                    ),
-                                  ),
-                                  if (index == 0) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: t.accent.withValues(alpha: 0.16),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        'Recommended',
-                                        style: theme.textTheme.labelSmall
-                                            ?.copyWith(
-                                              color: t.accent,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          );
+                          return KeyEventResult.ignored;
                         },
+                        child: Builder(
+                          builder: (context) {
+                            final isFocused = Focus.of(context).hasFocus;
+                            return InkWell(
+                              onTap: () => _sections.playerSetters
+                                  .setNightModeIndex(index),
+                              borderRadius: BorderRadius.circular(8),
+                              // Snap, don't tween (TV GPU rule).
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? t.panel2
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isFocused
+                                        ? t.accent
+                                        : isSelected
+                                        ? t.accent
+                                        : t.line,
+                                    width: isFocused || isSelected ? 2 : 1,
+                                  ),
+                                  boxShadow: isFocused
+                                      ? [
+                                          BoxShadow(
+                                            color: t.accent.withValues(
+                                              alpha: 0.25,
+                                            ),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Single focus stop per row —
+                                    // keep the Radio off the DPAD
+                                    // traversal order.
+                                    ExcludeFocus(
+                                      child: Radio<int>(
+                                        value: index,
+                                        groupValue: _values.nightModeIndex,
+                                        onChanged: (v) => _sections
+                                            .playerSetters
+                                            .setNightModeIndex(v!),
+                                        materialTapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      PlaybackNightModeSection
+                                          .nightModeLabels[index],
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            fontWeight: isSelected || isFocused
+                                                ? FontWeight.w600
+                                                : FontWeight.normal,
+                                          ),
+                                    ),
+                                    if (index == 0) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: t.accent.withValues(
+                                            alpha: 0.16,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Recommended',
+                                          style: theme.textTheme.labelSmall
+                                              ?.copyWith(
+                                                color: t.accent,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  );
-                }),
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -1952,10 +1566,14 @@ class _ExternalPlayerSettingsPageState
           buildSettingDropdown(
             context,
             label: 'Default Subtitle',
-            value: _subtitleLanguageIndex,
-            items: _subtitleLanguageOptions.map((opt) => opt.$2).toList(),
+            value: _sections.subtitleSection.subtitleLanguageIndex,
+            items: PlaybackSubtitleSection.subtitleLanguageOptions
+                .map((opt) => opt.$2)
+                .toList(),
             onChanged: (index) =>
-                _setDefaultSubtitleLanguage(_subtitleLanguageOptions[index].$1),
+                _sections.subtitleSetters.setDefaultSubtitleLanguage(
+                  PlaybackSubtitleSection.subtitleLanguageOptions[index].$1,
+                ),
             focusNode: _subRows.defaultSubtitleLangFocusNode,
             isFocused: _subRows.defaultSubtitleLangFocused,
           ),
@@ -1969,7 +1587,7 @@ class _ExternalPlayerSettingsPageState
                 'Subtitles stay off for matching or unknown audio; '
                 'manual subtitle choices take priority.',
             value: _sub.subtitleOnlyForeignAudio,
-            onChanged: _setSubtitleOnlyForeignAudio,
+            onChanged: _sections.subtitleSetters.setSubtitleOnlyForeignAudio,
             focusNode: _subRows.subtitleOnlyForeignAudioFocusNode,
             isFocused: _subRows.subtitleOnlyForeignAudioFocused,
           ),
@@ -1983,7 +1601,7 @@ class _ExternalPlayerSettingsPageState
                 '(English if unset). No match means off; Default Subtitle Off disables it. '
                 'Overrides Subtitles when audio differs; manual choices take priority.',
             value: _sub.subtitleForcedOnly,
-            onChanged: _setSubtitleForcedOnly,
+            onChanged: _sections.subtitleSetters.setSubtitleForcedOnly,
             focusNode: _subRows.subtitleForcedOnlyFocusNode,
             isFocused: _subRows.subtitleForcedOnlyFocused,
           ),
@@ -2001,7 +1619,7 @@ class _ExternalPlayerSettingsPageState
                   'as you watch. Applies only on a confident match; '
                   'manual timing always wins.',
               value: _sub.subtitleAutoSync,
-              onChanged: _setSubtitleAutoSync,
+              onChanged: _sections.subtitleSetters.setSubtitleAutoSync,
               focusNode: _subRows.subtitleAutoSyncFocusNode,
               isFocused: _subRows.subtitleAutoSyncFocused,
             ),
@@ -2035,7 +1653,8 @@ class _ExternalPlayerSettingsPageState
                 label: 'Size',
                 value: _sub.subtitleSizeIndex,
                 items: SubtitleSize.options.map((o) => o.label).toList(),
-                onChanged: (index) => _setSubtitleSizeIndex(index),
+                onChanged: (index) =>
+                    _sections.subtitleSetters.setSubtitleSizeIndex(index),
                 focusNode: _subRows.subtitleSizeFocusNode,
                 isFocused: _subRows.subtitleSizeFocused,
               ),
@@ -2047,7 +1666,8 @@ class _ExternalPlayerSettingsPageState
                 label: 'Style',
                 value: _sub.subtitleStyleIndex,
                 items: SubtitleStyle.options.map((o) => o.label).toList(),
-                onChanged: (index) => _setSubtitleStyleIndex(index),
+                onChanged: (index) =>
+                    _sections.subtitleSetters.setSubtitleStyleIndex(index),
                 focusNode: _subRows.subtitleStyleFocusNode,
                 isFocused: _subRows.subtitleStyleFocused,
               ),
@@ -2059,7 +1679,8 @@ class _ExternalPlayerSettingsPageState
                 label: 'Color',
                 value: _sub.subtitleColorIndex,
                 items: SubtitleColor.options.map((o) => o.label).toList(),
-                onChanged: (index) => _setSubtitleColorIndex(index),
+                onChanged: (index) =>
+                    _sections.subtitleSetters.setSubtitleColorIndex(index),
                 focusNode: _subRows.subtitleColorFocusNode,
                 isFocused: _subRows.subtitleColorFocused,
               ),
@@ -2071,7 +1692,8 @@ class _ExternalPlayerSettingsPageState
                 label: 'Background',
                 value: _sub.subtitleBgIndex,
                 items: SubtitleBackground.options.map((o) => o.label).toList(),
-                onChanged: (index) => _setSubtitleBgIndex(index),
+                onChanged: (index) =>
+                    _sections.subtitleSetters.setSubtitleBgIndex(index),
                 focusNode: _subRows.subtitleBgFocusNode,
                 isFocused: _subRows.subtitleBgFocused,
               ),
@@ -2085,7 +1707,8 @@ class _ExternalPlayerSettingsPageState
                 items: _sub.allFonts
                     .map((f) => f.isCustom ? '${f.label} (Custom)' : f.label)
                     .toList(),
-                onChanged: (index) => _setSubtitleFontIndex(index),
+                onChanged: (index) =>
+                    _sections.subtitleSetters.setSubtitleFontIndex(index),
                 focusNode: _subRows.subtitleFontFocusNode,
                 isFocused: _subRows.subtitleFontFocused,
               ),
@@ -2097,7 +1720,8 @@ class _ExternalPlayerSettingsPageState
                 label: 'Bold',
                 value: _sub.subtitleBold ? 1 : 0,
                 items: const ['Off', 'On'],
-                onChanged: (index) => _setSubtitleBold(index == 1),
+                onChanged: (index) =>
+                    _sections.subtitleSetters.setSubtitleBold(index == 1),
                 focusNode: _subRows.subtitleBoldFocusNode,
                 isFocused: _subRows.subtitleBoldFocused,
               ),
@@ -2107,7 +1731,7 @@ class _ExternalPlayerSettingsPageState
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _importCustomFont,
+                  onPressed: _sections.fontActions.importCustomFont,
                   icon: const Icon(Icons.file_upload_outlined),
                   label: const Text('Import Custom Font (TTF/OTF)'),
                   // Default focus overlay is too faint for TV —
@@ -2167,7 +1791,8 @@ class _ExternalPlayerSettingsPageState
                               ),
                             ),
                             IconButton(
-                              onPressed: () => _removeCustomFont(font),
+                              onPressed: () =>
+                                  _sections.fontActions.removeCustomFont(font),
                               icon: const Icon(Icons.delete_outline, size: 18),
                               color: t.danger,
                               padding: EdgeInsets.zero,
@@ -3149,7 +2774,7 @@ class _ExternalPlayerSettingsPageState
                       label: 'Screen Type',
                       value: _vr.vrDefaultScreenType,
                       items: deovr.screenTypeLabels,
-                      onChanged: _setVrDefaultScreenType,
+                      onChanged: _sections.vrSetters.setVrDefaultScreenType,
                       focusNode: _vr.screenTypeFocusNode,
                       isFocused: _vr.screenTypeFocused,
                     ),
@@ -3161,7 +2786,7 @@ class _ExternalPlayerSettingsPageState
                       label: 'Stereo Mode',
                       value: _vr.vrDefaultStereoMode,
                       items: deovr.stereoModeLabels,
-                      onChanged: _setVrDefaultStereoMode,
+                      onChanged: _sections.vrSetters.setVrDefaultStereoMode,
                       focusNode: _vr.stereoModeFocusNode,
                       isFocused: _vr.stereoModeFocused,
                     ),
@@ -3175,7 +2800,7 @@ class _ExternalPlayerSettingsPageState
                 title: 'Auto-detect format from filename',
                 subtitle: 'Parse filename for VR markers (180, 360, SBS, etc.)',
                 value: _vr.vrAutoDetectFormat,
-                onChanged: _setVrAutoDetectFormat,
+                onChanged: _sections.vrSetters.setVrAutoDetectFormat,
                 focusNode: _vr.autoDetectFocusNode,
                 isFocused: _vr.autoDetectFocused,
               ),
@@ -3184,7 +2809,7 @@ class _ExternalPlayerSettingsPageState
                 title: 'Show format selection dialog',
                 subtitle: 'Confirm VR format before launching DeoVR',
                 value: _vr.vrShowDialog,
-                onChanged: _setVrShowDialog,
+                onChanged: _sections.vrSetters.setVrShowDialog,
                 focusNode: _vr.showDialogFocusNode,
                 isFocused: _vr.showDialogFocused,
               ),
@@ -3443,47 +3068,58 @@ Map<String, Object?> playbackSettingsTestAccess(
         s._sections.windowsActions.saveWindowsCustomCommand,
     'clearWindowsCustomCommand':
         s._sections.windowsActions.clearWindowsCustomCommand,
-    'setVrDefaultScreenType': s._setVrDefaultScreenType,
-    'setVrDefaultStereoMode': s._setVrDefaultStereoMode,
-    'setVrAutoDetectFormat': s._setVrAutoDetectFormat,
-    'setVrShowDialog': s._setVrShowDialog,
-    'setDefaultAspectIndex': s._setDefaultAspectIndex,
-    'setNightModeIndex': s._setNightModeIndex,
-    'setSystemAudioEffects': s._setSystemAudioEffects,
-    'setTvosForceSoftwareDecode': s._setTvosForceSoftwareDecode,
-    'setTvosForceStereo': s._setTvosForceStereo,
-    'setTvosLegacyAudioOutput': s._setTvosLegacyAudioOutput,
-    'setAudioPassthrough': s._setAudioPassthrough,
-    'setAppleMultichannel': s._setAppleMultichannel,
-    'setAndroidVideoRendererMode': s._setAndroidVideoRendererMode,
-    'setContentDisplayMatchMode': s._setContentDisplayMatchMode,
-    'setIptvDecoderMode': s._setIptvDecoderMode,
-    'setStartPortrait': s._setStartPortrait,
-    'setSubtitleOnlyForeignAudio': s._setSubtitleOnlyForeignAudio,
-    'setSubtitleForcedOnly': s._setSubtitleForcedOnly,
-    'setSubtitleAutoSync': s._setSubtitleAutoSync,
-    'completionThresholdOptions': s._completionThresholdOptions,
-    'completionThresholdIndex': s._completionThresholdIndex,
-    'setMovieCompletionThresholdIndex': s._setMovieCompletionThresholdIndex,
-    'setEpisodeCompletionThresholdIndex': s._setEpisodeCompletionThresholdIndex,
-    'setSkipSegmentsEnabled': s._setSkipSegmentsEnabled,
-    'setSkipSegmentProvider': s._setSkipSegmentProvider,
-    'setNetPatience': s._setNetPatience,
-    'setNetBuffer': s._setNetBuffer,
-    'setDefaultSubtitleLanguage': s._setDefaultSubtitleLanguage,
-    'setDefaultAudioLanguage': s._setDefaultAudioLanguage,
-    'setSubtitleSizeIndex': s._setSubtitleSizeIndex,
-    'setSubtitleStyleIndex': s._setSubtitleStyleIndex,
-    'setSubtitleColorIndex': s._setSubtitleColorIndex,
-    'setSubtitleBgIndex': s._setSubtitleBgIndex,
-    'setSubtitleFontIndex': s._setSubtitleFontIndex,
-    'setSubtitleBold': s._setSubtitleBold,
-    'loadFonts': s._loadFonts,
-    'importCustomFont': s._importCustomFont,
-    'removeCustomFont': s._removeCustomFont,
-    'aspectLabels': s._aspectLabels,
-    'subtitleLanguageIndex': s._subtitleLanguageIndex,
-    'audioLanguageIndex': s._audioLanguageIndex,
+    'setVrDefaultScreenType': s._sections.vrSetters.setVrDefaultScreenType,
+    'setVrDefaultStereoMode': s._sections.vrSetters.setVrDefaultStereoMode,
+    'setVrAutoDetectFormat': s._sections.vrSetters.setVrAutoDetectFormat,
+    'setVrShowDialog': s._sections.vrSetters.setVrShowDialog,
+    'setDefaultAspectIndex': s._sections.playerSetters.setDefaultAspectIndex,
+    'setNightModeIndex': s._sections.playerSetters.setNightModeIndex,
+    'setSystemAudioEffects': s._sections.playerSetters.setSystemAudioEffects,
+    'setTvosForceSoftwareDecode':
+        s._sections.playerSetters.setTvosForceSoftwareDecode,
+    'setTvosForceStereo': s._sections.playerSetters.setTvosForceStereo,
+    'setTvosLegacyAudioOutput':
+        s._sections.playerSetters.setTvosLegacyAudioOutput,
+    'setAudioPassthrough': s._sections.playerSetters.setAudioPassthrough,
+    'setAppleMultichannel': s._sections.playerSetters.setAppleMultichannel,
+    'setAndroidVideoRendererMode':
+        s._sections.playerSetters.setAndroidVideoRendererMode,
+    'setContentDisplayMatchMode':
+        s._sections.playerSetters.setContentDisplayMatchMode,
+    'setIptvDecoderMode': s._sections.playerSetters.setIptvDecoderMode,
+    'setStartPortrait': s._sections.playerSetters.setStartPortrait,
+    'setSubtitleOnlyForeignAudio':
+        s._sections.subtitleSetters.setSubtitleOnlyForeignAudio,
+    'setSubtitleForcedOnly': s._sections.subtitleSetters.setSubtitleForcedOnly,
+    'setSubtitleAutoSync': s._sections.subtitleSetters.setSubtitleAutoSync,
+    'completionThresholdOptions':
+        s._sections.playerSetters.completionThresholdOptions,
+    'completionThresholdIndex':
+        s._sections.playerSetters.completionThresholdIndex,
+    'setMovieCompletionThresholdIndex':
+        s._sections.playerSetters.setMovieCompletionThresholdIndex,
+    'setEpisodeCompletionThresholdIndex':
+        s._sections.playerSetters.setEpisodeCompletionThresholdIndex,
+    'setSkipSegmentsEnabled': s._sections.playerSetters.setSkipSegmentsEnabled,
+    'setSkipSegmentProvider': s._sections.playerSetters.setSkipSegmentProvider,
+    'setNetPatience': s._sections.playerSetters.setNetPatience,
+    'setNetBuffer': s._sections.playerSetters.setNetBuffer,
+    'setDefaultSubtitleLanguage':
+        s._sections.subtitleSetters.setDefaultSubtitleLanguage,
+    'setDefaultAudioLanguage':
+        s._sections.subtitleSetters.setDefaultAudioLanguage,
+    'setSubtitleSizeIndex': s._sections.subtitleSetters.setSubtitleSizeIndex,
+    'setSubtitleStyleIndex': s._sections.subtitleSetters.setSubtitleStyleIndex,
+    'setSubtitleColorIndex': s._sections.subtitleSetters.setSubtitleColorIndex,
+    'setSubtitleBgIndex': s._sections.subtitleSetters.setSubtitleBgIndex,
+    'setSubtitleFontIndex': s._sections.subtitleSetters.setSubtitleFontIndex,
+    'setSubtitleBold': s._sections.subtitleSetters.setSubtitleBold,
+    'loadFonts': s._sections.fontActions.loadFonts,
+    'importCustomFont': s._sections.fontActions.importCustomFont,
+    'removeCustomFont': s._sections.fontActions.removeCustomFont,
+    'aspectLabels': s._sections.videoSection.aspectLabels,
+    'subtitleLanguageIndex': s._sections.subtitleSection.subtitleLanguageIndex,
+    'audioLanguageIndex': s._sections.audioSection.audioLanguageIndex,
     'openPlayerSettings': s._openPlayerSettings,
   };
 }

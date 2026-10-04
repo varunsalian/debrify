@@ -1029,11 +1029,31 @@ As in the PikPak plan, with these specifics:
   10,701 success / 13 failure / 28 error / 20 skipped. Every outcome identity
   equals the latest original `base4`; comparison PASS, zero additions/removals
   or changed outcomes. Same SDK, stable committed tree, no overlay/untracked
-  inputs. `gate1.env.json`, `gate1-full-identity-audit.json` and comparison logs
+  inputs. `gate1.env.json`, `gate1-complete-identity-audit.json` and comparison logs
   preserve the evidence in `playback_settings/`.
 - Historical helper replay still reports its original stale failure inventory;
   the exact observed original comparison is authoritative. No failure inventory,
   assertion or analyzer allowlist changes. This commit records evidence only.
+
+### Step 4 — instant setters, fonts and labels
+
+- Moved all 44 step-4 manifest entries: 33 instant setters, font operations,
+  three unchanged statics and live label/index getters. Wiring reviewed before
+  scaffold pinning (`step4-wiring-review.json`): the same owner instances and
+  State `setState` tear-off; live `mounted`/`context`; getter bodies read current
+  values. No constructor actions, preference/service changes or new consts.
+- Facade 3,125 lines; extracted files at most 309 lines, composition 187.
+  All six manifest/self-test runs pass. Focused replay: 146 successes and the
+  same original profile-adapter guard failure; PASS against `base4`. Whole
+  analyzer relocation/max comparison and per-symbol strict comparison PASS,
+  zero additions/scaffold diagnostics. Local CI passes with unchanged inventories.
+- Formatter decision: one retained radius wraps with a trailing comma after
+  receiver qualification. Normalize only such playback literal calls in the
+  shape source counter; preserve all other feature inventories. Initial broad
+  normalization exposed unrelated historical omissions and was discarded.
+  Final scoped check retains all 20 original radii/four token calls and floor 488;
+  affected shape, focused, CI and whole-analyzer checks were rerun successfully.
+  Frozen step-0b characterization, original PNGs and helper hashes are unchanged.
 
 ## Found, not fixed
 

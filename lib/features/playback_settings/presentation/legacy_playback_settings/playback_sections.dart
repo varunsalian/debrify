@@ -1,16 +1,24 @@
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_core_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_font_actions.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_ios_actions.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_ios_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_linux_actions.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_linux_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_mac_actions.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_mac_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_night_mode_section.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_player_mode_actions.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_player_setters.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_rows_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_settings_load.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_rows_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_section.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_setters.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_values_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_video_section.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_vr_setters.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_vr_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_windows_actions.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_windows_state.dart';
@@ -28,12 +36,20 @@ class PlaybackSections {
   final PlaybackSubtitleState sub;
   final PlaybackRowsState rows;
   final PlaybackSubtitleRowsState subRows;
+  final PlaybackAudioSection audioSection;
+  final PlaybackFontActions fontActions;
   final PlaybackIosActions iosActions;
   final PlaybackLinuxActions linuxActions;
   final PlaybackMacActions macActions;
+  final PlaybackNightModeSection nightModeSection;
   final PlaybackPlayerModeActions playerModeActions;
-  final PlaybackSettingsLoad load;
+  final PlaybackPlayerSetters playerSetters;
+  final PlaybackSubtitleSection subtitleSection;
+  final PlaybackSubtitleSetters subtitleSetters;
+  final PlaybackVideoSection videoSection;
+  final PlaybackVrSetters vrSetters;
   final PlaybackWindowsActions windowsActions;
+  final PlaybackSettingsLoad load;
   PlaybackSections({
     required this.core,
     required this.mac,
@@ -45,12 +61,20 @@ class PlaybackSections {
     required this.sub,
     required this.rows,
     required this.subRows,
+    required this.audioSection,
+    required this.fontActions,
     required this.iosActions,
     required this.linuxActions,
     required this.macActions,
+    required this.nightModeSection,
     required this.playerModeActions,
-    required this.load,
+    required this.playerSetters,
+    required this.subtitleSection,
+    required this.subtitleSetters,
+    required this.videoSection,
+    required this.vrSetters,
     required this.windowsActions,
+    required this.load,
   });
 }
 
@@ -69,8 +93,14 @@ PlaybackSections createPlaybackSections({
   required bool Function() mounted,
   required BuildContext Function() context,
   required PlaybackSettingsSection Function() section,
-  required Future<void> Function() loadFonts,
 }) {
+  final audioSection = PlaybackAudioSection((sub: sub));
+  final fontActions = PlaybackFontActions((
+    context: context,
+    mounted: mounted,
+    setState: setState,
+    sub: sub,
+  ));
   final iosActions = PlaybackIosActions((
     context: context,
     ios: ios,
@@ -89,18 +119,36 @@ PlaybackSections createPlaybackSections({
     mounted: mounted,
     setState: setState,
   ));
+  final nightModeSection = PlaybackNightModeSection();
   final playerModeActions = PlaybackPlayerModeActions((
     context: context,
     core: core,
     mounted: mounted,
     setState: setState,
   ));
+  final playerSetters = PlaybackPlayerSetters((
+    setState: setState,
+    values: values,
+  ));
+  final subtitleSection = PlaybackSubtitleSection((sub: sub));
+  final subtitleSetters = PlaybackSubtitleSetters((
+    setState: setState,
+    sub: sub,
+  ));
+  final videoSection = PlaybackVideoSection((values: values));
+  final vrSetters = PlaybackVrSetters((setState: setState, vr: vr));
+  final windowsActions = PlaybackWindowsActions((
+    context: context,
+    mounted: mounted,
+    setState: setState,
+    win: win,
+  ));
   final load = PlaybackSettingsLoad((
     context: context,
     core: core,
     ios: ios,
     linux: linux,
-    loadFonts: loadFonts,
+    loadFonts: fontActions.loadFonts,
     mac: mac,
     mounted: mounted,
     section: section,
@@ -108,12 +156,6 @@ PlaybackSections createPlaybackSections({
     sub: sub,
     values: values,
     vr: vr,
-    win: win,
-  ));
-  final windowsActions = PlaybackWindowsActions((
-    context: context,
-    mounted: mounted,
-    setState: setState,
     win: win,
   ));
   return PlaybackSections(
@@ -127,11 +169,19 @@ PlaybackSections createPlaybackSections({
     sub: sub,
     rows: rows,
     subRows: subRows,
+    audioSection: audioSection,
+    fontActions: fontActions,
     iosActions: iosActions,
     linuxActions: linuxActions,
     macActions: macActions,
+    nightModeSection: nightModeSection,
     playerModeActions: playerModeActions,
-    load: load,
+    playerSetters: playerSetters,
+    subtitleSection: subtitleSection,
+    subtitleSetters: subtitleSetters,
+    videoSection: videoSection,
+    vrSetters: vrSetters,
     windowsActions: windowsActions,
+    load: load,
   );
 }
