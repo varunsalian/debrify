@@ -11,5 +11,45 @@
     },
     "capture": "pikpak/working-views.txt (new originals only)",
     "strict": "pikpak/working-all3.txt; original worktree replay before extraction"
+  },
+  "linux": {
+    "original_revision": "2b93c52098f5eb66314f9d2bb65ba438f9835297",
+    "with_accessor_sha256": "039dba65d1b14c8df54ca36231735a3eeaf31a7d8ed17f9623f8b46cece23a5a",
+    "sha256": {
+      "folder.png": "db1aac9cf69a03dcda803c1cf08a1f53fddfdaa4a5ef8f2acdbbfd27c74fb375",
+      "not_enabled.png": "538db88a17690d56a3616bee6fab783dc3d14b26fa179acd9c56532daf3f9b6c",
+      "root.png": "ff715febd99a44c4e0f38f11d7b22678345da1e8b686e8292cb383b3bc2fecc0",
+      "select_source.png": "b89d0c01293675788bd5528d1c8f0919d82f011e4ed3120621ff45dcf101efd2",
+      "selection.png": "9ed5c08fd2e5d52f04f6be0735078fb0b97dfa1e10617f2ac3f1ed1e798558ba"
+    },
+    "capture_method": "Local linux/amd64 Docker container under Colima on macOS; GitHub Actions unavailable because of billing limit",
+    "captured_at": "2026-10-04T00:34:22Z",
+    "image": "debrify-flutter:3.44.8",
+    "os": "ubuntu:24.04",
+    "flutter": "3.44.8",
+    "sdk_source": "official flutter_linux_3.44.8-stable.tar.xz",
+    "capture_script_revision": "ec997117",
+    "capture_script_sha256": "4449a0cbdeb5634a9874e5eecc10b6126d2fafbee65ef960ba4c3bbecebbcf5d",
+    "dockerfile": {
+      "evidence": "pikpak/linux-capture-Dockerfile",
+      "sha256": "7622cd0472f3afbeb2c9af33b5bdfb3b8221cd31a5c26e034e0734643691f93f",
+      "content": "FROM --platform=linux/amd64 ubuntu:24.04\nRUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\\n    curl git unzip xz-utils zip ca-certificates libglu1-mesa python3 && rm -rf /var/lib/apt/lists/*\nRUN curl -fsSL https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.44.8-stable.tar.xz \\\n    | tar -xJ -C /opt\nENV PATH=/opt/flutter/bin:$PATH\nRUN git config --global --add safe.directory '*' && flutter --version && flutter precache --no-android --no-ios --linux\n"
+    },
+    "calibration": {
+      "revision": "47169f6e",
+      "strict_passes": 9,
+      "goldens": "GitHub-captured TorBox (4) and Real-Debrid (5) Linux originals",
+      "source": "User-reported pre-capture calibration, recorded in linux-original-run-url.txt"
+    },
+    "capture": "pikpak/linux-original-capture.txt (5 passed)",
+    "strict": "pikpak/linux-original-strict.txt (5 passed)",
+    "evidence_sha256": {
+      "linux-original-capture.txt": "e78e6cfdb3ac6789098f6163cb19158bd30df24b5d0a849a09b52b5c514d242c",
+      "linux-original-strict.txt": "25692322e4b74fbdd95a4067483cb384f84a67e81eeba36255b95c7a21839e58",
+      "linux-original-sha256.txt": "699973f71a46a0992acfdfbcc0d3e0e2db0deae3b32e820b9d7064265b2044ba",
+      "linux-original-revision.txt": "a210b43ab1902701ede86d3065fe6dac3158992e15d031ea3e9c7f4fc679352e",
+      "linux-original-run-url.txt": "77468958eb5a714238a58ed883135104815b035b7263e38a4d51e15c7e11fe1c"
+    },
+    "run_description": "local capture: Docker image debrify-flutter:3.44.8 (linux/amd64 ubuntu:24.04, official flutter_linux_3.44.8-stable tarball) under colima on macOS, 2026-10-04T00:34:22Z; GitHub Actions unavailable (spending limit). Container calibrated first: all 9 GitHub-captured TorBox/Debrid Linux goldens passed strictly in it at 47169f6e."
   }
 }

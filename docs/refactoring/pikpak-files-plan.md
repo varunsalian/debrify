@@ -452,6 +452,12 @@ Real-Debrid, PikPak) with self-tests, and gates against the latest PikPak base.
 - Whole analyzer still 839 diagnostics, zero added/removed versus Step 5. All five manifest/self-tests and callback negatives, exact CI format (1,457 files, zero changed), analyzer/strict five-warning allowlist, architecture, sizes, storage/self-tests/314 keys, capture-shell syntax and staged diff checks PASS. JSON/env/hash proof files are in the common evidence directory; step0b-final-proof.json fingerprints the original, mutation, base4 and moved runs.
 - Latest PikPak base is now base4. Existing gate1 remains historical evidence against base3 and is not relabeled as a base4 run; audit it against the new baseline when resuming the remaining gate work. Step 0b stops here as requested, with Step 6, strict Linux originals and Step 7/gate 2 pending. No push.
 
+### Linux originals — prerequisite satisfied
+
+- Claude ran the unchanged `ec997117` capture script in local linux/amd64 Docker (`ubuntu:24.04`, official Flutter 3.44.8 tarball, Colima on macOS), because GitHub Actions is unavailable at the billing limit. Exact-subject resolution selected ORIGINAL `2b93c520`; capture and original strict re-run each passed all five views. All five delivered PNG SHA-256 values match the capture record; no regeneration against moved code.
+- Claude reports pre-capture calibration at `47169f6e`: all nine GitHub-captured TorBox/Real-Debrid Linux originals passed strictly in this container. Calibration is identified as user-reported evidence, not an independently supplied log. `provenance.json` records local capture, calibration, script revision/hash, complete Dockerfile/hash, original source hash, PNG hashes and fingerprints of all five evidence files. The local description occupies run-url.txt; it is not a remote CI URL.
+- PNGs/provenance are committed separately before Step 6. The unrelated untracked `docs/refactoring/iptv-settings-plan.md` is user work and excluded from all commits. Remote CI remains pending; no push.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
