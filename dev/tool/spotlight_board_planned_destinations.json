@@ -627,7 +627,7 @@
   "_CardState._moving": {
     "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
     "owner": "SpotlightBoardCardState",
-    "name": "moving"
+    "name": "cardMoving"
   },
   "_CardState._activeCard": {
     "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",

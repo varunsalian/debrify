@@ -110,7 +110,7 @@ class SpotlightBoardCardState extends State<SpotlightBoardCard>
 
   bool wideSelected = false;
 
-  bool moving = false;
+  bool cardMoving = false;
 
   bool get activeCard => widget.largeInteractions ? wideSelected : f;
 
@@ -136,10 +136,10 @@ class SpotlightBoardCardState extends State<SpotlightBoardCard>
   }
 
   void setWideSelection(bool selected, {required bool moving}) {
-    if (wideSelected == selected && moving == moving) return;
+    if (wideSelected == selected && cardMoving == moving) return;
     setState(() {
       wideSelected = selected;
-      moving = moving;
+      cardMoving = moving;
     });
     armCardTrailer();
     loadFocusedDescription();
@@ -167,12 +167,12 @@ class SpotlightBoardCardState extends State<SpotlightBoardCard>
     trailerDwell?.cancel();
     trailerTextTimer?.cancel();
     hideTrailerText = false;
-    if (!activeCard || moving) trailerAttempted = false;
+    if (!activeCard || cardMoving) trailerAttempted = false;
     trailerRequested = false;
     trailerPlaying = false;
     if (trailerAttempted ||
         !activeCard ||
-        moving ||
+        cardMoving ||
         !canExpand ||
         !widget.trailerEnabled ||
         MediaQuery.disableAnimationsOf(context))
@@ -180,7 +180,7 @@ class SpotlightBoardCardState extends State<SpotlightBoardCard>
     trailerDwell = Timer(const Duration(seconds: 2), () {
       if (!mounted ||
           !activeCard ||
-          moving ||
+          cardMoving ||
           !widget.trailerEnabled ||
           !canExpand ||
           ModalRoute.of(context)?.isCurrent == false ||
@@ -207,7 +207,7 @@ class SpotlightBoardCardState extends State<SpotlightBoardCard>
     descriptionTimer?.cancel();
     final request = ++descriptionRequest;
     final item = originalMetadata;
-    if (!canExpand || !activeCard || moving || item == null) return;
+    if (!canExpand || !activeCard || cardMoving || item == null) return;
     final scope = ProfileRuntime.scope.value;
     bool current() =>
         mounted &&
@@ -264,7 +264,7 @@ class SpotlightBoardCardState extends State<SpotlightBoardCard>
   bool previewActivityReported = false;
 
   bool get cardPreviewActive => widget.largeInteractions
-      ? wideSelected && !moving
+      ? wideSelected && !cardMoving
       : widget.dpad
       ? f
       : h || (widget.card.previewOnKeyboardFocus && f);
@@ -350,7 +350,7 @@ class SpotlightBoardCardState extends State<SpotlightBoardCard>
     tween: Tween(
       end:
           scrollGrowth ??
-          (canExpand && activeCard && !moving
+          (canExpand && activeCard && !cardMoving
               ? (widget.expandedHeight *
                         SpotlightCardShape.wide.aspect /
                         (widget.height * widget.card.shape.aspect)) *

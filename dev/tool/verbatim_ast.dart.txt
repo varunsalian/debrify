@@ -161,7 +161,42 @@ class References extends RecursiveAstVisitor<void> {
     ) {
       if (ancestor is Block) blocks.add(ancestor.offset);
     }
+    final lexicalNames = <String>{
+      for (final names in parameters) ...names,
+    };
+    for (AstNode? ancestor = parent; ancestor != null; ancestor = ancestor.parent) {
+      if (ancestor is Block) {
+        for (final statement in ancestor.statements) {
+          if (statement is VariableDeclarationStatement) {
+            for (final variable in statement.variables.variables) {
+              lexicalNames.add(variable.name.lexeme);
+            }
+          }
+        }
+      }
+    }
+    final receiver = switch (parent) {
+      PropertyAccess() when parent.propertyName == node => parent.target?.toSource(),
+      PrefixedIdentifier() when parent.identifier == node => parent.prefix.toSource(),
+      MethodInvocation() when parent.methodName == node => parent.target?.toSource(),
+      _ => null,
+    };
+    final bindingNode = switch (parent) {
+      PropertyAccess() when parent.propertyName == node => parent,
+      PrefixedIdentifier() when parent.identifier == node => parent,
+      _ => node,
+    };
+    final bindingParent = bindingNode.parent;
+    final bindingRole = invoked ? 'call'
+        : bindingParent is AssignmentExpression && bindingParent.leftHandSide == bindingNode
+        ? (bindingParent.operator.lexeme == '=' ? 'write' : 'read/write')
+        : bindingParent is PostfixExpression || bindingParent is PrefixExpression &&
+          (bindingParent.operator.lexeme == '++' || bindingParent.operator.lexeme == '--')
+        ? 'read/write' : 'read';
     values.add({
+      'bindingRole': bindingRole,
+      'lexicalNames': lexicalNames.toList(),
+      'receiver': receiver,
       'name': node.name,
       'offset': node.offset,
       'end': node.end,

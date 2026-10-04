@@ -28,7 +28,7 @@ class SpotlightBoardCardLayout {
     final app = AppThemeScope.of(context);
     final c = cardState.widget.card;
     final expanded =
-        cardState.canExpand && cardState.activeCard && !cardState.moving;
+        cardState.canExpand && cardState.activeCard && !cardState.cardMoving;
     final w = cardState.widget.height * c.shape.aspect * growth;
     // Keep the row's baseline and height; only widen the selected poster.
     // The width uses landscape-rail sizing rather than the taller poster.
@@ -329,7 +329,7 @@ class SpotlightBoardCardLayout {
                 IgnorePointer(child: preview(context)),
               if (cardState.trailerRequested &&
                   cardState.activeCard &&
-                  !cardState.moving &&
+                  !cardState.cardMoving &&
                   cardState.canExpand &&
                   cardState.widget.trailerEnabled)
                 SpotlightCardTrailer(
@@ -339,7 +339,7 @@ class SpotlightBoardCardLayout {
                   onPlayingChanged: (playing) {
                     if (!cardState.mounted ||
                         !cardState.activeCard ||
-                        cardState.moving ||
+                        cardState.cardMoving ||
                         !cardState.trailerRequested ||
                         cardState.trailerPlaying == playing)
                       return;

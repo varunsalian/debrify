@@ -1232,6 +1232,41 @@ decomposition; bug fixes and behaviour changes, including everything below.
 - Formatted facade: **2168**. Physical AST breakdown: imports export 31, widget docs 185, state header 3, lifecycle 142, forwarders overrides 18, bindings 54, composition 11, retained original bodies 1667, remaining 57 (sum 2168); detailed spans in `step4-cap.json`.
 - All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step4-focused.*` includes full end-of-run tree provenance before this Progress edit.
 
+### Step 4b — close the gate-1 field-capture regression
+
+- Step 4 is `8e385c17`. The first full gate (`gate1.*`, retained) rejected
+  `spotlight_large_screen_test::overlapping horizontal rows stay moving until
+  both end`: 11,129 PASS / 13 failure / 29 error / 20 skipped, one new error.
+  Investigation found the step-2 `_moving` → `moving` rename captured the
+  existing `moving` parameter in both the comparison and assignment inside
+  `setWideSelection`. This was a real extraction regression, not accepted
+  as flaky or added to any allowlist.
+- Conservative correction: the exposed field is `cardMoving`; the original
+  parameter, field behavior, method body structure, callbacks, comments and
+  timing are unchanged. Updated the manifest, immutable destination ledger,
+  card references, dependency entry and exact physical context prefixes.
+  Facade stays 2,168; card layout stays 585; complete cap stays 451.
+- Added opt-in Spotlight State-field binding comparison before declaration
+  normalization and before source-reader comparison. It uses AST lexical
+  parameters/block locals, exact registered receivers and read/write roles;
+  comment references are excluded. It covers all 32 board fields and card
+  fields. General token/comma rules and every other feature's behavior are
+  unchanged. Guard-alone positives and parameter/local-capture negatives
+  prevent token normalization from hiding another capture.
+- Full relevant file on ORIGINAL b/R: 21 PASS. Separate original read,
+  write and local-capture mutations produce respectively 19/2, 20/1 and 20/1
+  PASS/error; each is rejected by the binding guard too. Original source is
+  restored and hash-verified. Corrected current full file: 21 PASS with no
+  missing identities or skips. `step4b-original-full-mutation-proofs.json`
+  and `step4b-causal-proof.json` retain inputs/results; full end-of-run tree
+  provenance is captured before restoration and Progress edits.
+- All ten manifests with self-tests, focused characterization comparison,
+  architecture negatives, sizes/storage, shape/theme, CI format/analyze and
+  allowlist PASS again (`step4b-*`). Strict analysis: 17 inventoried infos,
+  zero additions, errors or warnings. No test assertions or goldens changed;
+  original base3 remains authoritative. A fresh committed gate-1 run uses
+  `gate1-final.*`, preserving the rejected first attempt.
+
 ### Amendment after step 0b (design-reviewed before resuming)
 
 1. **Facade cap.** The hard maximum becomes 460 (see the size section); the

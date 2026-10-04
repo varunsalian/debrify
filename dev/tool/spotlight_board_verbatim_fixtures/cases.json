@@ -114,5 +114,15 @@
     "name": "dropped Board dispose step",
     "member": "SpotlightBoardState.dispose",
     "mutation": "drop_dispose"
+  },
+  {
+    "name": "moving field read captures the selection parameter",
+    "member": "_CardState._setWideSelection",
+    "mutation": "capture_moving_read"
+  },
+  {
+    "name": "moving field write captures the selection parameter",
+    "member": "_CardState._setWideSelection",
+    "mutation": "capture_moving_write"
   }
 ]

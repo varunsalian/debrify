@@ -36,12 +36,21 @@ def self_test(package=None):
                 key = (source, config.get('type_renames', {}).get(owner, owner), leaf or name)
         return key, lookup[key]
 
+    from spotlight_board_field_binding_fixtures import self_test as field_binding_self_test
+    field_binding_self_test(original, sources, rows, source, config, package)
     for case in json.loads((ROOT / 'dev/tool/spotlight_board_verbatim_fixtures/cases.json').read_text()):
         key, node = located(case['member'])
         changed = dict(sources)
         body = node['text']
         if case['mutation'] == 'drop_stop':
             body, count = re.subn(r'(?:widget|view)\s*\.\s*onTrailerStop\?\.call\(\);', '', body, count=1)
+        elif case['mutation'] in ['capture_moving_read', 'capture_moving_write']:
+            field = 'cardMoving' if 'cardMoving' in body else '_moving'
+            operator = '==' if case['mutation'] == 'capture_moving_read' else '='
+            before_text = field + ' ' + operator + ' moving'
+            assert before_text in body
+            body = body.replace(before_text, 'moving ' + operator + ' moving', 1)
+            count = 1
         elif case['mutation'] == 'drop_dispose':
             body, count = re.subn(r'[\w.]+(?:\?\.)?(?:cancel|dispose)\(\);', '', body, count=1)
         elif case['mutation'] == 'wrong_this':

@@ -960,6 +960,10 @@ def _check(original_source, sources, rows, source_path, package=None,
         import importlib
         validator = importlib.import_module(CONFIG['source_validator_module'])
         errors.extend(validator.validate_sources(sources))
+    if CONFIG.get('spotlight_state_field_bindings'):
+        from spotlight_board_field_bindings import failures as field_binding_failures
+        errors.extend(field_binding_failures(original, all_nodes(parsed), rows,
+                                             source_path, CONFIG))
     errors.extend(check_named_exceptions(rows))
     errors.extend(check_lint_comments(original_source, sources))
     known = {r['original_name'] for r in rows}

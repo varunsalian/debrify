@@ -64,6 +64,14 @@ def read_member(original_name, original, sources, rows, config, package):
         actual = lookup.get((SOURCE, owner, name))
     if actual is None:
         raise ValueError('Manifest-owned body is missing: ' + original_name)
+    if config.get('spotlight_state_field_bindings'):
+        from spotlight_board_field_bindings import failures as field_binding_failures
+        originals = {r['original_name']: lookup[('<original>', *r['original_name'].rsplit('.', 1))]
+                     for r in rows if '.' in r['original_name']}
+        failures = field_binding_failures(originals, lookup, [row] + [r for r in rows
+                                          if r is not row], SOURCE, config, members=[original_name])
+        if failures:
+            raise ValueError('Owned field binding changed: ' + original_name + '\n' + '\n'.join(failures))
     receivers = config.get('bound_state_receivers', {}).get(original_name, [])
     if builder_context_signature(before, receivers) != builder_context_signature(actual, receivers):
         raise ValueError('Lexical/State context or mounted guard changed: ' + original_name)

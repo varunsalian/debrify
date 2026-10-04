@@ -18,6 +18,9 @@
     "formatter_if_braces",
     "production_api_annotation",
     "layout_body",
+    "formatter_if_braces",
+    "production_api_annotation",
+    "layout_body",
     "formatter_if_braces"
   ],
   "receivers": [
@@ -4820,5 +4823,9 @@
       "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart",
       "difference": "production_api_annotation: remove only @visibleForTesting from moved implementation; retain exact annotated facade forwarder"
     }
-  }
+  },
+  "spotlight_state_field_bindings": [
+    "_CardState",
+    "SpotlightBoardState"
+  ]
 }
