@@ -614,11 +614,11 @@ As in the playlist and merged-detail plans, plus:
 | --- | --- | --- |
 | 0 | Baseline; format commit (a) and `base-fmt`; lint probes; deps report, manifest, config; characterization tests, macOS goldens and checkpoint (b); CI list; inventory; Linux script; step 0b review | Nothing moves |
 | 1 | Guard registration; public types (re-exported); metrics; shape and theme registration begin | Surface |
-| 2 | Title link, logo, open pill; card and card State (owners, trailer and description sections, bound layout owner with its exception) | 1 (`this`), 5–7, 15 |
+| 2 | **Prerequisite: the supplied Linux originals are hash-verified, committed separately and the Linux golden test made strict before this step.** Title link, logo, open pill; card and card State (owners, trailer and description sections, bound layout owner with its exception) | 1 (`this`), 5–7, 15 |
 | 3 | Board owners (32 fields); widget view and injected statics; lifecycle verbatim | 1, 14 |
 | 4 | Hero art and warm-up, cadence and lease, `_onHeroFocus`, ambient, tint, flip, metadata hook bodies. **Full-suite gate 1.** | 2, 4, 6, 13 |
 | 5 | Selection, scroll, movement, progressive DOWN, `focusShelf`/`focusTarget` bodies | 11, 12 |
-| 6 | `build` forwarder, `_board`, hero paint, shelves. Committed Linux originals are a prerequisite. | 3, 7–10 |
+| 6 | `build` forwarder, `_board`, hero paint, shelves (Linux originals already committed and strict since before step 2). | 3, 7–10 |
 | 7 | Composition, facade registration, cap and `TEMP`, guards, CI. **Full-suite gate 2.** | All |
 
 ### Step 0
@@ -783,7 +783,8 @@ push is approved.
 ## Definition of done
 
 1. **Facade.** Formatted and within its measured cap (400, or the recorded
-   value up to 450, counting every physical line), with the breakdown
+   measured value — 451 or lower — within the amended 460 design maximum,
+   counting every physical line), with the breakdown
    recorded. It holds `SpotlightBoard`, the re-export, and the State with
    its mixin, verbatim lifecycle, forwarders, bindings and composition. All
    9 production and 19 test importers compile unchanged.
@@ -1098,10 +1099,27 @@ decomposition; bug fixes and behaviour changes, including everything below.
    the AST-owned optional-formatter-comma inventory by declaration and
    position, with a negative proving any other added comma or token in that
    declaration still fails. The checker's general rule is not relaxed.
-3. **`_LogoOrTitle` placement.** It already moves into the
-   `legacy_spotlight_board/` bridge (shelf/hero row), which is the documented
-   home for `DebrifyImageCache`; the dependency inventory records that
-   import explicitly so the move is not counted as service-free.
+   **Wiring (review P2):** an inventory row alone changes nothing —
+   `verbatim_ast.dart.txt` deliberately excludes named-record literal commas
+   and comparisons consume only `formatCommas`. Add a **config-scoped**
+   validator (Spotlight config key only) that identifies exactly this
+   optional trailing comma in the named-record literal of
+   `loadShelvesAndFinishDown` and supplies its offset before the
+   declaration, context-prefix and source-reader comparisons. Required
+   fixtures on the full composition: positive (the real output passes);
+   negatives for an unregistered named-record comma elsewhere, changed
+   record values, and a hoisted context — each must fail.
+3. **`_LogoOrTitle` placement.** Its original reads
+   `DebrifyImageCache.manager` (original 2970), so it is not service-free.
+   Its destination becomes
+   `presentation/legacy_spotlight_board/spotlight_board_logo_or_title.dart`
+   (inside the bridge): update `spotlight_board_manifest.tsv` (row 120),
+   `spotlight-board-deps.md` (127), imports, guard/shape/theme registrations
+   and the probe accordingly, record the cache dependency, and correct its
+   context inventory to the lexical `build` parameter.
+4. **Linux originals** become a prerequisite **before step 2** (the first
+   builder move), not step 6: verify hashes, commit separately, make the
+   Linux test strict, then step 2.
 
 ## Found, not fixed
 
