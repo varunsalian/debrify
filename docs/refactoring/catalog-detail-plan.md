@@ -594,6 +594,78 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   its private destination and both writers move together in step 3.
 
 
+- Step 0 original-code characterization: 73/73 pass in the owned detached
+  format-only original, recorded as `catalog_detail/original-characterization-final`
+  on tested tree `e5dded15496ebe241db83a9d3bc2ce23803a3083` (SDK unchanged,
+  no untracked inputs, no tree change during the run). `original-checkpoint-proof.json`
+  verifies the whole `lib/`, `pubspec.yaml` and lockfile objects equal the
+  formatted original and all 16 test/helper/pixel inputs still match that run.
+  There is no production seam. Tests observe rendered widgets, exact host
+  callbacks, stored rows, request counts and direct configured-TMDB transport.
+- Original negatives: `catalog_detail/original-mutations.json` records 39
+  assertion-rejected mutations covering all 73 new identities, zero uncovered.
+  Each negative records its tested tree, restores original production bytes and
+  preserves all five fixture/master image hashes. The interrupted autofocus run
+  was archived as incomplete, the original restored, and that negative rerun;
+  neither incomplete runs nor compile-error drafts count as accepted proof.
+- Four macOS masters captured against original code and replayed strictly:
+  TV movie wide, phone movie narrow, desktop series wide, TV series resume.
+  Readiness waits for backdrop decode at zero fake-clock time, then uses one
+  fixed 1.2 s reveal/fade timeline, named TV focus, no shimmer and a null accent.
+  Conservative fixture decision: explicit empty poster skips the original
+  cached accent decode; fixed bitmap artwork still exercises the backdrop.
+  Sparse enrichment's loader-art emissions are separately observed. Failed
+  cache/accent-readiness drafts are retained only as rejected evidence.
+- The LF manifest covers all 135 original leaves; the dependency report reviews
+  intended receivers, live host reads, resource owners and every entry's actual
+  wiring checkpoint before any scaffold is pinned. Actual moving-step wiring
+  remains pending. Catalog-only identity checks pin all eight listener receivers,
+  17 callback handoffs, nine raw host assignments and recommendation mapping;
+  real-config negatives independently exercise the resolver before whole-leaf
+  comparison. Other manifests retain their own configs and original baselines,
+  including merged detail at `21320ff9`.
+- `catalog_detail/base2` full suite: 11,166 successes / 13 failures / 28 errors /
+  20 skips. Comparison with `base-fmt` passes with exactly 73 passing additions,
+  no changed original identity, missing test or newly skipped test. Runner flags
+  are recorded separately (`--no-pub`); its full-suite paths list is empty.
+  Tested tree `176bae456cf23a5671a88e318c640674c3f516f7` is stable.
+  This is the latest catalog base for both later gates. Gate 1 and gate 2 have
+  not run yet. Every new concrete test and the three already-passing original
+  hold cases are on the CI list; the known-failure list is unchanged.
+- Step 0 inventories: original shape has 29 bare-radius sites and no tokens;
+  theme remains 238 sites (formatting alone raises its measured line total to
+  6,844); light-ink remains 919 total / 249 primary sites. Architecture, size,
+  storage map/bodies/keys/references and the CI format command plus the catalog
+  facade and every helper pass. Current original facade breakdown: 43 import /
+  blank lines, 106 public-widget / separator lines, 1,789 State lines and 1,623
+  private-widget / section-comment lines = 3,561. The final cap is still pending.
+  All source guards remain enforced; feature,
+  facade, shape and explicit-directory theme registrations land with step 1.
+- Step 0 analyzer closure: root comparison against `base-fmt-analyze.txt`
+  has zero added or removed diagnostics (1,667 total). CI-scoped analyzer plus
+  `check_analyzer_allowlist.py` passes all 12 exact pre-existing warning entries;
+  the seven new tests and four support helpers have no diagnostics. The exact-
+  import strict facade probe remains 21 original identities, zero additions;
+  its temporary analysis config is removed. Catalog `_simklStatus` warning is
+  deliberately outside CI scope until step 3 moves it with both writers and
+  adds its full-message destination allowlist entry in that same commit.
+- Step 0 checker closure: all 11 integrated manifests and their self-tests pass,
+  recorded in `catalog_detail/step0-manifests.json` with separate logs. Every
+  invocation uses the isolated parser; each existing manifest keeps its own
+  original/config (merged detail `21320ff9`), and only catalog uses the format
+  baseline. Catalog passes all 135 leaves plus independent callback, receiver,
+  live-read, lifecycle, lazy, mixin, co-location and comment negatives. The
+  final staged diff is LF-clean and contains no application change beyond the
+  already-committed formatting; all original assertions are retained.
+- Linux handoff script uses the exact named checkpoint and format-only original,
+  verifies their application objects match, captures in an owned detached
+  worktree and replays strict originals before copying four PNGs. `bash -n`
+  passes; it has no early-exit producer pipeline. Linux originals are not yet
+  present, so step 0L and all moves remain pending. Until original pixels arrive,
+  the Linux-only missing-master skip exists solely for this checkpoint; step 0L
+  removes it and the opt-out define in a separate provenance/asset commit.
+
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

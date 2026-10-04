@@ -1,0 +1,31 @@
+import 'dart:convert';
+import 'package:debrify/models/metadata_preferences.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/services/metadata_preferences_service.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import '../test/support/catalog_detail_fixture.dart';
+
+void main() {
+  for(final category in ['credits','recommendations']) {
+    testWidgets('R O configured original TMDB $category success uses direct transport',(t) async {
+      await catalogDetailCase(t,(f) async {
+        f.item=StremioMeta(id:category=='credits'?'tmdb:795301':'tmdb:795302',type:'movie',name:'Configured Catalog',description:'Fixed configured original',year:'2026');
+        f.onRequest=(r) async => http.Response(jsonEncode(r.url.path.endsWith('/credits') ? {'cast':[{'id':1,'name':'Configured Actor','character':'Original Role'}],'crew':[{'job':'Director','name':'Configured Director'}]} : r.url.path.endsWith('/recommendations') ? {'results':[{'id':795303,'title':'Configured Recommendation','media_type':'movie','release_date':'2026-01-01'}]} : {}),200);
+        await MetadataPreferencesService.save(MetadataPreferences(providers:{
+          MetadataCategory.credits:category=='credits'?MetadataPreferences.tmdb:MetadataPreferences.current,
+          MetadataCategory.recommendations:category=='recommendations'?MetadataPreferences.tmdb:MetadataPreferences.current,
+        },fallback:false));
+        await f.mount(t);
+        final marker=category=='credits'?'Configured Director':'Configured Recommendation';
+        await f.until(t,()=>find.textContaining(marker).evaluate().isNotEmpty);
+        final target=f.requests.where((r)=>r.url.path.endsWith('/$category')).toList();
+        expect(target,hasLength(1));
+        expect(target.single.url.host,'api.themoviedb.org');
+        expect(target.single.headers['authorization'],'Bearer catalog-original-fixture');
+        expect(target.single.url.queryParameters['language'],'en-US');
+        if(category=='recommendations') expect(f.calls.where((c)=>c=='recommendations'),isEmpty);
+      });
+    });
+  }
+}

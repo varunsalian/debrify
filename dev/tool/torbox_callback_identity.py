@@ -220,6 +220,11 @@ def check_callback_identities(lookup, rows, source_path, config):
                 resolved.append(identity([expected_node['name']], expected_node['owner']))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
+        if 'expected_identity' in spec:
+            resolved.append(spec['expected_identity'])
         if resolved and len(set(resolved)) != 1:
             errors.append(f"Callback identity {spec['name']} differs: {resolved}")
+    if any(key.startswith('catalog_') for key in config):
+        from catalog_detail_callback_identity import check_contracts
+        errors.extend(check_contracts(lookup, rows, source_path, config))
     return errors

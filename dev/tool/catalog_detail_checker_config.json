@@ -1,0 +1,538 @@
+{
+  "baseline": "adc2e32e7127fb5109de14afa74c0daecfa4c184",
+  "execution_base": "881ed25073c9cac0f80c5ae650118a9bcdcb4d41",
+  "source": "lib/screens/catalog_item_detail_screen.dart",
+  "feature": "lib/features/catalog_detail",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": true,
+  "allowed_edits": [
+    "unchanged",
+    "receiver",
+    "rename",
+    "state_callback",
+    "context_guard",
+    "live_getter_callback",
+    "layout_body",
+    "retained_forwarder"
+  ],
+  "receivers": [
+    "_deps",
+    "deps",
+    "s",
+    "state",
+    "this",
+    "CatalogDetailActionLayout",
+    "CatalogDetailBoundSources",
+    "CatalogDetailContentColumns",
+    "CatalogDetailCreditsSections",
+    "CatalogDetailHeroSections",
+    "CatalogDetailMetadata",
+    "CatalogDetailPrimaryAction",
+    "CatalogDetailRailSections",
+    "CatalogDetailResources",
+    "CatalogDetailRootLayout",
+    "CatalogDetailWatchlist"
+  ],
+  "live_widget_getters": [
+    "item",
+    "isTelevision",
+    "showQuickPlay",
+    "hasBoundSource",
+    "onPlay",
+    "onRewatch",
+    "onLoaderArt",
+    "resumeInfoLoader",
+    "onBrowse",
+    "onBrowsePrimaryEpisodeSources",
+    "enablePrimarySourcesHold",
+    "traktMenuOptions",
+    "onTraktAction",
+    "simklMenuOptions",
+    "onSimklAction",
+    "mdblistMenuOptions",
+    "onMdblistAction",
+    "simklStatusLoader",
+    "recommendationsLoader",
+    "onRecommendationTap",
+    "metaEnricher"
+  ],
+  "live_getter_callbacks": [
+    "presentedItem",
+    "metadataPreferences",
+    "revealCtrl",
+    "hasBoundSource"
+  ],
+  "lifecycle": [
+    "_CatalogItemDetailScreenState.initState",
+    "_CatalogItemDetailScreenState.didChangeDependencies",
+    "_CatalogItemDetailScreenState.didPopNext",
+    "_CatalogItemDetailScreenState._onPlaybackReturned",
+    "_CatalogItemDetailScreenState.dispose",
+    "_CatalogItemDetailScreenState._revealCtrl",
+    "_CatalogItemDetailScreenState._hasBoundSource",
+    "_CatalogItemDetailScreenState.originalMetadata",
+    "_CatalogItemDetailScreenState._item"
+  ],
+  "forwarders": {
+    "_CatalogItemDetailScreenState.onMetadataPolicyChanged": {
+      "receiver": "_parts.metadata"
+    },
+    "_CatalogItemDetailScreenState.build": {
+      "receiver": "_parts.rootLayout"
+    }
+  },
+  "sidecars": {},
+  "test_accessors": [],
+  "type_aliases": [],
+  "additional_owners": [],
+  "required_nodes": [],
+  "receiver_paths": {},
+  "receiver_owners": {
+    "_CatalogItemDetailScreenState": "_CatalogItemDetailScreenState"
+  },
+  "plain_sections": [],
+  "co_located_declarations": [
+    [
+      "_CatalogItemDetailScreenState._simklStatus",
+      "_CatalogItemDetailScreenState._loadSimklStatus",
+      "_CatalogItemDetailScreenState._playPrimary"
+    ],
+    [
+      "_CatalogItemDetailScreenState._openMetadataRecommendation",
+      "_CatalogItemDetailScreenState._recommendations",
+      "_CatalogItemDetailScreenState._recommendationOriginals"
+    ]
+  ],
+  "self_test_module": "catalog_detail_checker_test",
+  "callback_instances": {
+    "_CatalogItemDetailScreenState": "$State"
+  },
+  "callback_receiver_aliases": {},
+  "callback_identities": [
+    {
+      "name": "TrackingSourceStorage.trackingSourceRevision.addListener",
+      "callback_member": "_CatalogItemDetailScreenState._onMovieProgressPolicyChanged",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "MovieProgressStorage.movieFinishedRevision.addListener",
+      "callback_member": "_CatalogItemDetailScreenState._loadLocalMovieFinished",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "name": "MdblistService.instance.watchedRevision.addListener",
+      "callback_member": "_CatalogItemDetailScreenState._loadLocalMovieFinished",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 2
+        }
+      ]
+    },
+    {
+      "name": "TrackingSourceStorage.trackingSourceRevision.removeListener",
+      "callback_member": "_CatalogItemDetailScreenState._onMovieProgressPolicyChanged",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState.dispose",
+          "call": "removeListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "MovieProgressStorage.movieFinishedRevision.removeListener",
+      "callback_member": "_CatalogItemDetailScreenState._loadLocalMovieFinished",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState.dispose",
+          "call": "removeListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "name": "MdblistService.instance.watchedRevision.removeListener",
+      "callback_member": "_CatalogItemDetailScreenState._loadLocalMovieFinished",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState.dispose",
+          "call": "removeListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 2
+        }
+      ]
+    },
+    {
+      "name": "addPlaybackReturnListener",
+      "callback_member": "_CatalogItemDetailScreenState._onPlaybackReturned",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState.initState",
+          "call": "addPlaybackReturnListener",
+          "argument": 0
+        }
+      ]
+    },
+    {
+      "name": "removePlaybackReturnListener",
+      "callback_member": "_CatalogItemDetailScreenState._onPlaybackReturned",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState.dispose",
+          "call": "removePlaybackReturnListener",
+          "argument": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildBody onOpen",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState._buildBody",
+          "call": "MetadataExploreButton",
+          "argument": "onOpen"
+        }
+      ],
+      "expected_identity": "widget.onRecommendationTap"
+    },
+    {
+      "name": "_secQuickActions onSelected",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState._secQuickActions",
+          "call": "_QuickActions",
+          "argument": "onSelected"
+        }
+      ],
+      "expected_identity": "widget.onTraktAction"
+    },
+    {
+      "name": "_secSimklQuickActions onSelected",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState._secSimklQuickActions",
+          "call": "_SimklQuickActions",
+          "argument": "onSelected"
+        }
+      ],
+      "expected_identity": "widget.onSimklAction"
+    },
+    {
+      "name": "_secMdblistQuickActions onSelected",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState._secMdblistQuickActions",
+          "call": "_MdblistQuickActions",
+          "argument": "onSelected"
+        }
+      ],
+      "expected_identity": "widget.onMdblistAction"
+    },
+    {
+      "name": "_buildActionRow onPlay",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState._buildActionRow",
+          "call": "_ActionRow",
+          "argument": "onPlay"
+        }
+      ],
+      "callback_member": "_CatalogItemDetailScreenState._playPrimary"
+    },
+    {
+      "name": "_buildActionRow onBrowse",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState._buildActionRow",
+          "call": "_ActionRow",
+          "argument": "onBrowse"
+        }
+      ],
+      "expected_identity": "widget.onBrowse"
+    },
+    {
+      "name": "_buildActionRow onArrowUp",
+      "callback_member": "_CatalogItemDetailScreenState._scrollWideToTop",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState._buildActionRow",
+          "call": "_ActionRow",
+          "argument": "onArrowUp",
+          "conditional_member": "_CatalogItemDetailScreenState._scrollWideToTop",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildActionRow onPlayLongPress",
+      "callback_member": "_CatalogItemDetailScreenState._browsePrimarySources",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState._buildActionRow",
+          "call": "_ActionRow",
+          "argument": "onPlayLongPress",
+          "conditional_member": "_CatalogItemDetailScreenState._browsePrimarySources",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildActionRow onToggleMyWatchlist",
+      "callback_member": "_CatalogItemDetailScreenState._toggleMyWatchlist",
+      "sites": [
+        {
+          "member": "_CatalogItemDetailScreenState._buildActionRow",
+          "call": "_ActionRow",
+          "argument": "onToggleMyWatchlist",
+          "conditional_member": "_CatalogItemDetailScreenState._toggleMyWatchlist",
+          "branch_count": 1
+        }
+      ]
+    }
+  ],
+  "catalog_call_receivers": [
+    {
+      "member": "_CatalogItemDetailScreenState.initState",
+      "call": "addListener",
+      "occurrence": 0,
+      "receiver": "TrackingSourceStorage.trackingSourceRevision"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState.initState",
+      "call": "addListener",
+      "occurrence": 1,
+      "receiver": "MovieProgressStorage.movieFinishedRevision"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState.initState",
+      "call": "addListener",
+      "occurrence": 2,
+      "receiver": "MdblistService.instance.watchedRevision"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState.dispose",
+      "call": "removeListener",
+      "occurrence": 0,
+      "receiver": "TrackingSourceStorage.trackingSourceRevision"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState.dispose",
+      "call": "removeListener",
+      "occurrence": 1,
+      "receiver": "MovieProgressStorage.movieFinishedRevision"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState.dispose",
+      "call": "removeListener",
+      "occurrence": 2,
+      "receiver": "MdblistService.instance.watchedRevision"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState.initState",
+      "call": "addPlaybackReturnListener",
+      "occurrence": 0,
+      "receiver": "MainPageBridge"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState.dispose",
+      "call": "removePlaybackReturnListener",
+      "occurrence": 0,
+      "receiver": "MainPageBridge"
+    }
+  ],
+  "catalog_live_reads": [
+    {
+      "member": "_CatalogItemDetailScreenState._openMetadataRecommendation",
+      "getter": "onRecommendationTap",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._loadSimklStatus",
+      "getter": "simklStatusLoader",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._loadResumeInfo",
+      "getter": "resumeInfoLoader",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._primaryLabel",
+      "getter": "onRewatch",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._playPrimary",
+      "getter": "onPlay",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._playPrimary",
+      "getter": "onRewatch",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._loadEnrichedMeta",
+      "getter": "metaEnricher",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._emitLoaderArt",
+      "getter": "onLoaderArt",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._loadRecommendations",
+      "getter": "metaEnricher",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._loadRecommendations",
+      "getter": "recommendationsLoader",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._buildBody",
+      "getter": "onRecommendationTap",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._buildContentColumn",
+      "getter": "onRecommendationTap",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._buildNarrowColumn",
+      "getter": "onRecommendationTap",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._secSimklQuickActions",
+      "getter": "onSimklAction",
+      "count": 2
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._secMdblistQuickActions",
+      "getter": "onMdblistAction",
+      "count": 2
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._secQuickActions",
+      "getter": "onTraktAction",
+      "count": 2
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._secRecommendations",
+      "getter": "onRecommendationTap",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._secRecommendations",
+      "getter": "recommendationsLoader",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._buildActionRow",
+      "getter": "onBrowse",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._canBrowsePrimarySources",
+      "getter": "onBrowsePrimaryEpisodeSources",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._browsePrimarySourcesAsync",
+      "getter": "onBrowse",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._browsePrimarySourcesAsync",
+      "getter": "onBrowsePrimaryEpisodeSources",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._browsePrimarySourcesAsync",
+      "getter": "onTraktAction",
+      "count": 2
+    }
+  ],
+  "catalog_host_assignments": [
+    {
+      "member": "_CatalogItemDetailScreenState._openMetadataRecommendation",
+      "local": "onOpen",
+      "getter": "onRecommendationTap"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._loadSimklStatus",
+      "local": "loader",
+      "getter": "simklStatusLoader"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._loadResumeInfo",
+      "local": "loader",
+      "getter": "resumeInfoLoader"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._playPrimary",
+      "local": "restart",
+      "getter": "onRewatch"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._loadEnrichedMeta",
+      "local": "enrich",
+      "getter": "metaEnricher"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._emitLoaderArt",
+      "local": "sink",
+      "getter": "onLoaderArt"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._loadRecommendations",
+      "local": "loader",
+      "getter": "recommendationsLoader"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._loadRecommendations",
+      "local": "enrich",
+      "getter": "metaEnricher"
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._browsePrimarySourcesAsync",
+      "local": "openEpisode",
+      "getter": "onBrowsePrimaryEpisodeSources"
+    }
+  ],
+  "catalog_rail_callback": {
+    "member": "_CatalogItemDetailScreenState._secRecommendations",
+    "local": "onTap",
+    "target": "_CatalogItemDetailScreenState._openMetadataRecommendation"
+  }
+}
