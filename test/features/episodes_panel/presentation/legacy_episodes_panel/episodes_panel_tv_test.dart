@@ -88,6 +88,7 @@ void main() {
         await focusEpisodeNode(t, 'catalog-ep-back');
         await key(t, LogicalKeyboardKey.arrowRight);
         await key(t, LogicalKeyboardKey.arrowDown);
+        expect(FocusManager.instance.primaryFocus!.debugLabel, 'catalog-ep-0');
         final tile = t.widget<EpisodeTile>(find.byType(EpisodeTile).first);
         expect(tile.onMenuAction, isNull);
         expect(tile.onTrackerOptions, isNull);
@@ -213,6 +214,7 @@ void main() {
           await t.pump(const Duration(milliseconds: 400));
           expect(find.text('Play'), findsOneWidget);
           expect(f.calls, isEmpty);
+          expectEpisodesPlayFocus();
           expect(
             find.descendant(
               of: find.byWidget(
@@ -290,14 +292,17 @@ void main() {
       f.television = true;
       await f.mount(t);
       await focusEpisodeNode(t, 'catalog-ep-season');
-      final region = t
+      final regions = t
           .widgetList<Focus>(
             find.descendant(
               of: find.byType(SeasonActionRegion),
               matching: find.byType(Focus),
             ),
           )
-          .firstWhere((w) => !w.canRequestFocus && w.onKeyEvent != null);
+          .where((w) => !w.canRequestFocus && w.onKeyEvent != null)
+          .toList();
+      expect(regions, hasLength(1));
+      final region = regions.single;
       const down = KeyDownEvent(
         physicalKey: PhysicalKeyboardKey.enter,
         logicalKey: LogicalKeyboardKey.select,
@@ -446,6 +451,22 @@ void main() {
           frame: const Duration(milliseconds: 20),
         );
         expect(progressCalls, initial + 2);
+        f.view.seasonOptions!(1);
+        await f.until(
+          t,
+          () => find
+              .text('Mark season as watched on Simkl')
+              .evaluate()
+              .isNotEmpty,
+        );
+        await t.pump(const Duration(milliseconds: 400));
+        expect(
+          find.text('Retry: mark season as watched on Simkl'),
+          findsNothing,
+        );
+        f.navigator.currentState!.pop();
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 400));
         await t.runAsync(SimklStorage.clearSimklAuth);
         f.view.seasonOptions!(1);
         await f.until(

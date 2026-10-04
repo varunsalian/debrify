@@ -233,3 +233,4 @@ test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_r
 test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_source_contract_test.dart
 test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_tv_test.dart
 test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_watched_test.dart
+test/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_review_test.dart

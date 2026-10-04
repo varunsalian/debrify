@@ -563,3 +563,16 @@ Future<void> episodesPanelCase(
     PlatformUtil.debugSetAndroidTvCached(null);
   }
 }
+
+// The modal scope also contains Play; only the tile's own focus proves autofocus.
+void expectEpisodesPlayFocus() {
+  final primary = FocusManager.instance.primaryFocus!;
+  expect(primary, isNot(isA<FocusScopeNode>()));
+  expect(
+    find.ancestor(
+      of: find.byWidget(primary.context!.widget),
+      matching: find.widgetWithText(ListTile, 'Play'),
+    ),
+    findsOneWidget,
+  );
+}

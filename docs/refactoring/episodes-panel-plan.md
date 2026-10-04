@@ -899,6 +899,53 @@ including everything below.
   Theme remains 238; panel rendered metric remains 165 sites, 50 white lines,
   four Theme.of calls; EpisodesScreen remains the same route boundary.
 
+### Step 0b2 — independent original-code review closure
+
+- Resumed from clean Step 2 `be61d048`; no interrupted changes or owned
+  running processes remained. Application files are unchanged by this review.
+  All P1/P2 findings are closed by observable assertions, without a production
+  seam, assertion weakening, golden rewrite or behavior change.
+- Play autofocus now rejects a `FocusScopeNode` and proves the primary node's
+  own widget belongs to the Play `ListTile`; both compact-key cases and the
+  options golden retain their previous assertions. Classic dropdown Down
+  explicitly targets `catalog-ep-0`. A scrolled Classic list resets to zero
+  on season change and the custom view subsequently exposes `seasonControl`.
+- Nine added cases cover fully watched direct-source completion `[false]`,
+  direct-source Trakt gating with valid and expired credentials (no rating or
+  auth HTTP request), a complete Trakt rating body with differing provider and
+  canonical IDs, separately primed continue-watching caches after watched
+  action and revision bump, mixed addon/TVMaze thumbnail URLs without fetching
+  artwork, season scroll/intent, and owned source-button FocusNode disposal.
+  Existing cases now assert successful retry clearing and native MDBList
+  subtitle/snackbar labels. Every new file is registered in the CI list.
+- `step0b2-original-detached`: all 85 characterization identities pass on
+  detached ORIGINAL `7e28b7bd`, whose `lib`, `pubspec.yaml`, `pubspec.lock`
+  objects equal R `92339749`. Final test/fixture bytes equal the current tree.
+  `step0b2-original-mutation-proofs.json` records 14 valid ORIGINAL mutations
+  rejected by assertions across 16 review identities; each has a tested-tree
+  env and mutant hash. Compiler/load errors and incidental `StateError` are
+  explicitly rejected as proof. The season-hold lookup now asserts length
+  before selection; its dropped-hold mutation fails that assertion. Source
+  node disposal is cheap enough to cover rather than leave as `(S)`.
+- New full-suite ORIGINAL `base5`, checkpoint `458ef7b6`, tree
+  `fd9148268d9e8f609a15159e2f1f88ac747b0f9e`: 11,178 successes, the same
+  13 failures, 28 errors, 20 skips. Comparison to `base4` PASS: nine added
+  successes, zero missing/newly skipped identities or new failures. Env has
+  `paths: []`, `flags: ["--no-pub"]`, no untracked inputs, a clean committed
+  tree and no changes during execution. A final Dart-format change removes
+  one optional comma from the new rating test only; the thumbnail fixture
+  also adds required braces without changing its request/response. All 85 original cases
+  and all 14 mutations are replayed against the exact formatted bytes.
+  This unchanged-behavior format delta does not invalidate the full base.
+  Both gates use **base5**, and gate 2 also compares with gate 1.
+- Conservative review decision: optional request-count extensions for partial
+  stale-guard removals remain `(S)`; no additional timing seam is introduced.
+  Existing stale-result characterization and exact verbatim guards remain.
+  The previously recorded Step 2 checker/architecture evidence is reusable:
+  this commit changes only characterization, fixture assertions and coverage.
+  Final current run passes all 85 cases; whole-repo analysis has zero added
+  or removed diagnostics (`step0b2-analyzer-comparison-final.txt`: PASS).
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

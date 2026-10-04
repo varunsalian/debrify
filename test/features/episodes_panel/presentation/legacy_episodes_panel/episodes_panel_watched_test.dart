@@ -463,11 +463,22 @@ void main() {
             await t.runAsync(f.rememberCanonical);
           }
           await f.mount(t);
+          if (native) {
+            await f.sheet(t);
+            expect(find.text('On MDBList and this device'), findsOneWidget);
+            f.navigator.currentState!.pop();
+            await t.pump();
+            await t.pump(const Duration(milliseconds: 400));
+          }
           f.requests.clear();
           final before = DateTime.now().toUtc();
           await actWatched(t, f, true);
           final after = DateTime.now().toUtc();
           if (native) {
+            expect(
+              find.text('Marked as Watched on MDBList and this device'),
+              findsOneWidget,
+            );
             expect(f.requests, hasLength(1));
             final r = f.requests.single;
             expectRequest(

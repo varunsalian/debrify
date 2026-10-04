@@ -60,6 +60,7 @@ void main() {
               await t.pump();
               await t.pump(const Duration(milliseconds: 400));
               expect(find.text('Play'), findsOneWidget);
+              expectEpisodesPlayFocus();
               expect(
                 find.descendant(
                   of: find.byWidget(
