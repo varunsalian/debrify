@@ -573,8 +573,14 @@ class ShowcaseIdentity extends StatelessWidget {
       );
     }
     if (m.onMetadataExplore != null && i < actionNodes.length) {
-      actions.add(_Circle(node: next(), icon: Icons.explore_outlined,
-        label: 'Explore', onTap: m.onMetadataExplore!));
+      actions.add(
+        _Circle(
+          node: next(),
+          icon: Icons.explore_outlined,
+          label: 'Explore',
+          onTap: m.onMetadataExplore!,
+        ),
+      );
     }
     if (m.onAppMenu != null && i < actionNodes.length) {
       actions.add(
@@ -1371,7 +1377,9 @@ class ShowcaseSeasons extends StatelessWidget {
             label: 'Season ${s.number}',
             active: active,
             onTap: () => view.selectSeason(s.number),
-            onOptions: view.seasonOptions == null ? null : () => view.seasonOptions!(s.number),
+            onOptions: view.seasonOptions == null
+                ? null
+                : () => view.seasonOptions!(s.number),
           );
         },
       ),
@@ -1438,39 +1446,45 @@ class _SeasonDropdownState extends State<_SeasonDropdown> {
 
   @override
   Widget build(BuildContext context) {
-    return SeasonActionRegion(onTap: _open,
-      onOptions: widget.view.seasonOptions == null ? null : () => widget.view.seasonOptions!(widget.view.selectedSeasonNumber),
+    return SeasonActionRegion(
+      onTap: _open,
+      onOptions: widget.view.seasonOptions == null
+          ? null
+          : () => widget.view.seasonOptions!(widget.view.selectedSeasonNumber),
       child: Focus(
-      focusNode: widget.node,
-      onFocusChange: (v) => setState(() => _f = v),
-      onKeyEvent: (_, e) => widget.view.seasonOptions == null ? _activate(e, _open) : KeyEventResult.ignored,
-      child: GestureDetector(
-        onTap: _open,
-        child: Container(
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: _ink.withValues(alpha: _f ? 0.22 : 0.12),
-            borderRadius: BorderRadius.circular(17),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Season ${widget.view.selectedSeasonNumber}',
-                style: _t(14, w: FontWeight.w600),
-              ),
-              const SizedBox(width: 7),
-              const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 17,
-                color: Colors.white70,
-              ),
-            ],
+        focusNode: widget.node,
+        onFocusChange: (v) => setState(() => _f = v),
+        onKeyEvent: (_, e) => widget.view.seasonOptions == null
+            ? _activate(e, _open)
+            : KeyEventResult.ignored,
+        child: GestureDetector(
+          onTap: _open,
+          child: Container(
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: _ink.withValues(alpha: _f ? 0.22 : 0.12),
+              borderRadius: BorderRadius.circular(17),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Season ${widget.view.selectedSeasonNumber}',
+                  style: _t(14, w: FontWeight.w600),
+                ),
+                const SizedBox(width: 7),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 17,
+                  color: Colors.white70,
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ));
+    );
   }
 }
 
@@ -1499,49 +1513,55 @@ class _SeasonPillState extends State<_SeasonPill> {
   @override
   Widget build(BuildContext context) {
     final k = ShowcaseMetrics.of(context).k;
-    return SeasonActionRegion(onTap: widget.onTap, onOptions: widget.onOptions, child: Focus(
-      focusNode: widget.node,
-      onFocusChange: (v) {
-        setState(() => _f = v);
-        if (v) _keepVisible(context);
-      },
-      // Selecting on FOCUS would reload the episode list on every step of a
-      // walk across the seasons. OK commits; the walk is free.
-      onKeyEvent: (_, e) => widget.onOptions == null ? _activate(e, widget.onTap) : KeyEventResult.ignored,
-      // The wide row is what every TOUCH tablet gets (compact swaps in the
-      // dropdown below 600), so the pill needs a finger path too — OK-only
-      // left the season control dead under a finger. Opaque: the pill draws
-      // no background until it is focused or active, and a bare DecoratedBox
-      // defers the hit test to the Text, so the padding would miss.
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: ParallaxFocus(
-          focused: _f,
-          shape: ParallaxShape.pill,
-          radius: BorderRadius.circular(12.5 * k),
-          child: Container(
-            height: 25 * k,
-            alignment: Alignment.center,
-            padding: EdgeInsets.symmetric(horizontal: 15 * k),
-            decoration: BoxDecoration(
-              color: (_f || widget.active)
-                  ? _ink.withValues(alpha: _f ? 0.28 : 0.18)
-                  : null,
-              borderRadius: BorderRadius.circular(12.5 * k),
-            ),
-            child: Text(
-              widget.label,
-              style: _t(
-                12.5 * k,
-                w: FontWeight.w600,
-                a: widget.active || _f ? 1 : 0.55,
+    return SeasonActionRegion(
+      onTap: widget.onTap,
+      onOptions: widget.onOptions,
+      child: Focus(
+        focusNode: widget.node,
+        onFocusChange: (v) {
+          setState(() => _f = v);
+          if (v) _keepVisible(context);
+        },
+        // Selecting on FOCUS would reload the episode list on every step of a
+        // walk across the seasons. OK commits; the walk is free.
+        onKeyEvent: (_, e) => widget.onOptions == null
+            ? _activate(e, widget.onTap)
+            : KeyEventResult.ignored,
+        // The wide row is what every TOUCH tablet gets (compact swaps in the
+        // dropdown below 600), so the pill needs a finger path too — OK-only
+        // left the season control dead under a finger. Opaque: the pill draws
+        // no background until it is focused or active, and a bare DecoratedBox
+        // defers the hit test to the Text, so the padding would miss.
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: ParallaxFocus(
+            focused: _f,
+            shape: ParallaxShape.pill,
+            radius: BorderRadius.circular(12.5 * k),
+            child: Container(
+              height: 25 * k,
+              alignment: Alignment.center,
+              padding: EdgeInsets.symmetric(horizontal: 15 * k),
+              decoration: BoxDecoration(
+                color: (_f || widget.active)
+                    ? _ink.withValues(alpha: _f ? 0.28 : 0.18)
+                    : null,
+                borderRadius: BorderRadius.circular(12.5 * k),
+              ),
+              child: Text(
+                widget.label,
+                style: _t(
+                  12.5 * k,
+                  w: FontWeight.w600,
+                  a: widget.active || _f ? 1 : 0.55,
+                ),
               ),
             ),
           ),
         ),
       ),
-    ));
+    );
   }
 }
 
@@ -1978,7 +1998,12 @@ class ShowcaseCast extends StatelessWidget {
   final List<FocusNode> nodes;
   final ValueChanged<CastMember>? onPersonOpen;
 
-  const ShowcaseCast({super.key, required this.cast, required this.nodes, this.onPersonOpen});
+  const ShowcaseCast({
+    super.key,
+    required this.cast,
+    required this.nodes,
+    this.onPersonOpen,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1992,10 +2017,14 @@ class ShowcaseCast extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: m.gutter),
         itemCount: cast.length,
         separatorBuilder: (_, __) => SizedBox(width: m.castGap),
-        itemBuilder: (context, i) =>
-            _CastTile(member: cast[i], node: nodes[i], size: m.circle,
-              onTap: onPersonOpen != null && (cast[i].tmdbPersonId ?? 0) > 0
-                  ? () => onPersonOpen!(cast[i]) : null),
+        itemBuilder: (context, i) => _CastTile(
+          member: cast[i],
+          node: nodes[i],
+          size: m.circle,
+          onTap: onPersonOpen != null && (cast[i].tmdbPersonId ?? 0) > 0
+              ? () => onPersonOpen!(cast[i])
+              : null,
+        ),
       ),
     );
   }
@@ -2040,55 +2069,57 @@ class _CastTileState extends State<_CastTile> {
           onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: _Hover(
-        cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-        builder: (context, hovered) => SizedBox(
-          width: widget.size,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ParallaxFocus(
-                focused: _f || hovered,
-                shape: ParallaxShape.castCircle,
-                radius: BorderRadius.circular(widget.size / 2),
-                child: ClipOval(
-                  child: SizedBox(
-                    width: widget.size,
-                    height: widget.size,
-                    child: (url != null && url.isNotEmpty)
-                        ? CachedNetworkImage(
-                            imageUrl: url,
-                            fit: BoxFit.cover,
-                            cacheManager: DebrifyImageCache.manager,
-                            memCacheWidth: 260,
-                            placeholder: (_, __) =>
-                                const ColoredBox(color: Color(0xFF4A4A55)),
-                            errorWidget: (_, __, ___) =>
-                                const ColoredBox(color: Color(0xFF4A4A55)),
-                          )
-                        : const ColoredBox(color: Color(0xFF4A4A55)),
+            cursor: widget.onTap != null
+                ? SystemMouseCursors.click
+                : MouseCursor.defer,
+            builder: (context, hovered) => SizedBox(
+              width: widget.size,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ParallaxFocus(
+                    focused: _f || hovered,
+                    shape: ParallaxShape.castCircle,
+                    radius: BorderRadius.circular(widget.size / 2),
+                    child: ClipOval(
+                      child: SizedBox(
+                        width: widget.size,
+                        height: widget.size,
+                        child: (url != null && url.isNotEmpty)
+                            ? CachedNetworkImage(
+                                imageUrl: url,
+                                fit: BoxFit.cover,
+                                cacheManager: DebrifyImageCache.manager,
+                                memCacheWidth: 260,
+                                placeholder: (_, __) =>
+                                    const ColoredBox(color: Color(0xFF4A4A55)),
+                                errorWidget: (_, __, ___) =>
+                                    const ColoredBox(color: Color(0xFF4A4A55)),
+                              )
+                            : const ColoredBox(color: Color(0xFF4A4A55)),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 9),
+                  Text(
+                    widget.member.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: _t(12.5 * k),
+                  ),
+                  if ((widget.member.character ?? '').isNotEmpty)
+                    Text(
+                      widget.member.character!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: _t(11.5 * k, a: 0.55),
+                    ),
+                ],
               ),
-              const SizedBox(height: 9),
-              Text(
-                widget.member.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: _t(12.5 * k),
-              ),
-              if ((widget.member.character ?? '').isNotEmpty)
-                Text(
-                  widget.member.character!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: _t(11.5 * k, a: 0.55),
-                ),
-            ],
+            ),
           ),
-        ),
-      ),
         ),
       ),
     );

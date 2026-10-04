@@ -35,7 +35,28 @@ are **full-suite**: since `8a527a4e` `suite_evidence.py` records runner flags
 such as `--no-pub` under `flags`, apart from `paths`, so a full run's env has
 empty `paths` and `compare` reports any baseline suite missing from it. Every
 base and gate is recorded with a `suite_evidence.py` at or after `8a527a4e`,
-and Progress shows each env's `paths` (empty) and `flags`.
+and Progress shows each env's `paths` - Execution base: `14d173a9` on `refactor/detail-showcase`, dedicated
+  `/Users/varunbsalian/Documents/Projects/debrify-wt/detail-showcase`. Only this
+  worktree and owned nested proof worktrees are used; no branch switch or push.
+  `flutter pub get` ran first; `pubspec.yaml` and lockfile unchanged.
+- Step 0(a): format-only original, exact subject `style(showcase): format the
+  original showcase parts`. Retain the oversized original temporarily until
+  steps 1–4 move all 69 declarations and the shared band chrome. Ratchet
+  3394 → 3425 is the formatter-only raise; later checkpoints only lower it.
+- `detail_showcase/base`: full suite on untouched `14d173a9`, Flutter 3.44.8 /
+  Dart 3.12.2, paths `[]`, flags `["--no-pub"]`: 11,093 success, 13 failure,
+  28 error, 20 skipped. Stable tree; no untracked inputs. Whole analyzer
+  recorded as `base-analyze.txt`; historical failure lists are not changed.
+- `format-proof.json`: whole-file scanner tokens, comments and literals equal
+  after removing exactly six AST-identified optional commas (Explore circle
+  nested calls, SeasonDropdown, SeasonPill, ShowcaseCast constructor, cast tile
+  call). All four negatives reject and each mutation changes its input.
+  Parser and kernel live only under this worktree's `.dart_tool/`.
+- Conservative choices: no application seam, deterministic null artwork,
+  equal-length cross-file alias names to avoid body reflow; all moved comments
+  remain verbatim. Linux originals will be separately verified/committed at L;
+  absent originals block before builder moves. Step 0(b), strict/alias probes,
+  original characterization/mutation proofs and base-fmt are in progress. and `flags`.
 
 ## Goal
 
@@ -606,7 +627,28 @@ change below.
 
 ## Progress
 
-(empty)
+- Execution base: `14d173a9` on `refactor/detail-showcase`, dedicated
+  `/Users/varunbsalian/Documents/Projects/debrify-wt/detail-showcase`. Only this
+  worktree and owned nested proof worktrees are used; no branch switch or push.
+  `flutter pub get` ran first; `pubspec.yaml` and lockfile unchanged.
+- Step 0(a): format-only original, exact subject `style(showcase): format the
+  original showcase parts`. Retain the oversized original temporarily until
+  steps 1–4 move all 69 declarations and the shared band chrome. Ratchet
+  3394 → 3425 is the formatter-only raise; later checkpoints only lower it.
+- `detail_showcase/base`: full suite on untouched `14d173a9`, Flutter 3.44.8 /
+  Dart 3.12.2, paths `[]`, flags `["--no-pub"]`: 11,093 success, 13 failure,
+  28 error, 20 skipped. Stable tree; no untracked inputs. Whole analyzer
+  recorded as `base-analyze.txt`; historical failure lists are not changed.
+- `format-proof.json`: whole-file scanner tokens, comments and literals equal
+  after removing exactly six AST-identified optional commas (Explore circle
+  nested calls, SeasonDropdown, SeasonPill, ShowcaseCast constructor, cast tile
+  call). All four negatives reject and each mutation changes its input.
+  Parser and kernel live only under this worktree's `.dart_tool/`.
+- Conservative choices: no application seam, deterministic null artwork,
+  equal-length cross-file alias names to avoid body reflow; all moved comments
+  remain verbatim. Linux originals will be separately verified/committed at L;
+  absent originals block before builder moves. Step 0(b), strict/alias probes,
+  original characterization/mutation proofs and base-fmt are in progress.
 
 ## Found, not fixed
 
