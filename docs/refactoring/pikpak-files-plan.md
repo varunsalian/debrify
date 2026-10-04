@@ -474,6 +474,32 @@ Real-Debrid, PikPak) with self-tests, and gates against the latest PikPak base.
 - `pikpak/step7-final`: all 88 PikPak characterizations remain identical to ORIGINAL base4; broader focused run 116 successes / the unchanged profile source-guard failure, comparison versus base4 PASS. Staged tested tree `4619232cc4d5306726ce9707f609dc25bf01cd09`, no untracked inputs or change during run; the subsequent guard-registration-only delta has independent negative/architecture evidence. Whole analyzer remains 839 diagnostics, zero additions/removals with facade-only relocation. All five manifest/self-tests, full disposal/root/forwarder/context/accessor/callback negatives, architecture, sizes, storage/self-tests/314 keys, exact CI format (1,463 files, zero changes), analyzer/strict five-warning allowlist and diff checks PASS. All original ten PNG hashes and assertions/body fixtures remain frozen.
 - Final application/guard source is committed before a detached-worktree full-suite gate 2 against base4 and gate1. Concurrent documentation work is preserved; detached gate and Linux worktrees will identify exact committed input, SDK, start/end trees and untracked paths. No historical failure list, checker allowlist or analyzer suppression changes. Remote CI at the billing limit and physical-device/account checks remain pending; no push.
 
+### Full-suite gate 2 — complete; final stop
+
+- Final Step 7 source is `af3f9b29`. `suite_evidence.py run pikpak/gate2` ran in detached clean worktree `/Users/varunbsalian/Documents/Projects/debrify-pikpak-gate2` on committed source, Flutter 3.44.8 / Dart 3.12.2. HEAD/index/tested/end tree identify `af3f9b29` / `8f57e6d7b872060eaabb9a2401fae81421bed704`, no overlay/untracked inputs or changes during run. No application/test/tool change during the gate.
+- Gate 2: **10,577 successes / unchanged 13 failures / 28 errors / 20 skips**. PASS against latest `pikpak/base4`: every test identity and outcome identical, zero added/missing/fixed/newly skipped/new failures. PASS against gate1: every prior outcome identical, exactly the five added passing Step 0b identities. Gate1/base4 audit likewise passes. The historical helper replays completed JSON without another runner or --record/--update; the same 41 failure/error identities and 32 absent from the historical list are byte-identical to base4. No historical failure list change.
+- **Extracted-code Linux pixels:** five strict reachable views PASS in the calibrated linux/amd64 `debrify-flutter:3.44.8` image at the same committed source/tree. `step7-linux-strict.env.json` records the real container SDK (exact match), image ID, command, start/end times and stable committed trees with no untracked/different tracked input. No capture/update flags, no PNG regeneration; all original ten SHA-256 values remain frozen. Together with original strict-default Linux replay and the full Mac suite, both host pixel paths have observed parity.
+- `gate2-identity-and-tree-audit.json` verifies exact baseline/gate1 outcomes, both stable committed runs, original assertions/body fixtures/ten PNG hashes and facade 269 lines. `gate2-final-proof.json` fingerprints both gates, latest baseline, step checks and Linux replay. This gate-result commit changes Progress only; tested application, tests, assets, dependencies and tools remain exactly `af3f9b29`.
+- Steps 0–7, Step 0b review, separate Linux original/provenance commit, and both local full-suite gates are complete. Conservative decisions remain: move-only legacy sections/live callbacks, retained Raw/cast aliases/private unused email, deferred Riverpod/data/model/localization migrations, local calibrated Docker instead of unavailable Actions, isolated committed-source final runs. No bug fix, assertion weakening, warning suppression, new allowlist entry or unrelated user-work change.
+- **Pending:** remote CI on private (Actions billing limit; no push), physical Android TV D-pad/focus/repeat, all three native playback handoffs, real PikPak account workflows and isolated native enqueue success/mixed-result messages. Source guards and original characterization cover the bounded migration; these device/native checks are not claimed. Found-not-fixed behavior below remains preserved. Stop here.
+
+### Commit checkpoints
+
+| Checkpoint | Commit |
+| --- | --- |
+| Step 0 original-code characterization | `2b93c520` |
+| Step 0a manifest line endings | `e5a1b6b6` |
+| Step 0b review closure | `ec997117` |
+| Step 1 helpers/models | `35f1bccb` |
+| Step 2 owners/resources | `d181b61d` |
+| Step 3 source / gate 1 | `31ee19ac` / `43025625` |
+| Step 4 folders/views/search/source binding | `2c5f393a` |
+| Step 5 playback/downloads/playlists/links | `47169f6e` |
+| Original Linux assets/provenance | `a92c08b8` |
+| Step 6 builders/root/strict Linux | `f5393279` |
+| Step 7 source | `af3f9b29` |
+| Gate 2 evidence | This commit: exact subject `test(pikpak): step 7 gate 2 committed-tree evidence` |
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
