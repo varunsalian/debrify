@@ -209,18 +209,6 @@ void main() {
         }
         final platform = Platform.isLinux ? 'linux' : 'macos';
         final path = 'test/goldens/merged_detail/$platform/${c.name}.png';
-        const captureLinux = bool.fromEnvironment(
-          'MERGED_DETAIL_CAPTURE_ORIGINAL_LINUX',
-        );
-        const requireLinux = bool.fromEnvironment(
-          'MERGED_DETAIL_REQUIRE_ORIGINAL_LINUX',
-        );
-        if (Platform.isLinux &&
-            !captureLinux &&
-            !requireLinux &&
-            !File(path).existsSync()) {
-          return;
-        }
         expect(
           File(path).existsSync() || autoUpdateGoldenFiles,
           true,

@@ -827,6 +827,25 @@ the behaviour suite compared against the latest recorded base.
 - The full-suite tested tree is frozen; the subsequent checkpoint edit is
   this Progress report only. Proof summary: `step0b-proof-summary.json`.
 
+### Linux originals — separate artifact checkpoint
+
+- Claude captured the five original PNGs from `4b65c7cf` in local Docker
+  `debrify-flutter:3.44.8`, linux/amd64 Ubuntu 24.04 with the official Flutter
+  3.44.8 SDK and `libsqlite3-dev`, under Colima on macOS, at
+  `2026-10-04T07:24:28Z`. The image was calibrated against 14 GitHub-captured
+  TorBox/Debrid goldens; all 14 strict comparisons passed. GitHub Actions was
+  unavailable because of its spending limit; this is local Linux evidence.
+- `linux-original-{capture,strict,sha256,revision,run-url}.txt` record the
+  capture and strict five-test pass. `linux-original-verification.json`
+  verifies all five copied file hashes, exact revision and evidence hashes.
+  No PNG is generated or updated against moved code.
+- Conservative instruction precedence: the user's instruction to make Linux
+  strict when the originals arrive is applied now, earlier than the plan's
+  Step 6 default. The missing-file early return and opt-out are removed;
+  Linux runs require the committed originals. This changes test enforcement
+  only. The capture script continues resolving its checkpoint-owned tests by
+  their exact Step 0 commit subject.
+
 
 ## Found, not fixed
 
