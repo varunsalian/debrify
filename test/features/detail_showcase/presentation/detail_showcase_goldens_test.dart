@@ -172,9 +172,12 @@ void main() {
               f.host(
                 RepaintBoundary(
                   key: const ValueKey('capture'),
-                  child: ColoredBox(
-                    color: MergedDetailPalette.bg,
-                    child: child,
+                  child: SizedBox.fromSize(
+                    size: size,
+                    child: ColoredBox(
+                      color: MergedDetailPalette.bg,
+                      child: child,
+                    ),
                   ),
                 ),
                 size: size,
@@ -200,6 +203,7 @@ void main() {
               expect(find.text('Plain 1'), findsOneWidget);
             }
             final bounds = Offset.zero & size;
+            expect(t.getSize(find.byKey(const ValueKey('capture'))), size);
             for (final band in promised) {
               expect(band, findsOneWidget);
               expect(

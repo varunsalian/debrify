@@ -797,7 +797,8 @@ change below.
   Flutter 3.44.8 / Dart 3.12.2; `paths=[]`, `flags=["--no-pub"]`; tested tree
   `3e9b548859e3d1cfd8ab414963708907cc3e470b`, start/end equal, no snapshot,
   untracked inputs or changes during the run. Both extraction gates must use
-  this latest base; neither gate has run. Base4 is original baseline evidence.
+  base4 at that handoff; neither gate had run. The independent-review bases
+  below supersede it. Base4 remains original baseline evidence.
 - UTC helper/test analyzer, fixture formatting, Linux script syntax and final
   diff checks pass. All previous step-0 application/checker evidence remains
   valid: no application, assertion, manifest, checker configuration, suppression
@@ -868,6 +869,31 @@ change below.
   segments. Existing frozen assertions remain. `ci_behavior_tests.txt` gains
   only the new identity-actions test. New committed original replay, fresh
   mutation proofs and full-suite latest base are recorded below when complete.
+
+### Step 0b viewport checkpoint — final capture framing
+
+- Independent review checkpoint is `de904b55`: committed original replay passes
+  49/49 and `review-step0b/step0b-original-mutations.json` records all **36 fresh
+  assertion rejections**, covering all 15 added cases, the ambient S guard and
+  every corrected dark golden. Restored original is clean, with no `failures/`.
+  `base5` passes against base4: 11,142 success / 13 failure / 28 error / 20 skips;
+  exactly 15 added successes, zero missing/changed/skipped previous outcomes.
+- Final PNG dimension audit finds the compact guide's shrink-wrapped Column
+  produced 390×291 rather than the plan's 390×844 capture. Correct only the
+  golden host with `SizedBox.fromSize(size: size)` and assert the boundary's
+  actual size for every scene. Recapture on ORIGINAL: compact guide is now
+  390×844; the other three PNG hashes remain exactly `de904b55`'s. The dark
+  surface fills the viewport, and no application behavior/leaf changes.
+- This final framing correction supersedes `de904b55` as the Linux capture
+  checkpoint. Script exact subject becomes `test(detail-showcase): step 0b
+  viewport characterization checkpoint`; two-clean-worktree independent capture,
+  SHA256/byte comparison and two strict replay protocol remains unchanged.
+  Application/pubspec/lock hashes must still equal R. Four strict development
+  goldens pass without regeneration after the original-only capture.
+- Record a clean committed original replay, fresh mutation proofs and latest
+  full-suite `base6` on this final checkpoint before stopping. Checkpoint/base
+  hashes and comparisons follow below. Old review evidence and base5 remain
+  available; no regression acceptance, application change, branch switch or push.
 
 ## Found, not fixed
 

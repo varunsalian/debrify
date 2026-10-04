@@ -2,7 +2,7 @@
 # Capture ONLY the characterized original; never regenerate against moved code.
 set -euo pipefail
 repo="$(git rev-parse --show-toplevel)"
-checkpoint_subject='test(detail-showcase): step 0b review characterization checkpoint'
+checkpoint_subject='test(detail-showcase): step 0b viewport characterization checkpoint'
 format_subject='style(showcase): format the original showcase parts'
 # Consume all git-log output: an early awk exit causes SIGPIPE under pipefail.
 checkpoint="$(git log --format='%H %s' HEAD | awk -v subject="$checkpoint_subject" 'substr($0,42)==subject {print substr($0,1,40)}')"
