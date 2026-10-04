@@ -3,23 +3,19 @@ import 'dart:math' show max;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_bindings.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_composition.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_constants_state.dart';
-import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_logo_or_title.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_owners.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_board_metrics.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_board_types.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_hero_open_pill.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_shelf_title_link.dart';
-import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/debrify_image_cache.dart';
-import 'package:debrify/services/diagnostic_log.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/theme/widgets/parallax_focus.dart';
-import 'package:debrify/utils/artwork_url.dart';
-import 'package:debrify/utils/dominant_color.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/utils/spotlight_interaction_policy.dart';
 import 'package:debrify/widgets/home/home_row_focus.dart';
@@ -369,7 +365,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
         );
         if (_owners.selection.scrollingSources.isEmpty &&
             _owners.hero.desktopPreviewOwners.isEmpty)
-          _restartCadence();
+          _sections.cadence.restartCadence();
         return;
       }
       final render = context.findRenderObject();
@@ -412,110 +408,26 @@ class SpotlightBoardState extends State<SpotlightBoard>
       );
       if (_owners.selection.scrollingSources.isEmpty &&
           _owners.hero.desktopPreviewOwners.isEmpty)
-        _restartCadence();
+        _sections.cadence.restartCadence();
     });
   }
 
   @override
-  bool get prioritizeMetadata => true;
+  bool get prioritizeMetadata => _sections.heroArt.prioritizeMetadata;
 
   @override
-  StremioMeta? get originalMetadata =>
-      widget.hero.isEmpty ? null : widget.hero[_heroIndex];
+  StremioMeta? get originalMetadata => _sections.heroArt.originalMetadata;
 
   @override
-  void onMetadataPresentationChanged() => unawaited(_probe());
+  void onMetadataPresentationChanged() =>
+      _sections.heroArt.onMetadataPresentationChanged();
 
   @override
-  void onMetadataPolicyChanged() {
-    // A previous image's tint must not publish after the policy changes.
-    _owners.hero.probeGen++;
-    _preloadHeroes();
-  }
-
-  void _cancelWarmups() {
-    for (final cancel in _owners.hero.cancelHeroWarmups.toList()) {
-      cancel();
-    }
-  }
-
-  int get _heroDecodeWidth => widget.dpad
-      ? 1400
-      : (MediaQuery.devicePixelRatioOf(context) *
-                MediaQuery.sizeOf(context).width)
-            .round()
-            .clamp(720, 1920);
-
-  Duration get _heroImageFadeIn =>
-      (MediaQuery.maybeOf(context)?.disableAnimations ?? false)
-      ? Duration.zero
-      : Duration(milliseconds: widget.dpad ? 180 : 420);
-
-  Duration get _heroImageFadeOut =>
-      widget.dpad || (MediaQuery.maybeOf(context)?.disableAnimations ?? false)
-      ? Duration.zero
-      : const Duration(milliseconds: 1000);
+  void onMetadataPolicyChanged() => _sections.heroArt.onMetadataPolicyChanged();
 
   @visibleForTesting
-  ImageProvider heroWarmupProvider(String url) => ResizeImage.resizeIfNeeded(
-    _heroDecodeWidth,
-    null,
-    CachedNetworkImageProvider(url, cacheManager: DebrifyImageCache.manager),
-  );
-
-  Future<bool> _warmHeroImage(String url) {
-    final result = Completer<bool>();
-    final stream = heroWarmupProvider(
-      url,
-    ).resolve(createLocalImageConfiguration(context));
-    Timer? timer;
-    late ImageStreamListener listener;
-    late VoidCallback cancel;
-    void finish(bool success) {
-      if (result.isCompleted) return;
-      timer?.cancel();
-      stream.removeListener(listener);
-      _owners.hero.cancelHeroWarmups.remove(cancel);
-      result.complete(success);
-    }
-
-    cancel = () => finish(false);
-    listener = ImageStreamListener((image, _) {
-      image.dispose();
-      finish(true);
-    }, onError: (_, _) => finish(false));
-    _owners.hero.cancelHeroWarmups.add(cancel);
-    timer = Timer(const Duration(seconds: 15), cancel);
-    stream.addListener(listener);
-    return result.future;
-  }
-
-  void _preloadHeroes() {
-    _cancelWarmups();
-    unawaited(
-      preloadMetadata(widget.hero, (item, prefs) async {
-        if (!mounted) return;
-        final selected =
-            prefs.provider(MetadataCategory.backgrounds) !=
-            MetadataPreferences.current;
-        final url =
-            highQualityArtworkUrl(item.background) ??
-            (!selected && (item.imdbId ?? item.id).startsWith('tt')
-                ? 'https://images.metahub.space/background/large/${item.imdbId ?? item.id}/img'
-                : !selected || prefs.fallback
-                ? highQualityArtworkUrl(item.poster)
-                : null);
-        if (url == null || url.isEmpty) return;
-        final timer = Stopwatch()..start();
-        final failed = !await _warmHeroImage(url);
-        DiagnosticLog.instance.recordEvent(
-          source: 'metadata',
-          event: 'hero_image_warm',
-          fields: {'elapsed_ms': timer.elapsedMilliseconds, 'failed': failed},
-        );
-      }),
-    );
-  }
+  ImageProvider heroWarmupProvider(String url) =>
+      _sections.heroArt.heroWarmupProvider(url);
 
   /// Crossing detector for [_scrolledAway]: teardown on the way out,
   /// re-arm on the way back. Also called on metrics corrections (see
@@ -534,204 +446,29 @@ class SpotlightBoardState extends State<SpotlightBoard>
     if (away) {
       _owners.hero.cadence?.cancel();
       _owners.hero.cadence = null;
-      _stopRolling();
+      _sections.cadence.stopRolling();
     } else {
       // Applies its own gates (DPAD hero focus, pref, dwell callback), so
       // this is safe to fire from any scroll back to the top.
-      _restartCadence();
+      _sections.cadence.restartCadence();
     }
-  }
-
-  /// One funnel for leaving the rolling state, so no exit path can forget to
-  /// tell the host to tear the video down.
-  void _stopRolling() {
-    if (!_owners.hero.rolling) return;
-    if (mounted) setState(() => _owners.hero.rolling = false);
-    widget.onTrailerStop?.call();
-  }
-
-  /// A desktop IPTV card is about to mount its own video decoder. The hero
-  /// must yield its output lease before that mount; otherwise MediaKit queues
-  /// the card behind an ambient trailer that loops indefinitely. Re-arm the
-  /// hero only when the pointer has left every live card.
-  void _onDesktopPreviewActivityChanged(Object owner, bool active) {
-    if (widget.dpad) return;
-    final hadPreview = _owners.hero.desktopPreviewOwners.isNotEmpty;
-    if (active) {
-      _owners.hero.desktopPreviewOwners.add(owner);
-    } else {
-      _owners.hero.desktopPreviewOwners.remove(owner);
-    }
-    final hasPreview = _owners.hero.desktopPreviewOwners.isNotEmpty;
-    if (hadPreview == hasPreview) return;
-
-    if (hasPreview) {
-      _owners.hero.cadence?.cancel();
-      _owners.hero.cadence = null;
-      if (_owners.hero.rolling && mounted) {
-        setState(() => _owners.hero.rolling = false);
-      }
-      // Also cancels a hero resolve that has not reached its first frame yet.
-      widget.onTrailerStop?.call();
-      return;
-    }
-
-    _restartCadence();
-  }
-
-  void _restartCadence() {
-    if (_owners.selection.largeCardInteractions &&
-        _owners.selection.scrollingSources.isNotEmpty) {
-      return;
-    }
-    _owners.hero.cadence?.cancel();
-    // Nulled, not just cancelled: didUpdateWidget's reconcile decides "is a
-    // timer armed" by null-ness, and a cancelled-but-non-null handle reads
-    // as armed.
-    _owners.hero.cadence = null;
-    if (!mounted) return;
-    if (_owners.hero.dwelledHeroId != null &&
-        _owners.hero.dwelledHeroId == _heroItem?.id) {
-      return;
-    }
-    _owners.hero.rolling = false;
-    // The active card owns the one available decoder. A rebuild caused by
-    // loading more shelves or resolving hero art must not re-arm the hero
-    // underneath it.
-    if (_owners.hero.desktopPreviewOwners.isNotEmpty) return;
-    // With no trailer to arm there is nothing to schedule. The reel itself
-    // still moves only on input.
-    if (!widget.trailersEnabled || widget.onDwell == null) return;
-    // TV: frozen while focus is off the hero. `_row == -1` alone is NOT that
-    // test: it stays -1 when focus goes to the sidebar, another tab, or a
-    // pushed detail route — the node's own `hasFocus` is the real question.
-    // Touch has no focus to gate on; visibility is checked at FIRE time.
-    if (widget.dpad &&
-        (_owners.navigation.row >= 0 || !widget.heroNode.hasFocus)) {
-      return;
-    }
-    // Keep the handoff cancellable so a focus/route change in this event loop
-    // can still stop the resolve, but add no user-visible dwell.
-    _owners.hero.cadence = Timer(const Duration(seconds: 2), _onArtDone);
-  }
-
-  /// Dot tap / swipe target: show slide [i] and restart the clock.
-  void _jumpTo(int i) {
-    if (i < 0 || i >= widget.hero.length) return;
-    if (widget.hero[i].id == _owners.hero.heroId) return;
-    _stopRolling();
-    _owners.hero.dwelledHeroId = null;
-    setState(() => _owners.hero.heroId = widget.hero[i].id);
-    refreshMetadataPresentation();
-    _probe();
-    _restartCadence();
-  }
-
-  void _onArtDone() {
-    // The one-shot is consumed the moment this runs — null it, or the
-    // reconcile in didUpdateWidget reads a dead handle as "armed" and a
-    // disable→re-enable of trailers strands the cadence forever.
-    _owners.hero.cadence = null;
-    if (!mounted || _owners.navigation.row >= 0) return;
-    // Scrolled off the hero (touch/wheel — a DPAD descent goes through
-    // [_down] and cancels the clock itself): do not start a decoder behind
-    // the veil. No re-arm — scrolling back under the threshold restarts the
-    // cadence via [_onBoardScrolled].
-    if (_owners.constants.scrolledAway) return;
-    // Touch: a covered or backgrounded board must not spin up an engine for
-    // a hero nobody can see. Poll gently until visible; this retry delay is
-    // not part of the visible start cadence.
-    if (!widget.dpad) {
-      final route = ModalRoute.of(context);
-      final lifecycle = WidgetsBinding.instance.lifecycleState;
-      final visible =
-          (route == null || route.isCurrent) &&
-          (lifecycle == null || lifecycle == AppLifecycleState.resumed);
-      if (!visible) {
-        _owners.hero.cadence = Timer(
-          SpotlightBoardHeroState.hiddenRetry,
-          _onArtDone,
-        );
-        return;
-      }
-    }
-    final item = _heroItem;
-    if (item == null) {
-      // didUpdateWidget re-arms when the first hero arrives; polling an empty
-      // reel here would create a zero-delay loop.
-      return;
-    }
-    if (widget.trailersEnabled && widget.onDwell != null) {
-      _owners.hero.dwelledHeroId = item.id;
-      // Once a trailer is rolling the reel stays put — the video loops until
-      // the next deliberate move (swipe, dot tap, LEFT/RIGHT, DOWN).
-      setState(() => _owners.hero.rolling = true);
-      widget.onDwell!(item);
-    }
-    // Never an advance — see the cadence comment.
-  }
-
-  /// Best full-bleed art for [item]: its own backdrop, else a MetaHub 16:9
-  /// still derived from its IMDb id — the same synchronous trick the other
-  /// stage layouts use, because catalog and Continue Watching items carry a
-  /// poster but rarely a backdrop — and the poster only as a last resort.
-  ///
-  /// This is intentionally the *large* MetaHub path. It feeds the single
-  /// full-screen hero only; shelf cards keep their medium artwork and small
-  /// decode budgets. The poster fallback is what blurry heroes are made of
-  /// (~350px of 2:3 art cover-cropped over a full screen), so it is LAST, not
-  /// second.
-  String? _heroPoster(StremioMeta item) =>
-      metadataArtworkPending(MetadataCategory.backgrounds)
-      ? null
-      : usesMetadataProvider(MetadataCategory.backgrounds) &&
-            !metadataPreferences.fallback
-      ? null
-      : highQualityArtworkUrl(item.poster);
-
-  String? _heroArt(StremioMeta item) {
-    if (metadataArtworkPending(MetadataCategory.backgrounds)) return null;
-    final b = item.background;
-    if (b != null && b.isNotEmpty) return highQualityArtworkUrl(b);
-    if (usesMetadataProvider(MetadataCategory.backgrounds))
-      return _heroPoster(item);
-    final tt = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
-    if (tt != null) {
-      return 'https://images.metahub.space/background/large/$tt/img';
-    }
-    final p = item.poster;
-    return (p != null && p.isNotEmpty) ? highQualityArtworkUrl(p) : null;
-  }
-
-  int get _heroIndex {
-    if (widget.hero.isEmpty) return 0;
-    final i = widget.hero.indexWhere((m) => m.id == _owners.hero.heroId);
-    return i < 0 ? 0 : i;
-  }
-
-  StremioMeta? get _heroItem => heroPresentation;
-
-  void _openHero() {
-    final item = originalMetadata;
-    final addon = widget.heroAddon;
-    if (item != null && addon != null) widget.onHeroOpen(item, addon);
   }
 
   /// The id of the slide currently SHOWING — the host's suppression snapshot
   /// reads this at content-playback launch, because its own bookkeeping only
   /// knows the last *dwelled* item and playback can start before any dwell.
-  String? get currentHeroId => _heroItem?.id;
+  String? get currentHeroId => _sections.heroArt.currentHeroId;
 
   @override
   void initState() {
     super.initState();
     _owners.hero.heroId = widget.hero.isNotEmpty ? widget.hero.first.id : null;
-    widget.heroNode.addListener(_onHeroFocus);
+    widget.heroNode.addListener(_sections.cadence.onHeroFocus);
     _owners.scroll.scroll.addListener(_onBoardScrolled);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _probe();
-      _restartCadence();
-      _preloadHeroes();
+      _sections.ambient.probe();
+      _sections.cadence.restartCadence();
+      _sections.heroWarmup.preloadHeroes();
     });
   }
 
@@ -763,7 +500,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
           widget.hero.length,
           (i) => i,
         ).any((i) => !identical(old.hero[i], widget.hero[i]))) {
-      _preloadHeroes();
+      _sections.heroWarmup.preloadHeroes();
     }
     // The reel can change under us as sections load. Keep the parked item if
     // it is still present; otherwise fall back to the head rather than to a
@@ -771,26 +508,26 @@ class SpotlightBoardState extends State<SpotlightBoard>
     // The host can hand us a different node across a rebuild; without moving
     // the listener the old node keeps one forever and the new one has none.
     if (old.heroNode != widget.heroNode) {
-      old.heroNode.removeListener(_onHeroFocus);
-      widget.heroNode.addListener(_onHeroFocus);
+      old.heroNode.removeListener(_sections.cadence.onHeroFocus);
+      widget.heroNode.addListener(_sections.cadence.onHeroFocus);
     }
     // The trailer pref flipped: rebuild the cadence from scratch. Disable
     // must also clear a stale `_rolling` (or nothing ever re-arms — the
     // reconcile below skips while rolling), and enable must arm a clock that
     // has nothing else to wake it.
     if (old.trailersEnabled != widget.trailersEnabled) {
-      _restartCadence();
+      _sections.cadence.restartCadence();
     }
     if (_owners.hero.heroId != null &&
         !widget.hero.any((m) => m.id == _owners.hero.heroId)) {
       // The title we were on is gone. Tear the trailer down FIRST: it was
       // resolved for that title, and leaving it rolling paints it over the new
       // head until the 20s cap expires.
-      _stopRolling();
+      _sections.cadence.stopRolling();
       _owners.hero.heroId = widget.hero.isNotEmpty
           ? widget.hero.first.id
           : null;
-      _restartCadence();
+      _sections.cadence.restartCadence();
     } else if (_owners.hero.cadence == null && !_owners.hero.rolling) {
       // Reconcile for BOTH inputs: the host often enables trailers (the
       // pref read lands) or grows the reel AFTER first build, with the
@@ -798,7 +535,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
       // this the dwell clock would simply never start. _restartCadence
       // applies its own gates (focus on DPAD, pref, dwell callback), so an
       // uncalled-for restart is a no-op, not a stolen cadence.
-      _restartCadence();
+      _sections.cadence.restartCadence();
     }
     // The cursor bookkeeping is positional, but tracker rows FRONT-INSERT:
     // after `rows=9to11` every `_col[i]` describes a different shelf than it
@@ -846,135 +583,22 @@ class SpotlightBoardState extends State<SpotlightBoard>
         _owners.navigation.col[row] = len - 1;
       }
     }
-    _probe();
-  }
-
-  /// Re-arms when the hero actually holds focus and stops the moment it does
-  /// not — covering the sidebar, tab switches and pushed routes in one place.
-  void _onHeroFocus() {
-    if (!mounted) return;
-    if (widget.heroNode.hasFocus) {
-      _restartCadence();
-    } else {
-      _owners.hero.cadence?.cancel();
-      _owners.hero.dwelledHeroId = null;
-      _stopRolling();
-    }
+    _sections.ambient.probe();
   }
 
   @override
   void dispose() {
-    _cancelWarmups();
+    _sections.heroWarmup.cancelWarmups();
     _owners.scroll.veilMetricsRevision.dispose();
-    widget.heroNode.removeListener(_onHeroFocus);
+    widget.heroNode.removeListener(_sections.cadence.onHeroFocus);
     if (_owners.hero.rolling) widget.onTrailerStop?.call();
     _owners.hero.cadence?.cancel();
     _owners.scroll.scroll.dispose();
     super.dispose();
   }
 
-  void _emitAmbient(String? art, Color? tint) {
-    final next = (art: art, tint: tint);
-    final sink = widget.onAmbient;
-    if (identical(sink, _owners.hero.lastAmbientSink) &&
-        next == _owners.hero.lastAmbient) {
-      return;
-    }
-    _owners.hero.lastAmbientSink = sink;
-    _owners.hero.lastAmbient = next;
-    sink?.call(art, tint);
-  }
-
-  Future<void> _probe() async {
-    // The RESOLVED art, not the raw fields — tint and side-flip must be
-    // measured on the image actually drawn.
-    final gen = ++_owners.hero.probeGen;
-    final item = _heroItem;
-    final url = item == null ? null : _heroArt(item);
-    if (url == null || url.isEmpty) {
-      _emitAmbient(null, null);
-      return;
-    }
-
-    // Publish FIRST from cache when we have it. Skipping the publish for a
-    // cached URL meant paging A→B→A left B's art and tint on the shell —
-    // the cache short-circuited the only code path that told anyone.
-    if (_owners.hero.tints.containsKey(url)) {
-      _emitAmbient(url, _owners.hero.tints[url]);
-    } else {
-      // Update the shell immediately; colour extraction may wait on a decode.
-      _emitAmbient(url, null);
-      final tint = await extractDominantColor(
-        CachedNetworkImageProvider(
-          url,
-          cacheManager: DebrifyImageCache.manager,
-        ),
-      );
-      if (!mounted || gen != _owners.hero.probeGen) return;
-      setState(() => _remember(url, tint));
-      _emitAmbient(url, tint);
-    }
-    unawaited(_warmNext());
-  }
-
-  /// Luminance of the extracted colour stands in for "is the left third busy":
-  /// a bright dominant means a bright image, and a bright image is one whose
-  /// text side cannot be trusted. A true left-third measurement would be
-  /// better and is noted in the plan.
-  void _remember(String url, Color? tint) {
-    _owners.hero.leftThird[url] = tint == null ? 0.0 : tint.computeLuminance();
-    _owners.hero.tints[url] = tint;
-  }
-
-  /// Resolve the NEXT slide's art while this one is still showing.
-  ///
-  /// Without this, freezing the side below would mean every slide's FIRST
-  /// appearance used the default side, because the probe cannot possibly have
-  /// finished by the time the slide is drawn. The cadence gives us seconds of
-  /// lead time; one image is a cheap way to spend it.
-  Future<void> _warmNext() async {
-    if (widget.hero.length < 2) return;
-    final next = widget.hero[(_heroIndex + 1) % widget.hero.length];
-    final url = _heroArt(next);
-    if (url == null || url.isEmpty || _owners.hero.tints.containsKey(url)) {
-      return;
-    }
-    final tint = await extractDominantColor(
-      CachedNetworkImageProvider(url, cacheManager: DebrifyImageCache.manager),
-    );
-    if (!mounted) return;
-    setState(() => _remember(url, tint));
-  }
-
   @visibleForTesting
-  String? get heroAlignmentItemId => _owners.hero.flipFor;
-
-  /// The side the identity sits on, FROZEN for as long as an item is showing.
-  ///
-  /// This used to read `_leftThird` directly on every build. That map is
-  /// filled by an async probe, so a slide appeared with its logo on one side
-  /// and then, a second or two later, jumped to the other as the probe landed
-  /// — the one thing a title card must never do while someone is reading it.
-  ///
-  /// Memoised by item id rather than recomputed: a probe that resolves for the
-  /// slide currently on screen updates the map for NEXT time, and moves
-  /// nothing now. `_warmNext` is what keeps "next time" from being the common
-  /// case.
-  bool get _flip {
-    final item = _heroItem;
-    if (item == null) return false;
-    // The missing URL is temporary during provider loading. Do not freeze
-    // the default side before the resolved artwork's cached tint is usable.
-    if (metadataArtworkPending(MetadataCategory.backgrounds)) return false;
-    if (_owners.hero.flipFor != item.id) {
-      _owners.hero.flipFor = item.id;
-      final url = _heroArt(item);
-      _owners.hero.flipValue =
-          url != null &&
-          (_owners.hero.leftThird[url] ?? 0) > SpotlightBoard.leftThirdBusy;
-    }
-    return _owners.hero.flipValue;
-  }
+  String? get heroAlignmentItemId => _sections.ambient.heroAlignmentItemId;
 
   // ── movement ───────────────────────────────────────────────────────────
   void _go(FocusNode node, Offset dir) {
@@ -985,15 +609,15 @@ class SpotlightBoardState extends State<SpotlightBoard>
   void _page(int delta) {
     if (widget.hero.length < 2) return;
     final n = widget.hero.length;
-    final next = (_heroIndex + delta + n) % n;
+    final next = (_sections.heroArt.heroIndex + delta + n) % n;
     if (widget.hero[next].id == _owners.hero.heroId) return;
-    _stopRolling();
+    _sections.cadence.stopRolling();
     _owners.hero.dwelledHeroId = null;
     setState(() => _owners.hero.heroId = widget.hero[next].id);
     refreshMetadataPresentation();
     ParallaxTravel.note(Offset(delta.toDouble(), 0));
-    _probe();
-    _restartCadence();
+    _sections.ambient.probe();
+    _sections.cadence.restartCadence();
   }
 
   @override
@@ -1110,7 +734,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
   void _down() {
     if (_owners.navigation.row < 0) {
       if (widget.sections.isEmpty) return;
-      _stopRolling();
+      _sections.cadence.stopRolling();
       setState(() => _owners.navigation.row = 0);
       _owners.hero.cadence?.cancel();
       _focusRow(0, const Offset(0, 1));
@@ -1138,7 +762,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
         return;
       }
       setState(() => _owners.navigation.row = -1);
-      _restartCadence();
+      _sections.cadence.restartCadence();
       _go(widget.heroNode, const Offset(0, -1));
       _owners.scroll.scroll.animateTo(
         0,
@@ -1292,10 +916,10 @@ class SpotlightBoardState extends State<SpotlightBoard>
       case LogicalKeyboardKey.gameButtonA:
         // The hero was focusable and inert: arrows paged it, but OK did
         // nothing at all, so the reel could be browsed and never opened.
-        final item = _heroItem;
+        final item = _sections.heroArt.heroItem;
         final addon = widget.heroAddon;
         if (_owners.navigation.row < 0 && item != null && addon != null) {
-          _openHero();
+          _sections.heroArt.openHero();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -1319,7 +943,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
         // last slide instead, which made the reel a loop with no exit — the
         // one gesture that opens the sidebar was the one gesture it ate.
         if (_owners.navigation.row < 0 &&
-            (widget.hero.length < 2 || _heroIndex == 0)) {
+            (widget.hero.length < 2 || _sections.heroArt.heroIndex == 0)) {
           return KeyEventResult.ignored;
         }
         _walk(-1);
@@ -1670,10 +1294,10 @@ class SpotlightBoardState extends State<SpotlightBoard>
   /// line and no side-flip heuristic: there is no "side" when the stack is
   /// centered.
   Widget _heroCompact(SpotlightBoardMetrics m) {
-    final item = _heroItem;
+    final item = _sections.heroArt.heroItem;
     if (item == null) return const SizedBox.shrink();
-    final url = _heroArt(item);
-    final posterUrl = _heroPoster(item);
+    final url = _sections.heroArt.heroArt(item);
+    final posterUrl = _sections.heroArt.heroPoster(item);
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
     final rolling = _owners.hero.rolling;
@@ -1683,14 +1307,16 @@ class SpotlightBoardState extends State<SpotlightBoard>
       onHorizontalDragEnd: (details) {
         final v = details.primaryVelocity ?? 0;
         if (v.abs() < 120) return;
-        _jumpTo(
-          (_heroIndex + (v < 0 ? 1 : -1) + widget.hero.length) %
+        _sections.cadence.jumpTo(
+          (_sections.heroArt.heroIndex +
+                  (v < 0 ? 1 : -1) +
+                  widget.hero.length) %
               widget.hero.length,
         );
       },
       onTap: () {
         final addon = widget.heroAddon;
-        if (addon != null) _openHero();
+        if (addon != null) _sections.heroArt.openHero();
       },
       child: Stack(
         fit: StackFit.expand,
@@ -1705,9 +1331,9 @@ class SpotlightBoardState extends State<SpotlightBoard>
               // 900 was under a 1080-class phone's physical width (390 × 3),
               // so the one full-bleed image on the screen was the soft one.
               // Clamped: metahub art tops out around 1920.
-              memCacheWidth: _heroDecodeWidth,
-              fadeInDuration: _heroImageFadeIn,
-              fadeOutDuration: _heroImageFadeOut,
+              memCacheWidth: _sections.heroArt.heroDecodeWidth,
+              fadeInDuration: _sections.heroArt.heroImageFadeIn,
+              fadeOutDuration: _sections.heroArt.heroImageFadeOut,
               placeholder: (_, __) => ColoredBox(color: ground),
               // Same guess-404 fallback as the wide backdrop: derived
               // metahub art can miss, and the poster beats a blank hero.
@@ -1804,7 +1430,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
         SpotlightHeroOpenPill(
           onTap: () {
             final addon = widget.heroAddon;
-            if (addon != null) _openHero();
+            if (addon != null) _sections.heroArt.openHero();
           },
         ),
         if (widget.hero.length > 1) ...[
@@ -1821,7 +1447,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
   /// list — split so the text can ride away with the shelves while the art
   /// stays put.
   Widget _heroWide(SpotlightBoardMetrics m, double heroH) {
-    final item = _heroItem;
+    final item = _sections.heroArt.heroItem;
     if (item == null) return const SizedBox.shrink();
     final wide = _heroForeground(m, item, heroH);
     if (widget.dpad) return wide;
@@ -1836,14 +1462,16 @@ class SpotlightBoardState extends State<SpotlightBoard>
       onHorizontalDragEnd: (details) {
         final v = details.primaryVelocity ?? 0;
         if (v.abs() < 120 || widget.hero.length < 2) return;
-        _jumpTo(
-          (_heroIndex + (v < 0 ? 1 : -1) + widget.hero.length) %
+        _sections.cadence.jumpTo(
+          (_sections.heroArt.heroIndex +
+                  (v < 0 ? 1 : -1) +
+                  widget.hero.length) %
               widget.hero.length,
         );
       },
       onTap: () {
         final addon = widget.heroAddon;
-        if (addon != null) _openHero();
+        if (addon != null) _sections.heroArt.openHero();
       },
       child: wide,
     );
@@ -1890,11 +1518,11 @@ class SpotlightBoardState extends State<SpotlightBoard>
   }
 
   Widget _heroBackdropContent(double heroH) {
-    final item = _heroItem;
+    final item = _sections.heroArt.heroItem;
     if (item == null) return const SizedBox.shrink();
-    final url = _heroArt(item);
-    final posterUrl = _heroPoster(item);
-    final flip = _flip;
+    final url = _sections.heroArt.heroArt(item);
+    final posterUrl = _sections.heroArt.heroPoster(item);
+    final flip = _sections.ambient.flip;
     // Both scrims below were tuned against a STILL, where they only have to
     // keep white text off busy artwork. Left at that strength over a moving
     // picture they are most of why the trailer reads dim: the identity scrim
@@ -1931,9 +1559,9 @@ class SpotlightBoardState extends State<SpotlightBoard>
             // TV keeps the 1400: its panels sit behind the box's own
             // upscaler and the decode budget there is the tighter constraint
             // (see TvHeroArtworkQuality).
-            memCacheWidth: _heroDecodeWidth,
-            fadeInDuration: _heroImageFadeIn,
-            fadeOutDuration: _heroImageFadeOut,
+            memCacheWidth: _sections.heroArt.heroDecodeWidth,
+            fadeInDuration: _sections.heroArt.heroImageFadeIn,
+            fadeOutDuration: _sections.heroArt.heroImageFadeOut,
             placeholder: (_, __) => ColoredBox(color: ground),
             // The derived metahub URL is a GUESS — when it 404s (no still
             // for that title), fall back to the poster rather than a flat
@@ -2095,7 +1723,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     StremioMeta item,
     double heroH,
   ) {
-    final flip = _flip;
+    final flip = _sections.ambient.flip;
     // TV keeps the shipped absolutes: on a ~960×540 canvas, 128 is the
     // proportional shelf overlap (88) plus 40 of clearance, and 92 is the
     // overlap plus 4. On touch the SAME structure is derived instead of
@@ -2201,7 +1829,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
       for (var i = 0; i < widget.hero.length; i++)
         GestureDetector(
           // A 4px dot is not a tap target — the padding is.
-          onTap: tappable ? () => _jumpTo(i) : null,
+          onTap: tappable ? () => _sections.cadence.jumpTo(i) : null,
           behavior: tappable ? HitTestBehavior.opaque : null,
           child: Padding(
             padding: tappable
@@ -2211,11 +1839,11 @@ class SpotlightBoardState extends State<SpotlightBoard>
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeOut,
               margin: const EdgeInsets.symmetric(horizontal: 2.25),
-              width: i == _heroIndex ? 11 : 4,
+              width: i == _sections.heroArt.heroIndex ? 11 : 4,
               height: 4,
               decoration: BoxDecoration(
                 color: Colors.white.withValues(
-                  alpha: i == _heroIndex ? 0.95 : 0.34,
+                  alpha: i == _sections.heroArt.heroIndex ? 0.95 : 0.34,
                 ),
                 borderRadius: BorderRadius.circular(2),
               ),
@@ -2463,7 +2091,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
                 hoverable: !widget.dpad,
                 dpad: widget.dpad,
                 onDesktopPreviewActivityChanged:
-                    _onDesktopPreviewActivityChanged,
+                    _sections.cadence.onDesktopPreviewActivityChanged,
               ),
             ),
           ),
@@ -2527,4 +2155,14 @@ class SpotlightBoardState extends State<SpotlightBoard>
   @override
   double get leftThirdBusy => SpotlightBoard.leftThirdBusy;
   final _owners = SpotlightBoardOwners();
+  SpotlightBoardSections? _cachedSections;
+  SpotlightBoardSections get _sections =>
+      _cachedSections ??= createSpotlightBoardSections(
+        view: this,
+        owners: _owners,
+        context: () => context,
+        mounted: () => mounted,
+        setState: setState,
+        heroWarmupProvider: heroWarmupProvider,
+      );
 }

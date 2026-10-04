@@ -15,6 +15,9 @@
     "formatter_if_braces",
     "production_api_annotation",
     "layout_body",
+    "formatter_if_braces",
+    "production_api_annotation",
+    "layout_body",
     "formatter_if_braces"
   ],
   "receivers": [
@@ -82,7 +85,11 @@
     "SpotlightBoardScrollState": "SpotlightBoardScrollState",
     "SpotlightBoardCardLayout": "SpotlightBoardCardLayout",
     "SpotlightBoardNavigationState": "SpotlightBoardNavigationState",
-    "SpotlightBoardHeroState": "SpotlightBoardHeroState"
+    "SpotlightBoardHeroState": "SpotlightBoardHeroState",
+    "SpotlightBoardHeroArt": "SpotlightBoardHeroArt",
+    "SpotlightBoardHeroWarmup": "SpotlightBoardHeroWarmup",
+    "SpotlightBoardAmbient": "SpotlightBoardAmbient",
+    "SpotlightBoardCadence": "SpotlightBoardCadence"
   },
   "receiver_owners": {
     "_sections.selection": "SpotlightBoardSelection",
@@ -113,7 +120,11 @@
     "SpotlightBoardScrollState": "SpotlightBoardScrollState",
     "SpotlightBoardCardLayout": "SpotlightBoardCardLayout",
     "SpotlightBoardNavigationState": "SpotlightBoardNavigationState",
-    "SpotlightBoardHeroState": "SpotlightBoardHeroState"
+    "SpotlightBoardHeroState": "SpotlightBoardHeroState",
+    "SpotlightBoardHeroArt": "SpotlightBoardHeroArt",
+    "SpotlightBoardHeroWarmup": "SpotlightBoardHeroWarmup",
+    "SpotlightBoardAmbient": "SpotlightBoardAmbient",
+    "SpotlightBoardCadence": "SpotlightBoardCadence"
   },
   "sidecars": {
     "scaffolding": "dev/tool/spotlight_board_scaffolding.json",
@@ -4800,5 +4811,14 @@
     }
   },
   "context_exception_difference": "formatter_if_braces: unchanged original statement; physical prefix frozen",
-  "annotation_exceptions": {}
+  "annotation_exceptions": {
+    "SpotlightBoardState.heroWarmupProvider": {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+      "difference": "production_api_annotation: remove only @visibleForTesting from moved implementation; retain exact annotated facade forwarder"
+    },
+    "SpotlightBoardState.heroAlignmentItemId": {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart",
+      "difference": "production_api_annotation: remove only @visibleForTesting from moved implementation; retain exact annotated facade forwarder"
+    }
+  }
 }

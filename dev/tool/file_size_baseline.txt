@@ -16,7 +16,7 @@
 4086 lib/services/iptv_catalog_db.dart
 3957 lib/screens/stremio_tv/stremio_tv_screen.dart
 3858 lib/services/stremio_service.dart
-2530 lib/widgets/home/spotlight_board.dart
+2168 lib/widgets/home/spotlight_board.dart
 3667 lib/screens/video_player/widgets/iptv_channel_sheet.dart
 3500 lib/screens/catalog_item_detail_screen.dart
 269 lib/screens/pikpak/pikpak_files_screen.dart

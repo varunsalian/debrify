@@ -1217,6 +1217,21 @@ decomposition; bug fixes and behaviour changes, including everything below.
 - Formatted facade: **2530**. Physical AST breakdown: imports export 35, widget docs 185, state header 3, lifecycle 142, forwarders overrides 0, bindings 54, composition 1, retained original bodies 2031, remaining 79 (sum 2530); detailed spans in `step3-cap.json`.
 - All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step3-focused.*` includes full end-of-run tree provenance before this Progress edit.
 
+### Step 4 — hero lifecycle sections; gate 1
+
+- Previous checkpoint: `e1d22c65`.
+- Moved hero art/warm-up, cadence/lease, hero focus, ambient/tint/flip
+  and metadata hooks. Plain sections are constructed once and cached in
+  the State; live context/mounted getters and the exact State setter and
+  virtual warm-up-provider tear-offs are injected. All trailer mount,
+  timing and stop bodies remain verbatim, source-guarded and contract-pinned;
+  ambient trailers remain decoration with device behavior pending.
+- Per-entry wiring reviewed before pinning. Facade ratchet resumes lowering.
+  Full-suite gate 1 runs next on this committed tree against original base3;
+  its completed evidence is recorded with step 5.
+- Formatted facade: **2168**. Physical AST breakdown: imports export 31, widget docs 185, state header 3, lifecycle 142, forwarders overrides 18, bindings 54, composition 11, retained original bodies 1667, remaining 57 (sum 2168); detailed spans in `step4-cap.json`.
+- All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step4-focused.*` includes full end-of-run tree provenance before this Progress edit.
+
 ### Amendment after step 0b (design-reviewed before resuming)
 
 1. **Facade cap.** The hard maximum becomes 460 (see the size section); the

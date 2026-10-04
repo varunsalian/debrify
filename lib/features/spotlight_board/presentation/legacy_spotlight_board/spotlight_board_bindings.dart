@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_composition.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_owners.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_board_types.dart';
 import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/models/stremio_addon.dart';
@@ -44,4 +46,26 @@ abstract class SpotlightBoardWidgetView {
     Future<void> Function(StremioMeta, MetadataPreferences) warmArtwork,
   );
   void refreshMetadataPresentation();
+}
+
+class SpotlightBoardDependencies {
+  // TEMP(spotlight_board): borrowed State callbacks until their planned step.
+
+  final SpotlightBoardWidgetView view;
+  final SpotlightBoardOwners owners;
+  final BuildContext Function() context;
+  final bool Function() mounted;
+  final void Function(VoidCallback) setState;
+  final ImageProvider Function(String) heroWarmupProvider;
+  SpotlightBoardSections? _sections;
+  SpotlightBoardSections get sections => _sections!;
+  void bindSections(SpotlightBoardSections value) => _sections = value;
+  SpotlightBoardDependencies(
+    this.view,
+    this.owners,
+    this.context,
+    this.mounted,
+    this.setState,
+    this.heroWarmupProvider,
+  );
 }
