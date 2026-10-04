@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 
@@ -188,7 +189,12 @@ void main() {
         playbackPreferences.writes.clear();
         await f.member(c.$1)();
         expect(playbackPreferences.writes, isEmpty);
-        expect(f.member(c.$4), isNotNull);
+        expect(
+          f.member(c.$4),
+          c.$1 == 'saveIOSCustomScheme'
+              ? 'Must contain :// (e.g., myapp://)'
+              : 'Command must contain {url} placeholder',
+        );
         controller.text = '  ${c.$8}  ';
         await f.member(c.$1)();
         expect(playbackPreferences.writes, [
@@ -276,6 +282,20 @@ void main() {
           final fonts = await SubtitleFontService.instance.getCustomFonts();
           expect(fonts, hasLength(1));
           final font = fonts.single;
+          expect(playbackPreferences.writes, [
+            (
+              'subtitle_custom_fonts',
+              jsonEncode([
+                {
+                  'id': font.id,
+                  'label': font.label,
+                  'fontFamily': font.fontFamily,
+                  'path': font.path,
+                },
+              ]),
+            ),
+            ('subtitle_selected_font_id', font.id),
+          ]);
           expect(font.path, startsWith('${f.directory.path}/subtitle_fonts/'));
           expect(
             await tester.runAsync(() => File(font.path!).readAsBytes()),

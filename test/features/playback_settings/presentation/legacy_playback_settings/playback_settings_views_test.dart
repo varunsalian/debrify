@@ -12,6 +12,8 @@ import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import '../../../../support/playback_settings_fixture.dart';
 
@@ -102,12 +104,26 @@ void main() {
   testWidgets('storage throw clears spinner and preserves raw load message', (
     tester,
   ) async {
-    await playbackSeed({'default_player_mode': 1});
+    SharedPreferences.setMockInitialValues({});
+    SharedPreferencesStorePlatform.instance = playbackPreferences;
+    playbackPreferences.failRead = true;
     await playbackCase(tester, (f) async {
-      await f.mount(tester, section: PlaybackSettingsSection.video);
-      expect(f.member('loading'), isFalse);
-      expect(find.textContaining('Failed to load settings:'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      try {
+        await f.mount(tester, section: PlaybackSettingsSection.video);
+        expect(f.member('loading'), isFalse);
+        expect(
+          find.text(
+            'Failed to load settings: Bad state: fixture preference read',
+          ),
+          findsOneWidget,
+        );
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+      } finally {
+        playbackPreferences.failRead = false;
+        playbackRawPreferences = (await tester.runAsync(
+          SharedPreferences.getInstance,
+        ))!;
+      }
     });
   });
   for (final section in PlaybackSettingsSection.values) {
@@ -155,14 +171,19 @@ void main() {
   testWidgets(
     'TV entry seeds the first row and concrete focus is retained on reload',
     (tester) async {
+      PlatformUtil.debugSetTvOS(true);
       PlatformUtil.debugSetAndroidTvCached(true);
       await playbackCase(tester, (f) async {
         await f.mount(tester, section: PlaybackSettingsSection.video);
         final aspect = f.member('aspectFocusNode') as FocusNode;
         expect(FocusManager.instance.primaryFocus, same(aspect));
+        final later = f.member('contentDisplayMatchFocusNode') as FocusNode;
+        later.requestFocus();
+        await tester.pump();
+        expect(FocusManager.instance.primaryFocus, same(later));
         await tester.runAsync(() async => await f.member('loadSettings')());
         await f.loaded(tester);
-        expect(FocusManager.instance.primaryFocus, same(aspect));
+        expect(FocusManager.instance.primaryFocus, same(later));
       });
     },
   );
@@ -178,7 +199,10 @@ void main() {
       );
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
-      expect(FocusManager.instance.primaryFocus, isNot(isA<FocusScopeNode>()));
+      expect(
+        FocusManager.instance.primaryFocus,
+        same(Focus.of(tester.element(find.text('External Player')))),
+      );
       expect(find.byType(Radio<String>), findsNWidgets(3));
       for (final radio in find.byType(Radio<String>).evaluate()) {
         expect(

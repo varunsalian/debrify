@@ -140,7 +140,7 @@ def self_test(package=None):
     row=next(r for r in rows if r['original_name']==key)
     spec=json.loads((ROOT/config['sidecars']['partitions']).read_text())['partitions'][key]
     elements=before['returnedList']['elements']
-    retained=original[before['start']:elements[0]['end']]+','
+    retained=original[before['start']:before['bodyOffset']+1]+'\nreturn ['+original[before['returnedList']['offset']+1:elements[0]['end']]+','
     retained=retained.replace('_externalPlayerSettings(', 'externalPlayerSettings(',1)
     retained+='\n'+''.join('..._deps.'+p['name']+'(),\n' for p in spec['slices'])+'];\n}'
     fixture_sources={spec['join_file']:'class '+spec['builder_class']+' { '+retained+' }'}
@@ -172,7 +172,7 @@ def self_test(package=None):
     variants['piece omitted']={**fixture_sources,join:base.replace(first,'')}
     variants['piece duplicated']={**fixture_sources,join:base.replace(first,first+first)}
     variants['inline E1 changed']={**fixture_sources,join:base.replace("'external'","'debrify'",1)}
-    variants['retained preamble changed']={**fixture_sources,join:base.replace('Theme.of(context)','Theme.of(otherContext)',1)}
+    variants['retained preamble changed']={**fixture_sources,join:base.replace('return [','final theme = Theme.of(otherContext); return [',1)}
     ios=spec['slices'][0]['file']
     piece_base=fixture_sources[ios]
     variants['unpermitted extra local']={**fixture_sources,ios:piece_base.replace('return [','final extra = 1; return [',1)}
@@ -181,10 +181,23 @@ def self_test(package=None):
     variants['element reordered']={**fixture_sources,ios:piece_base.replace(first_element,'MARKER').replace(second_element,first_element).replace('MARKER',second_element)}
     variants['element omitted']={**fixture_sources,ios:piece_base.replace(first_element+',','',1)}
     variants['element duplicated']={**fixture_sources,ios:piece_base.replace(first_element+',',first_element+','+first_element+',',1)}
-    # Replacing a complete collection-if with its spread branch splits the
-    # AST unit even when the child widgets themselves still look identical.
-    prefix=first_element[:first_element.index('...[')]
-    variants['element split across pieces']={**fixture_sources,ios:piece_base.replace(prefix,'',1)}
+    # Split the real E3 collection-if's child list into two complete halves,
+    # putting the second half in the next platform piece. All child widgets
+    # survive, but one original AST element is now spread across owners.
+    element = elements[2]['text']
+    child_open = element.index('...[') + 3
+    child_close = element.rfind(']')
+    child_text = element[child_open + 1:child_close]
+    child_node = parse({'children': 'List<Widget> children() { return [' + child_text + ']; }'}, package)['children']['declarations'][0]
+    children = child_node['returnedList']['elements']
+    assert len(children) > 1
+    cut = children[0]['end'] - child_node['returnedList']['offset'] - 1
+    first_half = element[:child_open + 1] + child_text[:cut] + ',]'
+    second_half = element[:child_open + 1] + child_text[cut:].lstrip().removeprefix(',') + ']'
+    linux = spec['slices'][1]['file']
+    variants['element split across pieces']={**fixture_sources,
+        ios:piece_base.replace(element, first_half, 1),
+        linux:fixture_sources[linux].replace('return [', 'return [' + second_half + ',', 1)}
     for label,fixture in variants.items():
         assert fixture!=fixture_sources,label
         try:

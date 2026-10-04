@@ -38,12 +38,12 @@ void main() {
         await tester.pump();
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
         await tester.pump();
-        expect(FocusManager.instance.primaryFocus, isNot(same(last)));
+        expect(FocusManager.instance.primaryFocus, same(first));
         last.requestFocus();
         await tester.pump();
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pump();
-        expect(FocusManager.instance.primaryFocus, isNot(same(first)));
+        expect(FocusManager.instance.primaryFocus, same(last));
         playbackPreferences.writes.clear();
         await tester.tap(find.text('Force stereo audio'));
         await tester.pumpAndSettle();
@@ -63,10 +63,45 @@ void main() {
       });
     },
   );
+  testWidgets('TV video dropdown traversal has exact targets at both ends', (
+    tester,
+  ) async {
+    PlatformUtil.debugSetTvOS(true);
+    PlatformUtil.debugSetAndroidTvCached(true);
+    await playbackCase(tester, (f) async {
+      await f.mount(tester, section: PlaybackSettingsSection.video);
+      final first = f.member('aspectFocusNode') as FocusNode;
+      final middle = f.member('contentDisplayMatchFocusNode') as FocusNode;
+      final last = f.member('tvosForceSwDecodeFocusNode') as FocusNode;
+      first.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(first));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(middle));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(last));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(last));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(middle));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, same(first));
+    });
+  });
   testWidgets(
     'macOS command text field retains owned focus and nonwrapping arrows',
     (tester) async {
-      if (!Platform.isMacOS) return;
+      if (!Platform.isMacOS) {
+        markTestSkipped('macOS-only command field');
+        return;
+      }
       PlatformUtil.debugSetAndroidTvCached(true);
       await playbackSeed({
         'default_player_mode': 'external',

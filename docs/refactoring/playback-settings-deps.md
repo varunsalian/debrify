@@ -259,3 +259,18 @@ live context/mounted/section, lexical contexts, no construction-time action.
 - No lifecycle statement moves, splits or gains an initialization.
 - Exit milestone for retained State sections/platform/storage/localization is
   the future Riverpod/data/capability/localization migration described in the plan.
+
+### Step-0 simulation breakdown
+
+Measured artifact: `.git/refactor-evidence/playback_settings/facade-simulation.dart.txt`;
+AST span breakdown in `facade-simulation-breakdown.json`. It is a sizing sketch,
+not a compiling implementation; final imports/bindings are measured again in step 7.
+
+- widget: 14 physical lines.
+- initState: 240 physical lines.
+- dispose: 47 physical lines.
+- composition getter: 17 physical lines.
+- self-push: 4 physical lines.
+- build forwarder: 2 physical lines.
+- accessor forwarder: 6 physical lines.
+- remaining imports, class header, owner handles and whitespace: 21 physical lines.

@@ -161,6 +161,25 @@ void main() {
               k: playbackRawPreferences.get(k),
           };
 
+          expect(
+            playbackPreferences.writes
+                .where((w) => w.$1.startsWith(p.a.preferencePrefix))
+                .toList(),
+            [
+              (
+                p.a.preferenceKey('android_video_renderer_mode'),
+                'direct_mediacodec',
+              ),
+              (
+                p.a.preferenceKey('android_video_renderer_gpu_migration_v1'),
+                true,
+              ),
+              (
+                p.a.preferenceKey('subtitle_extreme_bottom_default_adopted_v1'),
+                true,
+              ),
+            ],
+          );
           playbackPreferences.writes.clear();
 
           await tester.runAsync(() async {
@@ -176,6 +195,12 @@ void main() {
           expect(old.mounted, isFalse);
           expect(find.byType(ExternalPlayerSettingsPage), findsNothing);
           expect(f.navigator.currentState!.canPop(), isFalse);
+          expect(
+            playbackPreferences.writes.where(
+              (w) => w.$1.startsWith(p.a.preferencePrefix),
+            ),
+            isEmpty,
+          );
 
           playbackPreferences.writes.clear();
 
@@ -183,12 +208,20 @@ void main() {
           await f.loaded(tester);
           expect(f.key.currentState, isNot(same(old)));
           expect(f.member('defaultAspectIndex'), 1);
-          expect(
-            playbackPreferences.writes.every(
-              (w) => w.$1.startsWith(p.b.preferencePrefix),
+          expect(playbackPreferences.writes, [
+            (
+              p.b.preferenceKey('android_video_renderer_mode'),
+              'direct_mediacodec',
             ),
-            isTrue,
-          );
+            (
+              p.b.preferenceKey('android_video_renderer_gpu_migration_v1'),
+              true,
+            ),
+            (
+              p.b.preferenceKey('subtitle_extreme_bottom_default_adopted_v1'),
+              true,
+            ),
+          ]);
           expect({
             for (final k in playbackRawPreferences.getKeys().where(
               (k) => k.startsWith(p.a.preferencePrefix),

@@ -411,8 +411,8 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
    rounded up and at most 440, with the exception and exit milestone above.
    Lifecycle code never moves out of the facade to meet the cap.
 3. **Partition.** `_externalPlayerSettings` splits at whole collection-`if`
-   elements, kept in their original order. The joining method keeps the
-   preamble and E1 inline. It then spreads one piece per platform, in branch
+   elements, kept in their original order. The joining method keeps only preamble locals used by E1/the join,
+   and E1 inline. E1/the join use neither theme nor t. It then spreads one piece per platform, in branch
    order:
    - iOS/tvOS, E2–E4 (≈186 lines);
    - Linux, E5–E7 (≈183);
@@ -429,14 +429,14 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
    start at element 0 and cover every original element (582–596), and it
    requires the dispatcher to be exactly a fresh `final b = Builder(…)`
    followed only by ordered `...b.slice()` spreads (623–655). It has no way
-   to represent a retained preamble, an inline E1, or repeated locals in
+   to represent used join locals, an inline E1, or repeated locals in
    the pieces. Step 0 therefore adds an explicit **configuration-scoped
    extension**, enabled only by keys in
    `playback_settings_checker_config.json`. It must:
    - leave every existing config's behaviour unchanged, proved by all
      existing manifests and self-tests passing unmodified;
-   - accept a join method that keeps the original preamble (`theme`, `t`)
-     and E1 inline, then spreads exactly the five pieces in branch order;
+   - accept a join method that keeps only original preamble locals used by
+     E1/the join (none here), with E1 inline, then spreads exactly the five pieces in branch order;
    - map each piece to its exact original element range (E2–E4, E5–E7,
      E8–E10, E11–E14, E15) and compare the joined elements token for token
      with the original, after the existing comma normalization;
@@ -957,6 +957,70 @@ As in the PikPak plan, with these specifics:
 - Independent step-0 review arrived after source verification. Commit this
   verified source checkpoint, close all findings in a separate original-proved
   step 0b, adopt its new base, then run gate 1. No gate is claimed yet.
+
+### Step 0b — independent review closure (after source step 3)
+
+- Verified source step 3: `ded9f666`. Cherry-pick shared interpolation resolver
+  `def4e304` as `5a380c77`, retaining Codex/Claude attribution. All 35 playback
+  callback sites and their negatives remain unchanged.
+- User explicitly authorized a detached original proof worktree at `7bf567c9`.
+  Create it only under this worktree's ignored `build/step0b-original`, prove all
+  changed/new cases there, and remove it before the next whole-root analyzer.
+  No main checkout or pre-existing other worktree is used. App source is unchanged
+  except temporary scratch/mutation proofs, restored byte-for-byte each time.
+- P1 conservative structural decision: the join retains only locals actually
+  used by E1/the join. Neither theme nor t is used there; both remain verbatim
+  only in their platform pieces. The opt-in checker reconstructs their identical
+  original locals for whole-method comparison. Positive/negative fixtures cover
+  the real empty-preamble join and a genuinely split E3 child list across iOS/
+  Linux pieces. Scratch real join compiles all six navigation cases; unchanged
+  destination strict lint gives exactly 29 original diagnostics, zero new
+  diagnostics and zero warnings. No new const or allowlist entry is added.
+- Strengthen concrete TV focus retention using the later content-match row,
+  rendered with simulated tvOS. Exact dropdown traversal pins first → middle →
+  last and both ends; checkbox end targets stay exact. Mode Down targets the
+  External Player row. Non-macOS command-field cases explicitly skip.
+- Seed all omitted VR, tvOS, passthrough, Apple and external-player keys away from
+  defaults. Simulated tvOS makes its three values/Apple and iOS scheme reachable;
+  native desktop still loads its own external keys. Android-only VR/passthrough
+  seeds intentionally remain unread on desktop, with original guards/order pinned
+  and device execution pending. No fake Android seam is introduced.
+- Profile assertions pin A's initial ordered migration writes, zero A writes
+  during the picker handoff before clearing, and B's exact three ordered page
+  migration writes after its original defaults bootstrap. Removing B's renderer
+  migration fails, so the incoming assertion cannot pass vacuously.
+- Second-open cases now mount a fresh State. Font import pins the complete ordered
+  device-list/selection writes; invalid command/scheme errors use exact original
+  text. The storage failure resets preference acquisition in the views isolate
+  and uses failRead; its exact original snackbar is asserted. Golden test bodies,
+  all ten PNGs and the player helper files stay unchanged.
+- Source predicates are ordered, including E1–E15; detection sites, arguments,
+  enclosing read/guard prefix and all five detector calls are pinned from the
+  original. Source tests own a checkout-local pinned parser/kernel and never
+  initialize or recompile the shared evidence parser.
+- Eight original-only mutations fail their intended assertions: focus guard,
+  Apple/tvOS/external-command load, dropdown Down target, incoming migrations,
+  platform-element order and detector arguments. Original focused freeze has
+  130 successes (all 124 characterization identities plus six navigation cases).
+  New test analyzer has zero diagnostics. Mutation logs/proofs and all accepted
+  test hashes are in `playback_settings/`; no assertion is weakened.
+- Latest original `base4`: 10,701 successes / 13 failures / 28 errors / 20 skips;
+  comparison to `base3` PASS with exactly one added success and every old outcome
+  unchanged. Stable tested tree `618aa214e5955f4f1cb584891a7f7ebb0c3cb563` at
+  `7bf567c9`, staged review-only test/tool overlay, no untracked inputs. Current
+  replay: 146 successes and the same original profile guard failure, PASS versus
+  `base4`. All six manifests and local CI-equivalent checks pass with unchanged
+  inventories. Gate 1 will compare committed current source against `base4`.
+- Record the previously omitted accessor size raise: original formatted facade
+  4,314 → 4,515 with the 191-key test seam; this temporary raise exits when its
+  body moves in step 7. The 351-line sizing artifact and AST span breakdown are
+  now preserved in evidence and documented in the dependency report. The sketch
+  excludes final import details; step 7 measures the compiling facade again.
+- CI selector decision: retain the existing WebDAV hot-merge test path solely
+  because the unchanged exact CI failure inventory requires its observed failure
+  to be exercised. Dropping it fails the missing-known-identity check; filtering
+  or editing the inventory would weaken that check. No WebDAV code, assertion or
+  failure entry changes; the original whole baseline already observes it.
 
 ## Found, not fixed
 

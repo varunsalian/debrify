@@ -12,10 +12,11 @@ from check_settings_moves import ROOT, all_nodes, configured, declaration_tokens
 def inventory():
     config = json.loads((ROOT/'dev/tool/playback_settings_checker_config.json').read_text())
     rows = list(csv.DictReader((ROOT/'dev/tool/playback_settings_manifest.tsv').open(), delimiter='\t'))
-    common = Path(subprocess.check_output(['git','rev-parse','--git-common-dir'],cwd=ROOT,text=True).strip()).resolve()
-    package = common/'refactor-evidence/playback_settings/parser/.dart_tool/package_config.json'
+    # The test owns a checkout-local kernel. It never initializes/recompiles
+    # a parser in the shared evidence namespace used by concurrent checkers.
+    package = ROOT/'.dart_tool/playback_settings_source_parser/.dart_tool/package_config.json'
     if not package.exists():
-        # Fresh CI clones have no shared evidence. Initialize this feature's
+        # Fresh CI clones initialize only this checkout's
         # isolated tooling package from the checked-in lock, never the app.
         tooling = package.parent.parent
         tooling.mkdir(parents=True, exist_ok=True)
@@ -40,11 +41,14 @@ def inventory():
                 partition = json.loads((ROOT/config['sidecars']['partitions']).read_text())['partitions'][row['original_name']]
                 node = partition_virtual(node,partition,lookup,sources,package)
             members[name] = ' '.join(declaration_tokens(node,rows,row))
-    predicates = {name: sorted(re.findall(r'(?:Platform|PlatformUtil) \. \w+|\bisAndroidTv\b',text)) for name,text in members.items()}
+    predicates = {name: re.findall(r'(?:Platform|PlatformUtil) \. \w+|\bisAndroidTv\b',text) for name,text in members.items()}
     predicates = {k:v for k,v in predicates.items() if v}
     load = members['_loadSettings']
-    calls = re.findall(r'(?:\w+(?:Service|Storage)|AndroidNativeDownloader) \. (?:instance \. )?(\w+) \(',load)
+    calls = re.findall(r'(?:\w+(?:Service(?:Extension)?|Storage)|AndroidNativeDownloader) \. (?:instance \. )?(\w+) \(',load)
+    detectors = re.findall(r'((?:ExternalPlayerService|(?:Linux|Windows)ExternalPlayerServiceExtension|AndroidNativeDownloader) \. (?:detectInstalled\w+|isTelevision) \([^)]*\))', load)
     return {
+        'detector_sites_arguments': detectors,
+        'detection_prefix': load.split('String vrScreen')[0],
         'predicates':predicates,
         'listeners':re.findall(r'(\w+FocusNode) \. addListener \(',members['initState']),
         'disposals':re.findall(r'(\w+) \. dispose \(',members['dispose']),

@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:debrify/models/android_video_renderer_mode.dart';
 import 'package:debrify/models/content_display_match_mode.dart';
 import 'package:debrify/screens/settings/playback_settings_section.dart';
 import 'package:debrify/screens/video_player/services/subtitle_settings_service.dart';
 import 'package:debrify/services/subtitle_font_service.dart';
+import 'package:debrify/services/external_player_service.dart';
+import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -38,10 +41,10 @@ void main() {
                 elevation == 0 ? SubtitleElevation.defaultIndex : elevation,
               );
               playbackPreferences.writes.clear();
-              await tester.runAsync(
-                () async => await f.member('loadSettings')(),
-              );
-              await f.loaded(tester);
+              final originalState = f.key.currentState;
+              await tester.pumpWidget(const SizedBox.shrink());
+              await f.mount(tester, section: section);
+              expect(f.key.currentState, isNot(same(originalState)));
               expect(playbackPreferences.writes, isEmpty);
             });
           },
@@ -349,10 +352,32 @@ void main() {
     testWidgets('seeded load snapshots and fallback ${section.name}', (
       tester,
     ) async {
+      PlatformUtil.debugSetTvOS(true);
       await playbackSeed({
         'player_default_aspect_index': 1,
         'player_night_mode_index': 2,
         'player_system_audio_effects': true,
+        'tvos_force_software_decode': true,
+        'tvos_force_stereo_audio_v1': true,
+        'tvos_legacy_audio_output_v1': true,
+        'player_audio_passthrough': true,
+        'player_apple_multichannel_audio': true,
+        'quick_play_vr_default_screen_type': 'sphere',
+        'quick_play_vr_default_stereo_mode': 'tb',
+        'quick_play_vr_auto_detect_format': false,
+        'quick_play_vr_show_dialog': false,
+        if (section == PlaybackSettingsSection.player) ...{
+          'external_player_preferred': 'custom_command',
+          'external_player_custom_path': '/Applications/Original.app',
+          'external_player_custom_name': 'Original',
+          'external_player_custom_command': 'mpv {url}',
+          'ios_external_player_preferred': 'custom_scheme',
+          'ios_custom_scheme_template': 'original://play?url={url}',
+          'linux_external_player_preferred': 'custom_command',
+          'linux_custom_command': 'mpv {url}',
+          'windows_external_player_preferred': 'custom_command',
+          'windows_custom_command': 'vlc {url}',
+        },
         'player_start_portrait': true,
         'android_video_renderer_mode': 'automatic',
         'android_video_renderer_gpu_migration_v1': true,
@@ -407,17 +432,47 @@ void main() {
           'subtitleBgIndex': 2,
           'subtitleFontIndex': 1,
           'subtitleBold': true,
-          'tvosForceSoftwareDecode': false,
-          'tvosForceStereo': false,
-          'tvosLegacyAudioOutput': false,
-          'audioPassthrough': false,
-          'appleMultichannel': false,
+          'tvosForceSoftwareDecode': true,
+          'tvosForceStereo': true,
+          'tvosLegacyAudioOutput': true,
+          'audioPassthrough': Platform.isAndroid,
+          'appleMultichannel': true,
           'vrDefaultScreenType': 'dome',
           'vrDefaultStereoMode': 'sbs',
           'vrAutoDetectFormat': true,
           'vrShowDialog': true,
         };
         expect({for (final k in expected.keys) k: f.access[k]}, expected);
+        if (section == PlaybackSettingsSection.player) {
+          expect(f.member('selectedIOSPlayer'), iOSExternalPlayer.customScheme);
+          expect(f.member('iosCustomScheme'), 'original://play?url={url}');
+          expect(
+            (f.member('iosSchemeController') as TextEditingController).text,
+            'original://play?url={url}',
+          );
+          if (Platform.isMacOS) {
+            expect(f.member('selectedPlayer'), ExternalPlayer.customCommand);
+            expect(f.member('customAppPath'), '/Applications/Original.app');
+            expect(f.member('customAppName'), 'Original');
+            expect(f.member('customCommand'), 'mpv {url}');
+            expect(
+              (f.member('commandController') as TextEditingController).text,
+              'mpv {url}',
+            );
+          }
+          if (Platform.isLinux) {
+            expect(
+              f.member('selectedLinuxPlayer'),
+              LinuxExternalPlayer.customCommand,
+            );
+            expect(f.member('linuxCustomCommand'), 'mpv {url}');
+            expect(
+              (f.member('linuxCommandController') as TextEditingController)
+                  .text,
+              'mpv {url}',
+            );
+          }
+        }
         expect(
           (f.member('allFonts') as List<SubtitleFont>).map((f) => f.id),
           SubtitleFont.builtInOptions.map((f) => f.id),

@@ -35,6 +35,12 @@ void main() {
   });
   test('detectors reads and unconditional migrations retain call order', () {
     expect(current['load_calls'], original['load_calls']);
+    expect(
+      current['detector_sites_arguments'],
+      original['detector_sites_arguments'],
+    );
+    expect(current['detection_prefix'], original['detection_prefix']);
+    expect(current['detector_sites_arguments'], hasLength(5));
     final calls = current['load_calls'] as List;
     expect(
       calls.indexOf('getAndroidVideoRendererMode'),

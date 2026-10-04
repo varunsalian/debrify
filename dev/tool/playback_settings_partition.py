@@ -71,8 +71,16 @@ def check_partition(before, current, spec, lookup, rows, package, row):
             expected_body.pop(-4)
         if actual_body != expected_body:
             errors.append('Playback piece must contain only permitted locals and its list: ' + piece['name'])
-    if preamble_tokens(before, rows, row) != preamble_tokens(current, rows, row):
-        errors.append('Playback retained preamble changed')
+    # The join retains only original locals used by inline E1/the spreads.
+    # E1 and the five spread calls use neither theme nor t.
+    used = set(element_tokens(before, elements[0]))
+    expected_locals = [local for local in before['returnedList']['preamble'] if any(name in used for name in local['names'])]
+    actual_locals = current['returnedList']['preamble'] if current.get('returnedList') else []
+    if [local['names'] for local in actual_locals] != [local['names'] for local in expected_locals]:
+        errors.append('Playback join preamble must contain only used original locals')
+    for expected, actual in zip(expected_locals, actual_locals):
+        if normalized_local(expected, rows, row, package) != normalized_local(actual, rows, row, package):
+            errors.append('Playback used join preamble changed')
     actual_elements = partition_elements(current)
     if not actual_elements:
         return errors + ['Missing playback inline E1']
@@ -130,7 +138,7 @@ def virtual(current, spec, lookup, sources, package):
     raw = sources[spec['join_file']]
     result = current['returnedList']
     first = result['elements'][0]
-    # Keep header, original live preamble and inline E1 with its comments.
+    # Keep the header, used join locals and inline E1 with its comments.
     start = result['offset'] + 1
     inline = raw[start:first['end']] + ','
     interiors = [inline]
@@ -140,5 +148,12 @@ def virtual(current, spec, lookup, sources, package):
         returned = node['returnedList']
         interiors.append(piece_raw[returned['offset'] + 1:returned['end'] - 1])
     prefix = current['text'][:result['offset'] - current['start']]
+    # Restore the proven identical piece locals only for virtual whole-method
+    # comparison with the original scope; they are absent from the real join.
+    first_piece = lookup[(spec['slices'][0]['file'], spec['slices'][0]['owner'], spec['slices'][0]['name'])]
+    retained = {name for local in result['preamble'] for name in local['names']}
+    missing = '\n'.join(local['text'] for local in first_piece['returnedList']['preamble'] if local['names'][0] not in retained)
+    opening = prefix.index('{') + 1
+    prefix = prefix[:opening] + '\n' + missing + '\n' + prefix[opening:]
     text = prefix + '[' + '\n'.join(interiors) + '];\n}'
     return parse({'virtual': 'class Virtual { ' + text + ' }'}, package)['virtual']['declarations'][0]['members'][0]
