@@ -1,6 +1,7 @@
 # Merged detail screen refactor — plan
 
 Written 2026-10-04 on `refactor/codebase` at `a92c08b8`. Follow [AGENTS.md](../../AGENTS.md).
+Revised 2026-10-04 after Codex design review round 1.
 Read `docs/refactoring/pikpak-files-plan.md`, `debrid-downloads-plan.md` and
 `torbox-downloads-plan.md` first, including their Progress sections, and
 `iptv-settings-plan.md` for the parallel-worktree conventions. This plan reuses
@@ -73,7 +74,7 @@ class MergedDetailScreen extends StatefulWidget {
 ```
 
 The 40-parameter constructor (`super.key` plus 39), the 39 fields with their
-types and doc comments (88–194), the **field order, which differs from the
+types and doc comments (88–196), the **field order, which differs from the
 parameter order**, the stale class doc (77–86) and `createState` stay
 byte-identical in the facade (the step 0 manifest holds the verbatim text). It
 is the only public symbol. `onResume` and `onBrowsePrimaryEpisodeSources` keep
@@ -99,7 +100,7 @@ the `({bool started, int season, int episode})?` promise signature.
 | --- | --- | --- |
 | 1–75 | 73 imports | Unordered (`dart:async` at 16). |
 | 77–243 | `MergedDetailScreen` | Stays in the facade. |
-| 245–3460 | `_MergedDetailScreenState with RouteAware, MetadataPresentationMixin` | 53 fields (2 `late final`, 4 static const), 30 instance getters, 3 static methods. |
+| 245–3460 | `_MergedDetailScreenState with RouteAware, MetadataPresentationMixin` | 57 fields: 53 instance (2 of them `late final`) plus 4 static const; 30 instance getters, 3 static methods. |
 | 247–521 | Fields, palette statics, `_openMetadataRecommendation` (263–266) between fields, `late final _style` (365), getter `_theme` (386), `late final _focusCoordinator` (417), `originalMetadata`, `_item`, menu getters | |
 | 523–543, 720–772, 1114–1129 | `initState`, `didChangeDependencies`, `didPopNext`, `_onPlaybackReturned`, `_refreshAfterPlayback`, `dispose` | **Stay verbatim in the State.** |
 | 545–718 | `_guardPlay`, `_primaryEpisodePromise`, `_playPrimary`, `_rewatchTitle` (620), `_browsePrimarySources` (643), quick/direct play, `_loadShowcaseOpeningData` | |
@@ -194,11 +195,23 @@ No member exceeds 500 lines (largest: `build` 241, `_TraktSheetState.build`
      calls `removeFromList`; MDBList awaits its reload, then pops; the four
      clear-progress actions call `_refreshAfterPlayback()`; rating strips fall
      back to `onAction(rate)`.
-   - **Episode unwatch union fan-out** (`EpisodesPanel._setEpisodeWatchedEverywhere`,
-     `episodes_panel.dart:778`, with `_watchedSyncTargets` at 747): unwatch
-     clears local and all connected trackers; watch never writes local
-     completion when a tracker is connected. It stays untouched because the
-     panel receives identical arguments (contract 5).
+   - **Episode watched fan-out** (`EpisodesPanel._setEpisodeWatchedEverywhere`,
+     `episodes_panel.dart:778`, with `_watchedSyncTargets` at 747 naming the
+     targets for the row subtitle and snackbar): the action delegates to
+     `WatchedActionCoordinator.setEpisodeWatched`
+     (`watched_action_coordinator.dart:174`), which **always** writes local
+     completion, marking on watch (183) and unmarking on unwatch (190), then
+     invalidates the local snapshot (197); custom series IDs stop there (199).
+     Remote writes go to Trakt, Simkl and MDBList (IMDb or native IDs only)
+     only when the content's tracking policy selects that source
+     (`scrobbleTargets`, or `forceTargets`) **and** the service reports
+     `isAuthenticated()`, not on mere connection; Simkl watch also deletes
+     episode playback. Each failed target is reported; the panel moves the
+     tick only when a succeeded target is one the guide renders, shows
+     "Marked as … — failed on …", and the OR-union re-merges on the next
+     load. The panel's own comments ("on watch only when it is the sole
+     store") don't describe this (Found, not fixed, 20). Coordinator and panel stay
+     untouched; the panel receives identical arguments (contract 5).
 9. **Watchlist and bound sources.** The optimistic toggle with haptic,
    snackbar and rollback; `_myWatchlistItem` using the presented `_item`;
    `_loadBoundSources` keyed by `_item.imdbId` and reloaded from three paths;
@@ -229,12 +242,19 @@ No member exceeds 500 lines (largest: `build` 241, `_TraktSheetState.build`
   descriptions use `TraktItemMenuAction` from `lib/widgets/trakt/`.
 - **`presentation/`, outside the bridge:** the palette
   (`merged_detail_palette.dart`: `_bg`, `_gold`, `_imdb`, `_glass2`, `_hair`
-  as manifest-listed public names), the action descriptions
-  (`merged_detail_action_descriptions.dart`: `_descriptionFor`,
-  `_descriptionForSimkl`), and whole private widget classes with no service or
-  storage import, each moved with its State.
+  as manifest-listed public names), the Trakt action descriptions
+  (`merged_detail_action_descriptions.dart`: `_descriptionFor` only, whose
+  `TraktItemMenuAction` comes from `lib/widgets/trakt/trakt_menu_helpers.dart`),
+  and whole private widget classes with no service or storage import, each
+  moved with its State.
 - **`presentation/legacy_merged_detail/`:** the bridge (exact path in the
-  guard): state owners, every section that takes a `BuildContext`, reads
+  guard): `_descriptionForSimkl` in its own bridge file
+  (`merged_detail_simkl_descriptions.dart`), because its
+  `SimklItemMenuAction` is declared in
+  `lib/services/simkl/simkl_menu_helpers.dart:18` and the service-import ban
+  (`check_search_architecture.py:448`) exempts only files under a
+  `LEGACY_PLAYBACK_BRIDGES` prefix, not files that merely sit beside one;
+  state owners, every section that takes a `BuildContext`, reads
   `widget`, or calls services, storage or the launcher; widget classes that
   import services (likely `_TraktSheet`, `_SimklSheet`, `_RecCard`,
   `_AmbientStill`; the report decides).
@@ -254,9 +274,12 @@ No member exceeds 500 lines (largest: `build` 241, `_TraktSheetState.build`
 
 As in the PikPak and IPTV-settings plans, with these points:
 1. **Formatted original.** CI formats `lib/features`, but the file isn't
-   `dart format` clean (about 30 changes; 29 `diff -U0` hunks; 5,532 → 5,630
-   lines). Step 0 commits a **format-only** version of the original, proven
-   token-identical, and records it as its own baseline. Every later checker
+   `dart format` clean (29 `diff -U0` hunks; 5,532 → 5,630 lines; the
+   formatter also **inserts 25 optional trailing commas**, so raw token
+   streams differ while comments are identical). Step 0 commits a
+   **format-only** version of the original, proven equal except for
+   AST-identified optional formatter commas, and records it as its own
+   baseline. Every later checker
    run uses that commit as `--baseline`, so moves compare against the
    formatted original and no formatting exceptions are needed for the
    original's own drift.
@@ -286,7 +309,7 @@ As in the PikPak and IPTV-settings plans, with these points:
 | # | Work | Notes |
 | --- | --- | --- |
 | 0 | Baseline; format-only commit and its baseline; dependency report, manifest, checker config, accessor if needed, characterization tests and baselines, source-text inventory, CI list, Linux capture script | Nothing moves. |
-| 1 | Guard registration; palette, action descriptions, `_simklStatusLabel` | Shape and theme registrations begin. |
+| 1 | Guard registration; palette, Trakt action descriptions, `_descriptionForSimkl` (into the bridge), `_simklStatusLabel` | Shape and theme registrations begin. |
 | 2 | Presentational widget classes without service imports (`_StaggerReveal`, `_FocusHalo`, `_RailEdgeTrap`, `_CastTile`, `_PrimaryButton`, `_TrailerPlayingChip`, `_GhostButton`, `_SourcePill`, `_ScrollAnchor`, `_TrackerPill`, `_RoundIconButton`, sheet rows and strips) | Contract 10. |
 | 3 | `_QuickActionsMenu`, `_TraktSheet`, `_SimklSheet`, `_SimklStatusRow` and remaining classes; State and resource owners (fields, scroll controllers, focus nodes, GlobalKeys); lifecycle verbatim | Contracts 3, 8, 10, 12. |
 | 4 | Playback actions (`_guardPlay` to `_playDirectEpisode`, rewatch with browse), resume arbitration, refresh after playback, tracker status loads, local movie finished, watchlist | Contracts 4, 6, 8, 9. **Full-suite gate 1.** |
@@ -301,18 +324,32 @@ As in the PikPak and IPTV-settings plans, with these points:
    provenance; Flutter 3.44.8 / Dart 3.12.2.
 2. **Format-only commit** (`style(merged): format the original merged detail
    screen`):
-   - `dart format` on the facade only. Prove token identity: the checker's
-     scanner-token comparison over the whole file (every token, literal and
-     comment identical; only whitespace outside literals differs), plus
-     `dart format --set-exit-if-changed` idempotence. Record the proof under
-     `refactor-evidence/merged/format-proof.json`.
+   - `dart format` on the facade only. Prove equality **except
+     AST-identified optional formatter commas**: the checker's scanner-token
+     comparison over the whole file, after removing only commas the AST marks
+     as optional trailing commas in argument, parameter and collection lists
+     (as `check_settings_moves.py`'s `normalize` does; a positional record
+     comma is never removed), must match exactly; every comment, every literal
+     and every other token is identical, and only whitespace outside literals
+     otherwise differs. The proof lists all 25 removed commas by AST node and
+     fails on a negative that adds a non-optional comma or edits a comment or
+     literal; plus `dart format --set-exit-if-changed` idempotence. Record it
+     under `refactor-evidence/merged/format-proof.json`.
    - **The formatter breaks `rewatch_launch_routing_test`** (verified): the four
      `…Revision.addListener(_loadLocalMovieFinished)` /
-     `removeListener(...)` strings wrap onto three lines. In the same commit,
-     make the test's merged-screen `contains` checks whitespace-normalized
-     (collapse whitespace on both sides), keeping every expectation. Prove it
-     passes on original and formatted code and fails on a mutation that drops
-     one listener.
+     `removeListener(...)` sites wrap onto three lines **and gain a trailing
+     comma**, so collapsing whitespace alone still fails all four. In the same
+     commit, replace only the merged-screen `contains` checks with
+     **declaration-scoped matching**: find the site inside the `initState`
+     (adds) or `dispose` (removals) declaration, and match the exact notifier
+     expression, operation (`addListener`/`removeListener`) and callback
+     (`_loadLocalMovieFinished`), accepting any whitespace and one optional
+     trailing comma before `)`. The `catalog_item_detail_screen` checks stay as
+     they are; no expectation is weakened or removed. Prove it passes on both
+     the original and the formatted file, and fails, for **each of the four
+     sites**, on a deletion, a wrapper (`() => _loadLocalMovieFinished()`) and a
+     receiver swap (the other notifier, or `_onMovieProgressPolicyChanged`),
+     and on a site moved out of its declaration.
    - Raise `file_size_baseline.txt:9` by hand, 5,532 → 5,630 (a seam-only
      raise; it must shrink from step 1 and leave the over-limit list at step 7).
    - Record `merged/base-fmt` (full suite) and the analyzer: identities equal
@@ -331,7 +368,8 @@ As in the PikPak and IPTV-settings plans, with these points:
    staged diff) and `merged_detail_checker_config.json`, with
    `merged_detail_checker_test.py` fixtures built on the **real config**.
    Negatives: a wrapped or receiver-swapped listener tear-off (each of the four
-   sites and the playback-return pair); a route-observer subscriber that isn't
+   sites and the playback-return pair); each removal deleted individually (the
+   three listener removals, `removePlaybackReturnListener`, `unsubscribe`); a route-observer subscriber that isn't
    the State; a lost mixin; a `late final` turned eager or moved; the lifecycle
    reordered (first two and last two disposals swapped); `_rewatchTitle`
    separated from `_browsePrimarySources`; one `EpisodesPanel` argument
@@ -343,8 +381,10 @@ As in the PikPak and IPTV-settings plans, with these points:
    `DetailPageStorage.setDetailPageStyle(...)` before pump (`_style` reads the
    cache synchronously); `MaterialApp(navigatorObservers: [appRouteObserver],
    builder: AppThemeScope(...))`; `MainPageBridge.notifyPlaybackReturned`;
-   `http.runWithClient` with a `MockClient` for YouTube, IMDb and provider
-   calls; fake host loaders and callbacks that record arguments and call
+   `http.runWithClient` with a `MockClient` for IMDb, metadata and provider
+   calls on the main isolate (not YouTube streams: see contract 4's trailer
+   row); trailer autoplay off through `AmbientTrailerStorage` (or
+   `disableAnimations`) so no test reaches `YoutubeService.resolveStreams`; fake host loaders and callbacks that record arguments and call
    order; `PlatformUtil.debugSetAndroidTvCached(true)` (reset in teardown) for
    TV paths. Prove one passing fixture first. Schedule a frame explicitly after
    the post-frame loaders (a post-frame callback alone requests no frame).
@@ -357,20 +397,20 @@ As in the PikPak and IPTV-settings plans, with these points:
    | Contract | Coverage |
    | --- | --- |
    | 1 Surface | Existing `home_detail_presentation_test` and `home_detail_route_screen_test` field reads; a source guard on the verbatim constructor, field order and doc comments. |
-   | 2 Flag | Existing `home_detail_route_screen_test` (flag on/off by `initialPreferences`) and `xtream_series_detail_test`; one widget test that `seasonsLoader` forces the Classic body under a non-classic style. |
-   | 3 Lifecycle | Each of the five notifiers (three screen, two mixin) and the playback-return list fired before unmount reloads exactly once, and after unmount reloads nothing (removal really detaches the same tear-off); `didPopNext` refresh through a pushed and popped route on `appRouteObserver`; `_onPlaybackReturned` refreshes only when the route is current (negative: a route pushed on top); the `_refreshAfterPlayback` call order through recording loaders; the nine post-frame loaders' order; source guards on `initState`, `didChangeDependencies`, the 13-step `dispose` and both `late final` declarations. |
-   | 4 Playback | Each host callback invoked with exact arguments: `onResume` with and without a promise (series with a started merged target versus movie), Rewatch routing to `onRewatch` and not `onResume`, `_guardPlay` single launch on double press (existing play-guard test plus a held future), `onBrowsePrimaryEpisodeSources` with the packs sheet both ways and with `preferSeriesPacks` off, `onTraktAction(searchPacks)`, movie `onBrowse`, quick play without a pop, `onPlayEpisode` (Xtream), `onItemSelected` after `popUntil` across two stacked merged routes. Trailer: the choice dialog, the in-place promote, the failure snackbar through `MockClient`; the launcher call through a **source guard on the whole `_playSelectedTrailer` body** (the launcher has no capture hook; the push itself is pending device verification). |
+   | 2 Flag | Existing `home_detail_route_screen_test` (flag on/off by `initialPreferences`); `xtream_series_detail_test` only parses saved Xtream identities, so it is credited for nothing here. New: an **Xtream handoff guard**, a source guard on the whole `MergedDetailScreen(...)` construction in `openXtreamSeries` (`xtream_series_detail.dart:281–302`: `kCatalogDetailRouteName` route, `showQuickPlay: true`, `onResume: (_) => resumeAndPlay()`, `resumeInfoLoader`, `seasonsLoader`, `onPlayEpisode`, `watchProgressLoader`), plus a widget test constructing the screen with Xtream's argument shape that proves `seasonsLoader` forces the Classic body under a non-classic style, the panel uses the injected loaders, and an episode tap reaches `onPlayEpisode` with the episode while `onResume` receives the promise and its result is ignored. |
+   | 3 Lifecycle | **Reload behaviour:** each of the five notifiers (three screen, two mixin) and the playback-return list fired before unmount reloads exactly once, and fired after unmount produces no reload; this is behaviour only, not detachment evidence, because callbacks such as `_onMovieProgressPolicyChanged` and `_loadLocalMovieFinished` return early when unmounted. **Detachment evidence:** the checker's exact add/remove identity (same notifier expression, operation pair and member tear-off, in add order) for the three screen listeners, the playback-return pair and the route observer, with lifecycle mutation negatives that delete **each removal individually** (and each `unsubscribe`) and must fail; executable detachment is claimed only for a site with registration instrumentation (an existing listener-count or registry probe, no new production seam) whose removal-deletion mutation is shown to fail the test, and otherwise recorded as checker-evidenced; `didPopNext` refresh through a pushed and popped route on `appRouteObserver`; `_onPlaybackReturned` refreshes only when the route is current (negative: a route pushed on top); the `_refreshAfterPlayback` call order through recording loaders; the nine post-frame loaders' order; source guards on `initState`, `didChangeDependencies`, the 13-step `dispose` and both `late final` declarations. |
+   | 4 Playback | Each host callback invoked with exact arguments: `onResume` with and without a promise (series with a started merged target versus movie), Rewatch routing to `onRewatch` and not `onResume`, `_guardPlay` single launch on double press (existing play-guard test plus a held future), `onBrowsePrimaryEpisodeSources` with the packs sheet both ways and with `preferSeriesPacks` off, `onTraktAction(searchPacks)`, movie `onBrowse`, quick play without a pop, `onPlayEpisode` (Xtream), `onItemSelected` after `popUntil` across two stacked merged routes. Trailer, **no new production seams**: `YoutubeService.resolveStreams` runs `_resolveStreamsBlocking` in `Isolate.run` (`youtube_service.dart:377`), outside the test zone's `MockClient`, and promotion needs `HeroTrailerBackdrop.canPromote` (`_engine != null && _videoVisible`, set only after a rendered first frame), while the merged screen doesn't pass the backdrop's `engineFactory` seam. Executable: the choice dialog listing two `MockClient`-served candidates and its cancel (nothing resolved, no snackbar). **Source-guarded and pending device verification:** the in-place promote, the stream resolve with its IMDb fallback, the "Couldn't load trailer" snackbar and the launcher call, through a source guard on the whole `_playTrailer` and `_playSelectedTrailer` bodies (the launcher has no capture hook). |
    | 5 Append-only | Through a recording `EpisodesPanel` probe: `show` is `widget.item` even when presentation differs, the forwarded callbacks are the host's own objects (`boundSourceCount`, `onSelectSource`, `seasonsLoader`, `watchProgressLoader`), `onFocusLeftEdge` null versus non-null; a source guard on the complete `_buildEpisodesPanel` body; a source guard that no `lib/features/merged_detail/` file mentions `SeriesSourceFetcher` or `mergeSources`. |
    | 6 Resume | Stash and settle, mutation write-through, latch, failed loader, started-loader discard, the 12 s timeout (fake time, mounted outside `runAsync`). |
-   | 7 Metadata/profile | Profile scope change: trailer, recommendations and IMDb extra reset and reload; parents guide, resume, trackers, watchlist and bound sources not reloaded; a stale recommendation batch and a stale trailer resolve rejected by generation; recommendation tap maps a presented object to its original by identity. |
-   | 8 Trackers/destructive | Existing `simkl_status_toggle_sheet_test`, `rewatch_progress_dialog_test`, `series_rewatch_test`, `tracker_menu_ownership_test`; new: rewatch confirm and cancel with the call order (reset before `onRewatch`, never `onResume`); Trakt and Simkl pop-then-act; Simkl `removeFromList`; MDBList reload then pop; each `clearWatchProgress` refresh; rate fallback to `onAction(rate)`; pill labels (Checking…, Not tracked, Status unavailable, Rated). Existing `episodes_panel` unwatch tests cover the fan-out; contract 5 pins the arguments. |
+   | 7 Metadata/profile | Profile scope change: trailer, recommendations and IMDb extra reset and reload; parents guide, resume, trackers, watchlist and bound sources not reloaded; a stale recommendation batch and a stale trailer-candidate result (served by `MockClient` on the main isolate) rejected by generation, the stream-resolve stale return being source-guarded (contract 4); recommendation tap maps a presented object to its original by identity. |
+   | 8 Trackers/destructive | Existing `simkl_status_toggle_sheet_test`, `rewatch_progress_dialog_test`, `series_rewatch_test`, `tracker_menu_ownership_test`; new: rewatch confirm and cancel with the call order (reset before `onRewatch`, never `onResume`); Trakt and Simkl pop-then-act; Simkl `removeFromList`; MDBList reload then pop; each `clearWatchProgress` refresh; rate fallback to `onAction(rate)`; pill labels (Checking…, Not tracked, Status unavailable, Rated). Episode watched: existing `custom_series_progress_test` (custom ID, local write only even with forced targets) is the only direct coordinator coverage, and `episode_simkl_menu_test` only renders the "Mark as Unwatched" row without acting on it; add a hosted-panel test through the merged screen with `MockClient`: Simkl selected and authenticated, Trakt authenticated but not selected, MDBList selected but signed out; watch and unwatch each write local completion and only the Simkl history endpoint; a Simkl failure shows the failed-on snackbar while the local write stands; reopening re-merges the union. Contract 5 pins the arguments. |
    | 9 Watchlist/sources | Toggle on and off with the persisted row, rollback and error snackbar on a throwing store; bound sources reloaded at opening, on playback return and after `onManageSources`. |
    | 10 D-pad | Two-pane RIGHT/LEFT crossing and UP to back, DOWN dead stop, key repeat; action-row RIGHT crossing (series wide only) and LEFT stop; rail traps; movie autofocus on TV; trailer foreground exclusion and re-anchor; existing `home_layout_dpad_smoke_test` and held-OK test. |
-   | 11 Layouts | Classic movie column, two-pane (≥ 900 and TV) and stacked; each of the 11 styles mounts its body (`metadata_source_management_baseline_test` already loops; reuse it) and `_bodySpec`; existing `detail_page_layouts`, `detail_layouts_dpad`, `detail_showcase`, `detail_theme`, `detail_theme_layout` and `hero_trailer_backdrop` tests. Pixel goldens of Classic two-pane, stacked phone, movie column, Console and Showcase on macOS and Linux (Linux by Claude in the calibrated Docker image from the ORIGINAL), with fixed metadata and no network art. |
+   | 11 Layouts | Classic movie column, two-pane (≥ 900 and TV) and stacked; each of the 11 production style branches (`classic`, `marquee`, `dossier`, `stage`, `console`, `vista`, `monolith`, `mosaic`, `halo`, `premiere`, `showcase`; switch at 1985–2070) mounts its own body type, inside `themed(...)` (`DetailThemeScope`/`DetailAtmosphere`/`DetailHoldHint`) for the ten alternates and unwrapped for Classic, with `_bodySpec`, plus an unknown stored style narrowed by `effectiveDetailPageStyle` to the default body: new original-code characterization (`metadata_source_management_baseline_test.dart:14` loops `classic` and `showcase` only, for source-action metadata, and is credited for those two); existing `detail_page_layouts`, `detail_layouts_dpad`, `detail_showcase`, `detail_theme`, `detail_theme_layout` and `hero_trailer_backdrop` tests. Pixel goldens of Classic two-pane, stacked phone, movie column, Console and Showcase on macOS and Linux (Linux by Claude in the calibrated Docker image from the ORIGINAL), with fixed metadata and no network art; trailer resolution disabled (no candidates served, autoplay off); pinned surface size, DPR 1.0, `AppThemes.legacy`, `en-US` locale and text scale 1.0, and a named initial focus (or none) per golden; **bounded pumping**: pump the post-frame loaders and their fake futures to completion, then a fixed number of fixed-duration pumps covering the opening-readiness gate and every `_StaggerReveal` delay and animation (no `pumpAndSettle`, which repeating animations defeat), asserting that the reveal controllers have completed before capture (autoplay off means the 25 s safety net is never armed). |
    | 12 Identity | Through the accessor: `_recommendationOriginals` is an identity map; `_recommendations` null before load and growable after a reset; GlobalKeys and focus nodes keep their instances across rebuilds. |
 
    - Reuse the 21 existing related files unchanged (except the rewatch
-     normalization): `merged_detail_play_guard`, the three `metadata_*`
+     declaration-scoped matching): `merged_detail_play_guard`, the three `metadata_*`
      baselines, `simkl_status_toggle_sheet`, `rewatch_launch_routing`,
      `rewatch_progress_dialog`, `series_rewatch`, `tracker_menu_ownership`, Home (`home_layout_dpad_smoke`, `home_detail_presentation`,
      `home_detail_route_screen`), `search_title_suggestions`,
@@ -378,14 +418,31 @@ As in the PikPak and IPTV-settings plans, with these points:
      tests and `theme/shape_manifest`. An unrecorded HEAD run gave 1,306 pass / 3 fail
      (the `detail_episode_cells` raw-colour scan and two
      `search_title_suggestions` cases, all in PikPak `base4`'s failure
-     identities); `merged/base` and `merged/base-fmt` are the recorded truth.
+     identities, but not in `ci_behavior_known_failures.txt`; see item 7);
+     `merged/base` and `merged/base-fmt` are the recorded truth.
    - Record `merged/base2` after any seam (accessor), then `merged/base3` after
      the tests; compare each with the previous one (`PASS`, only added
      identities, all passing). Every new case first passes in the detached
      ORIGINAL worktree.
 7. **CI list:** add every new test and the existing merged tests above that
-   aren't listed (only `rewatch_launch_routing_test` is today) to
+   aren't listed (only `rewatch_launch_routing_test`, line 39, and
+   `theme/shape_manifest_test`, line 68, are today) to
    `ci_behavior_tests.txt` as concrete paths.
+   - **Newly exposed pre-existing failures.** Listing these tests exposes
+     deterministic failures CI never ran, absent from
+     `ci_behavior_known_failures.txt`: at least
+     `test/detail_theme_test.dart::no raw colour literals survive in the themed
+     files detail_episode_cells.dart` (the raw-colour scan of
+     `lib/widgets/detail/detail_episode_cells.dart:327, 335, 341`), and the two
+     `search_title_suggestions` cases if still observed. After `merged/base`
+     is recorded, inventory **only** the failures that run actually observed in
+     the newly listed files, and add those exact identities to
+     `ci_behavior_known_failures.txt` in the same commit as the list change,
+     under a dated comment (`# 2026-10-04 merged_detail step 0: pre-existing,
+     newly exposed by CI coverage; observed in merged/base`). No assertion
+     changes, no unrelated app-code fix, and nothing not observed in
+     `merged/base`; every baseline comparison still rejects regressions, and a
+     newly listed test passing in `merged/base` must keep passing.
 8. **Source-text inventory:**
    - `test/rewatch_launch_routing_test.dart` (in CI) reads the facade for: the
      listener strings (stay in the facade's lifecycle), `generation ==
@@ -396,14 +453,19 @@ As in the PikPak and IPTV-settings plans, with these points:
      null && _resolvedPrimaryLabel == 'Rewatch'` (moves with `_primaryLabel`).
      When each moves, the test's path follows it through
      `test/support/merged_detail_source.dart` (as `pikpak_files_source.dart`:
-     facade plus feature files, manifest renames reversed, whitespace
-     normalized), and additionally asserts the two rewatch markers are in the
+     facade plus feature files, manifest renames reversed, keeping step 0's
+     declaration-scoped matching that tolerates whitespace and one optional
+     trailing comma only), and additionally asserts the two rewatch markers are in the
      **same file** and adjacent. Every expectation keeps its purpose; contract
      8's executable rewatch test backs it. Never delete an assertion.
    - **Shape manifest:** 26 bare radii, 0 token calls; the original isn't
-     listed. Register every destination in `kExtractedShapeResidue` (not
-     `kShapeResidue`, whose "swept" test needs a token call) with its exact
-     count; the budgets sum to 26 at every step, zero-budget files included.
+     listed. From step 1, register **the facade's remaining residue and every
+     destination** in `kExtractedShapeResidue` (not `kShapeResidue`, whose
+     "swept" test needs a token call), zero-budget files included, each with
+     its exact measured count, and ratchet every entry to its new exact count
+     at each step, so the complete slice (facade plus destinations) reconciles
+     to 26 at every checkpoint. Step 1 moves radius-free helpers, so its new
+     files register 0 and the facade keeps 26.
    - **Theme registry:** `theme_surface_manifest.txt:11` (`details_themed`)
      gains explicit per-directory patterns
      (`lib/features/merged_detail/application/*.dart`,
@@ -435,11 +497,23 @@ the 38 original strict infos per symbol (26 `directives_ordering`, 11
 manifest plus this one with self-tests (isolated parser cache when
 concurrent), architecture, sizes, storage references, shape, theme, CI format,
 scoped analyze with the allowlist, and staged diff checks. Gates run from
-committed source against the latest `merged/` base; gate 2 also against gate
-1. Edits to files shared with parallel refactors (`check_search_architecture.py`,
+committed source against the latest `merged/` base; gate 2 also against
+gate 1. Record the **execution base SHA** (the `refactor/codebase` commit the
+worktree branch is cut from) in Progress at step 0; every proof names it.
+Edits to files shared with parallel refactors (`check_search_architecture.py`,
 `shape_manifest_test.dart`, `theme_surface_manifest.txt`,
-`ci_behavior_tests.txt`, `checks.yml`, `file_size_baseline.txt`) stay
-append-only so Claude's integration merges cleanly.
+`ci_behavior_tests.txt`, `ci_behavior_known_failures.txt`, `checks.yml`,
+`file_size_baseline.txt`, `light_ink_inventory.py`) are kept local to this
+feature's entries where possible, but they are not all append-only (the size
+baseline is raised and lowered, the shape budgets ratchet, the guard gains
+rules), so **Claude integrates them semantically**, not by textual merge:
+union and dedupe registrations (features, bridges, CI paths, known-failure
+identities, theme patterns, shape entries); preserve every `*_COMPLETE` and
+other completed flag already set by any branch; merge size ceilings per path
+by taking the lowest verified ceiling; then rerun, on Claude's merged and
+committed tree, every integrated manifest with self-tests, the architecture,
+size, shape and theme checks, CI format and analyzer with the allowlist, and
+the behaviour suite compared against the latest recorded base.
 
 ## Definition of done
 
@@ -454,8 +528,11 @@ append-only so Claude's integration merges cleanly.
 4. No new diagnostics or suppressions; the analyzer allowlist check passes;
    gate 2 passes against the latest base and gate 1.
 5. Local CI-equivalent checks pass; remote CI is pending until Claude pushes.
-   The test list holds the new tests; the failure allowlist gains nothing.
-   Shape budgets sum to 26; the theme surface measures the same.
+   The test list holds the new tests; the failure allowlist gains only the
+   dated, inventoried pre-existing identities observed in `merged/base` and
+   newly exposed by CI coverage (step 0 item 7), nothing else.
+   The facade's and destinations' registered shape budgets reconcile to 26;
+   the theme surface measures the same.
 6. Progress records the commits, ownership, exceptions with exit milestones,
    seams, and pending device verification (Android TV D-pad and hold-OK, the
    trailer launch, host playback handoffs from Home and Xtream, real tracker
@@ -506,3 +583,7 @@ All pre-existing; the extraction keeps each exactly.
     and `_loadBoundSources` (1769–1791).
 19. `merged_detail_play_guard_test` relies silently on the default `'console'`
     style, so a default-style change changes which body it covers.
+20. Outside this file, out of scope: `EpisodesPanel`'s `_watchedSyncTargets`
+    and `_setEpisodeWatchedEverywhere` comments describe a conditional local
+    write on watch that `WatchedActionCoordinator.setEpisodeWatched` doesn't
+    make (it always writes local completion).
