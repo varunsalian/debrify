@@ -189,7 +189,7 @@ void main() {
     'reset detaches paging then attaches exactly one original listener',
     (t) => pikpakCase(t, (f) async {
       f.pages['|'] = f.page([
-        for (var i = 0; i < 30; i++) pikpakFile('p0-$i'),
+        for (var i = 0; i < 10; i++) pikpakFile('p0-$i'),
       ], next: 'token-n7');
       f.pages['|token-n7'] = f.page([
         for (var i = 0; i < 30; i++) pikpakFile('p1-$i'),
@@ -198,11 +198,28 @@ void main() {
       await f.mount(t);
       final c = f.member('scrollController') as ScrollController;
       final callback = f.member('onScroll') as VoidCallback;
+      expect(c.position.maxScrollExtent, greaterThan(0));
+      expect(c.position.maxScrollExtent, lessThan(200));
       c.position.correctPixels(c.position.maxScrollExtent);
       f.member('resetListScroll')();
       await t.pump();
+      await t.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await t.pump();
       expect(c.offset, 0);
       expect(f.requests.length, 1);
+      expect(
+        f.requests.map(
+          (r) => (
+            r.method,
+            r.url.path,
+            r.url.queryParameters['parent_id'],
+            r.url.queryParameters['page_token'],
+          ),
+        ),
+        [('GET', '/drive/v1/files', '', null)],
+      );
       c.removeListener(callback);
       c.jumpTo(c.position.maxScrollExtent);
       await t.pump();

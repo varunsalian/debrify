@@ -231,7 +231,7 @@ Review these bindings before pinning each production scaffold. Every callback re
 | `PikpakFolderNavigation` | `_virtualFolderFiles` | one PikpakViewState owner / _virtualFolderFiles (deferred only until its planned move) |
 | `PikpakFolderNavigation` | `_virtualFolderName` | one PikpakViewState owner / _virtualFolderName (deferred only until its planned move) |
 | `PikpakFolderNavigation` | `setState` | State live setState callback |
-| `PikpakViewModes` | `_applySortedView` | one  owner / _applySortedView (deferred only until its planned move) |
+| `PikpakViewModes` | `_applySortedView` | application top-level function `applySortedView` in `lib/features/pikpak_files/application/pikpak_sort_policy.dart` |
 | `PikpakViewModes` | `_currentFolderId` | one PikpakNavigationState owner / _currentFolderId (deferred only until its planned move) |
 | `PikpakViewModes` | `_files` | one PikpakCatalogState owner / _files (deferred only until its planned move) |
 | `PikpakViewModes` | `_folderViewModes` | one PikpakViewState owner / _folderViewModes (deferred only until its planned move) |
@@ -264,11 +264,11 @@ Review these bindings before pinning each production scaffold. Every callback re
 | `PikpakFolderDownload` | `_showSnackBar` | one PikpakFeedback owner / _showSnackBar (deferred only until its planned move) |
 | `PikpakFolderDownload` | `context` | State live context callback |
 | `PikpakFolderDownload` | `mounted` | State live mounted callback |
-| `PikpakFolderPlayback` | `_combineSeriesAndEpisodeTitle` | one  owner / _combineSeriesAndEpisodeTitle (deferred only until its planned move) |
-| `PikpakFolderPlayback` | `_findFirstEpisodeIndex` | one  owner / _findFirstEpisodeIndex (deferred only until its planned move) |
-| `PikpakFolderPlayback` | `_formatPikPakPlaylistTitle` | one  owner / _formatPikPakPlaylistTitle (deferred only until its planned move) |
+| `PikpakFolderPlayback` | `_combineSeriesAndEpisodeTitle` | application top-level function `combineSeriesAndEpisodeTitle` in `lib/features/pikpak_files/application/pikpak_playlist_titles.dart` |
+| `PikpakFolderPlayback` | `_findFirstEpisodeIndex` | application top-level function `findFirstEpisodeIndex` in `lib/features/pikpak_files/application/pikpak_playlist_titles.dart` |
+| `PikpakFolderPlayback` | `_formatPikPakPlaylistTitle` | application top-level function `formatPikPakPlaylistTitle` in `lib/features/pikpak_files/application/pikpak_playlist_titles.dart` |
 | `PikpakFolderPlayback` | `_ignoreSmallVideos` | one PikpakCatalogState owner / _ignoreSmallVideos (deferred only until its planned move) |
-| `PikpakFolderPlayback` | `_pikpakDisplayName` | one  owner / _pikpakDisplayName (deferred only until its planned move) |
+| `PikpakFolderPlayback` | `_pikpakDisplayName` | application top-level function `pikpakDisplayName` in `lib/features/pikpak_files/application/pikpak_playlist_titles.dart` |
 | `PikpakFolderPlayback` | `_showSnackBar` | one PikpakFeedback owner / _showSnackBar (deferred only until its planned move) |
 | `PikpakFolderPlayback` | `_showVideosOnly` | one PikpakCatalogState owner / _showVideosOnly (deferred only until its planned move) |
 | `PikpakFolderPlayback` | `context` | State live context callback |
@@ -279,7 +279,7 @@ Review these bindings before pinning each production scaffold. Every callback re
 | `PikpakPlaylistActions` | `mounted` | State live mounted callback |
 | `PikpakLinkActions` | `_currentFolderId` | one PikpakNavigationState owner / _currentFolderId (deferred only until its planned move) |
 | `PikpakLinkActions` | `_isAddingLink` | one PikpakLinkState owner / _isAddingLink (deferred only until its planned move) |
-| `PikpakLinkActions` | `_isValidPikPakLink` | one  owner / _isValidPikPakLink (deferred only until its planned move) |
+| `PikpakLinkActions` | `_isValidPikPakLink` | application top-level function `isValidPikPakLink` in `lib/features/pikpak_files/application/pikpak_link_policy.dart` |
 | `PikpakLinkActions` | `_linkController` | one PikpakLinkState owner / _linkController (deferred only until its planned move) |
 | `PikpakLinkActions` | `_refreshFiles` | one PikpakFeedback owner / _refreshFiles (deferred only until its planned move) |
 | `PikpakLinkActions` | `_restrictedFolderId` | one PikpakNavigationState owner / _restrictedFolderId (deferred only until its planned move) |
@@ -393,3 +393,7 @@ The legacy bridge keeps direct calls to PikpakStorage (profile preferences and c
 - Step 3: reviewed all data-composition entries against the checklist above before pinning 33 scaffolds. Owners are the originating State instances, live callbacks resolve State/context/widget at use, deferred navigation callbacks invoke the real facade, and cross-section callbacks resolve the one fully wired composition. No constructor starts work; nullable slots are assigned before exposure, with no late fields.
 - Step 4: reviewed every navigation/view/search/source-binding composition entry before pinning 45 current scaffolds. Deferred calls are removed; callbacks reach their single production section, live widget getters stay live, and Raw/cast collections are passed unchanged. Original source-reader assertions also replay successfully after whitespace/getter normalization.
 - Step 5: reviewed all six playback/download/playlist/link composition entries before pinning 64 current scaffolds. Defaults and live contexts are preserved, feedback/refresh resolve their sole section, catalog/navigation/link state use the original owners, and launcher/enqueue/persistence payloads remain fully source-guarded. All 83 frozen characterizations still pass.
+
+## Step 0b review closure
+
+The six previously blank application-owner entries now identify their actual top-level function and application file. No wiring or application code changes. Reviewed tests pass first on ORIGINAL 2b93c520, including the reset threshold/detach mutation proof and eight deliberate negative variants; base4 is the new original-code baseline, followed by a passing moved-code characterization replay at 47169f6e. Claude owns Linux capture from the checkpoint, calibrated against existing GitHub Linux originals; the script copies no current tests or fixture into it. Original, negative and moved tree/hash evidence is recorded in the plan Progress.

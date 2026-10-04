@@ -18,9 +18,7 @@ capture_root="$(mktemp -d /tmp/pikpak-original-linux.XXXXXX)"
 rmdir "$capture_root"
 git worktree add --detach "$capture_root" "$original_revision"
 trap 'git -C "$repo" worktree remove --force "$capture_root"' EXIT
-# Reviewed tests with the unchanged step-0 original screen/accessor.
-cp -R "$repo/test/features/pikpak_files" "$capture_root/test/features/"
-cp "$repo/test/support/pikpak_files_fixture.dart" "$capture_root/test/support/"
+# The checkpoint owns its tests, fixture, and unchanged original screen/accessor.
 cd "$capture_root"
 flutter pub get
 common="$(git rev-parse --git-common-dir)"

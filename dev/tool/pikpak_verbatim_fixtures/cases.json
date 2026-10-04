@@ -1,8 +1,13 @@
 [
   {
-    "name": "all 14 disposals reordered",
+    "name": "first two resource disposals reordered",
     "member": "_PikPakFilesScreenState.dispose",
     "mutation": "dispose_order"
+  },
+  {
+    "name": "last two resource disposals reordered",
+    "member": "_PikPakFilesScreenState.dispose",
+    "mutation": "dispose_order_last"
   },
   {
     "name": "duplicate resource owner",

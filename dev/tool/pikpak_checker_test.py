@@ -43,9 +43,12 @@ def self_test(package=None):
         key, node = located(case['member'])
         changed = dict(sources)
         text = node['text']
-        if case['mutation'] == 'dispose_order':
+        if case['mutation'] in ('dispose_order', 'dispose_order_last'):
             calls = list(re.finditer(r'[\w.]+\.dispose\(\);', text))
-            first, second = calls[:2]
+            resources = [call for call in calls if call.group() != 'super.dispose();']
+            assert len(resources) == 14
+            first, second = (resources[-2:] if case['mutation'] == 'dispose_order_last'
+                             else resources[:2])
             text = text[:first.start()] + second.group() + text[first.end():second.start()] + first.group() + text[second.end():]
         elif case['mutation'] == 'duplicate_owner':
             changed['fixture_duplicate.dart'] = 'class DuplicatePikpakOwner { ' + text + ' }'

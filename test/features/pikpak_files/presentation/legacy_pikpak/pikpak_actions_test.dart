@@ -151,50 +151,80 @@ void main() {
     }),
   );
   for (final series in [false, true]) {
-    testWidgets(
-      'multi video preparation resolves only sorted start URL series=$series',
-      (t) => pikpakCase(t, (f) async {
-        await f.mount(t);
-        final rows = series
-            ? [
-                pikpakFile('z9', name: 'Show.S02E10.mkv'),
-                pikpakFile('m5', name: 'Show.S01E02.mkv'),
-                pikpakFile('a2', name: 'Show.S01E01.mkv'),
-              ]
-            : [
-                pikpakFile('z9', name: 'Zebra.mkv'),
-                pikpakFile('m5', name: 'Beta.mkv'),
-                pikpakFile('a2', name: 'Alpha.mkv'),
-              ];
-        f.details['a2'] = pikpakFile('a2', url: false);
-        final done =
-            f.member('playPikPakVideos')(rows, 'Collection') as Future<void>;
-        await f.until(t, () => f.requests.length == 2);
-        await done;
-        await t.pump();
-        expect(f.requests.map((r) => (r.method, r.url.path)), [
-          ('GET', '/drive/v1/files'),
-          ('GET', '/drive/v1/files/a2'),
-        ]);
-        expect(find.text('Could not get streaming URL'), findsOneWidget);
-        expect(
-          f.member('findFirstEpisodeIndex')(
-            SeriesParser.parsePlaylist([
-              'Show.S02E10.mkv',
-              'Show.S01E02.mkv',
-              'Show.S01E01.mkv',
-            ]),
-          ),
-          2,
-        );
-        expect(
-          f.member('findFirstEpisodeIndex')(
-            SeriesParser.parsePlaylist(['Alpha.mkv', 'Beta.mkv']),
-          ),
-          0,
-        );
-      }),
-    );
+    for (final acrossSeasons in [false, if (series) true]) {
+      testWidgets(
+        'multi video preparation resolves only sorted start URL series=$series'
+        '${acrossSeasons ? ' across seasons' : ''}',
+        (t) => pikpakCase(t, (f) async {
+          await f.mount(t);
+          final rows = series
+              ? [
+                  pikpakFile(
+                    'z9',
+                    name: acrossSeasons ? 'A.S02E01.mkv' : 'A.S01E03.mkv',
+                  ),
+                  pikpakFile('m5', name: 'B.S01E02.mkv'),
+                  pikpakFile('a2', name: 'C.S01E01.mkv'),
+                ]
+              : [
+                  pikpakFile('z9', name: 'Zebra.mkv'),
+                  pikpakFile('m5', name: 'Beta.mkv'),
+                  pikpakFile('a2', name: 'Alpha.mkv'),
+                ];
+          expect(
+            SeriesParser.isSeriesPlaylist(
+              rows.map((row) => row['name'] as String).toList(),
+            ),
+            series,
+          );
+          for (final row in rows) {
+            final id = row['id'] as String;
+            f.details[id] = pikpakFile(id, url: id != 'a2');
+          }
+          f.onRequest = (request) async {
+            if (request.url.path.startsWith('/drive/v1/files/')) {
+              expect(request.url.path, '/drive/v1/files/a2');
+            }
+          };
+          final done =
+              f.member('playPikPakVideos')(rows, 'Collection') as Future<void>;
+          await f.until(t, () => f.requests.length == 2);
+          await done;
+          await t.pump();
+          expect(f.requests.map((r) => (r.method, r.url.path)), [
+            ('GET', '/drive/v1/files'),
+            ('GET', '/drive/v1/files/a2'),
+          ]);
+          expect(find.text('Could not get streaming URL'), findsOneWidget);
+          expect(
+            f.member('findFirstEpisodeIndex')(
+              SeriesParser.parsePlaylist([
+                'Show.S02E10.mkv',
+                'Show.S01E02.mkv',
+                'Show.S01E01.mkv',
+              ]),
+            ),
+            2,
+          );
+          if (series) {
+            expect(
+              f.member('findFirstEpisodeIndex')(
+                SeriesParser.parsePlaylist(
+                  rows.map((row) => row['name'] as String).toList(),
+                ),
+              ),
+              2,
+            );
+          }
+          expect(
+            f.member('findFirstEpisodeIndex')(
+              SeriesParser.parsePlaylist(['Alpha.mkv', 'Beta.mkv']),
+            ),
+            0,
+          );
+        }),
+      );
+    }
   }
   for (final ignoreSmall in [false, true]) {
     testWidgets(

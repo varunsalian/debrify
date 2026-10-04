@@ -109,6 +109,63 @@ void main() {
     }),
   );
   testWidgets(
+    'restricted deep link with empty stack back goes to restricted root',
+    (t) => pikpakCase(
+      t,
+      (f) async {
+        await f.mount(t, pushed: true, initialId: 'z9', initialName: 'Target');
+        expect(f.member('navigationStack'), isEmpty);
+        expect(f.member('currentFolderId'), 'z9');
+        expect(f.member('restrictedFolderId'), 'restricted');
+        expect(f.member('isAtRestrictedRoot'), isFalse);
+        expect(MainPageBridge.handleBackNavigation(), isTrue);
+        await f.until(t, () => f.member('isLoading') == false);
+        await t.pump();
+        expect(f.member('currentFolderId'), 'restricted');
+        expect(f.member('currentFolderName'), 'Restricted');
+        expect(f.member('isAtRestrictedRoot'), isTrue);
+        expect(f.member('navigationStack'), isEmpty);
+        expect(find.byType(PikPakFilesScreen), findsOneWidget);
+        expect(f.observer.popped, isEmpty);
+        expect(
+          f.requests.map(
+            (r) => (
+              r.method,
+              r.url.path,
+              r.url.queryParameters['parent_id'],
+              r.url.queryParameters['page_token'],
+            ),
+          ),
+          [
+            ('GET', '/drive/v1/files/restricted', null, null),
+            ('GET', '/drive/v1/files', 'z9', null),
+            ('GET', '/drive/v1/files', 'restricted', null),
+          ],
+        );
+      },
+      preferences: {
+        'pikpak_restricted_folder_id': 'restricted',
+        'pikpak_restricted_folder_name': 'Restricted',
+      },
+    ),
+  );
+  testWidgets(
+    'pushed root with no current folder back returns false',
+    (t) => pikpakCase(t, (f) async {
+      await f.mount(t, pushed: true);
+      expect(f.member('currentFolderId'), isNull);
+      expect(f.member('navigationStack'), isEmpty);
+      expect(MainPageBridge.handleBackNavigation(), isFalse);
+      await t.pump(const Duration(milliseconds: 600));
+      expect(f.member('currentFolderId'), isNull);
+      expect(find.byType(PikPakFilesScreen), findsOneWidget);
+      expect(f.observer.popped, isEmpty);
+      expect(f.requests.map((r) => (r.method, r.url.path)), [
+        ('GET', '/drive/v1/files'),
+      ]);
+    }),
+  );
+  testWidgets(
     'virtual folder back precedes real folder back and keeps cast alias',
     (t) => pikpakCase(t, (f) async {
       await f.mount(t);
@@ -189,6 +246,42 @@ void main() {
       }, preferences: {'pikpak_enabled': false}),
     );
   }
+  testWidgets(
+    'tab initial folder id never schedules ten second pop',
+    (t) => pikpakCase(t, (f) async {
+      await f.mount(t, initialId: 'z9', wait: false);
+      expect(f.member('currentFolderId'), isNull);
+      await t.pump(const Duration(milliseconds: 9399));
+      expect(find.byType(PikPakFilesScreen), findsOneWidget);
+      expect(f.observer.popped, isEmpty);
+      await t.pump(const Duration(milliseconds: 1));
+      await t.pump();
+      expect(find.byType(PikPakFilesScreen), findsOneWidget);
+      expect(f.observer.popped, isEmpty);
+      expect(f.member('currentFolderId'), isNull);
+      expect(f.requests, isEmpty);
+      expect(
+        find.text('Failed to open folder. Please try again.'),
+        findsNothing,
+      );
+    }, preferences: {'pikpak_enabled': false}),
+  );
+  testWidgets(
+    'unmount before ten second deadline prevents delayed pop',
+    (t) => pikpakCase(t, (f) async {
+      await f.mount(t, pushed: true, initialId: 'z9', wait: false);
+      expect(f.member('currentFolderId'), isNull);
+      await t.pump(const Duration(milliseconds: 9399));
+      expect(f.observer.popped, isEmpty);
+      await t.pumpWidget(const SizedBox.shrink());
+      expect(f.key.currentState, isNull);
+      await t.pump(const Duration(milliseconds: 1));
+      await t.pump();
+      expect(f.observer.popped, isEmpty);
+      expect(f.requests, isEmpty);
+      expect(t.takeException(), isNull);
+    }, preferences: {'pikpak_enabled': false}),
+  );
   testWidgets(
     'assigned folder prevents timeout pop at deadline',
     (t) => pikpakCase(t, (f) async {
