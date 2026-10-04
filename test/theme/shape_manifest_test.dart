@@ -40,6 +40,8 @@ const Map<String, int> kShapeResidue = {
   'lib/features/addon_hub/presentation/addon_hub_dialog.dart': 0,
   'lib/features/addon_hub/presentation/addon_hub_option_tile.dart': 0,
   'lib/features/addon_hub/presentation/addon_hub_options_sheet.dart': 0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_actions.dart':
+      0,
   'lib/screens/addons/addon_hub_screen.dart': 2,
 
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_tiles.dart':
@@ -228,6 +230,22 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/addon_hub/presentation/addon_hub_focus_card.dart': 1,
   'lib/features/addon_hub/presentation/addon_hub_installed_row.dart': 0,
   'lib/features/addon_hub/presentation/addon_hub_row_nav.dart': 0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_composition.dart':
+      0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_loading.dart':
+      0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_state.dart':
+      0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_state.dart':
+      0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_loading.dart':
+      0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_market_state.dart':
+      0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_navigation_state.dart':
+      0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_sections.dart':
+      0,
 
   // Playback settings: every remaining destination and the facade, at zero.
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart':

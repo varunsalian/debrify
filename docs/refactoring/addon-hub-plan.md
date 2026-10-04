@@ -747,6 +747,46 @@ committed tree**, reconciling each branch's approved additions.
   Evidence snapshot startups are serialized after a concurrent index-lock
   collision; failed startups produced no accepted test evidence.
 
+- Step 3 moves the 38 non-static/non-handler fields into four typed owners,
+  plus installed/market/debrid loads, engine loads and engine actions into
+  three plain sections. Nontrivial construction order remains installed
+  service, marketplace singleton, navigation resources, then owned engine
+  manager; the between-method revisions and blocking flag are placed with
+  their owners. All initialization/disposal statements stay on the State in
+  original order with receiver qualification only. Borrowed services stay
+  borrowed; the one remote manager stays owned and closes last.
+- Step 3 binding review pins 25 structural leaves, exact owner/section paths,
+  plain class headers and 11 dependency bindings. `context`/`mounted` remain
+  live functions and `setState` is the actual State tear-off. Both change
+  listeners use one lazily composed section instance before registration.
+  The short typed `_l` getter returns that existing engine-loading section;
+  it avoids changing unmoved kind-guard syntax and exits in step 5. Navigation
+  and engine handles `h`/`_e` likewise keep unmoved guards formatter-clean;
+  they preserve the same typed owner instances. No wrapper listener appears.
+- Orphan group banners and inline comments are carried byte for byte with
+  their original responsibility; draft checker failures exposed omissions
+  before any acceptance evidence. Three formatter-required brace sites are
+  pinned only in moved methods, with complete raw prefixes and bodies;
+  lifecycle has no formatting exception. No infos are added to the frozen
+  original strict inventory. Facade: 2190 lines; action/menu/list/layout
+  responsibilities remain for steps 4–6.
+
+- Step 3 source-guard attempt retained: the first navigation handle `n`
+  collided with the original local focus-node name in `_RowNav`; the unchanged
+  whole-widget assertion caught normalization ambiguity. The unique short `h`
+  handle avoids that collision and preserves unextracted one-line guard syntax.
+  `_n` was also evaluated, but needed a brace exception outside the moved set;
+  that draft is rejected. No source assertion or strict inventory is weakened.
+
+- Step 3 verification: `step3-final-checks.json` records all ten manifest
+  self-tests and architecture/size/storage/format/diff PASS. All 129 cases
+  in `step3-affected-final` pass and compare to the latest `base4` with zero
+  additions/missing/skips; macOS pixels pass. Strict Linux originals pass
+  6/6 (`step3-linux`), unchanged image hashes. `step3-final-analyze-recorded`
+  and its env record no added original strict identities or whole-repo
+  diagnostics; exact CI allowlist retains only its 12 existing warnings.
+  Gate 1 now runs on the committed step-3 tree, with no untracked inputs.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

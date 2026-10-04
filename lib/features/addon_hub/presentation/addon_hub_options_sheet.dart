@@ -3,6 +3,7 @@ import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:flutter/material.dart';
 
+// ── Options bottom sheet ─────────────────────────────────────────────────────
 class AddonHubAddonOptionsSheet extends StatelessWidget {
   final StremioAddon addon;
   final VoidCallback onToggle;

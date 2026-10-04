@@ -37,8 +37,35 @@
     "_deps",
     "deps"
   ],
-  "receiver_paths": {},
-  "receiver_owners": {},
+  "receiver_paths": {
+    "_installedOwner": "AddonHubInstalledState",
+    "s._installedOwner": "AddonHubInstalledState",
+    "_deps.installedState": "AddonHubInstalledState",
+    "_marketOwner": "AddonHubMarketState",
+    "s._marketOwner": "AddonHubMarketState",
+    "_deps.marketState": "AddonHubMarketState",
+    "h": "AddonHubNavigationState",
+    "s.h": "AddonHubNavigationState",
+    "_deps.navigationState": "AddonHubNavigationState",
+    "_e": "AddonHubEngineState",
+    "s._e": "AddonHubEngineState",
+    "_deps.engineState": "AddonHubEngineState",
+    "_sections.loading": "AddonHubLoading",
+    "s._sections.loading": "AddonHubLoading",
+    "_sections.engineLoading": "AddonHubEngineLoading",
+    "s._sections.engineLoading": "AddonHubEngineLoading",
+    "_sections.engineActions": "AddonHubEngineActions",
+    "s._sections.engineActions": "AddonHubEngineActions",
+    "_l": "AddonHubEngineLoading",
+    "s._l": "AddonHubEngineLoading"
+  },
+  "receiver_owners": {
+    "_installedOwner": "AddonHubInstalledState",
+    "_marketOwner": "AddonHubMarketState",
+    "h": "AddonHubNavigationState",
+    "_e": "AddonHubEngineState",
+    "_l": "AddonHubEngineLoading"
+  },
   "additional_owners": [],
   "required_nodes": [],
   "live_getter_callbacks": [],
@@ -55,12 +82,46 @@
     {
       "name": "addonHubTestAccess",
       "tokens_file": "dev/tool/addon_hub_test_accessor.json",
-      "required": true
+      "required": true,
+      "borrowed_receiver": "s"
     }
   ],
   "self_test_module": "addon_hub_checker_test",
   "seams": [],
-  "plain_sections": [],
+  "plain_sections": [
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_state.dart",
+      "owner": "AddonHubInstalledState"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_market_state.dart",
+      "owner": "AddonHubMarketState"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_navigation_state.dart",
+      "owner": "AddonHubNavigationState"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_state.dart",
+      "owner": "AddonHubEngineState"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_loading.dart",
+      "owner": "AddonHubLoading"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_loading.dart",
+      "owner": "AddonHubEngineLoading"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_actions.dart",
+      "owner": "AddonHubEngineActions"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_sections.dart",
+      "owner": "AddonHubSections"
+    }
+  ],
   "forwarders": {
     "_AddonHubScreenState.build": {
       "receiver": "_sections.layout"
@@ -86,9 +147,17 @@
     }
   ],
   "callback_instances": {
-    "_AddonHubScreenState": "$State"
+    "_AddonHubScreenState": "$State",
+    "AddonHubLoading": "$State._sections.loading",
+    "AddonHubEngineLoading": "$State._sections.engineLoading",
+    "AddonHubEngineActions": "$State._sections.engineActions"
   },
-  "callback_receiver_aliases": {},
+  "callback_receiver_aliases": {
+    "_sections.loading": "$State._sections.loading",
+    "_sections.engineLoading": "$State._sections.engineLoading",
+    "_sections.engineActions": "$State._sections.engineActions",
+    "_l": "$State._sections.engineLoading"
+  },
   "callback_closure_binding": true,
   "callback_identities": [
     {
@@ -345,5 +414,12 @@
       "_HubDialogButton",
       "_HubDialogButtonState"
     ]
-  ]
+  ],
+  "borrowed_member_aliases": {
+    "_deps.loadEngines": "_AddonHubScreenState._loadEngines"
+  },
+  "callback_member_aliases": {
+    "_deps.loadEngines": "_AddonHubScreenState._loadEngines"
+  },
+  "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in addon_hub_context_exceptions.json; original guards and statement order unchanged"
 }

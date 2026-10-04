@@ -3,6 +3,7 @@ import 'package:debrify/utils/tv_keys.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+// ── Buttons & dialog chrome ──────────────────────────────────────────────────
 /// A pill button that matches the Discover chrome: panel fill, purple focus ring;
 /// [primary] fills with the accent tint.
 class AddonHubHubActionButton extends StatefulWidget {

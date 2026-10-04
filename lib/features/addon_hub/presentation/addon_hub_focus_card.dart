@@ -3,6 +3,7 @@ import 'package:debrify/widgets/see_all/see_all_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+// ── Rows ─────────────────────────────────────────────────────────────────────
 /// Focus wrapper giving a card the purple DPAD ring + activate-key handling.
 class AddonHubFocusCard extends StatefulWidget {
   final VoidCallback onTap;

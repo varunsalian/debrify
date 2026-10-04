@@ -1,40 +1,37 @@
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/services/analytics_service.dart';
+import 'package:debrify/services/android_native_downloader.dart';
+import 'package:debrify/services/engine/local_engine_storage.dart';
+import 'package:debrify/services/engine/remote_engine_manager.dart';
+import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/stremio_marketplace_service.dart';
+import 'package:debrify/services/stremio_service.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/utils/tv_keys.dart';
+import 'package:debrify/widgets/see_all/see_all_theme.dart';
+import 'package:debrify/widgets/see_all/stremio_dropdown.dart';
+import 'package:debrify/widgets/tv_text_field.dart';
+import 'package:debrify/features/addon_hub/models/addon_hub_kinds.dart';
 import 'package:debrify/features/addon_hub/presentation/addon_hub_action_button.dart';
 import 'package:debrify/features/addon_hub/presentation/addon_hub_addon_info.dart';
 import 'package:debrify/features/addon_hub/presentation/addon_hub_dialog.dart';
 import 'package:debrify/features/addon_hub/presentation/addon_hub_focus_card.dart';
 import 'package:debrify/features/addon_hub/presentation/addon_hub_installed_row.dart';
 import 'package:debrify/features/addon_hub/presentation/addon_hub_options_sheet.dart';
-import 'package:debrify/features/addon_hub/models/addon_hub_kinds.dart';
 import 'package:debrify/features/addon_hub/presentation/addon_hub_row_nav.dart';
-import 'dart:convert';
-
-import 'package:debrify/services/storage/alldebrid_storage.dart';
-import 'package:debrify/services/storage/premiumize_storage.dart';
-import 'package:debrify/services/storage/real_debrid_storage.dart';
-import 'package:debrify/services/storage/torbox_storage.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
-import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
-
-import 'package:yaml/yaml.dart';
-
-import '../../models/stremio_addon.dart';
-import '../../services/analytics_service.dart';
-import '../../services/android_native_downloader.dart';
-import '../../services/engine/config_loader.dart';
-import '../../services/engine/engine_registry.dart';
-import '../../services/engine/local_engine_storage.dart';
-import '../../services/engine/remote_engine_manager.dart';
-import '../../services/main_page_bridge.dart';
-import '../../services/stremio_marketplace_service.dart';
-import '../../services/stremio_service.dart';
-import '../../theme/app_theme_scope.dart';
-import '../../utils/tv_keys.dart';
-import '../../widgets/see_all/see_all_theme.dart';
-import '../../widgets/see_all/stremio_dropdown.dart';
-import '../../widgets/tv_text_field.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_composition.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_loading.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_state.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_state.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_market_state.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_navigation_state.dart';
+import 'package:debrify/features/addon_hub/presentation/legacy_addon_hub/addon_hub_sections.dart';
 
 /// A single, Stremio-themed home for addons: one list with a source + type
 /// filter, a search box, an "Add addon" URL flow, and a 1-click Discover
@@ -49,452 +46,73 @@ class AddonHubScreen extends StatefulWidget {
 
 class _AddonHubScreenState extends State<AddonHubScreen> {
   static const int _tabIndex = 7; // Addons slot in the main nav.
-
-  final StremioService _stremio = StremioService.instance;
-  final _marketplace = StremioMarketplaceService.instance;
-
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _kindFocus = FocusNode(debugLabel: 'hub-kind');
-  final FocusNode _sourceFocus = FocusNode(debugLabel: 'hub-source');
-  final FocusNode _typeFocus = FocusNode(debugLabel: 'hub-type');
-  final FocusNode _addFocus = FocusNode(debugLabel: 'hub-add');
-  final FocusNode _moreFocus = FocusNode(debugLabel: 'hub-more');
-  final FocusNode _searchFocus = FocusNode(debugLabel: 'hub-search');
-  final FocusNode _searchBtnFocus = FocusNode(debugLabel: 'hub-search-btn');
-  final FocusNode _metadataFocus = FocusNode(
-    debugLabel: 'hub-metadata-provider',
+  final _installedOwner = AddonHubInstalledState();
+  final _marketOwner = AddonHubMarketState();
+  final h = AddonHubNavigationState();
+  final _e = AddonHubEngineState();
+  AddonHubEngineLoading get _l => _sections.engineLoading;
+  AddonHubSections? _sectionCache;
+  AddonHubSections get _sections => _sectionCache ??= createAddonHubSections(
+    (context: () => context, mounted: () => mounted, setState: setState),
+    (
+      installedState: _installedOwner,
+      marketState: _marketOwner,
+      navigationState: h,
+      engineState: _e,
+    ),
   );
 
-  /// Attached to the first focusable of the installed/engine lists (single-focus
-  /// cards), so DOWN from the filter bar deterministically lands on item 1.
-  final FocusNode _firstRowFocus = FocusNode(debugLabel: 'hub-first-row');
-
-  /// One focus node per focusable marketplace row (its primary button). Market
-  /// rows have variable buttons (Install / Install+Configure / Configure), so
-  /// geometric DOWN is unreliable — vertical moves go through these instead, and
-  /// always land on the NEXT row's first button regardless of its layout.
-  final AddonHubRowNav _marketNav = AddonHubRowNav();
-
   VoidCallback? _tvFocusHandler;
-
-  bool _isTv = false;
-
-  AddonHubKind _kind = AddonHubKind.addons;
-  AddonHubSource _source = AddonHubSource.installed;
-  String _typeFilter = ''; // '' == All
-  String _search = '';
-  bool _searchOpen = false;
-
-  // Installed addons.
-  List<StremioAddon> _installed = const [];
-  bool _installedLoading = true;
-  String? _metadataProviderPreference;
-
-  // Marketplace addons (Official / Community).
-  List<MarketplaceAddon> _market = const [];
-  bool _marketLoading = false;
-  String? _marketError;
-  AddonHubSource? _marketLoadedFor; // which source _market currently holds
-
-  /// Whether any debrid/cloud provider is configured — drives the "Needs debrid"
-  /// honesty badge on stream addons (debrify can't play torrents P2P).
-  bool _hasDebrid = true;
-
-  // Torrent engines (the "Torrent Engines" kind).
-  final RemoteEngineManager _remoteEngines = RemoteEngineManager();
-  final LocalEngineStorage _localEngines = LocalEngineStorage.instance;
-  List<ImportedEngineMetadata> _importedEngines = const [];
-  List<RemoteEngineInfo> _availableEngines = const [];
-  List<RemoteEngineInfo> _knownRemoteEngines = const [];
-  bool _enginesLoading = false;
-  String? _enginesError;
-  bool _enginesLoadedOnce = false;
 
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('addon_hub');
-    _stremio.addAddonsChangedListener(_onAddonsChanged);
-    LocalEngineStorage.changes.addListener(_onEnginesChanged);
-    _searchController.addListener(() {
-      final q = _searchController.text.trim();
-      if (q != _search) setState(() => _search = q);
+    _installedOwner.stremio.addAddonsChangedListener(
+      _sections.loading.onAddonsChanged,
+    );
+    LocalEngineStorage.changes.addListener(_l.onEnginesChanged);
+    h.searchController.addListener(() {
+      final q = h.searchController.text.trim();
+      if (q != h.search) setState(() => h.search = q);
     });
 
-    _tvFocusHandler = () => _kindFocus.requestFocus();
+    _tvFocusHandler = () => h.kindFocus.requestFocus();
     MainPageBridge.registerTvContentFocusHandler(_tabIndex, _tvFocusHandler!);
 
     AndroidNativeDownloader.isTelevision().then((tv) {
-      if (mounted) setState(() => _isTv = tv);
+      if (mounted) setState(() => h.isTv = tv);
     });
 
-    _loadDebridState();
-    _loadInstalled();
-  }
-
-  Future<void> _loadDebridState() async {
-    final configured = await Future.wait([
-      RealDebridStorage.hasRealDebridCredential(),
-      TorboxStorage.hasTorboxCredential(),
-      PremiumizeStorage.hasPremiumizeCredential(),
-      AllDebridStorage.hasAllDebridCredential(),
-    ]);
-    final has = configured.any((value) => value);
-    if (mounted) setState(() => _hasDebrid = has);
+    _sections.loading.loadDebridState();
+    _sections.loading.loadInstalled();
   }
 
   @override
   void dispose() {
-    _stremio.removeAddonsChangedListener(_onAddonsChanged);
-    LocalEngineStorage.changes.removeListener(_onEnginesChanged);
+    _installedOwner.stremio.removeAddonsChangedListener(
+      _sections.loading.onAddonsChanged,
+    );
+    LocalEngineStorage.changes.removeListener(_l.onEnginesChanged);
     if (_tvFocusHandler != null) {
       MainPageBridge.unregisterTvContentFocusHandler(
         _tabIndex,
         _tvFocusHandler!,
       );
     }
-    _searchController.dispose();
-    _kindFocus.dispose();
-    _sourceFocus.dispose();
-    _typeFocus.dispose();
-    _addFocus.dispose();
-    _moreFocus.dispose();
-    _searchFocus.dispose();
-    _searchBtnFocus.dispose();
-    _metadataFocus.dispose();
-    _firstRowFocus.dispose();
-    _marketNav.dispose();
-    _remoteEngines.dispose();
+    h.searchController.dispose();
+    h.kindFocus.dispose();
+    h.sourceFocus.dispose();
+    h.typeFocus.dispose();
+    h.addFocus.dispose();
+    h.moreFocus.dispose();
+    h.searchFocus.dispose();
+    h.searchBtnFocus.dispose();
+    h.metadataFocus.dispose();
+    h.firstRowFocus.dispose();
+    h.marketNav.dispose();
+    _e.remoteEngines.dispose();
     super.dispose();
-  }
-
-  void _onAddonsChanged() => _loadInstalled();
-
-  int _installedLoadRevision = 0;
-
-  Future<void> _loadInstalled() async {
-    final revision = ++_installedLoadRevision;
-    if (mounted) setState(() => _installedLoading = true);
-    try {
-      // This is the management inventory. It must include disabled addons so
-      // they remain visible and can be enabled again; the normal read path
-      // intentionally excludes profile-locally disabled rows for playback.
-      final results = await Future.wait<Object?>([
-        _stremio.getAddonsForManagement(),
-        _stremio.getMetadataProviderPreference(),
-      ]);
-      final addons = results[0] as List<StremioAddon>;
-      final metadataPreference = results[1] as String?;
-      if (mounted && revision == _installedLoadRevision) {
-        setState(() {
-          _installed = addons;
-          _metadataProviderPreference = metadataPreference;
-          _installedLoading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted && revision == _installedLoadRevision) {
-        setState(() => _installedLoading = false);
-      }
-    }
-  }
-
-  Future<void> _loadMarket(AddonHubSource source, {bool force = false}) async {
-    if (!mounted) return;
-    setState(() {
-      _marketLoading = true;
-      _marketError = null;
-      _marketLoadedFor = source;
-    });
-    try {
-      final addons = source == AddonHubSource.community
-          ? await _marketplace.fetchCommunity(forceRefresh: force)
-          : await _marketplace.fetchOfficial(forceRefresh: force);
-      if (mounted && _marketLoadedFor == source) {
-        setState(() {
-          _market = addons;
-          _marketLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted && _marketLoadedFor == source) {
-        setState(() {
-          _marketError = e.toString().replaceFirst('Exception: ', '');
-          _marketLoading = false;
-        });
-      }
-    }
-  }
-
-  // ── Torrent engines ────────────────────────────────────────────────────────
-
-  int _engineLoadRevision = 0;
-  Future<void> _onEnginesChanged() async {
-    final revision = ++_engineLoadRevision;
-    try {
-      final imported = await _localEngines.getImportedEngines();
-      if (!mounted || revision != _engineLoadRevision) return;
-      setState(() {
-        _importedEngines = imported;
-        final installed = imported.map((e) => e.id).toSet();
-        _availableEngines = _knownRemoteEngines
-            .where((e) => !installed.contains(e.id))
-            .toList();
-        _enginesLoading = false;
-        _enginesError = null;
-      });
-    } catch (_) {
-      if (mounted && revision == _engineLoadRevision) {
-        setState(() {
-          _enginesLoading = false;
-          _enginesError = 'Could not refresh installed engines';
-        });
-      }
-    }
-  }
-
-  Future<void> _loadEngines() async {
-    final revision = ++_engineLoadRevision;
-    setState(() {
-      _enginesLoading = true;
-      _enginesError = null;
-      _enginesLoadedOnce = true;
-    });
-    try {
-      final imported = await _localEngines.getImportedEngines();
-      final remote = await _remoteEngines.fetchAvailableEngines();
-      if (!mounted) return;
-      _knownRemoteEngines = remote;
-      if (revision != _engineLoadRevision) {
-        await _onEnginesChanged();
-        return;
-      }
-      final importedIds = imported.map((e) => e.id).toSet();
-      if (mounted && revision == _engineLoadRevision) {
-        setState(() {
-          _importedEngines = imported;
-          _availableEngines = remote
-              .where((e) => !importedIds.contains(e.id))
-              .toList();
-          _enginesLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted && revision == _engineLoadRevision) {
-        setState(() {
-          _enginesError = e.toString().replaceFirst('Exception: ', '');
-          _enginesLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _installEngine(RemoteEngineInfo engine) async {
-    final messenger = ScaffoldMessenger.of(context);
-    _showBlockingProgress('Installing ${engine.displayName}…');
-    try {
-      final yaml = await _remoteEngines.downloadEngineYaml(engine.fileName);
-      if (yaml == null) throw Exception('Failed to download engine config');
-      await _localEngines.saveEngine(
-        engineId: engine.id,
-        fileName: engine.fileName,
-        yamlContent: yaml,
-        displayName: engine.displayName,
-        icon: engine.icon,
-      );
-      ConfigLoader().clearCache();
-      await EngineRegistry.instance.reload();
-      _dismissBlockingProgress();
-      await _loadEngines();
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('${engine.displayName} installed')),
-      );
-    } catch (e) {
-      _dismissBlockingProgress();
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Failed to install: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _deleteEngine(ImportedEngineMetadata engine) async {
-    final app = AppThemeScope.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AddonHubHubDialog(
-        title: 'Delete engine',
-        content: Text(
-          'Delete "${engine.displayName}"?',
-          style: TextStyle(color: app.fade(app.core.tx, 0.75)),
-        ),
-        actions: [
-          AddonHubHubDialogButton(
-            label: 'Cancel',
-            onTap: () => Navigator.of(ctx).pop(false),
-          ),
-          AddonHubHubDialogButton(
-            label: 'Delete',
-            danger: true,
-            onTap: () => Navigator.of(ctx).pop(true),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await _localEngines.deleteEngine(engine.id);
-      ConfigLoader().clearCache();
-      await EngineRegistry.instance.reload();
-      await _loadEngines();
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('${engine.displayName} deleted')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Failed to delete: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _importEngineFromFile() async {
-    final messenger = ScaffoldMessenger.of(context);
-    // Captured with the messenger, before any await: the replace-confirmation
-    // dialog below opens after the file picker returns.
-    final app = AppThemeScope.of(context);
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        allowMultiple: false,
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return;
-      final file = result.files.first;
-      final lower = file.name.toLowerCase();
-      if (!lower.endsWith('.yaml') && !lower.endsWith('.yml')) {
-        throw Exception('Please select a YAML file (.yaml or .yml)');
-      }
-      final String yamlContent;
-      if (file.bytes != null) {
-        yamlContent = String.fromCharCodes(file.bytes!);
-      } else if (file.path != null) {
-        yamlContent = String.fromCharCodes(await file.xFile.readAsBytes());
-      } else {
-        throw Exception('Could not read file content');
-      }
-      final yaml = loadYaml(yamlContent);
-      final engineId = yaml is Map ? yaml['id'] as String? : null;
-      final displayName = yaml is Map ? yaml['display_name'] as String? : null;
-      final icon = yaml is Map ? yaml['icon'] as String? : null;
-      if (engineId == null || engineId.isEmpty) {
-        throw Exception('YAML must contain an "id" field');
-      }
-      if (displayName == null || displayName.isEmpty) {
-        throw Exception('YAML must contain a "display_name" field');
-      }
-      final existing = await _localEngines.getImportedEngines();
-      if (existing.any((e) => e.id == engineId)) {
-        if (!mounted) return;
-        final replace = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AddonHubHubDialog(
-            title: 'Engine already exists',
-            content: Text(
-              'Replace the existing "$engineId"?',
-              style: TextStyle(color: app.fade(app.core.tx, 0.75)),
-            ),
-            actions: [
-              AddonHubHubDialogButton(
-                label: 'Cancel',
-                onTap: () => Navigator.of(ctx).pop(false),
-              ),
-              AddonHubHubDialogButton(
-                label: 'Replace',
-                primary: true,
-                onTap: () => Navigator.of(ctx).pop(true),
-              ),
-            ],
-          ),
-        );
-        if (replace != true) return;
-      }
-      if (!mounted) return;
-      _showBlockingProgress('Importing $displayName…');
-      await _localEngines.saveEngine(
-        engineId: engineId,
-        fileName: file.name,
-        yamlContent: yamlContent,
-        displayName: displayName,
-        icon: icon,
-      );
-      ConfigLoader().clearCache();
-      await EngineRegistry.instance.reload();
-      _dismissBlockingProgress();
-      await _loadEngines();
-      if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('$displayName imported')));
-    } catch (e) {
-      _dismissBlockingProgress();
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  bool _blockingProgressUp = false;
-  void _showBlockingProgress(String message) {
-    final app = AppThemeScope.of(context);
-    _blockingProgressUp = true;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        backgroundColor: app.seeAll.panel,
-        shape: RoundedRectangleBorder(
-          borderRadius: app.shape.br(16),
-          side: BorderSide(color: app.seeAll.line),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(22),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: app.seeAll.accent,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Flexible(child: Text(message)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _dismissBlockingProgress() {
-    if (_blockingProgressUp && mounted) {
-      Navigator.of(context, rootNavigator: true).pop();
-      _blockingProgressUp = false;
-    }
   }
 
   /// Move focus from the filter bar down to the first row of whatever list is
@@ -502,45 +120,46 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   /// single first-card node).
   void _focusFirstRow() {
     final isMarket =
-        _kind == AddonHubKind.addons &&
-        (_source == AddonHubSource.official ||
-            _source == AddonHubSource.community);
+        h.kind == AddonHubKind.addons &&
+        (h.source == AddonHubSource.official ||
+            h.source == AddonHubSource.community);
     if (isMarket) {
-      _marketNav.focus(0);
-    } else if (_kind == AddonHubKind.addons &&
-        _source == AddonHubSource.installed &&
-        _metadataFocus.context != null) {
-      _metadataFocus.requestFocus();
-    } else if (_firstRowFocus.context != null) {
-      _firstRowFocus.requestFocus();
+      h.marketNav.focus(0);
+    } else if (h.kind == AddonHubKind.addons &&
+        h.source == AddonHubSource.installed &&
+        h.metadataFocus.context != null) {
+      h.metadataFocus.requestFocus();
+    } else if (h.firstRowFocus.context != null) {
+      h.firstRowFocus.requestFocus();
     }
   }
 
   void _toggleSearch() {
-    setState(() => _searchOpen = !_searchOpen);
-    if (_searchOpen) {
+    setState(() => h.searchOpen = !h.searchOpen);
+    if (h.searchOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _searchFocus.requestFocus();
+        if (mounted) h.searchFocus.requestFocus();
       });
     } else {
-      _searchController.clear();
+      h.searchController.clear();
       // Hand focus back to the search button so the remote isn't stranded on a
       // widget that just left the tree.
-      _searchBtnFocus.requestFocus();
+      h.searchBtnFocus.requestFocus();
     }
   }
 
   void _selectKind(AddonHubKind kind) {
-    if (kind == _kind) return;
-    setState(() => _kind = kind);
-    if (kind == AddonHubKind.engines && !_enginesLoadedOnce) _loadEngines();
+    if (kind == h.kind) return;
+    setState(() => h.kind = kind);
+    if (kind == AddonHubKind.engines && !_e.enginesLoadedOnce) _l.loadEngines();
   }
 
   void _selectSource(AddonHubSource source) {
-    if (source == _source) return;
-    setState(() => _source = source);
-    if (source != AddonHubSource.installed && _marketLoadedFor != source) {
-      _loadMarket(source);
+    if (source == h.source) return;
+    setState(() => h.source = source);
+    if (source != AddonHubSource.installed &&
+        _marketOwner.marketLoadedFor != source) {
+      _sections.loading.loadMarket(source);
     }
   }
 
@@ -549,27 +168,26 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     // via the Configure→paste flow has a different (configured) URL than its
     // marketplace [config] transportUrl, so it's recognised only by id — fine for
     // addons that keep their id after configuration (the common case).
-    for (final a in _installed) {
+    for (final a in _installedOwner.installed) {
       if (a.id == m.id || a.manifestUrl == m.transportUrl) return true;
     }
     return false;
   }
 
   bool _matchesFilters({required List<String> types, required String name}) {
-    if (_typeFilter.isNotEmpty && !types.contains(_typeFilter)) return false;
-    if (_search.isNotEmpty &&
-        !name.toLowerCase().contains(_search.toLowerCase())) {
+    if (h.typeFilter.isNotEmpty && !types.contains(h.typeFilter)) return false;
+    if (h.search.isNotEmpty &&
+        !name.toLowerCase().contains(h.search.toLowerCase())) {
       return false;
     }
     return true;
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
-
   Future<void> _installFromMarket(MarketplaceAddon m, int? fromNav) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final addon = await _stremio.addAddon(m.transportUrl);
+      final addon = await _installedOwner.stremio.addAddon(m.transportUrl);
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text('${addon.name} installed')),
@@ -579,12 +197,12 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       // listener also fires) and, once the list rebuilds, land focus on whatever
       // row now occupies this slot (or the previous one / the filter bar) so the
       // TV remote is never stranded.
-      await _loadInstalled();
+      await _sections.loading.loadInstalled();
       if (!mounted) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || fromNav == null) return;
-        if (!_marketNav.focus(fromNav) && !_marketNav.focus(fromNav - 1)) {
-          _searchBtnFocus.requestFocus();
+        if (!h.marketNav.focus(fromNav) && !h.marketNav.focus(fromNav - 1)) {
+          h.searchBtnFocus.requestFocus();
         }
       });
     } catch (e) {
@@ -667,7 +285,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     if (url == null || url.isEmpty || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final addon = await _stremio.addAddon(url);
+      final addon = await _installedOwner.stremio.addAddon(url);
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('${addon.name} added')));
     } catch (e) {
@@ -702,7 +320,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       } else {
         throw Exception('Could not read the selected file.');
       }
-      final importResult = await _stremio.importAddonsFromJson(
+      final importResult = await _installedOwner.stremio.importAddonsFromJson(
         utf8.decode(bytes),
       );
       if (!mounted) return;
@@ -763,7 +381,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   Future<void> _updateAll() async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final result = await _stremio.refreshAllAddons();
+      final result = await _installedOwner.stremio.refreshAllAddons();
       if (!mounted) return;
       final parts = <String>[];
       if (result.updated > 0) parts.add('${result.updated} updated');
@@ -789,13 +407,13 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Future<void> _deleteAll() async {
-    final count = _installed.length;
+    final count = _installedOwner.installed.length;
     if (count == 0) return;
     final app = AppThemeScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final int sharedCount;
     try {
-      sharedCount = await _stremio.sharedAddonCount();
+      sharedCount = await _installedOwner.stremio.sharedAddonCount();
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
@@ -836,7 +454,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await _stremio.clearAllAddons(revokeSharedProfiles: hasSharedAddons);
+      await _installedOwner.stremio.clearAllAddons(
+        revokeSharedProfiles: hasSharedAddons,
+      );
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text('Deleted $count addon${count == 1 ? '' : 's'}')),
@@ -856,7 +476,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   // resource and its key is that resource's id, so the URL matches nothing
   // and the toggle silently did nothing at all.
   Future<void> _toggleAddon(StremioAddon a) =>
-      _stremio.setAddonEnabled(a.storageKey, !a.enabled);
+      _installedOwner.stremio.setAddonEnabled(a.storageKey, !a.enabled);
 
   Future<void> _renameAddon(StremioAddon a) async {
     var value = a.userAlias ?? a.name;
@@ -911,7 +531,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     if (alias == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await _stremio.setAddonAlias(a.storageKey, alias);
+      await _installedOwner.stremio.setAddonAlias(a.storageKey, alias);
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
@@ -933,7 +553,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
   Future<void> _updateAddon(StremioAddon a) async {
     final messenger = ScaffoldMessenger.of(context);
-    final refreshed = await _stremio.refreshAddon(a.manifestUrl);
+    final refreshed = await _installedOwner.stremio.refreshAddon(a.manifestUrl);
     if (!mounted) return;
     if (refreshed == null) {
       messenger.showSnackBar(
@@ -961,7 +581,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final int borrowerCount;
     try {
-      borrowerCount = await _stremio.addonBorrowerCount(a.storageKey);
+      borrowerCount = await _installedOwner.stremio.addonBorrowerCount(
+        a.storageKey,
+      );
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
@@ -1001,7 +623,10 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await _stremio.removeAddon(a.storageKey, revokeSharedProfiles: isShared);
+      await _installedOwner.stremio.removeAddon(
+        a.storageKey,
+        revokeSharedProfiles: isShared,
+      );
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text('${a.displayName} removed')),
@@ -1018,7 +643,6 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   // ── Sheets / menus ───────────────────────────────────────────────────────
-
   void _showOptions(StremioAddon a) {
     final app = AppThemeScope.of(context);
     showModalBottomSheet<void>(
@@ -1144,7 +768,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     final app = AppThemeScope.of(context);
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
-    final btn = _moreFocus.context?.findRenderObject() as RenderBox?;
+    final btn = h.moreFocus.context?.findRenderObject() as RenderBox?;
     if (overlay == null || btn == null) return;
     final topLeft = btn.localToGlobal(
       Offset(0, btn.size.height + 6),
@@ -1219,7 +843,6 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   // ── Build ────────────────────────────────────────────────────────────────
-
   /// Page-level DPAD policy. On TV the sidebar shares the screen's focus scope,
   /// so default geometric traversal can "escape" sideways/down into it (focusing
   /// a rail icon pops the sidebar open). The [FocusScope] in [build] contains all
@@ -1234,7 +857,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       return KeyEventResult.ignored;
     }
     // Let the search field keep left/right for caret movement.
-    if (_searchFocus.hasFocus) return KeyEventResult.ignored;
+    if (h.searchFocus.hasFocus) return KeyEventResult.ignored;
     final primary = FocusManager.instance.primaryFocus;
     if (primary == null) return KeyEventResult.ignored;
     // Move within the hub ONLY when there's a focusable genuinely to the left
@@ -1330,7 +953,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Widget _buildFilterBar() {
-    final isAddon = _kind == AddonHubKind.addons;
+    final isAddon = h.kind == AddonHubKind.addons;
     return LayoutBuilder(
       builder: (context, c) {
         // Phone-width: the labelled dropdowns + buttons wrap into four ragged
@@ -1343,9 +966,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           // Stremio addons and torrent engines are separate features — the
           // first dropdown picks which one is being managed.
           label: narrow ? null : 'Manage',
-          value: _kind,
-          focusNode: _kindFocus,
-          isTelevision: _isTv,
+          value: h.kind,
+          focusNode: h.kindFocus,
+          isTelevision: h.isTv,
           options: const [
             StremioDropdownOption(AddonHubKind.addons, 'Stremio Addons'),
             StremioDropdownOption(AddonHubKind.engines, 'Torrent Engines'),
@@ -1354,9 +977,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         );
         final sourceDd = StremioDropdown<AddonHubSource>(
           label: narrow ? null : 'Source',
-          value: _source,
-          focusNode: _sourceFocus,
-          isTelevision: _isTv,
+          value: h.source,
+          focusNode: h.sourceFocus,
+          isTelevision: h.isTv,
           options: const [
             StremioDropdownOption(AddonHubSource.installed, 'Installed'),
             StremioDropdownOption(AddonHubSource.official, 'Official'),
@@ -1366,9 +989,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         );
         final typeDd = StremioDropdown<String>(
           label: narrow ? null : 'Type',
-          value: _typeFilter,
-          focusNode: _typeFocus,
-          isTelevision: _isTv,
+          value: h.typeFilter,
+          focusNode: h.typeFocus,
+          isTelevision: h.isTv,
           options: const [
             StremioDropdownOption('', 'All'),
             StremioDropdownOption('movie', 'Movies'),
@@ -1377,15 +1000,15 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
             StremioDropdownOption('tv', 'TV'),
             StremioDropdownOption('anime', 'Anime'),
           ],
-          onSelected: (v) => setState(() => _typeFilter = v),
+          onSelected: (v) => setState(() => h.typeFilter = v),
         );
         final searchBtn = AddonHubHubActionButton(
-          focusNode: _searchBtnFocus,
+          focusNode: h.searchBtnFocus,
           icon: Icons.search_rounded,
           onTap: _toggleSearch,
         );
         final addBtn = AddonHubHubActionButton(
-          focusNode: _addFocus,
+          focusNode: h.addFocus,
           icon: Icons.add_rounded,
           label: 'Add addon',
           primary: true,
@@ -1393,7 +1016,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           onTap: _addByUrl,
         );
         final moreBtn = AddonHubHubActionButton(
-          focusNode: _moreFocus,
+          focusNode: h.moreFocus,
           icon: Icons.more_horiz_rounded,
           onTap: _showActionsMenu,
         );
@@ -1402,11 +1025,11 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           label: 'Import YAML',
           primary: true,
           expand: narrow,
-          onTap: _importEngineFromFile,
+          onTap: _sections.engineActions.importEngineFromFile,
         );
         final refreshBtn = AddonHubHubActionButton(
           icon: Icons.refresh_rounded,
-          onTap: _loadEngines,
+          onTap: _l.loadEngines,
         );
 
         final Widget controls;
@@ -1491,8 +1114,8 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
                   if (event.logicalKey != LogicalKeyboardKey.arrowDown) {
                     return KeyEventResult.ignored;
                   }
-                  if (_searchOpen || _search.isNotEmpty) {
-                    _searchFocus.requestFocus();
+                  if (h.searchOpen || h.search.isNotEmpty) {
+                    h.searchFocus.requestFocus();
                     return KeyEventResult.handled;
                   }
                   _focusFirstRow();
@@ -1500,7 +1123,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
                 },
                 child: controls,
               ),
-              if (isAddon && (_searchOpen || _search.isNotEmpty)) ...[
+              if (isAddon && (h.searchOpen || h.search.isNotEmpty)) ...[
                 const SizedBox(height: 10),
                 _buildSearchField(),
               ],
@@ -1532,8 +1155,8 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           const SizedBox(width: 8),
           Expanded(
             child: TvTextField(
-              controller: _searchController,
-              focusNode: _searchFocus,
+              controller: h.searchController,
+              focusNode: h.searchFocus,
               style: const TextStyle(fontSize: 13),
               cursorColor: app.seeAll.accent,
               decoration: InputDecoration(
@@ -1544,13 +1167,13 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
               ),
               onSubmitted: (_) => _focusFirstRow(),
               onDownArrow: _focusFirstRow,
-              onUpArrow: () => _searchBtnFocus.requestFocus(),
+              onUpArrow: () => h.searchBtnFocus.requestFocus(),
             ),
           ),
           GestureDetector(
             onTap: () => setState(() {
-              _searchController.clear();
-              _searchOpen = false;
+              h.searchController.clear();
+              h.searchOpen = false;
             }),
             child: Icon(
               Icons.close_rounded,
@@ -1564,8 +1187,8 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Widget _buildBody() {
-    if (_kind == AddonHubKind.engines) return _buildEngineList();
-    switch (_source) {
+    if (h.kind == AddonHubKind.engines) return _buildEngineList();
+    switch (h.source) {
       case AddonHubSource.installed:
         return _buildInstalledList();
       case AddonHubSource.official:
@@ -1575,12 +1198,12 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Widget _buildInstalledList() {
-    if (_installedLoading) {
+    if (_installedOwner.installedLoading) {
       return const Center(
         child: CircularProgressIndicator(color: kSeeAllAccent, strokeWidth: 2),
       );
     }
-    final items = _installed
+    final items = _installedOwner.installed
         .where((a) => _matchesFilters(types: a.types, name: a.displayName))
         .toList();
     return Column(
@@ -1590,8 +1213,10 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           child: items.isEmpty
               ? _emptyState(
                   icon: Icons.extension_outlined,
-                  title: _installed.isEmpty ? 'No addons yet' : 'No matches',
-                  subtitle: _installed.isEmpty
+                  title: _installedOwner.installed.isEmpty
+                      ? 'No addons yet'
+                      : 'No matches',
+                  subtitle: _installedOwner.installed.isEmpty
                       ? 'Add a manifest URL, or install one from Discover.'
                       : 'Try a different type or search.',
                 )
@@ -1604,9 +1229,10 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
                   separatorBuilder: (_, __) => const SizedBox(height: 14),
                   itemBuilder: (_, i) => AddonHubInstalledRow(
                     addon: items[i],
-                    focusNode: i == 0 ? _firstRowFocus : null,
+                    focusNode: i == 0 ? h.firstRowFocus : null,
                     warnDebrid:
-                        !_hasDebrid && items[i].resources.contains('stream'),
+                        !_installedOwner.hasDebrid &&
+                        items[i].resources.contains('stream'),
                     onTap: () => _showOptions(items[i]),
                   ),
                 ),
@@ -1617,7 +1243,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
   Widget _buildMetadataProviderSetting() {
     final app = AppThemeScope.of(context);
-    final providers = _installed
+    final providers = _installedOwner.installed
         .where(
           (a) =>
               a.enabled && a.resources.contains('meta') && a.baseUrl.isNotEmpty,
@@ -1634,12 +1260,12 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         .map(StremioService.metadataProviderValue)
         .toSet();
     String value;
-    if (_metadataProviderPreference ==
+    if (_installedOwner.metadataProviderPreference ==
         StremioService.automaticMetadataProvider) {
       value = StremioService.automaticMetadataProvider;
-    } else if (_metadataProviderPreference != null &&
-        providerValues.contains(_metadataProviderPreference)) {
-      value = _metadataProviderPreference!;
+    } else if (_installedOwner.metadataProviderPreference != null &&
+        providerValues.contains(_installedOwner.metadataProviderPreference)) {
+      value = _installedOwner.metadataProviderPreference!;
     } else {
       final cinemeta = providers.where(StremioService.isCinemetaAddon);
       value = cinemeta.isNotEmpty
@@ -1691,12 +1317,12 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           );
           final picker = StremioDropdown<String>(
             value: value,
-            focusNode: _metadataFocus,
-            isTelevision: _isTv,
-            onUpArrowPressed: () => _typeFocus.requestFocus(),
+            focusNode: h.metadataFocus,
+            isTelevision: h.isTv,
+            onUpArrowPressed: () => h.typeFocus.requestFocus(),
             onDownArrowPressed: () {
-              if (_firstRowFocus.context != null) {
-                _firstRowFocus.requestFocus();
+              if (h.firstRowFocus.context != null) {
+                h.firstRowFocus.requestFocus();
               }
             },
             options: [
@@ -1737,13 +1363,13 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Future<void> _setMetadataProvider(String value) async {
-    final previous = _metadataProviderPreference;
-    setState(() => _metadataProviderPreference = value);
+    final previous = _installedOwner.metadataProviderPreference;
+    setState(() => _installedOwner.metadataProviderPreference = value);
     try {
-      await _stremio.setMetadataProviderPreference(value);
+      await _installedOwner.stremio.setMetadataProviderPreference(value);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _metadataProviderPreference = previous);
+      setState(() => _installedOwner.metadataProviderPreference = previous);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Couldn\'t save metadata provider: $e'),
@@ -1767,8 +1393,8 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         // Attribution required by the stremio-addons.net API terms — shown only
         // on the Community list AND only when that source actually served the
         // data (not the legacy fallback, which would be a misattribution).
-        if (_source == AddonHubSource.community &&
-            _marketplace.communityFromNet)
+        if (h.source == AddonHubSource.community &&
+            _marketOwner.marketplace.communityFromNet)
           _communityAttribution(),
       ],
     );
@@ -1862,25 +1488,25 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Widget _buildMarketListBody() {
-    if (_marketLoading) {
+    if (_marketOwner.marketLoading) {
       return const Center(
         child: CircularProgressIndicator(color: kSeeAllAccent, strokeWidth: 2),
       );
     }
-    if (_marketError != null) {
+    if (_marketOwner.marketError != null) {
       return _emptyState(
         icon: Icons.cloud_off_rounded,
         title: 'Couldn\'t load addons',
-        subtitle: _marketError!,
+        subtitle: _marketOwner.marketError!,
         action: AddonHubHubActionButton(
           icon: Icons.refresh_rounded,
           label: 'Retry',
           primary: true,
-          onTap: () => _loadMarket(_source, force: true),
+          onTap: () => _sections.loading.loadMarket(h.source, force: true),
         ),
       );
     }
-    final items = _market
+    final items = _marketOwner.market
         .where((m) => _matchesFilters(types: m.types, name: m.name))
         .toList();
     if (items.isEmpty) {
@@ -1897,7 +1523,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     for (var i = 0; i < items.length; i++) {
       if (!_isInstalled(items[i])) navIndexOf[i] = focusable++;
     }
-    _marketNav.ensure(focusable);
+    h.marketNav.ensure(focusable);
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
@@ -1911,10 +1537,11 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         return _MarketRow(
           addon: m,
           installed: _isInstalled(m),
-          nav: _marketNav,
+          nav: h.marketNav,
           navIndex: navIndex,
           navCount: focusable,
-          warnDebrid: !_hasDebrid && m.resources.contains('stream'),
+          warnDebrid:
+              !_installedOwner.hasDebrid && m.resources.contains('stream'),
           onInstall: () => _installFromMarket(m, navIndex),
           onConfigure: () => _configureInBrowser(m),
         );
@@ -1923,25 +1550,25 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Widget _buildEngineList() {
-    if (_enginesLoading) {
+    if (_e.enginesLoading) {
       return const Center(
         child: CircularProgressIndicator(color: kSeeAllAccent, strokeWidth: 2),
       );
     }
-    if (_enginesError != null) {
+    if (_e.enginesError != null) {
       return _emptyState(
         icon: Icons.cloud_off_rounded,
         title: 'Couldn\'t load engines',
-        subtitle: _enginesError!,
+        subtitle: _e.enginesError!,
         action: AddonHubHubActionButton(
           icon: Icons.refresh_rounded,
           label: 'Retry',
           primary: true,
-          onTap: _loadEngines,
+          onTap: _l.loadEngines,
         ),
       );
     }
-    if (_importedEngines.isEmpty && _availableEngines.isEmpty) {
+    if (_e.importedEngines.isEmpty && _e.availableEngines.isEmpty) {
       return _emptyState(
         icon: Icons.travel_explore_rounded,
         title: 'No engines available',
@@ -1952,38 +1579,40 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
       scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
       children: [
-        if (_importedEngines.isNotEmpty) ...[
-          _engineSectionHeader('Imported', _importedEngines.length),
-          for (var i = 0; i < _importedEngines.length; i++) ...[
+        if (_e.importedEngines.isNotEmpty) ...[
+          _engineSectionHeader('Imported', _e.importedEngines.length),
+          for (var i = 0; i < _e.importedEngines.length; i++) ...[
             _EngineRow(
-              icon: _iconForEngine(_importedEngines[i].icon),
-              title: _importedEngines[i].displayName,
+              icon: _iconForEngine(_e.importedEngines[i].icon),
+              title: _e.importedEngines[i].displayName,
               subtitle:
-                  'Imported ${_relativeDate(_importedEngines[i].importedAt)}',
+                  'Imported ${_relativeDate(_e.importedEngines[i].importedAt)}',
               actionLabel: 'Remove',
               danger: true,
-              focusNode: i == 0 ? _firstRowFocus : null,
-              onTap: () => _deleteEngine(_importedEngines[i]),
+              focusNode: i == 0 ? h.firstRowFocus : null,
+              onTap: () =>
+                  _sections.engineActions.deleteEngine(_e.importedEngines[i]),
             ),
             const SizedBox(height: 14),
           ],
         ],
-        if (_availableEngines.isNotEmpty) ...[
+        if (_e.availableEngines.isNotEmpty) ...[
           _engineSectionHeader(
             'Available to install',
-            _availableEngines.length,
+            _e.availableEngines.length,
           ),
-          for (var i = 0; i < _availableEngines.length; i++) ...[
+          for (var i = 0; i < _e.availableEngines.length; i++) ...[
             _EngineRow(
-              icon: _iconForEngine(_availableEngines[i].icon),
-              title: _availableEngines[i].displayName,
-              subtitle: _availableEngines[i].description,
+              icon: _iconForEngine(_e.availableEngines[i].icon),
+              title: _e.availableEngines[i].displayName,
+              subtitle: _e.availableEngines[i].description,
               actionLabel: 'Install',
               primary: true,
-              focusNode: (_importedEngines.isEmpty && i == 0)
-                  ? _firstRowFocus
+              focusNode: (_e.importedEngines.isEmpty && i == 0)
+                  ? h.firstRowFocus
                   : null,
-              onTap: () => _installEngine(_availableEngines[i]),
+              onTap: () =>
+                  _sections.engineActions.installEngine(_e.availableEngines[i]),
             ),
             const SizedBox(height: 14),
           ],
@@ -2089,8 +1718,6 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     );
   }
 }
-
-// ── Rows ─────────────────────────────────────────────────────────────────────
 
 class _MarketRow extends StatelessWidget {
   final MarketplaceAddon addon;
@@ -2503,63 +2130,60 @@ class _EngineActionPill extends StatelessWidget {
   }
 }
 
-// ── Options bottom sheet ─────────────────────────────────────────────────────
-
-// ── Buttons & dialog chrome ──────────────────────────────────────────────────
-
 @visibleForTesting
 Map<String, Object?> addonHubTestAccess(State state) {
   final s = state as _AddonHubScreenState;
   return {
-    'searchController': s._searchController,
-    'kindFocus': s._kindFocus,
-    'sourceFocus': s._sourceFocus,
-    'typeFocus': s._typeFocus,
-    'addFocus': s._addFocus,
-    'moreFocus': s._moreFocus,
-    'searchFocus': s._searchFocus,
-    'searchBtnFocus': s._searchBtnFocus,
-    'metadataFocus': s._metadataFocus,
-    'firstRowFocus': s._firstRowFocus,
+    'searchController': s.h.searchController,
+    'kindFocus': s.h.kindFocus,
+    'sourceFocus': s.h.sourceFocus,
+    'typeFocus': s.h.typeFocus,
+    'addFocus': s.h.addFocus,
+    'moreFocus': s.h.moreFocus,
+    'searchFocus': s.h.searchFocus,
+    'searchBtnFocus': s.h.searchBtnFocus,
+    'metadataFocus': s.h.metadataFocus,
+    'firstRowFocus': s.h.firstRowFocus,
     'tvFocusHandler': s._tvFocusHandler,
-    'isTv': s._isTv,
-    'kind': s._kind,
-    'source': s._source,
-    'typeFilter': s._typeFilter,
-    'search': s._search,
-    'searchOpen': s._searchOpen,
-    'installed': List<StremioAddon>.of(s._installed),
-    'installedLoading': s._installedLoading,
-    'metadataProviderPreference': s._metadataProviderPreference,
-    'market': List<MarketplaceAddon>.of(s._market),
-    'marketLoading': s._marketLoading,
-    'marketError': s._marketError,
-    'marketLoadedFor': s._marketLoadedFor,
-    'hasDebrid': s._hasDebrid,
-    'importedEngines': List<ImportedEngineMetadata>.of(s._importedEngines),
-    'availableEngines': List<RemoteEngineInfo>.of(s._availableEngines),
-    'knownRemoteEngines': List<RemoteEngineInfo>.of(s._knownRemoteEngines),
-    'enginesLoading': s._enginesLoading,
-    'enginesError': s._enginesError,
-    'enginesLoadedOnce': s._enginesLoadedOnce,
-    'installedLoadRevision': s._installedLoadRevision,
-    'engineLoadRevision': s._engineLoadRevision,
-    'blockingProgressUp': s._blockingProgressUp,
+    'isTv': s.h.isTv,
+    'kind': s.h.kind,
+    'source': s.h.source,
+    'typeFilter': s.h.typeFilter,
+    'search': s.h.search,
+    'searchOpen': s.h.searchOpen,
+    'installed': List<StremioAddon>.of(s._installedOwner.installed),
+    'installedLoading': s._installedOwner.installedLoading,
+    'metadataProviderPreference': s._installedOwner.metadataProviderPreference,
+    'market': List<MarketplaceAddon>.of(s._marketOwner.market),
+    'marketLoading': s._marketOwner.marketLoading,
+    'marketError': s._marketOwner.marketError,
+    'marketLoadedFor': s._marketOwner.marketLoadedFor,
+    'hasDebrid': s._installedOwner.hasDebrid,
+    'importedEngines': List<ImportedEngineMetadata>.of(s._e.importedEngines),
+    'availableEngines': List<RemoteEngineInfo>.of(s._e.availableEngines),
+    'knownRemoteEngines': List<RemoteEngineInfo>.of(s._e.knownRemoteEngines),
+    'enginesLoading': s._e.enginesLoading,
+    'enginesError': s._e.enginesError,
+    'enginesLoadedOnce': s._e.enginesLoadedOnce,
+    'installedLoadRevision': s._installedOwner.installedLoadRevision,
+    'engineLoadRevision': s._e.engineLoadRevision,
+    'blockingProgressUp': s._e.blockingProgressUp,
     'marketNodes': <FocusNode>[
-      for (var i = 0; s._marketNav.nodeAt(i) != null; i++)
-        s._marketNav.nodeAt(i)!,
+      for (var i = 0; s.h.marketNav.nodeAt(i) != null; i++)
+        s.h.marketNav.nodeAt(i)!,
     ],
-    'marketIdenticalTo': (Object list) => identical(s._market, list),
-    'onAddonsChanged': s._onAddonsChanged,
-    'onEnginesChanged': s._onEnginesChanged,
-    'loadInstalled': s._loadInstalled,
-    'loadMarket': s._loadMarket,
-    'loadEngines': s._loadEngines,
+    'marketIdenticalTo': (Object list) =>
+        identical(s._marketOwner.market, list),
+    'onAddonsChanged': s._sections.loading.onAddonsChanged,
+    'onEnginesChanged': s._l.onEnginesChanged,
+    'loadInstalled': s._sections.loading.loadInstalled,
+    'loadMarket': s._sections.loading.loadMarket,
+    'loadEngines': s._l.loadEngines,
     'focusFirstRow': s._focusFirstRow,
     'setMetadataProvider': s._setMetadataProvider,
     'toggleAddon': s._toggleAddon,
     'setTv': (bool tv) {
-      s._isTv = tv;
+      s.h.isTv = tv;
       (s.context as Element).markNeedsBuild();
     },
   };
