@@ -154,6 +154,22 @@ def self_test(package=None):
         assert validate_live_item_binding({'binding': binding}), label
         print('Playlist content live onPlaybackStarted ' + label + ': rejected')
 
+    from playlist_content_live_bindings import COMPOSITION
+    forwarding = ('final Map<String, dynamic> Function() playlistItem;\n'
+                  'final VoidCallback? Function() onPlaybackStarted;\n'
+                  'PlaylistContentFixture((\nplaylistItem: _deps.playlistItem,\n'
+                  'onPlaybackStarted: _deps.onPlaybackStarted,\n));\n')
+    assert not validate_live_item_binding({COMPOSITION: forwarding})
+    for getter in ['playlistItem', 'onPlaybackStarted']:
+        for label, replacement in [('eager forwarding', '_deps.' + getter + '()'),
+                                   ('cached forwarding', '_deps.cached' + getter),
+                                   ('wrapper forwarding', '() => _deps.' + getter + '()')]:
+            bad = forwarding.replace(getter + ': _deps.' + getter + ',', getter + ': ' + replacement + ',')
+            assert validate_live_item_binding({COMPOSITION: bad}), (getter, label)
+            print('Playlist content composition ' + getter + ' ' + label + ': rejected')
+    assert validate_live_item_binding({'wrong_factory.dart': forwarding})
+    print('Playlist content typed getter forwarding: PASS; wrong factory rejected')
+
     from check_settings_moves import configured, check_plain_sections, check_forwarder
     row = next(r for r in rows if r['original_name'].endswith('.build'))
     original_lookup = all_nodes(parse({source: original}, package))

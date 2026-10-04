@@ -225,6 +225,8 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_cloud_loading.dart':
       0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_composition.dart':
+      0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_content_loading.dart':
       0,
   'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_debrid_launches.dart':

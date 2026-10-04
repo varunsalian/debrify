@@ -1,6 +1,8 @@
 """Validate live widget getter types and their composition bindings."""
 import re
 
+COMPOSITION = 'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_composition.dart'
+
 
 def validate_sources(sources):
     errors = []
@@ -14,8 +16,9 @@ def validate_sources(sources):
                 if not re.search(expected_type + r'\s+' + name + r'\s*[;,]', source):
                     errors.append(f'{path}: {name} getter must preserve its original return nullability')
             for binding in re.findall(name + r':\s*([^\n]+)', composition_records(source)):
-                if binding.strip().rstrip(',') != '() => widget.' + name:
-                    errors.append(f'{path}: {name} binding must read the live widget without copying or caching')
+                expected = '_deps.' + name if path == COMPOSITION else '() => widget.' + name
+                if binding.strip().rstrip(',') != expected:
+                    errors.append(f'{path}: {name} binding must read or forward the live getter without copying or caching')
     return errors
 
 

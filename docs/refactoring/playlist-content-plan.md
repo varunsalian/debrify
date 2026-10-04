@@ -802,6 +802,33 @@ identities against the observed branch baselines and approved additions.
   inputs or changes during the run. Strict moved-code Linux follows on
   the committed step-6 archive in the calibrated image.
 
+- Strict moved-code Linux at committed step 6 `b73c1340` passes all five
+  original PNG comparisons in the calibrated linux/amd64 image
+  `sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`.
+  `step6-linux-moved` records the commit/archive/image/SDK and source hashes;
+  every lib/test file and the lockfile remain unchanged. Source copy and
+  archive stay inside this worktree's ignored `.dart_tool`; no other checkout
+  or worktree is used. Flutter 3.44.8 / Dart 3.12.2 matches the baseline.
+- Step 7: typed composition forwards the same eight route-owned objects
+  and live item/callback/context/mounted getter functions. All 24 constructors
+  retain their exact binding/order parity with step 6; no action starts in
+  composition. The public widget, verbatim lifecycle, build forwarder and
+  frozen 99-line accessor remain in the **204-line facade**. The composition
+  factory is 343 lines; every feature destination meets the 500-line cap.
+  Final facade/TEMP guards are enabled and their four cap/marker negatives
+  reject. Source ownership documentation and provider guidance name the new
+  production files. Typed getter forwarding has eager/cached/wrapper and
+  wrong-factory negatives in the main checker self-test.
+  `step7-*` versus latest `base4` passes: 172 affected identities, all six
+  manifest self-tests (107/316/384/195/173/128), no added analyzer diagnostics,
+  all 17 warning occurrences, CI format/allowlist, architecture/size/storage
+  checks and staged diffs. The sole removed original private-field info
+  remains the step-2 documented case. `step7-ci-behavior` passes with 3,187
+  successes and the same two observed known failures; neither known-failure
+  list nor frozen assertions/body fixtures is changed. All inputs were
+  staged before these stable tree-recording runs. Full gate 2 and a final
+  composition Linux replay follow on this committed code checkpoint.
+
 
 ## Found, not fixed
 

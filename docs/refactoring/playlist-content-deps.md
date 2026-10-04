@@ -258,3 +258,23 @@ Step 6: actual nine layout dependency records and every production binding revie
 | `_PlaylistContentViewScreenState._buildDesktopEpisodeCard` | `PlaylistContentDesktopEpisode` / `context`, `buildThumbnailPlaceholder`, `episode`, `episodeInfo`, `progress`, `isFinished`, `buildEpisodeMetadataRow`, `toggleWatchedState` | Original contexts, callback targets, flags and owner resources retained. |
 | `_PlaylistContentViewScreenState._buildEpisodeMetadataRow` | `PlaylistContentEpisodeMetadata` / `context` | Original contexts, callback targets, flags and owner resources retained. |
 | `_PlaylistContentViewScreenState._buildThumbnailPlaceholder` | `PlaylistContentEpisodeMetadata` / `context` | Original contexts, callback targets, flags and owner resources retained. |
+
+Step 7: actual CompositionDeps input record and all 24 section constructors reviewed before pinning. Each of the eight State-owned records is forwarded by reference. Item, nullable playback callback, context and mounted remain live State getter functions, forwarded without invoking, caching or wrapping them; setState remains the actual State tear-off. All slots are assigned before exposure. A comparison against committed step 6 proves exact AST token parity of all constructor bindings and their order after only the documented getter/owner forwarding substitutions. The seven registered callback groups keep direct same-instance tear-offs. No constructor starts any action.
+
+| Input | Facade binding | Factory forwarding |
+| --- | --- | --- |
+| `playlistItem` | `() => widget.playlistItem` | `_deps.playlistItem`, no invocation/copy/cache |
+| `onPlaybackStarted` | `() => widget.onPlaybackStarted` | `_deps.onPlaybackStarted`, no invocation/copy/cache |
+| `context` | `() => context` | `_deps.context`, live State getter |
+| `mounted` | `() => mounted` | `_deps.mounted`, live State getter |
+| `setState` | `setState` | `_deps.setState`, same State tear-off |
+| `catalogState` | `_catalog` | `_deps.catalogState`, same route-owned object |
+| `navigationState` | `_navigation` | `_deps.navigationState`, same route-owned object |
+| `focusState` | `_focus` | `_deps.focusState`, same route-owned object |
+| `seriesState` | `_series` | `_deps.seriesState`, same route-owned object |
+| `scrollState` | `_scroll` | `_deps.scrollState`, same route-owned object |
+| `ottState` | `_ott` | `_deps.ottState`, same route-owned object |
+| `searchState` | `_search` | `_deps.searchState`, same route-owned object |
+| `episodeState` | `_episode` | `_deps.episodeState`, same route-owned object |
+
+Every manifest entry keeps the step 1–6 owner/binding above; step 7 moves no original responsibility.
