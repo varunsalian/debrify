@@ -56,6 +56,14 @@
     "s._sections.engineLoading": "AddonHubEngineLoading",
     "_sections.engineActions": "AddonHubEngineActions",
     "s._sections.engineActions": "AddonHubEngineActions",
+    "_sections.installActions": "AddonHubInstallActions",
+    "s._sections.installActions": "AddonHubInstallActions",
+    "_sections.management": "AddonHubManagement",
+    "s._sections.management": "AddonHubManagement",
+    "_sections.menus": "AddonHubMenus",
+    "s._sections.menus": "AddonHubMenus",
+    "_sections.installedList": "AddonHubInstalledList",
+    "s._sections.installedList": "AddonHubInstalledList",
     "_l": "AddonHubEngineLoading",
     "s._l": "AddonHubEngineLoading"
   },
@@ -118,6 +126,22 @@
       "owner": "AddonHubEngineActions"
     },
     {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_install_actions.dart",
+      "owner": "AddonHubInstallActions"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_management.dart",
+      "owner": "AddonHubManagement"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_menus.dart",
+      "owner": "AddonHubMenus"
+    },
+    {
+      "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_list.dart",
+      "owner": "AddonHubInstalledList"
+    },
+    {
       "file": "lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_sections.dart",
       "owner": "AddonHubSections"
     }
@@ -150,12 +174,20 @@
     "_AddonHubScreenState": "$State",
     "AddonHubLoading": "$State._sections.loading",
     "AddonHubEngineLoading": "$State._sections.engineLoading",
-    "AddonHubEngineActions": "$State._sections.engineActions"
+    "AddonHubEngineActions": "$State._sections.engineActions",
+    "AddonHubInstallActions": "$State._sections.installActions",
+    "AddonHubManagement": "$State._sections.management",
+    "AddonHubMenus": "$State._sections.menus",
+    "AddonHubInstalledList": "$State._sections.installedList"
   },
   "callback_receiver_aliases": {
     "_sections.loading": "$State._sections.loading",
     "_sections.engineLoading": "$State._sections.engineLoading",
     "_sections.engineActions": "$State._sections.engineActions",
+    "_sections.installActions": "$State._sections.installActions",
+    "_sections.management": "$State._sections.management",
+    "_sections.menus": "$State._sections.menus",
+    "_sections.installedList": "$State._sections.installedList",
     "_l": "$State._sections.engineLoading"
   },
   "callback_closure_binding": true,
@@ -416,10 +448,26 @@
     ]
   ],
   "borrowed_member_aliases": {
-    "_deps.loadEngines": "_AddonHubScreenState._loadEngines"
+    "_deps.loadEngines": "_AddonHubScreenState._loadEngines",
+    "_deps.loadInstalled": "_AddonHubScreenState._loadInstalled",
+    "_deps.toggleAddon": "_AddonHubScreenState._toggleAddon",
+    "_deps.updateAddon": "_AddonHubScreenState._updateAddon",
+    "_deps.renameAddon": "_AddonHubScreenState._renameAddon",
+    "_deps.removeAddon": "_AddonHubScreenState._removeAddon",
+    "_deps.importJson": "_AddonHubScreenState._importJson",
+    "_deps.updateAll": "_AddonHubScreenState._updateAll",
+    "_deps.deleteAll": "_AddonHubScreenState._deleteAll"
   },
   "callback_member_aliases": {
-    "_deps.loadEngines": "_AddonHubScreenState._loadEngines"
+    "_deps.loadEngines": "_AddonHubScreenState._loadEngines",
+    "_deps.loadInstalled": "_AddonHubScreenState._loadInstalled",
+    "_deps.toggleAddon": "_AddonHubScreenState._toggleAddon",
+    "_deps.updateAddon": "_AddonHubScreenState._updateAddon",
+    "_deps.renameAddon": "_AddonHubScreenState._renameAddon",
+    "_deps.removeAddon": "_AddonHubScreenState._removeAddon",
+    "_deps.importJson": "_AddonHubScreenState._importJson",
+    "_deps.updateAll": "_AddonHubScreenState._updateAll",
+    "_deps.deleteAll": "_AddonHubScreenState._deleteAll"
   },
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in addon_hub_context_exceptions.json; original guards and statement order unchanged"
 }

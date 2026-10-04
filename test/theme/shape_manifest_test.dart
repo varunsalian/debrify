@@ -42,6 +42,10 @@ const Map<String, int> kShapeResidue = {
   'lib/features/addon_hub/presentation/addon_hub_options_sheet.dart': 0,
   'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_actions.dart':
       0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_install_actions.dart':
+      0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_menus.dart':
+      0,
   'lib/screens/addons/addon_hub_screen.dart': 2,
 
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_tiles.dart':
@@ -236,9 +240,13 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_engine_state.dart':
       0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_list.dart':
+      0,
   'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_installed_state.dart':
       0,
   'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_loading.dart':
+      0,
+  'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_management.dart':
       0,
   'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_market_state.dart':
       0,

@@ -787,6 +787,32 @@ committed tree**, reconciling each branch's approved additions.
   diagnostics; exact CI allowlist retains only its 12 existing warnings.
   Gate 1 now runs on the committed step-3 tree, with no untracked inputs.
 
+- Gate 1: committed `9f84dd5f`, tested tree
+  `c66dae0a97b14237bb95c74945812989bfb5a8fb`, no untracked inputs or tree
+  change. `gate1` versus original `base4` (`da6bc0b4`) PASS: 11,098 success,
+  13 failure, 28 error, 20 skipped; no added/missing/newly skipped identities,
+  no new failures or fixes. The unchanged historical `test_baseline.py` parser
+  is replayed over those recorded events and the original base4 events:
+  both return 1 with exactly the same 41 failures (32 absent from the stale
+  nine-entry historical list). Its list is never updated; the observed
+  identity comparison is the gate. Replay evidence and stable-tree envs stay
+  in `addon_hub/`; no second full-suite run is needed to reparse those events.
+- Step 4 moves install/URL/JSON actions, addon management, sheets/details/menu
+  actions and the metadata write into their scheduled sections. All 32
+  actual composition bindings and per-entry dependencies are reviewed;
+  live State getters, captured messengers/themes, dialog `ctx`, post-frame
+  install refocus and the previous metadata value stay at their original
+  sites. The committed-mode Update still passes `manifestUrl`; toggle/rename/
+  remove still pass `storageKey`. Facade: 1511 lines. No new formatting site
+  beyond the three already required in moved loading methods.
+
+- Step 4 verification: all ten manifests/self-tests and guards PASS
+  (`step4-checks.json`); strict original-symbol and whole diagnostic comparisons
+  report zero additions, exact CI analyzer allowlist PASS. All 129 affected
+  cases and their comparison to base4 PASS; macOS and strict Linux originals
+  pass unchanged (Linux 6/6). No characterization assertion or failure list
+  changes. Commit follows this verified batch.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
