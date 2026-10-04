@@ -1139,6 +1139,51 @@ including everything below.
   watched writes/season marks; post-playback MDBList refresh. Remote CI and
   Claude's union merge/integration full suite are pending; no branch is pushed.
 
+
+### Gate 2 — complete and stopped
+
+- Step 7 gate commit: `6a06266a`, tested tree
+  `fd9d6daea82b9fa9621a4694b97d5ad27bc15889`. `gate2` versus latest ORIGINAL
+  `base5` (`458ef7b6`, tree `fd9148268d9e8f609a15159e2f1f88ac747b0f9e`)
+  and accepted `gate1` (`c846cfe1`) both PASS: 11,178 successes, the same
+  13 failures, 28 errors and 20 skips. Zero new failures, missing identities,
+  missing suites, newly skipped, fixed or added identities. Both comparisons
+  and all env files are retained in the owned `episodes_panel/` namespace.
+- `gate2.env.json` records `paths: []`, only `--no-pub`, the matching SDK,
+  clean committed input, no untracked paths and no changes during execution.
+  Gate 2 passes on its first full run. Gate 1's two failed attempts and their
+  isolated retries remain separate evidence; its accepted full run also has
+  zero new failures. No assertion is removed/weakened, no baseline updated to
+  accept a regression and no golden rewritten by the extraction.
+- Completed commits: format/R `92339749`; characterization (b) `989718fa`;
+  step 0b `1f575f79` and original audit `61f4b046`; Linux originals `908edb00`;
+  step 1 `3b20807c`; step 2 `be61d048`; independent step 0b2 `af5a65a7`
+  (before step 3); step 3 `635e1b46`; step 4/gate 1 `c846cfe1`;
+  step 5 `86cbaaac`; step 6 `622427c4`; step 7/gate 2 `6a06266a`.
+  Every commit has the required Codex co-author trailer. The final evidence
+  commit changes this Progress documentation only; gate inputs remain named
+  above and their application/test/tool bytes remain the final implementation.
+- Final acceptance: 281-line facade (134 + 52 + 62 + 11 + 22), exact public
+  widget/lifecycle/public methods, all 22 unchanged importers compiling, all
+  destinations within 500, all 93 leaves/forwarders and every other manifest
+  passing with self-tests, real architecture/completion negatives passing,
+  all 85 characterization cases passing, five macOS and five strict Linux
+  originals matching, shape 7/facade 0, theme 238, no new diagnostics or lint
+  suppressions, actual permanent CI scopes and analyzer allowlist passing.
+- Conservative decisions remain recorded above: constructor exports preserve
+  private runtime types and strict lint; pinned borrowed accessors preserve
+  unbraced original statements; staged live getters expire in step 6;
+  optional partial stale-guard request counts remain `(S)`. The pre-existing
+  behaviors below are preserved, including cached target/auth mismatches,
+  progress races, missing `didUpdateWidget` and legacy text/localization.
+- Pending only: device/real-account checks listed in step 7, remote CI, and
+  Claude's semantic union merge of concurrent shared-file additions followed
+  by all manifests/checks and a full integration suite versus branch bases.
+  Work stayed in the dedicated episodes-panel worktree, with parser/kernel
+  caches owned here and evidence only in its namespace. No branch switch or
+  push. Authorized local steps 0 and 1–7 and both full-suite gates are done;
+  stop after reporting.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
