@@ -349,13 +349,23 @@ As in the merged-detail and spotlight plans, plus:
      existing command line and output stay byte-identical, proven by
      rerunning it.) Arguments: `--original` (revision; source path fixed to
      `lib/widgets/episodes_panel.dart`), `--formatted`, `--parser-package`,
-     `--output`. It compares whole-file scanner tokens after removing
-     AST-identified optional trailing commas from **each side's own** site
-     set and walks the opcodes allowing only `insert [',']` (each at a
-     formatted-side site) and `delete [',']` (each at an original-side
-     site, the collapsed collections); any `replace` or other token fails.
-     Expectations: exactly **37 inserted and 3 removed**, each listed by line,
-     AST node and owner. Negatives with this file's own text (each must
+     `--output`. It aligns the two files **through their mandatory-token streams**
+     (round-2 review: the inherited `SequenceMatcher` walk mis-aligns one
+     optional comma that the formatter moves across a closing parenthesis
+     near `_publishSeriesCompletion`, producing a spurious `)` insert/delete
+     pair). Procedure: remove AST-identified optional trailing commas from
+     **each side's own** site set; the remaining mandatory scanner-token
+     streams (comments and literals included) must be **exactly equal**,
+     else fail. Each removed optional comma is then anchored to the index
+     of the mandatory token it follows; formatted-side anchors absent on
+     the original side are insertions (each at a formatted-side AST site),
+     original-side anchors absent on the formatted side are removals (each
+     at an original-side site, the collapsed collections). A comma whose
+     anchor shifts counts as one removal plus one insertion and is listed
+     as a relocation. No other difference is accepted.
+     Expectations: exactly **38 inserted and 4 removed** (37/3 plus the one
+     relocation, listed separately), each listed by line, AST node and
+     owner. Negatives with this file's own text (each must
      occur exactly once, asserted before replacing): the dartdoc comment
      `The episode drill-down engine + UI` edited; a trailing comment
      appended; the literal `'catalog-ep-season'` edited; a non-optional
@@ -472,17 +482,23 @@ As in the merged-detail and spotlight plans, plus:
    `MaterialApp` + `AppThemeScope(AppThemes.legacy)` +
    `Scaffold`; `PlatformUtil.debugSetAndroidTvCached` reset in teardown;
    **unique addon ids per case** (`StremioService._seriesMetaCache` is
-   process-wide, 15 min TTL, no reset); **unique IMDb/native identities per
-   case** wherever a process-wide identity or lookup cache has no reset API
-   (services are not touched to add one): `TVMazeService._cache` /
-   `_seriesIdCache` (static, no clear) and any IMDb/native-id resolution
-   cache the step 0 deps report finds; the report lists each cache with
-   either the reset used or the uniqueness rule. **TVMaze routing:**
+   process-wide, 15 min TTL, no reset); **TVMaze reset:** the existing public
+   `TVMazeService.clearCache()` (clears `_cache`, `_seriesIdCache`, the
+   availability timestamp and the persistent `TVMazeCacheService` cache) runs
+   in every case's setup and teardown, inside the mocked environment after
+   profile/preferences initialization, so no availability or lookup state
+   carries between cases; unique IMDb/native identities per case are kept
+   as well. For any other IMDb/native-id resolution cache the step 0 deps
+   report finds, the report lists the reset used or the uniqueness rule
+   (services are not touched to add one). **TVMaze routing:**
    `GET /shows/1` → 200 (the availability probe; a blanket 404 would set the
    static `_isAvailable = false` for 5 minutes and skip the lookup), then
-   `GET /lookup/shows?imdb=<unique id>` → 404; every case or scene that
-   promises the 404 path asserts that lookup request in the log, so a
-   cached or "unavailable" short-circuit fails instead of passing silently.
+   `GET /lookup/shows?imdb=<unique id>` → 404. TVMaze expectations are
+   **per case/scene**: a case that performs thumbnail enrichment asserts the
+   probe and lookup requests in the log, so a cached or "unavailable"
+   short-circuit fails instead of passing silently; a case that never
+   reaches enrichment (e.g. the empty-season/unavailable branch, which
+   returns before it) asserts **zero** TVMaze requests.
    Recording host callbacks. Fake time
    mounted outside `runAsync`, IO inside; bounded pumps, no `pumpAndSettle`;
    schedule a frame after post-frame callbacks. Prove one fixture on (a)
@@ -523,10 +539,15 @@ As in the merged-detail and spotlight plans, plus:
    neither the thumbnail nor the `showImageUrl` poster fallback (2820,
    `show.poster` at 2105/2186/2418) yields a URL; the readiness check
    asserts no `CachedNetworkImage` in the tree has a non-null `imageUrl` and
-   no image host appears in the log. TVMaze as in the harness (`/shows/1`
-   200, `/lookup/shows?imdb=<unique id per scene>` 404, the lookup asserted
-   in the log; `TVMazeService._cache` has no reset, so identities are never
-   shared between scenes or with other tests). `AppThemes.legacy`, `en-US`,
+   no image host appears in the log. TVMaze as in the harness (`clearCache()` in setup and
+   teardown; `/shows/1` 200, `/lookup/shows?imdb=<unique id per scene>` 404).
+   Per-scene TVMaze expectation: the classic phone/TV, compact and options
+   scenes assert the probe and lookup in the log; the **unavailable** scene
+   asserts **zero** TVMaze requests (its empty-season branch returns before
+   thumbnail enrichment). Its fixture fails the addon meta **and** makes the
+   public Trakt fallback explicitly return an error/empty result (mocked
+   route asserted in the log), so the unavailable state is reached
+   deterministically. `AppThemes.legacy`, `en-US`,
    text scale 1.0, a fixed bounded pump count per scene (recorded). **Repeatability
    before extraction:** each scene is captured twice from (b) in separate
    `flutter test` processes and in reversed scene order; the two captures
