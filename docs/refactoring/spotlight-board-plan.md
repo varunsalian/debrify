@@ -534,9 +534,12 @@ As in the playlist and merged-detail plans, plus:
      over a `context` parameter, and `normalize` would map
      `cardState.context` onto a plain lexical `context`, hiding a swap. A
      config-scoped key (`bound_state_receivers`, here `cardState` for
-     `_buildCard` only) makes the guard recognise `<receiver>.context` and
-     `<receiver>.mounted` **before** normalization and count them as
-     `state-context-over-parameter`. Negatives replace the lexical
+     `_buildCard` only) makes the guard recognise `<receiver>.context` **before**
+     normalization and count it as `state-context-over-parameter` (the
+     prohibited substitution), while `<receiver>.mounted` counts as the
+     original State-mounted guard (`_buildCard` legitimately reads State
+     `mounted` at 3500 and 3506, recorded as `state-mounted: 2`). A positive
+     fixture preserves both mounted checks. Negatives replace the lexical
      `context` with `cardState.context` in `AppThemeScope.of(context)`,
      `context.findRenderObject()` and `Scrollable.ensureVisible(context, …)`;
      each must fail. Manifests without the key behave as today.
@@ -583,8 +586,11 @@ As in the playlist and merged-detail plans, plus:
      `cardState` and the injected `setState` tear-off compiles, under the
      strict config with no new diagnostics (in particular no
      `invalid_use_of_protected_member`). The probe also runs **the real
-     manifest checker** (`check_settings_moves.py` with this config and an
-     isolated `--parser-package`) over the probe tree, which must accept
+     manifest checker** through its CLI wrapper
+     (`python3 dev/tool/check_verbatim_moves.py --manifest
+     dev/tool/spotlight_board_manifest.tsv` with the Spotlight config, baseline
+     R, source, feature, an isolated `--parser-package` and `--self-test`;
+     `check_settings_moves.py` has no CLI entry point) over the probe tree, which must accept
      the header addition and reject each header negative. The evidence is
      kept and the branch discarded. Step 3 reruns the real checker on the
      real header. The view lands at step 3 with its first production
