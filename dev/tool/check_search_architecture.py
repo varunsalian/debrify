@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -59,6 +59,9 @@ EPISODES_PANEL_MODEL_IMPORTS = {
 }
 # Set to the measured completed facade at step 7 (at most 450).
 EPISODES_PANEL_FACADE_LIMIT = 281
+CATALOG_DETAIL_COMPLETE = True
+CATALOG_DETAIL_FACADE = "lib/screens/catalog_item_detail_screen.dart"
+CATALOG_DETAIL_BRIDGE = "lib/features/catalog_detail/presentation/legacy_catalog_detail/"
 MERGED_DETAIL_COMPLETE = True
 MERGED_DETAIL_FACADE = "lib/screens/merged_series_detail_screen.dart"
 MERGED_DETAIL_BRIDGE = "lib/features/merged_detail/presentation/legacy_merged_detail/"
@@ -378,6 +381,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     ADDON_HUB_BRIDGE,
     SPOTLIGHT_BOARD_BRIDGE,
     EPISODES_PANEL_BRIDGE,
+    CATALOG_DETAIL_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -511,6 +515,16 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the {EPISODES_PANEL_FACADE_LIMIT}-line episodes panel facade limit")
         if "TEMP(episodes_panel)" in source:
             problems.append("episodes panel temporary cross-call remains in the facade")
+    if relative.startswith("lib/features/catalog_detail/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line catalog-detail extraction limit")
+        if "TEMP(catalog_detail)" in source and (CATALOG_DETAIL_COMPLETE or not relative.startswith(CATALOG_DETAIL_BRIDGE)):
+            problems.append("temporary catalog-detail cross-call outside the staged legacy bridge")
+    if CATALOG_DETAIL_COMPLETE and relative == CATALOG_DETAIL_FACADE:
+        if lines > 360:
+            problems.append(f"{lines} lines exceeds the 360-line catalog-detail facade limit")
+        if "TEMP(catalog_detail)" in source:
+            problems.append("temporary catalog-detail cross-call remains in the facade")
     if relative.startswith("lib/features/merged_detail/"):
         if lines > 500:
             problems.append(f"{lines} lines exceeds the 500-line merged-detail extraction limit")
@@ -739,6 +753,12 @@ def violations(path: Path) -> list[str]:
                         problems.append("playlist content/cloud cross-feature import")
                 if own == "playlist_content" and target == PLAYLIST_CONTENT_FACADE:
                     problems.append("playlist content feature imports its facade")
+                if target == CATALOG_DETAIL_FACADE and relative != "lib/features/home/presentation/home_detail_presentation.dart":
+                    problems.append("feature imports the catalog-detail facade outside the existing Home caller")
+                if own == "catalog_detail" and not relative.startswith(CATALOG_DETAIL_BRIDGE) and target.startswith("lib/services/"):
+                    problems.append("catalog-detail service/storage import outside the legacy bridge")
+                if target.startswith("lib/features/") and {own, target.split("/")[2]} == {"catalog_detail", "merged_detail"}:
+                    problems.append("catalog-detail/merged-detail cross-feature import")
                 if own == "merged_detail" and target == MERGED_DETAIL_FACADE:
                     problems.append("merged-detail feature imports the detail facade")
                 if own == "merged_detail" and not relative.startswith(MERGED_DETAIL_BRIDGE) and target.startswith(("lib/services/", "lib/services/storage/")):
@@ -777,6 +797,8 @@ def main() -> int:
         paths.add(ROOT / DETAIL_SHOWCASE_FACADE)
     if EPISODES_PANEL_COMPLETE:
         paths.add(ROOT / EPISODES_PANEL_FACADE)
+    if CATALOG_DETAIL_COMPLETE:
+        paths.add(ROOT / CATALOG_DETAIL_FACADE)
     if MERGED_DETAIL_COMPLETE:
         paths.add(ROOT / MERGED_DETAIL_FACADE)
     if ADDON_HUB_COMPLETE:

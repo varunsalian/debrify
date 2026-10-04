@@ -1222,6 +1222,50 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/detail_showcase/presentation/showcase_universe.dart': 2,
   'lib/widgets/detail/showcase_parts.dart': 0,
   // End detail showcase.
+  'lib/screens/catalog_item_detail_screen.dart': 0,
+  'lib/features/catalog_detail/presentation/catalog_action_row.dart': 1,
+  'lib/features/catalog_detail/presentation/catalog_backdrop.dart': 0,
+  'lib/features/catalog_detail/presentation/catalog_cert_badge.dart': 1,
+  'lib/features/catalog_detail/presentation/catalog_description.dart': 0,
+  'lib/features/catalog_detail/presentation/catalog_genre_chip.dart': 1,
+  'lib/features/catalog_detail/presentation/catalog_glass_card.dart': 1,
+  'lib/features/catalog_detail/presentation/catalog_glass_icon_button.dart': 1,
+  'lib/features/catalog_detail/presentation/catalog_metacritic_badge.dart': 1,
+  'lib/features/catalog_detail/presentation/catalog_quick_actions.dart': 1,
+  'lib/features/catalog_detail/presentation/catalog_rec_card.dart': 1,
+  'lib/features/catalog_detail/presentation/catalog_reveal.dart': 0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_cast_avatar.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_action_layout.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_bound_sources.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_content_columns.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_credits_sections.dart':
+      8,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_hero_sections.dart':
+      7,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_primary_action.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_rail_sections.dart':
+      5,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_resources.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_root_layout.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_watchlist.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_mdblist_quick_actions.dart':
+      0,
+  'lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_simkl_quick_actions.dart':
+      1,
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(

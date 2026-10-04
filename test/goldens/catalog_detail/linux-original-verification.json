@@ -1,0 +1,28 @@
+{
+  "checkpoint_revision": "093f47075a8a0ba52add99ea299bfdcace2fcd9e",
+  "formatted_original_revision": "adc2e32e7127fb5109de14afa74c0daecfa4c184",
+  "execution_base": "881ed25073c9cac0f80c5ae650118a9bcdcb4d41",
+  "application_objects": {
+    "lib": "320c6c92cb57beff304555424c8f7cea0e1c338b",
+    "pubspec.yaml": "5f983ff8c68a01aef5c7a1ec393e677e7693591f",
+    "pubspec.lock": "e0ff9cca69c00ae69bb4dfe111c18a89547cec98"
+  },
+  "sha256": {
+    "test/goldens/catalog_detail/linux/desktop_series_wide.png": "0516bb401119c39d28e110337f3416059960c3d0629097b4de26cc1d3172cede",
+    "test/goldens/catalog_detail/linux/phone_movie_narrow.png": "441d33d50c1a41c05ec93ae53b3bd2a87a0a0f1d78399506340de7406be8a970",
+    "test/goldens/catalog_detail/linux/tv_movie_wide.png": "2158b179c360f3db81d573d556b306f807238a0fbf4aee042e3d352719c6967e",
+    "test/goldens/catalog_detail/linux/tv_series_resume.png": "eca39527d43585e9d022fc8a05538ed2a920ea5bbf52684fe067198cd36f12dd"
+  },
+  "provenance": "local Docker capture: image debrify-flutter:3.44.8 (linux/amd64, colima), clone /Users/varunbsalian/.cache/debrify-cat-linux at 093f4707, 2026-10-04T14:47:39Z; no GitHub run (Actions billing-blocked)",
+  "capture_and_strict_original_cases": 4,
+  "evidence_sha256": {
+    "linux-original-capture.txt": "4886b0b500a899289f513e17c1e042232a1767c7015e89e693d52bf786d917a4",
+    "linux-original-strict.txt": "cb3446f8923920e97dd96619f720ee2a280dca53ddbec3cbe7cd59fda59f9e82",
+    "linux-original-sha256.txt": "6869ef3991abda3255d4d9e954c8ceb67aab5bd9438352c3b869ea6dbf6f092f",
+    "linux-original-revision.txt": "0a1366d625e5b00bfe703b1b52ceb9c90f635ce17ce59b3eef6e9329031efc61",
+    "linux-original-format-revision.txt": "a44a412017eb0e1b8bc2590b97b9dc4ea30aea4848bedf538dc334717a079001",
+    "linux-original-run-url.txt": "03364a76e7700ca97a900c806ed86e7a2b30bdd663d9c5566777c802b976a68b",
+    "linux-capture-Dockerfile": "0b8d2c8f40551e61cefa4f5e9cf422d38f2f1ab30e6e6e3a8ed0f7e5d1d37413"
+  },
+  "verification": "PASS; local hashes and two-original objects verified; Linux execution supplied by Claude"
+}

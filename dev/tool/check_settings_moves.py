@@ -369,6 +369,11 @@ def normalize(values, rows, row=None):
             continue
         if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
+            # Config-scoped borrowed mixin callbacks have a frozen dependency
+            # field and composition binding, but no original owned declaration.
+            if (value in {'_deps', 'deps'}
+                    and target in CONFIG.get('dependency_callback_members', [])):
+                i += 2; continue
             getter_alias = CONFIG.get('live_getter_aliases', {}).get(target)
             if (getter_alias and target in live_getters
                     and values[i + 3:i + 5] == ['(', ')']):
@@ -376,7 +381,8 @@ def normalize(values, rows, row=None):
             borrowed = CONFIG.get('borrowed_resource_aliases', {}).get(target)
             if borrowed:
                 out.append(borrowed.split('.')[-1]); i += 3; continue
-            if target in mapped or target in {'mounted', 'setState', 'context'} | set(CONFIG.get('live_widget_getters', [])):
+            borrowed_live = set(CONFIG.get('borrowed_live_getter_members', [])) & live_getters
+            if target in mapped or target in borrowed_live or target in {'mounted', 'setState', 'context'} | set(CONFIG.get('live_widget_getters', [])):
                 if value in {'_deps', 'deps'} and target in live_getters and values[i + 3:i + 5] == ['(', ')']:
                     out.append(target); i += 5; continue
                 if target in {'mounted', 'context'} | set(CONFIG.get('live_widget_getters', [])) and values[i + 3:i + 5] == ['(', ')']:
@@ -424,7 +430,9 @@ def declaration_tokens(node, rows, row, *, original=False):
                 values[i + 2:i + 2] = ['layout', ',']
                 i += 2
             i += 1
-    if 'layout_body' in row['allowed_edits'] and values[:2] == ['@', 'override']:
+    if ('layout_body' in row['allowed_edits']
+            or (key in CONFIG.get('retained_override_bodies', [])
+                and 'retained_forwarder' in row['allowed_edits'].split(','))) and values[:2] == ['@', 'override']:
         del values[:2]
     return named_exception_tokens(values, row)
 
@@ -777,7 +785,17 @@ def all_nodes(parsed):
         for d in unit['declarations']:
             add((path, '', d['name']), d)
             for m in d['members']:
-                add((path, d['name'], m['name']), m)
+                # An explicitly pinned scaffold getter/setter pair shares a
+                # Dart name. Keep the physical setter tokens and give only that
+                # configured setter a distinct lookup key; other configs retain
+                # the original duplicate-declaration rejection.
+                setter_keys = [spec['key'] for spec in CONFIG.get('scaffold_setter_keys', [])
+                               if (path, d['name'], m['name']) ==
+                               (spec['file'], spec['owner'], spec['name'])
+                               and [t['text'] for t in m['tokens'] if not t['comment']][:1] == ['set']]
+                if len(setter_keys) > 1:
+                    raise ValueError('Duplicate scaffold setter key registration')
+                add((path, d['name'], setter_keys[0] if setter_keys else m['name']), m)
     return found
 
 

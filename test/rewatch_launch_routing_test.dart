@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/merged_detail_source.dart';
+import 'support/catalog_detail_source.dart';
 
 void main() {
   test(
@@ -12,7 +13,7 @@ void main() {
       ]) {
         final source = path == 'merged_series_detail_screen'
             ? mergedDetailSource()
-            : File('lib/screens/$path.dart').readAsStringSync();
+            : catalogDetailSource();
         for (final notifier in [
           'MovieProgressStorage.movieFinishedRevision',
           'MdblistService.instance.watchedRevision',
@@ -38,12 +39,22 @@ void main() {
             );
           } else {
             expect(
-              source,
-              contains('$notifier.addListener(_loadLocalMovieFinished)'),
+              catalogCompletionListenerSite(
+                source,
+                'initState',
+                notifier,
+                'addListener',
+              ),
+              isTrue,
             );
             expect(
-              source,
-              contains('$notifier.removeListener(_loadLocalMovieFinished)'),
+              catalogCompletionListenerSite(
+                source,
+                'dispose',
+                notifier,
+                'removeListener',
+              ),
+              isTrue,
             );
           }
         }
@@ -52,9 +63,12 @@ void main() {
     },
   );
   test('shared detail screens require restart capability before resetting', () {
-    final catalog = File(
-      'lib/screens/catalog_item_detail_screen.dart',
-    ).readAsStringSync();
+    final catalog = catalogDetailSource();
+    final primary = catalogOriginalMember(
+      '_CatalogItemDetailScreenState._playPrimary',
+    );
+    expect(primary, contains('if (restart == null'));
+    expect(primary, contains('await resetProgressForRewatch'));
     final action = catalog.substring(
       catalog.indexOf('Future<void> _playPrimary()'),
     );

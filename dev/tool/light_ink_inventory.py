@@ -65,6 +65,8 @@ PRIMARY = (
     'lib/features/debrid_downloads',
     'lib/screens/downloads_screen.dart',
     'lib/screens/catalog_item_detail_screen.dart',
+    'lib/features/catalog_detail/presentation/',
+    'lib/features/catalog_detail/presentation/legacy_catalog_detail/',
     'lib/screens/merged_series_detail_screen.dart',
     'lib/features/merged_detail/application/',
     'lib/features/merged_detail/presentation/',

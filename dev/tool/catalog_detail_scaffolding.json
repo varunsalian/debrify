@@ -1,0 +1,2381 @@
+{
+  "scaffolds": [
+    {
+      "file": "lib/screens/catalog_item_detail_screen.dart",
+      "owner": "_CatalogItemDetailScreenState",
+      "name": "_parts",
+      "tokens": [
+        "late",
+        "final",
+        "CatalogDetailParts",
+        "_parts",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/catalog_item_detail_screen.dart",
+      "owner": "_CatalogItemDetailScreenState",
+      "name": "_CatalogItemDetailScreenState",
+      "tokens": [
+        "_CatalogItemDetailScreenState",
+        "(",
+        ")",
+        "{",
+        "final",
+        "deps",
+        "=",
+        "CatalogDetailDependencies",
+        "(",
+        "context",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "context",
+        ",",
+        "mounted",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "mounted",
+        ",",
+        "setState",
+        ":",
+        "setState",
+        ",",
+        "item",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "item",
+        ",",
+        "isTelevision",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "isTelevision",
+        ",",
+        "showQuickPlay",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "showQuickPlay",
+        ",",
+        "onPlay",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "onPlay",
+        ",",
+        "onRewatch",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "onRewatch",
+        ",",
+        "onLoaderArt",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "onLoaderArt",
+        ",",
+        "resumeInfoLoader",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "resumeInfoLoader",
+        ",",
+        "onBrowse",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "onBrowse",
+        ",",
+        "onBrowsePrimaryEpisodeSources",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "onBrowsePrimaryEpisodeSources",
+        ",",
+        "enablePrimarySourcesHold",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "enablePrimarySourcesHold",
+        ",",
+        "traktMenuOptions",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "traktMenuOptions",
+        ",",
+        "onTraktAction",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "onTraktAction",
+        ",",
+        "simklMenuOptions",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "simklMenuOptions",
+        ",",
+        "onSimklAction",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "onSimklAction",
+        ",",
+        "mdblistMenuOptions",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "mdblistMenuOptions",
+        ",",
+        "onMdblistAction",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "onMdblistAction",
+        ",",
+        "simklStatusLoader",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "simklStatusLoader",
+        ",",
+        "recommendationsLoader",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "recommendationsLoader",
+        ",",
+        "onRecommendationTap",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "onRecommendationTap",
+        ",",
+        "metaEnricher",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "widget",
+        ".",
+        "metaEnricher",
+        ",",
+        "presentedItem",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "_item",
+        ",",
+        "metadataPreferences",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "metadataPreferences",
+        ",",
+        "refreshMetadataPresentation",
+        ":",
+        "refreshMetadataPresentation",
+        ",",
+        "revealController",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "_revealCtrl",
+        ",",
+        "hasBoundSource",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "_hasBoundSource",
+        ",",
+        "writeHasBoundSource",
+        ":",
+        "(",
+        "value",
+        ")",
+        "=>",
+        "_hasBoundSource",
+        "=",
+        "value",
+        ")",
+        ";",
+        "_parts",
+        "=",
+        "CatalogDetailParts",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "deps",
+        ".",
+        "parts",
+        "=",
+        "_parts",
+        ";",
+        "}"
+      ]
+    },
+    {
+      "file": "lib/screens/catalog_item_detail_screen.dart",
+      "owner": "_CatalogItemDetailScreenState",
+      "name": "_f",
+      "tokens": [
+        "CatalogDetailResources",
+        "get",
+        "_f",
+        "=>",
+        "_parts",
+        ".",
+        "resources",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/catalog_item_detail_screen.dart",
+      "owner": "_CatalogItemDetailScreenState",
+      "name": "_m",
+      "tokens": [
+        "CatalogDetailMetadata",
+        "get",
+        "_m",
+        "=>",
+        "_parts",
+        ".",
+        "metadata",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/catalog_item_detail_screen.dart",
+      "owner": "_CatalogItemDetailScreenState",
+      "name": "_w",
+      "tokens": [
+        "CatalogDetailWatchlist",
+        "get",
+        "_w",
+        "=>",
+        "_parts",
+        ".",
+        "watchlist",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/catalog_item_detail_screen.dart",
+      "owner": "_CatalogItemDetailScreenState",
+      "name": "_p",
+      "tokens": [
+        "CatalogDetailPrimaryAction",
+        "get",
+        "_p",
+        "=>",
+        "_parts",
+        ".",
+        "primaryAction",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/catalog_item_detail_screen.dart",
+      "owner": "_CatalogItemDetailScreenState",
+      "name": "_b",
+      "tokens": [
+        "CatalogDetailBoundSources",
+        "get",
+        "_b",
+        "=>",
+        "_parts",
+        ".",
+        "boundSources",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_quick_actions.dart",
+      "owner": "",
+      "name": "CatalogQuickActions",
+      "tokens": [
+        "typedef",
+        "CatalogQuickActions",
+        "=",
+        "_QuickActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_quick_actions.dart",
+      "owner": "",
+      "name": "catalogQuickActionsConstructor",
+      "tokens": [
+        "const",
+        "catalogQuickActionsConstructor",
+        "=",
+        "_QuickActions",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_quick_actions.dart",
+      "owner": "",
+      "name": "CatalogQuickAction",
+      "tokens": [
+        "typedef",
+        "CatalogQuickAction",
+        "=",
+        "_QuickAction",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_quick_actions.dart",
+      "owner": "",
+      "name": "catalogQuickActionConstructor",
+      "tokens": [
+        "const",
+        "catalogQuickActionConstructor",
+        "=",
+        "_QuickAction",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_action_row.dart",
+      "owner": "",
+      "name": "CatalogActionRow",
+      "tokens": [
+        "typedef",
+        "CatalogActionRow",
+        "=",
+        "_ActionRow",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_action_row.dart",
+      "owner": "",
+      "name": "catalogActionRowConstructor",
+      "tokens": [
+        "const",
+        "catalogActionRowConstructor",
+        "=",
+        "_ActionRow",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_cert_badge.dart",
+      "owner": "",
+      "name": "CatalogCertBadge",
+      "tokens": [
+        "typedef",
+        "CatalogCertBadge",
+        "=",
+        "_CertBadge",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_cert_badge.dart",
+      "owner": "",
+      "name": "catalogCertBadgeConstructor",
+      "tokens": [
+        "const",
+        "catalogCertBadgeConstructor",
+        "=",
+        "_CertBadge",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_rec_card.dart",
+      "owner": "",
+      "name": "CatalogRecCard",
+      "tokens": [
+        "typedef",
+        "CatalogRecCard",
+        "=",
+        "_RecCard",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_rec_card.dart",
+      "owner": "",
+      "name": "catalogRecCardConstructor",
+      "tokens": [
+        "const",
+        "catalogRecCardConstructor",
+        "=",
+        "_RecCard",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_description.dart",
+      "owner": "",
+      "name": "CatalogDescription",
+      "tokens": [
+        "typedef",
+        "CatalogDescription",
+        "=",
+        "_Description",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_description.dart",
+      "owner": "",
+      "name": "catalogDescriptionConstructor",
+      "tokens": [
+        "const",
+        "catalogDescriptionConstructor",
+        "=",
+        "_Description",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_backdrop.dart",
+      "owner": "",
+      "name": "CatalogBackdrop",
+      "tokens": [
+        "typedef",
+        "CatalogBackdrop",
+        "=",
+        "_Backdrop",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_backdrop.dart",
+      "owner": "",
+      "name": "catalogBackdropConstructor",
+      "tokens": [
+        "const",
+        "catalogBackdropConstructor",
+        "=",
+        "_Backdrop",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_genre_chip.dart",
+      "owner": "",
+      "name": "CatalogGenreChip",
+      "tokens": [
+        "typedef",
+        "CatalogGenreChip",
+        "=",
+        "_GenreChip",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_genre_chip.dart",
+      "owner": "",
+      "name": "catalogGenreChipConstructor",
+      "tokens": [
+        "const",
+        "catalogGenreChipConstructor",
+        "=",
+        "_GenreChip",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_metacritic_badge.dart",
+      "owner": "",
+      "name": "CatalogMetacriticBadge",
+      "tokens": [
+        "typedef",
+        "CatalogMetacriticBadge",
+        "=",
+        "_MetacriticBadge",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_metacritic_badge.dart",
+      "owner": "",
+      "name": "catalogMetacriticBadgeConstructor",
+      "tokens": [
+        "const",
+        "catalogMetacriticBadgeConstructor",
+        "=",
+        "_MetacriticBadge",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_glass_icon_button.dart",
+      "owner": "",
+      "name": "CatalogGlassIconButton",
+      "tokens": [
+        "typedef",
+        "CatalogGlassIconButton",
+        "=",
+        "_GlassIconButton",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_glass_icon_button.dart",
+      "owner": "",
+      "name": "catalogGlassIconButtonConstructor",
+      "tokens": [
+        "const",
+        "catalogGlassIconButtonConstructor",
+        "=",
+        "_GlassIconButton",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_reveal.dart",
+      "owner": "",
+      "name": "CatalogReveal",
+      "tokens": [
+        "typedef",
+        "CatalogReveal",
+        "=",
+        "_Reveal",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_reveal.dart",
+      "owner": "",
+      "name": "catalogRevealConstructor",
+      "tokens": [
+        "const",
+        "catalogRevealConstructor",
+        "=",
+        "_Reveal",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_glass_card.dart",
+      "owner": "",
+      "name": "CatalogGlassCard",
+      "tokens": [
+        "typedef",
+        "CatalogGlassCard",
+        "=",
+        "_GlassCard",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_glass_card.dart",
+      "owner": "",
+      "name": "catalogGlassCardConstructor",
+      "tokens": [
+        "const",
+        "catalogGlassCardConstructor",
+        "=",
+        "_GlassCard",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_primary_action.dart",
+      "owner": "CatalogDetailPrimaryAction",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "CatalogDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_primary_action.dart",
+      "owner": "CatalogDetailPrimaryAction",
+      "name": "CatalogDetailPrimaryAction",
+      "tokens": [
+        "CatalogDetailPrimaryAction",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_primary_action.dart",
+      "owner": "CatalogDetailPrimaryAction",
+      "name": "_p",
+      "tokens": [
+        "CatalogDetailPrimaryAction",
+        "get",
+        "_p",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "primaryAction",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_simkl_quick_actions.dart",
+      "owner": "",
+      "name": "CatalogSimklQuickActions",
+      "tokens": [
+        "typedef",
+        "CatalogSimklQuickActions",
+        "=",
+        "_SimklQuickActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_simkl_quick_actions.dart",
+      "owner": "",
+      "name": "catalogSimklQuickActionsConstructor",
+      "tokens": [
+        "const",
+        "catalogSimklQuickActionsConstructor",
+        "=",
+        "_SimklQuickActions",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "resources",
+      "tokens": [
+        "final",
+        "CatalogDetailResources",
+        "resources",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "metadata",
+      "tokens": [
+        "final",
+        "CatalogDetailMetadata",
+        "metadata",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "watchlist",
+      "tokens": [
+        "final",
+        "CatalogDetailWatchlist",
+        "watchlist",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "primaryAction",
+      "tokens": [
+        "final",
+        "CatalogDetailPrimaryAction",
+        "primaryAction",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "boundSources",
+      "tokens": [
+        "final",
+        "CatalogDetailBoundSources",
+        "boundSources",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "rootLayout",
+      "tokens": [
+        "final",
+        "CatalogDetailRootLayout",
+        "rootLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "contentColumns",
+      "tokens": [
+        "final",
+        "CatalogDetailContentColumns",
+        "contentColumns",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "heroSections",
+      "tokens": [
+        "final",
+        "CatalogDetailHeroSections",
+        "heroSections",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "creditsSections",
+      "tokens": [
+        "final",
+        "CatalogDetailCreditsSections",
+        "creditsSections",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "railSections",
+      "tokens": [
+        "final",
+        "CatalogDetailRailSections",
+        "railSections",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "actionLayout",
+      "tokens": [
+        "final",
+        "CatalogDetailActionLayout",
+        "actionLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_parts.dart",
+      "owner": "CatalogDetailParts",
+      "name": "CatalogDetailParts",
+      "tokens": [
+        "CatalogDetailParts",
+        "(",
+        "CatalogDetailDependencies",
+        "deps",
+        ")",
+        ":",
+        "resources",
+        "=",
+        "CatalogDetailResources",
+        "(",
+        ")",
+        ",",
+        "metadata",
+        "=",
+        "CatalogDetailMetadata",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "watchlist",
+        "=",
+        "CatalogDetailWatchlist",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "primaryAction",
+        "=",
+        "CatalogDetailPrimaryAction",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "boundSources",
+        "=",
+        "CatalogDetailBoundSources",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "rootLayout",
+        "=",
+        "CatalogDetailRootLayout",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "contentColumns",
+        "=",
+        "CatalogDetailContentColumns",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "heroSections",
+        "=",
+        "CatalogDetailHeroSections",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "creditsSections",
+        "=",
+        "CatalogDetailCreditsSections",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "railSections",
+        "=",
+        "CatalogDetailRailSections",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "actionLayout",
+        "=",
+        "CatalogDetailActionLayout",
+        "(",
+        "deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_mdblist_quick_actions.dart",
+      "owner": "",
+      "name": "CatalogMdblistQuickActions",
+      "tokens": [
+        "typedef",
+        "CatalogMdblistQuickActions",
+        "=",
+        "_MdblistQuickActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_mdblist_quick_actions.dart",
+      "owner": "",
+      "name": "catalogMdblistQuickActionsConstructor",
+      "tokens": [
+        "const",
+        "catalogMdblistQuickActionsConstructor",
+        "=",
+        "_MdblistQuickActions",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_root_layout.dart",
+      "owner": "CatalogDetailRootLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "CatalogDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_root_layout.dart",
+      "owner": "CatalogDetailRootLayout",
+      "name": "CatalogDetailRootLayout",
+      "tokens": [
+        "CatalogDetailRootLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_root_layout.dart",
+      "owner": "CatalogDetailRootLayout",
+      "name": "_f",
+      "tokens": [
+        "CatalogDetailResources",
+        "get",
+        "_f",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "resources",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_root_layout.dart",
+      "owner": "CatalogDetailRootLayout",
+      "name": "_m",
+      "tokens": [
+        "CatalogDetailMetadata",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadata",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_root_layout.dart",
+      "owner": "CatalogDetailRootLayout",
+      "name": "_co",
+      "tokens": [
+        "CatalogDetailContentColumns",
+        "get",
+        "_co",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "contentColumns",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_bound_sources.dart",
+      "owner": "CatalogDetailBoundSources",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "CatalogDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_bound_sources.dart",
+      "owner": "CatalogDetailBoundSources",
+      "name": "CatalogDetailBoundSources",
+      "tokens": [
+        "CatalogDetailBoundSources",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_bound_sources.dart",
+      "owner": "CatalogDetailBoundSources",
+      "name": "_p",
+      "tokens": [
+        "CatalogDetailPrimaryAction",
+        "get",
+        "_p",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "primaryAction",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "parts",
+      "tokens": [
+        "late",
+        "final",
+        "CatalogDetailParts",
+        "parts",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "context",
+      "tokens": [
+        "final",
+        "BuildContext",
+        "Function",
+        "(",
+        ")",
+        "context",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "mounted",
+      "tokens": [
+        "final",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "mounted",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "presentedItem",
+      "tokens": [
+        "final",
+        "StremioMeta",
+        "Function",
+        "(",
+        ")",
+        "presentedItem",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "metadataPreferences",
+      "tokens": [
+        "final",
+        "MetadataPreferences",
+        "Function",
+        "(",
+        ")",
+        "metadataPreferences",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "item",
+      "tokens": [
+        "final",
+        "StremioMeta",
+        "Function",
+        "(",
+        ")",
+        "item",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "isTelevision",
+      "tokens": [
+        "final",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "isTelevision",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "showQuickPlay",
+      "tokens": [
+        "final",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "showQuickPlay",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "onPlay",
+      "tokens": [
+        "final",
+        "VoidCallback",
+        "Function",
+        "(",
+        ")",
+        "onPlay",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "onRewatch",
+      "tokens": [
+        "final",
+        "VoidCallback",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "onRewatch",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "onLoaderArt",
+      "tokens": [
+        "final",
+        "ValueChanged",
+        "<",
+        "PlayLoaderArt",
+        ">",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "onLoaderArt",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "resumeInfoLoader",
+      "tokens": [
+        "final",
+        "Future",
+        "<",
+        "(",
+        "{",
+        "bool",
+        "started",
+        ",",
+        "int",
+        "?",
+        "season",
+        ",",
+        "int",
+        "?",
+        "episode",
+        "}",
+        ")",
+        ">",
+        "Function",
+        "(",
+        ")",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "resumeInfoLoader",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "onBrowse",
+      "tokens": [
+        "final",
+        "VoidCallback",
+        "Function",
+        "(",
+        ")",
+        "onBrowse",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "onBrowsePrimaryEpisodeSources",
+      "tokens": [
+        "final",
+        "Future",
+        "<",
+        "void",
+        ">",
+        "Function",
+        "(",
+        ")",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "onBrowsePrimaryEpisodeSources",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "enablePrimarySourcesHold",
+      "tokens": [
+        "final",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "enablePrimarySourcesHold",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "traktMenuOptions",
+      "tokens": [
+        "final",
+        "List",
+        "<",
+        "TraktMenuOption",
+        ">",
+        "Function",
+        "(",
+        ")",
+        "traktMenuOptions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "onTraktAction",
+      "tokens": [
+        "final",
+        "void",
+        "Function",
+        "(",
+        "TraktItemMenuAction",
+        "action",
+        ")",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "onTraktAction",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "simklMenuOptions",
+      "tokens": [
+        "final",
+        "List",
+        "<",
+        "SimklMenuOption",
+        ">",
+        "Function",
+        "(",
+        ")",
+        "simklMenuOptions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "onSimklAction",
+      "tokens": [
+        "final",
+        "void",
+        "Function",
+        "(",
+        "SimklItemMenuAction",
+        "action",
+        ")",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "onSimklAction",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "mdblistMenuOptions",
+      "tokens": [
+        "final",
+        "List",
+        "<",
+        "MdblistMenuOption",
+        ">",
+        "Function",
+        "(",
+        ")",
+        "mdblistMenuOptions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "onMdblistAction",
+      "tokens": [
+        "final",
+        "void",
+        "Function",
+        "(",
+        "MdblistItemMenuAction",
+        "action",
+        ")",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "onMdblistAction",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "simklStatusLoader",
+      "tokens": [
+        "final",
+        "Future",
+        "<",
+        "SimklTitleStatus",
+        "?",
+        ">",
+        "Function",
+        "(",
+        ")",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "simklStatusLoader",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "recommendationsLoader",
+      "tokens": [
+        "final",
+        "Future",
+        "<",
+        "List",
+        "<",
+        "StremioMeta",
+        ">",
+        ">",
+        "Function",
+        "(",
+        ")",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "recommendationsLoader",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "onRecommendationTap",
+      "tokens": [
+        "final",
+        "void",
+        "Function",
+        "(",
+        "StremioMeta",
+        "recommendation",
+        ")",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "onRecommendationTap",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "metaEnricher",
+      "tokens": [
+        "final",
+        "Future",
+        "<",
+        "StremioMeta",
+        "?",
+        ">",
+        "Function",
+        "(",
+        "String",
+        "imdbId",
+        ",",
+        "String",
+        "type",
+        ")",
+        "?",
+        "Function",
+        "(",
+        ")",
+        "metaEnricher",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "setState",
+      "tokens": [
+        "final",
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "setState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "refreshMetadataPresentation",
+      "tokens": [
+        "final",
+        "VoidCallback",
+        "refreshMetadataPresentation",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "revealController",
+      "tokens": [
+        "final",
+        "AnimationController",
+        "Function",
+        "(",
+        ")",
+        "revealController",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "_readHasBoundSource",
+      "tokens": [
+        "final",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "_readHasBoundSource",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "writeHasBoundSource",
+      "tokens": [
+        "final",
+        "void",
+        "Function",
+        "(",
+        "bool",
+        ")",
+        "writeHasBoundSource",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "revealCtrl",
+      "tokens": [
+        "AnimationController",
+        "get",
+        "revealCtrl",
+        "=>",
+        "revealController",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "hasBoundSource",
+      "tokens": [
+        "bool",
+        "get",
+        "hasBoundSource",
+        "=>",
+        "_readHasBoundSource",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "hasBoundSource=",
+      "tokens": [
+        "set",
+        "hasBoundSource",
+        "(",
+        "bool",
+        "value",
+        ")",
+        "=>",
+        "writeHasBoundSource",
+        "(",
+        "value",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_dependencies.dart",
+      "owner": "CatalogDetailDependencies",
+      "name": "CatalogDetailDependencies",
+      "tokens": [
+        "CatalogDetailDependencies",
+        "(",
+        "{",
+        "required",
+        "this",
+        ".",
+        "context",
+        ",",
+        "required",
+        "this",
+        ".",
+        "mounted",
+        ",",
+        "required",
+        "this",
+        ".",
+        "presentedItem",
+        ",",
+        "required",
+        "this",
+        ".",
+        "metadataPreferences",
+        ",",
+        "required",
+        "this",
+        ".",
+        "item",
+        ",",
+        "required",
+        "this",
+        ".",
+        "isTelevision",
+        ",",
+        "required",
+        "this",
+        ".",
+        "showQuickPlay",
+        ",",
+        "required",
+        "this",
+        ".",
+        "onPlay",
+        ",",
+        "required",
+        "this",
+        ".",
+        "onRewatch",
+        ",",
+        "required",
+        "this",
+        ".",
+        "onLoaderArt",
+        ",",
+        "required",
+        "this",
+        ".",
+        "resumeInfoLoader",
+        ",",
+        "required",
+        "this",
+        ".",
+        "onBrowse",
+        ",",
+        "required",
+        "this",
+        ".",
+        "onBrowsePrimaryEpisodeSources",
+        ",",
+        "required",
+        "this",
+        ".",
+        "enablePrimarySourcesHold",
+        ",",
+        "required",
+        "this",
+        ".",
+        "traktMenuOptions",
+        ",",
+        "required",
+        "this",
+        ".",
+        "onTraktAction",
+        ",",
+        "required",
+        "this",
+        ".",
+        "simklMenuOptions",
+        ",",
+        "required",
+        "this",
+        ".",
+        "onSimklAction",
+        ",",
+        "required",
+        "this",
+        ".",
+        "mdblistMenuOptions",
+        ",",
+        "required",
+        "this",
+        ".",
+        "onMdblistAction",
+        ",",
+        "required",
+        "this",
+        ".",
+        "simklStatusLoader",
+        ",",
+        "required",
+        "this",
+        ".",
+        "recommendationsLoader",
+        ",",
+        "required",
+        "this",
+        ".",
+        "onRecommendationTap",
+        ",",
+        "required",
+        "this",
+        ".",
+        "metaEnricher",
+        ",",
+        "required",
+        "this",
+        ".",
+        "setState",
+        ",",
+        "required",
+        "this",
+        ".",
+        "refreshMetadataPresentation",
+        ",",
+        "required",
+        "this",
+        ".",
+        "revealController",
+        ",",
+        "required",
+        "this",
+        ".",
+        "writeHasBoundSource",
+        ",",
+        "required",
+        "bool",
+        "Function",
+        "(",
+        ")",
+        "hasBoundSource",
+        "}",
+        ")",
+        ":",
+        "_readHasBoundSource",
+        "=",
+        "hasBoundSource",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_credits_sections.dart",
+      "owner": "CatalogDetailCreditsSections",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "CatalogDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_credits_sections.dart",
+      "owner": "CatalogDetailCreditsSections",
+      "name": "CatalogDetailCreditsSections",
+      "tokens": [
+        "CatalogDetailCreditsSections",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_credits_sections.dart",
+      "owner": "CatalogDetailCreditsSections",
+      "name": "_m",
+      "tokens": [
+        "CatalogDetailMetadata",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadata",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_credits_sections.dart",
+      "owner": "CatalogDetailCreditsSections",
+      "name": "_ro",
+      "tokens": [
+        "CatalogDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_hero_sections.dart",
+      "owner": "CatalogDetailHeroSections",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "CatalogDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_hero_sections.dart",
+      "owner": "CatalogDetailHeroSections",
+      "name": "CatalogDetailHeroSections",
+      "tokens": [
+        "CatalogDetailHeroSections",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_hero_sections.dart",
+      "owner": "CatalogDetailHeroSections",
+      "name": "_m",
+      "tokens": [
+        "CatalogDetailMetadata",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadata",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_hero_sections.dart",
+      "owner": "CatalogDetailHeroSections",
+      "name": "_ro",
+      "tokens": [
+        "CatalogDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_hero_sections.dart",
+      "owner": "CatalogDetailHeroSections",
+      "name": "_a",
+      "tokens": [
+        "CatalogDetailActionLayout",
+        "get",
+        "_a",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "actionLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_cast_avatar.dart",
+      "owner": "",
+      "name": "CatalogCastAvatar",
+      "tokens": [
+        "typedef",
+        "CatalogCastAvatar",
+        "=",
+        "_CastAvatar",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_cast_avatar.dart",
+      "owner": "",
+      "name": "catalogCastAvatarConstructor",
+      "tokens": [
+        "const",
+        "catalogCastAvatarConstructor",
+        "=",
+        "_CastAvatar",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_action_layout.dart",
+      "owner": "CatalogDetailActionLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "CatalogDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_action_layout.dart",
+      "owner": "CatalogDetailActionLayout",
+      "name": "CatalogDetailActionLayout",
+      "tokens": [
+        "CatalogDetailActionLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_action_layout.dart",
+      "owner": "CatalogDetailActionLayout",
+      "name": "_f",
+      "tokens": [
+        "CatalogDetailResources",
+        "get",
+        "_f",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "resources",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_action_layout.dart",
+      "owner": "CatalogDetailActionLayout",
+      "name": "_m",
+      "tokens": [
+        "CatalogDetailMetadata",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadata",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_action_layout.dart",
+      "owner": "CatalogDetailActionLayout",
+      "name": "_w",
+      "tokens": [
+        "CatalogDetailWatchlist",
+        "get",
+        "_w",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "watchlist",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_action_layout.dart",
+      "owner": "CatalogDetailActionLayout",
+      "name": "_p",
+      "tokens": [
+        "CatalogDetailPrimaryAction",
+        "get",
+        "_p",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "primaryAction",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_action_layout.dart",
+      "owner": "CatalogDetailActionLayout",
+      "name": "_b",
+      "tokens": [
+        "CatalogDetailBoundSources",
+        "get",
+        "_b",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "boundSources",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_action_layout.dart",
+      "owner": "CatalogDetailActionLayout",
+      "name": "_ro",
+      "tokens": [
+        "CatalogDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_content_columns.dart",
+      "owner": "CatalogDetailContentColumns",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "CatalogDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_content_columns.dart",
+      "owner": "CatalogDetailContentColumns",
+      "name": "CatalogDetailContentColumns",
+      "tokens": [
+        "CatalogDetailContentColumns",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_content_columns.dart",
+      "owner": "CatalogDetailContentColumns",
+      "name": "_m",
+      "tokens": [
+        "CatalogDetailMetadata",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadata",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_content_columns.dart",
+      "owner": "CatalogDetailContentColumns",
+      "name": "_ro",
+      "tokens": [
+        "CatalogDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_content_columns.dart",
+      "owner": "CatalogDetailContentColumns",
+      "name": "_he",
+      "tokens": [
+        "CatalogDetailHeroSections",
+        "get",
+        "_he",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "heroSections",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_content_columns.dart",
+      "owner": "CatalogDetailContentColumns",
+      "name": "_cr",
+      "tokens": [
+        "CatalogDetailCreditsSections",
+        "get",
+        "_cr",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "creditsSections",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_content_columns.dart",
+      "owner": "CatalogDetailContentColumns",
+      "name": "_ra",
+      "tokens": [
+        "CatalogDetailRailSections",
+        "get",
+        "_ra",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "railSections",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_content_columns.dart",
+      "owner": "CatalogDetailContentColumns",
+      "name": "_a",
+      "tokens": [
+        "CatalogDetailActionLayout",
+        "get",
+        "_a",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "actionLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_rail_sections.dart",
+      "owner": "CatalogDetailRailSections",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "CatalogDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_rail_sections.dart",
+      "owner": "CatalogDetailRailSections",
+      "name": "CatalogDetailRailSections",
+      "tokens": [
+        "CatalogDetailRailSections",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_rail_sections.dart",
+      "owner": "CatalogDetailRailSections",
+      "name": "_m",
+      "tokens": [
+        "CatalogDetailMetadata",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadata",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_rail_sections.dart",
+      "owner": "CatalogDetailRailSections",
+      "name": "_ro",
+      "tokens": [
+        "CatalogDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_watchlist.dart",
+      "owner": "CatalogDetailWatchlist",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "CatalogDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_watchlist.dart",
+      "owner": "CatalogDetailWatchlist",
+      "name": "CatalogDetailWatchlist",
+      "tokens": [
+        "CatalogDetailWatchlist",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart",
+      "owner": "CatalogDetailMetadata",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "CatalogDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart",
+      "owner": "CatalogDetailMetadata",
+      "name": "CatalogDetailMetadata",
+      "tokens": [
+        "CatalogDetailMetadata",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart",
+      "owner": "CatalogDetailMetadata",
+      "name": "mounted",
+      "tokens": [
+        "bool",
+        "get",
+        "mounted",
+        "=>",
+        "_deps",
+        ".",
+        "mounted",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_metadata.dart",
+      "owner": "CatalogDetailMetadata",
+      "name": "setState",
+      "tokens": [
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "get",
+        "setState",
+        "=>",
+        "_deps",
+        ".",
+        "setState",
+        ";"
+      ]
+    }
+  ]
+}

@@ -560,7 +560,403 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
 
 ## Progress
 
-(Not started.)
+- Execution base: `881ed25073c9cac0f80c5ae650118a9bcdcb4d41`, branch
+  `refactor/catalog-detail`, dedicated worktree only. Flutter 3.44.8 / Dart
+  3.12.2; first command `flutter pub get`, lockfile unchanged; no push or
+  branch switch. Evidence namespace `catalog_detail/`; parser and kernels
+  isolated under this worktree's `.dart_tool/catalog_detail_parser/`.
+- Untouched full baseline `catalog_detail/base`: 11,093 successes / 13
+  failures / 28 errors / 20 skips, stable committed tree
+  `b11d47e4c6824a9ed47202bf8f4dcac98509dba5`. Existing catalog hold cases all
+  pass; no new CI failure entries are authorized. Whole analyzer: 1,666
+  original diagnostics. The historical failure list is not the baseline.
+- Temporary oversized original: `lib/screens/catalog_item_detail_screen.dart`
+  retains all rendering, lifecycle, state, actions and private widgets until
+  the prescribed steps 1–5 extract them. Its format-only ceiling is 3,561;
+  step 6 enforces the final 360-line facade cap. This records retention,
+  remaining responsibilities and the extraction milestone before editing.
+- Format-only preparation preserves every application token, comment and
+  literal except the 15 AST-identified optional formatter commas. Only the
+  four formatter-broken catalog completion-listener assertions use the new
+  declaration-scoped helper; their notifier, operation and callback identity
+  remain exact. Every other catalog and merged assertion is retained.
+- Format proof PASS: 15 optional commas, token/comment/literal equality and
+  four scanner negatives; format idempotent. Listener guard fixture: 48/48
+  positives/negatives pass on unformatted and formatted originals; all three
+  unchanged rewatch guards pass. Root formatted analyzer: 1,667 diagnostics,
+  exactly the one accepted curly info added. Exact-import strict probe uses a
+  temporary local analysis config, restored after each run; 20 unformatted
+  versus 21 formatted diagnostics. Rejected package-import and symlink probes
+  remain evidence only and are never accepted as baselines.
+- Conservative decision: the single format-induced curly-braces info is
+  accepted by the exact user-approved rule/symbol/message identity; no braces,
+  suppression or info allowlist entry. `_simklStatus` remains untouched until
+  its private destination and both writers move together in step 3.
+
+
+- Step 0 original-code characterization: 73/73 pass in the owned detached
+  format-only original, recorded as `catalog_detail/original-characterization-final`
+  on tested tree `e5dded15496ebe241db83a9d3bc2ce23803a3083` (SDK unchanged,
+  no untracked inputs, no tree change during the run). `original-checkpoint-proof.json`
+  verifies the whole `lib/`, `pubspec.yaml` and lockfile objects equal the
+  formatted original and all 16 test/helper/pixel inputs still match that run.
+  There is no production seam. Tests observe rendered widgets, exact host
+  callbacks, stored rows, request counts and direct configured-TMDB transport.
+- Original negatives: `catalog_detail/original-mutations.json` records 39
+  assertion-rejected mutations covering all 73 new identities, zero uncovered.
+  Each negative records its tested tree, restores original production bytes and
+  preserves all five fixture/master image hashes. The interrupted autofocus run
+  was archived as incomplete, the original restored, and that negative rerun;
+  neither incomplete runs nor compile-error drafts count as accepted proof.
+- Four macOS masters captured against original code and replayed strictly:
+  TV movie wide, phone movie narrow, desktop series wide, TV series resume.
+  Readiness waits for backdrop decode at zero fake-clock time, then uses one
+  fixed 1.2 s reveal/fade timeline, named TV focus, no shimmer and a null accent.
+  Conservative fixture decision: explicit empty poster skips the original
+  cached accent decode; fixed bitmap artwork still exercises the backdrop.
+  Sparse enrichment's loader-art emissions are separately observed. Failed
+  cache/accent-readiness drafts are retained only as rejected evidence.
+- The LF manifest covers all 135 original leaves; the dependency report reviews
+  intended receivers, live host reads, resource owners and every entry's actual
+  wiring checkpoint before any scaffold is pinned. Actual moving-step wiring
+  remains pending. Catalog-only identity checks pin all eight listener receivers,
+  17 callback handoffs, nine raw host assignments and recommendation mapping;
+  real-config negatives independently exercise the resolver before whole-leaf
+  comparison. Other manifests retain their own configs and original baselines,
+  including merged detail at `21320ff9`.
+- `catalog_detail/base2` full suite: 11,166 successes / 13 failures / 28 errors /
+  20 skips. Comparison with `base-fmt` passes with exactly 73 passing additions,
+  no changed original identity, missing test or newly skipped test. Runner flags
+  are recorded separately (`--no-pub`); its full-suite paths list is empty.
+  Tested tree `176bae456cf23a5671a88e318c640674c3f516f7` is stable.
+  This was the latest catalog base at step 0; step 0b below replaces it for
+  both later gates. Gate 1 and gate 2 have not run yet. Every new concrete test and the three already-passing original
+  hold cases are on the CI list; the known-failure list is unchanged.
+- Step 0 inventories: original shape has 29 bare-radius sites and no tokens;
+  theme remains 238 sites (formatting alone raises its measured line total to
+  6,844); light-ink remains 919 total / 249 primary sites. Architecture, size,
+  storage map/bodies/keys/references and the CI format command plus the catalog
+  facade and every helper pass. Current original facade breakdown: 43 import /
+  blank lines, 106 public-widget / separator lines, 1,789 State lines and 1,623
+  private-widget / section-comment lines = 3,561. The final cap is still pending.
+  All source guards remain enforced; feature,
+  facade, shape and explicit-directory theme registrations land with step 1.
+- Step 0 analyzer closure: root comparison against `base-fmt-analyze.txt`
+  has zero added or removed diagnostics (1,667 total). CI-scoped analyzer plus
+  `check_analyzer_allowlist.py` passes all 12 exact pre-existing warning entries;
+  the seven new tests and four support helpers have no diagnostics. The exact-
+  import strict facade probe remains 21 original identities, zero additions;
+  its temporary analysis config is removed. Catalog `_simklStatus` warning is
+  deliberately outside CI scope until step 3 moves it with both writers and
+  adds its full-message destination allowlist entry in that same commit.
+- Step 0 checker closure: all 11 integrated manifests and their self-tests pass,
+  recorded in `catalog_detail/step0-manifests.json` with separate logs. Every
+  invocation uses the isolated parser; each existing manifest keeps its own
+  original/config (merged detail `21320ff9`), and only catalog uses the format
+  baseline. Catalog passes all 135 leaves plus independent callback, receiver,
+  live-read, lifecycle, lazy, mixin, co-location and comment negatives. The
+  final staged diff is LF-clean and contains no application change beyond the
+  already-committed formatting; all original assertions are retained.
+- Linux handoff script uses the exact named checkpoint and format-only original,
+  verifies their application objects match, captures in an owned detached
+  worktree and replays strict originals before copying four PNGs. `bash -n`
+  passes; it has no early-exit producer pipeline. At the step-0 checkpoint,
+  Linux originals were absent and step 0L and all moves remained pending. The
+  Linux-only missing-master skip existed solely for that checkpoint; step 0L
+  below removed it and the opt-out define in a separate provenance/asset commit.
+
+
+- Step 0L (`66025710`): four Linux original hashes and exact checkpoint/format application
+  objects verified from Claude's calibrated linux/amd64 Docker capture at
+  `093f4707`; supplied strict replay passed 4/4. Provenance and evidence hashes
+  are committed in `test/goldens/catalog_detail/linux-original-verification.json`.
+  Linux golden tests now require every master unconditionally: missing-master
+  skip and opt-out define removed. These four assets are committed separately.
+
+
+- Step 0b independent review (application remains format-only ORIGINAL):
+  five new executable cases cover initially saved watchlist state, an uncached
+  held parents-guide response, a fixture-served non-empty poster publishing a
+  non-null artwork accent, Back from a catalog above Cover without a
+  `didPopNext` resume read, and all three completion notifiers' `hasListeners`
+  becoming false after close. Existing listener source guards remain enforced.
+  A test-only dynamic getter reads Flutter's protected public listener probe on
+  the borrowed singleton instances; no production seam or analyzer suppression.
+- Conservative poster fixture decision: serve and decode the fixed PNG through
+  the recording HTTP fixture, then prime Flutter's exact 32 px image-cache key.
+  The unchanged production `DominantColorCache`, pixel extraction, theme
+  normalization and `ArtworkAccentScope` publication execute normally. Native
+  disk caching is outside this view-publication test; its stalled draft is not
+  parity evidence. Each poster URL and metadata id is unique to its fixture.
+- The existing held-unmount case now closes with zero fake-clock drain, asserts
+  its resume loader has started and remains pending, then releases both reads
+  before the 12 s timeout. All original assertions stay. The configured-TMDB
+  credits child also asserts `Configured Actor`. The full nine-loader invocation
+  order is explicitly class **S**, pinned by `initState`; the five recorded host
+  emissions are **O**, an observed asynchronous sequence. Private swallowed
+  post-dispose updates are not claimed observable from the no-error assertion.
+- Fifth macOS master: `tv_movie_rich`, captured only on ORIGINAL and replayed
+  strictly, includes fixture recommendations, cast, IMDb certificate/metascore,
+  quick actions and parents guide. Readiness requires each section; viewport
+  assertions ensure it is in the captured 1600 x 1500 surface. It uses the same
+  fixed 1.2 s timeline; all eight existing platform masters retain their bytes.
+  Rich Linux ORIGINAL is still pending; its test is strict and has no skip.
+- Step 0b original proof: 79/79 positive identities in
+  `catalog_detail/step0b-original-characterization-final-format`; 13 additional
+  assertion-rejected mutations in
+  `catalog_detail/step0b-final-original-mutations.json` cover all six new
+  identities, both strengthened cases, and the mounted-guard and loader-order
+  S contracts. Combined with unchanged step-0 negatives, all 79 identities are
+  covered. Mutation fixtures/pixels are immutable and production bytes restored.
+  `step0b-original-checkpoint-proof.json` records application object equality,
+  fixture hashes, capture provenance and stable original positive tree
+  `25bba9fed00eb4ccea7a809af52863fe3b88c43b`. The direct protected-getter draft
+  added three analyzer warnings; it was rejected, replaced by the test-only
+  probe, and all positives and negatives rerun on the final fixture bytes.
+- Rich Linux handoff: capture script resolves exact subjects via the first
+  matching `%H%x09%s` history row, rejecting substrings and avoiding producer
+  SIGPIPE under `pipefail`. It selects exact
+  `test(catalog): step 0b original-code review checkpoint`, verifies lib/pubspec
+  objects equal the format-only original, captures only the new rich master,
+  strictly replays all five, and verifies the existing four Linux hashes. New
+  evidence uses `linux-rich-original-*`; it copies only the rich PNG. Preserve
+  the separate Linux asset commit boundary after Claude supplies it.
+- Intermediate full-suite base `catalog_detail/base0b`: 11,172 successes /
+  13 failures / 28 errors / 20 skips, versus `base2` exactly six passing
+  additions and every previous identity/outcome unchanged; no missing test or
+  new skip. Runner flags are separately `--no-pub`, paths empty, tested tree
+  `0dc9e71fb050321285650c5b3d47b5f41385abf5` stable with no untracked inputs.
+  This pass precedes fixture normalization; the final base is recorded below.
+  `step0b-base-comparison.txt` and `step0b-base-verdict.json` retain the result.
+- Step 0b analyzer: root remains 1,667 identities, zero additions/removals;
+  CI allowlist matches all 12 existing entries; all eight characterization
+  files and six support helpers have zero diagnostics; strict catalog remains
+  the same 21 identities, zero additions/removals. The exact-import temporary
+  strict config is removed. Application objects remain identical to format-only
+  ORIGINAL, and the facade remains 3,561 lines with its recorded breakdown.
+- Step 0b checker closure: all eleven manifests and their self-tests pass with
+  their own configs/original baselines and the isolated parser. Architecture,
+  size, storage map/bodies/keys/references (including self-tests), theme and
+  light-ink checks pass with unchanged inventories; original shape is still
+  29 bare-radius sites / zero tokens. CI format plus facade, all six helpers
+  and the changed TMDB fixture text passes. That fixture's pre-existing compact
+  formatting was normalized; parser proof confirms unchanged declaration
+  tokens/comments/literals apart from formatter commas. Originals and all
+  thirteen negatives were rerun after normalization. Check commands/results
+  are in `step0b-checks.json`; resolver substring/first-match negatives and
+  Bash syntax pass. No CI failure or analyzer allowlist entry was added.
+- Full-suite candidate `base0b-final` after fixture normalization was rejected:
+  one additional teardown failure in unchanged
+  `iptv_catalog_refresh_service_test` (first movie search: download directory
+  still present). No failure-list change or assertion edit. All catalog cases
+  passed. The IPTV file then passed 12/12 here and 12/12 in ORIGINAL. Its test
+  and service bytes equal the execution base. Inferred timing risk: teardown's
+  resumed notification launches unawaited discovery of VOD/series/live, waits a
+  fixed 150 ms and does not await those discovered jobs; disposal cancels timers,
+  not a running download. This unchanged-slice risk is found, not fixed. The
+  rejected comparison is retained in `step0b-base-final-rejected.txt`.
+- **Latest catalog base:** `catalog_detail/base0b-final-rerun` after all final
+  fixture bytes: 11,172 successes / 13 failures / 28 errors / 20 skips. Versus
+  `base2`, exactly six passing additions and every old identity unchanged;
+  versus the intermediate `base0b`, identical outcomes. No missing/newly skipped
+  test. The IPTV first-search case passes again. Same default full suite with
+  flags separately `--no-pub`, paths empty; stable tested tree
+  `2ea453f3e96c3a8de209f0cb99954a3df83382af`, zero untracked inputs. Both later gates
+  compare against this base; gate 2 also against gate 1. Final evidence:
+  `step0b-base-final-comparison.txt` and `step0b-base-final-verdict.json`.
+  Steps 1–6 and both gates remain pending. Stop after the named step-0b checkpoint
+  for ORIGINAL rich Linux; no builders or application responsibilities moved.
+
+
+- Rich Linux prerequisite: `tv_movie_rich.png` verified against supplied SHA-256
+  `18cf134f91daec347378d896b6487af1791558a5df50f4a9b91027dfe14e52d6`; exact step-0b and format-only
+  application objects match. Supplied calibrated Docker strict replay is 5/5,
+  and the existing four PNGs are byte-identical. Provenance/evidence hashes are
+  in `linux-rich-original-verification.json`. Linux tests already require all
+  five masters unconditionally; no opt-out or skip is present. These assets and
+  verification are committed separately before step 1.
+
+- Step 1: moved the six leaf widget classes to their planned presentation files;
+  private names, constructors, runtime types, defaults and comments stay exact.
+  Actual production constructor sites use pinned typedefs; the six exact
+  constructor exports prevent new optional-parameter lint identities. All six
+  wiring rows reviewed. Destination sizes 34–48 lines; facade 3,369 lines.
+- Step 1 evidence: all 11 manifests/self-tests PASS with their own original
+  baselines/configs and worktree-local parser/kernel caches; catalog 135 leaves.
+  Architecture, sizes, storage, CI format, light-ink, scoped analyzer/12-warning
+  allowlist and strict per-symbol comparison PASS (21 ORIGINAL identities,
+  zero additions). Shape registers facade plus every destination, including
+  zeros, and totals 29; Classic details measures 238 sites. All 122 focused cases
+  in `catalog_detail/step1-focused` pass against `base0b-final-rerun`; all five
+  macOS and five calibrated Docker Linux goldens pass strict replay, unchanged
+  original PNG hashes. Source trees stay stable during both runner snapshots.
+- Conservative lint decision: root comparisons project only the four measured
+  ORIGINAL `prefer_const_constructors` infos from `formatted-strict.txt` onto
+  `base-fmt-analyze.txt`, because destination linting now exposes them. The
+  separate per-symbol strict checker still rejects every new identity; other
+  diagnostics retain file identity, with catalog-only relocation. No const,
+  braces, suppression or info allowlist change. The initial serial manifest
+  run's five completed results were reused on the identical staged source;
+  remaining independent manifests used separate local parser/kernel caches.
+
+- Step 1 commit: `ccb9d5cf`. Step 2: all remaining private widgets and their
+  States now live together at the planned destinations; `_kNetflixRed` stays
+  with ActionRow. Private runtime types, constructors/defaults, widget trees,
+  focus/hover lifecycles and callbacks are unchanged. Every moved wiring row
+  reviewed; only cross-library widget calls use exact typedefs/constructor
+  exports, including QuickAction's cross-file Simkl use. Facade 1,977 lines;
+  largest destination 389 lines. Service-typed widgets stay in the bridge.
+- Step 2 checks PASS: all 11 manifests/self-tests on their own originals,
+  catalog 135 leaves; structural/storage/format/theme/light-ink checks;
+  29 shape radii across facade and all destinations, 238 Classic sites;
+  scoped 12-warning allowlist and strict ORIGINAL identity comparison with
+  zero additions. All 122 focused cases pass against `base0b-final-rerun`,
+  including five strict macOS originals; five final strict Linux originals
+  pass with unchanged PNG hashes (`step2-final-linux-strict.env.json`).
+- Review caught AST identifier replacement entering documentation links before
+  step 2 committed. Restored every original comment byte and added catalog-only
+  `catalog_original_comments` pins for all 135 leaves plus a real-config
+  negative for `[_QuickActions]` becoming `[CatalogQuickActions]`. The final
+  comment/self-test checker passes; other configs have no new accepted edits.
+  Constructor call names in the callback config relocate to their pinned
+  aliases without changing identity/receiver/count assertions. Final Linux
+  replay was serialized after the focused run; the interrupted overlap is
+  non-authoritative evidence only. No golden was updated against moved code.
+
+- Step 2 commit: `f1be4d5b`. Step 3: resource, primary-action, watchlist and
+  bound-source owners are wired once per State. The constructor captures live
+  getters and tear-offs without evaluating widget/context, services or either
+  original late field. Focus/scroll allocation order and lifecycle ownership
+  remain exact. `_simklStatus` stays private with both writers in one library;
+  its full-message destination allowlist entry is included in this commit.
+  Every moved entry's receiver and original evaluation site were reviewed.
+  Facade 1,753 lines; all destinations below 500.
+- Step 3 evidence: all 11 real-config manifests/self-tests PASS with isolated
+  parsers and their own originals; catalog 135 leaves. Structural/storage/format
+  checks, shape 29, Classic theme 238, scoped allowlist and root comparison PASS.
+  Strict comparison has zero additions to the 21 ORIGINAL identities. All 122
+  focused cases pass against `base0b-final-rerun`; five macOS and five Linux
+  originals pass strictly with unchanged hashes and stable runner trees.
+  See `step3-checks.json` and `step3-final-linux-strict.env.json`.
+- Step 3 conservative decisions: short pinned owner getters keep existing guard
+  layout without adding braces. The original private `_simklStatus` identifier
+  needs no `this.` qualification. Rejected lint candidates remain evidence;
+  neither added diagnostics nor suppressions were accepted. A catalog-scoped
+  logical setter key distinguishes the exactly pinned borrowed-bound getter and
+  setter without changing tokens or another config's duplicate rejection; its
+  write-inversion negative passes. Original State comments outside member spans
+  are also pinned. The relocated source reader retains every rewatch assertion,
+  adds declaration-local marker assertions, and passes three source-guard tests
+  on ORIGINAL (`step3-original-source-guards-fixed`). Gate 1 follows from this
+  committed application tree, against the latest step-0b base.
+
+- Step 3 application commit: `01d89613`. **Full-suite gate 1 PASS** against
+  latest `catalog_detail/base0b-final-rerun`: exactly 11,172 successes / 13
+  failures / 28 errors / 20 skips; no new failures, missing tests, newly skipped
+  tests or changed old outcomes. Evidence `gate1.jsonl`, `gate1.env.json` and
+  `gate1-vs-base0b-final-rerun.txt`; clean committed tested tree
+  `85cddca114815dda8057f65e6fab8b83ca8d81cb`, no untracked inputs or tree drift.
+- Gate runner decision: both complete gates use full suite paths `[]` with
+  flags `--no-pub`, `--concurrency=2` recorded separately. Two rejected default
+  concurrency runs hit the unchanged Xtream 50k fixture's 30-second timeout;
+  current and ORIGINAL focused files pass 10/10 (case 11.1 / 13.6 seconds),
+  with byte-identical test/services/lockfile and catalog-only application diff.
+  The complete bounded-concurrency gate passes that case in 9.3 seconds.
+  Rejected runs and the incomplete concurrency-1 run remain non-authoritative
+  evidence; no timeout, assertion, baseline or failure-list change. A measured
+  one-suite rate over 1,099 files projected roughly an hour per gate, so two
+  concurrent suites balance resource contention and run duration. Investigation:
+  `gate1-xtream-timeout-investigation.json`. Gate 2 uses the same flags and
+  compares both the latest base and gate 1.
+
+- Gate 1 evidence commit: `154d6de0`. Step 4: the 18 metadata declarations move
+  together, including the interleaved recommendation method/doc, identity map,
+  profile/revision generations, loader-art emissions, parents guide and accent.
+  The facade retains its exact policy override as a forwarder and original
+  metadata getter. Every entry's actual dependency wiring was reviewed before
+  pinning. Facade 1,511 lines; metadata owner 265; all destinations below 500.
+- Step 4 checks PASS: all 11 manifests/self-tests on their own originals,
+  catalog 135 leaves; architecture, size, storage, CI format, shape 29, Classic
+  theme 238, light-ink, scoped allowlist and root analyzer comparison. Strict
+  comparison has zero additions; the accepted curly info relocates by identity.
+  All 122 focused identities pass against `base0b-final-rerun`; all five macOS
+  and five Linux originals pass strictly with unchanged hashes/stable trees.
+  Evidence `step4-checks.json`, `step4-final-linux-strict.env.json`.
+- Step 4 decisions: exactly pinned `mounted`/`setState` forwarding getters keep
+  long original guards on one line without braces or suppression; inversion and
+  wrapping negatives reject changes. Config-scoped borrowed-mixin callback and
+  retained-override-body handling preserve the exact callback binding and the
+  facade's original annotated signature; wrong receiver/wrapper/annotation
+  negatives pass. The rail fixture now mutates the complete moved callback
+  expression, with valid wrapper, alternate receiver and raw-host swaps; no
+  assertion was removed. Initial rejected lint/checker/fixture evidence remains.
+  The other ten passing manifest results were reused on unchanged inputs within
+  this step after the catalog-only fixture correction.
+
+- Step 4 commit: `90445004`. Step 5: all 27 rendering declarations are wired
+  into six cohesive owners (root/body, columns, hero, credits, rails, actions),
+  with the exact State build forwarder. Widget trees, raw host callbacks versus
+  mapped recommendation callbacks, context read sites, reveal timing, section
+  order, focus and scroll ownership stay exact. Every new wiring row reviewed
+  before scaffold pinning. Facade 320 lines; rendering owners 143–297; largest
+  destination remains 389. The below-800 facade size exception is removed.
+- Step 5 checks PASS: all 11 real-config manifests/self-tests with own baselines
+  and isolated parsers; all 135 catalog leaves and forwarders, original comment
+  bytes, structural/storage/format checks, shape 29, Classic sites 238,
+  light-ink, scoped warning allowlist and root comparison. Exactly the original
+  four const infos, accepted curly info and private-field warning remain;
+  strict additions zero. All 122 focused identities pass against the latest
+  base, and five macOS/five Linux originals pass strictly with unchanged hashes
+  and stable trees (`step5-checks.json`, `step5-final-linux-strict.env.json`).
+- Step 5 checker decisions: per-spec exact borrowed getter aliases preserve
+  the five raw host callback identities while every other config keeps its old
+  rule. Standalone same-type dependency-instance negatives map a real alternate
+  getter to another widget identity; wrapper, member, missing-invocation and
+  wrong-getter negatives also reject. The three inherited preference reads use
+  a catalog-only borrowed-live getter entry and exact invocation-count guard,
+  including missing-invocation/alternate-receiver negatives. Application wiring
+  was not changed to satisfy checker gaps; no assertions or diagnostics waived.
+
+- Step 5 commit: `005ea4c8`. Step 6: `CATALOG_DETAIL_COMPLETE = True`; every
+  other completion flag unchanged. CI formats/analyzes the facade and formats
+  all six catalog support helpers plus the configured child fixture. All paths
+  remain inside their commands, before `tee`. Twelve synthetic guard negatives
+  prove destination/facade caps, TEMP rejection, facade back-import rejection,
+  service/storage boundary, model-inclusive cross-import rejection in both
+  directions, and feature guards active with completion disabled
+  (`step6-guard-negatives.json`). No application cleanup or further move needed.
+- Final facade: **320 physical lines**. Imports/leading blank 23; public widget
+  including doc 105 (byte-identical); widget/State gap 1; composition/owner getters
+  41; retained metadata and late fields 12; lifecycle 91; forwarders 4; State
+  syntax/spacing 19; retained separator comments/spacing 24. Sum 320, no comment
+  deletion or compressed formatting (`final-facade-breakdown.json`). All 27
+  destinations are registered in shape, including zeros; maximum 389 lines.
+- Step 6 checks PASS: all 11 manifests/self-tests with own configs/originals
+  and isolated parser/kernel caches; catalog 135 leaves/forwarders; structural,
+  storage, actual CI scopes, shape 29, Classic theme 238, light-ink, scoped
+  allowlist and root analyzer comparison. Strict: the four original const infos,
+  one accepted curly info and private `_simklStatus` warning, zero additions.
+  All 122 focused identities pass against `base0b-final-rerun`; all five macOS
+  and five calibrated Linux originals pass strictly, unchanged hashes/stable
+  runner trees (`step6-checks.json`, `step6-final-linux-strict.env.json`).
+  Full-suite gate 2 follows from the clean committed completion checkpoint,
+  against both the latest catalog base and gate 1.
+
+- Step 6 completion commit: `70b6e892`. **Full-suite gate 2 PASS** against both
+  latest `catalog_detail/base0b-final-rerun` (tested tree
+  `2ea453f3e96c3a8de209f0cb99954a3df83382af`) and gate 1: exactly 11,172 successes /
+  13 failures / 28 errors / 20 skips; every old identity unchanged, no new
+  failures, missing tests, newly skipped tests or additions. Full suite paths
+  `[]`, flags `--no-pub`, `--concurrency=2`; same SDK as both references.
+  Clean committed tested tree `d88b19bb76b7b93f6e8fab0ab8ccf3ed1554cfba`, no
+  untracked inputs or tree drift. Evidence `gate2.jsonl`, `gate2.env.json`,
+  `gate2-vs-base0b-final-rerun.txt`, `gate2-vs-gate1.txt`. This final evidence
+  commit changes documentation only; gate-2 application/test/tool/CI inputs stay
+  byte-identical. All steps 0, 0L, 0b, 1–6 and both gates complete; stop here.
+- Pending: Android TV device D-pad/focus/hold-OK; real host playback handoffs
+  from all five callers and real tracker accounts; native/platform integration
+  checks and remote CI when Claude pushes. No push or branch switch performed.
+  All 24 found-not-fixed items below remain outside this move-only scope.
 
 ## Found, not fixed
 
@@ -600,3 +996,10 @@ All pre-existing; the extraction keeps each exactly.
 20. `_artworkAccent` is never recomputed after enrichment changes the poster.
 21. Only Home supplies `onRewatch`; elsewhere Rewatch shows as Play (by design).
 22. Analytics reports `'catalog_detail'` for movies and series alike.
+23. The unchanged IPTV first-search test has a teardown timing risk: resumed
+    discovery is unawaited and its fixed 150 ms wait/disposal does not await a
+    running download (original/current proofs and rejected baseline above).
+24. The unchanged Xtream 50k streaming fixture is sensitive to full-suite load:
+    default-concurrency gates timed out at 30 seconds, then failed interrupted
+    ingest cleanup. Original/current focused runs and the complete bounded-
+    concurrency gate pass; no production or test behavior was changed.

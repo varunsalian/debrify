@@ -139,11 +139,16 @@ def check_callback_identities(lookup, rows, source_path, config):
         retained_owner = config.get('type_renames', {}).get(owner, owner)
         return lookup[(source_path, retained_owner, name)]
 
-    def identity(expr, owner, *, getter=False):
+    def identity(expr, owner, *, getter=False, borrowed_getters=None):
         expr = list(expr)
         if expr[-1:] == ['!']:
             expr.pop()
         path = ''.join(expr)
+        # Exact per-spec dependency getter reads borrow a host callback. These
+        # aliases are separate from owned getter detection; all other specs and
+        # configs keep their direct-tear-off rule.
+        if path in (borrowed_getters or {}):
+            path = borrowed_getters[path]
         if getter and path in getter_aliases:
             path = getter_aliases[path]
         if not re.fullmatch(r'[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*', path):
@@ -303,7 +308,8 @@ def check_callback_identities(lookup, rows, source_path, config):
                                     or expr[end:end + 1] not in ([], [':'], [')'])):
                                 raise ValueError('conditional branch must be a direct tear-off: ' + target)
                             expr = expr[start:end]
-                        resolved.append(identity(expr, node['owner'], getter=is_getter))
+                        resolved.append(identity(expr, node['owner'], getter=is_getter,
+                                                 borrowed_getters=config.get('callback_borrowed_getters', {}).get(spec['name'], {})))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
         if 'expected_identity' in spec:
@@ -318,4 +324,7 @@ def check_callback_identities(lookup, rows, source_path, config):
             resolved.append(spec['expected_identity'])
         if resolved and len(set(resolved)) != 1:
             errors.append(f"Callback identity {spec['name']} differs: {resolved}")
+    if any(key.startswith('catalog_') for key in config):
+        from catalog_detail_callback_identity import check_contracts
+        errors.extend(check_contracts(lookup, rows, source_path, config))
     return errors

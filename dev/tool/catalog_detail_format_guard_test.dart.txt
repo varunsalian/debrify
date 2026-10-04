@@ -1,0 +1,100 @@
+import 'dart:io';
+import 'package:flutter_test/flutter_test.dart';
+import '../../test/support/catalog_detail_source.dart';
+
+void main() {
+  for (final path in [
+    '.dart_tool/catalog_detail_step0/unformatted-original.txt',
+    'lib/screens/catalog_item_detail_screen.dart',
+  ]) {
+    final source = File(path).readAsStringSync();
+    for (final notifier in [
+      'MovieProgressStorage.movieFinishedRevision',
+      'MdblistService.instance.watchedRevision',
+    ]) {
+      for (final (declaration, operation) in [
+        ('initState', 'addListener'),
+        ('dispose', 'removeListener'),
+      ]) {
+        final expression = notifier
+            .split('.')
+            .map(RegExp.escape)
+            .join(r'\s*\.\s*');
+        final pattern = RegExp(
+          expression +
+              r'\s*\.\s*' +
+              operation +
+              r'\s*\(\s*_loadLocalMovieFinished\s*,?\s*\)\s*;',
+        );
+        final match = pattern.allMatches(source).single;
+        test('$path $notifier $operation exact lifecycle positive', () {
+          expect(
+            catalogCompletionListenerSite(
+              source,
+              declaration,
+              notifier,
+              operation,
+            ),
+            isTrue,
+          );
+        });
+        for (final mutation in [
+          'delete',
+          'wrapper',
+          'notifier swap',
+          'callback swap',
+          'move outside declaration',
+        ]) {
+          test('$path $notifier $operation rejects $mutation', () {
+            final site = source.substring(match.start, match.end);
+            var changed = switch (mutation) {
+              'delete' => source.replaceRange(match.start, match.end, ''),
+              'wrapper' => source.replaceRange(
+                match.start,
+                match.end,
+                site.replaceFirst(
+                  '_loadLocalMovieFinished',
+                  '() => _loadLocalMovieFinished()',
+                ),
+              ),
+              'notifier swap' => source.replaceRange(
+                match.start,
+                match.end,
+                site.replaceFirst(
+                  notifier,
+                  notifier.startsWith('Movie')
+                      ? 'MdblistService.instance.watchedRevision'
+                      : 'MovieProgressStorage.movieFinishedRevision',
+                ),
+              ),
+              'callback swap' => source.replaceRange(
+                match.start,
+                match.end,
+                site.replaceFirst(
+                  '_loadLocalMovieFinished',
+                  '_onMovieProgressPolicyChanged',
+                ),
+              ),
+              _ => source.replaceRange(match.start, match.end, ''),
+            };
+            if (mutation == 'move outside declaration') {
+              changed = changed.replaceFirst(
+                '  void initState()',
+                '  void misplaced() {\n    $site\n  }\n  void initState()',
+              );
+            }
+            expect(
+              catalogCompletionListenerSite(
+                changed,
+                declaration,
+                notifier,
+                operation,
+              ),
+              isFalse,
+            );
+          });
+        }
+      }
+    }
+  }
+}
