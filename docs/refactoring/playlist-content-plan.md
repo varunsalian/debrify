@@ -18,14 +18,11 @@ integrates it and captures the Linux goldens. Commit after every step; never
 push. Gate commits contain `gate`. Remote CI stays pending until Claude
 pushes, so every step runs the local CI-equivalent commands.
 
-**Execution prerequisite (parallel worktrees).** `suite_evidence.py check`
-writes a fixed `/tmp/suite_evidence_check.jsonl` (and `.stderr`)
-(`dev/tool/suite_evidence.py:293`, `flutter_test_json` at 145), so parallel
-worktrees overwrite each other's results; `TMPDIR` does not change it.
-Before parallel execution starts, Claude either lands invocation-specific
-output paths in `suite_evidence.py` on `refactor/codebase`, or such checks
-are serialized through a shared lock. Execution does not start otherwise
-and does not edit the tool itself.
+**Execution prerequisite (parallel worktrees), satisfied before execution.**
+Commit `4f3ee3b3` replaced the old fixed `/tmp/suite_evidence_check.jsonl`
+outputs with invocation-specific filenames. Parallel `check` runs are safe;
+this execution copies its own raw result and tree/SDK environment evidence
+into the `playlist_content/` namespace without changing the shared tool.
 
 ## Goal
 
@@ -829,10 +826,48 @@ identities against the observed branch baselines and approved additions.
   staged before these stable tree-recording runs. Full gate 2 and a final
   composition Linux replay follow on this committed code checkpoint.
 
+- Gate 2: committed step 7 `2e520a3a`, tree
+  `b98cdf73be4b7783f0ab133dcfc4606a168ab84c`; final `gate2` versus latest
+  `base4` **and gate 1 PASS**: identical complete outcome dictionaries,
+  10,736 successes / 13 failures / 28 errors / 20 skips, zero added/missing
+  identities, changed outcomes or newly skipped cases. Both gates ran on
+  committed trees; final gate has no untracked inputs or changes during run.
+- Gate 2's first attempt is preserved as `gate2-attempt1`, including its
+  failing comparison. Its sole new error was the unrelated member PIN
+  recovery dialog assertion. The test waits a fixed six × 30 ms wall-time
+  rounds. Its complete 116-file project import closure is byte-identical to
+  original `6e23a3c5`; isolated original and current replays both pass.
+  The full repeat after our Docker job completed restores every baseline
+  outcome. This is consistent with an existing timing limitation; no test,
+  production code or known-failure list was changed or accepted as a new
+  baseline. `gate2-pin-input-audit.json` records all 116 hashes.
+- Final step-7 Linux composition replay also passes all five strict original
+  PNG comparisons. `step7-linux-moved` records the exact committed archive,
+  calibrated image and matching SDK, with every lib/test file and lockfile
+  unchanged. The five macOS originals and five imported Linux PNG hashes
+  remain frozen, as does `playlist_content_original_bodies.json`. Step 0b
+  changed no golden scenes/helpers/shared fixtures; no recapture is needed.
+- `final-proof.json` fingerprints final source, tests, assets and checker
+  inputs and audits both gates against `base4`. This final report commit
+  changes Progress/evidence documentation only; tested application, tests,
+  tools, assets and dependencies remain exactly `2e520a3a`.
+- Completion: steps 0–7, review step 0b, both full gates and both host golden
+  comparisons are complete. Branch remains `refactor/playlist-content`; no
+  push or branch switch. Only this worktree and its explicitly authorized
+  nested original-code proof were used; shared metadata writes use only
+  `refactor-evidence/playlist_content/`. Pending: physical Android TV D-pad
+  hold/repeat/focus/hint, seven real provider launch sites with both public
+  callers and native/external/DeoVR successful-return cleanup, real accounts,
+  remote CI (no push), and Claude's merged-tree integration checks/full suite
+  including any newly integrated manifest. Stop after this report.
+
 
 ## Found, not fixed
 
-All pre-existing; the extraction keeps each exactly.
+All application findings are pre-existing; the extraction keeps each exactly.
+The unchanged PIN test also exposed its fixed-wait timing limitation once
+during gate 2; the failed attempt and passing original/current/full replays
+are preserved above. No test timing fix is included.
 - **Mobile missing-thumbnail placeholder:** the original 500-pixel layout
   can overflow vertically by 5 pixels under the real app theme. Preserved;
   completed-metadata goldens use deterministic thumbnails.
