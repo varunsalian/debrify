@@ -850,6 +850,25 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   on ORIGINAL (`step3-original-source-guards-fixed`). Gate 1 follows from this
   committed application tree, against the latest step-0b base.
 
+- Step 3 application commit: `01d89613`. **Full-suite gate 1 PASS** against
+  latest `catalog_detail/base0b-final-rerun`: exactly 11,172 successes / 13
+  failures / 28 errors / 20 skips; no new failures, missing tests, newly skipped
+  tests or changed old outcomes. Evidence `gate1.jsonl`, `gate1.env.json` and
+  `gate1-vs-base0b-final-rerun.txt`; clean committed tested tree
+  `85cddca114815dda8057f65e6fab8b83ca8d81cb`, no untracked inputs or tree drift.
+- Gate runner decision: both complete gates use full suite paths `[]` with
+  flags `--no-pub`, `--concurrency=2` recorded separately. Two rejected default
+  concurrency runs hit the unchanged Xtream 50k fixture's 30-second timeout;
+  current and ORIGINAL focused files pass 10/10 (case 11.1 / 13.6 seconds),
+  with byte-identical test/services/lockfile and catalog-only application diff.
+  The complete bounded-concurrency gate passes that case in 9.3 seconds.
+  Rejected runs and the incomplete concurrency-1 run remain non-authoritative
+  evidence; no timeout, assertion, baseline or failure-list change. A measured
+  one-suite rate over 1,099 files projected roughly an hour per gate, so two
+  concurrent suites balance resource contention and run duration. Investigation:
+  `gate1-xtream-timeout-investigation.json`. Gate 2 uses the same flags and
+  compares both the latest base and gate 1.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
@@ -888,3 +907,10 @@ All pre-existing; the extraction keeps each exactly.
 20. `_artworkAccent` is never recomputed after enrichment changes the poster.
 21. Only Home supplies `onRewatch`; elsewhere Rewatch shows as Play (by design).
 22. Analytics reports `'catalog_detail'` for movies and series alike.
+23. The unchanged IPTV first-search test has a teardown timing risk: resumed
+    discovery is unawaited and its fixed 150 ms wait/disposal does not await a
+    running download (original/current proofs and rejected baseline above).
+24. The unchanged Xtream 50k streaming fixture is sensitive to full-suite load:
+    default-concurrency gates timed out at 30 seconds, then failed interrupted
+    ingest cleanup. Original/current focused runs and the complete bounded-
+    concurrency gate pass; no production or test behavior was changed.
