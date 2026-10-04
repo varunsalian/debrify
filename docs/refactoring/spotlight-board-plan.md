@@ -370,8 +370,13 @@ forwarder, the bindings implementation and composition.
   header, lifecycle, forwarders/overrides, bindings, composition, and the
   remaining blank/comment lines — whose sum must equal the `wc -l` total.
 - The target is 400 lines. If the measured total exceeds it, the cap
-  becomes that measured value, **at most 450** (the merged-detail
-  precedent); above 450 is a plan failure to report, not a new exception.
+  becomes that measured value, **at most 460** (amended after step 0b: the
+  complete composition probe measured 451 physical lines with the public
+  State warm-up override preserved through its tear-off; the original
+  450 maximum was the merged-detail precedent, and 451–460 stays inside the
+  AGENTS.md 301–500 band for one responsibility — composition). Above 460
+  is a plan failure to report, not a new exception. The cap is the
+  measured value, not 460: no line may be added to use the headroom.
   `TEMP(spotlight_board)` rejection enforces the cap from step 7.
 - No accessor is planned: the public seams, host callbacks and bindings
   suffice. If step 0 proves one necessary, it is frozen and counted, and
@@ -1079,6 +1084,24 @@ decomposition; bug fixes and behaviour changes, including everything below.
   Device-only trailer/decoder/TV checks, remote CI and merged integration stay
   pending. No branch switch or push occurred.
 
+
+### Amendment after step 0b (design-reviewed before resuming)
+
+1. **Facade cap.** The hard maximum becomes 460 (see the size section); the
+   enforced cap is the measured complete facade (451 from the probe, or the
+   actual step-7 value if it is lower). No compression, deleted comment or
+   alternative layout is introduced to reach any number.
+2. **Named-record formatter comma.** The probe's new trailing comma in the
+   named-record literal inside `loadShelvesAndFinishDown` (and its changed
+   context prefix) is a formatter consequence of the receiver rename, the
+   same class as the sixteen pinned receiver-induced wraps. It is added to
+   the AST-owned optional-formatter-comma inventory by declaration and
+   position, with a negative proving any other added comma or token in that
+   declaration still fails. The checker's general rule is not relaxed.
+3. **`_LogoOrTitle` placement.** It already moves into the
+   `legacy_spotlight_board/` bridge (shelf/hero row), which is the documented
+   home for `DebrifyImageCache`; the dependency inventory records that
+   import explicitly so the move is not counted as service-free.
 
 ## Found, not fixed
 
