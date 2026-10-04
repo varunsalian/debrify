@@ -961,6 +961,17 @@ the behaviour suite compared against the latest recorded base.
   concurrency-sensitive Xtream 50k timeout. Gate evidence follows separately.
 
 
+### Gate 1 — full suite PASS
+
+- Source revision `26f90beaaa48275b100352b64f964ec1905d40a7`, tested tree `c04f601a1683e4af83bb638fa25ff1422389a933`; Flutter
+  3.44.8 / Dart 3.12.2. `merged_detail/gate1` has 10,686 successes, 13 failures,
+  28 load/test errors and 20 skips, exactly matching latest `merged_detail/base4`.
+- `gate1-comparison` is PASS: no new failure/error, missing test or newly skipped
+  identity. The tested tree did not change during the run. Gate evidence is recorded
+  in this separate documentation commit; its difference from the tested source is
+  documentation only. No baseline or assertion is updated to accept a regression.
+
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
