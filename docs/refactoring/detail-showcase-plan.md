@@ -2,6 +2,7 @@
 
 Written 2026-10-04 on `refactor/codebase` at `10ceef60`; the file is unchanged
 since `f73f4800` (2026-09-17). Follow [AGENTS.md](../../AGENTS.md).
+Revised 2026-10-04 after Codex design review round 1 (at `8a527a4e`).
 
 Read first: `spotlight-board-plan.md` (closest template: widget library behind a
 re-export facade), `merged-detail-plan.md` (typedef aliases, format-only step 0
@@ -20,9 +21,26 @@ local CI-equivalent commands. Evidence is written **only** under
 `--parser-package`** (inside this worktree's ignored `.dart_tool/`), including
 self-tests and other features' manifests (PikPak exit-253 lesson).
 
+**Parallel-execution boundaries.** Other processes share this repository's
+object store and run in sibling worktrees. Within this worktree,
+`suite_evidence.py` snapshots (`git_tree_evidence`: `git stash create` +
+`git write-tree` on this worktree's index) are **serialized**: never two
+`suite_evidence.py run`s, or a run alongside a commit/`git add`, at once.
+Manifest runs that share one `--parser-package` are serialized too; any run
+that must overlap gets its **own parser-package and kernel directory** (the
+format proof compiles its kernel next to the parser package). Full-suite gates
+are coordinated with other heavy load (another worktree's full suite, Docker
+goldens, builds); a timeout under contention is rerun, not recorded. Gate runs
+are **full-suite**: since `8a527a4e` `suite_evidence.py` records runner flags
+such as `--no-pub` under `flags`, apart from `paths`, so a full run's env has
+empty `paths` and `compare` reports any baseline suite missing from it. Every
+base and gate is recorded with a `suite_evidence.py` at or after `8a527a4e`,
+and Progress shows each env's `paths` (empty) and `flags`.
+
 ## Goal
 
-`lib/widgets/detail/showcase_parts.dart` is 3,394 lines: 21 imports, no `part`
+`lib/widgets/detail/showcase_parts.dart` is 3,394 lines: 20 import directives
+(lines 1–21, line 4 blank), no `part`
 files, 18 public top-level symbols, 40 private classes (11 stateless, 14
 stateful + 15 States) and 11 private top-level functions/consts; no enums,
 typedefs, extensions, mixins or statics. It is the parts library of the
@@ -82,7 +100,7 @@ public (no diagnostic) and moves as-is (Found 2).
 
 | Orig | Fmt | Area |
 | --- | --- | --- |
-| 1–21 | 1–21 | imports (relative, sorted) |
+| 1–21 | 1–21 | 20 import directives (relative, sorted) |
 | 23–141 | 23–142 | `ShowcaseMetrics`, `ShowcaseMetricsScope`, `kShowcaseGutter` |
 | 143–273 | 143–274 | `_ink`, `_slotFill`, `_plateFill`, `_ambientBed`, `_t`, `_activate`, `_keepVisible`, `_Hover`/State |
 | 275–455 | 275–456 | grounds: Ambient, BackdropScrim, StickyLogo |
@@ -105,8 +123,10 @@ layout 618); animations are implicit only. Lifecycle code exists only in
 ## Contracts that must not change
 
 Pinned by behaviour tests and/or source guards. Guards read whole bodies,
-comments included, through `test/support/detail_showcase_source.dart` (facade
-plus feature files, manifest aliases reversed).
+comments included, through `test/support/detail_showcase_source.dart`, a
+**manifest-driven** reader frozen in (b) (Step 0 item 5): each declaration
+is selected from the original or its created destination, with manifest
+aliases reversed.
 
 1. **Public surface** as above; each name declared in exactly one destination
    and re-exported once.
@@ -179,18 +199,29 @@ its creation commit and must be **≤ 500** (checker-enforced).
 | `showcase_seasons.dart` | seasons band | 240 |
 | `showcase_episodes.dart` | episode cell, compact card, `_KebabButton`, `_Badge` | 445 |
 | `showcase_cast.dart` / `_sources.dart` / `_recs.dart` | one band each | 150 / 190 / 125 |
-| `showcase_guide.dart` | guide helpers, `_SeverityMark`, guide, `_GuideCard` | 485 (largest) |
+| `showcase_guide.dart` | guide helpers, `_SeverityMark`, guide, `_GuideCard` | 475–493 (largest) |
 | `showcase_universe.dart` / `_did_you_know.dart` | one band each | 160 / 210 |
 | `showcase_notes.dart` | `ShowcaseBandNote`, `_RetryChip`, `ShowcaseDetails` | 150 |
 
-If `showcase_guide.dart` measures above 500 at creation, `_GuideCard` (+State)
-moves to `showcase_guide_card.dart` behind one more pinned alias; no exception.
+Measured with the probe: the complete guide file is 493 lines with long alias
+names and 475 with short ones, so keeping the whole guide in one file is
+feasible. If it nevertheless measures above 500 at creation, the fallback is
+`showcase_guide_readouts.dart`, which owns `_GuideCard` (+State),
+`_SeverityMark` and `_severityLevel` together: `_GuideCard` constructs
+`_SeverityMark` (orig 2835), which `ShowcaseGuide` also uses (2581, 2726), so
+the card can't move alone. That file adds **two** pinned widget aliases
+(`_GuideCard`, `_SeverityMark`, each typedef + constructor const), the
+conditional inventory becomes **17 cross-file privates**, and `_plainOf` /
+`_spoilersOf` stay private in `showcase_guide.dart`; no exception. Progress
+records which branch was taken.
 
 **Privates (corrects the inventory's "8 + 9").** `_ambientBed` is used only by
 grounds (293) and `_hasHonors` only by `ShowcaseIdentity` (640, 696), so both
 move privately with their sole consumer. `_TrackerMark`, `_RatingBox`,
 `_KebabButton`, `_Badge`, the guide helpers and each band's own card stay
-private in their band file. That leaves **15 cross-file privates**: 7 style
+private in their band file (`_SeverityMark` stays with both its users, the
+guide and `_GuideCard`). That leaves **15 cross-file privates** (17 under the
+guide fallback above): 7 style
 items (`_ink`, `_t`, `_activate`, `_keepVisible`, `_slotFill`, `_Hover`,
 `_Band`) and 8 identity widgets (`_LogoOrTitle`, `_ExpandableSynopsis`,
 `_Chip`, `_MetaLine`, `_HonorsLine`, `_TechLine`, `_Primary`, `_Circle`).
@@ -199,8 +230,9 @@ items (`_ink`, `_t`, `_activate`, `_keepVisible`, `_slotFill`, `_Hover`,
 stays byte-identical and private in its owner (runtime type, keyless private
 constructor and `const` unchanged); the owner adds pinned public aliases right
 after it:
-- 10 widgets: `typedef ShowcaseX = _X;` plus `const showcaseXConstructor =
-  _X.new;` (`_Circle` also `showcaseCircleMarkConstructor = _Circle.mark`).
+- 10 widgets (12 under the guide fallback): `typedef ShowcaseX = _X;` plus
+  `const showcaseXConstructor = _X.new;` (`_Circle` also
+  `showcaseCircleMarkConstructor = _Circle.mark`).
   Cross-library typedef calls otherwise report the private constructor's
   optional parameters unused.
 - 5 functions/consts: `const showcaseInk = _ink;` and tear-off consts for
@@ -208,8 +240,19 @@ after it:
 
 Owner-file uses keep the private name; other files use the alias; the manifest
 registers each mapping and the checker reverses it and rejects a changed
-target. **Final alias names are fixed at step 0** by a rename-plus-format
-probe, preferring names that cause no reflow (`_t` has ~70 call sites; the
+target. The existing reversal (`type_aliases` in `check_settings_moves.py`)
+maps a typedef name **globally**, so it cannot tell an owner-file alias use
+from a cross-file one. This plan therefore adds an **opt-in, file-aware
+alias-use validator** (a new config key, absent from every other manifest's
+config) covering widget, function and const aliases: in the owner file each
+alias appears only in its own declaration and uses keep the private name; in
+every other file only the alias appears. Declarations are pinned
+**separately** and token-exactly: each typedef by `check_type_aliases`, and
+**every constructor target** (`showcaseXConstructor = _X.new`, and
+`showcaseCircleMarkConstructor = _Circle.mark`) and each function/const
+tear-off (`showcaseInk = _ink`, …) by the new key. Every integrated manifest's
+self-tests and runs stay passing unchanged. **Final alias names are fixed at
+step 0** by a rename-plus-format probe, preferring names that cause no reflow (`_t` has ~70 call sites; the
 merged `seriesDone` precedent). Any reflow-added optional comma is inventoried
 by AST node and owner, and any new brace info by identity, or a shorter name is
 chosen. No alias is exported by the facade.
@@ -217,8 +260,18 @@ chosen. No alias is exported by the facade.
 **`_plateFill`** stays private and unused in `showcase_style.dart`. Its
 `unused_element` warning goes into `dev/tool/analyzer_allowlist.txt` **in the
 commit that creates the file** (PikPak `_email` precedent), at the destination
-path, with the exact message `The declaration '_plateFill' isn't referenced.`
-and a dated `# detail_showcase:` comment. No warning disappears or is added.
+path, as the **full observed Flutter message**, with no final period:
+
+```text
+warning | unused_element | lib/features/detail_showcase/presentation/showcase_style.dart | The declaration '_plateFill' isn't referenced. Try removing the declaration of '_plateFill'
+```
+
+with a dated `# detail_showcase:` comment. `check_analyzer_allowlist.py`
+matches (severity, rule, path, message) exactly and fails on stale entries,
+so the entry is verified against the **complete scoped analyzer output** (all
+CI analyze paths, as in `checks.yml`), not a single-file run, and the captured
+line is compared with the entry before committing. No warning disappears or is
+added.
 
 **Service imports are type/cache-manager only** (no calls into service logic),
 so each destination imports with an exact `show` list registered per file in
@@ -261,10 +314,21 @@ As in the merged-detail and spotlight plans, plus:
      `diff -U0` hunks, 3,394 → 3,425 lines, idempotent. Tokens differ only by
      **6 AST-identified optional trailing commas** (Explore circle ×2
      contexts, SeasonDropdown, SeasonPill, `ShowcaseCast` constructor, cast
-     tile constructor call), proven with `dev/tool/merged_detail_format_proof.py`
-     (`--original`, `--formatted`, isolated `--parser-package`, `--output`),
-     listing each comma by node and owner; edited-comment, edited-literal and
-     non-optional-comma negatives must reject. **0 format-induced
+     tile constructor call). `merged_detail_format_proof.py` is **not**
+     reused as-is: it hardcodes merged's source path, its mutation strings
+     (`'Merged series page (experimental'`, `0xFF0B0B0E`) and 25 commas, and
+     its `str.replace` mutations would silently no-op on this file. Add
+     `dev/tool/detail_showcase_format_proof.py`, a showcase wrapper over the
+     existing AST adapter (`merged_detail_format_proof.dart.txt`), or
+     parameterize the merged script (`--source`, `--expected-commas`,
+     mutation targets) with merged's current values as defaults so its own
+     run is unchanged. Inputs: `--original`, `--formatted`, isolated
+     `--parser-package`, a per-run kernel path, `--output`. It lists each
+     comma by node and owner, **expects exactly 6**, and asserts that every
+     mutation actually changes its input (`mutated != formatted`) before
+     requiring that edited-comment (a showcase doc comment), trailing-comment,
+     edited-literal (a showcase literal, e.g. `0xFF4A4A55`) and
+     non-optional-comma negatives reject. **0 format-induced
      diagnostics** are expected (no wrapped `if`); any observed is recorded by
      identity in `base-fmt`, never fixed. The commit also **raises
      `dev/tool/file_size_baseline.txt:23` by hand** 3394 → 3425; it is lowered
@@ -317,9 +381,9 @@ As in the merged-detail and spotlight plans, plus:
 
 1. **Baselines.** `detail_showcase/base` (`suite_evidence.py run` + whole-repo
    analyzer) on the untouched head with tree/SDK provenance (Flutter 3.44.8 /
-   Dart 3.12.2, `--no-pub`); `detail_showcase/base-fmt` after (a), equal by
-   identity. At `10ceef60` the five related files gave 69 passes / 0 failures
-   and the merged `showcase` golden passes on macOS.
+   Dart 3.12.2; `--no-pub` recorded under `flags`, `paths` empty);
+   `detail_showcase/base-fmt` after (a), equal by identity. At `10ceef60` the
+   five related files gave 69 passes / 0 failures and the merged `showcase` golden passes on macOS.
 2. **Dependency report** (`docs/refactoring/detail-showcase-deps.md`): per leaf
    (declaration, private top-level item, comment fragment) its destination,
    each cross-file private reference and alias, each service type and `show`
@@ -335,6 +399,13 @@ As in the merged-detail and spotlight plans, plus:
    reworded comment; new `const` or key; reordered `dispose`; lazy `_hold`;
    dropped `identical` in `didUpdateWidget`; `onTap: m.onTrailer` wrapped in a
    closure; `_Hover` TV gate removed; `_keepVisible` axis check removed.
+   **Emitted-alias checks are staged:** `check_type_aliases` requires the
+   destination typedef to exist, so a `type_aliases` (or validator) entry
+   registered before its owner file exists fails. The alias table is fixed
+   at step 0 in the deps report and Progress, but each alias's config entries
+   enter in the step that creates its owner file; step 0 proves that a
+   registration ahead of its owner is rejected (so staging is required, not
+   tolerated).
 4. **Harness** (`test/support/detail_showcase_fixture.dart`), with the model
    and host builders of `detail_showcase_test` copied in (not imported from a
    test): `AppThemeScope` with a named look; pinned `tester.view` size, DPR
@@ -351,17 +422,43 @@ As in the merged-detail and spotlight plans, plus:
    (4), `showcase_hover_focus_test` (5), `showcase_band_contracts_test` (7, 8,
    10, `ShowcaseDetails`, `ShowcaseBandNote`/`_RetryChip` activation, sticky
    logo and thinned scrim visibility), `detail_showcase_surface_test` (facade
-   namespace = 18 names) and `detail_showcase_source_contract_test` (guards,
-   **unconditional**: they read the feature folder whether or not it exists,
-   and a missing file fails).
+   namespace = 18 names) and `detail_showcase_source_contract_test`. The
+   guards must pass **on (b) itself**, which precedes feature creation, and
+   unchanged at every later checkpoint. The frozen reader
+   (`test/support/detail_showcase_source.dart`) is **manifest-driven**: for
+   each registered declaration it reads the original
+   (`showcase_parts.dart`) or the destination file the manifest names, if
+   that file has been created, and **fails when neither (or both) holds the
+   declaration**, so a lost or duplicated declaration never passes silently.
+   Final-topology requirements (every destination exists, the original is a
+   pure 18-name facade, no declaration remains in it) are **dormant until
+   completion**: they activate only when `DETAIL_SHOWCASE_COMPLETE = True` in
+   `check_search_architecture.py` (absent counts as false, as at (b)). The
+   step 0b review proves the guards pass on (b), fail on a declaration
+   deleted from the original, and that the final-topology checks fire on a
+   temporary copy of (b) with the flag set.
 6. **Goldens.** The merged `showcase` golden (1200×900, wide touch, movie)
    stays. New deterministic scenes from (b), `detail_showcase_goldens_test.dart`
    → `test/goldens/detail_showcase/{macos,linux}/`: `tv_movie` (1920×1080,
    dpad, k = 1, identity focused); `compact_series` (390×844, seasons pill,
-   compact episode cards); `wide_series_bands` (1280 wide, tall enough to lay
-   out seasons, episodes, cast, sources, recs, wide guide plate, universe, DYK
-   with "+N", band note and details); `compact_guide` (accordion, one row
-   open). No trailer; bounded pumps. Execution captures macOS into (b).
+   compact episode cards); `wide_series_bands` (seasons, episodes, cast,
+   sources, recs, wide guide plate, universe, DYK with "+N", band note and
+   details); `compact_guide` (accordion, one row open). A taller
+   `DetailShowcase` page can't produce the all-bands scene: `_heroHeight`
+   is `viewport - peek` (layout 749), so the hero grows with the viewport
+   and pushes the bands down. So `wide_series_bands` uses a **direct
+   public-parts harness**: the public band widgets in a fixed-size column
+   under an explicit `ShowcaseMetricsScope` (1280 wide, fixed `w`,
+   `compact: false`, `touch` pinned) — no `DetailShowcase`, no hero.
+   `compact_series` uses either the same parts harness or the full page at
+   an **explicit, recorded scroll offset** (`jumpTo`, then a bounded pump).
+   Every golden asserts that **each promised band's rect intersects the
+   capture bounds** (`tester.getRect(...).overlaps(...)`) before matching, so
+   a band laid out off-screen fails instead of silently passing. Motion
+   timing is pinned (fixed pump durations past the 550/400 ms fades and the
+   220 ms `_keepVisible` scroll; no `pumpAndSettle`); any look that focuses a
+   `ParallaxFocus` card calls `ParallaxTravel.resetForTest()` in setUp and
+   teardown. No trailer. Execution captures macOS into (b).
    **Claude captures Linux** from (b) in the calibrated
    `debrify-flutter:3.44.8` linux/amd64 Docker image (Colima): clone the branch
    into a mounted `$HOME` path, check out (b), verify `HEAD` and hashes, run the
@@ -421,7 +518,17 @@ analyzer with `check_analyzer_allowlist.py`; the strict comparison by identity
 staged diff; the focused characterization set plus the five existing related
 files. No golden is ever regenerated against moved code. Gates run on
 committed trees with no untracked inputs against the latest `detail_showcase/`
-base; gate 2 also compares with gate 1. Never `--record` a regression.
+base; gate 2 also compares with gate 1. Gates are full-suite runs under the
+parallel-execution boundaries above. Never `--record` a regression.
+
+**Linux replays.** At completion (gate 2's commit) and again after
+integration, Claude replays all four new goldens **and** the existing merged
+`showcase` golden in the calibrated `debrify-flutter:3.44.8` linux/amd64
+Docker image, as for step L: the replay checks out the committed revision,
+records its input provenance (commit SHA, `lib`/`test`/`pubspec.yaml`/
+`pubspec.lock` tree hashes, image ID, Flutter version) and verifies in
+strict mode with **no regeneration**; Progress records each PNG's hash as
+unchanged from step L (the merged golden from its committed hash).
 
 **Step 5** also adds the facade to the `checks.yml` format (45) and analyze
 (52) lists and `test/support/detail_showcase_*.dart` to the format list —
@@ -443,7 +550,8 @@ and `COMPOSITION_ROOTS`; keep every `*_COMPLETE`; take the lowest verified size
 ceiling; keep every `checks.yml` path before `| tee`. Then, on the merged
 committed tree: every manifest with self-tests; architecture, size, shape,
 theme; CI format, analyze and allowlist; a full-suite comparison against each
-branch's bases.
+branch's bases; and the Linux golden replay (Per step and gates) on the
+integrated revision.
 
 ## Definition of done
 
@@ -451,16 +559,19 @@ branch's bases.
    measured cap; both production importers, the four test importers and
    `merged_detail` compile unchanged.
 2. **Feature:** every destination ≤ 500 lines, no size exception; the 15
-   cross-file privates cross only through pinned aliases; all other privates
-   file-local; no runtime type name changes.
+   cross-file privates (17 under the guide fallback) cross only through
+   pinned aliases, with owner-local spelling enforced by the alias-use
+   validator; all other privates file-local; no runtime type name changes.
 3. **Guard:** feature, facade rules and cap, `show`-list service imports, and
    the playback, resource, back-import and `merged_detail`/`catalog_detail`
    bans, each proven through the real checker.
 4. **Tests:** all manifests with self-tests pass; every characterization test
    and guard from (b) passes unchanged; macOS and Linux goldens (four new plus
-   the merged `showcase`) match the originals.
+   the merged `showcase`) match the originals, with the completion Linux
+   replay's provenance and unchanged PNG hashes recorded.
 5. **Diagnostics:** no new diagnostics or suppressions; `_plateFill`'s warning
-   only via its destination allowlist entry; the 4 const infos trace to their
+   only via its destination allowlist entry (full observed message, checked
+   against the complete scoped output); the 4 const infos trace to their
    original members.
 6. **CI:** behaviour list holds the direct-importer and new tests; shape slice
    totals 18 with 0 in the facade; theme surface unchanged; size baseline
