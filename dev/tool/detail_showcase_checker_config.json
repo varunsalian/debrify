@@ -10,10 +10,100 @@
   ],
   "receivers": [],
   "self_test_module": "detail_showcase_checker_test",
-  "type_aliases": [],
-  "file_aliases": [],
-  "additional_owners": [],
-  "callback_call_aliases": {},
+  "type_aliases": [
+    {
+      "original_name": "_Hover",
+      "alias": "SHover",
+      "file": "lib/features/detail_showcase/presentation/showcase_style.dart"
+    },
+    {
+      "original_name": "_Band",
+      "alias": "SBand",
+      "file": "lib/features/detail_showcase/presentation/showcase_style.dart"
+    }
+  ],
+  "file_aliases": [
+    {
+      "original_name": "_ink",
+      "alias": "sInk",
+      "file": "lib/features/detail_showcase/presentation/showcase_style.dart",
+      "kind": "value",
+      "constructors": []
+    },
+    {
+      "original_name": "_t",
+      "alias": "st",
+      "file": "lib/features/detail_showcase/presentation/showcase_style.dart",
+      "kind": "value",
+      "constructors": []
+    },
+    {
+      "original_name": "_activate",
+      "alias": "sActivate",
+      "file": "lib/features/detail_showcase/presentation/showcase_style.dart",
+      "kind": "value",
+      "constructors": []
+    },
+    {
+      "original_name": "_keepVisible",
+      "alias": "sKeepVisible",
+      "file": "lib/features/detail_showcase/presentation/showcase_style.dart",
+      "kind": "value",
+      "constructors": []
+    },
+    {
+      "original_name": "_slotFill",
+      "alias": "sSlotFill",
+      "file": "lib/features/detail_showcase/presentation/showcase_style.dart",
+      "kind": "value",
+      "constructors": []
+    },
+    {
+      "original_name": "_Hover",
+      "alias": "SHover",
+      "file": "lib/features/detail_showcase/presentation/showcase_style.dart",
+      "kind": "widget",
+      "constructors": [
+        {
+          "name": "showcaseHoverConstructor",
+          "target": "new"
+        }
+      ]
+    },
+    {
+      "original_name": "_Band",
+      "alias": "SBand",
+      "file": "lib/features/detail_showcase/presentation/showcase_style.dart",
+      "kind": "widget",
+      "constructors": [
+        {
+          "name": "showcaseBandConstructor",
+          "target": "new"
+        }
+      ]
+    }
+  ],
+  "additional_owners": [
+    {
+      "file": "lib/features/detail_showcase/presentation/showcase_style.dart",
+      "owner": "",
+      "names": [
+        "sInk",
+        "st",
+        "sActivate",
+        "sKeepVisible",
+        "sSlotFill",
+        "SHover",
+        "showcaseHoverConstructor",
+        "SBand",
+        "showcaseBandConstructor"
+      ]
+    }
+  ],
+  "callback_call_aliases": {
+    "_Hover": "SHover",
+    "_Band": "SBand"
+  },
   "callback_identities": [
     {
       "name": "trailer callback",

@@ -979,6 +979,47 @@ change below.
   byte-identical. No recapture or assertion weakening. Incomplete step1 attempts
   are retained as investigation evidence and are not claimed as passed checks.
 
+### Step 1 — metrics/style wired and guards registered
+
+- L is `df7d646f`; the original formatted-export checkpoint is `5753dee2`.
+  New original base7: 11,142 success / 13 failure / 28 error / 20 skipped,
+  identical identities to base6 (zero added/missing/fixed/newly skipped).
+  `base7.env.json`: HEAD `5753dee2`, tested tree
+  `1e2b2c1a3b1e15274a2a59ca34d032543b39e4da`, paths `[]`, flags
+  `["--no-pub"]`, no snapshot/untracked inputs/tree changes; Flutter 3.44.8 /
+  Dart 3.12.2. Both extraction gates now compare with base7, also preserving
+  base6's observed passing identities. Detached step0c proof is recorded in
+  `step0c-detached-proofs.json` at that exact original checkpoint.
+- Moved metrics (122 lines) and style (200), whole declarations/comments intact.
+  Seven aliases registered only with their created owner; `_plateFill` remains
+  private and unused. Exact original warning entered the destination allowlist
+  at creation; complete CI-scoped analyzer accepts 13 existing warnings, no
+  new/stale entry. Remaining original facade is 3,132 lines, ratcheted down;
+  its grounds/identity and remaining bands leave at steps 2–4.
+- Registered unconditional feature size/import/playback/resource/back-import
+  guards, exact per-file service-show enforcement, and both-direction detail
+  implementation boundaries. Shape includes both destinations and the facade:
+  exact total 18, zero in metrics/style. Theme uses one explicit directory
+  pattern: 750 sites unchanged; light-ink candidates 5, PRIMARY 0.
+- Every integrated manifest (11), each with its own config/original baseline
+  (merged_detail `21320ff9`), passes with self-tests. Overlapping runs have
+  separate parser-package/kernel directories inside this worktree; no shared
+  parser/evidence namespace. Existing other manifests are byte-unchanged;
+  only this plan's manifest is required to be LF (TorBox's historical CRLF is
+  retained rather than normalized outside scope).
+- Evidence `detail_showcase/step1/`: zero whole-analyzer additions with explicit
+  relocation; original-only per-identity maximum includes the four strict const
+  infos once (never sum with duplicate root warning). Strict lint traces one
+  `_plateFill` warning and two infos each in the two episode builds; the two
+  import-qualification ordering infos at lines 5/21 disappear under sorting.
+  CI format, scoped analyzer/allowlist, architecture, sizes and staged diff pass.
+  Characterization 49 + related 69 = 118 passes, strict macOS goldens unchanged.
+  Shape/theme guards 128 success / 1 original failure; profile guards 17 success /
+  1 original failure, both compared to base7 with zero new/missing/skipped.
+- Decision: sorted facade export directives, preserving its exact namespace and
+  every declaration's original ordering. No assertion, constructor, callback,
+  lifecycle or moved comment changes. Lazy hold/dispose ordering remain S class.
+
 ## Found, not fixed
 
 All pre-existing; the move keeps each exactly.

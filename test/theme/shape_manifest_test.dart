@@ -1042,6 +1042,11 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/merged_detail/presentation/merged_tracker_sheet_header.dart': 0,
   'lib/features/merged_detail/presentation/merged_trailer_playing_chip.dart': 1,
   'lib/screens/merged_series_detail_screen.dart': 0,
+  // Detail showcase: exact slice total 18; every created file and facade.
+  'lib/features/detail_showcase/presentation/showcase_metrics.dart': 0,
+  'lib/features/detail_showcase/presentation/showcase_style.dart': 0,
+  'lib/widgets/detail/showcase_parts.dart': 18,
+  // End detail showcase.
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(

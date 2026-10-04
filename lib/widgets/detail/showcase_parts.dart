@@ -1,164 +1,30 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/features/detail_showcase/presentation/showcase_metrics.dart';
+import 'package:debrify/features/detail_showcase/presentation/showcase_style.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/services/debrify_image_cache.dart'
+    show DebrifyImageCache;
+import 'package:debrify/services/imdb_enrichment_service.dart'
+    show CastMember, UniverseTitle, DidYouKnowEntry;
+import 'package:debrify/services/imdb_parents_guide_service.dart'
+    show ParentsGuideResult, ParentsGuideCategory, ParentsGuideItem;
+import 'package:debrify/services/series_source_service.dart' show SeriesSource;
+import 'package:debrify/services/trakt/trakt_episode_model.dart'
+    show TraktEpisode;
+import 'package:debrify/theme/app_theme.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/theme/widgets/parallax_focus.dart';
+import 'package:debrify/utils/tv_keys.dart';
+import 'package:debrify/widgets/detail/detail_model.dart';
+import 'package:debrify/widgets/episodes_panel.dart';
+import 'package:debrify/widgets/season_action_region.dart';
+import 'package:debrify/widgets/tracker_brand_marks.dart';
+import 'package:debrify/widgets/viewport_artwork_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../models/stremio_addon.dart';
-import '../../services/debrify_image_cache.dart';
-import '../../services/imdb_enrichment_service.dart';
-import '../../services/imdb_parents_guide_service.dart';
-import '../../services/series_source_service.dart';
-import '../../services/trakt/trakt_episode_model.dart';
-import '../../theme/app_theme.dart';
-import '../../theme/app_theme_scope.dart';
-import '../../theme/widgets/parallax_focus.dart';
-import '../../utils/platform_util.dart';
-import '../../utils/tv_keys.dart';
-import '../../utils/wide_touch_scale.dart';
-import '../episodes_panel.dart';
-import '../season_action_region.dart';
-import '../tracker_brand_marks.dart';
-import '../viewport_artwork_scope.dart';
-import 'detail_model.dart';
-
-/// Card metrics as FRACTIONS of the viewport.
-///
-/// The mock is 1920 wide; absolute logical pixels derived from it only land
-/// correctly on a panel whose logical width is exactly 960. Anywhere else the
-/// cards come out the wrong size relative to the screen and the gaps close up
-/// — which is exactly what "a bit big, with less space between them" is.
-/// The divisors below are the raw 1920-scale numbers from the mock.
-class ShowcaseMetrics {
-  final double w;
-
-  /// Compact — the phone presentation, chosen by [DetailShowcase] from its
-  /// own width AND input (never by width alone: a narrow TV keeps the wide
-  /// presentation so the DPAD ladder's widgets all exist). Compact values are
-  /// measured off the Apple TV phone app on the reference device — see
-  /// dev/design/mockups/spotlight_responsive_mockup/.
-  final bool compact;
-
-  /// The INPUT axis, carried so [k] can tell a wide tablet from a TV. False
-  /// everywhere the metrics come from the MediaQuery fallback, which keeps
-  /// every caller outside the Showcase page at the shipped TV numbers.
-  final bool touch;
-
-  const ShowcaseMetrics(this.w, {this.compact = false, this.touch = false});
-
-  /// The type-and-control scale for the wide TOUCH tier.
-  ///
-  /// The wide tier's fixed values — every `_t` literal, the pill heights, the
-  /// guide and DYK cards — are 960-canvas numbers, and a TV's logical width IS
-  /// ~960 (the scaled surface). A tablet hits the same tier at its real width:
-  /// an iPad Pro lands at 1366, where those fixed values render at ~70% of
-  /// their designed proportion — 10.5pt plot text and a 30pt primary pill on a
-  /// touch device. Scaling them by w/960 restores the mock's proportions
-  /// exactly, and because the proportional values (`w * x/1920`) already track
-  /// width, text and cards grow TOGETHER rather than drifting apart.
-  ///
-  /// Exactly 1.0 on TV (dpad keeps every shipped pixel) and on compact (its
-  /// absolutes are hand-measured off the Apple phone app, not derived).
-  /// The formula lives in [wideTouchScale], shared with the Home Spotlight
-  /// board so the two surfaces can never be retuned apart.
-  ///
-  /// Radii follow one rule: a radius k-scales exactly when its box does —
-  /// capsules (radius = height/2) and the k-sized cards/chips scale, while
-  /// boxes sized proportionally off `w` keep their shipped radii.
-  double get k => (compact || !touch) ? 1.0 : wideTouchScale(w);
-
-  /// From the space actually GIVEN, not from the screen.
-  ///
-  /// tvOS reports a full-screen size while the shell insets the content for
-  /// overscan safe area, so `MediaQuery.sizeOf` overstates the drawable width
-  /// and every card comes out proportionally too large for the band it sits
-  /// in. Prefers a [ShowcaseMetricsScope] installed by the page (which knows
-  /// both the LayoutBuilder width and the input axis); the MediaQuery
-  /// subtraction is the fallback for callers outside the Showcase page.
-  factory ShowcaseMetrics.of(BuildContext c) {
-    final scoped = c.dependOnInheritedWidgetOfExactType<ShowcaseMetricsScope>();
-    if (scoped != null) return scoped.metrics;
-    final mq = MediaQuery.of(c);
-    final w = mq.size.width - mq.padding.horizontal;
-    return ShowcaseMetrics(w > 0 ? w : mq.size.width);
-  }
-
-  double get gutter => compact ? w * 0.048 : w * (84 / 1920);
-  double get title => compact ? 19.0 : w * (26 / 1920);
-
-  /// Compact: the integrated episode card — 62% of the width, the still on
-  /// top and a caption plate inside the same rounded rect. Wide: the 1920-
-  /// scale mock table, caption below bare art.
-  double get epCell => compact ? w * 0.62 : w * (456 / 1920);
-  double get stillW => compact ? epCell : w * (432 / 1920);
-  double get stillH => stillW * (243 / 432);
-  double get epGap => compact ? w * 0.035 : w * (46 / 1920);
-
-  /// The compact card's caption plate: eyebrow, title, 3-line synopsis,
-  /// runtime + kebab footer, plus padding.
-  double get epPlate => compact ? 128.0 : 0;
-
-  double get circle => compact ? w * 0.23 : w * (250 / 1920);
-  double get castGap => compact ? w * 0.04 : w * (52 / 1920);
-
-  double get srcW => compact ? w * 0.75 : w * (560 / 1920);
-  double get srcH => w * (132 / 1920);
-  double get srcGap => compact ? w * 0.03 : w * (26 / 1920);
-
-  double get poster => compact ? w * 0.243 : w * (260 / 1920);
-  double get posterH => poster * (390 / 260);
-  double get posterGap => compact ? w * 0.046 : w * (40 / 1920);
-
-  /// Parents Guide category card (wide rail only — compact renders accordion
-  /// rows at full width instead). Fixed on the 960 canvas, like the source
-  /// cards — [k]-scaled so a tablet keeps the proportion.
-  double get guideW => 170.0 * k;
-  double get guideH => 76.0 * k;
-
-  /// Did You Know reading card.
-  double get dykW => compact ? w * 0.72 : 250.0 * k;
-  double get dykH => compact ? 168.0 : 136.0 * k;
-}
-
-/// The page's metrics, computed once by [DetailShowcase] from its
-/// LayoutBuilder width and input axis, and read by every band through
-/// [ShowcaseMetrics.of].
-class ShowcaseMetricsScope extends InheritedWidget {
-  final ShowcaseMetrics metrics;
-
-  const ShowcaseMetricsScope({
-    super.key,
-    required this.metrics,
-    required super.child,
-  });
-
-  @override
-  bool updateShouldNotify(ShowcaseMetricsScope old) =>
-      old.metrics.w != metrics.w ||
-      old.metrics.compact != metrics.compact ||
-      old.metrics.touch != metrics.touch;
-}
-
-/// Kept for callers that only need the page margin.
-const double kShowcaseGutter = 42;
-
-const _ink = Color(0xFFFFFFFF);
-
-/// The fill of a card slot whose art has not arrived, and of the ambient bed
-/// behind the bands.
-///
-/// These were `0xFF17171A` and `0xFF0A0A0B` written out at eight call sites —
-/// which meant the detail page was the surface that ignored the Background
-/// setting while everything around it followed. Derived now, from the same
-/// ground the rest of the app takes.
-///
-/// A placeholder is deliberately a STEP off the page rather than the page
-/// itself: an empty slot has to read as a slot. Pointing it at the ground would
-/// make loading cards dissolve into the background instead of holding their
-/// place.
-Color _slotFill(AppTheme app) => Color.lerp(app.home.bg, app.core.tx, 0.045)!;
-
-/// A contained mark — a channel logo — needs a lighter plate than a poster
-/// slot, or a dark logo lands on a dark card.
-Color _plateFill(AppTheme app) => Color.lerp(app.home.bg, app.core.tx, 0.10)!;
+export 'package:debrify/features/detail_showcase/presentation/showcase_metrics.dart'
+    show ShowcaseMetrics, ShowcaseMetricsScope, kShowcaseGutter;
 
 /// The bed the ambient field is laid on, and the veil over it.
 ///
@@ -174,103 +40,6 @@ Color _plateFill(AppTheme app) => Color.lerp(app.home.bg, app.core.tx, 0.10)!;
 /// breaks.
 Color _ambientBed(AppTheme app) =>
     Color.lerp(app.home.bg, const Color(0xFF000000), 0.55)!;
-
-TextStyle _t(double size, {FontWeight w = FontWeight.w400, double a = 1}) =>
-    TextStyle(
-      fontSize: size,
-      fontWeight: w,
-      color: _ink.withValues(alpha: a),
-      height: 1.3,
-    );
-
-/// OK/Select/Enter, as a remote sends them.
-///
-/// `GestureDetector.onTap` never fires for a DPAD, so a focusable built only
-/// from a gesture is visible, focusable, and completely inert on a TV.
-KeyEventResult _activate(KeyEvent e, VoidCallback? onTap) {
-  if (e is! KeyDownEvent || onTap == null) return KeyEventResult.ignored;
-  final k = e.logicalKey;
-  final isOk =
-      k == LogicalKeyboardKey.enter ||
-      k == LogicalKeyboardKey.select ||
-      k == LogicalKeyboardKey.space ||
-      k == LogicalKeyboardKey.gameButtonA;
-  if (!isOk) return KeyEventResult.ignored;
-  onTap();
-  return KeyEventResult.handled;
-}
-
-/// Keeps a focused item inside a lazy horizontal rail on screen — **within
-/// that rail**, and nowhere else.
-///
-/// Without it, walking a rail moves focus into cached off-screen children and
-/// then stalls at the first node that was never mounted.
-///
-/// `Scrollable.ensureVisible` walks every ancestor scrollable, so a cell in a
-/// horizontal rail also scrolled the page's vertical list. That fights
-/// `_reveal`, which is the only thing that knows where a band should park — and
-/// with a full-height identity it would drag the hero off screen the moment
-/// anything below it took focus. Scrolling the nearest scrollable only keeps
-/// horizontal travel horizontal.
-void _keepVisible(BuildContext context) {
-  final box = context.findRenderObject();
-  if (box is! RenderBox || !box.attached) return;
-  final scrollable = Scrollable.maybeOf(context);
-  if (scrollable == null) return;
-  // HORIZONTAL only. The identity's action circles have no rail of their own,
-  // so the nearest scrollable is the page itself — and centring a button in the
-  // page scrolls the full-height hero away the instant one takes focus. Rails
-  // want this; the hero does not.
-  if (scrollable.position.axis != Axis.horizontal) return;
-  scrollable.position.ensureVisible(
-    box,
-    alignment: 0.5,
-    duration: const Duration(milliseconds: 220),
-    curve: Curves.easeOutCubic,
-  );
-}
-
-/// Pointer hover for a focusable card, feeding the SAME visual the DPAD
-/// cursor gets — the ParallaxFocus lift and any focus plate — so mousing
-/// across a rail reads like walking it with a remote.
-///
-/// Purely visual by design: hover never requests real focus, because focus
-/// has side effects here ([_keepVisible]'s rail scroll, the guide band's
-/// follow-focus select) and a mouse sweeping across the page must not fire
-/// them. Owns its own state so each card only ORs the result in.
-class _Hover extends StatefulWidget {
-  final Widget Function(BuildContext, bool hovered) builder;
-
-  /// Click for cards a tap activates; basic for the focus-only reading cards
-  /// (cast, Did You Know) where a pointer press does nothing.
-  final MouseCursor cursor;
-
-  const _Hover({required this.builder, this.cursor = SystemMouseCursors.click});
-
-  @override
-  State<_Hover> createState() => _HoverState();
-}
-
-class _HoverState extends State<_Hover> {
-  bool _h = false;
-
-  @override
-  Widget build(BuildContext context) {
-    // No hover layer on a television. An Apple TV remote's trackpad delivers
-    // pointer events (see main.dart), so an ungated MouseRegion parks a
-    // second lifted card wherever the thumb last brushed — and every DPAD
-    // step's centre-scroll then sweeps cards under that parked pointer,
-    // firing lift/drop springs mid-scroll. The Spotlight board's `hoverable`
-    // is off on TV for exactly this reason; this is the same gate.
-    if (PlatformUtil.isTelevision) return widget.builder(context, false);
-    return MouseRegion(
-      cursor: widget.cursor,
-      onEnter: (_) => setState(() => _h = true),
-      onExit: (_) => setState(() => _h = false),
-      child: widget.builder(context, _h),
-    );
-  }
-}
 
 // ── grounds ────────────────────────────────────────────────────────────────
 
@@ -434,7 +203,7 @@ class ShowcaseStickyLogo extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.only(top: 22),
               child: (url == null || url!.isEmpty)
-                  ? Text(name, style: _t(17 * m.k, w: FontWeight.w700))
+                  ? Text(name, style: st(17 * m.k, w: FontWeight.w700))
                   : CachedNetworkImage(
                       imageUrl: url!,
                       height: 37 * m.k,
@@ -444,7 +213,7 @@ class ShowcaseStickyLogo extends StatelessWidget {
                       // one scaled element of the header renders soft.
                       memCacheWidth: (420 * m.k).round(),
                       errorWidget: (_, __, ___) =>
-                          Text(name, style: _t(17 * m.k, w: FontWeight.w700)),
+                          Text(name, style: st(17 * m.k, w: FontWeight.w700)),
                     ),
             ),
           ),
@@ -710,7 +479,7 @@ class ShowcaseIdentity extends StatelessWidget {
                 m.synopsis!,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: _t(10.5 * metrics.k, a: 0.74).copyWith(height: 1.42),
+                style: st(10.5 * metrics.k, a: 0.74).copyWith(height: 1.42),
               ),
             ),
           const SizedBox(height: 11),
@@ -767,7 +536,7 @@ class _LogoOrTitle extends StatelessWidget {
         height: 1,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.8,
-        color: _ink,
+        color: sInk,
       ),
     );
     // Keep one stable title-art viewport from the first frame. A loose
@@ -832,12 +601,12 @@ class _ExpandableSynopsisState extends State<_ExpandableSynopsis> {
             maxLines: _open ? null : 2,
             textAlign: TextAlign.center,
             overflow: _open ? null : TextOverflow.ellipsis,
-            style: _t(12.5, a: 0.78).copyWith(height: 1.5),
+            style: st(12.5, a: 0.78).copyWith(height: 1.5),
           ),
           const SizedBox(height: 3),
           Text(
             _open ? 'LESS' : 'MORE',
-            style: _t(
+            style: st(
               10.5,
               w: FontWeight.w700,
               a: 0.9,
@@ -867,7 +636,7 @@ class _Chip extends StatelessWidget {
           horizontal: 7.5 * m.k,
           vertical: 3.5 * m.k,
         ),
-        child: Text(label, style: _t(9.5 * m.k, w: FontWeight.w600)),
+        child: Text(label, style: st(9.5 * m.k, w: FontWeight.w600)),
       ),
     );
   }
@@ -895,7 +664,7 @@ class _MetaLine extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(bits.join(' · '), style: _t(10.5 * scale, a: 0.86)),
+        Text(bits.join(' · '), style: st(10.5 * scale, a: 0.86)),
         if (m.rating != null) ...[
           const SizedBox(width: 7),
           _RatingBox(value: m.rating!),
@@ -948,14 +717,14 @@ class _TrackerMark extends StatelessWidget {
         color: on ? tint : null,
         border: on
             ? null
-            : Border.all(color: _ink.withValues(alpha: 0.34), width: 0.75),
+            : Border.all(color: sInk.withValues(alpha: 0.34), width: 0.75),
       ),
       child: Text(
         letter,
         style: TextStyle(
           fontSize: 7 * k,
           fontWeight: FontWeight.w800,
-          color: on ? _ink : _ink.withValues(alpha: 0.5),
+          color: on ? sInk : sInk.withValues(alpha: 0.5),
         ),
       ),
     );
@@ -973,10 +742,10 @@ class _RatingBox extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 3 * k, vertical: 0.5 * k),
       decoration: BoxDecoration(
-        border: Border.all(color: _ink.withValues(alpha: 0.45), width: 0.75),
+        border: Border.all(color: sInk.withValues(alpha: 0.45), width: 0.75),
         borderRadius: BorderRadius.circular(2.5 * k),
       ),
-      child: Text('★ ${value.toStringAsFixed(1)}', style: _t(7.5 * k, a: 0.9)),
+      child: Text('★ ${value.toStringAsFixed(1)}', style: st(7.5 * k, a: 0.9)),
     );
   }
 }
@@ -1036,7 +805,7 @@ class _HonorsLine extends StatelessWidget {
         vertical: compact ? 3.5 : 2.5 * m.k,
       ),
       decoration: BoxDecoration(
-        border: Border.all(color: _ink.withValues(alpha: 0.30), width: 0.75),
+        border: Border.all(color: sInk.withValues(alpha: 0.30), width: 0.75),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -1044,7 +813,7 @@ class _HonorsLine extends StatelessWidget {
         children: [
           Text(
             '$label ',
-            style: _t(
+            style: st(
               size,
               w: FontWeight.w700,
               a: 0.62,
@@ -1052,14 +821,14 @@ class _HonorsLine extends StatelessWidget {
           ),
           Text(
             rank,
-            style: _t(
+            style: st(
               size,
               w: FontWeight.w700,
               a: 0.95,
             ).copyWith(letterSpacing: 0.4),
           ),
           if (drift != null)
-            Text(' $drift', style: _t(size, w: FontWeight.w700, a: 0.45)),
+            Text(' $drift', style: st(size, w: FontWeight.w700, a: 0.45)),
         ],
       ),
     );
@@ -1083,7 +852,7 @@ class _TechLine extends StatelessWidget {
     if (bits.isEmpty) return const SizedBox.shrink();
     return Text(
       bits.join('  ·  '),
-      style: _t(9.5 * ShowcaseMetrics.of(context).k, a: 0.7),
+      style: st(9.5 * ShowcaseMetrics.of(context).k, a: 0.7),
     );
   }
 }
@@ -1133,7 +902,7 @@ class _PrimaryState extends State<_Primary> {
 
   KeyEventResult _onKey(KeyEvent event) {
     if (widget.onLongPress == null || !isActivateOrSpaceKey(event.logicalKey)) {
-      return _activate(event, widget.onTap);
+      return sActivate(event, widget.onTap);
     }
     return _hold.handle(event);
   }
@@ -1177,7 +946,7 @@ class _PrimaryState extends State<_Primary> {
               // The focus flip: ghost at rest, SOLID WHITE on black when
               // focused. The reference's primary is the one thing that does
               // not merely lift.
-              color: solid ? _ink : _ink.withValues(alpha: 0.22),
+              color: solid ? sInk : sInk.withValues(alpha: 0.22),
               borderRadius: BorderRadius.circular(compact ? 22 : 15 * m.k),
             ),
             child: widget.busy
@@ -1189,7 +958,7 @@ class _PrimaryState extends State<_Primary> {
                         height: compact ? 16 : 11 * m.k,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: solid ? Colors.black : _ink,
+                          color: solid ? Colors.black : sInk,
                         ),
                       ),
                     ),
@@ -1200,7 +969,7 @@ class _PrimaryState extends State<_Primary> {
                       Icon(
                         Icons.play_arrow_rounded,
                         size: compact ? 20 : 14 * m.k,
-                        color: solid ? Colors.black : _ink,
+                        color: solid ? Colors.black : sInk,
                       ),
                       const SizedBox(width: 5),
                       Text(
@@ -1208,7 +977,7 @@ class _PrimaryState extends State<_Primary> {
                         style: TextStyle(
                           fontSize: compact ? 15 : 10.5 * m.k,
                           fontWeight: FontWeight.w600,
-                          color: solid ? Colors.black : _ink,
+                          color: solid ? Colors.black : sInk,
                         ),
                       ),
                     ],
@@ -1254,11 +1023,11 @@ class _CircleState extends State<_Circle> {
     focusNode: widget.node,
     onFocusChange: (v) {
       setState(() => _f = v);
-      if (v) _keepVisible(context);
+      if (v) sKeepVisible(context);
     },
     // Without this the tracker, trailer and More buttons focus correctly
     // and do NOTHING on a remote.
-    onKeyEvent: (_, e) => _activate(e, widget.onTap),
+    onKeyEvent: (_, e) => sActivate(e, widget.onTap),
     child: MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _h = true),
@@ -1278,7 +1047,7 @@ class _CircleState extends State<_Circle> {
                 Icon(
                   widget.icon,
                   size: compact ? 20 : 13 * m.k,
-                  color: lit ? Colors.black : _ink,
+                  color: lit ? Colors.black : sInk,
                 );
             // Lit (non-compact): the circle stretches into a pill that
             // names itself — the tooltip a DPAD user can actually read.
@@ -1290,7 +1059,7 @@ class _CircleState extends State<_Circle> {
               duration: const Duration(milliseconds: 140),
               height: d,
               decoration: BoxDecoration(
-                color: lit ? _ink : _ink.withValues(alpha: 0.18),
+                color: lit ? sInk : sInk.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(d / 2),
               ),
               child: AnimatedSize(
@@ -1455,7 +1224,7 @@ class _SeasonDropdownState extends State<_SeasonDropdown> {
         focusNode: widget.node,
         onFocusChange: (v) => setState(() => _f = v),
         onKeyEvent: (_, e) => widget.view.seasonOptions == null
-            ? _activate(e, _open)
+            ? sActivate(e, _open)
             : KeyEventResult.ignored,
         child: GestureDetector(
           onTap: _open,
@@ -1463,7 +1232,7 @@ class _SeasonDropdownState extends State<_SeasonDropdown> {
             height: 34,
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: _ink.withValues(alpha: _f ? 0.22 : 0.12),
+              color: sInk.withValues(alpha: _f ? 0.22 : 0.12),
               borderRadius: BorderRadius.circular(17),
             ),
             child: Row(
@@ -1471,7 +1240,7 @@ class _SeasonDropdownState extends State<_SeasonDropdown> {
               children: [
                 Text(
                   'Season ${widget.view.selectedSeasonNumber}',
-                  style: _t(14, w: FontWeight.w600),
+                  style: st(14, w: FontWeight.w600),
                 ),
                 const SizedBox(width: 7),
                 const Icon(
@@ -1520,12 +1289,12 @@ class _SeasonPillState extends State<_SeasonPill> {
         focusNode: widget.node,
         onFocusChange: (v) {
           setState(() => _f = v);
-          if (v) _keepVisible(context);
+          if (v) sKeepVisible(context);
         },
         // Selecting on FOCUS would reload the episode list on every step of a
         // walk across the seasons. OK commits; the walk is free.
         onKeyEvent: (_, e) => widget.onOptions == null
-            ? _activate(e, widget.onTap)
+            ? sActivate(e, widget.onTap)
             : KeyEventResult.ignored,
         // The wide row is what every TOUCH tablet gets (compact swaps in the
         // dropdown below 600), so the pill needs a finger path too — OK-only
@@ -1545,13 +1314,13 @@ class _SeasonPillState extends State<_SeasonPill> {
               padding: EdgeInsets.symmetric(horizontal: 15 * k),
               decoration: BoxDecoration(
                 color: (_f || widget.active)
-                    ? _ink.withValues(alpha: _f ? 0.28 : 0.18)
+                    ? sInk.withValues(alpha: _f ? 0.28 : 0.18)
                     : null,
                 borderRadius: BorderRadius.circular(12.5 * k),
               ),
               child: Text(
                 widget.label,
-                style: _t(
+                style: st(
                   12.5 * k,
                   w: FontWeight.w600,
                   a: widget.active || _f ? 1 : 0.55,
@@ -1612,7 +1381,7 @@ class ShowcaseEpisodeCell extends StatelessWidget {
     // cell read as barely distinguishable. In the reference the still carries
     // focus by lifting, and the caption below it gains a filled card. Splitting
     // them lets each do its own job.
-    final slot = _slotFill(AppThemeScope.of(context));
+    final slot = sSlotFill(AppThemeScope.of(context));
     return SizedBox(
       width: cellWidth ?? m.epCell,
       child: Column(
@@ -1699,7 +1468,7 @@ class ShowcaseEpisodeCell extends StatelessWidget {
             // text sideways — only its ground appears.
             padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
             decoration: BoxDecoration(
-              color: focused ? _ink.withValues(alpha: 0.13) : null,
+              color: focused ? sInk.withValues(alpha: 0.13) : null,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
@@ -1715,14 +1484,14 @@ class ShowcaseEpisodeCell extends StatelessWidget {
                       ? 'EPISODE ${episode.number} · ★ '
                             '${episode.rating!.toStringAsFixed(1)}'
                       : 'EPISODE ${episode.number}',
-                  style: _t(9.5 * m.k, a: 0.55).copyWith(letterSpacing: 0.4),
+                  style: st(9.5 * m.k, a: 0.55).copyWith(letterSpacing: 0.4),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   episode.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: _t(12.5 * m.k, w: FontWeight.w600),
+                  style: st(12.5 * m.k, w: FontWeight.w600),
                 ),
                 const SizedBox(height: 3),
                 SizedBox(
@@ -1731,13 +1500,13 @@ class ShowcaseEpisodeCell extends StatelessWidget {
                     episode.overview ?? '',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: _t(10.5 * m.k, a: 0.6).copyWith(height: 1.36),
+                    style: st(10.5 * m.k, a: 0.6).copyWith(height: 1.36),
                   ),
                 ),
                 if ((episode.firstAired ?? '').isNotEmpty)
                   Text(
                     episode.firstAired!.split('T').first,
-                    style: _t(9.5 * m.k, a: 0.5),
+                    style: st(9.5 * m.k, a: 0.5),
                   ),
               ],
             ),
@@ -1780,7 +1549,7 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
     final url = ViewportArtworkScope.enabledOf(context)
         ? episode.thumbnailUrl ?? fallbackImage
         : null;
-    final slot = _slotFill(app);
+    final slot = sSlotFill(app);
 
     return ParallaxFocus(
       focused: focused,
@@ -1858,7 +1627,7 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                 // gaining the plate never shifts the text — only its ground
                 // appears (the wide cell's own rule).
                 decoration: BoxDecoration(
-                  color: focused ? _ink.withValues(alpha: 0.13) : null,
+                  color: focused ? sInk.withValues(alpha: 0.13) : null,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 // Near-flush with the still's edge — page text, not card
@@ -1869,14 +1638,14 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                   children: [
                     Text(
                       'EPISODE ${episode.number}',
-                      style: _t(10, a: 0.5).copyWith(letterSpacing: 0.9),
+                      style: st(10, a: 0.5).copyWith(letterSpacing: 0.9),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       episode.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: _t(14.5, w: FontWeight.w600),
+                      style: st(14.5, w: FontWeight.w600),
                     ),
                     const SizedBox(height: 4),
                     Expanded(
@@ -1902,7 +1671,7 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                               episode.overview ?? '',
                               maxLines: lines,
                               overflow: TextOverflow.ellipsis,
-                              style: _t(fs, a: 0.55).copyWith(height: 1.4),
+                              style: st(fs, a: 0.55).copyWith(height: 1.4),
                             ),
                           );
                         },
@@ -1917,18 +1686,18 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                             color: Colors.white70,
                           ),
                           const SizedBox(width: 3),
-                          Text('${episode.runtime}m', style: _t(11.5, a: 0.7)),
+                          Text('${episode.runtime}m', style: st(11.5, a: 0.7)),
                         ] else if ((episode.firstAired ?? '').isNotEmpty)
                           Text(
                             episode.firstAired!.split('T').first,
-                            style: _t(11.5, a: 0.5),
+                            style: st(11.5, a: 0.5),
                           ),
                         // Same monochrome footer grammar as the runtime.
                         if ((episode.rating ?? 0) > 0) ...[
                           const SizedBox(width: 8),
                           Text(
                             '★ ${episode.rating!.toStringAsFixed(1)}',
-                            style: _t(11.5, a: 0.7),
+                            style: st(11.5, a: 0.7),
                           ),
                         ],
                         const Spacer(),
@@ -1985,7 +1754,7 @@ class _Badge extends StatelessWidget {
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 5 * k, vertical: 2 * k),
-        child: Text(label, style: _t(9.5 * k)),
+        child: Text(label, style: st(9.5 * k)),
       ),
     );
   }
@@ -2008,7 +1777,7 @@ class ShowcaseCast extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = ShowcaseMetrics.of(context);
-    return _Band(
+    return SBand(
       title: 'Cast & Crew',
       height: m.circle * 1.08 + 46 * m.k,
       child: ListView.separated(
@@ -2060,15 +1829,15 @@ class _CastTileState extends State<_CastTile> {
       focusNode: widget.node,
       onFocusChange: (v) {
         setState(() => _f = v);
-        if (v) _keepVisible(context);
+        if (v) sKeepVisible(context);
       },
-      onKeyEvent: (_, event) => _activate(event, widget.onTap),
+      onKeyEvent: (_, event) => sActivate(event, widget.onTap),
       child: Semantics(
         button: widget.onTap != null,
         child: GestureDetector(
           onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
-          child: _Hover(
+          child: SHover(
             cursor: widget.onTap != null
                 ? SystemMouseCursors.click
                 : MouseCursor.defer,
@@ -2106,7 +1875,7 @@ class _CastTileState extends State<_CastTile> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: _t(12.5 * k),
+                    style: st(12.5 * k),
                   ),
                   if ((widget.member.character ?? '').isNotEmpty)
                     Text(
@@ -2114,7 +1883,7 @@ class _CastTileState extends State<_CastTile> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      style: _t(11.5 * k, a: 0.55),
+                      style: st(11.5 * k, a: 0.55),
                     ),
                 ],
               ),
@@ -2158,7 +1927,7 @@ class ShowcaseSources extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => _Band(
+  Widget build(BuildContext context) => SBand(
     title: 'Sources',
     height: 96 * ShowcaseMetrics.of(context).k,
     child: ListView.separated(
@@ -2225,10 +1994,10 @@ class _SourceCardState extends State<_SourceCard> {
       focusNode: widget.node,
       onFocusChange: (v) {
         setState(() => _f = v);
-        if (v) _keepVisible(context);
+        if (v) sKeepVisible(context);
       },
-      onKeyEvent: (_, e) => _activate(e, widget.onTap),
-      child: _Hover(
+      onKeyEvent: (_, e) => sActivate(e, widget.onTap),
+      child: SHover(
         builder: (context, hovered) => GestureDetector(
           onTap: widget.onTap,
           // Same reason as `_Poster`: the Sources band is 96 tall to leave
@@ -2255,9 +2024,9 @@ class _SourceCardState extends State<_SourceCard> {
                   vertical: 9 * mm.k,
                 ),
                 decoration: BoxDecoration(
-                  color: widget.add ? null : _ink.withValues(alpha: 0.07),
+                  color: widget.add ? null : sInk.withValues(alpha: 0.07),
                   border: Border.all(
-                    color: _ink.withValues(alpha: widget.add ? 0.22 : 0.09),
+                    color: sInk.withValues(alpha: widget.add ? 0.22 : 0.09),
                   ),
                   borderRadius: BorderRadius.circular(7 * mm.k),
                 ),
@@ -2265,7 +2034,7 @@ class _SourceCardState extends State<_SourceCard> {
                     ? Center(
                         child: Text(
                           widget.addLabel,
-                          style: _t(10.5 * mm.k, a: 0.66),
+                          style: st(10.5 * mm.k, a: 0.66),
                         ),
                       )
                     : Row(
@@ -2279,7 +2048,7 @@ class _SourceCardState extends State<_SourceCard> {
                                   'Pinned sources (${widget.sourceCount})',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: _t(10.5 * mm.k, w: FontWeight.w600),
+                                  style: st(10.5 * mm.k, w: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -2288,7 +2057,7 @@ class _SourceCardState extends State<_SourceCard> {
                                       : 'View and manage sources',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: _t(9.5 * mm.k, a: 0.58),
+                                  style: st(9.5 * mm.k, a: 0.58),
                                 ),
                               ],
                             ),
@@ -2321,7 +2090,7 @@ class ShowcaseRecs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = ShowcaseMetrics.of(context);
-    return _Band(
+    return SBand(
       title: 'More Like This',
       height: m.posterH * 1.10 + 24,
       child: ListView.separated(
@@ -2369,15 +2138,15 @@ class _PosterState extends State<_Poster> {
     final url = ViewportArtworkScope.enabledOf(context)
         ? widget.item.poster
         : null;
-    final slot = _slotFill(AppThemeScope.of(context));
+    final slot = sSlotFill(AppThemeScope.of(context));
     return Focus(
       focusNode: widget.node,
       onFocusChange: (v) {
         setState(() => _f = v);
-        if (v) _keepVisible(context);
+        if (v) sKeepVisible(context);
       },
-      onKeyEvent: (_, e) => _activate(e, () => widget.onTap?.call(widget.item)),
-      child: _Hover(
+      onKeyEvent: (_, e) => sActivate(e, () => widget.onTap?.call(widget.item)),
+      child: SHover(
         builder: (context, hovered) => GestureDetector(
           onTap: () => widget.onTap?.call(widget.item),
           // The band is taller than the card so the lift has somewhere to go,
@@ -2453,7 +2222,7 @@ class _SeverityMark extends StatelessWidget {
       children: [
         Text(
           severity.toUpperCase(),
-          style: _t(
+          style: st(
             compact ? 9.5 : 7.5 * m.k,
             w: FontWeight.w700,
             a: 0.6,
@@ -2465,7 +2234,7 @@ class _SeverityMark extends StatelessWidget {
             width: compact ? 10 : 8 * m.k,
             height: compact ? 3.5 : 3 * m.k,
             decoration: BoxDecoration(
-              color: _ink.withValues(alpha: i <= level ? 0.88 : 0.16),
+              color: sInk.withValues(alpha: i <= level ? 0.88 : 0.16),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -2560,7 +2329,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _Band(
+        SBand(
           title: 'Parents Guide',
           height: m.guideH * 1.12 + 18,
           child: ListView.separated(
@@ -2597,8 +2366,8 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 13, 16, 12),
       decoration: BoxDecoration(
-        color: _ink.withValues(alpha: 0.055),
-        border: Border.all(color: _ink.withValues(alpha: 0.07)),
+        color: sInk.withValues(alpha: 0.055),
+        border: Border.all(color: sInk.withValues(alpha: 0.07)),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
@@ -2607,7 +2376,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
         children: [
           Row(
             children: [
-              Text(cat.label, style: _t(11.5 * k, w: FontWeight.w700)),
+              Text(cat.label, style: st(11.5 * k, w: FontWeight.w700)),
               const SizedBox(width: 10),
               _SeverityMark(severity: cat.severity),
               const Spacer(),
@@ -2615,7 +2384,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
                 Text(
                   '${cat.severityVotes} of ${cat.totalVotes} rated '
                   '${cat.severity.toLowerCase()}',
-                  style: _t(8.5 * k, a: 0.4),
+                  style: st(8.5 * k, a: 0.4),
                 ),
             ],
           ),
@@ -2643,14 +2412,14 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
             width: 4,
             height: 4,
             decoration: BoxDecoration(
-              color: _ink.withValues(alpha: 0.28),
+              color: sInk.withValues(alpha: 0.28),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
         ),
         const SizedBox(width: 9),
         Expanded(
-          child: Text(text, style: _t(size, a: 0.78).copyWith(height: 1.5)),
+          child: Text(text, style: st(size, a: 0.78).copyWith(height: 1.5)),
         ),
       ],
     ),
@@ -2669,7 +2438,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
               '${shown ? 'shown' : 'hidden'}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: _t(compact ? 11 : 8.5 * m.k, a: 0.5),
+              style: st(compact ? 11 : 8.5 * m.k, a: 0.5),
             ),
           ),
           const SizedBox(width: 10),
@@ -2684,7 +2453,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
                 vertical: compact ? 4 : 2.5 * m.k,
               ),
               decoration: BoxDecoration(
-                border: Border.all(color: _ink.withValues(alpha: 0.24)),
+                border: Border.all(color: sInk.withValues(alpha: 0.24)),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
@@ -2715,7 +2484,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
           padding: EdgeInsets.only(left: m.gutter, bottom: 10),
           child: Text(
             'Parents Guide',
-            style: _t(19, w: FontWeight.w600, a: 0.84),
+            style: st(19, w: FontWeight.w600, a: 0.84),
           ),
         ),
         for (var i = 0; i < _cats.length; i++)
@@ -2735,13 +2504,13 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
     return Focus(
       focusNode: widget.nodes[i],
       onKeyEvent: (_, e) =>
-          _activate(e, () => setState(() => _open = open ? -1 : i)),
+          sActivate(e, () => setState(() => _open = open ? -1 : i)),
       child: GestureDetector(
         onTap: () => setState(() => _open = open ? -1 : i),
         child: Container(
           width: double.infinity,
           decoration: BoxDecoration(
-            color: _ink.withValues(alpha: 0.07),
+            color: sInk.withValues(alpha: 0.07),
             borderRadius: BorderRadius.circular(14),
           ),
           padding: const EdgeInsets.fromLTRB(15, 13, 15, 13),
@@ -2752,11 +2521,11 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(cat.label, style: _t(14, w: FontWeight.w600)),
+                    child: Text(cat.label, style: st(14, w: FontWeight.w600)),
                   ),
                   _SeverityMark(severity: cat.severity),
                   const SizedBox(width: 10),
-                  Text(open ? '▲' : '▼', style: _t(10, a: 0.4)),
+                  Text(open ? '▲' : '▼', style: st(10, a: 0.4)),
                 ],
               ),
               if (open) ...[
@@ -2766,7 +2535,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
                     child: Text(
                       '${cat.severityVotes} of ${cat.totalVotes} rated '
                       '${cat.severity.toLowerCase()}',
-                      style: _t(10.5, a: 0.38),
+                      style: st(10.5, a: 0.38),
                     ),
                   ),
                 const SizedBox(height: 2),
@@ -2821,11 +2590,11 @@ class _GuideCardState extends State<_GuideCard> {
         setState(() => _f = v);
         if (v) {
           widget.onSelect();
-          _keepVisible(context);
+          sKeepVisible(context);
         }
       },
-      onKeyEvent: (_, e) => _activate(e, widget.onOk),
-      child: _Hover(
+      onKeyEvent: (_, e) => sActivate(e, widget.onOk),
+      child: SHover(
         builder: (context, hovered) => GestureDetector(
           onTap: widget.onSelect,
           child: Align(
@@ -2842,9 +2611,9 @@ class _GuideCardState extends State<_GuideCard> {
                   9 * m.k,
                 ),
                 decoration: BoxDecoration(
-                  color: _ink.withValues(alpha: widget.selected ? 0.12 : 0.07),
+                  color: sInk.withValues(alpha: widget.selected ? 0.12 : 0.07),
                   border: Border.all(
-                    color: _ink.withValues(
+                    color: sInk.withValues(
                       alpha: widget.selected ? 0.22 : 0.09,
                     ),
                   ),
@@ -2858,7 +2627,7 @@ class _GuideCardState extends State<_GuideCard> {
                         cat.label,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: _t(10.5 * m.k, w: FontWeight.w600),
+                        style: st(10.5 * m.k, w: FontWeight.w600),
                       ),
                     ),
                     Row(
@@ -2867,7 +2636,7 @@ class _GuideCardState extends State<_GuideCard> {
                         const Spacer(),
                         Text(
                           '${cat.items.length}',
-                          style: _t(8.5 * m.k, w: FontWeight.w600, a: 0.38),
+                          style: st(8.5 * m.k, w: FontWeight.w600, a: 0.38),
                         ),
                       ],
                     ),
@@ -2902,7 +2671,7 @@ class ShowcaseUniverse extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = ShowcaseMetrics.of(context);
     final capH = m.compact ? 52.0 : 42.0 * m.k;
-    return _Band(
+    return SBand(
       title: 'Universe',
       height: m.posterH * 1.10 + 24 + capH,
       child: ListView.separated(
@@ -2949,17 +2718,17 @@ class _UniverseCardState extends State<_UniverseCard> {
   Widget build(BuildContext context) {
     final m = ShowcaseMetrics.of(context);
     final u = widget.item;
-    final slot = _slotFill(AppThemeScope.of(context));
+    final slot = sSlotFill(AppThemeScope.of(context));
     final url = ViewportArtworkScope.enabledOf(context) ? u.posterUrl : null;
     return Focus(
       focusNode: widget.node,
       onFocusChange: (v) {
         setState(() => _f = v);
-        if (v) _keepVisible(context);
+        if (v) sKeepVisible(context);
       },
       onKeyEvent: (_, e) =>
-          _activate(e, widget.onOpen == null ? null : () => widget.onOpen!(u)),
-      child: _Hover(
+          sActivate(e, widget.onOpen == null ? null : () => widget.onOpen!(u)),
+      child: SHover(
         builder: (context, hovered) => GestureDetector(
           onTap: () => widget.onOpen?.call(u),
           child: Align(
@@ -2997,7 +2766,7 @@ class _UniverseCardState extends State<_UniverseCard> {
                     u.relation.toUpperCase(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _t(
+                    style: st(
                       m.compact ? 9 : 7 * m.k,
                       w: FontWeight.w700,
                       a: 0.42,
@@ -3008,7 +2777,7 @@ class _UniverseCardState extends State<_UniverseCard> {
                     u.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _t(
+                    style: st(
                       m.compact ? 12 : 10 * m.k,
                       w: FontWeight.w600,
                       a: 0.9,
@@ -3017,7 +2786,7 @@ class _UniverseCardState extends State<_UniverseCard> {
                   if (u.yearLabel.isNotEmpty)
                     Text(
                       u.yearLabel,
-                      style: _t(m.compact ? 10.5 : 8.5 * m.k, a: 0.45),
+                      style: st(m.compact ? 10.5 : 8.5 * m.k, a: 0.45),
                     ),
                 ],
               ),
@@ -3056,7 +2825,7 @@ class ShowcaseDidYouKnow extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = ShowcaseMetrics.of(context);
     final hasMore = total > entries.length;
-    return _Band(
+    return SBand(
       title: 'Did You Know',
       subtitle: countLine,
       height: m.dykH * 1.10 + 18,
@@ -3099,10 +2868,10 @@ class _DykCardState extends State<_DykCard> {
       focusNode: widget.node,
       onFocusChange: (v) {
         setState(() => _f = v);
-        if (v) _keepVisible(context);
+        if (v) sKeepVisible(context);
       },
       // Basic cursor: ambient reading, SELECT is deliberately inert.
-      child: _Hover(
+      child: SHover(
         cursor: MouseCursor.defer,
         builder: (context, hovered) => Align(
           child: ParallaxFocus(
@@ -3118,8 +2887,8 @@ class _DykCardState extends State<_DykCard> {
                 m.compact ? 13 : 11 * m.k,
               ),
               decoration: BoxDecoration(
-                color: _ink.withValues(alpha: _f || hovered ? 0.11 : 0.07),
-                border: Border.all(color: _ink.withValues(alpha: 0.09)),
+                color: sInk.withValues(alpha: _f || hovered ? 0.11 : 0.07),
+                border: Border.all(color: sInk.withValues(alpha: 0.09)),
                 borderRadius: BorderRadius.circular(7 * m.k),
               ),
               child: Column(
@@ -3127,7 +2896,7 @@ class _DykCardState extends State<_DykCard> {
                 children: [
                   Text(
                     e.kind.toUpperCase(),
-                    style: _t(
+                    style: st(
                       m.compact ? 10 : 7.5 * m.k,
                       w: FontWeight.w700,
                       a: 0.42,
@@ -3140,7 +2909,7 @@ class _DykCardState extends State<_DykCard> {
                       maxLines: m.compact ? 6 : 7,
                       overflow: TextOverflow.ellipsis,
                       style:
-                          _t(
+                          st(
                             m.compact ? 12.5 : 9.5 * m.k,
                             a: quote ? 0.88 : 0.8,
                           ).copyWith(
@@ -3181,10 +2950,10 @@ class _DykMoreCardState extends State<_DykMoreCard> {
       focusNode: widget.node,
       onFocusChange: (v) {
         setState(() => _f = v);
-        if (v) _keepVisible(context);
+        if (v) sKeepVisible(context);
       },
       // Basic cursor: like its siblings, this card is not activatable.
-      child: _Hover(
+      child: SHover(
         cursor: MouseCursor.defer,
         builder: (context, hovered) => Align(
           child: ParallaxFocus(
@@ -3195,8 +2964,8 @@ class _DykMoreCardState extends State<_DykMoreCard> {
               height: m.dykH,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: _ink.withValues(alpha: _f || hovered ? 0.11 : 0.05),
-                border: Border.all(color: _ink.withValues(alpha: 0.09)),
+                color: sInk.withValues(alpha: _f || hovered ? 0.11 : 0.05),
+                border: Border.all(color: sInk.withValues(alpha: 0.09)),
                 borderRadius: BorderRadius.circular(7 * m.k),
               ),
               child: Column(
@@ -3204,12 +2973,12 @@ class _DykMoreCardState extends State<_DykMoreCard> {
                 children: [
                   Text(
                     '+${widget.count}',
-                    style: _t(m.compact ? 20 : 16 * m.k, w: FontWeight.w800),
+                    style: st(m.compact ? 20 : 16 * m.k, w: FontWeight.w800),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     'ON IMDb',
-                    style: _t(
+                    style: st(
                       m.compact ? 9 : 7 * m.k,
                       w: FontWeight.w700,
                       a: 0.4,
@@ -3221,68 +2990,6 @@ class _DykMoreCardState extends State<_DykMoreCard> {
           ),
         ),
       ),
-    );
-  }
-}
-
-// ── shared band chrome ─────────────────────────────────────────────────────
-
-class _Band extends StatelessWidget {
-  final String title;
-  final double height;
-  final Widget child;
-
-  /// A quiet count line after the title ("142 trivia · 9 goofs · 26 quotes").
-  final String? subtitle;
-
-  const _Band({
-    required this.title,
-    required this.height,
-    required this.child,
-    this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final m = ShowcaseMetrics.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const SizedBox(height: 20),
-        Padding(
-          padding: EdgeInsets.only(left: m.gutter, bottom: 10),
-          // Compact band titles use the phone heading size; wide keeps the
-          // shipped 13pt (the 960-canvas number the TV mock pins), k-scaled
-          // back to proportion on wide touch surfaces.
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                title,
-                style: _t(
-                  m.compact ? 19 : 13 * m.k,
-                  w: FontWeight.w600,
-                  a: 0.84,
-                ),
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(width: 9),
-                Text(
-                  subtitle!,
-                  style: _t(
-                    m.compact ? 11.5 : 8.5 * m.k,
-                    w: FontWeight.w600,
-                    a: 0.35,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        SizedBox(height: height, child: child),
-      ],
     );
   }
 }
@@ -3315,7 +3022,7 @@ class ShowcaseBandNote extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(m.gutter, 22, m.gutter, 8),
       child: Row(
         children: [
-          Text(text, style: _t(11.5 * m.k, a: 0.66)),
+          Text(text, style: st(11.5 * m.k, a: 0.66)),
           if (actionLabel != null && onAction != null) ...[
             const SizedBox(width: 12),
             _RetryChip(label: actionLabel!, onTap: onAction!, node: actionNode),
@@ -3346,7 +3053,7 @@ class _RetryChipState extends State<_RetryChip> {
     return Focus(
       focusNode: widget.node,
       onFocusChange: (v) => setState(() => _f = v),
-      onKeyEvent: (_, e) => _activate(e, widget.onTap),
+      onKeyEvent: (_, e) => sActivate(e, widget.onTap),
       child: GestureDetector(
         onTap: widget.onTap,
         child: Container(
@@ -3354,7 +3061,7 @@ class _RetryChipState extends State<_RetryChip> {
           alignment: Alignment.center,
           padding: EdgeInsets.symmetric(horizontal: 11 * k),
           decoration: BoxDecoration(
-            color: _f ? _ink : _ink.withValues(alpha: 0.18),
+            color: _f ? sInk : sInk.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(11 * k),
           ),
           child: Text(
@@ -3362,7 +3069,7 @@ class _RetryChipState extends State<_RetryChip> {
             style: TextStyle(
               fontSize: 10.5 * k,
               fontWeight: FontWeight.w600,
-              color: _f ? Colors.black : _ink,
+              color: _f ? Colors.black : sInk,
             ),
           ),
         ),
@@ -3392,7 +3099,7 @@ class ShowcaseDetails extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Details', style: _t(13 * m.k, w: FontWeight.w600, a: 0.84)),
+          Text('Details', style: st(13 * m.k, w: FontWeight.w600, a: 0.84)),
           const SizedBox(height: 10),
           Wrap(
             spacing: 46,
@@ -3406,9 +3113,9 @@ class ShowcaseDetails extends StatelessWidget {
                     children: [
                       SizedBox(
                         width: 74 * m.k,
-                        child: Text(r.$1, style: _t(10 * m.k, a: 0.5)),
+                        child: Text(r.$1, style: st(10 * m.k, a: 0.5)),
                       ),
-                      Expanded(child: Text(r.$2, style: _t(10 * m.k, a: 0.82))),
+                      Expanded(child: Text(r.$2, style: st(10 * m.k, a: 0.82))),
                     ],
                   ),
                 ),
@@ -3416,7 +3123,7 @@ class ShowcaseDetails extends StatelessWidget {
           ),
           if ((awards ?? '').isNotEmpty) ...[
             const SizedBox(height: 9),
-            Text(awards!, style: _t(10 * m.k, a: 0.6)),
+            Text(awards!, style: st(10 * m.k, a: 0.6)),
           ],
         ],
       ),

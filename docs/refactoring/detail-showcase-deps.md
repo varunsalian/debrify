@@ -6,18 +6,18 @@ Original application reference R: `1165b624` (format-only). Every row is a whole
 
 | Declaration | Destination | Cross-file private reads (alias) | State reads | Wiring |
 | --- | --- | --- | --- | --- |
-| `ShowcaseMetrics` | `showcase_metrics.dart` | none | none | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
-| `ShowcaseMetricsScope` | `showcase_metrics.dart` | none | none | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
-| `kShowcaseGutter` | `showcase_metrics.dart` | none | none | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
-| `_ink` | `showcase_style.dart` | none | none | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
-| `_slotFill` | `showcase_style.dart` | none | none | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
-| `_plateFill` | `showcase_style.dart` | none | none | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseMetrics` | `showcase_metrics.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseMetricsScope` | `showcase_metrics.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `kShowcaseGutter` | `showcase_metrics.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `_ink` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `_slotFill` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `_plateFill` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
 | `_ambientBed` | `showcase_grounds.dart` | none | none | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_t` | `showcase_style.dart` | none | none | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
-| `_activate` | `showcase_style.dart` | none | none | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
-| `_keepVisible` | `showcase_style.dart` | none | context | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
-| `_Hover` | `showcase_style.dart` | none | none | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
-| `_HoverState` | `showcase_style.dart` | none | widget, context | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `_t` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `_activate` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `_keepVisible` | `showcase_style.dart` | none | context | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `_Hover` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `_HoverState` | `showcase_style.dart` | none | widget, context | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
 | `ShowcaseAmbient` | `showcase_grounds.dart` | none | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
 | `ShowcaseBackdropScrim` | `showcase_grounds.dart` | none | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
 | `ShowcaseStickyLogo` | `showcase_grounds.dart` | _t → st | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
@@ -70,7 +70,7 @@ Original application reference R: `1165b624` (format-only). Every row is a whole
 | `_DykCardState` | `showcase_did_you_know.dart` | _ink → sInk; _t → st; _keepVisible → sKeepVisible; _Hover → SHover | widget, context | Pending step 4; production via unchanged facade, owner-local spelling, same callback objects |
 | `_DykMoreCard` | `showcase_did_you_know.dart` | none | none | Pending step 4; production via unchanged facade, owner-local spelling, same callback objects |
 | `_DykMoreCardState` | `showcase_did_you_know.dart` | _ink → sInk; _t → st; _keepVisible → sKeepVisible; _Hover → SHover | widget, context | Pending step 4; production via unchanged facade, owner-local spelling, same callback objects |
-| `_Band` | `showcase_style.dart` | none | context | Pending step 1; production via unchanged facade, owner-local spelling, same callback objects |
+| `_Band` | `showcase_style.dart` | none | context | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
 | `ShowcaseBandNote` | `showcase_notes.dart` | _t → st | context | Pending step 4; production via unchanged facade, owner-local spelling, same callback objects |
 | `_RetryChip` | `showcase_notes.dart` | none | none | Pending step 4; production via unchanged facade, owner-local spelling, same callback objects |
 | `_RetryChipState` | `showcase_notes.dart` | _ink → sInk; _activate → sActivate | widget, context | Pending step 4; production via unchanged facade, owner-local spelling, same callback objects |

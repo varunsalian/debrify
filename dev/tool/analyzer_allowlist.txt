@@ -26,3 +26,6 @@ warning | unnecessary_non_null_assertion | lib/features/playlist_content/present
 warning | unnecessary_null_comparison | lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_metadata.dart | The operand can't be 'null', so the condition is always 'true'. Remove the condition
 warning | unnecessary_null_comparison | lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_view_modes.dart | The operand can't be 'null', so the condition is always 'true'. Remove the condition
 warning | unused_element | lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_dormant.dart | The declaration '_loadProgressData' isn't referenced. Try removing the declaration of '_loadProgressData'
+
+# 2026-10-04 detail_showcase: original unused private retained verbatim in step 1.
+warning | unused_element | lib/features/detail_showcase/presentation/showcase_style.dart | The declaration '_plateFill' isn't referenced. Try removing the declaration of '_plateFill'

@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "detail_showcase")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -33,6 +33,8 @@ PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_p
 PLAYLIST_CONTENT_COMPLETE = True
 PLAYLIST_CONTENT_FACADE = "lib/screens/playlist_content_view_screen.dart"
 PLAYLIST_CONTENT_BRIDGE = "lib/features/playlist_content/presentation/legacy_playlist_content/"
+DETAIL_SHOWCASE_COMPLETE = False
+DETAIL_SHOWCASE_FACADE = "lib/widgets/detail/showcase_parts.dart"
 MERGED_DETAIL_COMPLETE = True
 MERGED_DETAIL_FACADE = "lib/screens/merged_series_detail_screen.dart"
 MERGED_DETAIL_BRIDGE = "lib/features/merged_detail/presentation/legacy_merged_detail/"
@@ -402,6 +404,16 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line playback settings facade limit")
         if "TEMP(playback_settings)" in source:
             problems.append("temporary playback settings cross-call remains in the facade")
+    # Always scan the feature, including intermediate extraction checkpoints.
+    if relative.startswith("lib/features/detail_showcase/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line detail showcase extraction limit")
+        if "TEMP(detail_showcase)" in source:
+            problems.append("temporary detail showcase cross-call remains")
+        if re.search(r"\b(?:FocusNode|[A-Za-z]*Controller|Timer|KeepAlive)\s*\(", source):
+            problems.append("detail showcase constructs an owned resource")
+        if re.search(r"\b(?:node|focusNode|nodes\[[^]]+\])\s*\.\s*dispose\s*\(", source):
+            problems.append("detail showcase disposes a borrowed focus node")
     if relative.startswith("lib/features/merged_detail/"):
         if lines > 500:
             problems.append(f"{lines} lines exceeds the 500-line merged-detail extraction limit")
@@ -479,6 +491,11 @@ def violations(path: Path) -> list[str]:
                 resolved = (path.parent / uri).resolve()
                 if resolved.is_relative_to(ROOT):
                     target = resolved.relative_to(ROOT).as_posix()
+            if relative.startswith("lib/features/detail_showcase/") or relative == DETAIL_SHOWCASE_FACADE:
+                if any(name in target for name in ("media_kit", "hero_trailer_backdrop", "trailer_engine", "video_player_launcher", "player_launch")):
+                    problems.append("detail showcase imports a playback implementation")
+                if relative.startswith("lib/features/detail_showcase/") and target == DETAIL_SHOWCASE_FACADE:
+                    problems.append("detail showcase feature imports its facade")
             if relative.startswith("lib/features/playback_settings/") and not relative.startswith(PLAYBACK_SETTINGS_BRIDGE) and target.startswith("lib/services/"):
                 problems.append("playback settings outside the legacy bridge imports a service")
             if relative.startswith("lib/features/iptv_settings/"):
@@ -518,6 +535,8 @@ def violations(path: Path) -> list[str]:
             if isinstance(bridge, dict) and target in bridge:
                 shown = re.search(r"\bshow\s+([\w,\s]+)$", declaration)
                 names = set(re.findall(r"\w+", shown.group(1))) if shown else set()
+                if relative.startswith("lib/features/detail_showcase/") and names != bridge[target]:
+                    problems.append(f"detail showcase service import must show the exact registered declarations: {uri}")
                 if not names or not names <= bridge[target]:
                     problems.append(f"legacy presentation import must show only allowed declarations: {uri}")
             legacy_bridge = (relative.startswith(LEGACY_PLAYBACK_BRIDGES)
@@ -552,6 +571,12 @@ def violations(path: Path) -> list[str]:
                     problems.append("playback settings feature imports its facade")
                 if target.startswith("lib/features/") and {own, target.split("/")[2]} in ({"playback_settings", "settings"}, {"playback_settings", "iptv_settings"}) and "/models/" not in target:
                     problems.append("playback/settings cross-feature import outside models")
+                if target.startswith("lib/features/"):
+                    other = target.split("/")[2]
+                    if ((own == "detail_showcase" and other in ("merged_detail", "catalog_detail")) or
+                            (other == "detail_showcase" and own in ("merged_detail", "catalog_detail"))):
+                        if not target.startswith(f"lib/features/{other}/models/"):
+                            problems.append("detail showcase/detail implementation cross-import")
                 clouds = {"debrid_downloads", "torbox_downloads", "pikpak_files"}
                 if target.startswith("lib/features/"):
                     other = target.split("/")[2]
