@@ -1,6 +1,6 @@
 # Playlist content dependency and wiring report
 
-Original: `67b32702`, screen blob `4fc757c7760960d30e5254b9c6809fed300d036b`. All 29 State fields and 107 original leaves have exactly one destination. No extraction has begun.
+Original: `67b32702`, screen blob `4fc757c7760960d30e5254b9c6809fed300d036b`. All 29 State fields and 107 original leaves have exactly one destination. Step 1 moves the pure helpers and search-result model; later entries remain planned.
 
 This is the bounded legacy stage and its exceptions/exit milestones in the plan apply. State owns lifecycle; each route constructs fresh owners. Context/mounted/item/callback bindings remain live and preserve current profile behavior. Builders keep lexical callback/build contexts. No action starts during construction.
 
@@ -127,3 +127,23 @@ The checklist below records planned bindings. At each move, review the actual pr
 ## Wiring verification checkpoints
 
 Step 0: planned inventory reviewed against original AST references. No scaffolds pinned.
+
+Step 1: actual production bindings reviewed before scaffold pinning. Pure functions retain their original inputs/returns, aliases, sorting mutation/ordering, loop ids and fallbacks; they read no State, context, services or widget. State and the accessor reference the same top-level functions. The search DTO retains both final fields and its const constructor. Analyzer removes only unused import directives.
+
+| Entry | Actual production callers / binding | Review |
+| --- | --- | --- |
+| `_PlaylistContentViewScreenState._buildPikPakFileTree` | `_loadPikPakContent` → `buildPikPakFileTree` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._buildPremiumizeCloudFileTree` | `_loadPremiumizeContent` → `buildPremiumizeCloudFileTree` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._buildPremiumizeFileTree` | `_loadPremiumizeContent` → `buildPremiumizeFileTree` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._buildWebDavFileTree` | `_loadWebDavContent` → `buildWebDavFileTree` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._relativeWebDavPath` | `_buildWebDavFileTree` → `relativeWebDavPath` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._fileNameFromPath` | `_loadWebDavContent`, `_buildWebDavFileTree` → `fileNameFromPath` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._asStringDynamicMap` | `_loadWebDavContent` → `asStringDynamicMap` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._asInt` | `_buildWebDavFileTree` → `asInt` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._applySortedView` | `_applyViewMode`, `_applySeriesArrangeView` → `applySortedView` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._extractSeasonNumber` | `_applySortedView`, `_applySortedPlaylistOrder` → `extractSeasonNumber` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._extractLeadingNumber` | `_applySortedView`, `_applySortedPlaylistOrder` → `extractLeadingNumber` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._formatAirDate` | `_buildEpisodeMetadataRow` → `formatAirDate` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._hasWebDavCredentials` | `_playWebDavPlaylist` → `hasWebDavCredentials` | Original signature/body and ownership retained. |
+| `_PlaylistContentViewScreenState._cleanTorboxPath` | `_playTorboxPlaylist` → `cleanTorboxPath` | Original signature/body and ownership retained. |
+| `_SearchResult` | `_performSearch` → `PlaylistContentSearchResult` | Original signature/body and ownership retained. |

@@ -692,6 +692,14 @@ identities against the observed branch baselines and approved additions.
   removed diagnostics, CI allowlist/format and all 17 warning occurrences pass.
   Original checkpoint and current affected tests pass; no production move yet.
 
+- Step 1: the 14 pure helpers and search-result DTO use their planned
+  application/model destinations. Actual per-entry callers are reviewed in
+  the wiring checklist; the production caller and frozen accessor use those
+  functions. Feature/import/500-line destination guards and explicit theme
+  globs are registered. The facade ratchet is 3,935 lines; State resources,
+  loading/actions/layout and composition remain until their named steps.
+  Evidence `playlist_content/step1-*` passes against latest `base4`: 172 focused/source/shape identities, all six manifest self-tests, exact analyzer comparison, CI format/allowlist, all 17 warning occurrences, architecture/size and storage checks. No new strict-lint infos; original diagnostics are retained.
+
 
 ## Found, not fixed
 

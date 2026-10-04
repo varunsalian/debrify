@@ -1,5 +1,22 @@
 import 'dart:async';
-
+import 'package:debrify/features/playlist_content/application/playlist_content_file_trees.dart';
+import 'package:debrify/features/playlist_content/application/playlist_content_formatting.dart';
+import 'package:debrify/features/playlist_content/application/playlist_content_sort_policy.dart';
+import 'package:debrify/features/playlist_content/models/playlist_content_search_result.dart';
+import 'package:debrify/models/alldebrid_file.dart';
+import 'package:debrify/models/playlist_view_mode.dart';
+import 'package:debrify/models/rd_file_node.dart';
+import 'package:debrify/models/series_playlist.dart';
+import 'package:debrify/models/webdav_item.dart';
+import 'package:debrify/screens/video_player/models/playlist_entry.dart';
+import 'package:debrify/services/alldebrid_service.dart';
+import 'package:debrify/services/analytics_service.dart';
+import 'package:debrify/services/android_native_downloader.dart';
+import 'package:debrify/services/debrid_service.dart';
+import 'package:debrify/services/episode_info_service.dart';
+import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/pikpak_api_service.dart';
+import 'package:debrify/services/premiumize_service.dart';
 import 'package:debrify/services/storage/alldebrid_storage.dart';
 import 'package:debrify/services/storage/episode_completion_storage.dart';
 import 'package:debrify/services/storage/episode_progress_storage.dart';
@@ -14,38 +31,22 @@ import 'package:debrify/services/storage/real_debrid_storage.dart';
 import 'package:debrify/services/storage/torbox_storage.dart';
 import 'package:debrify/services/storage/tvmaze_mapping_storage.dart';
 import 'package:debrify/services/storage/webdav_server_storage.dart';
+import 'package:debrify/services/torbox_service.dart';
+import 'package:debrify/services/tvmaze_service.dart';
+import 'package:debrify/services/video_player_launcher.dart';
+import 'package:debrify/services/webdav_service.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/utils/file_utils.dart';
+import 'package:debrify/utils/formatters.dart';
+import 'package:debrify/utils/rd_folder_tree_builder.dart';
+import 'package:debrify/utils/series_parser.dart';
+import 'package:debrify/utils/torbox_folder_tree_builder.dart';
+import 'package:debrify/utils/tv_keys.dart';
+import 'package:debrify/widgets/tv_text_field.dart';
+import 'package:debrify/widgets/tvmaze_search_dialog.dart';
+import 'package:debrify/widgets/view_mode_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-import '../models/playlist_view_mode.dart';
-import '../models/rd_file_node.dart';
-import '../models/series_playlist.dart';
-import '../services/analytics_service.dart';
-import '../services/debrid_service.dart';
-import '../services/alldebrid_service.dart';
-import '../models/alldebrid_file.dart';
-import '../services/torbox_service.dart';
-import '../services/pikpak_api_service.dart';
-import '../services/video_player_launcher.dart';
-import '../services/main_page_bridge.dart';
-import '../services/android_native_downloader.dart';
-import '../services/episode_info_service.dart';
-import '../services/tvmaze_service.dart';
-import '../services/webdav_service.dart';
-import '../services/premiumize_service.dart';
-import '../models/premiumize_file.dart';
-import '../theme/app_theme_scope.dart';
-import '../utils/series_parser.dart';
-import '../utils/file_utils.dart';
-import '../utils/formatters.dart';
-import '../utils/rd_folder_tree_builder.dart';
-import '../utils/torbox_folder_tree_builder.dart';
-import '../widgets/view_mode_dropdown.dart';
-import '../widgets/tvmaze_search_dialog.dart';
-import '../widgets/tv_text_field.dart';
-import '../models/webdav_item.dart';
-import 'video_player/models/playlist_entry.dart';
-import '../utils/tv_keys.dart';
 
 /// Screen for viewing contents of a playlist item
 /// Supports Raw, Sort, and Series Arrange view modes
@@ -67,14 +68,19 @@ class PlaylistContentViewScreen extends StatefulWidget {
 
 class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   bool _isLoading = true;
+
   String? _errorMessage;
 
   // Current navigation state
-  List<String> _folderPath = []; // Path segments for breadcrumbs
-  RDFileNode? _rootContent; // Root content tree
-  List<RDFileNode>?
-  _currentViewNodes; // Current folder's visible nodes (after view mode transformation)
+  List<String> _folderPath = [];
 
+  // Path segments for breadcrumbs
+  RDFileNode? _rootContent;
+
+  // Root content tree
+  List<RDFileNode>? _currentViewNodes;
+
+  // Current folder's visible nodes (after view mode transformation)
   // AllDebrid: files in the order used to build the tree, so a node's linkIndex
   // maps to its locked link (parallels Real-Debrid's links[] array).
   List<AllDebridFile> _allDebridFiles = [];
@@ -86,6 +92,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   final FocusNode _viewModeDropdownFocusNode = FocusNode(
     debugLabel: 'playlist-view-mode-dropdown',
   );
+
   final FocusNode _backButtonFocusNode = FocusNode(
     debugLabel: 'playlist-back-button',
   );
@@ -95,36 +102,52 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   // OTT View state
   SeriesPlaylist? _seriesPlaylist;
+
   int _selectedSeasonNumber = 1;
+
   bool _isLoadingSeriesMetadata = false;
 
   // Auto-scroll state
   final ScrollController _episodeListScrollController = ScrollController();
-  int? _targetEpisodeIndex; // Episode to scroll to after list is built
-  Timer? _scrollRetryTimer; // Timer for scroll retry to prevent memory leaks
-  bool _isScrollScheduled =
-      false; // Flag to prevent duplicate scroll scheduling
 
+  int? _targetEpisodeIndex;
+
+  // Episode to scroll to after list is built
+  Timer? _scrollRetryTimer;
+
+  // Timer for scroll retry to prevent memory leaks
+  bool _isScrollScheduled = false;
+
+  // Flag to prevent duplicate scroll scheduling
   // OTT view auto-switch timer (for non-series content)
   Timer? _ottViewAutoSwitchTimer;
 
   // Search state (for Raw and Sort A-Z modes)
   bool _isSearchActive = false;
+
   final TextEditingController _searchController = TextEditingController();
+
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'playlist-search');
+
   final FocusNode _searchButtonFocusNode = FocusNode(
     debugLabel: 'playlist-search-button',
   );
+
   final FocusNode _searchClearFocusNode = FocusNode(
     debugLabel: 'playlist-search-clear',
   );
-  List<_SearchResult> _searchResults = [];
+
+  List<PlaylistContentSearchResult> _searchResults = [];
 
   // Long-press state for episode cards (Android TV D-pad)
   Timer? _episodeLongPressTimer;
+
   bool _episodeLongPressTriggered = false;
+
   DateTime? _lastEpisodeLongPressTime;
+
   bool _episodeKeyDownReceived = false;
+
   bool _isAndroidTv = false;
 
   @override
@@ -459,7 +482,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       final cachedFiles = widget.playlistItem['pikpakFiles'] as List?;
       if (cachedFiles != null && cachedFiles.isNotEmpty) {
         final files = cachedFiles.cast<Map<String, dynamic>>();
-        _rootContent = _buildPikPakFileTree(files);
+        _rootContent = buildPikPakFileTree(files);
       } else {
         throw Exception(
           'No PikPak file data found. Please remove and re-add this item to playlist.',
@@ -542,46 +565,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     return RDFileNode.folder(name: 'Root', children: children);
   }
 
-  /// Build file tree from PikPak files (from recursive list)
-  /// Used as fallback for old playlist items without pikpakFileId
-  /// Displays as a flat list since we don't have folder structure info
-  RDFileNode _buildPikPakFileTree(List<Map<String, dynamic>> files) {
-    final List<RDFileNode> nodes = [];
-
-    for (int i = 0; i < files.length; i++) {
-      final file = files[i];
-      final kind = file['kind'] ?? '';
-      final name = (file['name'] as String?) ?? 'Unknown';
-      final fileId = file['id'] as String?;
-
-      // PikPak returns size as String, need to parse it
-      final sizeRaw = file['size'];
-      final size = sizeRaw is int
-          ? sizeRaw
-          : (sizeRaw is String ? int.tryParse(sizeRaw) ?? 0 : 0);
-
-      if (kind == 'drive#folder') {
-        // Skip folders in flat view since we don't have hierarchy
-        continue;
-      } else if (fileId != null) {
-        // Add file node with pikpak:// URL for playback
-        final pikpakUrl = 'pikpak://$fileId|$name';
-
-        nodes.add(
-          RDFileNode.file(
-            name: name,
-            fileId: i,
-            path: pikpakUrl, // Store PikPak file ID for playback
-            bytes: size,
-            linkIndex: i,
-          ),
-        );
-      }
-    }
-
-    return RDFileNode.folder(name: 'Root', children: nodes);
-  }
-
   /// Load Premiumize content by re-resolving the torrent's files from its hash.
   Future<void> _loadPremiumizeContent() async {
     final infohash = (widget.playlistItem['torrent_hash'] as String?)?.trim();
@@ -590,13 +573,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // file metadata (each node carries its cloud item id for re-resolution).
       final filesRaw = widget.playlistItem['premiumizeFiles'];
       if (filesRaw is List && filesRaw.isNotEmpty) {
-        _rootContent = _buildPremiumizeCloudFileTree(filesRaw);
+        _rootContent = buildPremiumizeCloudFileTree(filesRaw);
         return;
       }
       // Single cloud item: build a one-node tree from its metadata.
       final singleFile = widget.playlistItem['premiumizeFile'];
       if (singleFile is Map) {
-        _rootContent = _buildPremiumizeCloudFileTree([singleFile]);
+        _rootContent = buildPremiumizeCloudFileTree([singleFile]);
         return;
       }
       throw Exception('No Premiumize torrent hash found');
@@ -612,66 +595,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       throw Exception('No files found in torrent');
     }
 
-    _rootContent = _buildPremiumizeFileTree(files);
-  }
-
-  /// Build a flat tree from cloud-browser collection metadata. Each node stores
-  /// the Premiumize cloud item id in its [RDFileNode.path] so playback can
-  /// re-resolve a fresh direct link via `/item/details`.
-  RDFileNode _buildPremiumizeCloudFileTree(List<dynamic> filesRaw) {
-    final List<RDFileNode> nodes = [];
-    int i = 0;
-    for (final raw in filesRaw) {
-      if (raw is! Map) continue;
-      final id = raw['id']?.toString() ?? '';
-      if (id.isEmpty) continue;
-      final name = raw['name']?.toString() ?? 'File $id';
-      final size = int.tryParse(raw['size']?.toString() ?? '') ?? 0;
-      nodes.add(
-        RDFileNode.file(
-          name: name,
-          fileId: i,
-          path: id, // cloud item id, used to re-resolve on playback
-          relativePath: name,
-          bytes: size,
-          linkIndex: i,
-        ),
-      );
-      i++;
-    }
-    return RDFileNode.folder(name: 'Root', children: nodes);
-  }
-
-  /// Build a flat file tree from Premiumize files. Each file node stores the
-  /// Premiumize file path so playback can re-resolve a fresh direct link.
-  RDFileNode _buildPremiumizeFileTree(List<PremiumizeFile> files) {
-    final List<RDFileNode> nodes = [];
-    for (int i = 0; i < files.length; i++) {
-      final file = files[i];
-      // Strip the first folder level (torrent name) for a clean series path.
-      String relativePath = file.path;
-      final firstSlash = relativePath.indexOf('/');
-      if (firstSlash > 0) {
-        relativePath = relativePath.substring(firstSlash + 1);
-      }
-      nodes.add(
-        RDFileNode.file(
-          name: file.fileName,
-          fileId: i,
-          path: file.path, // Premiumize file path, matched on re-resolve
-          relativePath: relativePath,
-          bytes: file.size,
-          linkIndex: i,
-        ),
-      );
-    }
-    return RDFileNode.folder(name: 'Root', children: nodes);
+    _rootContent = buildPremiumizeFileTree(files);
   }
 
   /// Load WebDAV content from the file metadata stored in the playlist item.
   Future<void> _loadWebDavContent() async {
     final files = <Map<String, dynamic>>[];
-    final singleFile = _asStringDynamicMap(widget.playlistItem['webdavFile']);
+    final singleFile = asStringDynamicMap(widget.playlistItem['webdavFile']);
     if (singleFile != null) {
       files.add(singleFile);
     }
@@ -679,7 +609,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final cachedFiles = widget.playlistItem['webdavFiles'];
     if (cachedFiles is List) {
       for (final rawFile in cachedFiles) {
-        final file = _asStringDynamicMap(rawFile);
+        final file = asStringDynamicMap(rawFile);
         if (file != null) files.add(file);
       }
     }
@@ -687,7 +617,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final fallbackPath = (widget.playlistItem['webdavPath'] ?? '').toString();
     if (files.isEmpty && fallbackPath.isNotEmpty) {
       files.add({
-        'name': _fileNameFromPath(fallbackPath, fallbackPath),
+        'name': fileNameFromPath(fallbackPath, fallbackPath),
         'path': fallbackPath,
         'sizeBytes': widget.playlistItem['sizeBytes'],
       });
@@ -699,101 +629,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       );
     }
 
-    _rootContent = _buildWebDavFileTree(
+    _rootContent = buildWebDavFileTree(
       files,
       rootPath: (widget.playlistItem['webdavFolderPath'] ?? '').toString(),
     );
-  }
-
-  RDFileNode _buildWebDavFileTree(
-    List<Map<String, dynamic>> files, {
-    required String rootPath,
-  }) {
-    final rootChildren = <RDFileNode>[];
-    var fileIndex = 0;
-
-    for (final file in files) {
-      final path = (file['path'] ?? '').toString();
-      if (path.isEmpty) continue;
-
-      final fallbackName = _fileNameFromPath(path, path);
-      final name = ((file['name'] ?? '').toString().trim().isNotEmpty)
-          ? file['name'].toString()
-          : fallbackName;
-      final relativePath = _relativeWebDavPath(rootPath, path, name);
-      final segments = relativePath
-          .split('/')
-          .where((segment) => segment.trim().isNotEmpty)
-          .toList();
-      final safeSegments = segments.isEmpty ? [name] : segments;
-      var currentChildren = rootChildren;
-
-      for (final folderName in safeSegments.take(safeSegments.length - 1)) {
-        final existingIndex = currentChildren.indexWhere(
-          (node) => node.isFolder && node.name == folderName,
-        );
-        RDFileNode folder;
-        if (existingIndex == -1) {
-          folder = RDFileNode.folder(
-            name: folderName,
-            children: <RDFileNode>[],
-          );
-          currentChildren.add(folder);
-        } else {
-          folder = currentChildren[existingIndex];
-        }
-        currentChildren = folder.children;
-      }
-
-      final fileName = safeSegments.last;
-      currentChildren.add(
-        RDFileNode.file(
-          name: fileName,
-          fileId: fileIndex,
-          path: path,
-          relativePath: relativePath,
-          bytes: _asInt(file['sizeBytes']) ?? 0,
-          linkIndex: fileIndex,
-        ),
-      );
-      fileIndex++;
-    }
-
-    if (rootChildren.isEmpty) {
-      throw Exception('No playable WebDAV files found');
-    }
-
-    return RDFileNode.folder(name: 'Root', children: rootChildren);
-  }
-
-  String _relativeWebDavPath(String rootPath, String filePath, String name) {
-    final normalizedRoot = rootPath.replaceFirst(RegExp(r'/+$'), '');
-    final normalizedFile = filePath.replaceFirst(RegExp(r'/+$'), '');
-    if (normalizedRoot.isNotEmpty &&
-        normalizedFile.startsWith('$normalizedRoot/')) {
-      return normalizedFile.substring(normalizedRoot.length + 1);
-    }
-    return normalizedFile.isNotEmpty ? normalizedFile : name;
-  }
-
-  String _fileNameFromPath(String path, String fallback) {
-    final parts = path.split('/').where((part) => part.isNotEmpty).toList();
-    return parts.isEmpty ? fallback : parts.last;
-  }
-
-  Map<String, dynamic>? _asStringDynamicMap(dynamic value) {
-    if (value is Map<String, dynamic>) return value;
-    if (value is Map) {
-      return value.map((key, value) => MapEntry(key.toString(), value));
-    }
-    return null;
-  }
-
-  int? _asInt(dynamic value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value);
-    return null;
   }
 
   /// Apply view mode transformation
@@ -840,7 +679,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           _currentViewNodes = currentFolder.children;
           break;
         case FolderViewMode.sortedAZ:
-          _currentViewNodes = _applySortedView(currentFolder.children);
+          _currentViewNodes = applySortedView(currentFolder.children);
           break;
         case FolderViewMode.seriesArrange:
           _currentViewNodes = _applySeriesArrangeView(currentFolder.children);
@@ -853,90 +692,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       widget.playlistItem,
       _viewModeToString(mode),
     );
-  }
-
-  /// Apply sorted A-Z view
-  List<RDFileNode> _applySortedView(List<RDFileNode> nodes) {
-    final folders = nodes.where((n) => n.isFolder).toList();
-    final files = nodes.where((n) => !n.isFolder).toList();
-
-    // Sort folders with numerical handling (same logic as PikPak/RD/Torbox)
-    folders.sort((a, b) {
-      final aNum = _extractSeasonNumber(a.name);
-      final bNum = _extractSeasonNumber(b.name);
-
-      // If both have numbers, sort numerically
-      if (aNum != null && bNum != null) {
-        return aNum.compareTo(bNum);
-      }
-
-      // If only one has a number, numbered folders come first
-      if (aNum != null) return -1;
-      if (bNum != null) return 1;
-
-      // Otherwise sort alphabetically
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
-
-    // Sort files with numerical handling (same logic as PikPak/RD/Torbox)
-    files.sort((a, b) {
-      final aNum = _extractLeadingNumber(a.name);
-      final bNum = _extractLeadingNumber(b.name);
-
-      // If both start with numbers, sort numerically
-      if (aNum != null && bNum != null) {
-        return aNum.compareTo(bNum);
-      }
-
-      // If only one starts with a number, numbered files come first
-      if (aNum != null) return -1;
-      if (bNum != null) return 1;
-
-      // Otherwise sort alphabetically
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
-
-    return [...folders, ...files];
-  }
-
-  /// Extract number from folder name for numerical sorting
-  /// Handles: "1. Introduction", "10. Chapter", "Season 10", "Chapter_12", "Episode 5", "Part 3", etc.
-  int? _extractSeasonNumber(String folderName) {
-    final patterns = [
-      // Leading numbers: "1. ", "10-", "5_", etc.
-      RegExp(r'^(\d+)[\s._-]'),
-      // Season/Chapter/Episode/Part keywords: "Season 10", "Chapter_12", etc.
-      RegExp(r'season[\s_-]*(\d+)', caseSensitive: false),
-      RegExp(r'chapter[\s_-]*(\d+)', caseSensitive: false),
-      RegExp(r'episode[\s_-]*(\d+)', caseSensitive: false),
-      RegExp(r'part[\s_-]*(\d+)', caseSensitive: false),
-      // Generic word followed by number: "Lesson_5", "Module-3"
-      RegExp(r'^[a-z]+[\s_-]*(\d+)', caseSensitive: false),
-    ];
-
-    final lowerName = folderName.toLowerCase();
-
-    for (final pattern in patterns) {
-      final match = pattern.firstMatch(lowerName);
-      if (match != null && match.groupCount >= 1) {
-        return int.tryParse(match.group(1)!);
-      }
-    }
-
-    return null;
-  }
-
-  /// Extract leading number from filename for numerical sorting
-  /// Handles: "10. Video.mp4", "9 - Title.mkv", "05_Episode.mp4", etc.
-  int? _extractLeadingNumber(String filename) {
-    final pattern = RegExp(r'^(\d+)[\s._-]');
-    final match = pattern.firstMatch(filename);
-
-    if (match != null && match.groupCount >= 1) {
-      return int.tryParse(match.group(1)!);
-    }
-
-    return null;
   }
 
   /// Apply Sort A-Z ordering to a list of video files for playback
@@ -970,8 +725,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     // Sort files within each folder group (SAME LOGIC AS UI)
     for (final group in folderGroups.values) {
       group.sort((a, b) {
-        final aNum = _extractLeadingNumber(a.name);
-        final bNum = _extractLeadingNumber(b.name);
+        final aNum = extractLeadingNumber(a.name);
+        final bNum = extractLeadingNumber(b.name);
 
         // If both start with numbers, sort numerically
         if (aNum != null && bNum != null) {
@@ -1026,8 +781,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
 
       // Use _extractSeasonNumber for numerical awareness (SAME AS UI)
-      final aNum = _extractSeasonNumber(aFolderName);
-      final bNum = _extractSeasonNumber(bFolderName);
+      final aNum = extractSeasonNumber(aFolderName);
+      final bNum = extractSeasonNumber(bFolderName);
 
       // If both have numbers, sort numerically
       if (aNum != null && bNum != null) {
@@ -1060,13 +815,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     if (videoFiles.length < 3) {
       // Not enough files for series detection, fallback to sorted
-      return _applySortedView(nodes);
+      return applySortedView(nodes);
     }
 
     // Use the already-parsed _seriesPlaylist instead of re-parsing filenames
     // This is more accurate (considers TVMaze mappings) and faster
     if (_seriesPlaylist == null || !_seriesPlaylist!.isSeries) {
-      return _applySortedView(nodes);
+      return applySortedView(nodes);
     }
 
     // Parse filenames for season/episode extraction
@@ -1219,7 +974,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   }
 
   // ============ Search Methods ============
-
   /// Toggle search mode on/off
   void _toggleSearch() {
     setState(() {
@@ -1244,7 +998,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     final lowerQuery = query.toLowerCase();
-    final results = <_SearchResult>[];
+    final results = <PlaylistContentSearchResult>[];
 
     // Recursive function to search with path tracking
     void searchNode(RDFileNode node, List<String> path) {
@@ -1252,7 +1006,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         // Only search video files
         if (FileUtils.isVideoFile(node.name) &&
             node.name.toLowerCase().contains(lowerQuery)) {
-          results.add(_SearchResult(node: node, path: path.join(' / ')));
+          results.add(
+            PlaylistContentSearchResult(node: node, path: path.join(' / ')),
+          );
         }
       } else {
         // Recurse into folder
@@ -1407,7 +1163,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   }
 
   /// Build a card for a search result
-  Widget _buildSearchResultCard(_SearchResult result) {
+  Widget _buildSearchResultCard(PlaylistContentSearchResult result) {
     final app = AppThemeScope.of(context);
     final node = result.node;
 
@@ -3176,30 +2932,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     );
   }
 
-  /// Format air date from "YYYY-MM-DD" to "Mon DD, YYYY" (e.g. "Feb 10, 2023")
-  String _formatAirDate(String airDate) {
-    try {
-      final date = DateTime.parse(airDate);
-      const months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      return '${months[date.month - 1]} ${date.day}, ${date.year}';
-    } catch (_) {
-      return airDate;
-    }
-  }
-
   /// Build compact metadata row (Trakt-style) for episode cards
   Widget _buildEpisodeMetadataRow(
     SeriesEpisode episode,
@@ -3234,7 +2966,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           ),
         if (episodeInfo?.airDate != null)
           Text(
-            _formatAirDate(episodeInfo!.airDate!),
+            formatAirDate(episodeInfo!.airDate!),
             style: TextStyle(color: app.playlist.ink3, fontSize: 11),
           ),
         if (episodeInfo?.runtime != null)
@@ -3714,7 +3446,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               PlaylistEntry(
                 url: url,
                 title: file.name,
-                relativePath: _cleanTorboxPath(file.path),
+                relativePath: cleanTorboxPath(file.path),
                 torboxTorrentId: torboxTorrentId,
                 torboxFileId: file.fileId,
                 sizeBytes: file.bytes,
@@ -3727,7 +3459,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             PlaylistEntry(
               url: '',
               title: file.name,
-              relativePath: _cleanTorboxPath(file.path),
+              relativePath: cleanTorboxPath(file.path),
               torboxTorrentId: torboxTorrentId,
               torboxFileId: file.fileId,
               sizeBytes: file.bytes,
@@ -3740,7 +3472,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           PlaylistEntry(
             url: '',
             title: file.name,
-            relativePath: _cleanTorboxPath(file.path),
+            relativePath: cleanTorboxPath(file.path),
             torboxTorrentId: torboxTorrentId,
             torboxFileId: file.fileId,
             sizeBytes: file.bytes,
@@ -4066,7 +3798,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       disableAutoResume: true,
       viewMode: _convertToPlaylistViewMode(_currentViewMode),
       httpHeaders: WebDavService.authHeaders(config),
-      disableExternalPlayer: _hasWebDavCredentials(config),
+      disableExternalPlayer: hasWebDavCredentials(config),
       webDavServerId: (widget.playlistItem['webdavServerId'] ?? config.id)
           .toString(),
       webDavBaseUrl: (widget.playlistItem['webdavBaseUrl'] ?? config.baseUrl)
@@ -4101,42 +3833,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
     return null;
   }
-
-  bool _hasWebDavCredentials(WebDavConfig config) {
-    return config.username.isNotEmpty || config.password.isNotEmpty;
-  }
-
-  /// Clean Torbox path by removing "TorrentName..." prefix
-  /// Example: "TorrentName.../Season 1/Episode 1.mkv" -> "Season 1/Episode 1.mkv"
-  String? _cleanTorboxPath(String? path) {
-    if (path == null) return null;
-
-    // Step 1: Remove "TorrentName..." prefix
-    String cleanedPath = path;
-    if (path.contains('.../')) {
-      final parts = path.split('.../');
-      if (parts.length > 1) {
-        cleanedPath = parts.skip(1).join('.../');
-      }
-    }
-
-    // Step 2: Strip first-level folder for Torbox files
-    // Example: "Chapter_1-Introduction/1. Introduction.mp4" -> "1. Introduction.mp4"
-    final firstSlash = cleanedPath.indexOf('/');
-    if (firstSlash > 0) {
-      cleanedPath = cleanedPath.substring(firstSlash + 1);
-    }
-
-    return cleanedPath;
-  }
-}
-
-/// Helper class to hold search result with its folder path
-class _SearchResult {
-  final RDFileNode node;
-  final String path;
-
-  const _SearchResult({required this.node, required this.path});
 }
 
 /// Original-code characterization seam: fresh state and real action tear-offs.
@@ -4189,14 +3885,14 @@ Map<String, Object?> playlistContentTestAccess(
     'loadPikPakContent': s._loadPikPakContent,
     'loadPremiumizeContent': s._loadPremiumizeContent,
     'loadWebDavContent': s._loadWebDavContent,
-    'relativeWebDavPath': s._relativeWebDavPath,
-    'fileNameFromPath': s._fileNameFromPath,
-    'asStringDynamicMap': s._asStringDynamicMap,
-    'asInt': s._asInt,
+    'relativeWebDavPath': relativeWebDavPath,
+    'fileNameFromPath': fileNameFromPath,
+    'asStringDynamicMap': asStringDynamicMap,
+    'asInt': asInt,
     'applyViewMode': s._applyViewMode,
-    'applySortedView': s._applySortedView,
-    'extractSeasonNumber': s._extractSeasonNumber,
-    'extractLeadingNumber': s._extractLeadingNumber,
+    'applySortedView': applySortedView,
+    'extractSeasonNumber': extractSeasonNumber,
+    'extractLeadingNumber': extractLeadingNumber,
     'applySortedPlaylistOrder': s._applySortedPlaylistOrder,
     'applySeriesArrangeView': s._applySeriesArrangeView,
     'navigateIntoFolder': s._navigateIntoFolder,
@@ -4214,7 +3910,7 @@ Map<String, Object?> playlistContentTestAccess(
     'saveDetectedSeriesPosterToPlaylist': s._saveDetectedSeriesPosterToPlaylist,
     'updatePlaylistPoster': s._updatePlaylistPoster,
     'scrollToEpisode': s._scrollToEpisode,
-    'formatAirDate': s._formatAirDate,
+    'formatAirDate': formatAirDate,
     'toggleWatchedState': s._toggleWatchedState,
     'playEpisode': s._playEpisode,
     'playRealDebridPlaylist': s._playRealDebridPlaylist,
@@ -4224,13 +3920,13 @@ Map<String, Object?> playlistContentTestAccess(
     'playPremiumizePlaylist': s._playPremiumizePlaylist,
     'playWebDavPlaylist': s._playWebDavPlaylist,
     'resolveWebDavConfig': s._resolveWebDavConfig,
-    'hasWebDavCredentials': s._hasWebDavCredentials,
-    'cleanTorboxPath': s._cleanTorboxPath,
+    'hasWebDavCredentials': hasWebDavCredentials,
+    'cleanTorboxPath': cleanTorboxPath,
     'buildPikPakFolderTree': s._buildPikPakFolderTree,
-    'buildPikPakFileTree': s._buildPikPakFileTree,
-    'buildPremiumizeCloudFileTree': s._buildPremiumizeCloudFileTree,
-    'buildPremiumizeFileTree': s._buildPremiumizeFileTree,
-    'buildWebDavFileTree': s._buildWebDavFileTree,
+    'buildPikPakFileTree': buildPikPakFileTree,
+    'buildPremiumizeCloudFileTree': buildPremiumizeCloudFileTree,
+    'buildPremiumizeFileTree': buildPremiumizeFileTree,
+    'buildWebDavFileTree': buildWebDavFileTree,
     'setAndroidTv': (bool value) {
       s._isAndroidTv = value;
       (state.context as Element).markNeedsBuild();
