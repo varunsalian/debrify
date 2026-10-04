@@ -1,6 +1,9 @@
 # Playlist content view refactor — plan
 
-Written 2026-10-04 against `ec997117` (file blob `4fc757c7`). Follow
+Written 2026-10-04 against `ec997117` (file blob `4fc757c7`); revised after
+Codex design review round 1 (launch probe scope, typed facade getters,
+progress matrix, TV taps, profile writes, parallel tooling, Linux handoff).
+Follow
 [AGENTS.md](../../AGENTS.md). Read `docs/refactoring/pikpak-files-plan.md`,
 `debrid-downloads-plan.md` and `torbox-downloads-plan.md` first, including
 their Progress sections. This plan reuses their technique, checker, tooling,
@@ -14,6 +17,15 @@ Execution runs in its own git worktree on a branch cut from
 integrates it and captures the Linux goldens. Commit after every step; never
 push. Gate commits contain `gate`. Remote CI stays pending until Claude
 pushes, so every step runs the local CI-equivalent commands.
+
+**Execution prerequisite (parallel worktrees).** `suite_evidence.py check`
+writes a fixed `/tmp/suite_evidence_check.jsonl` (and `.stderr`)
+(`dev/tool/suite_evidence.py:293`, `flutter_test_json` at 145), so parallel
+worktrees overwrite each other's results; `TMPDIR` does not change it.
+Before parallel execution starts, Claude either lands invocation-specific
+output paths in `suite_evidence.py` on `refactor/codebase`, or such checks
+are serialized through a shared lock. Execution does not start otherwise
+and does not edit the tool itself.
 
 ## Goal
 
@@ -157,13 +169,19 @@ No member is over 200 lines (largest `_buildEpisodeCard`, 187).
      `webDavPath` with their item-or-config fallbacks;
    - never passed: `onPlayerHandoff`, `sourceOwner`, `canContinue`,
      `retainSourceSession`;
-   - every `PlaylistEntry(...)` construction (RD 3538/3551/3565, AllDebrid
-     3641, TorBox 3714/3727/3740, PikPak 3823/3834/3846, Premiumize 3922/3972,
-     WebDAV 4033) with its `provider` string and ids; only the start entry is
-     resolved except Premiumize hash (all entries) and WebDAV (direct URLs);
+   - all 14 `PlaylistEntry(...)` constructions: the parse-only one in
+     `_parseSeriesPlaylist` (2164, `url: ''`) and the 13 provider-playback
+     ones (RD 3539/3551/3565, AllDebrid 3641, TorBox 3714/3727/3740, PikPak
+     3823/3834/3846, Premiumize 3922/3972, WebDAV 4033) with their `provider`
+     strings and ids; only the start entry is resolved except Premiumize hash
+     (all entries) and WebDAV (direct URLs);
    - start index: `_playFile` matches name and path; `_playEpisode` matches
-     filename in sortedAZ, else `originalIndex` in range, else filename;
-     Premiumize and WebDAV clamp, the others don't.
+     filename in sortedAZ, else `originalIndex` in range, else filename.
+     RD, AllDebrid, TorBox and PikPak don't clamp. Premiumize cloud clamps
+     against **`videoFiles` before filtering** (3908; null-`path` nodes are
+     then skipped, so `cloudEntries[startIndex]` can be the wrong entry or
+     throw); Premiumize hash (3988) and WebDAV (4046) clamp against the
+     **built entries**.
 7. **Preparing dialog and the return from the player.** `showDialog
    (barrierDismissible: false)` (root navigator) before resolving; popped
    through the State's `Navigator.of(context)` on an empty list, after the
@@ -173,17 +191,28 @@ No member is over 200 lines (largest `_buildEpisodeCard`, 187).
    which then refreshes); with Home (no callback) the dialog stays under the
    player and the post-return pop removes **the dialog** (the user stays on
    the content screen). A throw after the callback pops the screen.
-   `_reloadProgress` follows in both paths.
+   `_reloadProgress` follows in both paths. "After the launcher returns"
+   differs by launch kind: the in-app player returns when its route pops
+   (`launch_router.dart`, the awaited `Navigator.push`), while a native
+   Android TV, external or DeoVR launch returns **immediately** after
+   handing off, so the same post-return pop and reload run while the
+   external player is still playing.
 8. **Watched toggles** (3304–3388): no confirmation; title from the series
    or item; season and episode default 1; imdbId from the series, then the
    item; `isEpisodeFinished` then `unmark…` or `mark…AsFinished` (local only,
    no trackers); `_reloadProgress`; the inverted snackbar text and colours;
-   the error snackbar. Triggers: tap and long-press (non-TV), D-pad hold.
+   the error snackbar. Triggers: the episode card's watched button
+   (`GestureDetector.onTap`, mobile 2981 and desktop 3148, **not TV-gated**:
+   it toggles on TV too); the outer card `InkWell.onLongPress` (null on TV);
+   the D-pad hold. The outer `InkWell.onTap` **plays** the episode (null on
+   TV, 2786).
 9. **Series metadata and Fix Metadata.** Fix Metadata (2261–2350) keeps its
    exact order: `TVMazeSearchDialog` (`barrierDismissible: false`); read the
    old mapping; if the old id differs, `TVMazeService.clearShowCache` then
-   `EpisodeInfoService.clearShowCache`; `EpisodeInfoService.clearSeriesCache`;
-   `TVMazeService.clearSeriesCache`; `saveTVMazeSeriesMapping(playlistItem:,
+   `EpisodeInfoService.clearShowCache`; `EpisodeInfoService.clearSeriesCache`
+   (which itself calls `TVMazeService.clearSeriesCache`,
+   `episode_info_service.dart:180`); `TVMazeService.clearSeriesCache` again
+   (so **two** TVMaze series clears per fix); `saveTVMazeSeriesMapping(playlistItem:,
    tvmazeShowId:, showName:)`; `_updatePlaylistPoster` (override plus the
    per-provider artwork or TorBox raw-list write; no WebDAV, `'rd'` or
    `'torbox_webdl'` branch); the snackbar; null `tvmazeShowId`,
@@ -207,17 +236,40 @@ No member is over 200 lines (largest `_buildEpisodeCard`, 187).
     `node.onKeyEvent`); the clear button's KeyDown handler; file cards'
     select/enter/space; episode cards (KeyDown starts the 800 ms timer,
     KeyRepeat ignored, KeyUp plays when no long press and > 300 ms since the
-    last; blur cancels). The key handler isn't TV-gated; on TV only the
-    InkWell `onTap`/`onLongPress` become null and the hold hint shows.
-13. **Profile behaviour.** Nothing captures a profile; every read and write
-    resolves the active profile at call time. The route sits above
-    `ProfileGate` and is disposed by the picker's `popUntil`. No scoping is
-    added or removed.
+    last; blur cancels). The key handler and the watched-button taps aren't
+    TV-gated; on TV only the outer card InkWell `onTap` (play) and
+    `onLongPress` (toggle) become null and the hold hint shows.
+13. **Profile behaviour.** The screen captures no scope. Storage does,
+    partly: `ProfilePreferences.instance()` (`profile_preferences.dart:271`)
+    captures the committed scope at acquisition and rejects later reads and
+    writes through that instance once the profile changes; an operation that
+    *starts* after the handoff acquires the new profile. The playlist
+    read-modify-writes (detected poster 2365–2372, TorBox raw list
+    2424–2431) read through one instance and `savePlaylistItemsRaw`
+    reacquires preferences to save, so a switch between read and save can
+    write the old profile's list into the new one; the save also records
+    deletion tombstones for keys missing from its re-read previous list
+    (`playlist_storage.dart:32`). The route sits above `ProfileGate` and is
+    disposed by the picker's `popUntil`. These outcomes are characterized
+    and preserved; no scoping or protection is added or removed.
 14. **Collection identity and mutable models:** Raw aliasing; `_folderPath`
     mutated in place; the WebDAV builder mutating `children`; in-place
     `SeriesPlaylist` updates; `widget.playlistItem` never refreshed.
-15. **Diagnostics.** The 18 analyzer warnings (step 0 item 7) keep firing at
-    their destinations; the 39 `print`s and their text stay.
+15. **Diagnostics.** All 18 analyzer warnings (step 0 item 7) keep firing
+    at their destinations, verified by rule and enclosing member; none may
+    disappear. The 39 `print`s and their text stay.
+16. **Progress lookup and initial selection.** `_getProgressForFile`
+    (1802–1839): a parsed `S_E` key returns only when non-null; otherwise,
+    with a root, the sequential `0_{index+1}` key (index in the
+    sortedAZ-reordered video list) is returned **immediately even when
+    null** (1831); the filename key is tried only when the file isn't found
+    or there is no root. Completion: `progress >= 0.9` or under 120,000 ms
+    left (1423, 1646, 2686), plus the manual marker `positionMs == 0 &&
+    durationMs == 1` on episode cards. `_determineInitialSeason` /
+    `_determineInitialEpisodeIndex` pick the latest `updatedAt`: an `int` is
+    taken as ms; a numeric string below 10^10 is seconds (×1000), else ms;
+    other strings parse as ISO; ties keep the first seen. The initial season
+    (2203) and the scheduled scroll follow from that.
 
 ## Destination layout
 
@@ -244,7 +296,10 @@ No member is over 200 lines (largest `_buildEpisodeCard`, 187).
   `playlist_content_manifest.tsv` and `playlist_content_checker_config.json`.
 - **The facade** is an exact composition root (400-line cap and
   `TEMP(playlist_content)` rejection from step 7); it keeps the widget, the
-  State's lifecycle, the `build` forwarder, owners, wiring and the accessor.
+  State's lifecycle, the `build` forwarder, owners, wiring (including the
+  typed `playlistItem`/`onPlaybackStarted` getters) and the accessor; no
+  file under `lib/features/playlist_content/` names
+  `PlaylistContentViewScreen`.
 - **Guard rules** (step 1, `check_search_architecture.py`):
   `playlist_content` in `FEATURES`; `PLAYLIST_CONTENT_FACADE/BRIDGE/
   COMPLETE`; the bridge in `LEGACY_PLAYBACK_BRIDGES` (still no `http`,
@@ -257,16 +312,25 @@ No member is over 200 lines (largest `_buildEpisodeCard`, 187).
 ## Technique
 
 As in the PikPak plan, with these points:
-1. **The live widget accessor stays typed `PlaylistContentViewScreen`**
-   (non-nullable). The 11 `invalid_null_aware_operator`, the
+1. **The concrete widget type stays in the facade; sections get live typed
+   getters.** No section names `PlaylistContentViewScreen` (that would
+   back-import the facade). The facade wiring injects `Map<String, dynamic>
+   Function() playlistItem` (`() => widget.playlistItem`, non-nullable,
+   returning the same map object, never a copy) and `VoidCallback?
+   Function() onPlaybackStarted` (`() => widget.onPlaybackStarted`), read
+   at each use. The 11 `invalid_null_aware_operator`, the
    `unnecessary_null_comparison` at 2212 and the `!` at 2214 fire only
-   because `widget.playlistItem` is non-nullable; a nullable or `dynamic`
-   receiver would silently drop or change them.
+   because the item is non-nullable; a nullable or `dynamic` getter would
+   silently drop or change them. The checker config registers the
+   normalization `widget.playlistItem` ↔ `playlistItem()` and
+   `widget.onPlaybackStarted` ↔ `onPlaybackStarted()` (with negatives for a
+   nullable return type, a copied map and a cached value), and every step
+   verifies all 18 occurrences by rule and enclosing member.
 2. **Private dormant and warned members stay private** in the section that
    owns them: `_loadProgressData` moves privately into the dormant section,
-   keeping `unused_element` with its exact message. If any warned member
-   must become public, the warning's disappearance is recorded under "Found,
-   not fixed" (the PikPak `_email` rule) and no allowlist entry is added.
+   keeping `unused_element` with its exact message. No warned member becomes
+   public and no warning may disappear (the PikPak `_email` escape does not
+   apply here); a placement that would drop one is redesigned.
 3. **Callback identity** (receiver path plus member, wrapper and same-class
    receiver-swap negatives) for `_handleBackNavigation` (push and pop), and
    tear-off form for `_navigateUp`, `_toggleSearch`, `_loadContent` (Refresh,
@@ -288,7 +352,7 @@ As in the PikPak plan, with these points:
 | 1 | Guard registration; search-result model; pure application helpers | |
 | 2 | State and resource owners (29 fields); lifecycle verbatim | Contract 1. |
 | 3 | Loading and dispatch, view modes, navigation, back handler, saved mode, `_initializeScreen` | Contracts 2–5, 14. **Full-suite gate 1.** |
-| 4 | Search, progress, watched toggle, series metadata, Fix Metadata, posters, dormant code | Contracts 8, 9, 11, 13. |
+| 4 | Search, progress, watched toggle, series metadata, Fix Metadata, posters, dormant code | Contracts 8, 9, 11, 13, 16. |
 | 5 | `_playFile`, `_playEpisode`, all seven launch sites | Contracts 3, 6, 7. |
 | 6 | `build` forwarder, file list, OTT view, episode list and cards | Contracts 10, 12. Linux originals are a blocking prerequisite. |
 | 7 | Final State, composition, guards, CI. **Full-suite gate 2.** | |
@@ -312,17 +376,23 @@ As in the PikPak plan, with these points:
    reordered dispose statement; a timer cancelled through a different owner;
    a dropped `onPlaybackStarted` or `notifyPlayerLaunching` before a push;
    lifecycle moved out of the State.
-4. **Accessor** (the approved seam; there is no TV, clock or launcher seam):
-   a frozen `@visibleForTesting playlistContentTestAccess(State)` in the
-   facade returning fresh snapshots (tree, view nodes, folder path, view
-   mode, series playlist, progress cache, search state, the three timers,
-   flags) and real tear-offs (loaders, `_applyViewMode`,
+4. **Accessor** (the approved seam; no clock or launcher seam, and the only
+   TV seam is the setter below): a frozen `@visibleForTesting
+   playlistContentTestAccess(State)` in the facade returning fresh snapshots
+   (tree, view nodes, folder path, view mode, series playlist, progress
+   cache, search state, the three timers, `_targetEpisodeIndex`,
+   `_isScrollScheduled`, flags), the live `_episodeListScrollController`,
+   and real tear-offs (loaders, `_applyViewMode`,
    `_applySortedPlaylistOrder`, `_playFile`, `_playEpisode`, the six play
    methods, `_toggleWatchedState`, `_showFixMetadataDialog`,
-   `_saveImdbIdToPlaylist`, `_handleBackNavigation`), and one TV setter that
-   assigns `_isAndroidTv` and calls `(state.context as Element)
-   .markNeedsBuild()` (after `_checkIfAndroidTv` has settled to false). The
-   seam-only facade size raise is recorded and exits at step 1.
+   `_saveImdbIdToPlaylist`, `_handleBackNavigation`, `_getProgressForFile`,
+   `_determineInitialSeason`, `_determineInitialEpisodeIndex`,
+   `_reloadProgress`, `_scrollToEpisode` for unattached-controller retry
+   tests), and one TV setter that assigns `_isAndroidTv` and calls
+   `(state.context as Element).markNeedsBuild()`, used only after the async
+   `_checkIfAndroidTv` has settled (false on the host). The list is complete
+   before freezing; the seam-only facade size raise is recorded and exits
+   at step 1.
 5. **Harness** (`test/support/playlist_content_fixture.dart`): the PikPak
    fixture's profile setup (`SharedPreferences` mocks, `ProfileRuntime`
    reset and `initializeLegacy`, `SecretVault.debugReset`), seeded API keys
@@ -331,15 +401,27 @@ As in the PikPak plan, with these points:
    bodies), sqflite ffi only if the first fixture proves it necessary. Items
    carry no `poster`. Launch fixtures omit `imdbId`/`contentType` unless a
    case needs them (the launcher writes continue-watching and seeds trackers
-   for catalog ids). **Launch probe:** the
+   for catalog ids). **Launch probe (rejection path only):** the
    `video_player_launcher_settings_rejection_test.dart` recipe, adapted: a
    player-launch listener that passes the screen's own
    `notifyPlayerLaunching()` and throws `NativePlayerSettingsUnavailable` on
-   the launcher's (second) call, so the real launcher accepts the args,
-   logs its playlist trace (`debugPrint` captured: entry count, titles,
-   `relativePath` of the first five), shows its snackbar and **returns
-   without opening a player**. Prove one HTTP fixture and the probe on the
-   original code first.
+   the launcher's (second) call at `launch_router.dart:466`. That throw
+   skips the playlist trace (468–478) and every launch branch; the catch
+   (94–103) emits `notifyContentPlaybackStopped`, shows the settings-error
+   snackbar and returns normally. The probe therefore proves only the
+   rejection path: the screen's HTTP requests, `onPlaybackStarted` once
+   before the launcher's notify, the playback-stopped signal and snackbar,
+   and the screen's post-return dialog/route pops and reload **on
+   rejection**. It proves no playlist contents and no successful-launch
+   cleanup. **Successful launch:** step 0 may prove, on the original code,
+   a fixture where the real launcher pushes the in-app player route and a
+   `NavigatorObserver` pops it as soon as it is pushed (the trace captured
+   via `debugPrint`, the pushed route's args read before the pop); if that
+   fixture is not proven on the original code, the playlist trace, launch
+   arguments and successful caller cleanup stay **pending device
+   verification**. Native TV, external and DeoVR completion (return
+   immediately) are pending device verification either way. Prove one HTTP
+   fixture and the probe on the original code first.
 6. **Characterization tests,** recorded against the original code, with
    the earlier lessons up front: drive real entry points; re-read state
    after acting; non-monotonic ids and file orders that differ from
@@ -356,15 +438,16 @@ As in the PikPak plan, with these points:
    | 3 Dispatch | Load: each canonical provider and `'RD'`-cased variants; `'rd'`, `'torbox_webdl'`, `'real_debrid'`, unknown → the RD request. Play: those four open, show and pop the dialog, reload progress, launch nothing (probe listener never called). |
    | 4 Loading | Exact request lists: RD info; AllDebrid upload then files, **again on Refresh**; TorBox retry; PikPak recursion order, `limit=100`, depth-over-4 error, cached fallback; Premiumize hash and cloud (no request); WebDAV single, list and path fallback, empty error. Refresh and Retry call `_loadContent` alone (no reparse or reapply). |
    | 5 View modes | Saved mode read twice; auto seriesArrange only with nothing saved; persistence on every apply including navigation; Raw result identical to `children`; sorted order; missing folder resets; seriesArrange closes search. |
-   | 6 Playback | Per site through the probe: the HTTP log (start entry resolved only, Premiumize hash all, AllDebrid unlock errors swallowed), the launcher's playlist trace (count, titles, relative paths incl. `_cleanTorboxPath` and the PikPak fallback), `onPlaybackStarted` once before the launcher's notify. Start index through the accessor: sorted vs raw, `originalIndex` fallback, Premiumize/WebDAV clamp. **Source guards** on the seven complete call expressions, the guard→callback→notify→push sequence, and every `PlaylistEntry` construction; remaining argument values (ids, flags, `viewMode`, WebDAV headers and fields) are **pending device verification**. |
-   | 7 Return | With a `NavigatorObserver`, the screen pushed with each caller's construction reproduced verbatim (source guards pin both caller expressions): Playlist-tab form → dialog popped before the launch, content route popped after the probe returns; Home form → dialog popped after return, content screen still mounted. Plus the empty-list and catch paths. |
-   | 8 Watched | Mark and unmark arguments (title fallback, defaults, imdbId preference), the persisted completion, reload, snackbar text and colour, error snackbar; via tap, long-press, D-pad hold. |
-   | 9 Metadata | Fix Metadata with a fake dialog result: cache-clear calls in order (conditional pair), mapping, poster override and per-provider artwork or TorBox list write, forced imdbId, nulled fields, loading flag; cancel does nothing. Unforced imdbId save rules; detected-poster write; writes landing after unmount (recorded). |
+   | 6 Playback | Per site through the probe (rejection path): the HTTP log (start entry resolved only, Premiumize hash all, AllDebrid unlock errors swallowed), `onPlaybackStarted` once before the launcher's notify, the playback-stopped signal and settings snackbar. Start index through the accessor: sorted vs raw, `originalIndex` fallback, the Premiumize cloud clamp against pre-filter `videoFiles` (with a null-`path` node before the start) vs the hash and WebDAV clamps against built entries. Playlist contents (count, titles, relative paths incl. `_cleanTorboxPath` and the PikPak fallback) only through the successful-launch fixture if proven, else **pending device verification**. **Source guards** on the seven complete call expressions, the guard→callback→notify→push sequence, and all 14 `PlaylistEntry` constructions; remaining argument values (ids, flags, `viewMode`, WebDAV headers and fields) are **pending device verification**. |
+   | 7 Return | With a `NavigatorObserver`, the screen pushed with each caller's construction reproduced verbatim (source guards pin both caller expressions). **Rejection path (probe):** Playlist-tab form → dialog popped before the launch, content route popped after the launcher returns; Home form → dialog popped after return, content screen still mounted. **In-app success:** the same two observations only through the proven observer-controlled fixture, else pending device verification. Native/external completion (immediate return): pending device verification. Plus the empty-list and catch paths. |
+   | 8 Watched | Mark and unmark arguments (title fallback, defaults, imdbId preference), the persisted completion, reload, snackbar text and colour, error snackbar; via the watched button (mobile and desktop widths, **TV false and TV true**: toggles both ways), the outer long-press (non-TV), D-pad hold; the outer card tap plays (non-TV) and is inert on TV. |
+   | 9 Metadata | Fix Metadata with a fake dialog result: cache-clear calls in order (conditional pair; two TVMaze series clears, one transitive through `EpisodeInfoService.clearSeriesCache`, in expected counts), mapping, poster override and per-provider artwork or TorBox list write, forced imdbId, nulled fields, loading flag; cancel does nothing. Unforced imdbId save rules; detected-poster write; writes landing after unmount (recorded). |
    | 10 Timers/build | Fake time: auto-switch to A–Z at 2 s with persistence, timer object replaced per rebuild; missing-season post-frame `setState`; scroll retries and the 800 ms animation; `print` capture shows the per-card lines. |
    | 11 Search | Recursive video-only matches, paths, clear and close, hidden in seriesArrange. |
-   | 12 D-pad | Clear-button keys, search-field arrows, file-card select/enter/space, episode KeyDown/hold 800 ms/repeat ignored/short press/300 ms suppression (host keys); via the TV setter: null `onTap`/`onLongPress` and the hold hint. |
-   | 13 Profile | A profile switch through the gate's picker disposes the route (handler gone, timers cancelled); two routes on the same item share no owners. |
+   | 12 D-pad | Clear-button keys, search-field arrows, file-card select/enter/space, episode KeyDown/hold 800 ms/repeat ignored/short press/300 ms suppression (host keys); via the TV setter (after the TV check settles): null outer `onTap`/`onLongPress`, the watched button still live, and the hold hint. |
+   | 13 Profile | A profile switch through the gate's picker disposes the route (handler gone, timers cancelled); two routes on the same item share no owners. Separately, with held futures and asserting persisted data **and tombstones** in both profiles (including writes the captured instance rejects): (a) a late operation (`.then` imdbId/poster save, watched toggle, Fix Metadata write) that starts after the handoff; (b) a switch between `getPlaylistItemsRaw` and `savePlaylistItemsRaw` in the poster and TorBox list writes; (c) a switch after a `ProfilePreferences` instance was acquired. Outcomes are recorded and preserved; no protection is added. |
    | 14 Identity | Through the accessor: Raw aliasing, `_folderPath` identity, `_searchResults` reassign-then-clear, `_applySortedPlaylistOrder` mutating its argument. |
+   | 16 Progress | Through the real tear-offs: `S_E` key hit; sequential key returned even when null (filename key then not consulted) vs filename fallback when the file is absent or there is no root; sortedAZ index; completion at 0.89/0.90 progress and 120,000/119,999 ms remaining, the manual `0/1` marker; `updatedAt` as int ms, numeric seconds string, ms string, ISO string, unparsable, and ties; initial season and episode index; the scheduled scroll and its 100/200/300 ms retries through `_scrollToEpisode` with an unattached controller, then the 800 ms animation once attached. |
 
    Pixel goldens (raw list, search, OTT mobile and desktop, error) on macOS
    and Linux, Linux captured by Claude from the original code. Record
@@ -390,7 +473,8 @@ As in the PikPak plan, with these points:
      every destination receiving a token call goes in `kShapeResidue`
      (residue 0) and every other destination in `kExtractedShapeResidue`;
      the facade leaves `kShapeResidue` when its last call leaves (step 6).
-     Parallel refactors also move tokens; Claude re-sums at integration.
+     Parallel refactors also move tokens; a re-sum alone is not enough at
+     integration (see "Per step and gates").
    - **Theme:** `theme_surface_manifest.txt:21` (`p2_playlist`) gains
      explicit per-directory patterns (`ls $@` without `globstar` treats `**`
      as one level); `source_guard_test.dart:188` keeps its frozen prefix
@@ -410,7 +494,17 @@ As in the PikPak plan, with these points:
    resolving the step-0 checkpoint by its exact subject
    (`test(playlist-content): step 0 original-code characterization
    checkpoint`), run by Claude in the calibrated local Docker image; the
-   Linux test stays non-strict through step 5.
+   Linux test stays non-strict through step 5. **Handoff:** like the PikPak
+   script, it searches the *invoking* `HEAD`'s ancestry and copies PNGs into
+   the *invoking* repo root, and a linked worktree's absolute `gitdir` is
+   not reachable inside Docker. So execution reports the exact checkpoint
+   hash and leaves it on a reachable ref (the execution branch); Claude
+   clones that branch into a `$HOME` path (mounted by colima), checks out
+   the checkpoint hash there, verifies `HEAD` equals it, runs the script
+   inside the container from that clone, and copies the produced PNGs
+   (with the evidence files) explicitly into the feature worktree's
+   `test/goldens/playlist_content/linux/`, where execution reviews and
+   commits them.
 
 ### Per step and gates
 
@@ -422,6 +516,14 @@ isolated parser cache when run concurrently), the allowlist and per-symbol
 warning comparison, the shape floor, LF-only manifests and staged diff
 checks before each commit, and gates on committed trees against the latest
 playlist-content base. Never `--record` to accept a regression.
+
+**Integration.** After Claude merges with parallel plans, the checks run on
+the **merged committed tree**, not per branch: the architecture guard (all
+registered features), the analyzer allowlist (no stale or missing entry,
+per-symbol comparison), every manifest run with self-tests, the CI format,
+analyze and behaviour-test lists, `file_size_baseline.txt` ratchet and the
+shape floor (`kShapeResidue`/`kExtractedShapeResidue` membership and the
+total), plus the affected tests.
 
 ## Definition of done
 
@@ -441,8 +543,10 @@ playlist-content base. Never `--record` to accept a regression.
    nothing.
 6. Progress records the commits, ownership, exceptions with exit
    milestones, the seam, and pending device verification (seven real
-   launches per provider with both callers, Android TV D-pad hold and hint,
-   real provider accounts, the Linux run of moved code).
+   launches per provider with both callers, including the playlist trace
+   and successful-return cleanup unless the observer fixture proved them,
+   and native TV/external completion; Android TV D-pad hold and hint;
+   real provider accounts; the Linux run of moved code).
 7. Stop after gate 2 and report.
 
 ## Explicitly not in scope
@@ -467,7 +571,8 @@ All pre-existing; the extraction keeps each exactly.
   `_currentViewNodes` can point at the old tree.
 - **Start index vs skipped entries:** RD, AllDebrid, TorBox and PikPak skip
   unresolvable entries without clamping, so `entries[startIndex]` can be the
-  wrong file or throw.
+  wrong file or throw; Premiumize cloud clamps against pre-filter
+  `videoFiles` and then skips null-`path` nodes, with the same effect.
 - **AllDebrid re-uploads the magnet** on every open and refresh; Premiumize
   hash resolves twice; PikPak lists 100 per folder with no paging,
   sequentially, throwing beyond depth 4 (fallback tree: null `relativePath`).
@@ -475,11 +580,19 @@ All pre-existing; the extraction keeps each exactly.
 - **Builder side effects:** the timer recreated per build, the nested
   `setState`, the unguarded post-frame `setState`, per-card `print`s with
   titles and progress, O(n² log n) progress lookups.
-- **Unguarded `setState`s** after awaits (160, 318, 346, 222/254 in parse,
+- **Unguarded `setState`s** after awaits (160, 318, 346, 2222/2254 in parse,
   1903); no request generations; overlapping loads and metadata fetches.
-- **Writes after unmount or a profile switch:** the `.then` imdbId and poster
-  saves, Fix Metadata writes and watched toggles land in the then-active
-  profile; nothing captures a profile.
+- **Writes after unmount or a profile switch:** the screen captures no
+  scope, so a `.then` imdbId or poster save, Fix Metadata write or watched
+  toggle that *starts* after the handoff writes the then-active profile.
+  A `ProfilePreferences` instance acquired before the switch rejects its
+  later access, but the playlist read-modify-writes reacquire preferences
+  to save, so a switch between read and save can copy the old profile's
+  list (and its tombstones) into the new profile.
+- **Sequential progress lookup** returns a null `0_n` hit without trying the
+  filename key; Fix Metadata clears the TVMaze series cache twice; the
+  watched button stays tappable on TV while the card's tap and long-press
+  don't.
 - **View mode persisted on every navigation;** the saved mode read twice.
 - **`contentImdbId`** comes from the unrefreshed in-memory item.
 - **Progress keys disagree** (title key for reads, `seriesProgressKey(title,
