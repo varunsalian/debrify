@@ -735,6 +735,24 @@ identities against the observed branch baselines and approved additions.
   repeated; the other five manifests and unchanged application checks retain
   their recorded passing inputs. Gate 1 follows on the committed tree.
 
+- Gate 1: committed step 3 `730c0a41`, tree
+  `adafe86d7c9e33c0580664fc54feec8ce637d584`; `gate1` versus latest `base4`
+  **PASS**: 10,736 successes, unchanged 13 failures / 28 errors / 20 skips,
+  no added/missing identities or changed outcomes. No tracked changes during
+  the run; the five pending Linux PNG paths were recorded as untracked and
+  deliberately excluded from the gate commit.
+- Linux original handoff: all five supplied PNG hashes match
+  `linux-original-sha256.txt`; revision resolves to the exact step-0 subject
+  at `6e23a3c5`. Capture and strict original-code logs each pass five scenes.
+  Provenance: calibrated `debrify-flutter:3.44.8` linux/amd64 Ubuntu 24.04
+  image under Colima, supplied local run dated 2026-10-04T03:04:05Z;
+  `linux-original-verified.json` records hashes and provenance. They are
+  committed separately. Missing Linux files now fail instead of returning
+  successfully; existing assertions and scene construction are retained.
+  Step 0b did not change golden scenes, seedSeries or shared fixtures, so
+  recapture of the original is unnecessary. A moved-code Linux comparison
+  will use this same locally available calibrated image after step 6.
+
 
 ## Found, not fixed
 

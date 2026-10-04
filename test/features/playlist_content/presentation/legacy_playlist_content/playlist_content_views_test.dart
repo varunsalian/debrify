@@ -335,7 +335,7 @@ void main() {
         ).existsSync();
         if (Platform.isLinux && !exists && !captureLinux && !requireLinux) {
           expect(captureLinux, isFalse);
-          return;
+          fail('Original checkpoint Linux goldens are required');
         }
         await expectLater(
           find.byKey(const ValueKey('playlist-content-canvas')),
