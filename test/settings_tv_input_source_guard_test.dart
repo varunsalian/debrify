@@ -7,11 +7,10 @@ void main() {
     final paths = [
       File('lib/screens/settings_screen.dart'),
       File('lib/screens/settings/iptv_settings_page.dart'),
-      if (Directory('lib/features/iptv_settings').existsSync())
-        ...Directory('lib/features/iptv_settings')
-            .listSync(recursive: true)
-            .whereType<File>()
-            .where((file) => file.path.endsWith('.dart')),
+      ...Directory('lib/features/iptv_settings')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart')),
       ...Directory('lib/features/settings')
           .listSync(recursive: true)
           .whereType<File>()

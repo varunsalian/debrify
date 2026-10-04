@@ -103,10 +103,10 @@ class IptvCatalogRefreshService with WidgetsBindingObserver {
     }
   }
 
-  /// A due check is cheap: only catalog metadata is read, never channel lists.
   @visibleForTesting
   static int debugRefreshDueInvocations = 0;
 
+  /// A due check is cheap: only catalog metadata is read, never channel lists.
   Future<void> refreshDue() async {
     assert(() {
       debugRefreshDueInvocations++;

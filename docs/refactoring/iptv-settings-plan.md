@@ -794,3 +794,5 @@ All pre-existing; the extraction keeps each exactly.
 - The 400-pixel narrow source form has pre-existing tab-row overflow; it is
   retained. URL/Xtream stale post-persistence throws can retain busy flags.
 - Stale comments (133; `lib/theme/app_looks.dart:22`).
+
+- Completion review (Claude): the TV text-field, print-redaction and runExclusive scans now include `lib/features/iptv_settings` unconditionally (the `existsSync` guards were removed, which only tightens them); the refresh service doc comment returned to `refreshDue()`; stale doc/comment references updated. The owner fields `r` and `l` keep their names because the checker config refers to them (cosmetic follow-up).

@@ -1,4 +1,4 @@
-/// The edited values a [_EditPlaylistDialog] returns. Only the fields relevant
+/// The edited values an [IptvSettingsEditDialog] returns. Only the fields relevant
 /// to the playlist's type are populated; the caller rebuilds the playlist.
 class IptvSettingsPlaylistEdit {
   const IptvSettingsPlaylistEdit({

@@ -1,6 +1,6 @@
 # IPTV settings dependency and wiring report
 
-Original: `4f3ee3b3`. The manifest owns every original declaration. The oversized facade temporarily retains the original workflows and a frozen test accessor; Steps 2–6 remove these responsibilities and Step 7 enforces 400 lines. No source service, schema, profile semantics or widget constructor is redesigned.
+Original: `4f3ee3b3`. The manifest owns every original declaration. After step 7 the facade (267 lines) holds only the public widgets, the State's lifecycle and wiring, and the frozen test accessor `iptvSettingsTestAccess`; every workflow moved to the feature. No source service, schema, profile semantics or widget constructor is redesigned.
 
 State remains the observer and ticker provider. It owns the one two-pane key. All field initializers, collections and resource identities are retained at their declaration on the planned owner. Sections borrow them; facade lifecycle performs the original ordered cleanup. State/context/mounted, openAddSource and appearance are live reads at the original sites.
 
