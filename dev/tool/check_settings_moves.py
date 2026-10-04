@@ -277,6 +277,13 @@ def normalize(values, rows, row=None):
             if target in mapped:
                 i += path[0] + 1
                 continue
+        # Exact inventoried original cross-class statics, before their owner moves.
+        if (values[i + 1:i + 2] == ['.']
+                and values[i + 2:i + 3]
+                and values[i + 2] in CONFIG.get('original_static_receivers', {}).get(value, [])):
+            out.append(mapping.get(values[i + 2], values[i + 2]))
+            i += 3
+            continue
         if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
             if target in mapped or target in {'mounted', 'setState', 'context'} | set(CONFIG.get('live_widget_getters', [])):

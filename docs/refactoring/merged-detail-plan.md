@@ -846,6 +846,37 @@ the behaviour suite compared against the latest recorded base.
   only. The capture script continues resolving its checkpoint-owned tests by
   their exact Step 0 commit subject.
 
+### Step 1 — static helpers and registrations
+
+- Eight original static leaves move to the four manifest-selected owners:
+  palette (13 lines), Trakt descriptions (58), Simkl descriptions in the
+  legacy bridge (38), and pure Simkl labels in application (18). The eight
+  wiring entries were checked: signatures, literals, argument order and
+  evaluations remain at their original sites. All facade imports now resolve
+  to the same libraries through sorted package URIs. Facade: 5,571 lines.
+- Register the feature, bridge and 500-line destination cap; final 450-line
+  facade enforcement remains staged for Step 7. Theme uses three explicit
+  directory patterns; light-ink includes them. Shape registers the facade's
+  26 radii plus all four zero-budget destinations, still totaling 26.
+- The shared normalizer gains only the three inventoried original qualified
+  static names (`_gold`, `_descriptionFor`, `_descriptionForSimkl`) for this
+  config's exact original State receiver. Its three wrong-static-owner
+  negatives reject mismatches. No generic original-State prefix is erased.
+- `step1-characterization`: all 109 cases pass against the latest base4;
+  no new failure, missing or skipped identity. Shape's three checks pass.
+  All seven integrated manifests with self-tests, architecture, sizes,
+  storage keys/references, theme, light-ink, full CI format and diff pass.
+  All 235 leaves and present forwarders match the formatted original.
+- Whole analyzer comparison has no additions/removals; scoped allowlist
+  passes. Strict evidence traces 16 infos (the original 11 const, deprecated
+  use and four format-induced identities), with zero additions to the
+  maximum original baseline of 42; sorting removes 26 import-order infos.
+  The first combined strict input duplicated the facade's five default infos
+  by appending its normal-scope log to its strict copy. This rejected input
+  is retained as `step1-strict-duplicate-input.json`; the valid combined log
+  contains the strict facade and only the feature lines from scoped analysis.
+  No diagnostic rule or comparison allowance changes.
+
 
 ## Found, not fixed
 

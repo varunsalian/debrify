@@ -43,6 +43,13 @@ def self_test(package=None):
     assert not errors, 'Real merged positive: ' + str(errors)
     assert not rewatch_adjacency(lookup, rows, source)
     print('Merged detail real configuration positive: PASS')
+    from check_settings_moves import normalize
+    for name in config.get('original_static_receivers', {}).get('_MergedDetailScreenState', []):
+        row = next(r for r in rows if r['original_name'] == '_MergedDetailScreenState.' + name)
+        expected = normalize(['_MergedDetailScreenState', '.', name], rows)
+        assert expected == normalize([row['destination_class'], '.', row['new_name']], rows)
+        assert expected != normalize(['SecondState', '.', name], rows)
+    print('Merged exact original static qualifiers and receiver negatives: PASS')
 
     def located(member):
         row = next(r for r in rows if r['original_name'] == member)

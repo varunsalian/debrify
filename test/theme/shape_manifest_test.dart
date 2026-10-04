@@ -716,6 +716,14 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_view_state.dart':
       0,
+  // Merged-detail complete slice: 26 original bare radii, zero token calls.
+  'lib/features/merged_detail/application/merged_detail_simkl_labels.dart': 0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_simkl_descriptions.dart':
+      0,
+  'lib/features/merged_detail/presentation/merged_detail_action_descriptions.dart':
+      0,
+  'lib/features/merged_detail/presentation/merged_detail_palette.dart': 0,
+  'lib/screens/merged_series_detail_screen.dart': 26,
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(

@@ -119,7 +119,24 @@
   "receiver_owners": {
     "_MergedDetailScreenState": "_MergedDetailScreenState"
   },
-  "plain_sections": [],
+  "plain_sections": [
+    {
+      "file": "lib/features/merged_detail/presentation/merged_detail_palette.dart",
+      "owner": "MergedDetailPalette"
+    },
+    {
+      "file": "lib/features/merged_detail/application/merged_detail_simkl_labels.dart",
+      "owner": "MergedDetailSimklLabels"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_detail_action_descriptions.dart",
+      "owner": "MergedDetailActionDescriptions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_simkl_descriptions.dart",
+      "owner": "MergedDetailSimklDescriptions"
+    }
+  ],
   "callback_identities": [
     {
       "name": "tracking-source",
@@ -867,5 +884,12 @@
     "_MergedDetailScreenState": "$State"
   },
   "callback_receiver_aliases": {},
-  "original_activation": {}
+  "original_activation": {},
+  "original_static_receivers": {
+    "_MergedDetailScreenState": [
+      "_gold",
+      "_descriptionFor",
+      "_descriptionForSimkl"
+    ]
+  }
 }

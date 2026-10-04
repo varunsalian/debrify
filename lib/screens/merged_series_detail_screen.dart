@@ -1,78 +1,82 @@
+import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/features/merged_detail/application/merged_detail_simkl_labels.dart';
+import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_simkl_descriptions.dart';
+import 'package:debrify/features/merged_detail/presentation/merged_detail_action_descriptions.dart';
+import 'package:debrify/features/merged_detail/presentation/merged_detail_palette.dart';
+import 'package:debrify/models/advanced_search_selection.dart';
+import 'package:debrify/models/ambient_trailer_surface.dart';
+import 'package:debrify/models/metadata_preferences.dart';
+import 'package:debrify/models/playlist_view_mode.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/screens/episodes_screen.dart'
+    show kCatalogDetailRouteName;
+import 'package:debrify/screens/metadata_explore_page.dart';
+import 'package:debrify/screens/settings/detail_page_style_page.dart'
+    show effectiveDetailPageStyle;
+import 'package:debrify/services/analytics_service.dart';
+import 'package:debrify/services/app_route_observer.dart';
+import 'package:debrify/services/debrify_image_cache.dart';
+import 'package:debrify/services/imdb_enrichment_service.dart';
+import 'package:debrify/services/imdb_parents_guide_service.dart';
+import 'package:debrify/services/imdb_trailer_service.dart';
+import 'package:debrify/services/main_page_bridge.dart';
+import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
+import 'package:debrify/services/mdblist/mdblist_models.dart';
+import 'package:debrify/services/mdblist/mdblist_service.dart';
+import 'package:debrify/services/metadata_details_service.dart';
+import 'package:debrify/services/metadata_preferences_service.dart';
+import 'package:debrify/services/metadata_provider_service.dart';
+import 'package:debrify/services/movie_completion_service.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/series_source_service.dart';
+import 'package:debrify/services/simkl/simkl_menu_helpers.dart';
+import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/services/storage/ambient_trailer_storage.dart';
 import 'package:debrify/services/storage/detail_page_storage.dart';
 import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
 import 'package:debrify/services/storage/watchlist_storage.dart';
-import '../widgets/metadata_franchise_rail.dart';
-import '../widgets/metadata_title_navigation.dart';
-import '../services/metadata_provider_service.dart';
-import '../services/metadata_preferences_service.dart';
-import '../models/metadata_preferences.dart';
-import '../services/profiles/profile_runtime.dart';
-import 'metadata_explore_page.dart';
-import '../services/metadata_details_service.dart';
-import '../widgets/metadata_presentation_mixin.dart';
-import 'dart:async';
-
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/services/trakt/trakt_episode_model.dart';
+import 'package:debrify/services/trakt/trakt_service.dart';
+import 'package:debrify/services/video_player_launcher.dart';
+import 'package:debrify/services/youtube_service.dart';
+import 'package:debrify/theme/app_theme_controller.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/theme/artwork_accent.dart';
+import 'package:debrify/theme/shipped_themes.dart' show effectiveDetailTheme;
+import 'package:debrify/theme/theme_core_resolver.dart';
+import 'package:debrify/theme/theme_overrides.dart';
+import 'package:debrify/utils/artwork_url.dart';
+import 'package:debrify/utils/episode_progress_merge.dart';
+import 'package:debrify/utils/platform_util.dart';
+import 'package:debrify/utils/tv_keys.dart';
+import 'package:debrify/widgets/detail/detail_episode_cells.dart';
+import 'package:debrify/widgets/detail/detail_layout_console.dart';
+import 'package:debrify/widgets/detail/detail_layout_dossier.dart';
+import 'package:debrify/widgets/detail/detail_layout_marquee.dart';
+import 'package:debrify/widgets/detail/detail_layout_premium.dart';
+import 'package:debrify/widgets/detail/detail_layout_showcase.dart';
+import 'package:debrify/widgets/detail/detail_layout_stage.dart';
+import 'package:debrify/widgets/detail/detail_model.dart';
+import 'package:debrify/widgets/detail/detail_primary_sources.dart';
+import 'package:debrify/widgets/detail/detail_style.dart';
+import 'package:debrify/widgets/detail/theme/detail_theme.dart';
+import 'package:debrify/widgets/episodes_panel.dart';
+import 'package:debrify/widgets/hero_trailer_backdrop.dart';
+import 'package:debrify/widgets/home/home_theme.dart';
+import 'package:debrify/widgets/horizontal_mouse_wheel.dart';
+import 'package:debrify/widgets/metadata_franchise_rail.dart';
+import 'package:debrify/widgets/metadata_presentation_mixin.dart';
+import 'package:debrify/widgets/metadata_title_navigation.dart';
+import 'package:debrify/widgets/movie_watched_badge.dart';
+import 'package:debrify/widgets/parents_guide_section.dart';
+import 'package:debrify/widgets/rewatch_progress_dialog.dart';
+import 'package:debrify/widgets/tracker_brand_marks.dart';
+import 'package:debrify/widgets/trakt/trakt_menu_helpers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-import '../utils/platform_util.dart';
-import '../models/stremio_addon.dart';
-import '../models/advanced_search_selection.dart';
-import '../models/playlist_view_mode.dart';
-import '../services/analytics_service.dart';
-import '../services/series_source_service.dart';
-import '../services/app_route_observer.dart';
-import '../services/debrify_image_cache.dart';
-import '../services/imdb_enrichment_service.dart';
-import '../services/imdb_parents_guide_service.dart';
-import '../services/main_page_bridge.dart';
-import '../services/movie_completion_service.dart';
-import '../services/mdblist/mdblist_service.dart';
-import '../widgets/rewatch_progress_dialog.dart';
-import '../services/video_player_launcher.dart';
-import '../services/imdb_trailer_service.dart';
-import '../services/youtube_service.dart';
-import '../widgets/detail/detail_episode_cells.dart';
-import '../widgets/detail/detail_layout_console.dart';
-import '../widgets/detail/detail_layout_dossier.dart';
-import '../widgets/detail/detail_layout_marquee.dart';
-import '../widgets/detail/detail_layout_premium.dart';
-import '../widgets/detail/detail_layout_showcase.dart';
-import '../widgets/detail/detail_layout_stage.dart';
-import '../widgets/detail/detail_primary_sources.dart';
-import '../widgets/detail/detail_style.dart';
-import '../widgets/detail/detail_model.dart';
-import '../theme/app_theme_scope.dart';
-import '../theme/artwork_accent.dart';
-import '../widgets/detail/theme/detail_theme.dart';
-import '../widgets/hero_trailer_backdrop.dart';
-import '../widgets/episodes_panel.dart';
-import '../widgets/horizontal_mouse_wheel.dart';
-import '../widgets/home/home_theme.dart';
-import '../widgets/parents_guide_section.dart';
-import '../widgets/movie_watched_badge.dart';
-import '../services/trakt/trakt_episode_model.dart';
-import '../services/trakt/trakt_service.dart';
-import '../widgets/trakt/trakt_menu_helpers.dart';
-import '../services/simkl/simkl_service.dart';
-import '../services/simkl/simkl_menu_helpers.dart';
-import '../services/mdblist/mdblist_models.dart';
-import '../services/mdblist/mdblist_menu_helpers.dart';
-import '../widgets/tracker_brand_marks.dart';
-import 'episodes_screen.dart' show kCatalogDetailRouteName;
-import 'settings/detail_page_style_page.dart' show effectiveDetailPageStyle;
-import '../theme/app_theme_controller.dart';
-import '../theme/theme_core_resolver.dart';
-import '../theme/theme_overrides.dart';
-import '../theme/shipped_themes.dart' show effectiveDetailTheme;
-import '../utils/artwork_url.dart';
-import '../utils/episode_progress_merge.dart';
-import '../utils/tv_keys.dart';
-import 'package:debrify/models/ambient_trailer_surface.dart';
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
 /// episode drill-down fused into one Stremio-styled screen. Reached only from
@@ -245,18 +249,13 @@ class MergedDetailScreen extends StatefulWidget {
 class _MergedDetailScreenState extends State<MergedDetailScreen>
     with RouteAware, MetadataPresentationMixin<MergedDetailScreen> {
   // ── Stremio-flat palette (neutral glass + gold state) ──
-  static const Color _bg = Color(0xFF0B0B0E);
-  static const Color _gold = Color(0xFFF5B942);
-  static const Color _imdb = Color(0xFFF5C518);
-  static Color get _glass2 => Colors.white.withValues(alpha: 0.07);
-  static Color get _hair => Colors.white.withValues(alpha: 0.09);
 
   /// Per-title accent, extracted once from the poster (same cheap 32px decode
   /// the home hero uses). Colors the eyebrow, an ambient wash behind the title
   /// and the Play button's glow, so the page feels made for *this* title rather
   /// than a template with the artwork swapped in. Falls back to [_gold] until a
   /// colorful dominant color is found (or forever, for a B&W poster).
-  Color _accent = _gold;
+  Color _accent = MergedDetailPalette.gold;
 
   ImdbEnrichment? _imdbExtra;
   ParentsGuideResult? _parentsGuide;
@@ -1612,7 +1611,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         if (!didPop) _exitTrailerForeground();
       },
       child: Scaffold(
-        backgroundColor: _bg,
+        backgroundColor: MergedDetailPalette.bg,
         body: Stack(
           children: [
             // Full-bleed backdrop → the Stremio "one lit surface" feel. When a
@@ -1731,12 +1730,20 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                                 end: Alignment.bottomRight,
                                 colors: _bodySpec.ownScrim
                                     ? [
-                                        _bg.withValues(alpha: 0.10),
-                                        _bg.withValues(alpha: 0.24),
+                                        MergedDetailPalette.bg.withValues(
+                                          alpha: 0.10,
+                                        ),
+                                        MergedDetailPalette.bg.withValues(
+                                          alpha: 0.24,
+                                        ),
                                       ]
                                     : [
-                                        _bg.withValues(alpha: 0.60),
-                                        _bg.withValues(alpha: 0.88),
+                                        MergedDetailPalette.bg.withValues(
+                                          alpha: 0.60,
+                                        ),
+                                        MergedDetailPalette.bg.withValues(
+                                          alpha: 0.88,
+                                        ),
                                       ],
                               ),
                             ),
@@ -2186,8 +2193,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    _bg.withValues(alpha: 0.82),
-                    _bg.withValues(alpha: 0.5),
+                    MergedDetailPalette.bg.withValues(alpha: 0.82),
+                    MergedDetailPalette.bg.withValues(alpha: 0.5),
                   ],
                 ),
               ),
@@ -2202,7 +2209,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: const Color(0xFF0E0B14).withValues(alpha: 0.82),
-                border: Border(left: BorderSide(color: _hair)),
+                border: Border(
+                  left: BorderSide(color: MergedDetailPalette.hair),
+                ),
               ),
               child: _buildEpisodesPanel(),
             ),
@@ -2540,9 +2549,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           decoration: BoxDecoration(
-            color: _glass2,
+            color: MergedDetailPalette.glass2,
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: _hair),
+            border: Border.all(color: MergedDetailPalette.hair),
           ),
           child: Text(
             cert,
@@ -2564,7 +2573,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
               decoration: BoxDecoration(
-                color: _imdb,
+                color: MergedDetailPalette.imdb,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text(
@@ -2640,7 +2649,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// anything — it's the one watchlist status, or nothing.
   String get _simklPillLabel {
     final status = _simklStatus?.currentStatus;
-    if (status != null) return _simklStatusLabel(status);
+    if (status != null) return MergedDetailSimklLabels.simklStatusLabel(status);
     if (_simklStatus?.rating != null) return 'Rated';
     if (!_simklStatusResolved && widget.simklStatusLoader != null) {
       return 'Checking…';
@@ -2664,23 +2673,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     ];
     if (parts.isEmpty) return s.rating == null ? 'Not tracked' : 'Rated';
     return parts.take(2).join(' · ');
-  }
-
-  static String _simklStatusLabel(String status) {
-    switch (status) {
-      case 'plantowatch':
-        return 'Plan to Watch';
-      case 'watching':
-        return 'Watching';
-      case 'hold':
-        return 'On Hold';
-      case 'completed':
-        return 'Completed';
-      case 'dropped':
-        return 'Dropped';
-      default:
-        return status;
-    }
   }
 
   Widget _metaText(String s) => Text(
@@ -2873,96 +2865,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           ),
       ],
     );
-  }
-
-  /// Human-readable description of each quick action, shown in the More menu.
-  static String _descriptionFor(TraktItemMenuAction a) {
-    switch (a) {
-      case TraktItemMenuAction.selectSource:
-        return 'Pin a specific torrent or file as this title\'s source so every '
-            'play uses it — no re-searching each time. Change or clear it here.';
-      case TraktItemMenuAction.addToStremioTv:
-        return 'Add this to your Stremio TV channel so it plays in your '
-            'always-on rotation alongside your other picks.';
-      case TraktItemMenuAction.playRandomEpisode:
-        return 'Skip the browsing and jump straight into a random episode from '
-            'this series — handy for background or comfort watching.';
-      case TraktItemMenuAction.searchPacks:
-        return 'Open a search for full-season and complete-series packs, then '
-            'do whatever you want with a result — play it, download it, and more.';
-      case TraktItemMenuAction.addToWatchlist:
-        return 'Save this to your Trakt watchlist so you can find it later, '
-            'synced across every device signed into your account.';
-      case TraktItemMenuAction.removeFromWatchlist:
-        return 'Take this off your Trakt watchlist — it won\'t appear in your '
-            '"to watch" list anymore.';
-      case TraktItemMenuAction.addToCollection:
-        return 'Mark this as part of your Trakt collection — your library of '
-            'everything you own or keep track of.';
-      case TraktItemMenuAction.removeFromCollection:
-        return 'Remove this from your Trakt collection.';
-      case TraktItemMenuAction.markWatched:
-        return 'Mark every episode of this title as watched on Trakt and sync '
-            'that history across all your devices.';
-      case TraktItemMenuAction.markUnwatched:
-        return 'Clear this title from your Trakt history so it counts as '
-            'unwatched again and can resurface in "up next".';
-      case TraktItemMenuAction.rate:
-        return 'Give this a 1–10 rating on Trakt. Your ratings sync everywhere '
-            'and help shape your recommendations.';
-      case TraktItemMenuAction.removeRating:
-        return 'Remove the rating you previously gave this on Trakt.';
-      case TraktItemMenuAction.addToList:
-        return 'Add this to one of your custom Trakt lists — like "Weekend", '
-            '"With friends" or anything you\'ve made.';
-      case TraktItemMenuAction.removeFromList:
-        return 'Remove this from one of your custom Trakt lists.';
-      case TraktItemMenuAction.removeFromPlayback:
-        return 'Remove this from Continue Watching so it stops showing on your '
-            'home rows and resume list.';
-      case TraktItemMenuAction.clearWatchProgress:
-        return 'Reset watched history and resume progress on this device and connected Trakt, Simkl and MDBList accounts. Saved sources are kept.';
-      case TraktItemMenuAction.clearTraktProgress:
-        return 'Clear watched history and resume progress on Trakt only. Local progress and other trackers are kept.';
-      case TraktItemMenuAction.removeFromTraktPlayback:
-        return 'Delete this title\'s playback progress (and watch history) on '
-            'Trakt so it leaves the Trakt Continue Watching rows.';
-    }
-  }
-
-  /// Human-readable description of each Simkl quick action, shown in its
-  /// own More menu — mirrors [_descriptionFor].
-  static String _descriptionForSimkl(SimklItemMenuAction a) {
-    switch (a) {
-      case SimklItemMenuAction.clearWatchProgress:
-        return 'Clear watched history and resume progress on Simkl only. Local progress and other trackers are kept.';
-      case SimklItemMenuAction.moveToPlanToWatch:
-        return 'Move this to your Simkl "Plan to Watch" list — a personal '
-            'watch queue synced across every device signed into your account.';
-      case SimklItemMenuAction.moveToWatching:
-        return 'Mark this as currently watching on Simkl, without changing '
-            'any episode watched state.';
-      case SimklItemMenuAction.moveToOnHold:
-        return 'Pause this on Simkl — keeps it out of Plan to Watch and '
-            'Watching until you\'re ready to pick it back up.';
-      case SimklItemMenuAction.moveToCompleted:
-        return 'Mark this completed on Simkl and sync that history across '
-            'all your devices.';
-      case SimklItemMenuAction.moveToDropped:
-        return 'Mark this dropped on Simkl so it stops showing up as '
-            'something you\'re meaning to finish.';
-      case SimklItemMenuAction.removeFromList:
-        return 'Remove this title from your Simkl library, including its '
-            'active status, watched history, rating and saved playback progress.';
-      case SimklItemMenuAction.removeFromContinueWatching:
-        return 'Take this off your Simkl Continue Watching rows. A movie just '
-            'clears its paused position; a series is moved to On Hold so its '
-            'next episode doesn\'t re-surface as an "up next" card.';
-      case SimklItemMenuAction.rate:
-        return 'Give this a 1–10 rating on Simkl.';
-      case SimklItemMenuAction.removeRating:
-        return 'Remove the rating you previously gave this on Simkl.';
-    }
   }
 
   /// Debrify's own actions, in a plain labelled list. Closes on selection —
@@ -3216,7 +3118,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   void _openDetailsSheet() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: _bg,
+      backgroundColor: MergedDetailPalette.bg,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => DraggableScrollableSheet(
@@ -3281,20 +3183,26 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
             decoration: BoxDecoration(
-              color: _gold.withValues(alpha: 0.12),
+              color: MergedDetailPalette.gold.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _gold.withValues(alpha: 0.24)),
+              border: Border.all(
+                color: MergedDetailPalette.gold.withValues(alpha: 0.24),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.emoji_events_rounded, size: 15, color: _gold),
+                const Icon(
+                  Icons.emoji_events_rounded,
+                  size: 15,
+                  color: MergedDetailPalette.gold,
+                ),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     awardsLine,
                     style: const TextStyle(
-                      color: _gold,
+                      color: MergedDetailPalette.gold,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
@@ -3466,11 +3374,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     );
   }
 
-  Widget _castTile(CastMember m) => _CastTile(member: m, fallback: _glass2);
+  Widget _castTile(CastMember m) =>
+      _CastTile(member: m, fallback: MergedDetailPalette.glass2);
 
   Widget _recCard(StremioMeta rec) => _RecCard(
     rec: rec,
-    fallback: _glass2,
+    fallback: MergedDetailPalette.glass2,
     onTap: () => _openMetadataRecommendation(rec),
   );
 
@@ -3517,9 +3426,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   Widget _pill(String s) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
     decoration: BoxDecoration(
-      color: _glass2,
+      color: MergedDetailPalette.glass2,
       borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: _hair),
+      border: Border.all(color: MergedDetailPalette.hair),
     ),
     child: Text(s, style: const TextStyle(fontSize: 12)),
   );
@@ -3880,7 +3789,7 @@ class _PrimaryButton extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.busy = false,
-    this.glow = _MergedDetailScreenState._gold,
+    this.glow = MergedDetailPalette.gold,
   });
 
   @override
@@ -4168,7 +4077,7 @@ class _SourcePillState extends State<_SourcePill> {
   @override
   Widget build(BuildContext context) {
     final bound = widget.count > 0;
-    const gold = _MergedDetailScreenState._gold;
+    const gold = MergedDetailPalette.gold;
     final label = bound
         ? (widget.count > 1 ? '${widget.count} sources' : '1 source')
         : 'Bind source';
@@ -4585,7 +4494,7 @@ class _QuickActionsMenu extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      _MergedDetailScreenState._descriptionFor(o.action),
+                      MergedDetailActionDescriptions.descriptionFor(o.action),
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.5),
                         fontSize: 13,
@@ -5167,9 +5076,10 @@ class _TraktSheetState extends State<_TraktSheet> {
                       _SheetActionRow(
                         icon: markWatched.icon,
                         label: markWatched.label,
-                        description: _MergedDetailScreenState._descriptionFor(
-                          markWatched.action,
-                        ),
+                        description:
+                            MergedDetailActionDescriptions.descriptionFor(
+                              markWatched.action,
+                            ),
                         autofocus: claimFocus(),
                         onTap: () =>
                             _run(() => widget.onAction(markWatched.action)),
@@ -5177,9 +5087,10 @@ class _TraktSheetState extends State<_TraktSheet> {
                       _SheetActionRow(
                         icon: markUnwatched.icon,
                         label: markUnwatched.label,
-                        description: _MergedDetailScreenState._descriptionFor(
-                          markUnwatched.action,
-                        ),
+                        description:
+                            MergedDetailActionDescriptions.descriptionFor(
+                              markUnwatched.action,
+                            ),
                         autofocus: claimFocus(),
                         onTap: () =>
                             _run(() => widget.onAction(markUnwatched.action)),
@@ -5189,9 +5100,10 @@ class _TraktSheetState extends State<_TraktSheet> {
                       _SheetActionRow(
                         icon: clearProgress.icon,
                         label: clearProgress.label,
-                        description: _MergedDetailScreenState._descriptionFor(
-                          clearProgress.action,
-                        ),
+                        description:
+                            MergedDetailActionDescriptions.descriptionFor(
+                              clearProgress.action,
+                            ),
                         autofocus: claimFocus(),
                         onTap: () =>
                             _run(() => widget.onAction(clearProgress.action)),
@@ -5227,9 +5139,10 @@ class _TraktSheetState extends State<_TraktSheet> {
                       _SheetActionRow(
                         icon: addToList.icon,
                         label: addToList.label,
-                        description: _MergedDetailScreenState._descriptionFor(
-                          addToList.action,
-                        ),
+                        description:
+                            MergedDetailActionDescriptions.descriptionFor(
+                              addToList.action,
+                            ),
                         autofocus: claimFocus(),
                         onTap: () =>
                             _run(() => widget.onAction(addToList.action)),
@@ -5240,9 +5153,10 @@ class _TraktSheetState extends State<_TraktSheet> {
                       _SheetActionRow(
                         icon: removePlayback.icon,
                         label: removePlayback.label,
-                        description: _MergedDetailScreenState._descriptionFor(
-                          removePlayback.action,
-                        ),
+                        description:
+                            MergedDetailActionDescriptions.descriptionFor(
+                              removePlayback.action,
+                            ),
                         color: const Color(0xFFFF8B8B),
                         autofocus: claimFocus(),
                         // Closes the sheet: whether this title is still on a
@@ -5472,7 +5386,7 @@ class _SimklSheetState extends State<_SimklSheet> {
                         icon: clearProgress.icon,
                         label: clearProgress.label,
                         description:
-                            _MergedDetailScreenState._descriptionForSimkl(
+                            MergedDetailSimklDescriptions.descriptionForSimkl(
                               clearProgress.action,
                             ),
                         onTap: () =>
@@ -5484,7 +5398,7 @@ class _SimklSheetState extends State<_SimklSheet> {
                         icon: removeCw.icon,
                         label: removeCw.label,
                         description:
-                            _MergedDetailScreenState._descriptionForSimkl(
+                            MergedDetailSimklDescriptions.descriptionForSimkl(
                               removeCw.action,
                             ),
                         color: const Color(0xFFFF8B8B),
