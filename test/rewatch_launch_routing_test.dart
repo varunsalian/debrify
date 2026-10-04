@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/merged_detail_source.dart';
 
 void main() {
   test(
@@ -9,19 +10,42 @@ void main() {
         'catalog_item_detail_screen',
         'merged_series_detail_screen',
       ]) {
-        final source = File('lib/screens/$path.dart').readAsStringSync();
+        final source = path == 'merged_series_detail_screen'
+            ? mergedDetailSource()
+            : File('lib/screens/$path.dart').readAsStringSync();
         for (final notifier in [
           'MovieProgressStorage.movieFinishedRevision',
           'MdblistService.instance.watchedRevision',
         ]) {
-          expect(
-            source,
-            contains('$notifier.addListener(_loadLocalMovieFinished)'),
-          );
-          expect(
-            source,
-            contains('$notifier.removeListener(_loadLocalMovieFinished)'),
-          );
+          if (path == 'merged_series_detail_screen') {
+            expect(
+              mergedCompletionListenerSite(
+                source,
+                'initState',
+                notifier,
+                'addListener',
+              ),
+              isTrue,
+            );
+            expect(
+              mergedCompletionListenerSite(
+                source,
+                'dispose',
+                notifier,
+                'removeListener',
+              ),
+              isTrue,
+            );
+          } else {
+            expect(
+              source,
+              contains('$notifier.addListener(_loadLocalMovieFinished)'),
+            );
+            expect(
+              source,
+              contains('$notifier.removeListener(_loadLocalMovieFinished)'),
+            );
+          }
         }
         expect(source, contains('generation == _movieCompletionGeneration'));
       }
@@ -40,9 +64,7 @@ void main() {
     );
     expect(action, contains('restart();'));
     expect(action, isNot(contains('(widget.onRewatch ?? widget.onPlay)()')));
-    final merged = File(
-      'lib/screens/merged_series_detail_screen.dart',
-    ).readAsStringSync();
+    final merged = mergedDetailSource();
     final rewatch = merged.substring(
       merged.indexOf('Future<void> _rewatchTitle()'),
       merged.indexOf('void _browsePrimarySources()'),
@@ -85,4 +107,40 @@ void main() {
     );
     expect(RegExp('startFromBeginning: true').allMatches(detail).length, 2);
   });
+}
+
+// Bound to the main State declaration and its owning lifecycle method. Only
+// whitespace and one optional formatter comma are accepted at the call site.
+bool mergedCompletionListenerSite(
+  String source,
+  String declaration,
+  String notifier,
+  String operation,
+) {
+  final stateStart = source.indexOf('class _MergedDetailScreenState ');
+  if (stateStart < 0) return false;
+  final tail = source.substring(stateStart);
+  final stateEnd = RegExp(r'^}', multiLine: true).firstMatch(tail);
+  if (stateEnd == null) return false;
+  final state = tail.substring(0, stateEnd.end);
+  final start = RegExp(
+    r'^  void ' + RegExp.escape(declaration) + r'\(\)\s*\{',
+    multiLine: true,
+  ).firstMatch(state);
+  if (start == null) return false;
+  final end = RegExp(
+    r'^  }',
+    multiLine: true,
+  ).firstMatch(state.substring(start.end));
+  if (end == null) return false;
+  final body = state.substring(start.start, start.end + end.end);
+  final expression = notifier.split('.').map(RegExp.escape).join(r'\s*\.\s*');
+  return RegExp(
+    r'^\s*' +
+        expression +
+        r'\s*\.\s*' +
+        RegExp.escape(operation) +
+        r'\s*\(\s*_loadLocalMovieFinished\s*,?\s*\)',
+    multiLine: true,
+  ).hasMatch(body);
 }

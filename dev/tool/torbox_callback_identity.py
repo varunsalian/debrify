@@ -7,7 +7,8 @@ opt-in through the TorBox config; other manifest configurations are unchanged.
 import re
 
 
-def arguments(values, method):
+def argument_ranges(values, method):
+    """Return exact token spans for each argument of each matching call."""
     found = []
     for i, value in enumerate(values[:-1]):
         if value != method:
@@ -24,16 +25,17 @@ def arguments(values, method):
                     break
         if opening >= len(values) or values[opening] != '(':
             continue
-        depth, current, args = 0, [], []
-        for token in values[opening + 1:]:
+        depth, start, args = 0, opening + 1, []
+        for j in range(opening + 1, len(values)):
+            token = values[j]
             if token == ')' and depth == 0:
-                if current:
-                    args.append(current)
+                if j > start:
+                    args.append((start, j))
                 found.append(args)
                 break
             if token == ',' and depth == 0:
-                args.append(current)
-                current = []
+                args.append((start, j))
+                start = j + 1
                 continue
             # '${' opens a string interpolation whose '}' is counted as a
             # closer; without it the depth never returns to 0 and the call
@@ -42,8 +44,12 @@ def arguments(values, method):
                 depth += 1
             elif token in (')', ']', '}'):
                 depth -= 1
-            current.append(token)
     return found
+
+
+def arguments(values, method):
+    return [[values[start:end] for start, end in call]
+            for call in argument_ranges(values, method)]
 
 
 def callback_argument(call, site):
@@ -55,6 +61,8 @@ def callback_argument(call, site):
     """
     if not isinstance(site, dict):
         site = {'argument': site}
+    call = [[token for token in arg if not token.startswith(('//', '/*'))]
+            for arg in call]
     if 'named_argument' in site:
         name = site['named_argument']
     elif isinstance(site['argument'], str):
@@ -65,6 +73,39 @@ def callback_argument(call, site):
     if len(matches) != 1 or not matches[0]:
         raise ValueError('expected exactly one named argument: ' + name)
     return matches[0]
+
+
+def argument_expression(call, selector):
+    """Select a positional argument or one exact named argument's expression."""
+    call = [[token for token in arg if not token.startswith(('//', '/*'))]
+            for arg in call]
+    if isinstance(selector, int):
+        return call[selector]
+    matches = [arg[2:] for arg in call if arg[:2] == [selector, ':']]
+    if len(matches) != 1:
+        raise ValueError(f'expected one named argument {selector}, got {len(matches)}')
+    return matches[0]
+
+
+def member_occurrences(values, member):
+    """Find member reads, excluding constructor/record named labels.
+
+    A renamed getter can have the same name as a nested named argument. Map
+    keys remain expressions; only labels within parentheses are excluded.
+    """
+    stack, found = [], []
+    for i, value in enumerate(values):
+        previous = next((v for v in reversed(values[:i])
+                         if not v.startswith(('//', '/*'))), None)
+        label = (stack[-1:] == ['('] and previous in ('(', ',')
+                 and values[i + 1:i + 2] == [':'])
+        if value == member and not label:
+            found.append(i)
+        if value in ('(', '[', '{', '${'):
+            stack.append(value)
+        elif value in (')', ']', '}') and stack:
+            stack.pop()
+    return found
 
 
 def check_callback_identities(lookup, rows, source_path, config):
@@ -152,7 +193,25 @@ def check_callback_identities(lookup, rows, source_path, config):
                 if len(calls) != count:
                     raise ValueError(f"expected {count} {call_name} calls, got {len(calls)}")
                 for call in ([calls[occurrence]] if occurrence is not None else calls):
-                    resolved.append(identity(callback_argument(call, site), node['owner'], getter=is_getter))
+                    expr = callback_argument(call, site)
+                    if 'conditional_member' in site:
+                        # Check a direct branch tear-off in an otherwise
+                        # verbatim conditional argument. Its surrounding
+                        # conditions remain covered by the whole-leaf check.
+                        target = node_for(site['conditional_member'])['name']
+                        positions = member_occurrences(expr, target)
+                        branch = site.get('branch_occurrence', 0)
+                        if len(positions) != site.get('branch_count', 1):
+                            raise ValueError('conditional tear-off occurrence count changed: ' + target)
+                        end = positions[branch] + 1
+                        start = end - 1
+                        while start >= 2 and expr[start - 1] == '.':
+                            start -= 2
+                        if (expr[start - 1:start] not in (['?'], [':'])
+                                or expr[end:end + 1] not in ([], [':'], [')'])):
+                            raise ValueError('conditional branch must be a direct tear-off: ' + target)
+                        expr = expr[start:end]
+                    resolved.append(identity(expr, node['owner'], getter=is_getter))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
         if 'callback_member' in spec:

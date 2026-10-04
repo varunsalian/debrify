@@ -551,7 +551,561 @@ the behaviour suite compared against the latest recorded base.
 
 ## Progress
 
-(empty)
+**Completed:** Steps 0–7, independent-review Step 0b, separate Linux-original
+checkpoint, and both full-suite gates. Latest baseline is `merged_detail/base4`;
+final source Gate 2 is `a3057a82`. Earlier blocker/pending notes below are
+historical checkpoints. Remaining work is device verification, remote CI and
+Claude’s semantic integration on the merged committed tree.
+
+### Step 0 — blocked at formatted-original analyzer parity
+
+- Execution base is `def4e30423c9d8344eeb340c665afc2ee866c11f`, clean
+  `refactor/merged-detail` in the dedicated merged-detail worktree. Ran
+  `flutter pub get` here first; the lockfile is unchanged. Flutter 3.44.8 /
+  Dart 3.12.2. No branch switch, push, or changes to another checkout.
+  All evidence uses the requested `refactor-evidence/merged_detail/`
+  namespace. The tool-only analyzer 14.3.0 parser and kernels are isolated
+  under this worktree's `.dart_tool/merged_detail_parser/`.
+- Untouched full suite `merged_detail/base` identifies committed HEAD
+  `def4e304` and tree `d3c663da804069a0bc24ba39f3d2faa4fca6b6f2`:
+  10,577 successes / 13 failures / 28 errors / 20 skips. No overlay,
+  untracked input, or tree change during the run. Its whole-repo analyzer
+  is recorded, including existing dependency-package test errors.
+- Format-only checkpoint is `21320ff9264fb7b1072b7682665058982a763dec`
+  (`style(merged): format the original merged detail screen`). Production
+  changes are only formatter whitespace and the 25 optional commas. The
+  existing rewatch test retains all expectations; only the merged listener
+  sites use declaration-scoped matching, with exact notifier, operation and
+  callback, arbitrary whitespace and one optional trailing comma. Catalog
+  checks are unchanged. The planned size ceiling is 5,630, up from 5,532;
+  no source responsibility has moved.
+- `format-proof.json`: whole-file scanner tokens, comments and literals
+  match after removing only AST-identified optional formatter commas.
+  Every added comma is listed by AST node and owner; exactly 25. Comment,
+  literal and required singleton-record comma negatives are rejected.
+  `dart format --output=none --set-exit-if-changed` is idempotent for the
+  screen and changed test. The reproducible proof tool is
+  `dev/tool/merged_detail_format_proof.py`, requiring `--original`,
+  `--formatted`, `--parser-package` and `--output`; its kernel stays beside
+  the explicitly supplied parser configuration.
+- All three existing rewatch identities pass on both unformatted and
+  formatted production source. `format-rewatch-site-negatives-final`
+  records 51 successes: the three existing cases plus original/formatted
+  positives and negatives at each of the four sites. Each site rejects
+  deletion, closure wrapping, notifier swap, callback swap, and movement
+  outside its lifecycle declaration. The reproducing fixture is
+  `dev/tool/merged_detail_format_guard_test.dart.txt`; copy it to
+  `.dart_tool/merged_detail_step0/rewatch_guard_test.dart` and save the exact
+  `git show def4e304:lib/screens/merged_series_detail_screen.dart` text as
+  `.dart_tool/merged_detail_step0/unformatted-original.txt` before running.
+- `merged_detail/base-fmt` ran on clean committed `21320ff9`. Exactly the
+  same 10,577 / 13 / 28 / 20 outcomes as `base`, with every identity and
+  outcome equal, no additions/missing/new skips, and stable committed trees.
+  `base-fmt-comparison.txt` is PASS. These are Step 0 baselines, not gates.
+- **Required analyzer parity is FAIL.** The formatter changes four existing
+  one-line guarded statements into multiline statements, exposing
+  `curly_braces_in_flow_control_structures` infos in
+  `_openMetadataRecommendation`, `_showQuickActionsMenu`,
+  `_showSimklQuickActionsMenu`, and `_showMdblistQuickActionsMenu`. This
+  contradicts Step 0 item 2's required equal analyzer identities and the
+  predicted 38 strict infos: original strict analysis has 38, formatted
+  strict analysis has 42. No warning or error is new in this screen.
+  The exact source still passes the token/comment/literal proof.
+- Initial whole analyzer runs overlapped Flutter test-asset rebuilding and
+  reported changing multiplicities. They remain historical evidence.
+  Serial `flutter analyze --no-pub` replay, with the exact unformatted
+  facade temporarily restored and then restored to the committed formatted
+  bytes in `finally`, confirms 1,635 original / 1,639 formatted diagnostics:
+  **exactly those four added infos and zero removals**. Each run records its
+  actual tested tree; the original replay accurately records its source
+  overlay. `format-analyzer-parity.json` records FAIL and the four owners.
+  An intervening transient `git stash create` failure interrupted the first
+  serial script after the original run; the formatted source was restored,
+  and the formatted serial run was completed separately with stable tree
+  evidence. No evidence was relabeled as a passing parity check.
+- Conservative decision: preserve the format-only checkpoint and stop
+  before dependent extraction. Adding braces would widen the format-only
+  proof beyond the authorized comma/whitespace edits; suppressing or
+  allowlisting the four infos would evade the required parity check. No
+  such change, diagnostic acceptance, assertion weakening, `--record`, or
+  `--update` was made. File-size and staged diff checks pass.
+- **Pending:** completion of Step 0 (dependency report, move manifest,
+  real-config checker fixtures, accessor and original-code worktree
+  characterization, CI registrations, and Linux capture script/checkpoint),
+  Steps 1–7, both full-suite gates, and Linux originals/strict verification.
+  The facade remains 5,630 formatted physical lines. All 20 Found, not fixed
+  items below remain untouched. Device-only checks, remote CI and Claude's
+  eventual semantic integration remain pending; no migration parity is
+  claimed.
+
+
+### Step 0 — resumed; user-authorized analyzer baseline decision
+
+- The user explicitly accepts the four format-induced infos; the previous
+  stop remains historical evidence and is resolved. Do not add braces or
+  suppress these infos. Every subsequent analyzer comparison uses formatted
+  ORIGINAL `21320ff9264fb7b1072b7682665058982a763dec`, not the unformatted
+  execution base. Strict baseline is the formatted original under destination
+  lints (42 infos), combined by per-identity maximum with the unformatted
+  original only for identities present there. All other additions still fail.
+  Relocations must correspond by rule, original symbol and message.
+- Exact accepted identities, all severity `info`, all classified
+  **format-induced**, all in
+  `lib/screens/merged_series_detail_screen.dart`, all with rule
+  `curly_braces_in_flow_control_structures` and message
+  `Statements in an if should be enclosed in a block. Try wrapping the statement in a block`:
+  `_MergedDetailScreenState._openMetadataRecommendation`,
+  `_MergedDetailScreenState._showQuickActionsMenu`,
+  `_MergedDetailScreenState._showSimklQuickActionsMenu`, and
+  `_MergedDetailScreenState._showMdblistQuickActionsMenu`.
+  `merged_detail/format-induced-diagnostics.json` records each complete
+  rule/file/symbol/message identity and the authorization. No warning
+  allowlist entry is added; the CI warning checker already ignores infos.
+
+
+### Step 0 — characterization checkpoint preparation
+
+- Nothing has moved. The only production seam is the frozen, test-only
+  `mergedDetailTestAccess` accessor (29 lines); the facade is 5,659 lines.
+  Its original methods, fields, comments and public widget remain unchanged.
+- The dependency report and 235-leaf LF manifest inventory every original
+  responsibility and its live reads, receivers, evaluation sites and tear-offs.
+  The real-config checker covers 52 callback contracts at 56 sites, including
+  named arguments and interpolation. Each site independently rejects closure
+  wrapping and a same-class receiver swap. Individual listener removals,
+  route subscription, lifecycle order, lazy declarations, mixins, adjacent
+  rewatch/browse, panel arguments, launcher flag and comment negatives pass.
+- 106 characterization identities in 11 files first passed on formatted
+  ORIGINAL `21320ff9`, with only the frozen accessor, fixtures and tests
+  overlaid in the owned detached original-proof directory. Evidence is
+  `original-characterization-final4` (104 successes) and
+  `original-metadata-retention2` (22 successes; two additions, 20 overlaps).
+  `original-mutations.json` records 40 rejected production mutations covering
+  all 106 original-positive identities, with per-run trees, SDK, execution
+  base, source hashes and JSON outcomes. Production original files were
+  restored after each mutation. No regression was accepted with record/update.
+- Real-entry fixtures exercise all 11 styles, forced Classic and Xtream's
+  whole route/handoff, resume arbitration, lifecycle reads/publication,
+  callback order, watchlist persistence/rollback, source reloads, tracker
+  sheets, episode watched fan-out, retained metadata, D-pad and object identity.
+  Equal-but-distinct metadata keys distinguish `Map.identity()` from a normal
+  map. Configured trailer candidates/cancel and stale returns run in an
+  isolated real-TMDB-config child process with a mocked main-isolate transport.
+  Device-only promotion, stream isolation and trailer playback remain pending.
+- Five macOS pixel originals were initially captured on original code and
+  subsequently checked strictly, with bounded pumping and completed reveal
+  controllers. Linux capture uses the checkpoint-owned tests and resolves
+  the exact commit subject `test(merged): step 0 original-code characterization checkpoint`.
+  The script checks Flutter 3.44.8 on Linux, captures once, then verifies
+  strictly and writes hashes/revision evidence. Linux remains non-strict
+  through Step 5 and is a blocking prerequisite before Step 6.
+- `base2` preserved a 30-second Xtream large-dataset timeout while original
+  proof work competed for CPU. The identical source rerun `base2-repeat`,
+  without that load, has 10,577 successes / 13 failures / 28 errors / 20 skips
+  and exactly matches `base-fmt`; the failed run remains evidence. Whole
+  analyzer fixture declarations were corrected before freeze; no additional
+  fixture infos are accepted. The strict identity comparison records the
+  42-info formatted-original baseline, with a new-info negative rejected.
+- CI lists all 21 existing related paths plus 11 new paths. Only the three
+  newly exposed failure identities actually observed in `base` are added
+  under the dated Step 0 comment. Source-text consumers, shape (26 bare
+  radii, zero token calls), theme patterns, light-ink inventory, size ceiling,
+  architecture and final CI lists are inventoried for their prescribed steps.
+- Conservative move decisions: preserve private widget/State declarations
+  and expose exact public type aliases at cross-file boundaries. This avoids
+  adding constructor keys, changing runtime type names or introducing new
+  key-constructor diagnostics; lint and alias mutation probes are recorded.
+  `_CastTile` imports an image-cache service, so its whole class moves into
+  the bridge at Step 3. The mid-field recommendation method shares the
+  metadata-state owner; the interleaved bound-source field/method and model
+  factory share one owner, preserving original comment order and adjacency.
+  These ownership decisions are pinned in the manifest and dependency report.
+
+
+- **Step 0 local verification PASS:** all seven integrated manifests
+  (`vpl`, `settings`, `iptv`, `torbox`, `debrid`, `pikpak`, `merged_detail`)
+  with self-tests; architecture, sizes, storage keys/references (self-tests),
+  theme/light-ink inventory, full CI format scope plus facade/all new helpers,
+  and staged diff checks. Evidence is `step0-*-verbatim`, `step0-architecture`,
+  `step0-sizes`, `step0-storage-*`, `step0-theme`, `step0-light-ink`,
+  `step0-format`, and `step0-diff`. Shape and the unaffected profile/stale
+  runtime/theme source guards are also exercised by the full suite.
+- `base3` is PASS against `base2-repeat`: **10,683 successes / 13 failures /
+  28 errors / 20 skips**, exactly 106 added identities, all successful,
+  no missing tests, new failures, fixes or new skips. The staged source tree
+  was stable throughout; its env records the actual tested tree and SDK.
+  The checkpoint's subsequent changes are Progress documentation only.
+  This is the latest merged-detail base for Gate 1.
+- Whole analyzer `step0-analyze` has exactly the formatted original's 1,639
+  identities/multiplicities, with no additions or removals. Scoped analysis
+  and `step0-allowlist` pass with the existing warning entries only; no
+  merged-detail warning is added. `step0-strict-comparison.json` traces all
+  42 strict infos to their original symbols, with zero additions. A new
+  fixture-only curly info was corrected before freeze, retaining every
+  assertion; `original-metadata-frozen` re-proves its four cases on original
+  production code. The four accepted production infos remain unmodified.
+
+### Step 0b — independent review closure
+
+- Step 1 was uncommitted. Its helper moves and registrations are saved under
+  this worktree's ignored `.dart_tool/merged_detail_step1_pending/`; the facade
+  and tracked registrations were restored to `4b65c7cf` before this revision.
+  Nothing moves in Step 0b. The only production-seam change removes the unused
+  `loadTrailer` and `loadBoundSources` entries (27 lines, facade 5,657).
+- P2-1: non-Xtream action fixtures explicitly default to Console and obtain
+  the mounted `DetailConsole.model`. Classic's model accessor is read-only
+  observation; primary/watchlist actions tap rendered labels. All alternate
+  style checks read their actual mounted model. After engine emissions, tests
+  paint the scheduled frame before re-reading the view's model.
+- P2-2/3: hosted episode writes pin the Simkl host and complete IMDb/S1E1
+  bodies; playback reads and paused-session deletion pin their host. The panel
+  probe waits for visibly enriched metadata, proves original and presented
+  objects differ, and compares its loaders with the exact screen fields using
+  `same()`. Its Classic primary action is a real tap.
+- P2-4: configured trailer children run `flutter test --dart-define=...`
+  directly. Child source and reporter output live in a unique system temp
+  directory and are removed in `finally`; the parent asserts only child
+  outcomes. No nested suite-evidence run, SDK-version assertion, or shared
+  evidence mutation remains in the test.
+- P2-5 conservative original-behavior decision: successful IMDb enrichment is
+  cached for the process lifetime by `ImdbEnrichmentService._cache`, with no
+  reset seam. The retained-title cases now start from non-null extra, assert
+  null synchronously on policy/profile notification, and await republication
+  of the same cached object with exactly zero additional non-ParentsGuide
+  GraphQL requests. Separate policy/profile cases start with an unsuccessful,
+  uncached fetch, then require exactly one additional request, its IMDb body,
+  and the rendered model's new rating. Requiring an extra network request for
+  the cached title would contradict original behavior; no cache is changed.
+- P3: actual keyboard dispatch covers the info pane, episodes pane, action row
+  and rail trap, preserving the direct branch/result checks. A two-season
+  fixture renders the real season dropdown. Tracking-source detachment is
+  checker-only because its callback checks `mounted` before reading; its test
+  title now claims only mounted reload and no publication after unmount. Movie
+  and MDBList removal-deletion mutations must fail generation observations.
+- Watchlist retention uses a recording store: its actual saved IMDb row,
+  original storage key/value and exact write list survive policy/profile
+  refresh; rendered watchlist/resume labels remain. SharedPreferences caches
+  reads, so this is persistence/retention evidence, not a claim of instrumented
+  per-read detachment. Tracker refresh uses `MainPageBridge` notification.
+  The direct accessor rewatch call is documented as a defensive early-return
+  probe: the no-restart branch cannot be selected by the Play UI.
+- Source contracts preserve literal whitespace and distinguish interpolation
+  boundaries; code formatting and optional commas remain tolerated. The
+  relocated listener negative now starts the misplaced site on its own line.
+  Four of nine post-frame loaders have recording host callbacks in the order
+  test (`resume`, `trakt`, `simkl`, `mdblist`); the remaining five and the entire
+  invocation order are pinned by the original `initState` source guard.
+- The five Linux originals copied by Claude stay untracked and outside Step
+  0b. Their hash/provenance verification and separate commit remain required
+  before Step 6; the exact Step 0 characterization checkpoint stays `4b65c7cf`.
+
+- Original proofs: `original-step0b-final` passes all 109 cases on the owned
+  detached `21320ff9` worktree. After switching the getter to the review's
+  exact `WidgetTester.widget<DetailConsole>(...).model`, its 40 affected cases
+  pass again in `original-step0b-rendered-model`. `original-step0b-frozen`
+  passes 43 metadata/source cases and all 48 listener-format positives and
+  negatives, including the newly multiline relocation sites.
+- `step0b-original-mutations.json`: all 49 guard mutations rejected, 109/109
+  characterization identities exercised, zero uncovered. This is 48 original
+  production mutations plus one regression mutation of the test canonicalizer.
+  `step0b-named-mutation-assertions.json` verifies actual assertion failures for
+  all nine appended review-specific mutations; no compilation/loading failure
+  is accepted. The mounted-model primary swap is re-proved on the final getter.
+  `step0b-original-production-proof.json` proves the facade's original bytes
+  unchanged, with only the two removed accessor entries differing from Step 0.
+- `merged_detail/base4` is the latest base: 10,686 successes, 13 failures,
+  28 errors, 20 skips. Comparison with base3 passes with exactly three added
+  passing identities, no new failure, missing identity, newly skipped test or
+  fixed failure. The user-requested tracking-source title rename has one exact
+  correspondence in `step0b-identity-correspondence.json`; the derived
+  `base3-step0b-identities.json` retains every original outcome and its source
+  hash/SDK/tree provenance. No failure allowance or assertion is changed.
+- All seven integrated manifests with self-tests pass, as do architecture,
+  sizes, storage keys/references, theme, light-ink, CI format and staged diff.
+  Stable runs are reused after cleanup limited to test scaffolds; the one
+  IPTV run whose tree changed during execution is rerun on the final tree.
+  Whole analyzer `step0b-analyze` has exactly the formatted original's 1,639
+  diagnostic identities/multiplicities, zero additions/removals. Scoped
+  allowlist passes; strict comparison retains the maximum original baseline
+  of 42, including all four format-induced identities, with zero additions.
+  New test-support lint findings were fixed and the affected original-code
+  proofs rerun; accepted production infos remain untouched.
+- The full-suite tested tree is frozen; the subsequent checkpoint edit is
+  this Progress report only. Proof summary: `step0b-proof-summary.json`.
+
+### Linux originals — separate artifact checkpoint
+
+- Claude captured the five original PNGs from `4b65c7cf` in local Docker
+  `debrify-flutter:3.44.8`, linux/amd64 Ubuntu 24.04 with the official Flutter
+  3.44.8 SDK and `libsqlite3-dev`, under Colima on macOS, at
+  `2026-10-04T07:24:28Z`. The image was calibrated against 14 GitHub-captured
+  TorBox/Debrid goldens; all 14 strict comparisons passed. GitHub Actions was
+  unavailable because of its spending limit; this is local Linux evidence.
+- `linux-original-{capture,strict,sha256,revision,run-url}.txt` record the
+  capture and strict five-test pass. `linux-original-verification.json`
+  verifies all five copied file hashes, exact revision and evidence hashes.
+  No PNG is generated or updated against moved code.
+- Conservative instruction precedence: the user's instruction to make Linux
+  strict when the originals arrive is applied now, earlier than the plan's
+  Step 6 default. The missing-file early return and opt-out are removed;
+  Linux runs require the committed originals. This changes test enforcement
+  only. The capture script continues resolving its checkpoint-owned tests by
+  their exact Step 0 commit subject.
+
+### Step 1 — static helpers and registrations
+
+- Eight original static leaves move to the four manifest-selected owners:
+  palette (13 lines), Trakt descriptions (58), Simkl descriptions in the
+  legacy bridge (38), and pure Simkl labels in application (18). The eight
+  wiring entries were checked: signatures, literals, argument order and
+  evaluations remain at their original sites. All facade imports now resolve
+  to the same libraries through sorted package URIs. Facade: 5,571 lines.
+- Register the feature, bridge and 500-line destination cap; final 450-line
+  facade enforcement remains staged for Step 7. Theme uses three explicit
+  directory patterns; light-ink includes them. Shape registers the facade's
+  26 radii plus all four zero-budget destinations, still totaling 26.
+- The shared normalizer gains only the three inventoried original qualified
+  static names (`_gold`, `_descriptionFor`, `_descriptionForSimkl`) for this
+  config's exact original State receiver. Its three wrong-static-owner
+  negatives reject mismatches. No generic original-State prefix is erased.
+- `step1-characterization`: all 109 cases pass against the latest base4;
+  no new failure, missing or skipped identity. Shape's three checks pass.
+  All seven integrated manifests with self-tests, architecture, sizes,
+  storage keys/references, theme, light-ink, full CI format and diff pass.
+  All 235 leaves and present forwarders match the formatted original.
+- Whole analyzer comparison has no additions/removals; scoped allowlist
+  passes. Strict evidence traces 16 infos (the original 11 const, deprecated
+  use and four format-induced identities), with zero additions to the
+  maximum original baseline of 42; sorting removes 26 import-order infos.
+  The first combined strict input duplicated the facade's five default infos
+  by appending its normal-scope log to its strict copy. This rejected input
+  is retained as `step1-strict-duplicate-input.json`; the valid combined log
+  contains the strict facade and only the feature lines from scoped analysis.
+  No diagnostic rule or comparison allowance changes.
+
+
+### Step 2 — service-free widget classes
+
+- Move 21 whole declarations into 15 files, keeping each private Widget/State,
+  constructor, default, lifecycle and runtime type. Exact public typedefs expose
+  constructors. Facade is 4,406 lines; shape remains 26 across the complete slice.
+- Conservative choice: constructor tear-off exports keep original keyless private
+  constructors intact. Dart's cross-library typedef calls otherwise report their
+  optional parameters unused. These constant exports perform no invocation or
+  initialization; their exact targets are pinned, with changed-target negatives.
+  No keys, braces, const invocations or lint suppressions are added to original
+  declarations. The header check selects concrete classes, and separately checks
+  every typedef; a typedef is not a second widget declaration.
+- All 115 focused cases pass (109 characterization plus shape and rewatch guards),
+  compared to base4 with no failed, missing or newly skipped identity. All seven
+  manifests with self-tests and local architecture, size, storage, theme, format
+  and diff checks pass. Three integrated checks span an independent merged-only
+  self-test edit; their unchanged-input reuse is recorded in
+  `step2-check-reuse.json`. The merged checker includes the new negative cases.
+- Allowlist passes with zero merged warnings. Strict comparison is PASS: 16 original
+  infos, zero additions. Whole analyzer uses the maximum of the original whole
+  analysis and original destination-lint analysis, with relocation; every slice
+  diagnostic also passes the stricter rule/symbol/message comparison. Four const
+  infos surface after moving widgets into destination lints and correspond to
+  original members. No candidate identity participates in either baseline.
+
+
+### Step 3 — remaining widgets and resource owners
+
+- Eleven whole Widget/State declarations move into seven files. All 22 widget
+  classes now retain their private runtime types and exact constructors through
+  pinned typedef/constructor exports. Six cohesive resource/state owners retain
+  original initializers, collection identity and GlobalKey/focus/scroll instances.
+  Facade is 3,309 lines. Every destination is under 500; shape still totals 26.
+- Composition constructs resources once before initState, captures no widget,
+  context or lazy reads, then binds its dependency object. The original two lazy
+  declarations remain in the State; the new assigned late-final parts field is
+  assigned in the constructor, not initialized lazily. Short typed owner getters
+  keep reads at the original sites and avoid new format-induced diagnostics.
+  The original static action set has an exact constant projection, with no copy.
+  `seriesDone` is the extracted name for `_seriesCompleted`, keeping its original
+  one-line guard within the formatter width. No braces or allowances are added.
+- The accessor follows actual owners; its original typed receiver is normalized
+  only for manifest-owned members. All added construction/projection leaves are
+  pinned after the per-entry wiring review. Lifecycle, mixins, subscription target,
+  disposal order, lazy initializers, defaults and bodies pass all 235 leaf checks.
+- Source readers now select a declaration, not mere destination-file existence;
+  the rewatch test follows the complete slice with every assertion retained.
+  All 40 affected cases pass first on the formatted original, whose production
+  bytes remain identical (`original-step3-source-proof.json`), then on this tree.
+  The literal-safe mapper skips irrelevant renames without altering mappings.
+- `step3-final-characterization`: 115 PASS against base4. All seven integrated
+  manifests/self-tests and architecture, size, storage, theme, format/diff pass on
+  a stable tested tree. Whole/scoped/strict analyzer and allowlist comparisons
+  pass, with 16 traced original infos and zero additions. The first reader run's
+  two source-reader failures are preserved; neither assertion is weakened.
+- Evidence snapshot creation is serialized at the beginning/end of the checker
+  batch. Parallel per-command git stash-create snapshots collided at the worktree
+  index; that failed launcher is preserved, and every check was rerun successfully.
+
+
+### Step 4 — actions and gate 1 checkpoint
+
+- Move playback/rewatch/browse, resume arbitration, tracking/completion and
+  watchlist into four cohesive owners (187/230/174/56 lines before final qualifier
+  formatting). The State retains `_refreshAfterPlayback` and wires its callees in
+  the original order. Facade: 2,792 lines; complete-slice shape remains 26.
+- Listener pairs share the same tracking-action instance; playback-return and route
+  ownership remain the State. All host callbacks are read live and handed through
+  directly. Resume timeout, latch/stash/settle, item writes, eleven logs, launch
+  guard, destructive order, watchlist writes/rollback and mounted checks are exact.
+- Compiler-confirmed unnecessary receiver qualifiers were removed only at those
+  sites, retaining local bindings. The literal-safe source reader reverses implicit
+  owner member names while preserving named labels and external qualified reads.
+  Its 40 affected original-code cases pass before the moved-code run.
+- All 115 focused checks pass against base4. All seven manifests/self-tests,
+  architecture, sizes, storage, shape, theme, CI format and diff pass on a stable
+  tree; every original leaf and callback identity remains checked. Whole/scoped
+  analysis, allowlist and per-symbol strict comparison pass with zero additions.
+- Gate 1 will run from this committed source against the latest merged_detail/base4,
+  with other Flutter tests and parser self-tests stopped to avoid the characterized
+  concurrency-sensitive Xtream 50k timeout. Gate evidence follows separately.
+
+
+### Gate 1 — full suite PASS
+
+- Source revision `26f90beaaa48275b100352b64f964ec1905d40a7`, tested tree `c04f601a1683e4af83bb638fa25ff1422389a933`; Flutter
+  3.44.8 / Dart 3.12.2. `merged_detail/gate1` has 10,686 successes, 13 failures,
+  28 load/test errors and 20 skips, exactly matching latest `merged_detail/base4`.
+- `gate1-comparison` is PASS: no new failure/error, missing test or newly skipped
+  identity. The tested tree did not change during the run. Gate evidence is recorded
+  in this separate documentation commit; its difference from the tested source is
+  documentation only. No baseline or assertion is updated to accept a regression.
+
+
+### Step 5 — metadata, trailer, sources and menus
+
+- Move metadata loading/policy, metadata exploration, trailer pipeline and the
+  four menus to their manifest owners; recommendation opening occupies its original
+  position before the recommendation fields in the metadata-state owner. Bound
+  sources/loading share the model factory and retain their interleaved doc fragments.
+  Facade: 2,136 lines. New owners are 34–293 lines; shape stays 26.
+- The State retains its mixin override as an exact policy forwarder. The existing
+  `layout_body` structural mode is enabled for its moved body only; its annotation
+  remains required on the facade. Source guards reconstruct that actual annotation
+  plus the actual destination body, preserving the complete original assertion.
+- All generations, captured profile/revision checks, reset/load order, cache
+  retention, uncancelled safety timer, trailer selection/promotion/launcher arguments,
+  pop/act sequencing, source read/write identity and mounted checks remain exact.
+  No service/player/panel implementation or persisted format changes.
+- All 115 focused cases pass against base4; the 40 affected reader cases also pass
+  on original code. All seven integrated manifests/self-tests, architecture, sizes,
+  storage, shape, theme, CI format and diff pass on a stable tree. Whole/scoped/strict
+  analyzer and allowlist pass with zero additions. The four accepted formatting
+  infos now trace by original rule/symbol/message to metadata-state and menu owners.
+- Linux originals are already verified and committed in their separate checkpoint.
+  Step 6 may proceed; the current Linux rendering will also be checked locally in
+  the calibrated image, without generating or updating any golden.
+
+
+### Step 6 — renderer and model factory
+
+- Move the complete build/model/body/pane/key-handler/hero/action/episode/rail
+  leaves to their reviewed manifest owners. The facade is 434 formatted lines;
+  all 49 feature Dart files are below 500. Public widget bytes, the two lazy fields,
+  mixins, original lifecycle order and direct action tear-offs remain exact.
+  Composition captures live getters and constructs inert owners once per route;
+  it reads no widget, context, lazy field or service during construction.
+- Per-entry wiring was reviewed before pinning: root/body rendering uses live
+  presentation, panel source identity remains the host's original item, every
+  host callback remains the same object, and focus/resource reads retain their
+  original sites. The model factory keeps bound-source loading and its comment
+  fragments in the original order. Shape budgets reconcile to exactly 26.
+- The callback resolver now distinguishes named labels from member reads, while
+  retaining ternary/map reads and interpolation. Real-config wrapper/receiver
+  negatives and all seven integrated manifests/self-tests pass. Architecture,
+  sizes, storage, theme, light-ink, format and diff pass. Whole/scoped/strict
+  analyzer and warning allowlist pass, with no diagnostic additions.
+- The complete source-body assertions caught reader bugs around a ternary colon,
+  a spread call and comment-separated named labels. The reader now carries code
+  context across comments and preserves literal text. Every assertion stays;
+  all 40 affected source cases pass on unchanged original production code, and
+  all 115 focused cases pass on the moved code (`step6-characterization-context`).
+  The 21 related files also compare PASS to base4 (1,306 success, one failure,
+  two errors; the same three observed original identities).
+- Linux strict rendering passes all 18 view cases in the calibrated amd64 image
+  (`step6-linux-strict`, stable archived tree). All five committed original PNG
+  hashes remain unchanged. That run preceded only the source-reader correction;
+  application, view-test, fixture and golden inputs are identical. The separate
+  original-golden commit remains separate. No golden was generated or updated.
+
+
+### Step 7 — completion guards and Gate 2 checkpoint
+
+- Enable `MERGED_DETAIL_COMPLETE`: the facade cap is 450 lines and every
+  `TEMP(merged_detail)` marker is rejected. Retain the exact legacy bridge,
+  feature-to-facade/service/other-feature import bans, and every prior completed
+  feature flag. Sixteen positive/negative probes verify these actual rules.
+- CI format/analyzer scopes now include the facade; the format scope lists all
+  four `test/support/merged_detail_*.dart` helpers explicitly. Behavior paths and
+  the five exact known-failure identities retain the approved Step 0 inventory.
+  No analyzer allowance or unrelated failure entry changes.
+- Acceptance proof: 235 manifest entries; byte-identical public surface; 434-line
+  facade; 49 feature Dart files, maximum 346 lines; unchanged Home/Xtream callers,
+  profile/stale-runtime/theme source guards and storage map; all 11 characterization
+  files byte-identical to the separate original-Linux checkpoint.
+- All seven integrated manifest/self-test runs, architecture, size, storage,
+  theme, light-ink, CI formatting and diff pass on the stable Step 7 source tree.
+  Whole/scoped/strict analyzer comparisons and allowlist pass. Sixteen original
+  infos remain: 11 const suggestions, one deprecated member, four accepted
+  format-induced curly suggestions, traced by original rule/symbol/message.
+  Only the 26 original import-order infos disappear through sorted imports.
+- Shape stays 26; the registered theme surface stays 750 sites. Linux input
+  parity proves all 2,080 application/dependency/config/view/fixture/golden inputs
+  match the strict tested archive. No missing-golden bypass remains.
+- Production State contains only retained lifecycle/mixins/lazy fields, live
+  metadata overrides, exact forwarders, inert composition and the frozen accessor.
+  Legacy-stage exceptions retain their named exit migrations (Riverpod route/profile
+  state, data contracts/playback bridge, TV capabilities, localization, shared focus).
+- The local CI behavior list and full-suite Gate 2 run next from this committed
+  source, serially. Gate 2 must compare with latest `merged_detail/base4` and Gate 1;
+  the following evidence commit changes documentation only. Device, remote-CI and
+  Claude's semantic integration checks remain pending.
+
+
+### Gate 2 — full suite PASS; execution complete
+
+- Full-suite run from clean committed `a3057a829173471bd9afbd9de56c35a88dd62a33`,
+  tree `5d9a6d80a36b137da7b82dbacacbf3fe4fbda3a5`, Flutter 3.44.8 / Dart 3.12.2:
+  **10,686 successes, 13 failures, 28 errors, 20 skips**. The tree and untracked
+  inputs stayed unchanged. Raw Flutter exit 1 represents the same original
+  failure/error identities; both recorded comparison verdicts are PASS.
+- `gate2-comparison-vs-base4` and `gate2-comparison-vs-gate1` each report no new
+  failure, missing identity, added identity, newly skipped test or fixed failure.
+  Gate 1 likewise matched latest base4 from committed `26f90bea`.
+- Local CI checker also passes from committed `a3057a82`: 4,437 successes,
+  three failures and two errors, exactly the five approved original identities.
+  `step7-ci-comparison` passes against base4 with no added/missing/skipped/fixed
+  identities. No failure allowance, test assertion or golden was weakened.
+- Completion index: shared authorized `refactor-evidence/merged_detail/` only,
+  `completion-summary.json`. It joins execution base, formatted original, latest
+  base, gate source trees/SDKs and all final checker/analyzer/CI verdicts. Parser
+  package/kernel artifacts remain inside this worktree’s ignored `.dart_tool`.
+- Step commits: format `21320ff9`, historical blocker `fc2f72df`, original
+  checkpoint `4b65c7cf`, review closure `e3a312c2`, separate Linux `2d2ce60c`,
+  step 1 `fc5b23b7`, step 2 `7c778ac7`, step 3 `864c0979`, step 4/Gate 1
+  `26f90bea` (evidence `70fa4ec1`), step 5 `0f92cfe2`, step 6 `66735b61`,
+  step 7/Gate 2 `a3057a82`. This final evidence commit changes this plan only.
+- Final facade: **434 lines**; 49 feature Dart files, maximum 346 lines;
+  235 verified manifest entries; 109 unchanged characterization cases,
+  49 rejected original mutations; 115 focused cases; 18 strict Linux view cases
+  with all five original PNG hashes unchanged. All seven integrated manifests
+  with self-tests, architecture, size, storage, shape, theme, format, analyzer
+  comparison and warning allowlist pass. Sixteen original strict infos remain,
+  including all four accepted format-induced identities; zero new diagnostics.
+- All 22 found-not-fixed items remain preserved. Pending physical checks:
+  Android TV D-pad/hold-OK, trailer promotion/foreground/launcher and isolated
+  stream resolution, host playback handoffs from Home/Xtream, real tracker accounts.
+  Remote CI is pending until Claude pushes (local calibrated Linux evidence is
+  complete); semantic shared-file integration and all integrated checks/full-suite
+  comparison on that committed tree remain Claude’s work. No branch switch or
+  push was made. Stop here as instructed.
+
 
 ## Found, not fixed
 
@@ -588,3 +1142,12 @@ All pre-existing; the extraction keeps each exactly.
     and `_setEpisodeWatchedEverywhere` comments describe a conditional local
     write on watch that `WatchedActionCoordinator.setEpisodeWatched` doesn't
     make (it always writes local completion).
+
+21. A failed SharedPreferences watchlist write updates the in-memory plugin
+    cache before the backend rejects it. The original UI rolls back, while
+    that cache can retain a ghost row; rollback tests verify the actual store
+    backend and UI. Storage behavior remains untouched.
+22. `_CastTile` can overflow its 92-pixel rail by two pixels for a two-line
+    cast name (56-pixel image, 6-pixel gap, two text lines). Original fixtures
+    use short cast names; the 12-member cap is still asserted. No layout fix.
+- Completion review (Claude): (1) the size baseline had a second, seam-only raise 5630 → 5659 at `4b65c7cf` for the 29-line frozen test accessor, then only fell, and the entry was removed at step 6. (2) Shared-tool changes not gated by config: `check_settings_moves.py` accepts only class declarations as widget headers for every feature; `torbox_callback_identity.py` `argument_expression` strips comment tokens and the alias lookup matches `path == alias` for every feature. All seven manifest self-tests pass with them. (3) The rewatch same-file/adjacency assertion lives in `test/features/merged_detail/.../merged_detail_source_contract_test.dart:117-130`, alongside `rewatch_launch_routing_test`'s declaration-scoped listener checks. (4) Final facade breakdown (434): imports 34, public widget 167 (byte-identical to `21320ff9`), State 204, frozen test accessor 26, separators 3. (5) Follow-ups: the orphaned palette comment above `_parts` (kept: the checker compares comments) and narrowing the generic checker receivers `s`/`state`/`this` to their members.

@@ -960,6 +960,88 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_view_state.dart':
       0,
+  // Merged-detail complete slice: 26 original bare radii, zero token calls.
+  'lib/features/merged_detail/application/merged_detail_simkl_labels.dart': 0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_ambient_still.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_cast_tile.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_focus_state.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart':
+      2,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_menus.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_actions.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_loading.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_state.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_playback_actions.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_rail_layout.dart':
+      2,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_state.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_simkl_descriptions.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_actions.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_trailer_actions.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_trailer_state.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_watchlist_actions.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_rec_card.dart':
+      2,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_simkl_sheet.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_simkl_status_row.dart':
+      1,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_trakt_sheet.dart':
+      0,
+  'lib/features/merged_detail/presentation/merged_detail_action_descriptions.dart':
+      0,
+  'lib/features/merged_detail/presentation/merged_detail_palette.dart': 0,
+  'lib/features/merged_detail/presentation/merged_focus_halo.dart': 0,
+  'lib/features/merged_detail/presentation/merged_ghost_button.dart': 4,
+  'lib/features/merged_detail/presentation/merged_primary_button.dart': 4,
+  'lib/features/merged_detail/presentation/merged_quick_actions_menu.dart': 0,
+  'lib/features/merged_detail/presentation/merged_rail_edge_trap.dart': 0,
+  'lib/features/merged_detail/presentation/merged_round_icon_button.dart': 0,
+  'lib/features/merged_detail/presentation/merged_scroll_anchor.dart': 0,
+  'lib/features/merged_detail/presentation/merged_sheet_action_row.dart': 0,
+  'lib/features/merged_detail/presentation/merged_sheet_group_label.dart': 0,
+  'lib/features/merged_detail/presentation/merged_sheet_rating_strip.dart': 3,
+  'lib/features/merged_detail/presentation/merged_sheet_switch_row.dart': 2,
+  'lib/features/merged_detail/presentation/merged_source_pill.dart': 4,
+  'lib/features/merged_detail/presentation/merged_stagger_reveal.dart': 0,
+  'lib/features/merged_detail/presentation/merged_tracker_pill.dart': 1,
+  'lib/features/merged_detail/presentation/merged_tracker_sheet_header.dart': 0,
+  'lib/features/merged_detail/presentation/merged_trailer_playing_chip.dart': 1,
+  'lib/screens/merged_series_detail_screen.dart': 0,
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(

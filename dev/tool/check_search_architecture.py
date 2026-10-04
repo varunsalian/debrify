@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -33,6 +33,9 @@ PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_p
 PLAYLIST_CONTENT_COMPLETE = True
 PLAYLIST_CONTENT_FACADE = "lib/screens/playlist_content_view_screen.dart"
 PLAYLIST_CONTENT_BRIDGE = "lib/features/playlist_content/presentation/legacy_playlist_content/"
+MERGED_DETAIL_COMPLETE = True
+MERGED_DETAIL_FACADE = "lib/screens/merged_series_detail_screen.dart"
+MERGED_DETAIL_BRIDGE = "lib/features/merged_detail/presentation/legacy_merged_detail/"
 PIKPAK_COMPLETE = True
 PIKPAK_FACADE = "lib/screens/pikpak/pikpak_files_screen.dart"
 PIKPAK_BRIDGE = "lib/features/pikpak_files/presentation/legacy_pikpak/"
@@ -303,6 +306,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     # Bounded move-only settings bridge; exit: IPTV settings data contracts.
     IPTV_SETTINGS_BRIDGE,
     PLAYLIST_CONTENT_BRIDGE,
+    MERGED_DETAIL_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -398,6 +402,16 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line playback settings facade limit")
         if "TEMP(playback_settings)" in source:
             problems.append("temporary playback settings cross-call remains in the facade")
+    if relative.startswith("lib/features/merged_detail/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line merged-detail extraction limit")
+        if "TEMP(merged_detail)" in source and (MERGED_DETAIL_COMPLETE or not relative.startswith(MERGED_DETAIL_BRIDGE)):
+            problems.append("temporary merged-detail cross-call outside the staged legacy bridge")
+    if MERGED_DETAIL_COMPLETE and relative == MERGED_DETAIL_FACADE:
+        if lines > 450:
+            problems.append(f"{lines} lines exceeds the 450-line merged-detail facade limit")
+        if "TEMP(merged_detail)" in source:
+            problems.append("temporary merged-detail cross-call remains in the facade")
     if relative.startswith("lib/features/pikpak_files/"):
         if lines > 500:
             problems.append(f"{lines} lines exceeds the 500-line PikPak extraction limit")
@@ -545,6 +559,10 @@ def violations(path: Path) -> list[str]:
                         problems.append("playlist content/cloud cross-feature import")
                 if own == "playlist_content" and target == PLAYLIST_CONTENT_FACADE:
                     problems.append("playlist content feature imports its facade")
+                if own == "merged_detail" and target == MERGED_DETAIL_FACADE:
+                    problems.append("merged-detail feature imports the detail facade")
+                if own == "merged_detail" and not relative.startswith(MERGED_DETAIL_BRIDGE) and target.startswith(("lib/services/", "lib/services/storage/")):
+                    problems.append("merged-detail service/storage/launcher import outside the legacy bridge")
                 if own == "pikpak_files" and target == PIKPAK_FACADE:
                     problems.append("PikPak feature imports the files facade")
                 if own == "debrid_downloads" and target == DEBRID_FACADE:
@@ -573,6 +591,8 @@ def main() -> int:
         paths.add(ROOT / IPTV_SETTINGS_FACADE)
     if PLAYLIST_CONTENT_COMPLETE:
         paths.add(ROOT / PLAYLIST_CONTENT_FACADE)
+    if MERGED_DETAIL_COMPLETE:
+        paths.add(ROOT / MERGED_DETAIL_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:

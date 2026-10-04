@@ -208,6 +208,12 @@ def names(rows, owner=None):
                          if r['original_name'] == owner + '.' + old}
                 if len(local) == 1:
                     candidates[old] = local
+    # A frozen public type alias exposes a constructor while its original
+    # private widget declaration (including keyless constructor) stays exact.
+    for alias in CONFIG.get('type_aliases', []):
+        matching = [r for r in rows if r['original_name'] == alias['original_name']]
+        if len(matching) == 1:
+            candidates[alias['original_name']] = {alias['alias']}
     return {old: next(iter(news)) for old, news in candidates.items()
             if len(news) == 1 and old != next(iter(news))}
 
@@ -297,6 +303,13 @@ def normalize(values, rows, row=None):
             if target in mapped:
                 i += path[0] + 1
                 continue
+        # Exact inventoried original cross-class statics, before their owner moves.
+        if (values[i + 1:i + 2] == ['.']
+                and values[i + 2:i + 3]
+                and values[i + 2] in CONFIG.get('original_static_receivers', {}).get(value, [])):
+            out.append(mapping.get(values[i + 2], values[i + 2]))
+            i += 3
+            continue
         if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
             getter_alias = CONFIG.get('live_getter_aliases', {}).get(target)
@@ -751,6 +764,16 @@ def destination_ownership(parsed, rows, source_path, scaffolds=(), partition_spe
 
 def accessor_receiver_tokens(values, spec, rows):
     """Drop only frozen accessor receivers on named methods moved to functions."""
+    receiver = spec.get('original_receiver')
+    owner = spec.get('original_owner')
+    if receiver:
+        owned = {row['original_name'].split('.')[-1] for row in rows
+                 if row['original_name'].startswith(owner + '.')}
+        values = [value for i, value in enumerate(values)
+                  if not (value == receiver and values[i + 1:i + 2] == ['.']
+                          and values[i + 2:i + 3] and values[i + 2] in owned)
+                  and not (value == '.' and i and values[i - 1] == receiver
+                           and values[i + 1:i + 2] and values[i + 1] in owned)]
     rule = spec.get('unbound_tearoffs')
     if not rule:
         return values
@@ -797,6 +820,25 @@ def check_scaffolds(lookup, scaffolds):
         node = lookup.get(key)
         if node is None or tokens(node) != scaffold['tokens']:
             errors.append('Registered settings scaffold changed: ' + str(key))
+    return errors
+
+
+def check_type_aliases(lookup, rows, config):
+    """Accept only one exact typedef to its manifest-owned private class."""
+    errors = []
+    for alias in config.get('type_aliases', []):
+        matching = [r for r in rows if r['original_name'] == alias['original_name']]
+        if (len(matching) != 1 or matching[0]['destination_class']
+                or matching[0]['new_name'] != alias['original_name']
+                or not alias['original_name'].startswith('_')
+                or alias['alias'].startswith('_')):
+            errors.append('Invalid private widget alias registration: ' + str(alias))
+            continue
+        row = matching[0]
+        node = lookup.get((row['destination_file'], '', alias['alias']))
+        expected = ['typedef', alias['alias'], '=', alias['original_name'], ';']
+        if node is None or tokens(node) != expected:
+            errors.append('Private widget constructor alias changed: ' + str(alias))
     return errors
 
 
@@ -942,6 +984,7 @@ def _check(original_source, sources, rows, source_path, package=None,
         if len(set(locations)) != 1 or locations[0] is None:
             errors.append('Co-located declarations split: ' + str(pair))
     errors.extend(check_plain_sections(lookup))
+    errors.extend(check_type_aliases(lookup, rows, CONFIG))
     from torbox_callback_identity import check_callback_identities
     errors.extend(check_callback_identities(lookup, rows, source_path, CONFIG))
     partitions = sidecar('partitions', 'partitions', {})
@@ -1020,7 +1063,8 @@ def _check(original_source, sources, rows, source_path, package=None,
                 errors.append('Public widget key exception used on a non-widget: ' + name)
         new_name = mapping.get(name, name)
         headers = [d for path, unit in parsed.items() if path != '<original>'
-                   for d in unit['declarations'] if d['name'] in {name, new_name}]
+                   for d in unit['declarations'] if d['name'] in {name, new_name}
+                   and d['kind'] == 'ClassDeclarationImpl']
         if len(headers) != 1:
             errors.append('Widget class missing or duplicated: ' + name); continue
         def header(node):

@@ -1,0 +1,50 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'package:debrify/models/metadata_preferences.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/services/metadata_preferences_service.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import '../test/support/merged_detail_fixture.dart';
+import '../test/support/merged_detail_http_transport.dart';
+
+void main() {
+ testWidgets('configured original two-candidate trailer dialog cancels without resolving', (t) async {
+  await mergedDetailCase(t, (f) async {
+   await HttpOverrides.runZoned(() async {
+   f.item = const StremioMeta(id:'tmdb:781913',type:'movie',name:'Original Trailer');
+   f.onRequest = (r) async => http.Response(jsonEncode(r.url.path.endsWith('/videos') ? {'results':[
+    {'key':'abcdefghijk','name':'First trailer','site':'YouTube','iso_639_1':'en','type':'Trailer','official':true},
+    {'key':'ABCDEFGHIJK','name':'Second teaser','site':'YouTube','iso_639_1':'fr','type':'Teaser','official':false},
+   ]} : {}),200);
+   await MetadataPreferencesService.save(MetadataPreferences(providers:{MetadataCategory.trailers:MetadataPreferences.tmdb}));
+   await f.mount(t); await f.until(t,()=>f.model.hasTrailer);
+   final requestsBefore = f.requests.length;
+   f.model.onTrailer(); await t.pump(const Duration(milliseconds:400));
+   expect(find.text('Choose trailer'),findsOneWidget);
+   expect(find.text('First trailer · en'),findsOneWidget); expect(find.text('Second teaser · fr'),findsOneWidget);
+   f.navigator.currentState!.pop(); await t.pump(const Duration(milliseconds:400));
+   expect(f.requests.length,requestsBefore);
+   expect(find.text('Loading trailer…'),findsNothing); expect(find.text("Couldn't load trailer"),findsNothing);
+   expect(f.model.trailerBusy,false);
+   },createHttpClient:(_)=>MergedFixtureHttpClient());
+  });
+ });
+ testWidgets('configured original rejects a stale trailer-candidate response', (t) async {
+  await mergedDetailCase(t, (f) async {
+   await HttpOverrides.runZoned(() async {
+   f.item = const StremioMeta(id:'tmdb:781914',type:'movie',name:'Original Stale Trailer');
+   final held = Completer<http.Response>();
+   f.onRequest = (r) async => r.url.path.endsWith('/videos') ? held.future : http.Response('{}',200);
+   await MetadataPreferencesService.save(MetadataPreferences(providers:{MetadataCategory.trailers:MetadataPreferences.tmdb}));
+   await f.mount(t); await f.until(t,()=>f.requests.any((r)=>r.url.path.endsWith('/videos')));
+   expect(f.model.hasTrailer,false);
+   await MetadataPreferencesService.save(MetadataPreferences()); await t.pump();
+   held.complete(http.Response(jsonEncode({'results':[{'key':'abcdefghijk','name':'Stale','site':'YouTube','type':'Trailer'}]}),200));
+   for(var i=0;i<10;i++){ await t.runAsync(()=>Future<void>.delayed(const Duration(milliseconds:5))); await t.pump(); }
+   expect(f.model.hasTrailer,false); expect(f.model.trailerBusy,false);
+   },createHttpClient:(_)=>MergedFixtureHttpClient());
+  });
+ });
+}

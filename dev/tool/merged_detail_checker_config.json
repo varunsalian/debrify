@@ -1,0 +1,1346 @@
+{
+  "allowed_edits": [
+    "receiver",
+    "rename",
+    "state_callback",
+    "context_guard",
+    "unchanged",
+    "live_getter_callback",
+    "root_build_forwarder",
+    "retained_forwarder",
+    "layout_body"
+  ],
+  "baseline": "21320ff9264fb7b1072b7682665058982a763dec",
+  "source": "lib/screens/merged_series_detail_screen.dart",
+  "feature": "lib/features/merged_detail",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": true,
+  "sidecars": {
+    "scaffolding": "dev/tool/merged_detail_scaffolding.json",
+    "context_exceptions": "dev/tool/merged_detail_context_exceptions.json"
+  },
+  "named_exceptions": {},
+  "annotation_exceptions": {},
+  "live_getter_callbacks": [],
+  "live_widget_getters": [
+    "item",
+    "addon",
+    "isTelevision",
+    "showQuickPlay",
+    "isTraktSource",
+    "isMdblistSource",
+    "onResume",
+    "onRewatch",
+    "resumeInfoLoader",
+    "onBrowse",
+    "onItemSelected",
+    "onQuickPlay",
+    "onBrowsePrimaryEpisodeSources",
+    "boundSourceCount",
+    "onSelectSource",
+    "traktMenuOptions",
+    "traktMenuBuilder",
+    "onTraktAction",
+    "traktStatusLoader",
+    "simklMenuOptions",
+    "simklMenuBuilder",
+    "onSimklAction",
+    "simklStatusLoader",
+    "mdblistMenuOptions",
+    "mdblistMenuBuilder",
+    "onMdblistAction",
+    "mdblistStatusLoader",
+    "onTraktRate",
+    "onSimklRate",
+    "onMdblistRate",
+    "recommendationsLoader",
+    "onRecommendationTap",
+    "metaEnricher",
+    "heroTag",
+    "initialSeason",
+    "initialEpisode",
+    "seasonsLoader",
+    "onPlayEpisode",
+    "watchProgressLoader"
+  ],
+  "token_rules": [],
+  "additional_owners": [],
+  "required_nodes": [],
+  "forwarders": {
+    "_MergedDetailScreenState.onMetadataPolicyChanged": {
+      "receiver": "_parts.metadataLoading"
+    },
+    "_MergedDetailScreenState.build": {
+      "receiver": "_parts.rootLayout"
+    }
+  },
+  "lifecycle": [
+    "_MergedDetailScreenState.initState",
+    "_MergedDetailScreenState.didChangeDependencies",
+    "_MergedDetailScreenState.didPopNext",
+    "_MergedDetailScreenState._onPlaybackReturned",
+    "_MergedDetailScreenState._refreshAfterPlayback",
+    "_MergedDetailScreenState.dispose",
+    "_MergedDetailScreenState._style",
+    "_MergedDetailScreenState._focusCoordinator"
+  ],
+  "test_accessors": [
+    {
+      "name": "mergedDetailTestAccess",
+      "tokens_file": "dev/tool/merged_detail_test_accessor.json",
+      "required": true,
+      "original_receiver": "s",
+      "original_owner": "_MergedDetailScreenState"
+    }
+  ],
+  "seams": [],
+  "self_test_module": "merged_detail_checker_test",
+  "receivers": [
+    "MergedDetailActionDescriptions",
+    "MergedDetailActionLayout",
+    "MergedDetailBodyLayout",
+    "MergedDetailEpisodesLayout",
+    "MergedDetailFocusState",
+    "MergedDetailHeroLayout",
+    "MergedDetailMenus",
+    "MergedDetailMetadataActions",
+    "MergedDetailMetadataLoading",
+    "MergedDetailMetadataState",
+    "MergedDetailModelFactory",
+    "MergedDetailPalette",
+    "MergedDetailPaneLayout",
+    "MergedDetailPlaybackActions",
+    "MergedDetailRailLayout",
+    "MergedDetailResumeActions",
+    "MergedDetailResumeState",
+    "MergedDetailRootLayout",
+    "MergedDetailSimklDescriptions",
+    "MergedDetailSimklLabels",
+    "MergedDetailTrackingActions",
+    "MergedDetailTrackingState",
+    "MergedDetailTrailerActions",
+    "MergedDetailTrailerState",
+    "MergedDetailWatchlistActions",
+    "_deps",
+    "deps",
+    "s",
+    "state",
+    "this"
+  ],
+  "receiver_paths": {
+    "_parts.metadataState": "MergedDetailMetadataState",
+    "_deps.parts.metadataState": "MergedDetailMetadataState",
+    "state._parts.metadataState": "MergedDetailMetadataState",
+    "_parts.trailerState": "MergedDetailTrailerState",
+    "_deps.parts.trailerState": "MergedDetailTrailerState",
+    "state._parts.trailerState": "MergedDetailTrailerState",
+    "_parts.resumeState": "MergedDetailResumeState",
+    "_deps.parts.resumeState": "MergedDetailResumeState",
+    "state._parts.resumeState": "MergedDetailResumeState",
+    "_parts.focusState": "MergedDetailFocusState",
+    "_deps.parts.focusState": "MergedDetailFocusState",
+    "state._parts.focusState": "MergedDetailFocusState",
+    "_parts.trackingState": "MergedDetailTrackingState",
+    "_deps.parts.trackingState": "MergedDetailTrackingState",
+    "state._parts.trackingState": "MergedDetailTrackingState",
+    "_parts.modelFactory": "MergedDetailModelFactory",
+    "_deps.parts.modelFactory": "MergedDetailModelFactory",
+    "state._parts.modelFactory": "MergedDetailModelFactory",
+    "_m": "MergedDetailMetadataState",
+    "s._parts.metadataState": "MergedDetailMetadataState",
+    "_t": "MergedDetailTrailerState",
+    "s._parts.trailerState": "MergedDetailTrailerState",
+    "_r": "MergedDetailResumeState",
+    "s._parts.resumeState": "MergedDetailResumeState",
+    "_f": "MergedDetailFocusState",
+    "s._parts.focusState": "MergedDetailFocusState",
+    "_k": "MergedDetailTrackingState",
+    "s._parts.trackingState": "MergedDetailTrackingState",
+    "_b": "MergedDetailModelFactory",
+    "s._parts.modelFactory": "MergedDetailModelFactory",
+    "_ra": "MergedDetailResumeActions",
+    "s._parts.resumeActions": "MergedDetailResumeActions",
+    "_parts.resumeActions": "MergedDetailResumeActions",
+    "_deps.parts.resumeActions": "MergedDetailResumeActions",
+    "state._parts.resumeActions": "MergedDetailResumeActions",
+    "_wa": "MergedDetailWatchlistActions",
+    "s._parts.watchlistActions": "MergedDetailWatchlistActions",
+    "_parts.watchlistActions": "MergedDetailWatchlistActions",
+    "_deps.parts.watchlistActions": "MergedDetailWatchlistActions",
+    "state._parts.watchlistActions": "MergedDetailWatchlistActions",
+    "_pl": "MergedDetailPlaybackActions",
+    "s._parts.playbackActions": "MergedDetailPlaybackActions",
+    "_parts.playbackActions": "MergedDetailPlaybackActions",
+    "_deps.parts.playbackActions": "MergedDetailPlaybackActions",
+    "state._parts.playbackActions": "MergedDetailPlaybackActions",
+    "_ta": "MergedDetailTrackingActions",
+    "s._parts.trackingActions": "MergedDetailTrackingActions",
+    "_parts.trackingActions": "MergedDetailTrackingActions",
+    "_deps.parts.trackingActions": "MergedDetailTrackingActions",
+    "state._parts.trackingActions": "MergedDetailTrackingActions",
+    "_mn": "MergedDetailMenus",
+    "s._parts.menus": "MergedDetailMenus",
+    "_parts.menus": "MergedDetailMenus",
+    "_deps.parts.menus": "MergedDetailMenus",
+    "state._parts.menus": "MergedDetailMenus",
+    "_ml": "MergedDetailMetadataLoading",
+    "s._parts.metadataLoading": "MergedDetailMetadataLoading",
+    "_parts.metadataLoading": "MergedDetailMetadataLoading",
+    "_deps.parts.metadataLoading": "MergedDetailMetadataLoading",
+    "state._parts.metadataLoading": "MergedDetailMetadataLoading",
+    "_tr": "MergedDetailTrailerActions",
+    "s._parts.trailerActions": "MergedDetailTrailerActions",
+    "_parts.trailerActions": "MergedDetailTrailerActions",
+    "_deps.parts.trailerActions": "MergedDetailTrailerActions",
+    "state._parts.trailerActions": "MergedDetailTrailerActions",
+    "_ma": "MergedDetailMetadataActions",
+    "s._parts.metadataActions": "MergedDetailMetadataActions",
+    "_parts.metadataActions": "MergedDetailMetadataActions",
+    "_deps.parts.metadataActions": "MergedDetailMetadataActions",
+    "state._parts.metadataActions": "MergedDetailMetadataActions",
+    "_ro": "MergedDetailRootLayout",
+    "s._parts.rootLayout": "MergedDetailRootLayout",
+    "_parts.rootLayout": "MergedDetailRootLayout",
+    "_deps.parts.rootLayout": "MergedDetailRootLayout",
+    "state._parts.rootLayout": "MergedDetailRootLayout",
+    "_bo": "MergedDetailBodyLayout",
+    "s._parts.bodyLayout": "MergedDetailBodyLayout",
+    "_parts.bodyLayout": "MergedDetailBodyLayout",
+    "_deps.parts.bodyLayout": "MergedDetailBodyLayout",
+    "state._parts.bodyLayout": "MergedDetailBodyLayout",
+    "_pa": "MergedDetailPaneLayout",
+    "s._parts.paneLayout": "MergedDetailPaneLayout",
+    "_parts.paneLayout": "MergedDetailPaneLayout",
+    "_deps.parts.paneLayout": "MergedDetailPaneLayout",
+    "state._parts.paneLayout": "MergedDetailPaneLayout",
+    "_he": "MergedDetailHeroLayout",
+    "s._parts.heroLayout": "MergedDetailHeroLayout",
+    "_parts.heroLayout": "MergedDetailHeroLayout",
+    "_deps.parts.heroLayout": "MergedDetailHeroLayout",
+    "state._parts.heroLayout": "MergedDetailHeroLayout",
+    "_ac": "MergedDetailActionLayout",
+    "s._parts.actionLayout": "MergedDetailActionLayout",
+    "_parts.actionLayout": "MergedDetailActionLayout",
+    "_deps.parts.actionLayout": "MergedDetailActionLayout",
+    "state._parts.actionLayout": "MergedDetailActionLayout",
+    "_ep": "MergedDetailEpisodesLayout",
+    "s._parts.episodesLayout": "MergedDetailEpisodesLayout",
+    "_parts.episodesLayout": "MergedDetailEpisodesLayout",
+    "_deps.parts.episodesLayout": "MergedDetailEpisodesLayout",
+    "state._parts.episodesLayout": "MergedDetailEpisodesLayout",
+    "_ri": "MergedDetailRailLayout",
+    "s._parts.railLayout": "MergedDetailRailLayout",
+    "_parts.railLayout": "MergedDetailRailLayout",
+    "_deps.parts.railLayout": "MergedDetailRailLayout",
+    "state._parts.railLayout": "MergedDetailRailLayout"
+  },
+  "receiver_owners": {
+    "_MergedDetailScreenState": "_MergedDetailScreenState",
+    "_m": "MergedDetailMetadataState",
+    "_t": "MergedDetailTrailerState",
+    "_r": "MergedDetailResumeState",
+    "_f": "MergedDetailFocusState",
+    "_k": "MergedDetailTrackingState",
+    "_b": "MergedDetailModelFactory",
+    "_ra": "MergedDetailResumeActions",
+    "_wa": "MergedDetailWatchlistActions",
+    "_pl": "MergedDetailPlaybackActions",
+    "_ta": "MergedDetailTrackingActions",
+    "_mn": "MergedDetailMenus",
+    "_ml": "MergedDetailMetadataLoading",
+    "_tr": "MergedDetailTrailerActions",
+    "_ma": "MergedDetailMetadataActions",
+    "_ro": "MergedDetailRootLayout",
+    "_bo": "MergedDetailBodyLayout",
+    "_pa": "MergedDetailPaneLayout",
+    "_he": "MergedDetailHeroLayout",
+    "_ac": "MergedDetailActionLayout",
+    "_ep": "MergedDetailEpisodesLayout",
+    "_ri": "MergedDetailRailLayout"
+  },
+  "plain_sections": [
+    {
+      "file": "lib/features/merged_detail/presentation/merged_detail_palette.dart",
+      "owner": "MergedDetailPalette"
+    },
+    {
+      "file": "lib/features/merged_detail/application/merged_detail_simkl_labels.dart",
+      "owner": "MergedDetailSimklLabels"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_detail_action_descriptions.dart",
+      "owner": "MergedDetailActionDescriptions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_simkl_descriptions.dart",
+      "owner": "MergedDetailSimklDescriptions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_state.dart",
+      "owner": "MergedDetailMetadataState"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_trailer_state.dart",
+      "owner": "MergedDetailTrailerState"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_state.dart",
+      "owner": "MergedDetailResumeState"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_focus_state.dart",
+      "owner": "MergedDetailFocusState"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart",
+      "owner": "MergedDetailTrackingState"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart",
+      "owner": "MergedDetailDependencies"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart",
+      "owner": "MergedDetailResumeActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_watchlist_actions.dart",
+      "owner": "MergedDetailWatchlistActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_playback_actions.dart",
+      "owner": "MergedDetailPlaybackActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_actions.dart",
+      "owner": "MergedDetailTrackingActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_menus.dart",
+      "owner": "MergedDetailMenus"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_loading.dart",
+      "owner": "MergedDetailMetadataLoading"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_trailer_actions.dart",
+      "owner": "MergedDetailTrailerActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_actions.dart",
+      "owner": "MergedDetailMetadataActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart",
+      "owner": "MergedDetailBodyLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart",
+      "owner": "MergedDetailHeroLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart",
+      "owner": "MergedDetailEpisodesLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_rail_layout.dart",
+      "owner": "MergedDetailRailLayout"
+    }
+  ],
+  "callback_identities": [
+    {
+      "name": "tracking-source",
+      "callback_member": "_MergedDetailScreenState._onMovieProgressPolicyChanged",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 0
+        },
+        {
+          "member": "_MergedDetailScreenState.dispose",
+          "call": "removeListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "movie-finished",
+      "callback_member": "_MergedDetailScreenState._loadLocalMovieFinished",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 1
+        },
+        {
+          "member": "_MergedDetailScreenState.dispose",
+          "call": "removeListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "name": "MDBList-watched",
+      "callback_member": "_MergedDetailScreenState._loadLocalMovieFinished",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 2
+        },
+        {
+          "member": "_MergedDetailScreenState.dispose",
+          "call": "removeListener",
+          "argument": 0,
+          "count": 3,
+          "occurrence": 2
+        }
+      ]
+    },
+    {
+      "name": "playback-return",
+      "callback_member": "_MergedDetailScreenState._onPlaybackReturned",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState.initState",
+          "call": "addPlaybackReturnListener",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "_MergedDetailScreenState.dispose",
+          "call": "removePlaybackReturnListener",
+          "argument": 0,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "onPrimary direct",
+      "callback_member": "_MergedDetailScreenState._playPrimary",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onPrimary",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "onTrailer direct",
+      "callback_member": "_MergedDetailScreenState._playTrailer",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onTrailer",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "onNextEpisodeChanged direct",
+      "callback_member": "_MergedDetailScreenState._onNextEpisodeChanged",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildEpisodesPanel",
+          "call": "EpisodesPanel",
+          "argument": "onNextEpisodeChanged",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "onQuickPlay conditional",
+      "callback_member": "_MergedDetailScreenState._quickPlayEpisode",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildEpisodesPanel",
+          "call": "EpisodesPanel",
+          "argument": "onQuickPlay",
+          "conditional_member": "_MergedDetailScreenState._quickPlayEpisode",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "onPlayEpisode conditional",
+      "callback_member": "_MergedDetailScreenState._playDirectEpisode",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildEpisodesPanel",
+          "call": "EpisodesPanel",
+          "argument": "onPlayEpisode",
+          "conditional_member": "_MergedDetailScreenState._playDirectEpisode",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "onPrimaryLongPress conditional",
+      "callback_member": "_MergedDetailScreenState._browsePrimarySources",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onPrimaryLongPress",
+          "conditional_member": "_MergedDetailScreenState._browsePrimarySources",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "onAppMenu conditional",
+      "callback_member": "_MergedDetailScreenState._showAppActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onAppMenu",
+          "conditional_member": "_MergedDetailScreenState._showAppActionsMenu",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "onTraktMenu conditional",
+      "callback_member": "_MergedDetailScreenState._showQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onTraktMenu",
+          "conditional_member": "_MergedDetailScreenState._showQuickActionsMenu",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "onSimklMenu conditional",
+      "callback_member": "_MergedDetailScreenState._showSimklQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onSimklMenu",
+          "conditional_member": "_MergedDetailScreenState._showSimklQuickActionsMenu",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "onMdblistMenu conditional",
+      "callback_member": "_MergedDetailScreenState._showMdblistQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onMdblistMenu",
+          "conditional_member": "_MergedDetailScreenState._showMdblistQuickActionsMenu",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "onToggleMyWatchlist conditional",
+      "callback_member": "_MergedDetailScreenState._toggleMyWatchlist",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onToggleMyWatchlist",
+          "conditional_member": "_MergedDetailScreenState._toggleMyWatchlist",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "build HeroTrailerBackdrop onRequestClose _exitTrailerForeground",
+      "callback_member": "_MergedDetailScreenState._exitTrailerForeground",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState.build",
+          "call": "HeroTrailerBackdrop",
+          "argument": "onRequestClose",
+          "count": 1,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "build Padding child _theme",
+      "callback_member": "_MergedDetailScreenState._theme",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState.build",
+          "call": "Padding",
+          "argument": "child",
+          "count": 2,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._theme",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "build Padding child _theme",
+      "callback_member": "_MergedDetailScreenState._theme",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState.build",
+          "call": "Padding",
+          "argument": "child",
+          "count": 2,
+          "occurrence": 1,
+          "conditional_member": "_MergedDetailScreenState._theme",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "build Positioned child _theme",
+      "callback_member": "_MergedDetailScreenState._theme",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState.build",
+          "call": "Positioned",
+          "argument": "child",
+          "count": 2,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._theme",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "build Positioned child _theme",
+      "callback_member": "_MergedDetailScreenState._theme",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState.build",
+          "call": "Positioned",
+          "argument": "child",
+          "count": 2,
+          "occurrence": 1,
+          "conditional_member": "_MergedDetailScreenState._theme",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "build SafeArea child _theme",
+      "callback_member": "_MergedDetailScreenState._theme",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState.build",
+          "call": "SafeArea",
+          "argument": "child",
+          "count": 3,
+          "occurrence": 1,
+          "conditional_member": "_MergedDetailScreenState._theme",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "build SafeArea child _theme",
+      "callback_member": "_MergedDetailScreenState._theme",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState.build",
+          "call": "SafeArea",
+          "argument": "child",
+          "count": 3,
+          "occurrence": 2,
+          "conditional_member": "_MergedDetailScreenState._theme",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildDetailModel DetailModel traktLabel _traktPillLabel",
+      "callback_member": "_MergedDetailScreenState._traktPillLabel",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "traktLabel",
+          "count": 1,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildDetailModel DetailModel onTrackers _showMdblistQuickActionsMenu",
+      "callback_member": "_MergedDetailScreenState._showMdblistQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onTrackers",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._showMdblistQuickActionsMenu",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildDetailModel DetailModel onTrackers _showQuickActionsMenu",
+      "callback_member": "_MergedDetailScreenState._showQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onTrackers",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._showQuickActionsMenu",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildDetailModel DetailModel onTrackers _showSimklQuickActionsMenu",
+      "callback_member": "_MergedDetailScreenState._showSimklQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onTrackers",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._showSimklQuickActionsMenu",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildDetailModel DetailModel onTrackersSecondary _showMdblistQuickActionsMenu",
+      "callback_member": "_MergedDetailScreenState._showMdblistQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onTrackersSecondary",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._showMdblistQuickActionsMenu",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildDetailModel DetailModel onTrackersSecondary _showSimklQuickActionsMenu",
+      "callback_member": "_MergedDetailScreenState._showSimklQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onTrackersSecondary",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._showSimklQuickActionsMenu",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildDetailModel DetailModel onTrackersTertiary _showMdblistQuickActionsMenu",
+      "callback_member": "_MergedDetailScreenState._showMdblistQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onTrackersTertiary",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._showMdblistQuickActionsMenu",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildDetailModel DetailModel onRecommendationTap _openMetadataRecommendation",
+      "callback_member": "_MergedDetailScreenState._openMetadataRecommendation",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildDetailModel",
+          "call": "DetailModel",
+          "argument": "onRecommendationTap",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._openMetadataRecommendation",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildBody DetailConsole episodesHost _episodesHost",
+      "callback_member": "_MergedDetailScreenState._episodesHost",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildBody",
+          "call": "DetailConsole",
+          "argument": "episodesHost",
+          "count": 1,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildBody DetailDossier episodesHost _episodesHost",
+      "callback_member": "_MergedDetailScreenState._episodesHost",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildBody",
+          "call": "DetailDossier",
+          "argument": "episodesHost",
+          "count": 1,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildBody DetailMarquee episodesHost _episodesHost",
+      "callback_member": "_MergedDetailScreenState._episodesHost",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildBody",
+          "call": "DetailMarquee",
+          "argument": "episodesHost",
+          "count": 1,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildBody DetailPremium episodesHost _episodesHost",
+      "callback_member": "_MergedDetailScreenState._episodesHost",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildBody",
+          "call": "DetailPremium",
+          "argument": "episodesHost",
+          "count": 5,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildBody DetailPremium episodesHost _episodesHost",
+      "callback_member": "_MergedDetailScreenState._episodesHost",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildBody",
+          "call": "DetailPremium",
+          "argument": "episodesHost",
+          "count": 5,
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildBody DetailPremium episodesHost _episodesHost",
+      "callback_member": "_MergedDetailScreenState._episodesHost",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildBody",
+          "call": "DetailPremium",
+          "argument": "episodesHost",
+          "count": 5,
+          "occurrence": 2
+        }
+      ]
+    },
+    {
+      "name": "_buildBody DetailPremium episodesHost _episodesHost",
+      "callback_member": "_MergedDetailScreenState._episodesHost",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildBody",
+          "call": "DetailPremium",
+          "argument": "episodesHost",
+          "count": 5,
+          "occurrence": 3
+        }
+      ]
+    },
+    {
+      "name": "_buildBody DetailPremium episodesHost _episodesHost",
+      "callback_member": "_MergedDetailScreenState._episodesHost",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildBody",
+          "call": "DetailPremium",
+          "argument": "episodesHost",
+          "count": 5,
+          "occurrence": 4
+        }
+      ]
+    },
+    {
+      "name": "_buildBody DetailShowcase episodesHost _episodesHost",
+      "callback_member": "_MergedDetailScreenState._episodesHost",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildBody",
+          "call": "DetailShowcase",
+          "argument": "episodesHost",
+          "count": 1,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildBody DetailStage episodesHost _episodesHost",
+      "callback_member": "_MergedDetailScreenState._episodesHost",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildBody",
+          "call": "DetailStage",
+          "argument": "episodesHost",
+          "count": 1,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildBody DetailThemeScope theme _theme",
+      "callback_member": "_MergedDetailScreenState._theme",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildBody",
+          "call": "DetailThemeScope",
+          "argument": "theme",
+          "count": 1,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildTwoPane FocusScope onKeyEvent _handleInfoPaneKey",
+      "callback_member": "_MergedDetailScreenState._handleInfoPaneKey",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildTwoPane",
+          "call": "FocusScope",
+          "argument": "onKeyEvent",
+          "count": 2,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildTwoPane FocusScope onKeyEvent _handleEpisodesPaneKey",
+      "callback_member": "_MergedDetailScreenState._handleEpisodesPaneKey",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildTwoPane",
+          "call": "FocusScope",
+          "argument": "onKeyEvent",
+          "count": 2,
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildActionRow Focus onKeyEvent _handleActionRowKey",
+      "callback_member": "_MergedDetailScreenState._handleActionRowKey",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildActionRow",
+          "call": "Focus",
+          "argument": "onKeyEvent",
+          "count": 1,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "_buildActionRowButtons Wrap children _browsePrimarySources",
+      "callback_member": "_MergedDetailScreenState._browsePrimarySources",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildActionRowButtons",
+          "call": "Wrap",
+          "argument": "children",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._browsePrimarySources",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildActionRowButtons Wrap children _playTrailer",
+      "callback_member": "_MergedDetailScreenState._playTrailer",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildActionRowButtons",
+          "call": "Wrap",
+          "argument": "children",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._playTrailer",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildActionRowButtons Wrap children _showAppActionsMenu",
+      "callback_member": "_MergedDetailScreenState._showAppActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildActionRowButtons",
+          "call": "Wrap",
+          "argument": "children",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._showAppActionsMenu",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildActionRowButtons Wrap children _showMdblistQuickActionsMenu",
+      "callback_member": "_MergedDetailScreenState._showMdblistQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildActionRowButtons",
+          "call": "Wrap",
+          "argument": "children",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._showMdblistQuickActionsMenu",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildActionRowButtons Wrap children _showQuickActionsMenu",
+      "callback_member": "_MergedDetailScreenState._showQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildActionRowButtons",
+          "call": "Wrap",
+          "argument": "children",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._showQuickActionsMenu",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildActionRowButtons Wrap children _showSimklQuickActionsMenu",
+      "callback_member": "_MergedDetailScreenState._showSimklQuickActionsMenu",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildActionRowButtons",
+          "call": "Wrap",
+          "argument": "children",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._showSimklQuickActionsMenu",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_buildActionRowButtons Wrap children _toggleMyWatchlist",
+      "callback_member": "_MergedDetailScreenState._toggleMyWatchlist",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._buildActionRowButtons",
+          "call": "Wrap",
+          "argument": "children",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._toggleMyWatchlist",
+          "branch_count": 1
+        }
+      ]
+    },
+    {
+      "name": "_sideRailSections MetadataFranchiseRail onOpen _openMetadataRecommendation",
+      "callback_member": "_MergedDetailScreenState._openMetadataRecommendation",
+      "sites": [
+        {
+          "member": "_MergedDetailScreenState._sideRailSections",
+          "call": "MetadataFranchiseRail",
+          "argument": "onOpen",
+          "count": 1,
+          "occurrence": 0,
+          "conditional_member": "_MergedDetailScreenState._openMetadataRecommendation",
+          "branch_count": 1
+        }
+      ]
+    }
+  ],
+  "callback_instances": {
+    "_MergedDetailScreenState": "$State",
+    "MergedDetailMetadataState": "$State.parts.metadataState",
+    "MergedDetailTrailerState": "$State.parts.trailerState",
+    "MergedDetailResumeState": "$State.parts.resumeState",
+    "MergedDetailFocusState": "$State.parts.focusState",
+    "MergedDetailTrackingState": "$State.parts.trackingState",
+    "MergedDetailModelFactory": "$State.parts.modelFactory",
+    "MergedDetailResumeActions": "$State.parts.resumeActions",
+    "MergedDetailWatchlistActions": "$State.parts.watchlistActions",
+    "MergedDetailPlaybackActions": "$State.parts.playbackActions",
+    "MergedDetailTrackingActions": "$State.parts.trackingActions",
+    "MergedDetailMenus": "$State.parts.menus",
+    "MergedDetailMetadataLoading": "$State.parts.metadataLoading",
+    "MergedDetailTrailerActions": "$State.parts.trailerActions",
+    "MergedDetailMetadataActions": "$State.parts.metadataActions",
+    "MergedDetailRootLayout": "$State.parts.rootLayout",
+    "MergedDetailBodyLayout": "$State.parts.bodyLayout",
+    "MergedDetailPaneLayout": "$State.parts.paneLayout",
+    "MergedDetailHeroLayout": "$State.parts.heroLayout",
+    "MergedDetailActionLayout": "$State.parts.actionLayout",
+    "MergedDetailEpisodesLayout": "$State.parts.episodesLayout",
+    "MergedDetailRailLayout": "$State.parts.railLayout"
+  },
+  "callback_receiver_aliases": {
+    "_parts.metadataState": "$State.parts.metadataState",
+    "_deps.parts.metadataState": "$State.parts.metadataState",
+    "state._parts.metadataState": "$State.parts.metadataState",
+    "_parts.trailerState": "$State.parts.trailerState",
+    "_deps.parts.trailerState": "$State.parts.trailerState",
+    "state._parts.trailerState": "$State.parts.trailerState",
+    "_parts.resumeState": "$State.parts.resumeState",
+    "_deps.parts.resumeState": "$State.parts.resumeState",
+    "state._parts.resumeState": "$State.parts.resumeState",
+    "_parts.focusState": "$State.parts.focusState",
+    "_deps.parts.focusState": "$State.parts.focusState",
+    "state._parts.focusState": "$State.parts.focusState",
+    "_parts.trackingState": "$State.parts.trackingState",
+    "_deps.parts.trackingState": "$State.parts.trackingState",
+    "state._parts.trackingState": "$State.parts.trackingState",
+    "_parts.modelFactory": "$State.parts.modelFactory",
+    "_deps.parts.modelFactory": "$State.parts.modelFactory",
+    "state._parts.modelFactory": "$State.parts.modelFactory",
+    "_m": "$State.parts.metadataState",
+    "_t": "$State.parts.trailerState",
+    "_r": "$State.parts.resumeState",
+    "_f": "$State.parts.focusState",
+    "_k": "$State.parts.trackingState",
+    "_b": "$State.parts.modelFactory",
+    "_ra": "$State.parts.resumeActions",
+    "_parts.resumeActions": "$State.parts.resumeActions",
+    "_deps.parts.resumeActions": "$State.parts.resumeActions",
+    "state._parts.resumeActions": "$State.parts.resumeActions",
+    "_wa": "$State.parts.watchlistActions",
+    "_parts.watchlistActions": "$State.parts.watchlistActions",
+    "_deps.parts.watchlistActions": "$State.parts.watchlistActions",
+    "state._parts.watchlistActions": "$State.parts.watchlistActions",
+    "_pl": "$State.parts.playbackActions",
+    "_parts.playbackActions": "$State.parts.playbackActions",
+    "_deps.parts.playbackActions": "$State.parts.playbackActions",
+    "state._parts.playbackActions": "$State.parts.playbackActions",
+    "_ta": "$State.parts.trackingActions",
+    "_parts.trackingActions": "$State.parts.trackingActions",
+    "_deps.parts.trackingActions": "$State.parts.trackingActions",
+    "state._parts.trackingActions": "$State.parts.trackingActions",
+    "_mn": "$State.parts.menus",
+    "_parts.menus": "$State.parts.menus",
+    "_deps.parts.menus": "$State.parts.menus",
+    "state._parts.menus": "$State.parts.menus",
+    "$State.parts.menus._refreshAfterPlayback": "$State._refreshAfterPlayback",
+    "_ml": "$State.parts.metadataLoading",
+    "_parts.metadataLoading": "$State.parts.metadataLoading",
+    "_deps.parts.metadataLoading": "$State.parts.metadataLoading",
+    "state._parts.metadataLoading": "$State.parts.metadataLoading",
+    "_tr": "$State.parts.trailerActions",
+    "_parts.trailerActions": "$State.parts.trailerActions",
+    "_deps.parts.trailerActions": "$State.parts.trailerActions",
+    "state._parts.trailerActions": "$State.parts.trailerActions",
+    "_ma": "$State.parts.metadataActions",
+    "_parts.metadataActions": "$State.parts.metadataActions",
+    "_deps.parts.metadataActions": "$State.parts.metadataActions",
+    "state._parts.metadataActions": "$State.parts.metadataActions",
+    "_ro": "$State.parts.rootLayout",
+    "_parts.rootLayout": "$State.parts.rootLayout",
+    "_deps.parts.rootLayout": "$State.parts.rootLayout",
+    "state._parts.rootLayout": "$State.parts.rootLayout",
+    "_bo": "$State.parts.bodyLayout",
+    "_parts.bodyLayout": "$State.parts.bodyLayout",
+    "_deps.parts.bodyLayout": "$State.parts.bodyLayout",
+    "state._parts.bodyLayout": "$State.parts.bodyLayout",
+    "_pa": "$State.parts.paneLayout",
+    "_parts.paneLayout": "$State.parts.paneLayout",
+    "_deps.parts.paneLayout": "$State.parts.paneLayout",
+    "state._parts.paneLayout": "$State.parts.paneLayout",
+    "_he": "$State.parts.heroLayout",
+    "_parts.heroLayout": "$State.parts.heroLayout",
+    "_deps.parts.heroLayout": "$State.parts.heroLayout",
+    "state._parts.heroLayout": "$State.parts.heroLayout",
+    "_ac": "$State.parts.actionLayout",
+    "_parts.actionLayout": "$State.parts.actionLayout",
+    "_deps.parts.actionLayout": "$State.parts.actionLayout",
+    "state._parts.actionLayout": "$State.parts.actionLayout",
+    "_ep": "$State.parts.episodesLayout",
+    "_parts.episodesLayout": "$State.parts.episodesLayout",
+    "_deps.parts.episodesLayout": "$State.parts.episodesLayout",
+    "state._parts.episodesLayout": "$State.parts.episodesLayout",
+    "_ri": "$State.parts.railLayout",
+    "_parts.railLayout": "$State.parts.railLayout",
+    "_deps.parts.railLayout": "$State.parts.railLayout",
+    "state._parts.railLayout": "$State.parts.railLayout"
+  },
+  "original_activation": {},
+  "original_static_receivers": {
+    "_MergedDetailScreenState": [
+      "_gold",
+      "_descriptionFor",
+      "_descriptionForSimkl"
+    ]
+  },
+  "type_aliases": [
+    {
+      "file": "lib/features/merged_detail/presentation/merged_stagger_reveal.dart",
+      "alias": "MergedStaggerReveal",
+      "original_name": "_StaggerReveal"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_focus_halo.dart",
+      "alias": "MergedFocusHalo",
+      "original_name": "_FocusHalo"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_rail_edge_trap.dart",
+      "alias": "MergedRailEdgeTrap",
+      "original_name": "_RailEdgeTrap"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_primary_button.dart",
+      "alias": "MergedPrimaryButton",
+      "original_name": "_PrimaryButton"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_trailer_playing_chip.dart",
+      "alias": "MergedTrailerPlayingChip",
+      "original_name": "_TrailerPlayingChip"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_ghost_button.dart",
+      "alias": "MergedGhostButton",
+      "original_name": "_GhostButton"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_source_pill.dart",
+      "alias": "MergedSourcePill",
+      "original_name": "_SourcePill"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_scroll_anchor.dart",
+      "alias": "MergedScrollAnchor",
+      "original_name": "_ScrollAnchor"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_tracker_pill.dart",
+      "alias": "MergedTrackerPill",
+      "original_name": "_TrackerPill"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_round_icon_button.dart",
+      "alias": "MergedRoundIconButton",
+      "original_name": "_RoundIconButton"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_tracker_sheet_header.dart",
+      "alias": "MergedTrackerSheetHeader",
+      "original_name": "_TrackerSheetHeader"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_group_label.dart",
+      "alias": "MergedSheetGroupLabel",
+      "original_name": "_SheetGroupLabel"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_switch_row.dart",
+      "alias": "MergedSheetSwitchRow",
+      "original_name": "_SheetSwitchRow"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_action_row.dart",
+      "alias": "MergedSheetActionRow",
+      "original_name": "_SheetActionRow"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_sheet_rating_strip.dart",
+      "alias": "MergedSheetRatingStrip",
+      "original_name": "_SheetRatingStrip"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_cast_tile.dart",
+      "alias": "MergedCastTile",
+      "original_name": "_CastTile"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_rec_card.dart",
+      "alias": "MergedRecCard",
+      "original_name": "_RecCard"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_quick_actions_menu.dart",
+      "alias": "MergedQuickActionsMenu",
+      "original_name": "_QuickActionsMenu"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_trakt_sheet.dart",
+      "alias": "MergedTraktSheet",
+      "original_name": "_TraktSheet"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_simkl_sheet.dart",
+      "alias": "MergedSimklSheet",
+      "original_name": "_SimklSheet"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_simkl_status_row.dart",
+      "alias": "MergedSimklStatusRow",
+      "original_name": "_SimklStatusRow"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_ambient_still.dart",
+      "alias": "MergedAmbientStill",
+      "original_name": "_AmbientStill"
+    }
+  ]
+}
