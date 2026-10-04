@@ -709,6 +709,10 @@ def destination_ownership(parsed, rows, source_path, scaffolds=(), partition_spe
                      for item in spec['slices'])
     for extra in CONFIG.get('additional_owners', []):
         known.update((extra['file'], extra['owner'], name) for name in extra['names'])
+    for accessor in CONFIG.get('test_accessors', []):
+        relocation = accessor.get('composition')
+        if relocation:
+            known.add((relocation['file'], '', relocation['name']))
     owners = {(path, owner) for path, owner, _ in known if owner}
     errors = []
     for path, unit in parsed.items():
@@ -1080,6 +1084,11 @@ def _check(original_source, sources, rows, source_path, package=None,
                 errors.append('Missing registered test accessor: ' + spec['name'])
             continue
         expected = json.loads((ROOT / spec['tokens_file']).read_text())
+        if spec.get('composition'):
+            from playback_settings_accessor import check_accessor
+            errors.extend(check_accessor(lookup, source_path, spec, expected, rows,
+                                         normalized_accessor_tokens, tokens))
+            continue
         if (normalized_accessor_tokens(tokens(accessor), spec, rows)
                 != normalized_accessor_tokens(expected, spec, rows)):
             errors.append('Test accessor changed outside its registered receiver edits')

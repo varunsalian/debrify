@@ -38,6 +38,7 @@ import 'package:debrify/screens/settings/playback_settings_section.dart';
 import 'package:flutter/material.dart';
 
 class PlaybackSections {
+  final Future<void> Function() openPlayerSettings;
   final PlaybackCoreState core;
   final PlaybackMacState mac;
   final PlaybackIosState ios;
@@ -75,6 +76,7 @@ class PlaybackSections {
   final PlaybackPlayerSection playerSection;
   final PlaybackSettingsLayout layout;
   PlaybackSections({
+    required this.openPlayerSettings,
     required this.core,
     required this.mac,
     required this.ios,
@@ -346,6 +348,7 @@ PlaybackSections createPlaybackSections({
     videoSettings: videoSection.videoSettings,
   ));
   return PlaybackSections(
+    openPlayerSettings: openPlayerSettings,
     core: core,
     mac: mac,
     ios: ios,

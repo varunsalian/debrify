@@ -274,3 +274,19 @@ not a compiling implementation; final imports/bindings are measured again in ste
 - build forwarder: 2 physical lines.
 - accessor forwarder: 6 physical lines.
 - remaining imports, class header, owner handles and whitespace: 21 physical lines.
+
+### Final measured facade and wiring
+
+Compiling final facade: **365 formatted physical lines**, under the 400 cap.
+`final-facade-breakdown.json` records widget 14, initState 240, dispose 47,
+composition getter 17, self-push 4, build forwarder 2, accessor forwarder 4,
+and remaining imports/handles/header/whitespace 37. Against the 351-line sketch,
+remaining lines add 16 and the accessor drops two. Lifecycle stays whole.
+
+All 214 entries are located at their registered destinations in
+`final-wiring-checklist.json`; original comment-token multiset is exact (192).
+Per-step wiring reviews precede scaffold pins. Composition borrows original owner
+instances and real action tear-offs; context, mounted and section remain live.
+The frozen 191-key accessor body lives in `playback_settings_test_access.dart`
+over `PlaybackSections`; the facade keeps its original typed State parameter.
+Its State self-push callback is stored as the same borrowed tear-off used by layout.

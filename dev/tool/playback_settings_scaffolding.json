@@ -1624,6 +1624,23 @@
     {
       "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_sections.dart",
       "owner": "PlaybackSections",
+      "name": "openPlayerSettings",
+      "tokens": [
+        "final",
+        "Future",
+        "<",
+        "void",
+        ">",
+        "Function",
+        "(",
+        ")",
+        "openPlayerSettings",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_sections.dart",
+      "owner": "PlaybackSections",
       "name": "core",
       "tokens": [
         "final",
@@ -2025,6 +2042,11 @@
         "PlaybackSections",
         "(",
         "{",
+        "required",
+        "this",
+        ".",
+        "openPlayerSettings",
+        ",",
         "required",
         "this",
         ".",
@@ -3345,6 +3367,10 @@
         "return",
         "PlaybackSections",
         "(",
+        "openPlayerSettings",
+        ":",
+        "openPlayerSettings",
+        ",",
         "core",
         ":",
         "core",

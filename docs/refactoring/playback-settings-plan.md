@@ -1114,6 +1114,36 @@ As in the PikPak plan, with these specifics:
   original PNGs: 5/5 PASS, no update flags (`linux-step6-strict.json` and log).
   The later manifest-only enforcement flag does not alter tested app/golden code.
 
+### Step 7 — completed source set and facade guard
+
+- All 214 original leaves occupy their registered destinations. Frozen 191-key
+  accessor body moves over `PlaybackSections`; the original typed State seam is
+  retained as a four-line facade forwarder. Composition stores the same borrowed
+  State self-push tear-off used by layout. Exact original body/header comparison
+  is opt-in through this config only; bridge accessor is excluded from scaffold
+  pins. Independent positives and 13 negatives cover missing/wrong/wrapped
+  accessors, State type/cast, owner, key, action, snapshot and five-line limit.
+  Existing checker configs follow the unchanged path and all six self-tests pass.
+- Final facade **365 formatted lines**, cap 400; lifecycle 240 + 47, self-push
+  four, build forwarder two, accessor four. Full breakdown and 214-entry wiring
+  checklist are retained; dependency report explains the 351 → 365 difference.
+  Largest feature file 433; composition 389; accessor bridge 207. Completion
+  guard enables facade cap and `TEMP(playback_settings)` rejection. No source
+  duplicates, facade back-imports, cross-feature imports or new consts.
+- Focused replay 146 successes plus the unchanged original profile-adapter guard
+  failure; PASS against `base4`. Whole analyzer relocation/max and strict symbol
+  comparisons PASS with zero additions/scaffold diagnostics. Local CI and six
+  manifest/self-test runs PASS with unchanged allowlists. Shape 20/four, floor
+  488; helpers, PNGs and frozen characterization retained, with only the proven
+  Linux strict-default delta. Original comment-token multiset remains 192.
+- Final source passes all five strict original Linux goldens in the calibrated
+  linux/amd64 image, without update flags (`linux-step7-strict.json` and log).
+  Remote CI remains pending until integration/push by Claude. Android/Android TV,
+  iOS-mobile, Windows and real tvOS/desktop device checks remain pending exactly
+  as listed in DoD 8. Legacy lifecycle, persistence and error hazards are retained.
+- Step 7 source is committed before unfiltered full-suite gate 2; its evidence
+  will be recorded separately under a gate subject, then execution stops.
+
 ## Found, not fixed
 
 All of these are pre-existing, and the extraction keeps each one exactly.

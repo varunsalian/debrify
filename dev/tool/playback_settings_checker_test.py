@@ -146,6 +146,50 @@ def self_test(package=None):
         assert normalized_accessor_tokens(['s', '.', 'wrongOwner', '.', 'defaultAspectIndex'], accessor_spec, rows) != normalized_accessor_tokens(['s', '.', '_defaultAspectIndex'], accessor_spec, rows)
     print('Playback frozen accessor receiver: PASS; exact-owner negatives rejected')
 
+    if 'composition' in accessor_spec:
+        from playback_settings_accessor import check_accessor
+        relocation = accessor_spec['composition']
+        facade_key = (source, '', accessor_spec['name'])
+        bridge_key = (relocation['file'], '', relocation['name'])
+        with configured(config):
+            assert not check_accessor(lookup, source, accessor_spec, expected, rows, normalized_accessor_tokens, tokens)
+            variants = []
+            for key, label in [(facade_key, 'missing facade'), (bridge_key, 'missing bridge')]:
+                altered = copy.deepcopy(lookup)
+                del altered[key]
+                variants.append((label, altered))
+
+            def changed_tokens(key, label, old, new):
+                altered = copy.deepcopy(lookup)
+                values = tokens(lookup[key])
+                matches = [i for i in range(len(values)) if values[i:i+len(old)] == old]
+                assert len(matches) == 1, (label, old, matches)
+                i = matches[0]
+                values[i:i+len(old)] = new
+                altered[key]['tokens'] = [{'text':v, 'offset':i, 'comment':False} for i,v in enumerate(values)]
+                altered[key]['formatCommas'] = []
+                variants.append((label, altered))
+
+            changed_tokens(facade_key, 'wrong State cast', [relocation['state']], ['WrongState'])
+            changed_tokens(facade_key, 'widened State parameter', ['State', '<', 'ExternalPlayerSettingsPage', '>'], ['State'])
+            changed_tokens(facade_key, 'wrong composition receiver', ['_sections'], ['_otherSections'])
+            changed_tokens(facade_key, 'wrapped forwarder', ['=>', relocation['name']], ['=>', '(', ')', '=>', relocation['name']])
+            changed_tokens(bridge_key, 'wrong composition type', [relocation['type']], ['WrongComposition'])
+            changed_tokens(bridge_key, 'changed frozen key', ["'defaultAspectIndex'"], ["'changedAspectIndex'"])
+            changed_tokens(bridge_key, 'wrong snapshot owner', ['s', '.', 'values', '.', 'defaultAspectIndex'], ['s', '.', 'otherValues', '.', 'defaultAspectIndex'])
+            action = ['s', '.', 'playerSetters', '.', 'setNightModeIndex']
+            changed_tokens(bridge_key, 'wrapped action tear-off', action, ['(', ')', '=>', *action, '(', ')'])
+            changed_tokens(bridge_key, 'wrong action member', action, [*action[:-1], 'setDefaultAspectIndex'])
+            changed_tokens(bridge_key, 'mutable font snapshot', ['List', '<', 'SubtitleFont', '>', '.', 'unmodifiable'], ['List', '<', 'SubtitleFont', '>', '.', 'from'])
+            altered = copy.deepcopy(lookup)
+            altered[facade_key]['text'] += '\n\n\n'
+            assert len(altered[facade_key]['text'].splitlines()) > 5
+            variants.append(('forwarder over five lines', altered))
+            for label, altered in variants:
+                assert check_accessor(altered, source, accessor_spec, expected, rows, normalized_accessor_tokens, tokens), label
+                print('Playback composition accessor '+label+': rejected')
+            print('Playback composition accessor exact real-config positive: PASS')
+
     # Build the planned join from the REAL formatted original and REAL ranges.
     # Directly exercise its rule, including reconstruction, before it exists.
     before_lookup=all_nodes(parse({source:original},package))
