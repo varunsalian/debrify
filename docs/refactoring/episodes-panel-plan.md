@@ -813,6 +813,20 @@ including everything below.
   inputs, unchanged tree. Both future gates use this latest original base.
   Linux originals are still pending external delivery before builder moves.
 
+### Linux ORIGINAL delivery
+
+- Five Linux PNGs delivered from exact checkpoint `989718fa`, with application
+  hashes equal to R `92339749`. The calibrated Docker capture, reversed capture
+  and strict run each pass all five scenes. First/second SHA-256 lists are equal;
+  every delivered PNG matches `linux-original-sha256.txt` and its prescribed
+  dimensions. `linux-original-local-verification.json` records the complete
+  hashes and supplied local Docker provenance (2026-10-04T15:47:42Z).
+- Originals are committed separately from extraction. Presence enables the
+  frozen Linux comparison immediately; `completed_step >= 6` requires every
+  original even if a PNG is missing. No golden or application code is updated.
+  Their asynchronous arrival invalidated `step1-behavior`'s untracked-input
+  snapshot; that attempt is retained and will be replayed after staging.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
