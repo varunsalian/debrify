@@ -869,6 +869,37 @@ committed tree**, reconciling each branch's approved additions.
   destinations. The final facade and every destination remain registered in
   the unchanged seven-radius / 488-token, zero-slack shape inventory.
 
+- Step 7 enables ADDON_HUB_COMPLETE, registers the facade as an exact
+  composition root, activates its 400-line cap and rejects TEMP(addon_hub)
+  everywhere in the completed source set. All 127 per-entry destination
+  reviews are complete. CODEMAP names the feature and facade; the theme's
+  old card-symbol comment is updated to `addonHubCardBackground` only.
+  Original app_theme.dart already has formatter drift; its unchanged
+  formatter diff and the comment-only/equal-drift proof are retained, without
+  bulk-formatting that shared file. The scoped CI formatter remains exact.
+- Final acceptance checks include all ten manifests with isolated parser
+  self-tests, strict original-symbol and whole analyzer comparison, the exact
+  CI analyzer/formatter/behavior job, 129 affected cases, both platforms'
+  goldens, final guard/shape/size/storage checks, and gate 2 on a committed
+  stable tree versus both latest base4 and gate 1. Device Android TV D-pad
+  (including rename), live marketplace/gitlab endpoints, configure in a device
+  browser, remote CI (billing/no push), and Claude's integration union merge
+  and committed merged-tree revalidation remain pending.
+
+- Step 7 verification: all ten manifests with self-tests PASS on the
+  isolated parser; guards, size/storage, shape floor and scoped format/diff
+  PASS. Exact CI formatting checks 1,675 files with zero changes. Its unchanged
+  behavior checker records 3,567 successes and exactly two listed failures,
+  PASS versus base4 with no missing/added/newly skipped identities. Exact CI
+  analyzer allowlist PASS (12 original warnings); strict per-symbol analyzer
+  records 20 destination infos within the original maximum 21, all three const
+  identities relocated. Whole comparison has zero additions, only the original
+  import-order info removed. All 129 affected cases and macOS goldens pass;
+  strict Linux originals pass 6/6. `final-static-audit.json` confirms every
+  destination/facade registration, unchanged characterization/allowlists since
+  da6bc0b4, exact CI path placement and valid docs/capture-shell syntax.
+  Gate 2 now runs on the committed final source tree.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
@@ -909,3 +940,7 @@ All pre-existing; the extraction keeps each exactly.
 23. A rejected metadata write leaves the SharedPreferences cache optimistic
     even though the underlying store retains its prior value; the hub restores
     its captured UI value. The extraction preserves this original behavior.
+
+24. app_theme.dart has pre-existing formatter drift. The planned card-symbol
+    comment changes alone; its formatter diff is identical after restoring that
+    comment. No unrelated shared theme code is formatted during this extraction.

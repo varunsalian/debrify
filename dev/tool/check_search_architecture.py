@@ -33,7 +33,7 @@ PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_p
 PLAYLIST_CONTENT_COMPLETE = True
 PLAYLIST_CONTENT_FACADE = "lib/screens/playlist_content_view_screen.dart"
 PLAYLIST_CONTENT_BRIDGE = "lib/features/playlist_content/presentation/legacy_playlist_content/"
-ADDON_HUB_COMPLETE = False
+ADDON_HUB_COMPLETE = True
 ADDON_HUB_FACADE = "lib/screens/addons/addon_hub_screen.dart"
 ADDON_HUB_BRIDGE = "lib/features/addon_hub/presentation/legacy_addon_hub/"
 PIKPAK_COMPLETE = True
@@ -104,6 +104,7 @@ TORRENT_PLAYBACK_PIPELINES = {
 # are not import-checked. Every other file in COMPOSITION is presentation and
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    ADDON_HUB_FACADE,
     FACADE,
     PLAYLIST_CONTENT_FACADE,
     PIKPAK_FACADE,
