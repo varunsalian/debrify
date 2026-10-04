@@ -65,5 +65,11 @@
     "name": "last two disposal swap",
     "member": "_IptvSettingsPageState.dispose",
     "mutation": "dispose_last"
+  },
+  {
+    "name": "borrowed two-pane key changed",
+    "member": "_IptvSettingsPageState._loadSettings",
+    "before": "twoPaneKey.currentState",
+    "after": "otherTwoPaneKey.currentState"
   }
 ]

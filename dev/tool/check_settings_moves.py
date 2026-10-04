@@ -273,6 +273,9 @@ def normalize(values, rows, row=None):
                 continue
         if value in RECEIVERS and i + 2 < len(values) and values[i + 1] == '.':
             target = values[i + 2]
+            borrowed = CONFIG.get('borrowed_resource_aliases', {}).get(target)
+            if borrowed:
+                out.append(borrowed.split('.')[-1]); i += 3; continue
             if target in mapped or target in {'mounted', 'setState', 'context'} | set(CONFIG.get('live_widget_getters', [])):
                 if value in {'_deps', 'deps'} and target in live_getters and values[i + 3:i + 5] == ['(', ')']:
                     out.append(target); i += 5; continue
@@ -846,6 +849,13 @@ def _check(original_source, sources, rows, source_path, package=None,
     errors.extend(check_named_exceptions(rows))
     errors.extend(check_lint_comments(original_source, sources))
     known = {r['original_name'] for r in rows}
+    for alias, member in CONFIG.get('borrowed_resource_aliases', {}).items():
+        declaration = original.get(member)
+        retained = next((r for r in rows if r['original_name'] == member), None)
+        if (not declaration or not declaration['variables'] or len(declaration['variables']) != 1
+                or not retained or retained['destination_file'] != source_path
+                or retained['new_name'] != member.split('.')[-1]):
+            errors.append('Borrowed resource alias must name one unchanged facade field: ' + alias)
     if set(original) != known:
         return ['Settings manifest coverage differs: ' + str(sorted(set(original) ^ known))]
     lookup = all_nodes(parsed)

@@ -18,6 +18,9 @@ def main():
     service = "import 'package:debrify/services/iptv_service.dart';\n"
     assert any('outside the exact legacy bridge' in x for x in check(pure, service))
     assert not any('outside the exact legacy bridge' in x for x in check(bridge, service))
+    assert not check(bridge, service), 'the exact bridge must pass every import rule'
+    assert check(guard.IPTV_SETTINGS_BRIDGE.replace('legacy_iptv_settings/', 'legacy_iptv_settings_extra/') + 'fixture.dart', service)
+    assert check(bridge, "import 'package:http/http.dart';\n")
     for target in [guard.IPTV_SETTINGS_FACADE, 'lib/features/settings/presentation/settings_tv_layout.dart', 'lib/features/iptv/application/iptv_loading.dart']:
         assert check(bridge, f"import 'package:debrify/{target.removeprefix('lib/')}';\n"), target
     assert not check(bridge, "import 'package:debrify/features/iptv/models/iptv_state.dart';\n")

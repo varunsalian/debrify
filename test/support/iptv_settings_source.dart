@@ -78,7 +78,7 @@ String iptvSettingsOriginalMember(String originalName) {
     String pattern(List<dynamic> values) =>
         values.map((value) => RegExp.escape(value as String)).join(gap);
     final recorded = RegExp(
-      '(${pattern(site['prefix_tokens'] as List<dynamic>)}$gap)'
+      '(${pattern((site['condition_tokens'] ?? site['prefix_tokens']) as List<dynamic>)}$gap)'
       '\\{$gap${pattern(site['body_tokens'] as List<dynamic>)}$gap\\}',
     );
     final matches = recorded.allMatches(member).toList();
@@ -99,6 +99,15 @@ String iptvSettingsOriginalMember(String originalName) {
             ).readAsStringSync(),
           )
           as Map<String, dynamic>;
+  for (final entry
+      in (config['borrowed_resource_aliases'] as Map<String, dynamic>? ??
+              const {})
+          .entries) {
+    member = member.replaceAll(
+      '_deps.${entry.key}',
+      (entry.value as String).split('.').last,
+    );
+  }
   // These are exactly the registered live State callbacks. Builder/dialog
   // contexts remain source text and the verbatim checker checks their scope.
   member = member.replaceAll('_deps.setState', 'setState');

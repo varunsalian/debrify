@@ -201,6 +201,44 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_xtream_add.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_url_add.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_sources_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_removal.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_refresh.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_edit.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_sections.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_recording_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_profile_actions.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_preferences_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_load_settings.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_layout_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_input_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_focus_owner.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_focus_actions.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_file_import.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_feedback.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_edit_dialog.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_composition.dart':
+      0,
   'lib/screens/settings/iptv_settings_page.dart': 0,
   'lib/features/iptv_settings/presentation/iptv_settings_focusable_tile.dart':
       0,

@@ -11,7 +11,8 @@
     "state_callback",
     "context_guard",
     "unchanged",
-    "live_getter_callback"
+    "live_getter_callback",
+    "formatter_if_braces"
   ],
   "sidecars": {
     "scaffolding": "dev/tool/iptv_settings_scaffolding.json",
@@ -58,9 +59,104 @@
     "_deps",
     "deps"
   ],
-  "receiver_paths": {},
-  "receiver_owners": {},
-  "plain_sections": [],
+  "receiver_paths": {
+    "_focus": "IptvSettingsFocusOwner",
+    "_deps.focusOwner": "IptvSettingsFocusOwner",
+    "_input": "IptvSettingsInputOwner",
+    "_deps.inputOwner": "IptvSettingsInputOwner",
+    "_sources": "IptvSettingsSourcesOwner",
+    "_deps.sourcesOwner": "IptvSettingsSourcesOwner",
+    "_preferences": "IptvSettingsPreferencesOwner",
+    "_deps.preferencesOwner": "IptvSettingsPreferencesOwner",
+    "_deps.recordingOwner": "IptvSettingsRecordingOwner",
+    "_deps.layoutOwner": "IptvSettingsLayoutOwner",
+    "_sections.profileActions": "IptvSettingsProfileActions",
+    "_sections.focusActions": "IptvSettingsFocusActions",
+    "_sections.loadSettings": "IptvSettingsLoadSettings",
+    "_sections.urlAdd": "IptvSettingsUrlAdd",
+    "_sections.fileImport": "IptvSettingsFileImport",
+    "_sections.xtreamAdd": "IptvSettingsXtreamAdd",
+    "_sections.sourceRemoval": "IptvSettingsSourceRemoval",
+    "_sections.sourceRefresh": "IptvSettingsSourceRefresh",
+    "_sections.feedback": "IptvSettingsFeedback",
+    "_sections.sourceEdit": "IptvSettingsSourceEdit",
+    "r": "IptvSettingsRecordingOwner",
+    "l": "IptvSettingsLayoutOwner"
+  },
+  "receiver_owners": {
+    "_focus": "IptvSettingsFocusOwner",
+    "_input": "IptvSettingsInputOwner",
+    "_sources": "IptvSettingsSourcesOwner",
+    "_preferences": "IptvSettingsPreferencesOwner",
+    "r": "IptvSettingsRecordingOwner",
+    "l": "IptvSettingsLayoutOwner"
+  },
+  "plain_sections": [
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_focus_owner.dart",
+      "owner": "IptvSettingsFocusOwner"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_input_owner.dart",
+      "owner": "IptvSettingsInputOwner"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_sources_owner.dart",
+      "owner": "IptvSettingsSourcesOwner"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_preferences_owner.dart",
+      "owner": "IptvSettingsPreferencesOwner"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_recording_owner.dart",
+      "owner": "IptvSettingsRecordingOwner"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_layout_owner.dart",
+      "owner": "IptvSettingsLayoutOwner"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_profile_actions.dart",
+      "owner": "IptvSettingsProfileActions"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_focus_actions.dart",
+      "owner": "IptvSettingsFocusActions"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_load_settings.dart",
+      "owner": "IptvSettingsLoadSettings"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_url_add.dart",
+      "owner": "IptvSettingsUrlAdd"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_file_import.dart",
+      "owner": "IptvSettingsFileImport"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_xtream_add.dart",
+      "owner": "IptvSettingsXtreamAdd"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_removal.dart",
+      "owner": "IptvSettingsSourceRemoval"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_refresh.dart",
+      "owner": "IptvSettingsSourceRefresh"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_feedback.dart",
+      "owner": "IptvSettingsFeedback"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_edit.dart",
+      "owner": "IptvSettingsSourceEdit"
+    }
+  ],
   "callback_identities": [
     {
       "name": "tab listener add/remove",
@@ -459,7 +555,17 @@
     }
   ],
   "callback_instances": {
-    "_IptvSettingsPageState": "$State"
+    "_IptvSettingsPageState": "$State",
+    "IptvSettingsProfileActions": "$State._sections.profileActions",
+    "IptvSettingsFocusActions": "$State._sections.focusActions",
+    "IptvSettingsLoadSettings": "$State._sections.loadSettings",
+    "IptvSettingsUrlAdd": "$State._sections.urlAdd",
+    "IptvSettingsFileImport": "$State._sections.fileImport",
+    "IptvSettingsXtreamAdd": "$State._sections.xtreamAdd",
+    "IptvSettingsSourceRemoval": "$State._sections.sourceRemoval",
+    "IptvSettingsSourceRefresh": "$State._sections.sourceRefresh",
+    "IptvSettingsFeedback": "$State._sections.feedback",
+    "IptvSettingsSourceEdit": "$State._sections.sourceEdit"
   },
   "callback_receiver_aliases": {},
   "co_located_declarations": [
@@ -467,5 +573,9 @@
       "IptvSharedSourceDeleteDialog",
       "_SharedIptvSourceDeleteDialogState"
     ]
-  ]
+  ],
+  "borrowed_resource_aliases": {
+    "twoPaneKey": "_IptvSettingsPageState._twoPaneKey"
+  },
+  "context_exception_difference": "formatter_if_braces: only the recorded source-edit cancellation return; no guard, ordering or behavior change"
 }

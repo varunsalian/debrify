@@ -292,6 +292,8 @@ LEGACY_PLAYBACK_BRIDGES = (
     TORBOX_BRIDGE,
     DEBRID_BRIDGE,
     PIKPAK_BRIDGE,
+    # Bounded move-only settings bridge; exit: IPTV settings data contracts.
+    IPTV_SETTINGS_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.

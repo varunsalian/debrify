@@ -1,16 +1,20 @@
+import 'package:debrify/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_input_owner.dart';
+import 'package:debrify/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_focus_owner.dart';
+import 'package:debrify/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_sources_owner.dart';
+import 'package:debrify/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_layout_owner.dart';
+import 'package:debrify/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_recording_owner.dart';
+import 'package:debrify/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_preferences_owner.dart';
+import 'package:debrify/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_sections.dart';
+import 'package:debrify/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_composition.dart';
 export 'package:debrify/features/iptv_settings/presentation/iptv_shared_source_delete_dialog.dart'
     show IptvSharedSourceDeleteDialog;
 import 'package:debrify/features/iptv_settings/presentation/iptv_settings_tv_button.dart';
 import 'package:debrify/features/iptv_settings/presentation/iptv_settings_tv_tab_bar.dart';
 import 'package:debrify/features/iptv_settings/presentation/iptv_settings_playlist_tile.dart';
-import 'package:debrify/features/iptv_settings/presentation/iptv_shared_source_delete_dialog.dart';
 import 'package:debrify/features/iptv_settings/presentation/iptv_settings_icon_button.dart';
 import 'package:debrify/features/iptv_settings/presentation/iptv_settings_back_button.dart';
-import 'package:debrify/features/iptv_settings/presentation/iptv_settings_playlist_name_dialog.dart';
-import 'package:debrify/features/iptv_settings/presentation/iptv_settings_dialog_button_style.dart';
 import 'package:debrify/features/iptv_settings/presentation/iptv_settings_focusable_tile.dart';
 import 'package:debrify/features/iptv_settings/models/iptv_settings_phone_section.dart';
-import 'package:debrify/features/iptv_settings/models/iptv_settings_playlist_edit.dart';
 import 'package:debrify/features/iptv_settings/application/normalize_xtream_server_url.dart';
 import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
@@ -18,31 +22,20 @@ import 'dart:io' show Platform;
 import 'package:debrify/services/storage/iptv_appearance_storage.dart';
 import 'package:debrify/services/storage/iptv_favorites_storage.dart';
 import 'package:debrify/services/storage/iptv_history_storage.dart';
-import 'package:debrify/services/storage/iptv_last_channel_storage.dart';
-import 'package:debrify/services/storage/iptv_playlist_storage.dart';
 import 'package:debrify/services/storage/startup_iptv_storage.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:file_picker/file_picker.dart';
 import '../../models/iptv_playlist.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../services/iptv_catalog_key.dart';
 import '../../services/iptv_catalog_db.dart';
 import '../../services/iptv_catalog_refresh_service.dart';
-import '../../services/iptv_service.dart';
-import '../../services/xtream_codes_service.dart';
 import '../../services/analytics_service.dart';
-import '../../utils/m3u_parser.dart';
 import '../../utils/platform_util.dart';
-import '../../utils/tv_reveal.dart';
 import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/live_recording_service.dart';
 import '../../services/profiles/profile_async_authorization.dart';
-import '../../services/profiles/profile_authorization.dart';
-import '../../services/profiles/profile_bootstrap.dart';
-import '../../services/profiles/profile_collection_resource_facade.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../services/webdav_sync/webdav_sync_library_models.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
@@ -81,167 +74,61 @@ class IptvSettingsPage extends StatefulWidget {
 
 class _IptvSettingsPageState extends State<IptvSettingsPage>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _urlController = TextEditingController();
-  final TextEditingController _epgUrlController = TextEditingController();
-  final FocusNode _backButtonFocusNode = FocusNode(
-    debugLabel: 'iptv-back-button',
-  );
-  final FocusNode _nameInputFocusNode = FocusNode(
-    debugLabel: 'iptv-name-input',
-  );
-  final FocusNode _urlInputFocusNode = FocusNode(debugLabel: 'iptv-url-input');
-  final FocusNode _epgUrlInputFocusNode = FocusNode(
-    debugLabel: 'iptv-epg-url-input',
-  );
-  final FocusNode _addButtonFocusNode = FocusNode(
-    debugLabel: 'iptv-add-button',
-  );
-  final FocusNode _importFileButtonFocusNode = FocusNode(
-    debugLabel: 'iptv-import-file-button',
-  );
+  final _focus = IptvSettingsFocusOwner();
+  final _input = IptvSettingsInputOwner();
+  final _sources = IptvSettingsSourcesOwner();
+  final _preferences = IptvSettingsPreferencesOwner();
+  final r = IptvSettingsRecordingOwner();
+  final l = IptvSettingsLayoutOwner();
+  IptvSettingsSections? _sectionCache;
+  IptvSettingsSections get _sections =>
+      _sectionCache ??= createIptvSettingsSections(
+        (
+          customLists: () => _customLists,
+          hideableSources: () => _hideableSources,
+          reloadHiddenCounts: _reloadHiddenCounts,
+          catalogOwnerReferencesFor: _catalogOwnerReferencesFor,
+          catalogKeysFor: _catalogKeysFor,
+          mounted: () => mounted,
+          setState: setState,
+          twoPaneKey: _twoPaneKey,
+          openAddSource: () => widget.openAddSource,
+          context: () => context,
+        ),
+        (
+          focusOwner: _focus,
+          inputOwner: _input,
+          sourcesOwner: _sources,
+          preferencesOwner: _preferences,
+          recordingOwner: r,
+          layoutOwner: l,
+        ),
+      );
 
-  // Xtream Codes controllers and focus nodes
-  final TextEditingController _xcNameController = TextEditingController();
-  final TextEditingController _xcServerController = TextEditingController();
-  final TextEditingController _xcUsernameController = TextEditingController();
-  final TextEditingController _xcPasswordController = TextEditingController();
-  final FocusNode _xcNameFocusNode = FocusNode(debugLabel: 'iptv-xc-name');
-  final FocusNode _xcServerFocusNode = FocusNode(debugLabel: 'iptv-xc-server');
-  final FocusNode _xcUsernameFocusNode = FocusNode(
-    debugLabel: 'iptv-xc-username',
-  );
-  final FocusNode _xcPasswordFocusNode = FocusNode(
-    debugLabel: 'iptv-xc-password',
-  );
-  final FocusNode _xcLoginButtonFocusNode = FocusNode(
-    debugLabel: 'iptv-xc-login-button',
-  );
-  bool _isXcAdding = false;
-
-  // Tab focus nodes
-  final FocusNode _urlTabFocusNode = FocusNode(debugLabel: 'iptv-url-tab');
-  final FocusNode _fileTabFocusNode = FocusNode(debugLabel: 'iptv-file-tab');
-  final FocusNode _xcTabFocusNode = FocusNode(debugLabel: 'iptv-xc-tab');
-
-  late TabController _tabController;
-
-  // Focus nodes for playlist items (3 per item: star + refresh + delete)
-  final List<FocusNode> _playlistFocusNodes = [];
-
-  /// Focus nodes for the Lists section — its OWN array rather than an
-  /// extension of [_playlistFocusNodes], whose every index is `row * 4`
-  /// arithmetic that a second section would silently break.
-  /// 4 per list: rename + move-up + move-down + delete.
-  final List<FocusNode> _listFocusNodes = [];
-  final FocusNode _createListFocusNode = FocusNode(
-    debugLabel: 'iptv-create-list',
-  );
-
-  /// Focus nodes for the Hidden-categories section — one per catalog-backed
-  /// source. Its own array for the same reason [_listFocusNodes] is: the
-  /// arrays above are index arithmetic that a third section would break.
-  final List<FocusNode> _hiddenFocusNodes = [];
-
-  /// Hidden-category counts per playlist id, for the section's row subtitles.
-  /// Read from the catalog DB on load rather than per build — a settings
-  /// rebuild must not query once per source.
-  Map<String, int> _hiddenCounts = const {};
-
-  List<IptvListMeta> _lists = [];
-
-  List<IptvPlaylist> _playlists = [];
-  String? _defaultPlaylistId;
-
-  /// True while the wide rail+pane layout is mounted. Read by the DPAD
-  /// hand-offs that target the single-column layout's playlist tiles — those
-  /// nodes exist but are attached to nothing here, and requesting focus on an
-  /// unattached node silently strands DPAD.
-  bool _twoPaneActive = false;
   final GlobalKey<IptvSettingsTwoPaneState> _twoPaneKey = GlobalKey();
 
-  // Recording engine + scheduled recordings. The section exists where SOME
-  // recorder can run: Android 10+ (engine + toggle) or desktop (in-app
-  // scheduler, no toggle). On iOS/pre-Q the page must not promise recording
-  // that native methods will just refuse.
-  bool _recordingSectionVisible = false;
-  bool _engineToggleVisible = false;
-  bool _recordingEngineOn = true;
-  int _scheduledCount = 0;
-  int _maxConcurrent = LiveRecordingService.maxConcurrentDefault;
-
-  /// Null while unknown / non-Android; battery exemption drives the row's
-  /// label so users can see at a glance whether long recordings are safe.
-  bool? _batteryExempt;
-  final FocusNode _scheduledRecordingsFocusNode = FocusNode(
-    debugLabel: 'iptv-scheduled-recordings',
+  Future<void> _pickAutoRefresh() => _sections.profileActions.runProfileAction(
+    () async {
+      final startingScope = ProfileRuntime.scope.value;
+      final hours = await showDialog<int>(
+        context: context,
+        builder: (_) =>
+            IptvAutoRefreshDialog(intervalHours: _preferences.autoRefreshHours),
+      );
+      if (hours == null ||
+          !mounted ||
+          ProfileRuntime.scope.value != startingScope) {
+        return;
+      }
+      await _sections.profileActions.runProfileAction(() async {
+        if (!mounted || ProfileRuntime.scope.value != startingScope) return;
+        await IptvCatalogRefreshService.setIntervalHours(hours);
+        if (!mounted || ProfileRuntime.scope.value != startingScope) return;
+        setState(() => _preferences.autoRefreshHours = hours);
+        unawaited(IptvCatalogRefreshService.instance.refreshDue());
+      });
+    },
   );
-  final FocusNode _maxConcurrentFocusNode = FocusNode(
-    debugLabel: 'iptv-max-concurrent',
-  );
-  final FocusNode _batteryFocusNode = FocusNode(
-    debugLabel: 'iptv-battery-exemption',
-  );
-
-  // Startup channel
-  bool _startupEnabled = false;
-  String _startupMode = StartupIptvStorage.startupIptvModeLast;
-  Map<String, dynamic>? _startupChannel;
-  Map<String, dynamic>? _lastLiveChannel;
-  final FocusNode _startupChannelFocusNode = FocusNode(
-    debugLabel: 'iptv-startup-channel',
-  );
-
-  // Continue watching
-  bool _trackContinueWatching = true;
-
-  // Embedded side preview while browsing channels. Providers count this as a
-  // real stream, so users with tight connection limits can keep the stage's
-  // artwork/details while preventing it from tuning.
-  bool _channelPreviewEnabled = true;
-  int _autoRefreshHours = 24;
-
-  Future<void> _pickAutoRefresh() => _runProfileAction(() async {
-    final startingScope = ProfileRuntime.scope.value;
-    final hours = await showDialog<int>(
-      context: context,
-      builder: (_) => IptvAutoRefreshDialog(intervalHours: _autoRefreshHours),
-    );
-    if (hours == null ||
-        !mounted ||
-        ProfileRuntime.scope.value != startingScope) {
-      return;
-    }
-    await _runProfileAction(() async {
-      if (!mounted || ProfileRuntime.scope.value != startingScope) return;
-      await IptvCatalogRefreshService.setIntervalHours(hours);
-      if (!mounted || ProfileRuntime.scope.value != startingScope) return;
-      setState(() => _autoRefreshHours = hours);
-      unawaited(IptvCatalogRefreshService.instance.refreshDue());
-    });
-  });
-
-  Future<void> _runProfileAction(Future<void> Function() body) async {
-    final authorization = await ProfileAsyncAuthorization.capture(
-      ProfileFeature.iptv,
-    );
-    if (!mounted) return;
-    if (authorization == null) {
-      await body();
-    } else {
-      await authorization.runIfCurrent(body);
-    }
-  }
-
-  // Cockpit appearance (`iptv_style`). Shown only where the cockpit exists —
-  // television and desktop; a phone or touch tablet would be picking a look it
-  // can never see.
-  String _iptvStyle = IptvAppearanceStorage.kIptvStyleDefault;
-
-  // In-player guide look (`iptv_player_guide_style`). Ungated: every
-  // platform has a player — phones/desktop the Dart one, Android TV the
-  // native one — and both read this pref at launch.
-  String _playerGuideStyle = 'classic';
   static final bool _isDesktopPlatform =
       !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
   bool get _appearanceVisible => IptvSettingsPage.showsAppearance(
@@ -249,44 +136,18 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     isDesktop: _isDesktopPlatform,
   );
 
-  bool _loading = true;
-  bool _isAdding = false;
-  // Ids of playlists currently being refreshed (re-fetched from source)
-  final Set<String> _refreshingIds = {};
-
-  /// Where the narrow layout is (see [IptvSettingsPhoneSection]). The wide layout never
-  /// reads it and forces it back to [IptvSettingsPhoneSection.hub] so a resize can't
-  /// strand back-handling in a sub-view that no longer renders.
-  IptvSettingsPhoneSection _phoneSection = IptvSettingsPhoneSection.hub;
-
-  /// The hub's first row (Sources) — DOWN from the back button and the
-  /// narrow TV entry both land here, mirroring how the old single column
-  /// landed on the add-form tabs.
-  final FocusNode _hubSourcesFocusNode = FocusNode(
-    debugLabel: 'iptv-hub-sources',
-  );
-
-  /// Non-focusable marker around whichever narrow view is showing — the
-  /// picker pages' idiom: section transitions unmount the focused row, so
-  /// DPAD re-seeds on the new view's first traversal descendant.
-  final FocusNode _phoneViewMarker = FocusNode(
-    debugLabel: 'iptv-phone-view',
-    skipTraversal: true,
-    canRequestFocus: false,
-  );
-
   /// Switch the narrow layout's view. On TV-class input the old view's
   /// focused row is about to unmount, which would strand DPAD on the bare
   /// FocusScope — hand it to the new view's first control instead. Touch
   /// keeps its no-focus-ring behavior (the guard below never fires there).
   void _enterPhoneSection(IptvSettingsPhoneSection section) {
-    setState(() => _phoneSection = section);
+    setState(() => l.phoneSection = section);
     if (!PlatformUtil.isAndroidTvCached) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _twoPaneActive) return;
+      if (!mounted || l.twoPaneActive) return;
       final primary = FocusManager.instance.primaryFocus;
       if (primary != null && primary is! FocusScopeNode) return;
-      _phoneViewMarker.traversalDescendants.firstOrNull?.requestFocus();
+      _focus.phoneViewMarker.traversalDescendants.firstOrNull?.requestFocus();
     });
   }
 
@@ -295,144 +156,77 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     AnalyticsService.screenView('iptv_settings');
-    _tabController = TabController(length: 3, vsync: this);
+    _input.tabController = TabController(length: 3, vsync: this);
     // Rebuild on tab change so the inactive tabs' ExcludeFocus updates —
     // otherwise DPAD traversal can wander into off-screen tab content.
-    _tabController.addListener(_onTabChanged);
+    _input.tabController.addListener(_onTabChanged);
     // An "Add playlist" deep-link lands on the Sources sub-view, where the
     // add forms live — the hub would be an extra hop the user didn't ask for.
-    if (widget.openAddSource) _phoneSection = IptvSettingsPhoneSection.sources;
-    _loadSettings();
+    if (widget.openAddSource) l.phoneSection = IptvSettingsPhoneSection.sources;
+    _sections.loadSettings.loadSettings();
   }
 
   void _onTabChanged() {
     if (mounted) setState(() {});
   }
 
-  /// DOWN from a tab may select it first — the new tab's content is still
-  /// under `ExcludeFocus(excluding: true)` until the rebuild, so a same-frame
-  /// focus request is refused. Defer one frame — and MANUFACTURE that frame:
-  /// when the tab was already selected, animateTo() early-returns (no
-  /// setState, nothing schedules a frame on an idle screen) and an
-  /// unscheduled post-frame callback just sits parked — the "DOWN does
-  /// nothing, then the next keypress teleports focus into the form" glitch
-  /// (the parked callback fired on the LATER press's frame and stole its
-  /// focus move).
-  void _focusContentAfterTabSwitch(FocusNode node) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focusAndReveal(node);
-    });
-    WidgetsBinding.instance.scheduleFrame();
-  }
-
-  /// House DPAD idiom: focus a node, then scroll it into view next frame.
-  /// Minimal + vertical-only via [tvRevealMinimal] — the alignment-pinning
-  /// `Scrollable.ensureVisible` both over-scrolled (button focus dragged the
-  /// playlists section into view) and dragged the TabBarView pager sideways
-  /// (focusing the right-aligned Add button visibly switched tabs).
-  void _focusAndReveal(FocusNode node) {
-    node.requestFocus();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = node.context;
-      if (ctx != null) tvRevealMinimal(ctx);
-    });
-    // If the node was already focused nothing above schedules a frame, and
-    // the reveal would stall until some unrelated repaint — see
-    // _focusContentAfterTabSwitch.
-    WidgetsBinding.instance.scheduleFrame();
-  }
-
   @override
   void dispose() {
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
-    _nameController.dispose();
-    _urlController.dispose();
-    _epgUrlController.dispose();
-    _backButtonFocusNode.dispose();
-    _hubSourcesFocusNode.dispose();
-    _phoneViewMarker.dispose();
-    _nameInputFocusNode.dispose();
-    _urlInputFocusNode.dispose();
-    _epgUrlInputFocusNode.dispose();
-    _addButtonFocusNode.dispose();
-    _importFileButtonFocusNode.dispose();
-    _xcNameController.dispose();
-    _xcServerController.dispose();
-    _xcUsernameController.dispose();
-    _xcPasswordController.dispose();
-    _xcNameFocusNode.dispose();
-    _xcServerFocusNode.dispose();
-    _xcUsernameFocusNode.dispose();
-    _xcPasswordFocusNode.dispose();
-    _xcLoginButtonFocusNode.dispose();
-    _urlTabFocusNode.dispose();
-    _fileTabFocusNode.dispose();
-    _xcTabFocusNode.dispose();
-    _scheduledRecordingsFocusNode.dispose();
-    _maxConcurrentFocusNode.dispose();
+    _input.tabController.removeListener(_onTabChanged);
+    _input.tabController.dispose();
+    _input.nameController.dispose();
+    _input.urlController.dispose();
+    _input.epgUrlController.dispose();
+    _focus.backButtonFocusNode.dispose();
+    _focus.hubSourcesFocusNode.dispose();
+    _focus.phoneViewMarker.dispose();
+    _focus.nameInputFocusNode.dispose();
+    _focus.urlInputFocusNode.dispose();
+    _focus.epgUrlInputFocusNode.dispose();
+    _focus.addButtonFocusNode.dispose();
+    _focus.importFileButtonFocusNode.dispose();
+    _input.xcNameController.dispose();
+    _input.xcServerController.dispose();
+    _input.xcUsernameController.dispose();
+    _input.xcPasswordController.dispose();
+    _focus.xcNameFocusNode.dispose();
+    _focus.xcServerFocusNode.dispose();
+    _focus.xcUsernameFocusNode.dispose();
+    _focus.xcPasswordFocusNode.dispose();
+    _focus.xcLoginButtonFocusNode.dispose();
+    _focus.urlTabFocusNode.dispose();
+    _focus.fileTabFocusNode.dispose();
+    _focus.xcTabFocusNode.dispose();
+    _focus.scheduledRecordingsFocusNode.dispose();
+    _focus.maxConcurrentFocusNode.dispose();
     WidgetsBinding.instance.removeObserver(this);
-    _batteryFocusNode.dispose();
-    for (final node in _playlistFocusNodes) {
+    _focus.batteryFocusNode.dispose();
+    for (final node in _focus.playlistFocusNodes) {
       node.dispose();
     }
-    for (final node in _listFocusNodes) {
+    for (final node in _focus.listFocusNodes) {
       node.dispose();
     }
-    for (final node in _hiddenFocusNodes) {
+    for (final node in _focus.hiddenFocusNodes) {
       node.dispose();
     }
-    _createListFocusNode.dispose();
-    _startupChannelFocusNode.dispose();
+    _focus.createListFocusNode.dispose();
+    _focus.startupChannelFocusNode.dispose();
     super.dispose();
-  }
-
-  void _ensureFocusNodes() {
-    // 4 focus nodes per playlist (star + refresh + edit-EPG + delete)
-    final needed = _playlists.length * 4;
-
-    while (_playlistFocusNodes.length > needed) {
-      _playlistFocusNodes.removeLast().dispose();
-    }
-
-    while (_playlistFocusNodes.length < needed) {
-      final index = _playlistFocusNodes.length;
-      _playlistFocusNodes.add(FocusNode(debugLabel: 'iptv-playlist-$index'));
-    }
-
-    // 4 per custom list (rename + up + down + delete). Favorites is built in
-    // and has no row of its own here.
-    final listsNeeded = _customLists.length * 4;
-    while (_listFocusNodes.length > listsNeeded) {
-      _listFocusNodes.removeLast().dispose();
-    }
-    while (_listFocusNodes.length < listsNeeded) {
-      final index = _listFocusNodes.length;
-      _listFocusNodes.add(FocusNode(debugLabel: 'iptv-list-$index'));
-    }
-
-    // One per source that can have hidden categories.
-    final hiddenNeeded = _hideableSources.length;
-    while (_hiddenFocusNodes.length > hiddenNeeded) {
-      _hiddenFocusNodes.removeLast().dispose();
-    }
-    while (_hiddenFocusNodes.length < hiddenNeeded) {
-      final index = _hiddenFocusNodes.length;
-      _hiddenFocusNodes.add(FocusNode(debugLabel: 'iptv-hidden-$index'));
-    }
   }
 
   /// Sources whose categories can be hidden: the ones stored as catalogs.
   /// Imported files and (elsewhere) virtual shelves never become one, so
   /// there is nothing to hide against.
   List<IptvPlaylist> get _hideableSources => [
-    for (final p in _playlists)
+    for (final p in _sources.playlists)
       if (!p.isLocalFile) p,
   ];
 
   /// Category ordering also works for imported files: they have no catalog
   /// rows, but their saved playlist id is a stable profile-local order key.
-  List<IptvPlaylist> get _categoryOrderSources => List.unmodifiable(_playlists);
+  List<IptvPlaylist> get _categoryOrderSources =>
+      List.unmodifiable(_sources.playlists);
 
   /// Every catalog key a source can store under — an Xtream login has one per
   /// content type, everything else exactly one.
@@ -506,7 +300,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     try {
       await authorization?.runIfCurrent(() async {});
     } on StateError {
-      _showSnackBar(
+      _sections.feedback.showSnackBar(
         'The active profile changed. Category order was not opened.',
         isError: true,
       );
@@ -545,18 +339,18 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       }
       if (total > 0) out[entry.key] = total;
     }
-    _hiddenCounts = out;
+    _sources.hiddenCounts = out;
   }
 
   List<IptvListMeta> get _customLists => [
-    for (final list in _lists)
+    for (final list in _sources.lists)
       if (!list.isBuiltin) list,
   ];
 
   /// Subtitle for the "specific channel" row — names the pinned channel so the
   /// setting is readable without opening the picker.
   String get _startupChannelLabel {
-    final channel = _startupChannel;
+    final channel = _preferences.startupChannel;
     if (channel == null) return 'None chosen yet';
     final name = channel['name'];
     final number = channel['channelNumber'];
@@ -567,51 +361,52 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   /// Names the remembered channel, so "last watched" is verifiable at a glance
   /// rather than a promise the user has to reboot to test.
   String get _lastLiveChannelLabel {
-    final channel = _lastLiveChannel;
+    final channel = _preferences.lastLiveChannel;
     final name = channel?['name'];
     if (name is! String || name.isEmpty) return 'unknown';
     final number = channel?['channelNumber'];
     return number is num ? 'CH $number  ·  $name' : name;
   }
 
-  Future<void> _setStartupMode(String? mode) =>
-      _runProfileAction(() => _setStartupModeForProfile(mode));
+  Future<void> _setStartupMode(String? mode) => _sections.profileActions
+      .runProfileAction(() => _setStartupModeForProfile(mode));
 
   Future<void> _setStartupModeForProfile(String? mode) async {
     if (mode == null) return;
     await StartupIptvStorage.setStartupIptvMode(mode);
-    if (mounted) setState(() => _startupMode = mode);
+    if (mounted) setState(() => _preferences.startupMode = mode);
     // Choosing "a specific channel" with none set yet goes straight to the
     // picker — otherwise the mode is selected but inert, which reads as broken.
     if (mode == StartupIptvStorage.startupIptvModePinned &&
-        _startupChannel == null) {
+        _preferences.startupChannel == null) {
       await _pickStartupChannel();
     }
   }
 
-  Future<void> _setStartupEnabled(bool enabled) => _runProfileAction(() async {
-    await StartupIptvStorage.setStartupIptvEnabled(enabled);
-    if (mounted) setState(() => _startupEnabled = enabled);
-  });
+  Future<void> _setStartupEnabled(bool enabled) =>
+      _sections.profileActions.runProfileAction(() async {
+        await StartupIptvStorage.setStartupIptvEnabled(enabled);
+        if (mounted) setState(() => _preferences.startupEnabled = enabled);
+      });
 
-  Future<void> _setTrackContinueWatching(bool value) =>
-      _runProfileAction(() => _setTrackContinueWatchingForProfile(value));
+  Future<void> _setTrackContinueWatching(bool value) => _sections.profileActions
+      .runProfileAction(() => _setTrackContinueWatchingForProfile(value));
 
   Future<void> _setTrackContinueWatchingForProfile(bool value) async {
     await IptvHistoryStorage.setIptvTrackContinueWatching(value);
-    if (mounted) setState(() => _trackContinueWatching = value);
+    if (mounted) setState(() => _preferences.trackContinueWatching = value);
   }
 
-  Future<void> _setChannelPreviewEnabled(bool value) =>
-      _runProfileAction(() => _setChannelPreviewEnabledForProfile(value));
+  Future<void> _setChannelPreviewEnabled(bool value) => _sections.profileActions
+      .runProfileAction(() => _setChannelPreviewEnabledForProfile(value));
 
   Future<void> _setChannelPreviewEnabledForProfile(bool value) async {
     await IptvAppearanceStorage.setIptvChannelPreviewEnabled(value);
-    if (mounted) setState(() => _channelPreviewEnabled = value);
+    if (mounted) setState(() => _preferences.channelPreviewEnabled = value);
   }
 
-  Future<void> _setIptvStyle(String style) =>
-      _runProfileAction(() => _setIptvStyleForProfile(style));
+  Future<void> _setIptvStyle(String style) => _sections.profileActions
+      .runProfileAction(() => _setIptvStyleForProfile(style));
 
   Future<void> _setIptvStyleForProfile(String style) async {
     // Persist BEFORE reflecting the choice: the IPTV page re-reads the pref
@@ -620,21 +415,21 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // any Look bundle that is still being applied.
     LookApplier.noteExternalWrite('iptv_style');
     await IptvAppearanceStorage.setIptvStyle(style);
-    if (mounted) setState(() => _iptvStyle = style);
+    if (mounted) setState(() => _preferences.iptvStyle = style);
   }
 
-  Future<void> _setPlayerGuideStyle(String style) =>
-      _runProfileAction(() => _setPlayerGuideStyleForProfile(style));
+  Future<void> _setPlayerGuideStyle(String style) => _sections.profileActions
+      .runProfileAction(() => _setPlayerGuideStyleForProfile(style));
 
   Future<void> _setPlayerGuideStyleForProfile(String style) async {
     // Same persist-before-setState contract as [_setIptvStyle]: the player
     // reads the pref at launch, which can happen the moment this route pops.
     await IptvAppearanceStorage.setIptvPlayerGuideStyle(style);
-    if (mounted) setState(() => _playerGuideStyle = style);
+    if (mounted) setState(() => _preferences.playerGuideStyle = style);
   }
 
   Future<void> _pickStartupChannel() =>
-      _runProfileAction(_pickStartupChannelForProfile);
+      _sections.profileActions.runProfileAction(_pickStartupChannelForProfile);
 
   Future<void> _pickStartupChannelForProfile() async {
     final choice = await showIptvStartupChannelPicker(context);
@@ -649,693 +444,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       httpHeaders: choice.httpHeaders.isEmpty ? null : choice.httpHeaders,
     );
     final stored = await StartupIptvStorage.getStartupIptvChannel();
-    if (mounted) setState(() => _startupChannel = stored);
-  }
-
-  Future<void> _loadSettings() async {
-    final startingScope = ProfileRuntime.scope.value;
-    // The wide layout reports per-source counts and freshness straight from
-    // the catalog. Opening once here keeps every row's read synchronous —
-    // a DPAD move must never await.
-    try {
-      await IptvCatalogDb.open();
-    } catch (_) {
-      // A catalog that won't open just means "no stats"; the page still works.
-    }
-    final playlists = await IptvPlaylistStorage.getIptvPlaylists(
-      forSettings: true,
-    );
-    final defaultId = await IptvPlaylistStorage.getIptvDefaultPlaylist();
-    final lists = await IptvFavoritesStorage.getIptvLists();
-    final startupEnabled = await StartupIptvStorage.getStartupIptvEnabled();
-    final startupMode = await StartupIptvStorage.getStartupIptvMode();
-    final startupChannel = await StartupIptvStorage.getStartupIptvChannel();
-    final lastLive = await IptvLastChannelStorage.getIptvLastLiveChannel();
-    final trackCw = await IptvHistoryStorage.getIptvTrackContinueWatching();
-    final channelPreviewEnabled =
-        await IptvAppearanceStorage.getIptvChannelPreviewEnabled();
-    final iptvStyle = await IptvAppearanceStorage.getIptvStyle();
-    final playerGuideStyle =
-        await IptvAppearanceStorage.getIptvPlayerGuideStyle();
-    final autoRefreshHours = await IptvCatalogRefreshService.getIntervalHours();
-    final engineSupported =
-        !kIsWeb &&
-        Platform.isAndroid &&
-        (await LiveRecordingService.engineSupport()) != 'unsupported';
-    final desktopSched = DesktopScheduleService.instance.isSupported;
-    final recordingEngineOn =
-        engineSupported && await LiveRecordingService.engineEnabled();
-    final scheduleCount = engineSupported
-        ? (await LiveRecordingService.listSchedules()).length
-        : desktopSched
-        ? (await DesktopScheduleService.instance.list()).length
-        : 0;
-    final maxConcurrent = await LiveRecordingService.maxConcurrent();
-    final batteryExempt = engineSupported && !PlatformUtil.isTelevision
-        ? await LiveRecordingService.isIgnoringBatteryOptimizations()
-        : null;
-
-    if (!mounted || ProfileRuntime.scope.value != startingScope) return;
-
-    setState(() {
-      _playlists = playlists;
-      _defaultPlaylistId = defaultId;
-      _lists = lists;
-      _startupEnabled = startupEnabled;
-      _startupMode = startupMode;
-      _startupChannel = startupChannel;
-      _lastLiveChannel = lastLive;
-      _trackContinueWatching = trackCw;
-      _channelPreviewEnabled = channelPreviewEnabled;
-      _iptvStyle = iptvStyle;
-      _playerGuideStyle = playerGuideStyle;
-      _autoRefreshHours = autoRefreshHours;
-      _recordingSectionVisible = engineSupported || desktopSched;
-      _engineToggleVisible = engineSupported;
-      _recordingEngineOn = recordingEngineOn;
-      _scheduledCount = scheduleCount;
-      _maxConcurrent = maxConcurrent;
-      _batteryExempt = batteryExempt;
-      _loading = false;
-    });
-    _ensureFocusNodes();
-    _reloadHiddenCounts();
-
-    // TV entry focus: land on the first tab (not a TextField, so no keyboard
-    // pops) so DPAD users are never stranded on nothing.
-    if (PlatformUtil.isTelevision) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        // Only a bare FocusScopeNode as primary focus means DPAD is
-        // stranded — don't steal focus the user already placed somewhere.
-        final primary = FocusManager.instance.primaryFocus;
-        if (primary != null && primary is! FocusScopeNode) return;
-        // In the wide layout the tab nodes belong to the Add pane, which is
-        // not what the page opens on — requesting focus on an unmounted node
-        // would leave DPAD exactly as stranded as doing nothing. Ask the rail
-        // instead. Keyed off the mounted widget rather than _twoPaneActive:
-        // that flag is set by a later post-frame than this one.
-        final twoPane = _twoPaneKey.currentState;
-        if (twoPane != null) {
-          // Arrived from an "Add playlist" button: hand DPAD to the add method
-          // chooser, not to the rail — the user already chose the destination.
-          if (widget.openAddSource) {
-            twoPane.focusAddPane();
-          } else {
-            twoPane.focusRail();
-          }
-          return;
-        }
-        // Narrow: an add-source deep-link opened straight onto the Sources
-        // sub-view where the URL tab is mounted; a normal entry sits on the
-        // hub, whose first row is the landing.
-        if (_phoneSection == IptvSettingsPhoneSection.sources) {
-          _urlTabFocusNode.requestFocus();
-        } else {
-          _hubSourcesFocusNode.requestFocus();
-        }
-      });
-    }
-  }
-
-  Future<void> _addPlaylist() => _runProfileAction(_addPlaylistForProfile);
-
-  Future<void> _addPlaylistForProfile() async {
-    // The busy button is a no-op, but the fields' onSubmitted calls this
-    // directly — guard so an in-flight add can't run twice.
-    if (_isAdding) return;
-    final name = _nameController.text.trim();
-    final url = _urlController.text.trim();
-
-    if (name.isEmpty) {
-      _showSnackBar('Please enter a playlist name');
-      return;
-    }
-
-    if (url.isEmpty) {
-      _showSnackBar('Please enter a playlist URL');
-      return;
-    }
-
-    if (!IptvService.isValidPlaylistUrl(url)) {
-      _showSnackBar('Please enter a valid HTTP/HTTPS URL');
-      return;
-    }
-
-    // Check for duplicate URL
-    if (_playlists.any((p) => p.url == url)) {
-      _showSnackBar('This playlist URL already exists');
-      return;
-    }
-
-    setState(() => _isAdding = true);
-
-    // Validate URL by trying to fetch it
-    final playlistId = DateTime.now().microsecondsSinceEpoch.toString();
-    final result = await IptvService.instance.fetchPlaylist(
-      url,
-      numberingSourceKey: playlistId,
-      allowUnbound: true,
-    );
-
-    if (!mounted) return;
-
-    if (result.hasError) {
-      setState(() => _isAdding = false);
-      _showSnackBar('Failed to load playlist: ${result.error}');
-      return;
-    }
-
-    if (result.isEmpty) {
-      setState(() => _isAdding = false);
-      _showSnackBar('Playlist is empty or invalid');
-      return;
-    }
-
-    // Create new playlist
-    final epgUrl = _epgUrlController.text.trim();
-    final playlist = IptvPlaylist(
-      id: playlistId,
-      name: name,
-      url: url,
-      epgUrl: epgUrl.isEmpty ? null : epgUrl,
-      addedAt: DateTime.now(),
-    );
-
-    final newPlaylists = [..._playlists, playlist];
-    final savedPlaylists = await IptvPlaylistStorage.setIptvPlaylistsAndReload(
-      newPlaylists,
-      forSettings: true,
-    );
-    if (!mounted) return;
-
-    setState(() {
-      _playlists = savedPlaylists;
-      _nameController.clear();
-      _urlController.clear();
-      _epgUrlController.clear();
-      _isAdding = false;
-    });
-    _ensureFocusNodes();
-
-    unawaited(IptvCatalogRefreshService.instance.refreshDue());
-
-    _showSnackBar(
-      // DB-catalog mode returns an ingest receipt with empty channels — the
-      // count lives on the receipt.
-      'Added "$name" '
-      '(${result.ingest?.channelCount ?? result.channels.length} channels)',
-      isError: false,
-    );
-  }
-
-  Future<void> _importFromFile() =>
-      _runProfileAction(_importFromFileForProfile);
-
-  Future<void> _importFromFileForProfile() async {
-    try {
-      // FileType.any instead of custom extensions: Android's MIME mapping for
-      // .m3u/.m3u8 is unreliable and can leave valid files unselectable in the
-      // picker. The extension is validated below instead.
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        allowMultiple: false,
-        withData: true,
-      );
-
-      if (result == null || result.files.isEmpty) {
-        return; // User cancelled
-      }
-
-      final file = result.files.first;
-      final fileName = file.name.toLowerCase();
-
-      // Validate extension
-      if (!fileName.endsWith('.m3u') && !fileName.endsWith('.m3u8')) {
-        _showSnackBar('Please select an M3U or M3U8 file');
-        return;
-      }
-
-      // Read file content
-      final Uint8List? fileBytes =
-          file.bytes ??
-          (file.path != null ? await file.xFile.readAsBytes() : null);
-      if (fileBytes == null) {
-        _showSnackBar('Could not read file content');
-        return;
-      }
-
-      // Decode as UTF-8 so non-ASCII channel names survive; falls back to
-      // latin1 for legacy playlists.
-      final content = M3uParser.decodeBytes(fileBytes);
-
-      // Validate file size (warn for >5MB)
-      if (content.length > 5 * 1024 * 1024) {
-        _showSnackBar(
-          'File is very large (>${(content.length / 1024 / 1024).toStringAsFixed(1)}MB). This may cause issues.',
-        );
-      }
-
-      // Parse to validate content (off the UI isolate for large files)
-      final parseResult = await IptvService.instance.parseContent(content);
-
-      if (parseResult.hasError) {
-        _showSnackBar('Failed to parse playlist: ${parseResult.error}');
-        return;
-      }
-
-      if (parseResult.isEmpty) {
-        _showSnackBar('Playlist is empty or invalid');
-        return;
-      }
-
-      // Extract default name from filename (without extension)
-      String defaultName = file.name;
-      if (defaultName.toLowerCase().endsWith('.m3u8')) {
-        defaultName = defaultName.substring(0, defaultName.length - 5);
-      } else if (defaultName.toLowerCase().endsWith('.m3u')) {
-        defaultName = defaultName.substring(0, defaultName.length - 4);
-      }
-
-      // Show dialog to get playlist name
-      if (!mounted) return;
-      final playlistName = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => Theme(
-          data: settingsPageTheme(context),
-          child: IptvSettingsPlaylistNameDialog(
-            defaultName: defaultName,
-            channelCount: parseResult.channels.length,
-            existingNames: _playlists.map((p) => p.name).toSet(),
-          ),
-        ),
-      );
-
-      // User cancelled
-      if (playlistName == null || playlistName.isEmpty || !mounted) {
-        return;
-      }
-
-      // Create new playlist with content
-      final playlist = IptvPlaylist(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: playlistName,
-        url: '', // Empty URL for file-based playlists
-        content: content,
-        addedAt: DateTime.now(),
-      );
-
-      final newPlaylists = [..._playlists, playlist];
-      final savedPlaylists =
-          await IptvPlaylistStorage.setIptvPlaylistsAndReload(
-            newPlaylists,
-            forSettings: true,
-          );
-      if (!mounted) return;
-
-      setState(() {
-        _playlists = savedPlaylists;
-      });
-      _ensureFocusNodes();
-
-      _showSnackBar(
-        'Imported "$playlistName" (${parseResult.channels.length} channels)',
-        isError: false,
-      );
-    } catch (e) {
-      _showSnackBar('Failed to import file: $e');
-    }
-  }
-
-  Future<void> _addXtreamCodes() =>
-      _runProfileAction(_addXtreamCodesForProfile);
-
-  Future<void> _addXtreamCodesForProfile() async {
-    // Same double-submission guard as _addPlaylist (fields' onSubmitted).
-    if (_isXcAdding) return;
-    final server = _xcServerController.text.trim();
-    final username = _xcUsernameController.text.trim();
-    final password = _xcPasswordController.text.trim();
-
-    if (server.isEmpty) {
-      _showSnackBar('Please enter a server URL');
-      return;
-    }
-    if (username.isEmpty) {
-      _showSnackBar('Please enter a username');
-      return;
-    }
-    if (password.isEmpty) {
-      _showSnackBar('Please enter a password');
-      return;
-    }
-
-    final serverUrl = normalizeXtreamServerUrl(server);
-    if (serverUrl == null) {
-      _showSnackBar('Please enter a valid server URL');
-      return;
-    }
-
-    // Check for duplicate
-    if (_playlists.any(
-      (p) =>
-          p.isXtreamCodes && p.serverUrl == serverUrl && p.username == username,
-    )) {
-      _showSnackBar('This Xtream Codes login already exists');
-      return;
-    }
-
-    setState(() => _isXcAdding = true);
-
-    final result = await XtreamCodesService.instance.authenticate(
-      serverUrl,
-      username,
-      password,
-    );
-
-    if (!mounted) return;
-
-    if (!result.success) {
-      setState(() => _isXcAdding = false);
-      _showSnackBar(result.error ?? 'Authentication failed');
-      return;
-    }
-
-    // Create playlist with XC fields. Honor a user-supplied name; fall back to
-    // the username@host label when the optional name field is left blank.
-    final customName = _xcNameController.text.trim();
-    final playlist = IptvPlaylist(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: customName.isEmpty
-          ? '$username@${Uri.parse(serverUrl).host}'
-          : customName,
-      url: '',
-      serverUrl: serverUrl,
-      username: username,
-      password: password,
-      addedAt: DateTime.now(),
-    );
-
-    final newPlaylists = [..._playlists, playlist];
-    final savedPlaylists = await IptvPlaylistStorage.setIptvPlaylistsAndReload(
-      newPlaylists,
-      forSettings: true,
-    );
-    if (!mounted) return;
-
-    setState(() {
-      _playlists = savedPlaylists;
-      _xcNameController.clear();
-      _xcServerController.clear();
-      _xcUsernameController.clear();
-      _xcPasswordController.clear();
-      _isXcAdding = false;
-    });
-    _ensureFocusNodes();
-    unawaited(IptvCatalogRefreshService.instance.refreshDue());
-
-    // Build status message
-    String statusMsg = 'Added Xtream Codes login';
-    if (result.status != null) statusMsg += ' (${result.status}';
-    if (result.expDate != null) {
-      statusMsg +=
-          ', expires ${result.expDate!.year}-${result.expDate!.month.toString().padLeft(2, '0')}-${result.expDate!.day.toString().padLeft(2, '0')}';
-    }
-    if (result.status != null) statusMsg += ')';
-    _showSnackBar(statusMsg, isError: false);
-  }
-
-  Future<void> _removePlaylist(IptvPlaylist playlist) async {
-    try {
-      final authorization = await ProfileAsyncAuthorization.capture(
-        ProfileFeature.iptv,
-      );
-      if (!mounted) return;
-      if (authorization == null) {
-        await _removePlaylistForProfile(playlist);
-      } else {
-        await authorization.runIfCurrent(
-          () => _removePlaylistForProfile(
-            playlist,
-            initiatingAuthorization: authorization,
-          ),
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
-      _showSnackBar(
-        'Could not remove "${playlist.name}". Please try again.',
-        isError: true,
-      );
-    }
-  }
-
-  Future<void> _removePlaylistForProfile(
-    IptvPlaylist playlist, {
-    ProfileAsyncAuthorization? initiatingAuthorization,
-  }) async {
-    var revokeBorrowers = false;
-    final resourceId = playlist.connectionResourceId;
-    if (ProfileCollectionResourceFacade.active && resourceId != null) {
-      final borrowerCount =
-          await ProfileCollectionResourceFacade.ownedBorrowerCount(
-            resourceId: resourceId,
-            feature: ProfileFeature.manageConnections,
-          );
-      if (borrowerCount > 0) {
-        final registry = ProfileBootstrap.registry;
-        var authorization = await ProfileAuthorizationContext.capture(registry);
-        var actor = await authorization.validate(registry);
-        if (!actor.isAdmin || !actor.allows(ProfileFeature.manageProfiles)) {
-          if (mounted) {
-            _showSnackBar(
-              'Only an Admin can remove a source shared with other profiles.',
-              isError: true,
-            );
-          }
-          return;
-        }
-        if (!mounted) return;
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (_) => IptvSharedSourceDeleteDialog(
-            playlistName: playlist.name,
-            borrowerCount: borrowerCount,
-          ),
-        );
-        if (confirmed != true || !mounted) return;
-        try {
-          await initiatingAuthorization?.runIfCurrent(() async {});
-        } on StateError {
-          _showSnackBar(
-            'The active profile changed. Nothing was removed.',
-            isError: true,
-          );
-          return;
-        }
-
-        // The dialog is an async authorization boundary. Capture and verify
-        // the visible actor again so an Admin confirmation cannot be replayed
-        // after a profile switch, lock, or role/policy change.
-        authorization = await ProfileAuthorizationContext.capture(registry);
-        actor = await authorization.validate(registry);
-        if (!actor.isAdmin || !actor.allows(ProfileFeature.manageProfiles)) {
-          _showSnackBar(
-            'Admin authorization changed. Nothing was removed.',
-            isError: true,
-          );
-          return;
-        }
-        revokeBorrowers = true;
-      }
-    }
-
-    final removedIndex = _playlists.indexWhere((p) => p.id == playlist.id);
-    final newPlaylists = _playlists.where((p) => p.id != playlist.id).toList();
-    final savedPlaylists = await IptvPlaylistStorage.setIptvPlaylistsAndReload(
-      newPlaylists,
-      forSettings: true,
-      revokeBorrowers: revokeBorrowers,
-    );
-    await IptvCatalogDb.archiveNumberingSource(playlist.id);
-
-    // If removed playlist was the default, clear default
-    if (_defaultPlaylistId == playlist.id) {
-      await IptvPlaylistStorage.setIptvDefaultPlaylist(null);
-      _defaultPlaylistId = null;
-    }
-
-    // Clear caches for this playlist — the in-memory fetch cache and the
-    // catalog DB rows.
-    if (playlist.isXtreamCodes) {
-      XtreamCodesService.instance.clearCache(playlist.serverUrl);
-      await IptvCatalogDb.removeCatalogsByKeys(
-        IptvCatalogKey.allForXtream(
-          playlist.serverUrl!,
-          playlist.username ?? '',
-        ),
-        forgetChannelOrders: true,
-        ownerReferences: _catalogOwnerReferencesFor(playlist),
-      );
-    } else if (!playlist.isLocalFile && playlist.url.isNotEmpty) {
-      IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogDb.removeCatalogsByKeys(
-        [IptvCatalogKey.forUrl(playlist.url)],
-        forgetChannelOrders: true,
-        ownerReferences: _catalogOwnerReferencesFor(playlist),
-      );
-    }
-    // The source's hidden categories go with it. Deliberately here and not
-    // inside the catalog delete: a manual REFRESH also drops and re-ingests
-    // the catalog under the same keys, and user rules must survive that.
-    IptvCatalogDb.forgetHiddenGroups(
-      _catalogKeysFor(playlist),
-      origin: WebDavSyncMutationOrigin.user,
-      ownerReferences: _catalogOwnerReferencesFor(playlist),
-    );
-    if (playlist.isLocalFile) {
-      try {
-        await IptvCatalogDb.forgetCategoryOrders([
-          IptvCatalogKey.forLocalCategoryOrder(playlist.id),
-        ], ownerReferences: _catalogOwnerReferencesFor(playlist));
-      } catch (error) {
-        // Category order is optional catalog metadata. Failure to open a
-        // damaged cache must not prevent the source itself being removed.
-        debugPrint(
-          'IPTV settings: local category-order cleanup skipped ($error)',
-        );
-      }
-    }
-    await IptvFavoritesStorage.removeIptvCategoryOrdersForSource(playlist.id);
-
-    // Remove list memberships and watch history that belonged to this
-    // playlist — both replay from stored metadata, so either would otherwise
-    // keep offering streams that no longer authenticate. The sweep covers
-    // EVERY list, not just Favorites: the provider is gone, so its channels
-    // have nowhere left to play from. The lists themselves survive, possibly
-    // empty.
-    await IptvFavoritesStorage.removeIptvListChannelsByPlaylistId(playlist.id);
-    await IptvHistoryStorage.removeIptvWatchHistoryByPlaylistId(playlist.id);
-
-    if (!mounted) return;
-    setState(() => _playlists = savedPlaylists);
-    // _ensureFocusNodes disposes the trailing nodes — including the one the
-    // focused delete button was using — so reseed DPAD focus on the same row
-    // slot of a surviving playlist (or the tab bar when the list empties).
-    _ensureFocusNodes();
-    if (PlatformUtil.isTelevision) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (_playlistFocusNodes.isEmpty) {
-          _focusAndReveal(switch (_tabController.index) {
-            1 => _fileTabFocusNode,
-            2 => _xcTabFocusNode,
-            _ => _urlTabFocusNode,
-          });
-        } else {
-          final row = removedIndex.clamp(0, _playlists.length - 1);
-          _focusAndReveal(_playlistFocusNodes[row * 4]);
-        }
-      });
-    }
-    _showSnackBar('Removed "${playlist.name}"', isError: false);
-  }
-
-  Future<void> _setDefaultPlaylist(IptvPlaylist? playlist) =>
-      _runProfileAction(() => _setDefaultPlaylistForProfile(playlist));
-
-  Future<void> _setDefaultPlaylistForProfile(IptvPlaylist? playlist) async {
-    await IptvPlaylistStorage.setIptvDefaultPlaylist(playlist?.id);
-    if (!mounted) return;
-    setState(() => _defaultPlaylistId = playlist?.id);
-    _showSnackBar(
-      playlist != null
-          ? 'Default set to "${playlist.name}"'
-          : 'Default cleared',
-      isError: false,
-    );
-  }
-
-  /// Re-fetch a URL or Xtream Codes playlist from its source. Local files are
-  /// static snapshots and cannot be refreshed.
-  Future<void> _refreshPlaylist(IptvPlaylist playlist) =>
-      _runProfileAction(() => _refreshPlaylistForProfile(playlist));
-
-  Future<void> _refreshPlaylistForProfile(IptvPlaylist playlist) async {
-    if (playlist.isLocalFile || playlist.connectionReadOnly) return;
-    if (_refreshingIds.contains(playlist.id)) return;
-    final startingScope = ProfileRuntime.scope.value;
-    bool isCurrent() => ProfileRuntime.scope.value == startingScope;
-
-    setState(() => _refreshingIds.add(playlist.id));
-    _showSnackBar('Refreshing "${playlist.name}"…', isError: false);
-
-    IptvParseResult result = IptvParseResult(channels: [], categories: []);
-    final refreshedSections = <String>[];
-    final failedSections = <String>[];
-    // Keep the previous snapshot until its replacement succeeds. Fetch in
-    // sequence for low-memory TVs; a failed section must not skip the others.
-    final sections = playlist.isXtreamCodes
-        ? [('live', 'live channels'), ('vod', 'movies'), ('series', 'series')]
-        : [('live', 'channels')];
-    for (final section in sections) {
-      if (!isCurrent()) break;
-      try {
-        result = await IptvCatalogRefreshService.instance.refreshCatalog(
-          playlist,
-          section.$1,
-          force: true,
-          priority: true,
-        );
-      } catch (e) {
-        result = IptvParseResult(channels: [], categories: [], error: '$e');
-      }
-      if (result.hasError) {
-        failedSections.add(section.$2);
-      } else {
-        final count = result.ingest?.channelCount ?? result.channels.length;
-        refreshedSections.add('$count ${section.$2}');
-      }
-    }
-
-    if (!mounted) return;
-    setState(() => _refreshingIds.remove(playlist.id));
-    if (!isCurrent()) return;
-
-    if (playlist.isXtreamCodes &&
-        (refreshedSections.isNotEmpty || failedSections.isNotEmpty)) {
-      final updated = refreshedSections.isEmpty
-          ? ''
-          : 'Updated ${refreshedSections.join(', ')}. ';
-      final failed = failedSections.isEmpty
-          ? ''
-          : 'Failed to refresh ${failedSections.join(', ')}; try again.';
-      _showSnackBar(
-        '"${playlist.name}" — $updated$failed',
-        isError: failedSections.isNotEmpty,
-      );
-    } else if (result.hasError) {
-      _showSnackBar('Failed to refresh "${playlist.name}": ${result.error}');
-    } else {
-      final suffix = result.warning != null ? ' (${result.warning})' : '';
-      final count = result.ingest?.channelCount ?? result.channels.length;
-      _showSnackBar(
-        'Updated "${playlist.name}" — $count channels$suffix',
-        isError: false,
-      );
-    }
-  }
-
-  void _showSnackBar(String message, {bool isError = true}) {
-    if (!mounted) return;
-    final t = AppThemeScope.of(context).settings;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? t.danger : t.success,
-      ),
-    );
+    if (mounted) setState(() => _preferences.startupChannel = stored);
   }
 
   // ── Channel lists ────────────────────────────────────────────────────────
@@ -1343,28 +452,29 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Future<void> _reloadLists() async {
     final lists = await IptvFavoritesStorage.getIptvLists();
     if (!mounted) return;
-    setState(() => _lists = lists);
-    _ensureFocusNodes();
+    setState(() => _sources.lists = lists);
+    _sections.focusActions.ensureFocusNodes();
   }
 
-  Future<void> _createList() => _runProfileAction(_createListForProfile);
+  Future<void> _createList() =>
+      _sections.profileActions.runProfileAction(_createListForProfile);
 
   Future<void> _createListForProfile() async {
     final name = await showIptvListNameDialog(
       context: context,
       title: 'New list',
       confirmLabel: 'Create',
-      existingNames: [for (final list in _lists) list.name],
+      existingNames: [for (final list in _sources.lists) list.name],
     );
     if (name == null || !mounted) return;
     await IptvFavoritesStorage.createIptvList(name);
     await _reloadLists();
     if (!mounted) return;
-    _showSnackBar('Created "$name"', isError: false);
+    _sections.feedback.showSnackBar('Created "$name"', isError: false);
   }
 
-  Future<void> _renameList(IptvListMeta list) =>
-      _runProfileAction(() => _renameListForProfile(list));
+  Future<void> _renameList(IptvListMeta list) => _sections.profileActions
+      .runProfileAction(() => _renameListForProfile(list));
 
   Future<void> _renameListForProfile(IptvListMeta list) async {
     final name = await showIptvListNameDialog(
@@ -1372,15 +482,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       title: 'Rename list',
       confirmLabel: 'Save',
       initialValue: list.name,
-      existingNames: [for (final entry in _lists) entry.name],
+      existingNames: [for (final entry in _sources.lists) entry.name],
     );
     if (name == null || name == list.name || !mounted) return;
     await IptvFavoritesStorage.renameIptvList(list.id, name);
     await _reloadLists();
   }
 
-  Future<void> _deleteList(IptvListMeta list) =>
-      _runProfileAction(() => _deleteListForProfile(list));
+  Future<void> _deleteList(IptvListMeta list) => _sections.profileActions
+      .runProfileAction(() => _deleteListForProfile(list));
 
   Future<void> _deleteListForProfile(IptvListMeta list) async {
     final confirmed = await showDialog<bool>(
@@ -1414,18 +524,19 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (_listFocusNodes.isEmpty) {
-          _focusAndReveal(_createListFocusNode);
+        if (_focus.listFocusNodes.isEmpty) {
+          _sections.focusActions.focusAndReveal(_focus.createListFocusNode);
         } else {
-          _focusAndReveal(_listFocusNodes.first);
+          _sections.focusActions.focusAndReveal(_focus.listFocusNodes.first);
         }
       });
     }
-    _showSnackBar('Deleted "${list.name}"', isError: false);
+    _sections.feedback.showSnackBar('Deleted "${list.name}"', isError: false);
   }
 
-  Future<void> _moveList(IptvListMeta list, int delta) =>
-      _runProfileAction(() => _moveListForProfile(list, delta));
+  Future<void> _moveList(IptvListMeta list, int delta) => _sections
+      .profileActions
+      .runProfileAction(() => _moveListForProfile(list, delta));
 
   Future<void> _moveListForProfile(IptvListMeta list, int delta) async {
     final order = [for (final entry in _customLists) entry.id];
@@ -1536,12 +647,16 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     return [
       for (var i = 0; i < sources.length; i++)
         ListTile(
-          focusNode: i < _hiddenFocusNodes.length ? _hiddenFocusNodes[i] : null,
+          focusNode: i < _focus.hiddenFocusNodes.length
+              ? _focus.hiddenFocusNodes[i]
+              : null,
           leading: Icon(
-            (_hiddenCounts[sources[i].id] ?? 0) > 0
+            (_sources.hiddenCounts[sources[i].id] ?? 0) > 0
                 ? Icons.visibility_off_rounded
                 : Icons.visibility_rounded,
-            color: (_hiddenCounts[sources[i].id] ?? 0) > 0 ? t.accent : t.dim2,
+            color: (_sources.hiddenCounts[sources[i].id] ?? 0) > 0
+                ? t.accent
+                : t.dim2,
           ),
           title: Text(
             sources[i].name,
@@ -1549,7 +664,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
-          subtitle: Text(switch (_hiddenCounts[sources[i].id] ?? 0) {
+          subtitle: Text(switch (_sources.hiddenCounts[sources[i].id] ?? 0) {
             0 => 'Nothing hidden',
             1 => '1 category hidden',
             final n => '$n categories hidden',
@@ -1600,15 +715,16 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     ];
   }
 
-  FocusNode? _listNodeAt(int index) =>
-      index < _listFocusNodes.length ? _listFocusNodes[index] : null;
+  FocusNode? _listNodeAt(int index) => index < _focus.listFocusNodes.length
+      ? _focus.listFocusNodes[index]
+      : null;
 
   List<Widget> _buildPlaylistsList() {
     final items = <Widget>[];
 
-    for (int i = 0; i < _playlists.length; i++) {
-      final playlist = _playlists[i];
-      final isDefault = _defaultPlaylistId == playlist.id;
+    for (int i = 0; i < _sources.playlists.length; i++) {
+      final playlist = _sources.playlists[i];
+      final isDefault = _sources.defaultPlaylistId == playlist.id;
       final starFocusIndex = i * 4;
       final refreshFocusIndex = i * 4 + 1;
       final editFocusIndex = i * 4 + 2;
@@ -1622,161 +738,38 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           child: IptvSettingsPlaylistTile(
             playlist: playlist,
             isDefault: isDefault,
-            isRefreshing: _refreshingIds.contains(playlist.id),
-            starFocusNode: starFocusIndex < _playlistFocusNodes.length
-                ? _playlistFocusNodes[starFocusIndex]
+            isRefreshing: _sources.refreshingIds.contains(playlist.id),
+            starFocusNode: starFocusIndex < _focus.playlistFocusNodes.length
+                ? _focus.playlistFocusNodes[starFocusIndex]
                 : null,
-            refreshFocusNode: refreshFocusIndex < _playlistFocusNodes.length
-                ? _playlistFocusNodes[refreshFocusIndex]
+            refreshFocusNode:
+                refreshFocusIndex < _focus.playlistFocusNodes.length
+                ? _focus.playlistFocusNodes[refreshFocusIndex]
                 : null,
-            editFocusNode: editFocusIndex < _playlistFocusNodes.length
-                ? _playlistFocusNodes[editFocusIndex]
+            editFocusNode: editFocusIndex < _focus.playlistFocusNodes.length
+                ? _focus.playlistFocusNodes[editFocusIndex]
                 : null,
-            deleteFocusNode: deleteFocusIndex < _playlistFocusNodes.length
-                ? _playlistFocusNodes[deleteFocusIndex]
+            deleteFocusNode: deleteFocusIndex < _focus.playlistFocusNodes.length
+                ? _focus.playlistFocusNodes[deleteFocusIndex]
                 : null,
-            onSetDefault: () =>
-                _setDefaultPlaylist(isDefault ? null : playlist),
-            onRefresh: canRefresh ? () => _refreshPlaylist(playlist) : null,
+            onSetDefault: () => _sections.sourceRefresh.setDefaultPlaylist(
+              isDefault ? null : playlist,
+            ),
+            onRefresh: canRefresh
+                ? () => _sections.sourceRefresh.refreshPlaylist(playlist)
+                : null,
             onEdit: playlist.connectionReadOnly
                 ? null
-                : () => _editPlaylist(playlist),
+                : () => _sections.sourceEdit.editPlaylist(playlist),
             onDelete: playlist.connectionReadOnly
                 ? null
-                : () => _removePlaylist(playlist),
+                : () => _sections.sourceRemoval.removePlaylist(playlist),
           ),
         ),
       );
     }
 
     return items;
-  }
-
-  /// Edit an existing playlist in place: rename it, change its guide (EPG) URL,
-  /// and — depending on type — its source URL (M3U URL playlists) or its
-  /// server/username/password (Xtream logins). The id and added-at are
-  /// preserved so favorites and watch history stay attached. When the source
-  /// actually changes, the stale fetch cache is cleared so the next load picks
-  /// up the new source; the user can Refresh to re-verify.
-  Future<void> _editPlaylist(IptvPlaylist playlist) =>
-      _runProfileAction(() => _editPlaylistForProfile(playlist));
-
-  Future<void> _editPlaylistForProfile(IptvPlaylist playlist) async {
-    final result = await showDialog<IptvSettingsPlaylistEdit>(
-      context: context,
-      builder: (context) => Theme(
-        data: settingsPageTheme(context),
-        child: _EditPlaylistDialog(
-          playlist: playlist,
-          // Exclude this playlist from the duplicate checks — keeping its own
-          // name/URL must not read as a collision.
-          existingNames: _playlists
-              .where((p) => p.id != playlist.id)
-              .map((p) => p.name)
-              .toSet(),
-          existingUrls: _playlists
-              .where(
-                (p) =>
-                    p.id != playlist.id && !p.isXtreamCodes && !p.isLocalFile,
-              )
-              .map((p) => p.url)
-              .toSet(),
-        ),
-      ),
-    );
-    if (result == null || !mounted) return; // cancelled or profile switched
-
-    // Normalize an edited Xtream server URL the same way add does.
-    String? newServerUrl = playlist.serverUrl;
-    if (playlist.isXtreamCodes) {
-      newServerUrl = normalizeXtreamServerUrl(result.serverUrl ?? '');
-      if (newServerUrl == null) {
-        _showSnackBar('Please enter a valid server URL');
-        return;
-      }
-    }
-
-    final epg = (result.epgUrl ?? '').trim();
-    final updated = IptvPlaylist(
-      id: playlist.id,
-      name: result.name,
-      // URL playlists take the edited URL; Xtream/local keep their existing
-      // url field (empty / snapshot-bound respectively).
-      url: playlist.isXtreamCodes || playlist.isLocalFile
-          ? playlist.url
-          : result.url,
-      content: playlist.content,
-      serverUrl: playlist.isXtreamCodes ? newServerUrl : playlist.serverUrl,
-      username: playlist.isXtreamCodes ? result.username : playlist.username,
-      password: playlist.isXtreamCodes ? result.password : playlist.password,
-      epgUrl: epg.isEmpty ? null : epg,
-      addedAt: playlist.addedAt,
-      connectionResourceId: playlist.connectionResourceId,
-      connectionResourceRevision: playlist.connectionResourceRevision,
-      connectionReadOnly: playlist.connectionReadOnly,
-      // The validated editor result supplies the replacement source details.
-      // Keeping the placeholder flag would silently retain the old secret.
-      credentialsRedacted: false,
-    );
-
-    final unreachableKeys = _catalogKeysFor(
-      playlist,
-    ).toSet().difference(_catalogKeysFor(updated).toSet());
-
-    // Drop the stale caches when the source changed so the next load doesn't
-    // serve the old channels — the in-memory fetch cache and the on-disk
-    // catalog snapshots (the new source's snapshots rebuild on next load).
-    if (playlist.isXtreamCodes) {
-      final credsChanged =
-          playlist.serverUrl != updated.serverUrl ||
-          playlist.username != updated.username ||
-          playlist.password != updated.password;
-      if (credsChanged) {
-        XtreamCodesService.instance.clearCache(playlist.serverUrl);
-        XtreamCodesService.instance.clearCache(updated.serverUrl);
-        await IptvCatalogDb.removeCatalogsByKeys(
-          IptvCatalogKey.allForXtream(
-            playlist.serverUrl!,
-            playlist.username ?? '',
-          ),
-          forgetChannelOrders: unreachableKeys.isNotEmpty,
-          ownerReferences: _catalogOwnerReferencesFor(playlist),
-        );
-      }
-    } else if (!playlist.isLocalFile && playlist.url != updated.url) {
-      IptvService.instance.clearCache(playlist.url);
-      await IptvCatalogDb.removeCatalogsByKeys(
-        [IptvCatalogKey.forUrl(playlist.url)],
-        forgetChannelOrders: true,
-        ownerReferences: _catalogOwnerReferencesFor(playlist),
-      );
-    }
-
-    // Hidden-category rules follow the source's IDENTITY, not its catalogs:
-    // clear only the keys this edit makes unreachable, or they sit orphaned
-    // and silently reattach if that endpoint/account is ever added again.
-    //
-    // Set difference rather than "did anything change": a PASSWORD-only edit
-    // deletes and re-ingests the catalogs above, but the key is
-    // server+username+type, so its keys are unchanged and its rules must
-    // survive. Same for a rename.
-    IptvCatalogDb.forgetHiddenGroups(
-      unreachableKeys,
-      origin: WebDavSyncMutationOrigin.user,
-      ownerReferences: _catalogOwnerReferencesFor(playlist),
-    );
-
-    final newPlaylists = [
-      for (final p in _playlists)
-        if (p.id == playlist.id) updated else p,
-    ];
-    final savedPlaylists = await IptvPlaylistStorage.setIptvPlaylistsAndReload(
-      newPlaylists,
-      forSettings: true,
-    );
-    if (!mounted) return;
-    setState(() => _playlists = savedPlaylists);
-    _showSnackBar('Updated "${updated.name}"', isError: false);
   }
 
   Widget _buildUrlTabContent() {
@@ -1786,17 +779,20 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         FocusTraversalOrder(
           order: const NumericFocusOrder(2),
           child: TvTextField(
-            controller: _nameController,
-            focusNode: _nameInputFocusNode,
+            controller: _input.nameController,
+            focusNode: _focus.nameInputFocusNode,
             labelText: 'Playlist Name',
             hintText: 'e.g., My IPTV',
             prefixIcon: const Icon(Icons.label_outline),
             textInputAction: TextInputAction.next,
-            onSubmitted: (_) => _focusAndReveal(_urlInputFocusNode),
+            onSubmitted: (_) =>
+                _sections.focusActions.focusAndReveal(_focus.urlInputFocusNode),
             // Explicit exits: UP targets the SELECTED tab (geometric search
             // from a full-width field center-lands on the middle tab).
-            onUpArrow: () => _focusAndReveal(_urlTabFocusNode),
-            onDownArrow: () => _focusAndReveal(_urlInputFocusNode),
+            onUpArrow: () =>
+                _sections.focusActions.focusAndReveal(_focus.urlTabFocusNode),
+            onDownArrow: () =>
+                _sections.focusActions.focusAndReveal(_focus.urlInputFocusNode),
           ),
         ),
         const SizedBox(height: 12),
@@ -1805,15 +801,21 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         FocusTraversalOrder(
           order: const NumericFocusOrder(3),
           child: TvTextField(
-            controller: _urlController,
-            focusNode: _urlInputFocusNode,
+            controller: _input.urlController,
+            focusNode: _focus.urlInputFocusNode,
             labelText: 'Playlist URL',
             hintText: 'https://example.com/playlist.m3u',
             prefixIcon: const Icon(Icons.link),
             textInputAction: TextInputAction.next,
-            onSubmitted: (_) => _focusAndReveal(_epgUrlInputFocusNode),
-            onUpArrow: () => _focusAndReveal(_nameInputFocusNode),
-            onDownArrow: () => _focusAndReveal(_epgUrlInputFocusNode),
+            onSubmitted: (_) => _sections.focusActions.focusAndReveal(
+              _focus.epgUrlInputFocusNode,
+            ),
+            onUpArrow: () => _sections.focusActions.focusAndReveal(
+              _focus.nameInputFocusNode,
+            ),
+            onDownArrow: () => _sections.focusActions.focusAndReveal(
+              _focus.epgUrlInputFocusNode,
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -1823,8 +825,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         FocusTraversalOrder(
           order: const NumericFocusOrder(4),
           child: TvTextField(
-            controller: _epgUrlController,
-            focusNode: _epgUrlInputFocusNode,
+            controller: _input.epgUrlController,
+            focusNode: _focus.epgUrlInputFocusNode,
             labelText: 'EPG URL (XMLTV, optional)',
             hintText: 'https://example.com/guide.xml.gz',
             prefixIcon: const Icon(Icons.calendar_view_day_outlined),
@@ -1832,11 +834,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             onSubmitted: (_) {
               // IME "done" unfocuses the field — park DPAD on the button so
               // focus isn't stranded on the bare scope while the add runs.
-              _addButtonFocusNode.requestFocus();
-              _addPlaylist();
+              _focus.addButtonFocusNode.requestFocus();
+              _sections.urlAdd.addPlaylist();
             },
-            onUpArrow: () => _focusAndReveal(_urlInputFocusNode),
-            onDownArrow: () => _focusAndReveal(_addButtonFocusNode),
+            onUpArrow: () =>
+                _sections.focusActions.focusAndReveal(_focus.urlInputFocusNode),
+            onDownArrow: () => _sections.focusActions.focusAndReveal(
+              _focus.addButtonFocusNode,
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -1848,16 +853,20 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           child: Align(
             alignment: Alignment.centerRight,
             child: IptvSettingsTvButton(
-              focusNode: _addButtonFocusNode,
-              icon: _isAdding ? Icons.hourglass_empty : Icons.add,
-              label: _isAdding ? 'Adding...' : 'Add Playlist',
-              onPressed: _isAdding ? () {} : _addPlaylist,
-              onUpArrow: () => _focusAndReveal(_epgUrlInputFocusNode),
+              focusNode: _focus.addButtonFocusNode,
+              icon: _input.isAdding ? Icons.hourglass_empty : Icons.add,
+              label: _input.isAdding ? 'Adding...' : 'Add Playlist',
+              onPressed: _input.isAdding ? () {} : _sections.urlAdd.addPlaylist,
+              onUpArrow: () => _sections.focusActions.focusAndReveal(
+                _focus.epgUrlInputFocusNode,
+              ),
               onDownArrow:
-                  !_twoPaneActive &&
-                      _playlists.isNotEmpty &&
-                      _playlistFocusNodes.isNotEmpty
-                  ? () => _focusAndReveal(_playlistFocusNodes[0])
+                  !l.twoPaneActive &&
+                      _sources.playlists.isNotEmpty &&
+                      _focus.playlistFocusNodes.isNotEmpty
+                  ? () => _sections.focusActions.focusAndReveal(
+                      _focus.playlistFocusNodes[0],
+                    )
                   : null,
             ),
           ),
@@ -1886,16 +895,19 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         FocusTraversalOrder(
           order: const NumericFocusOrder(2),
           child: IptvSettingsTvButton(
-            focusNode: _importFileButtonFocusNode,
+            focusNode: _focus.importFileButtonFocusNode,
             icon: Icons.file_open,
             label: 'Browse Files',
-            onPressed: _importFromFile,
-            onUpArrow: () => _focusAndReveal(_fileTabFocusNode),
+            onPressed: _sections.fileImport.importFromFile,
+            onUpArrow: () =>
+                _sections.focusActions.focusAndReveal(_focus.fileTabFocusNode),
             onDownArrow:
-                !_twoPaneActive &&
-                    _playlists.isNotEmpty &&
-                    _playlistFocusNodes.isNotEmpty
-                ? () => _focusAndReveal(_playlistFocusNodes[0])
+                !l.twoPaneActive &&
+                    _sources.playlists.isNotEmpty &&
+                    _focus.playlistFocusNodes.isNotEmpty
+                ? () => _sections.focusActions.focusAndReveal(
+                    _focus.playlistFocusNodes[0],
+                  )
                 : null,
           ),
         ),
@@ -1910,17 +922,20 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         FocusTraversalOrder(
           order: const NumericFocusOrder(1.9),
           child: TvTextField(
-            controller: _xcNameController,
-            focusNode: _xcNameFocusNode,
+            controller: _input.xcNameController,
+            focusNode: _focus.xcNameFocusNode,
             labelText: 'Playlist Name (optional)',
             hintText: 'e.g., My Provider',
             prefixIcon: const Icon(Icons.label_outline),
             textInputAction: TextInputAction.next,
-            onSubmitted: (_) => _focusAndReveal(_xcServerFocusNode),
+            onSubmitted: (_) =>
+                _sections.focusActions.focusAndReveal(_focus.xcServerFocusNode),
             // UP targets the SELECTED tab (geometric search from a full-width
             // field center-lands on the middle tab).
-            onUpArrow: () => _focusAndReveal(_xcTabFocusNode),
-            onDownArrow: () => _focusAndReveal(_xcServerFocusNode),
+            onUpArrow: () =>
+                _sections.focusActions.focusAndReveal(_focus.xcTabFocusNode),
+            onDownArrow: () =>
+                _sections.focusActions.focusAndReveal(_focus.xcServerFocusNode),
           ),
         ),
         const SizedBox(height: 12),
@@ -1929,15 +944,20 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         FocusTraversalOrder(
           order: const NumericFocusOrder(2),
           child: TvTextField(
-            controller: _xcServerController,
-            focusNode: _xcServerFocusNode,
+            controller: _input.xcServerController,
+            focusNode: _focus.xcServerFocusNode,
             labelText: 'Server URL',
             hintText: 'http://example.com:8080',
             prefixIcon: const Icon(Icons.dns),
             textInputAction: TextInputAction.next,
-            onSubmitted: (_) => _focusAndReveal(_xcUsernameFocusNode),
-            onUpArrow: () => _focusAndReveal(_xcNameFocusNode),
-            onDownArrow: () => _focusAndReveal(_xcUsernameFocusNode),
+            onSubmitted: (_) => _sections.focusActions.focusAndReveal(
+              _focus.xcUsernameFocusNode,
+            ),
+            onUpArrow: () =>
+                _sections.focusActions.focusAndReveal(_focus.xcNameFocusNode),
+            onDownArrow: () => _sections.focusActions.focusAndReveal(
+              _focus.xcUsernameFocusNode,
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -1946,15 +966,20 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         FocusTraversalOrder(
           order: const NumericFocusOrder(3),
           child: TvTextField(
-            controller: _xcUsernameController,
-            focusNode: _xcUsernameFocusNode,
+            controller: _input.xcUsernameController,
+            focusNode: _focus.xcUsernameFocusNode,
             labelText: 'Username',
             hintText: 'your username',
             prefixIcon: const Icon(Icons.person),
             textInputAction: TextInputAction.next,
-            onSubmitted: (_) => _focusAndReveal(_xcPasswordFocusNode),
-            onUpArrow: () => _focusAndReveal(_xcServerFocusNode),
-            onDownArrow: () => _focusAndReveal(_xcPasswordFocusNode),
+            onSubmitted: (_) => _sections.focusActions.focusAndReveal(
+              _focus.xcPasswordFocusNode,
+            ),
+            onUpArrow: () =>
+                _sections.focusActions.focusAndReveal(_focus.xcServerFocusNode),
+            onDownArrow: () => _sections.focusActions.focusAndReveal(
+              _focus.xcPasswordFocusNode,
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -1963,8 +988,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         FocusTraversalOrder(
           order: const NumericFocusOrder(3.5),
           child: TvTextField(
-            controller: _xcPasswordController,
-            focusNode: _xcPasswordFocusNode,
+            controller: _input.xcPasswordController,
+            focusNode: _focus.xcPasswordFocusNode,
             labelText: 'Password',
             hintText: 'your password',
             prefixIcon: const Icon(Icons.lock),
@@ -1972,11 +997,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             onSubmitted: (_) {
               // IME "done" unfocuses the field — park DPAD on the button so
               // focus isn't stranded on the bare scope while the login runs.
-              _xcLoginButtonFocusNode.requestFocus();
-              _addXtreamCodes();
+              _focus.xcLoginButtonFocusNode.requestFocus();
+              _sections.xtreamAdd.addXtreamCodes();
             },
-            onUpArrow: () => _focusAndReveal(_xcUsernameFocusNode),
-            onDownArrow: () => _focusAndReveal(_xcLoginButtonFocusNode),
+            onUpArrow: () => _sections.focusActions.focusAndReveal(
+              _focus.xcUsernameFocusNode,
+            ),
+            onDownArrow: () => _sections.focusActions.focusAndReveal(
+              _focus.xcLoginButtonFocusNode,
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -1987,16 +1016,22 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           child: Align(
             alignment: Alignment.centerRight,
             child: IptvSettingsTvButton(
-              focusNode: _xcLoginButtonFocusNode,
-              icon: _isXcAdding ? Icons.hourglass_empty : Icons.login,
-              label: _isXcAdding ? 'Logging in...' : 'Login & Add',
-              onPressed: _isXcAdding ? () {} : _addXtreamCodes,
-              onUpArrow: () => _focusAndReveal(_xcPasswordFocusNode),
+              focusNode: _focus.xcLoginButtonFocusNode,
+              icon: _input.isXcAdding ? Icons.hourglass_empty : Icons.login,
+              label: _input.isXcAdding ? 'Logging in...' : 'Login & Add',
+              onPressed: _input.isXcAdding
+                  ? () {}
+                  : _sections.xtreamAdd.addXtreamCodes,
+              onUpArrow: () => _sections.focusActions.focusAndReveal(
+                _focus.xcPasswordFocusNode,
+              ),
               onDownArrow:
-                  !_twoPaneActive &&
-                      _playlists.isNotEmpty &&
-                      _playlistFocusNodes.isNotEmpty
-                  ? () => _focusAndReveal(_playlistFocusNodes[0])
+                  !l.twoPaneActive &&
+                      _sources.playlists.isNotEmpty &&
+                      _focus.playlistFocusNodes.isNotEmpty
+                  ? () => _sections.focusActions.focusAndReveal(
+                      _focus.playlistFocusNodes[0],
+                    )
                   : null,
             ),
           ),
@@ -2007,7 +1042,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
+    if (_sources.loading) {
       return SettingsPageScaffold(
         title: 'IPTV Playlists',
         body: const Center(child: CircularProgressIndicator()),
@@ -2019,13 +1054,13 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       // back and the AppBar back go through maybePop, so one gesture
       // contract covers both. The wide layout always sits on `hub` (the
       // LayoutBuilder below forces it), so it pops normally.
-      canPop: _phoneSection == IptvSettingsPhoneSection.hub,
+      canPop: l.phoneSection == IptvSettingsPhoneSection.hub,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop || !mounted) return;
         _enterPhoneSection(IptvSettingsPhoneSection.hub);
       },
       child: SettingsPageScaffold(
-        title: switch (_phoneSection) {
+        title: switch (l.phoneSection) {
           IptvSettingsPhoneSection.hub => 'IPTV Playlists',
           IptvSettingsPhoneSection.sources => 'Sources',
           IptvSettingsPhoneSection.lists => 'Channel Lists',
@@ -2037,28 +1072,31 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           IptvSettingsPhoneSection.recording => 'Recording',
         },
         leading: IptvSettingsBackButton(
-          focusNode: _backButtonFocusNode,
+          focusNode: _focus.backButtonFocusNode,
           // Two-pane hands DOWN to the rail; the single column lands on the
           // currently-selected tab, not always the first one — but only the
           // Sources sub-view mounts the tabs at all; everywhere else default
           // traversal owns DOWN.
           onDownArrow: () {
-            if (_twoPaneActive) {
+            if (l.twoPaneActive) {
               _twoPaneKey.currentState?.focusRail();
               return;
             }
-            if (_phoneSection != IptvSettingsPhoneSection.sources) {
+            if (l.phoneSection != IptvSettingsPhoneSection.sources) {
               // The back button swallows DOWN whenever a handler exists, so
               // hand focus somewhere real: whichever view is up, its first
               // focusable row (on the hub that's the Sources row).
-              _phoneViewMarker.traversalDescendants.firstOrNull?.requestFocus();
+              _focus.phoneViewMarker.traversalDescendants.firstOrNull
+                  ?.requestFocus();
               return;
             }
-            _focusAndReveal(switch (_tabController.index) {
-              1 => _fileTabFocusNode,
-              2 => _xcTabFocusNode,
-              _ => _urlTabFocusNode,
-            });
+            _sections.focusActions.focusAndReveal(
+              switch (_input.tabController.index) {
+                1 => _focus.fileTabFocusNode,
+                2 => _focus.xcTabFocusNode,
+                _ => _focus.urlTabFocusNode,
+              },
+            );
           },
         ),
         // TV and desktop get the rail + detail layout; phones and narrow
@@ -2075,15 +1113,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             // setState. Safe because no rebuild is needed: the only other
             // readers are key handlers, which run on user input, never during
             // layout.
-            _twoPaneActive = twoPane;
+            l.twoPaneActive = twoPane;
             // The wide layout renders no sub-views, so a resize mid-sub-view
             // must land back on the hub. Unlike _twoPaneActive this one IS
             // read by widgets built before this LayoutBuilder runs (the
             // PopScope's canPop and the scaffold title), so a bare field
             // assignment would leave them stale indefinitely — schedule a
             // rebuild for them.
-            if (twoPane && _phoneSection != IptvSettingsPhoneSection.hub) {
-              _phoneSection = IptvSettingsPhoneSection.hub;
+            if (twoPane && l.phoneSection != IptvSettingsPhoneSection.hub) {
+              l.phoneSection = IptvSettingsPhoneSection.hub;
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) setState(() {});
               });
@@ -2099,75 +1137,77 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     return IptvSettingsTwoPane(
       key: _twoPaneKey,
       openAddSource: widget.openAddSource,
-      playlists: _playlists,
-      defaultPlaylistId: _defaultPlaylistId,
-      refreshingIds: _refreshingIds,
-      autoRefreshHours: _autoRefreshHours,
+      playlists: _sources.playlists,
+      defaultPlaylistId: _sources.defaultPlaylistId,
+      refreshingIds: _sources.refreshingIds,
+      autoRefreshHours: _preferences.autoRefreshHours,
       onPickAutoRefresh: _pickAutoRefresh,
       customLists: _customLists,
-      startupEnabled: _startupEnabled,
-      startupMode: _startupMode,
+      startupEnabled: _preferences.startupEnabled,
+      startupMode: _preferences.startupMode,
       startupChannelLabel: _startupChannelLabel,
       lastLiveChannelLabel: _lastLiveChannelLabel,
-      hasStartupChannel: _startupChannel != null,
-      hasLastLiveChannel: _lastLiveChannel != null,
-      addMethod: _tabController.index,
+      hasStartupChannel: _preferences.startupChannel != null,
+      hasLastLiveChannel: _preferences.lastLiveChannel != null,
+      addMethod: _input.tabController.index,
       // Kept on the shared TabController so the two layouts agree about which
       // method is chosen across a resize.
       onAddMethodChanged: (i) {
-        if (_tabController.index == i) return;
-        setState(() => _tabController.index = i);
+        if (_input.tabController.index == i) return;
+        setState(() => _input.tabController.index = i);
       },
       urlFormBuilder: (_) => _buildUrlTabContent(),
       fileFormBuilder: (_) => _buildFileTabContent(),
       xtreamFormBuilder: (_) => _buildXcTabContent(),
       // The forms' own up-arrow targets are these nodes, so reusing them for
       // the method chooser keeps every hand-off inside them valid here.
-      urlMethodFocusNode: _urlTabFocusNode,
-      fileMethodFocusNode: _fileTabFocusNode,
-      xtreamMethodFocusNode: _xcTabFocusNode,
-      onSetDefault: (p) =>
-          _setDefaultPlaylist(_defaultPlaylistId == p.id ? null : p),
-      onRefresh: _refreshPlaylist,
-      onEdit: _editPlaylist,
-      onDelete: _removePlaylist,
+      urlMethodFocusNode: _focus.urlTabFocusNode,
+      fileMethodFocusNode: _focus.fileTabFocusNode,
+      xtreamMethodFocusNode: _focus.xcTabFocusNode,
+      onSetDefault: (p) => _sections.sourceRefresh.setDefaultPlaylist(
+        _sources.defaultPlaylistId == p.id ? null : p,
+      ),
+      onRefresh: _sections.sourceRefresh.refreshPlaylist,
+      onEdit: _sections.sourceEdit.editPlaylist,
+      onDelete: _sections.sourceRemoval.removePlaylist,
       onCreateList: _createList,
       onManageChannelOrder: () => unawaited(_openChannelOrder()),
       onManageCategoryOrder: (playlist) =>
           unawaited(_openCategoryOrder(playlist)),
       onManageHidden: (playlist) => unawaited(_openHiddenCategories(playlist)),
-      hiddenCounts: _hiddenCounts,
-      onFocusFirstFormField: () =>
-          _focusAndReveal(switch (_tabController.index) {
-            1 => _importFileButtonFocusNode,
-            2 => _xcNameFocusNode,
-            _ => _nameInputFocusNode,
-          }),
+      hiddenCounts: _sources.hiddenCounts,
+      onFocusFirstFormField: () => _sections.focusActions.focusAndReveal(
+        switch (_input.tabController.index) {
+          1 => _focus.importFileButtonFocusNode,
+          2 => _focus.xcNameFocusNode,
+          _ => _focus.nameInputFocusNode,
+        },
+      ),
       onListActions: _showListActions,
       onToggleStartup: _setStartupEnabled,
       onStartupModeChanged: _setStartupMode,
       onPickStartupChannel: _pickStartupChannel,
-      channelPreviewEnabled: _channelPreviewEnabled,
+      channelPreviewEnabled: _preferences.channelPreviewEnabled,
       onToggleChannelPreview: _setChannelPreviewEnabled,
-      trackContinueWatching: _trackContinueWatching,
+      trackContinueWatching: _preferences.trackContinueWatching,
       onToggleTrackContinueWatching: _setTrackContinueWatching,
       showAppearanceSection: _appearanceVisible,
-      iptvStyle: _iptvStyle,
+      iptvStyle: _preferences.iptvStyle,
       onIptvStyleChanged: (v) => unawaited(_setIptvStyle(v)),
-      playerGuideStyle: _playerGuideStyle,
+      playerGuideStyle: _preferences.playerGuideStyle,
       onPlayerGuideStyleChanged: (v) => unawaited(_setPlayerGuideStyle(v)),
-      showRecordingSection: _recordingSectionVisible,
-      showEngineToggle: _engineToggleVisible,
-      recordingEngineEnabled: _recordingEngineOn,
-      scheduledCount: _scheduledCount,
+      showRecordingSection: r.recordingSectionVisible,
+      showEngineToggle: r.engineToggleVisible,
+      recordingEngineEnabled: r.recordingEngineOn,
+      scheduledCount: r.scheduledCount,
       onToggleRecordingEngine: (enabled) async {
         await LiveRecordingService.setEngineEnabled(enabled);
-        if (mounted) setState(() => _recordingEngineOn = enabled);
+        if (mounted) setState(() => r.recordingEngineOn = enabled);
       },
       onOpenScheduledRecordings: () => unawaited(_openScheduledRecordings()),
-      maxConcurrentRecordings: _maxConcurrent,
+      maxConcurrentRecordings: r.maxConcurrent,
       onPickMaxConcurrent: () => unawaited(_pickMaxConcurrent()),
-      batteryExempt: _batteryExempt,
+      batteryExempt: r.batteryExempt,
       onRequestBatteryExemption: () => unawaited(_requestBatteryExemption()),
     );
   }
@@ -2176,10 +1216,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     return FocusTraversalGroup(
       policy: OrderedTraversalPolicy(),
       child: Focus(
-        focusNode: _phoneViewMarker,
+        focusNode: _focus.phoneViewMarker,
         canRequestFocus: false,
         skipTraversal: true,
-        child: switch (_phoneSection) {
+        child: switch (l.phoneSection) {
           IptvSettingsPhoneSection.hub => _buildPhoneHub(),
           IptvSettingsPhoneSection.sources => _buildSourcesView(),
           IptvSettingsPhoneSection.lists => _buildListsView(),
@@ -2202,7 +1242,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // Sum only sources that still exist — a deleted source's cached count
     // must not haunt the subtitle.
     final hideableIds = {for (final p in _hideableSources) p.id};
-    final hiddenTotal = _hiddenCounts.entries
+    final hiddenTotal = _sources.hiddenCounts.entries
         .where((e) => hideableIds.contains(e.key))
         .fold(0, (a, e) => a + e.value);
     return ListView(
@@ -2220,13 +1260,13 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           title: '',
           children: [
             SettingsTile(
-              focusNode: _hubSourcesFocusNode,
+              focusNode: _focus.hubSourcesFocusNode,
               icon: Icons.playlist_play_rounded,
               title: 'Sources',
-              subtitle: _playlists.isEmpty
+              subtitle: _sources.playlists.isEmpty
                   ? 'None yet — add your first playlist'
-                  : '${_playlists.length} '
-                        '${_playlists.length == 1 ? 'source' : 'sources'}',
+                  : '${_sources.playlists.length} '
+                        '${_sources.playlists.length == 1 ? 'source' : 'sources'}',
               onTap: () async =>
                   _enterPhoneSection(IptvSettingsPhoneSection.sources),
             ),
@@ -2234,7 +1274,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               icon: Icons.update_rounded,
               title: 'Auto-refresh',
               subtitle:
-                  '${iptvAutoRefreshLabel(_autoRefreshHours)} · All sources in this profile',
+                  '${iptvAutoRefreshLabel(_preferences.autoRefreshHours)} · All sources in this profile',
               onTap: _pickAutoRefresh,
             ),
             SettingsTile(
@@ -2276,9 +1316,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             SettingsTile(
               icon: Icons.rocket_launch_rounded,
               title: 'Startup',
-              subtitle: !_startupEnabled
+              subtitle: !_preferences.startupEnabled
                   ? 'Off'
-                  : _startupMode == StartupIptvStorage.startupIptvModeLast
+                  : _preferences.startupMode ==
+                        StartupIptvStorage.startupIptvModeLast
                   ? 'Last watched channel'
                   : _startupChannelLabel,
               onTap: () async =>
@@ -2287,7 +1328,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             SettingsTile(
               icon: Icons.ondemand_video_rounded,
               title: 'Channel preview',
-              subtitle: _channelPreviewEnabled
+              subtitle: _preferences.channelPreviewEnabled
                   ? 'On · uses a provider stream while browsing'
                   : 'Off · no stream until you press Watch',
               onTap: () async =>
@@ -2296,7 +1337,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             SettingsTile(
               icon: Icons.history_toggle_off_rounded,
               title: 'Continue watching',
-              subtitle: _trackContinueWatching
+              subtitle: _preferences.trackContinueWatching
                   ? 'Tracking movies and series'
                   : 'Off',
               onTap: () async =>
@@ -2308,27 +1349,27 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               SettingsTile(
                 icon: Icons.style_rounded,
                 title: 'Appearance',
-                subtitle: iptvStyleLabel(_iptvStyle),
+                subtitle: iptvStyleLabel(_preferences.iptvStyle),
                 onTap: () async => unawaited(_openIptvStylePicker()),
               ),
             SettingsTile(
               icon: Icons.smart_display_rounded,
               title: 'Player guide',
-              subtitle: playerGuideStyleLabel(_playerGuideStyle),
+              subtitle: playerGuideStyleLabel(_preferences.playerGuideStyle),
               onTap: () async => unawaited(_openPlayerGuidePicker()),
             ),
-            if (_recordingSectionVisible)
+            if (r.recordingSectionVisible)
               SettingsTile(
                 icon: Icons.fiber_manual_record_rounded,
                 title: 'Recording',
-                subtitle: !_engineToggleVisible
-                    ? (_scheduledCount == 0
+                subtitle: !r.engineToggleVisible
+                    ? (r.scheduledCount == 0
                           ? 'Recordings'
-                          : '$_scheduledCount scheduled')
-                    : _recordingEngineOn
-                    ? (_scheduledCount == 0
+                          : '${r.scheduledCount} scheduled')
+                    : r.recordingEngineOn
+                    ? (r.scheduledCount == 0
                           ? 'Engine on'
-                          : 'Engine on · $_scheduledCount scheduled')
+                          : 'Engine on · ${r.scheduledCount} scheduled')
                     : 'Player-tied',
                 onTap: () async =>
                     _enterPhoneSection(IptvSettingsPhoneSection.recording),
@@ -2336,7 +1377,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           ],
         ),
         const SizedBox(height: 24),
-        if (_defaultPlaylistId != null)
+        if (_sources.defaultPlaylistId != null)
           const SettingsInfoBanner(
             text:
                 'Your default playlist will load automatically when you select IPTV.',
@@ -2352,14 +1393,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     await pushSettingsPage(context, const IptvStylePage());
     if (!mounted) return;
     final style = await IptvAppearanceStorage.getIptvStyle();
-    if (mounted) setState(() => _iptvStyle = style);
+    if (mounted) setState(() => _preferences.iptvStyle = style);
   }
 
   Future<void> _openPlayerGuidePicker() async {
     await pushSettingsPage(context, const PlayerGuideStylePage());
     if (!mounted) return;
     final style = await IptvAppearanceStorage.getIptvPlayerGuideStyle();
-    if (mounted) setState(() => _playerGuideStyle = style);
+    if (mounted) setState(() => _preferences.playerGuideStyle = style);
   }
 
   Widget _buildSourcesView() {
@@ -2373,17 +1414,17 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
         // Tab bar
         IptvSettingsTvTabBar(
-          tabController: _tabController,
-          urlTabFocusNode: _urlTabFocusNode,
-          fileTabFocusNode: _fileTabFocusNode,
-          xcTabFocusNode: _xcTabFocusNode,
-          onUpArrow: () => _backButtonFocusNode.requestFocus(),
-          onDownArrowFromUrlTab: () =>
-              _focusContentAfterTabSwitch(_nameInputFocusNode),
-          onDownArrowFromFileTab: () =>
-              _focusContentAfterTabSwitch(_importFileButtonFocusNode),
-          onDownArrowFromXcTab: () =>
-              _focusContentAfterTabSwitch(_xcNameFocusNode),
+          tabController: _input.tabController,
+          urlTabFocusNode: _focus.urlTabFocusNode,
+          fileTabFocusNode: _focus.fileTabFocusNode,
+          xcTabFocusNode: _focus.xcTabFocusNode,
+          onUpArrow: () => _focus.backButtonFocusNode.requestFocus(),
+          onDownArrowFromUrlTab: () => _sections.focusActions
+              .focusContentAfterTabSwitch(_focus.nameInputFocusNode),
+          onDownArrowFromFileTab: () => _sections.focusActions
+              .focusContentAfterTabSwitch(_focus.importFileButtonFocusNode),
+          onDownArrowFromXcTab: () => _sections.focusActions
+              .focusContentAfterTabSwitch(_focus.xcNameFocusNode),
         ),
         const SizedBox(height: 16),
 
@@ -2395,22 +1436,22 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         SizedBox(
           height: 410,
           child: TabBarView(
-            controller: _tabController,
+            controller: _input.tabController,
             physics: const NeverScrollableScrollPhysics(),
             children: [
               // Off-screen tab pages stay built by TabBarView, so exclude
               // them from focus or DPAD traversal can land on invisible
               // fields/buttons (a dead zone on TV).
               ExcludeFocus(
-                excluding: _tabController.index != 0,
+                excluding: _input.tabController.index != 0,
                 child: _buildUrlTabContent(),
               ),
               ExcludeFocus(
-                excluding: _tabController.index != 1,
+                excluding: _input.tabController.index != 1,
                 child: _buildFileTabContent(),
               ),
               ExcludeFocus(
-                excluding: _tabController.index != 2,
+                excluding: _input.tabController.index != 2,
                 child: _buildXcTabContent(),
               ),
             ],
@@ -2426,7 +1467,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         ),
         const SizedBox(height: 16),
 
-        if (_playlists.isEmpty)
+        if (_sources.playlists.isEmpty)
           Card(
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -2450,7 +1491,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         else
           Card(child: Column(children: _buildPlaylistsList())),
         const SizedBox(height: 24),
-        if (_defaultPlaylistId != null)
+        if (_sources.defaultPlaylistId != null)
           const SettingsInfoBanner(
             text:
                 'Your default playlist will load automatically when you select IPTV.',
@@ -2476,7 +1517,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             children: [
               ..._buildListsSection(),
               IptvSettingsFocusableTile(
-                focusNode: _createListFocusNode,
+                focusNode: _focus.createListFocusNode,
                 icon: Icons.add_rounded,
                 label: 'Create list',
                 onTap: _createList,
@@ -2567,15 +1608,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   'Open straight into a live channel when the app starts. '
                   'Press BACK while it is tuning to stop.',
                 ),
-                value: _startupEnabled,
+                value: _preferences.startupEnabled,
                 onChanged: _setStartupEnabled,
               ),
-              if (_startupEnabled) ...[
+              if (_preferences.startupEnabled) ...[
                 const Divider(height: 1),
                 RadioListTile<String>(
                   title: const Text('Last watched channel'),
                   subtitle: Text(
-                    _lastLiveChannel == null
+                    _preferences.lastLiveChannel == null
                         // Honest about the bootstrap: the first boot after
                         // enabling this has nothing to resume, and silently
                         // doing nothing reads as broken.
@@ -2584,21 +1625,22 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                         : 'Currently: $_lastLiveChannelLabel',
                   ),
                   value: StartupIptvStorage.startupIptvModeLast,
-                  groupValue: _startupMode,
+                  groupValue: _preferences.startupMode,
                   onChanged: _setStartupMode,
                 ),
                 RadioListTile<String>(
                   title: const Text('A specific channel'),
                   subtitle: Text(_startupChannelLabel),
                   value: StartupIptvStorage.startupIptvModePinned,
-                  groupValue: _startupMode,
+                  groupValue: _preferences.startupMode,
                   onChanged: _setStartupMode,
                 ),
-                if (_startupMode == StartupIptvStorage.startupIptvModePinned)
+                if (_preferences.startupMode ==
+                    StartupIptvStorage.startupIptvModePinned)
                   IptvSettingsFocusableTile(
-                    focusNode: _startupChannelFocusNode,
+                    focusNode: _focus.startupChannelFocusNode,
                     icon: Icons.live_tv_rounded,
-                    label: _startupChannel == null
+                    label: _preferences.startupChannel == null
                         ? 'Choose channel'
                         : 'Change channel',
                     onTap: _pickStartupChannel,
@@ -2626,7 +1668,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               'it — nothing is deleted, and playback still resumes where '
               'you left off.',
             ),
-            value: _trackContinueWatching,
+            value: _preferences.trackContinueWatching,
             onChanged: _setTrackContinueWatching,
           ),
         ),
@@ -2648,7 +1690,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               'This opens a provider stream and may count toward your '
               'connection limit. Fullscreen playback still works when off.',
             ),
-            value: _channelPreviewEnabled,
+            value: _preferences.channelPreviewEnabled,
             onChanged: _setChannelPreviewEnabled,
           ),
         ),
@@ -2671,7 +1713,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         Card(
           child: Column(
             children: [
-              if (_engineToggleVisible)
+              if (r.engineToggleVisible)
                 SwitchListTile(
                   title: const Text('Background recording engine'),
                   subtitle: const Text(
@@ -2680,28 +1722,28 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                     'guide. Off returns to player-tied recording. Uses an '
                     'extra connection to your provider.',
                   ),
-                  value: _recordingEngineOn,
+                  value: r.recordingEngineOn,
                   onChanged: (enabled) async {
                     await LiveRecordingService.setEngineEnabled(enabled);
                     if (mounted) {
-                      setState(() => _recordingEngineOn = enabled);
+                      setState(() => r.recordingEngineOn = enabled);
                     }
                   },
                 ),
-              if (!_engineToggleVisible || _recordingEngineOn) ...[
-                if (_engineToggleVisible) const Divider(height: 1),
+              if (!r.engineToggleVisible || r.recordingEngineOn) ...[
+                if (r.engineToggleVisible) const Divider(height: 1),
                 IptvSettingsFocusableTile(
-                  focusNode: _maxConcurrentFocusNode,
+                  focusNode: _focus.maxConcurrentFocusNode,
                   icon: Icons.filter_none_rounded,
-                  label: 'Simultaneous recordings ($_maxConcurrent)',
+                  label: 'Simultaneous recordings (${r.maxConcurrent})',
                   onTap: _pickMaxConcurrent,
                 ),
-                if (_batteryExempt != null) ...[
+                if (r.batteryExempt != null) ...[
                   const Divider(height: 1),
                   IptvSettingsFocusableTile(
-                    focusNode: _batteryFocusNode,
+                    focusNode: _focus.batteryFocusNode,
                     icon: Icons.battery_alert_rounded,
-                    label: _batteryExempt == true
+                    label: r.batteryExempt == true
                         ? 'Battery optimization — excluded ✓'
                         : 'Battery optimization — tap to exclude',
                     onTap: _requestBatteryExemption,
@@ -2709,11 +1751,11 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                 ],
                 const Divider(height: 1),
                 IptvSettingsFocusableTile(
-                  focusNode: _scheduledRecordingsFocusNode,
+                  focusNode: _focus.scheduledRecordingsFocusNode,
                   icon: Icons.fiber_manual_record_rounded,
-                  label: _scheduledCount == 0
+                  label: r.scheduledCount == 0
                       ? 'Recordings'
-                      : 'Recordings ($_scheduledCount scheduled)',
+                      : 'Recordings (${r.scheduledCount} scheduled)',
                   onTap: _openScheduledRecordings,
                 ),
               ],
@@ -2724,30 +1766,25 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     );
   }
 
-  /// The exemption dialog is a separate activity: the request call returns
-  /// the moment it LAUNCHES, so reading state right after it sees the old
-  /// value. The truth arrives when this app resumes.
-  bool _recheckBatteryOnResume = false;
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed || !_recheckBatteryOnResume) return;
-    _recheckBatteryOnResume = false;
+    if (state != AppLifecycleState.resumed || !r.recheckBatteryOnResume) return;
+    r.recheckBatteryOnResume = false;
     unawaited(
       LiveRecordingService.isIgnoringBatteryOptimizations().then((exempt) {
-        if (mounted) setState(() => _batteryExempt = exempt);
+        if (mounted) setState(() => r.batteryExempt = exempt);
       }),
     );
   }
 
   Future<void> _requestBatteryExemption() async {
-    _recheckBatteryOnResume = true;
+    r.recheckBatteryOnResume = true;
     await LiveRecordingService.requestIgnoreBatteryOptimizations();
   }
 
   Future<void> _pickMaxConcurrent() async {
     final picked = await showRecordingLimitPicker(context);
-    if (picked != null && mounted) setState(() => _maxConcurrent = picked);
+    if (picked != null && mounted) setState(() => r.maxConcurrent = picked);
   }
 
   Future<void> _openScheduledRecordings() async {
@@ -2758,326 +1795,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final count = DesktopScheduleService.instance.isSupported
         ? (await DesktopScheduleService.instance.list()).length
         : (await LiveRecordingService.listSchedules()).length;
-    if (mounted) setState(() => _scheduledCount = count);
-  }
-}
-
-/// Edit an existing playlist: rename, change the EPG URL, and — by type — the
-/// source URL (M3U URL playlists) or server/username/password (Xtream logins).
-///
-/// TV DPAD: each field is a shell with no explicit arrow wiring, so vertical
-/// moves fall through to the framework's directional traversal (the same way
-/// the single-field dialogs walk field↔buttons). The name field seeds focus so
-/// DOWN steps through the fields to the actions; OK on a field starts editing.
-class _EditPlaylistDialog extends StatefulWidget {
-  const _EditPlaylistDialog({
-    required this.playlist,
-    required this.existingNames,
-    required this.existingUrls,
-  });
-
-  final IptvPlaylist playlist;
-  final Set<String> existingNames;
-  final Set<String> existingUrls;
-
-  @override
-  State<_EditPlaylistDialog> createState() => _EditPlaylistDialogState();
-}
-
-class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _urlController;
-  late final TextEditingController _serverController;
-  late final TextEditingController _usernameController;
-  late final TextEditingController _passwordController;
-  late final TextEditingController _epgController;
-
-  // One shell node per field so DPAD can be wired field-to-field explicitly —
-  // this screen wires arrows rather than trusting directional traversal.
-  final FocusNode _nameFocusNode = FocusNode(debugLabel: 'iptv-edit-name');
-  final FocusNode _urlFocusNode = FocusNode(debugLabel: 'iptv-edit-url');
-  final FocusNode _serverFocusNode = FocusNode(debugLabel: 'iptv-edit-server');
-  final FocusNode _usernameFocusNode = FocusNode(
-    debugLabel: 'iptv-edit-username',
-  );
-  final FocusNode _passwordFocusNode = FocusNode(
-    debugLabel: 'iptv-edit-password',
-  );
-  final FocusNode _epgFocusNode = FocusNode(debugLabel: 'iptv-edit-epg');
-
-  bool get _isXtream => widget.playlist.isXtreamCodes;
-  bool get _isUrl =>
-      !widget.playlist.isXtreamCodes && !widget.playlist.isLocalFile;
-
-  @override
-  void initState() {
-    super.initState();
-    final p = widget.playlist;
-    _nameController = TextEditingController(text: p.name);
-    _urlController = TextEditingController(text: p.url);
-    _serverController = TextEditingController(text: p.serverUrl ?? '');
-    _usernameController = TextEditingController(text: p.username ?? '');
-    _passwordController = TextEditingController(text: p.password ?? '');
-    _epgController = TextEditingController(text: p.epgUrl ?? '');
-    for (final c in [
-      _nameController,
-      _urlController,
-      _serverController,
-      _usernameController,
-      _passwordController,
-    ]) {
-      c.addListener(_revalidate);
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _urlController.dispose();
-    _serverController.dispose();
-    _usernameController.dispose();
-    _passwordController.dispose();
-    _epgController.dispose();
-    _nameFocusNode.dispose();
-    _urlFocusNode.dispose();
-    _serverFocusNode.dispose();
-    _usernameFocusNode.dispose();
-    _passwordFocusNode.dispose();
-    _epgFocusNode.dispose();
-    super.dispose();
-  }
-
-  void _revalidate() => setState(() {});
-
-  /// The blocking error for the current values, or null when saveable. Drives
-  /// both the Save button's enabled state and the inline field errors.
-  String? get _nameError {
-    final name = _nameController.text.trim();
-    if (name.isEmpty) return 'Please enter a name';
-    // Keeping this playlist's own name is always fine, even if another
-    // playlist already happens to share it (the add paths don't enforce
-    // unique names) — only block CHANGING to a name that collides.
-    if (name != widget.playlist.name.trim() &&
-        widget.existingNames.contains(name)) {
-      return 'A playlist with this name already exists';
-    }
-    return null;
-  }
-
-  String? get _urlError {
-    if (!_isUrl) return null;
-    final url = _urlController.text.trim();
-    if (url.isEmpty) return 'Please enter a playlist URL';
-    if (!IptvService.isValidPlaylistUrl(url)) {
-      return 'Please enter a valid HTTP/HTTPS URL';
-    }
-    if (url != widget.playlist.url.trim() &&
-        widget.existingUrls.contains(url)) {
-      return 'This playlist URL already exists';
-    }
-    return null;
-  }
-
-  String? get _serverError {
-    if (!_isXtream) return null;
-    return _serverController.text.trim().isEmpty
-        ? 'Please enter a server URL'
-        : null;
-  }
-
-  String? get _usernameError {
-    if (!_isXtream) return null;
-    return _usernameController.text.trim().isEmpty
-        ? 'Please enter a username'
-        : null;
-  }
-
-  String? get _passwordError {
-    if (!_isXtream) return null;
-    return _passwordController.text.trim().isEmpty
-        ? 'Please enter a password'
-        : null;
-  }
-
-  bool get _canSave =>
-      _nameError == null &&
-      _urlError == null &&
-      _serverError == null &&
-      _usernameError == null &&
-      _passwordError == null;
-
-  void _submit() {
-    if (!_canSave) {
-      // IME "done" unfocused the field; park DPAD back on the name field so TV
-      // users aren't stranded on the dialog scope with errors showing.
-      _nameFocusNode.requestFocus();
-      return;
-    }
-    Navigator.of(context).pop(
-      IptvSettingsPlaylistEdit(
-        name: _nameController.text.trim(),
-        url: _urlController.text.trim(),
-        serverUrl: _isXtream ? _serverController.text.trim() : null,
-        username: _isXtream ? _usernameController.text.trim() : null,
-        password: _isXtream ? _passwordController.text.trim() : null,
-        epgUrl: _epgController.text.trim(),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    // The field shells in the order they're shown, so each field's UP/DOWN can
-    // point at its real neighbour regardless of type. First-field UP and
-    // last-field DOWN stay null: those hops (field↔action-buttons) go through
-    // the framework's directional traversal, exactly like the single-field
-    // dialogs on this screen already do.
-    final sequence = <FocusNode>[
-      _nameFocusNode,
-      if (_isUrl) _urlFocusNode,
-      if (_isXtream) ...[
-        _serverFocusNode,
-        _usernameFocusNode,
-        _passwordFocusNode,
-      ],
-      _epgFocusNode,
-    ];
-    VoidCallback? up(FocusNode n) {
-      final i = sequence.indexOf(n);
-      return i > 0 ? () => sequence[i - 1].requestFocus() : null;
-    }
-
-    VoidCallback? down(FocusNode n) {
-      final i = sequence.indexOf(n);
-      return i >= 0 && i < sequence.length - 1
-          ? () => sequence[i + 1].requestFocus()
-          : null;
-    }
-
-    final fields = <Widget>[
-      TvTextField(
-        controller: _nameController,
-        focusNode: _nameFocusNode,
-        labelText: 'Playlist Name',
-        hintText: 'Enter a name for this playlist',
-        errorText: _nameError,
-        prefixIcon: const Icon(Icons.label_outline),
-        // Off-TV only: on TV the action buttons seed DPAD focus (see the
-        // Save/Cancel autofocus below), matching the import-name dialog — a
-        // field autofocus in TV passthrough mode pops the broken system IME.
-        autofocus: !PlatformUtil.isTelevision,
-        textInputAction: TextInputAction.next,
-        onUpArrow: up(_nameFocusNode),
-        onDownArrow: down(_nameFocusNode),
-      ),
-      if (_isUrl) ...[
-        const SizedBox(height: 12),
-        TvTextField(
-          controller: _urlController,
-          focusNode: _urlFocusNode,
-          labelText: 'Playlist URL',
-          hintText: 'https://example.com/playlist.m3u',
-          errorText: _urlError,
-          prefixIcon: const Icon(Icons.link),
-          textInputAction: TextInputAction.next,
-          onUpArrow: up(_urlFocusNode),
-          onDownArrow: down(_urlFocusNode),
-        ),
-      ],
-      if (_isXtream) ...[
-        const SizedBox(height: 12),
-        TvTextField(
-          controller: _serverController,
-          focusNode: _serverFocusNode,
-          labelText: 'Server URL',
-          hintText: 'http://example.com:8080',
-          errorText: _serverError,
-          prefixIcon: const Icon(Icons.dns),
-          textInputAction: TextInputAction.next,
-          onUpArrow: up(_serverFocusNode),
-          onDownArrow: down(_serverFocusNode),
-        ),
-        const SizedBox(height: 12),
-        TvTextField(
-          controller: _usernameController,
-          focusNode: _usernameFocusNode,
-          labelText: 'Username',
-          hintText: 'your username',
-          errorText: _usernameError,
-          prefixIcon: const Icon(Icons.person),
-          textInputAction: TextInputAction.next,
-          onUpArrow: up(_usernameFocusNode),
-          onDownArrow: down(_usernameFocusNode),
-        ),
-        const SizedBox(height: 12),
-        TvTextField(
-          controller: _passwordController,
-          focusNode: _passwordFocusNode,
-          labelText: 'Password',
-          hintText: 'your password',
-          errorText: _passwordError,
-          prefixIcon: const Icon(Icons.lock),
-          obscureText: true,
-          textInputAction: TextInputAction.next,
-          onUpArrow: up(_passwordFocusNode),
-          onDownArrow: down(_passwordFocusNode),
-        ),
-      ],
-      const SizedBox(height: 12),
-      TvTextField(
-        controller: _epgController,
-        focusNode: _epgFocusNode,
-        labelText: 'EPG URL (XMLTV, optional)',
-        hintText: 'https://example.com/guide.xml.gz',
-        prefixIcon: const Icon(Icons.calendar_view_day_outlined),
-        textInputAction: TextInputAction.done,
-        onSubmitted: (_) => _submit(),
-        onUpArrow: up(_epgFocusNode),
-        onDownArrow: down(_epgFocusNode),
-      ),
-    ];
-
-    return AlertDialog(
-      title: const Text('Edit Playlist'),
-      // No fixed width — let AlertDialog size to the screen (a hard width
-      // overflows narrow phone dialogs). Scrollable so the taller Xtream form
-      // (four fields + EPG) never overflows vertically on short screens.
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_isXtream)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  'Changing the server or credentials won\'t be re-checked '
-                  'here — use Refresh afterwards to verify the login.',
-                  style: TextStyle(fontSize: 12, color: t.dim),
-                ),
-              ),
-            ...fields,
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          style: iptvSettingsDialogButtonFocusStyle,
-          // TV: seed DPAD focus on Cancel only when Save opens disabled, so
-          // focus is never stranded on the dialog scope.
-          autofocus: PlatformUtil.isTelevision && !_canSave,
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          style: iptvSettingsDialogButtonFocusStyle,
-          autofocus: PlatformUtil.isTelevision && _canSave,
-          onPressed: _canSave ? _submit : null,
-          child: const Text('Save'),
-        ),
-      ],
-    );
+    if (mounted) setState(() => r.scheduledCount = count);
   }
 }
 
@@ -3185,66 +1903,66 @@ Map<String, dynamic> iptvSettingsTestAccess(State state) {
   final s = state as _IptvSettingsPageState;
   return {
     'twoPaneKey': s._twoPaneKey,
-    'tabController': s._tabController,
-    'nameController': s._nameController,
-    'urlController': s._urlController,
-    'epgUrlController': s._epgUrlController,
-    'xcNameController': s._xcNameController,
-    'xcServerController': s._xcServerController,
-    'xcUsernameController': s._xcUsernameController,
-    'xcPasswordController': s._xcPasswordController,
-    'playlists': s._playlists,
-    'lists': s._lists,
-    'hiddenCounts': s._hiddenCounts,
-    'defaultPlaylistId': s._defaultPlaylistId,
-    'loading': s._loading,
-    'twoPaneActive': s._twoPaneActive,
-    'refreshingIds': s._refreshingIds,
-    'isAdding': s._isAdding,
-    'isXcAdding': s._isXcAdding,
-    'playlistFocusNodes': s._playlistFocusNodes,
-    'listFocusNodes': s._listFocusNodes,
-    'hiddenFocusNodes': s._hiddenFocusNodes,
-    'startupEnabled': s._startupEnabled,
-    'startupMode': s._startupMode,
-    'startupChannel': s._startupChannel,
-    'lastLiveChannel': s._lastLiveChannel,
-    'channelPreviewEnabled': s._channelPreviewEnabled,
-    'trackContinueWatching': s._trackContinueWatching,
-    'iptvStyle': s._iptvStyle,
-    'playerGuideStyle': s._playerGuideStyle,
-    'autoRefreshHours': s._autoRefreshHours,
-    'recordingSectionVisible': s._recordingSectionVisible,
-    'engineToggleVisible': s._engineToggleVisible,
-    'recordingEngineOn': s._recordingEngineOn,
-    'scheduledCount': s._scheduledCount,
-    'maxConcurrent': s._maxConcurrent,
-    'batteryExempt': s._batteryExempt,
-    'recheckBatteryOnResume': s._recheckBatteryOnResume,
-    'hubSourcesFocusNode': s._hubSourcesFocusNode,
-    'phoneViewMarker': s._phoneViewMarker,
-    'backButtonFocusNode': s._backButtonFocusNode,
-    'urlTabFocusNode': s._urlTabFocusNode,
-    'fileTabFocusNode': s._fileTabFocusNode,
-    'xcTabFocusNode': s._xcTabFocusNode,
-    'nameInputFocusNode': s._nameInputFocusNode,
-    'urlInputFocusNode': s._urlInputFocusNode,
-    'epgUrlInputFocusNode': s._epgUrlInputFocusNode,
-    'addButtonFocusNode': s._addButtonFocusNode,
-    'importFileButtonFocusNode': s._importFileButtonFocusNode,
-    'xcNameFocusNode': s._xcNameFocusNode,
-    'xcServerFocusNode': s._xcServerFocusNode,
-    'xcUsernameFocusNode': s._xcUsernameFocusNode,
-    'xcPasswordFocusNode': s._xcPasswordFocusNode,
-    'xcLoginButtonFocusNode': s._xcLoginButtonFocusNode,
-    'createListFocusNode': s._createListFocusNode,
-    'addPlaylist': s._addPlaylist,
-    'importFromFile': s._importFromFile,
-    'addXtreamCodes': s._addXtreamCodes,
-    'removePlaylist': s._removePlaylist,
-    'setDefaultPlaylist': s._setDefaultPlaylist,
-    'refreshPlaylist': s._refreshPlaylist,
-    'editPlaylist': s._editPlaylist,
+    'tabController': s._input.tabController,
+    'nameController': s._input.nameController,
+    'urlController': s._input.urlController,
+    'epgUrlController': s._input.epgUrlController,
+    'xcNameController': s._input.xcNameController,
+    'xcServerController': s._input.xcServerController,
+    'xcUsernameController': s._input.xcUsernameController,
+    'xcPasswordController': s._input.xcPasswordController,
+    'playlists': s._sources.playlists,
+    'lists': s._sources.lists,
+    'hiddenCounts': s._sources.hiddenCounts,
+    'defaultPlaylistId': s._sources.defaultPlaylistId,
+    'loading': s._sources.loading,
+    'twoPaneActive': s.l.twoPaneActive,
+    'refreshingIds': s._sources.refreshingIds,
+    'isAdding': s._input.isAdding,
+    'isXcAdding': s._input.isXcAdding,
+    'playlistFocusNodes': s._focus.playlistFocusNodes,
+    'listFocusNodes': s._focus.listFocusNodes,
+    'hiddenFocusNodes': s._focus.hiddenFocusNodes,
+    'startupEnabled': s._preferences.startupEnabled,
+    'startupMode': s._preferences.startupMode,
+    'startupChannel': s._preferences.startupChannel,
+    'lastLiveChannel': s._preferences.lastLiveChannel,
+    'channelPreviewEnabled': s._preferences.channelPreviewEnabled,
+    'trackContinueWatching': s._preferences.trackContinueWatching,
+    'iptvStyle': s._preferences.iptvStyle,
+    'playerGuideStyle': s._preferences.playerGuideStyle,
+    'autoRefreshHours': s._preferences.autoRefreshHours,
+    'recordingSectionVisible': s.r.recordingSectionVisible,
+    'engineToggleVisible': s.r.engineToggleVisible,
+    'recordingEngineOn': s.r.recordingEngineOn,
+    'scheduledCount': s.r.scheduledCount,
+    'maxConcurrent': s.r.maxConcurrent,
+    'batteryExempt': s.r.batteryExempt,
+    'recheckBatteryOnResume': s.r.recheckBatteryOnResume,
+    'hubSourcesFocusNode': s._focus.hubSourcesFocusNode,
+    'phoneViewMarker': s._focus.phoneViewMarker,
+    'backButtonFocusNode': s._focus.backButtonFocusNode,
+    'urlTabFocusNode': s._focus.urlTabFocusNode,
+    'fileTabFocusNode': s._focus.fileTabFocusNode,
+    'xcTabFocusNode': s._focus.xcTabFocusNode,
+    'nameInputFocusNode': s._focus.nameInputFocusNode,
+    'urlInputFocusNode': s._focus.urlInputFocusNode,
+    'epgUrlInputFocusNode': s._focus.epgUrlInputFocusNode,
+    'addButtonFocusNode': s._focus.addButtonFocusNode,
+    'importFileButtonFocusNode': s._focus.importFileButtonFocusNode,
+    'xcNameFocusNode': s._focus.xcNameFocusNode,
+    'xcServerFocusNode': s._focus.xcServerFocusNode,
+    'xcUsernameFocusNode': s._focus.xcUsernameFocusNode,
+    'xcPasswordFocusNode': s._focus.xcPasswordFocusNode,
+    'xcLoginButtonFocusNode': s._focus.xcLoginButtonFocusNode,
+    'createListFocusNode': s._focus.createListFocusNode,
+    'addPlaylist': s._sections.urlAdd.addPlaylist,
+    'importFromFile': s._sections.fileImport.importFromFile,
+    'addXtreamCodes': s._sections.xtreamAdd.addXtreamCodes,
+    'removePlaylist': s._sections.sourceRemoval.removePlaylist,
+    'setDefaultPlaylist': s._sections.sourceRefresh.setDefaultPlaylist,
+    'refreshPlaylist': s._sections.sourceRefresh.refreshPlaylist,
+    'editPlaylist': s._sections.sourceEdit.editPlaylist,
     'createList': s._createList,
     'renameList': s._renameList,
     'deleteList': s._deleteList,
@@ -3261,16 +1979,17 @@ Map<String, dynamic> iptvSettingsTestAccess(State state) {
     'pickMaxConcurrent': s._pickMaxConcurrent,
     'openScheduledRecordings': s._openScheduledRecordings,
     'requestBatteryExemption': s._requestBatteryExemption,
-    'runProfileAction': s._runProfileAction,
+    'runProfileAction': s._sections.profileActions.runProfileAction,
     'normalizeXtreamServerUrl': normalizeXtreamServerUrl,
-    'loadSettings': s._loadSettings,
+    'loadSettings': s._sections.loadSettings.loadSettings,
     'catalogKeysFor': s._catalogKeysFor,
     'catalogOwnerReferencesFor': s._catalogOwnerReferencesFor,
     'reloadHiddenCounts': s._reloadHiddenCounts,
-    'ensureFocusNodes': s._ensureFocusNodes,
-    'focusContentAfterTabSwitch': s._focusContentAfterTabSwitch,
-    'focusAndReveal': s._focusAndReveal,
-    'phoneSection': s._phoneSection.name,
+    'ensureFocusNodes': s._sections.focusActions.ensureFocusNodes,
+    'focusContentAfterTabSwitch':
+        s._sections.focusActions.focusContentAfterTabSwitch,
+    'focusAndReveal': s._sections.focusActions.focusAndReveal,
+    'phoneSection': s.l.phoneSection.name,
     'customLists': s._customLists,
     'hideableSources': s._hideableSources,
     'categoryOrderSources': s._categoryOrderSources,

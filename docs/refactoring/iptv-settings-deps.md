@@ -183,110 +183,110 @@ Review every entry against actual composition before pinning scaffold tokens. De
 
 | Section | Dependency | Required binding | Review |
 | --- | --- | --- | --- |
-| `IptvSettingsProfileActions` | `mounted` | `State live mounted getter` | Pending step 3 |
-| `IptvSettingsFeedback` | `context` | `State live context getter` | Pending step 3 |
-| `IptvSettingsFeedback` | `mounted` | `State live mounted getter` | Pending step 3 |
-| `IptvSettingsFocusActions` | `_customLists` | `IptvSettingsListsActions.customLists` | Pending step 3 |
-| `IptvSettingsFocusActions` | `_hiddenFocusNodes` | `IptvSettingsFocusOwner.hiddenFocusNodes` | Pending step 3 |
-| `IptvSettingsFocusActions` | `_hideableSources` | `IptvSettingsCatalogActions.hideableSources` | Pending step 3 |
-| `IptvSettingsFocusActions` | `_listFocusNodes` | `IptvSettingsFocusOwner.listFocusNodes` | Pending step 3 |
-| `IptvSettingsFocusActions` | `_playlistFocusNodes` | `IptvSettingsFocusOwner.playlistFocusNodes` | Pending step 3 |
-| `IptvSettingsFocusActions` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Pending step 3 |
-| `IptvSettingsFocusActions` | `context` | `State live context getter` | Pending step 3 |
-| `IptvSettingsFocusActions` | `mounted` | `State live mounted getter` | Pending step 3 |
+| `IptvSettingsProfileActions` | `mounted` | `State live mounted getter` | Reviewed step 3 |
+| `IptvSettingsFeedback` | `context` | `State live context getter` | Reviewed step 3 |
+| `IptvSettingsFeedback` | `mounted` | `State live mounted getter` | Reviewed step 3 |
+| `IptvSettingsFocusActions` | `_customLists` | `IptvSettingsListsActions.customLists` | Reviewed step 3 |
+| `IptvSettingsFocusActions` | `_hiddenFocusNodes` | `IptvSettingsFocusOwner.hiddenFocusNodes` | Reviewed step 3 |
+| `IptvSettingsFocusActions` | `_hideableSources` | `IptvSettingsCatalogActions.hideableSources` | Reviewed step 3 |
+| `IptvSettingsFocusActions` | `_listFocusNodes` | `IptvSettingsFocusOwner.listFocusNodes` | Reviewed step 3 |
+| `IptvSettingsFocusActions` | `_playlistFocusNodes` | `IptvSettingsFocusOwner.playlistFocusNodes` | Reviewed step 3 |
+| `IptvSettingsFocusActions` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Reviewed step 3 |
+| `IptvSettingsFocusActions` | `node.context` | Original FocusNode property; no State context dependency | Reviewed step 3 |
+| `IptvSettingsFocusActions` | `mounted` | `State live mounted getter` | Reviewed step 3 |
 | `IptvSettingsCatalogActions` | `_hiddenCounts` | `IptvSettingsSourcesOwner.hiddenCounts` | Pending step 4 |
 | `IptvSettingsCatalogActions` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Pending step 4 |
 | `IptvSettingsCatalogActions` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Pending step 4 |
 | `IptvSettingsCatalogActions` | `context` | `State live context getter` | Pending step 4 |
 | `IptvSettingsCatalogActions` | `mounted` | `State live mounted getter` | Pending step 4 |
 | `IptvSettingsCatalogActions` | `setState` | `State setState tear-off` | Pending step 4 |
-| `IptvSettingsLoadSettings` | `_autoRefreshHours` | `IptvSettingsPreferencesOwner.autoRefreshHours` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_batteryExempt` | `IptvSettingsRecordingOwner.batteryExempt` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_channelPreviewEnabled` | `IptvSettingsPreferencesOwner.channelPreviewEnabled` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_defaultPlaylistId` | `IptvSettingsSourcesOwner.defaultPlaylistId` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_engineToggleVisible` | `IptvSettingsRecordingOwner.engineToggleVisible` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_hubSourcesFocusNode` | `IptvSettingsFocusOwner.hubSourcesFocusNode` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_iptvStyle` | `IptvSettingsPreferencesOwner.iptvStyle` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_lastLiveChannel` | `IptvSettingsPreferencesOwner.lastLiveChannel` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_lists` | `IptvSettingsSourcesOwner.lists` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_loading` | `IptvSettingsSourcesOwner.loading` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_maxConcurrent` | `IptvSettingsRecordingOwner.maxConcurrent` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_phoneSection` | `IptvSettingsLayoutOwner.phoneSection` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_playerGuideStyle` | `IptvSettingsPreferencesOwner.playerGuideStyle` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_recordingEngineOn` | `IptvSettingsRecordingOwner.recordingEngineOn` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_recordingSectionVisible` | `IptvSettingsRecordingOwner.recordingSectionVisible` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_reloadHiddenCounts` | `IptvSettingsCatalogActions.reloadHiddenCounts` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_scheduledCount` | `IptvSettingsRecordingOwner.scheduledCount` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_startupChannel` | `IptvSettingsPreferencesOwner.startupChannel` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_startupEnabled` | `IptvSettingsPreferencesOwner.startupEnabled` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_startupMode` | `IptvSettingsPreferencesOwner.startupMode` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_trackContinueWatching` | `IptvSettingsPreferencesOwner.trackContinueWatching` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_twoPaneKey` | `_IptvSettingsPageState._twoPaneKey` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `_urlTabFocusNode` | `IptvSettingsFocusOwner.urlTabFocusNode` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `mounted` | `State live mounted getter` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `setState` | `State setState tear-off` | Pending step 3 |
-| `IptvSettingsLoadSettings` | `widget` | `live openAddSource getter only` | Pending step 3 |
-| `IptvSettingsUrlAdd` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Pending step 3 |
-| `IptvSettingsUrlAdd` | `_epgUrlController` | `IptvSettingsInputOwner.epgUrlController` | Pending step 3 |
-| `IptvSettingsUrlAdd` | `_isAdding` | `IptvSettingsInputOwner.isAdding` | Pending step 3 |
-| `IptvSettingsUrlAdd` | `_nameController` | `IptvSettingsInputOwner.nameController` | Pending step 3 |
-| `IptvSettingsUrlAdd` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Pending step 3 |
-| `IptvSettingsUrlAdd` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Pending step 3 |
-| `IptvSettingsUrlAdd` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Pending step 3 |
-| `IptvSettingsUrlAdd` | `_urlController` | `IptvSettingsInputOwner.urlController` | Pending step 3 |
-| `IptvSettingsUrlAdd` | `mounted` | `State live mounted getter` | Pending step 3 |
-| `IptvSettingsUrlAdd` | `setState` | `State setState tear-off` | Pending step 3 |
-| `IptvSettingsFileImport` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Pending step 3 |
-| `IptvSettingsFileImport` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Pending step 3 |
-| `IptvSettingsFileImport` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Pending step 3 |
-| `IptvSettingsFileImport` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Pending step 3 |
-| `IptvSettingsFileImport` | `context` | `State live context getter` | Pending step 3 |
-| `IptvSettingsFileImport` | `mounted` | `State live mounted getter` | Pending step 3 |
-| `IptvSettingsFileImport` | `setState` | `State setState tear-off` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `_isXcAdding` | `IptvSettingsInputOwner.isXcAdding` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `_normalizeXtreamServerUrl` | `.normalizeXtreamServerUrl` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `_xcNameController` | `IptvSettingsInputOwner.xcNameController` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `_xcPasswordController` | `IptvSettingsInputOwner.xcPasswordController` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `_xcServerController` | `IptvSettingsInputOwner.xcServerController` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `_xcUsernameController` | `IptvSettingsInputOwner.xcUsernameController` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `mounted` | `State live mounted getter` | Pending step 3 |
-| `IptvSettingsXtreamAdd` | `setState` | `State setState tear-off` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_catalogKeysFor` | `IptvSettingsCatalogActions.catalogKeysFor` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_catalogOwnerReferencesFor` | `IptvSettingsCatalogActions.catalogOwnerReferencesFor` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_defaultPlaylistId` | `IptvSettingsSourcesOwner.defaultPlaylistId` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_fileTabFocusNode` | `IptvSettingsFocusOwner.fileTabFocusNode` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_focusAndReveal` | `IptvSettingsFocusActions.focusAndReveal` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_playlistFocusNodes` | `IptvSettingsFocusOwner.playlistFocusNodes` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_tabController` | `IptvSettingsInputOwner.tabController` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_urlTabFocusNode` | `IptvSettingsFocusOwner.urlTabFocusNode` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `_xcTabFocusNode` | `IptvSettingsFocusOwner.xcTabFocusNode` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `context` | `State live context getter` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `mounted` | `State live mounted getter` | Pending step 3 |
-| `IptvSettingsSourceRemoval` | `setState` | `State setState tear-off` | Pending step 3 |
-| `IptvSettingsSourceEdit` | `_catalogKeysFor` | `IptvSettingsCatalogActions.catalogKeysFor` | Pending step 3 |
-| `IptvSettingsSourceEdit` | `_catalogOwnerReferencesFor` | `IptvSettingsCatalogActions.catalogOwnerReferencesFor` | Pending step 3 |
-| `IptvSettingsSourceEdit` | `_normalizeXtreamServerUrl` | `.normalizeXtreamServerUrl` | Pending step 3 |
-| `IptvSettingsSourceEdit` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Pending step 3 |
-| `IptvSettingsSourceEdit` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Pending step 3 |
-| `IptvSettingsSourceEdit` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Pending step 3 |
-| `IptvSettingsSourceEdit` | `context` | `State live context getter` | Pending step 3 |
-| `IptvSettingsSourceEdit` | `mounted` | `State live mounted getter` | Pending step 3 |
-| `IptvSettingsSourceEdit` | `setState` | `State setState tear-off` | Pending step 3 |
-| `IptvSettingsSourceRefresh` | `_defaultPlaylistId` | `IptvSettingsSourcesOwner.defaultPlaylistId` | Pending step 3 |
-| `IptvSettingsSourceRefresh` | `_refreshingIds` | `IptvSettingsSourcesOwner.refreshingIds` | Pending step 3 |
-| `IptvSettingsSourceRefresh` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Pending step 3 |
-| `IptvSettingsSourceRefresh` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Pending step 3 |
-| `IptvSettingsSourceRefresh` | `mounted` | `State live mounted getter` | Pending step 3 |
-| `IptvSettingsSourceRefresh` | `setState` | `State setState tear-off` | Pending step 3 |
+| `IptvSettingsLoadSettings` | `_autoRefreshHours` | `IptvSettingsPreferencesOwner.autoRefreshHours` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_batteryExempt` | `IptvSettingsRecordingOwner.batteryExempt` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_channelPreviewEnabled` | `IptvSettingsPreferencesOwner.channelPreviewEnabled` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_defaultPlaylistId` | `IptvSettingsSourcesOwner.defaultPlaylistId` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_engineToggleVisible` | `IptvSettingsRecordingOwner.engineToggleVisible` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_hubSourcesFocusNode` | `IptvSettingsFocusOwner.hubSourcesFocusNode` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_iptvStyle` | `IptvSettingsPreferencesOwner.iptvStyle` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_lastLiveChannel` | `IptvSettingsPreferencesOwner.lastLiveChannel` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_lists` | `IptvSettingsSourcesOwner.lists` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_loading` | `IptvSettingsSourcesOwner.loading` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_maxConcurrent` | `IptvSettingsRecordingOwner.maxConcurrent` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_phoneSection` | `IptvSettingsLayoutOwner.phoneSection` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_playerGuideStyle` | `IptvSettingsPreferencesOwner.playerGuideStyle` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_recordingEngineOn` | `IptvSettingsRecordingOwner.recordingEngineOn` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_recordingSectionVisible` | `IptvSettingsRecordingOwner.recordingSectionVisible` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_reloadHiddenCounts` | `IptvSettingsCatalogActions.reloadHiddenCounts` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_scheduledCount` | `IptvSettingsRecordingOwner.scheduledCount` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_startupChannel` | `IptvSettingsPreferencesOwner.startupChannel` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_startupEnabled` | `IptvSettingsPreferencesOwner.startupEnabled` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_startupMode` | `IptvSettingsPreferencesOwner.startupMode` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_trackContinueWatching` | `IptvSettingsPreferencesOwner.trackContinueWatching` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_twoPaneKey` | `_IptvSettingsPageState._twoPaneKey` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `_urlTabFocusNode` | `IptvSettingsFocusOwner.urlTabFocusNode` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `mounted` | `State live mounted getter` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `setState` | `State setState tear-off` | Reviewed step 3 |
+| `IptvSettingsLoadSettings` | `widget` | `live openAddSource getter only` | Reviewed step 3 |
+| `IptvSettingsUrlAdd` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Reviewed step 3 |
+| `IptvSettingsUrlAdd` | `_epgUrlController` | `IptvSettingsInputOwner.epgUrlController` | Reviewed step 3 |
+| `IptvSettingsUrlAdd` | `_isAdding` | `IptvSettingsInputOwner.isAdding` | Reviewed step 3 |
+| `IptvSettingsUrlAdd` | `_nameController` | `IptvSettingsInputOwner.nameController` | Reviewed step 3 |
+| `IptvSettingsUrlAdd` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Reviewed step 3 |
+| `IptvSettingsUrlAdd` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Reviewed step 3 |
+| `IptvSettingsUrlAdd` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Reviewed step 3 |
+| `IptvSettingsUrlAdd` | `_urlController` | `IptvSettingsInputOwner.urlController` | Reviewed step 3 |
+| `IptvSettingsUrlAdd` | `mounted` | `State live mounted getter` | Reviewed step 3 |
+| `IptvSettingsUrlAdd` | `setState` | `State setState tear-off` | Reviewed step 3 |
+| `IptvSettingsFileImport` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Reviewed step 3 |
+| `IptvSettingsFileImport` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Reviewed step 3 |
+| `IptvSettingsFileImport` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Reviewed step 3 |
+| `IptvSettingsFileImport` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Reviewed step 3 |
+| `IptvSettingsFileImport` | `context` | `State live context getter` | Reviewed step 3 |
+| `IptvSettingsFileImport` | `mounted` | `State live mounted getter` | Reviewed step 3 |
+| `IptvSettingsFileImport` | `setState` | `State setState tear-off` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `_isXcAdding` | `IptvSettingsInputOwner.isXcAdding` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `_normalizeXtreamServerUrl` | `.normalizeXtreamServerUrl` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `_xcNameController` | `IptvSettingsInputOwner.xcNameController` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `_xcPasswordController` | `IptvSettingsInputOwner.xcPasswordController` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `_xcServerController` | `IptvSettingsInputOwner.xcServerController` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `_xcUsernameController` | `IptvSettingsInputOwner.xcUsernameController` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `mounted` | `State live mounted getter` | Reviewed step 3 |
+| `IptvSettingsXtreamAdd` | `setState` | `State setState tear-off` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_catalogKeysFor` | `IptvSettingsCatalogActions.catalogKeysFor` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_catalogOwnerReferencesFor` | `IptvSettingsCatalogActions.catalogOwnerReferencesFor` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_defaultPlaylistId` | `IptvSettingsSourcesOwner.defaultPlaylistId` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_fileTabFocusNode` | `IptvSettingsFocusOwner.fileTabFocusNode` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_focusAndReveal` | `IptvSettingsFocusActions.focusAndReveal` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_playlistFocusNodes` | `IptvSettingsFocusOwner.playlistFocusNodes` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_tabController` | `IptvSettingsInputOwner.tabController` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_urlTabFocusNode` | `IptvSettingsFocusOwner.urlTabFocusNode` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `_xcTabFocusNode` | `IptvSettingsFocusOwner.xcTabFocusNode` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `context` | `State live context getter` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `mounted` | `State live mounted getter` | Reviewed step 3 |
+| `IptvSettingsSourceRemoval` | `setState` | `State setState tear-off` | Reviewed step 3 |
+| `IptvSettingsSourceEdit` | `_catalogKeysFor` | `IptvSettingsCatalogActions.catalogKeysFor` | Reviewed step 3 |
+| `IptvSettingsSourceEdit` | `_catalogOwnerReferencesFor` | `IptvSettingsCatalogActions.catalogOwnerReferencesFor` | Reviewed step 3 |
+| `IptvSettingsSourceEdit` | `_normalizeXtreamServerUrl` | `.normalizeXtreamServerUrl` | Reviewed step 3 |
+| `IptvSettingsSourceEdit` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Reviewed step 3 |
+| `IptvSettingsSourceEdit` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Reviewed step 3 |
+| `IptvSettingsSourceEdit` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Reviewed step 3 |
+| `IptvSettingsSourceEdit` | `context` | `State live context getter` | Reviewed step 3 |
+| `IptvSettingsSourceEdit` | `mounted` | `State live mounted getter` | Reviewed step 3 |
+| `IptvSettingsSourceEdit` | `setState` | `State setState tear-off` | Reviewed step 3 |
+| `IptvSettingsSourceRefresh` | `_defaultPlaylistId` | `IptvSettingsSourcesOwner.defaultPlaylistId` | Reviewed step 3 |
+| `IptvSettingsSourceRefresh` | `_refreshingIds` | `IptvSettingsSourcesOwner.refreshingIds` | Reviewed step 3 |
+| `IptvSettingsSourceRefresh` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Reviewed step 3 |
+| `IptvSettingsSourceRefresh` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Reviewed step 3 |
+| `IptvSettingsSourceRefresh` | `mounted` | `State live mounted getter` | Reviewed step 3 |
+| `IptvSettingsSourceRefresh` | `setState` | `State setState tear-off` | Reviewed step 3 |
 | `IptvSettingsListsActions` | `_createListFocusNode` | `IptvSettingsFocusOwner.createListFocusNode` | Pending step 4 |
 | `IptvSettingsListsActions` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Pending step 4 |
 | `IptvSettingsListsActions` | `_focusAndReveal` | `IptvSettingsFocusActions.focusAndReveal` | Pending step 4 |
@@ -593,3 +593,5 @@ production constructors and retain every default, key/const capability and
 private lifecycle. Shared delete and its State are co-located, and its facade
 re-export preserves callers. Explicit imports and shape registrations follow
 the transferred token/bare sites; all original behavior and pixels pass.
+
+Step 3 wiring review: the six owners are created once by each facade State; all initializers and lifecycle disposal order are manifest checked. The factory passes actual owner instances, live State context/mounted/openAddSource getters, the State setState tear-off, and direct section method tear-offs. The same retained two-pane GlobalKey is borrowed without resolving currentState during composition; a dedicated wrong-key negative rejects substitution. Catalog/list callbacks temporarily bind the retained facade methods/getters; Step 4 replaces these with the extracted owners. The FocusActions context reference is node.context, not State.context. Recording/layout receiver names r/l preserve the original lifecycle single-line guards under formatting; no lifecycle braces or guards change. Narrow dependency records were checked against every row above before scaffold pinning.
