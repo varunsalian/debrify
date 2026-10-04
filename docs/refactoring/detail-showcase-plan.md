@@ -1166,6 +1166,53 @@ change below.
 | `showcase_style.dart` | 200 |
 | `showcase_universe.dart` | 158 |
 
+### Gate 2 and final Linux completion — stop checkpoint
+
+- Gate 2 commit `5010272d0e025764201b80ae9c739af445b97ef0`; tested tree `f08827dc252becff1d7e50086afb80bd8b184198`;
+  lib `b850142b28d5aa573b9ae432b586ba3f701a72e9`, test `0c1c00c1a50f560ff83146b491cfeb3e18fab01b`. Full suite paths
+  `[]`, flags `["--no-pub"]`; Flutter 3.44.8 / Dart 3.12.2. Committed
+  HEAD/index/tested/end trees are equal, no snapshot/untracked inputs/tree change.
+  `gate2.jsonl`, `.env.json`, `gate2-audit.json` and comparisons with base7,
+  base6 and gate1 record exactly 11,142 success / 13 failure / 28 error /
+  20 skipped: zero added/missing/changed identities, new failures or skips.
+  All three comparisons PASS; historical failures/errors remain unchanged.
+- Strict Linux completion replay checked out that same gate 2 revision in a
+  fresh isolated clone under this worktree's ignored `.dart_tool/`, preserving
+  the root branch and app checkout. Calibrated linux/amd64 image
+  `sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`,
+  Flutter 3.44.8 / Dart 3.12.2, libsqlite3; revision lib/test/pubspec/lock inputs
+  equal gate2-audit. Four new originals PASS strictly, existing merged
+  `reachable pixel golden showcase` PASS strictly. No regeneration; all five
+  before/after PNG hashes match, the four showcase hashes equal step L.
+  Merged showcase SHA256: `94895f58b6f48c4f61ede89503b6b00c44c845366ccc056da62957506a311c52`.
+  Evidence `linux-completion-{driver,revision,sdk,strict,merged-strict,sha256,run-url}.txt`
+  and `linux-completion-audit.json`. Own clone removed after successful replay.
+- Final checkpoints: step 1 `86f72054`; step 2 `56420ea8`; step 3/gate 1
+  `786cd167`; step 4 `714bd0e9`; step 5/gate 2 `5010272d`. L `df7d646f`;
+  original format R `1165b624`, final 0b `439a1be5`, formatted-export original
+  proof/new full-suite base7 `5753dee2`. All commits carry the requested
+  Co-Authored-By stanza; no push or root branch switch occurred.
+- Completion: 15 feature files (120–474 lines), facade 24 physical export lines
+  (12 directives), no comments/blank lines/declarations/aliases exported;
+  all 69 wiring entries, 15 aliases and every shape destination/facade registered.
+  Every required checker and original diagnostic comparison passed at each step.
+  Frozen tests/helpers and all eight PNGs remain byte-identical to `5753dee2`.
+  Approved plan text outside Progress and the retained Found inventory remain
+  unchanged. This final evidence commit changes only documentation; its lib,
+  test and pubspec inputs equal the tested/replayed gate 2 tree.
+- Found-not-fixed: retained inventory below, including `_plateFill`, TV circle
+  hover, season popup mounted/inset edge, focused-to-empty guide clamp, short
+  action-node list, autofocus/decode sizing, raw colours, English strings and
+  semantics/metrics/topology limitations. Original full-suite 13 failures /
+  28 errors remain; strict const infos preserved. Formatting alone was resolved
+  in R. Lazy hold/dispose order remain S source-guard class.
+- Pending: Android TV D-pad through every band, hold-OK on Play and season
+  popup; Apple TV trackpad circles versus cards; trailer/play handoff through
+  the merged shell. Remote CI awaits Claude's push. Claude's semantic union
+  integration of shared files, integrated full-suite comparisons/checkers and
+  strict five-PNG Linux replay remain pending. No further work is authorized
+  here after this report; stop with the dedicated worktree clean.
+
 ## Found, not fixed
 
 All pre-existing; the move keeps each exactly.
