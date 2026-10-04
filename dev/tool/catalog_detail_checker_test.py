@@ -75,6 +75,7 @@ def self_test(package=None):
         changed[key[0]]=sources[key[0]][:node['start']]+text+sources[key[0]][node['end']:]
         mutated=all_nodes(parse(changed,package))
         assert check_contracts(mutated,rows,source,{**config,'catalog_call_receivers':[],'catalog_live_reads':[],'catalog_host_assignments':[]}),'Accepted rail '+label
+    mutate('_SimklQuickActions','reworded private comment reference',lambda s:s.replace('[_QuickActions]','[CatalogQuickActions]',1))
     state='_CatalogItemDetailScreenState.'
     for member,op,expected in [('initState','addListener',3),('dispose','removeListener',3),('initState','addPlaybackReturnListener',1),('dispose','removePlaybackReturnListener',1),('dispose','unsubscribe',1)]:
         _,node=located(state+member)

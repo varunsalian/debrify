@@ -27,6 +27,32 @@
       ]
     },
     {
+      "file": "lib/features/catalog_detail/presentation/catalog_backdrop.dart",
+      "owner": "",
+      "name": "CatalogBackdrop",
+      "tokens": [
+        "typedef",
+        "CatalogBackdrop",
+        "=",
+        "_Backdrop",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_backdrop.dart",
+      "owner": "",
+      "name": "catalogBackdropConstructor",
+      "tokens": [
+        "const",
+        "catalogBackdropConstructor",
+        "=",
+        "_Backdrop",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
       "file": "lib/features/catalog_detail/presentation/catalog_cert_badge.dart",
       "owner": "",
       "name": "CatalogCertBadge",
@@ -99,6 +125,214 @@
         "catalogMetacriticBadgeConstructor",
         "=",
         "_MetacriticBadge",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_cast_avatar.dart",
+      "owner": "",
+      "name": "CatalogCastAvatar",
+      "tokens": [
+        "typedef",
+        "CatalogCastAvatar",
+        "=",
+        "_CastAvatar",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_cast_avatar.dart",
+      "owner": "",
+      "name": "catalogCastAvatarConstructor",
+      "tokens": [
+        "const",
+        "catalogCastAvatarConstructor",
+        "=",
+        "_CastAvatar",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_rec_card.dart",
+      "owner": "",
+      "name": "CatalogRecCard",
+      "tokens": [
+        "typedef",
+        "CatalogRecCard",
+        "=",
+        "_RecCard",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_rec_card.dart",
+      "owner": "",
+      "name": "catalogRecCardConstructor",
+      "tokens": [
+        "const",
+        "catalogRecCardConstructor",
+        "=",
+        "_RecCard",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_description.dart",
+      "owner": "",
+      "name": "CatalogDescription",
+      "tokens": [
+        "typedef",
+        "CatalogDescription",
+        "=",
+        "_Description",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_description.dart",
+      "owner": "",
+      "name": "catalogDescriptionConstructor",
+      "tokens": [
+        "const",
+        "catalogDescriptionConstructor",
+        "=",
+        "_Description",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_action_row.dart",
+      "owner": "",
+      "name": "CatalogActionRow",
+      "tokens": [
+        "typedef",
+        "CatalogActionRow",
+        "=",
+        "_ActionRow",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_action_row.dart",
+      "owner": "",
+      "name": "catalogActionRowConstructor",
+      "tokens": [
+        "const",
+        "catalogActionRowConstructor",
+        "=",
+        "_ActionRow",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_quick_actions.dart",
+      "owner": "",
+      "name": "CatalogQuickActions",
+      "tokens": [
+        "typedef",
+        "CatalogQuickActions",
+        "=",
+        "_QuickActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_quick_actions.dart",
+      "owner": "",
+      "name": "catalogQuickActionsConstructor",
+      "tokens": [
+        "const",
+        "catalogQuickActionsConstructor",
+        "=",
+        "_QuickActions",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_quick_actions.dart",
+      "owner": "",
+      "name": "CatalogQuickAction",
+      "tokens": [
+        "typedef",
+        "CatalogQuickAction",
+        "=",
+        "_QuickAction",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_quick_actions.dart",
+      "owner": "",
+      "name": "catalogQuickActionConstructor",
+      "tokens": [
+        "const",
+        "catalogQuickActionConstructor",
+        "=",
+        "_QuickAction",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_mdblist_quick_actions.dart",
+      "owner": "",
+      "name": "CatalogMdblistQuickActions",
+      "tokens": [
+        "typedef",
+        "CatalogMdblistQuickActions",
+        "=",
+        "_MdblistQuickActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_mdblist_quick_actions.dart",
+      "owner": "",
+      "name": "catalogMdblistQuickActionsConstructor",
+      "tokens": [
+        "const",
+        "catalogMdblistQuickActionsConstructor",
+        "=",
+        "_MdblistQuickActions",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_simkl_quick_actions.dart",
+      "owner": "",
+      "name": "CatalogSimklQuickActions",
+      "tokens": [
+        "typedef",
+        "CatalogSimklQuickActions",
+        "=",
+        "_SimklQuickActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_simkl_quick_actions.dart",
+      "owner": "",
+      "name": "catalogSimklQuickActionsConstructor",
+      "tokens": [
+        "const",
+        "catalogSimklQuickActionsConstructor",
+        "=",
+        "_SimklQuickActions",
         ".",
         "new",
         ";"

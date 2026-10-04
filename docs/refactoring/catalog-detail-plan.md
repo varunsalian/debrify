@@ -799,6 +799,30 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   run's five completed results were reused on the identical staged source;
   remaining independent manifests used separate local parser/kernel caches.
 
+- Step 1 commit: `ccb9d5cf`. Step 2: all remaining private widgets and their
+  States now live together at the planned destinations; `_kNetflixRed` stays
+  with ActionRow. Private runtime types, constructors/defaults, widget trees,
+  focus/hover lifecycles and callbacks are unchanged. Every moved wiring row
+  reviewed; only cross-library widget calls use exact typedefs/constructor
+  exports, including QuickAction's cross-file Simkl use. Facade 1,977 lines;
+  largest destination 389 lines. Service-typed widgets stay in the bridge.
+- Step 2 checks PASS: all 11 manifests/self-tests on their own originals,
+  catalog 135 leaves; structural/storage/format/theme/light-ink checks;
+  29 shape radii across facade and all destinations, 238 Classic sites;
+  scoped 12-warning allowlist and strict ORIGINAL identity comparison with
+  zero additions. All 122 focused cases pass against `base0b-final-rerun`,
+  including five strict macOS originals; five final strict Linux originals
+  pass with unchanged PNG hashes (`step2-final-linux-strict.env.json`).
+- Review caught AST identifier replacement entering documentation links before
+  step 2 committed. Restored every original comment byte and added catalog-only
+  `catalog_original_comments` pins for all 135 leaves plus a real-config
+  negative for `[_QuickActions]` becoming `[CatalogQuickActions]`. The final
+  comment/self-test checker passes; other configs have no new accepted edits.
+  Constructor call names in the callback config relocate to their pinned
+  aliases without changing identity/receiver/count assertions. Final Linux
+  replay was serialized after the focused run; the interrupted overlap is
+  non-authoritative evidence only. No golden was updated against moved code.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

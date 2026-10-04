@@ -93,6 +93,11 @@
       "original_name": "_Reveal"
     },
     {
+      "file": "lib/features/catalog_detail/presentation/catalog_backdrop.dart",
+      "alias": "CatalogBackdrop",
+      "original_name": "_Backdrop"
+    },
+    {
       "file": "lib/features/catalog_detail/presentation/catalog_cert_badge.dart",
       "alias": "CatalogCertBadge",
       "original_name": "_CertBadge"
@@ -106,6 +111,46 @@
       "file": "lib/features/catalog_detail/presentation/catalog_metacritic_badge.dart",
       "alias": "CatalogMetacriticBadge",
       "original_name": "_MetacriticBadge"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_cast_avatar.dart",
+      "alias": "CatalogCastAvatar",
+      "original_name": "_CastAvatar"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_rec_card.dart",
+      "alias": "CatalogRecCard",
+      "original_name": "_RecCard"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_description.dart",
+      "alias": "CatalogDescription",
+      "original_name": "_Description"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_action_row.dart",
+      "alias": "CatalogActionRow",
+      "original_name": "_ActionRow"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_quick_actions.dart",
+      "alias": "CatalogQuickActions",
+      "original_name": "_QuickActions"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_quick_actions.dart",
+      "alias": "CatalogQuickAction",
+      "original_name": "_QuickAction"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_mdblist_quick_actions.dart",
+      "alias": "CatalogMdblistQuickActions",
+      "original_name": "_MdblistQuickActions"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_simkl_quick_actions.dart",
+      "alias": "CatalogSimklQuickActions",
+      "original_name": "_SimklQuickActions"
     },
     {
       "file": "lib/features/catalog_detail/presentation/catalog_glass_card.dart",
@@ -259,7 +304,7 @@
       "sites": [
         {
           "member": "_CatalogItemDetailScreenState._secQuickActions",
-          "call": "_QuickActions",
+          "call": "CatalogQuickActions",
           "argument": "onSelected"
         }
       ],
@@ -270,7 +315,7 @@
       "sites": [
         {
           "member": "_CatalogItemDetailScreenState._secSimklQuickActions",
-          "call": "_SimklQuickActions",
+          "call": "CatalogSimklQuickActions",
           "argument": "onSelected"
         }
       ],
@@ -281,7 +326,7 @@
       "sites": [
         {
           "member": "_CatalogItemDetailScreenState._secMdblistQuickActions",
-          "call": "_MdblistQuickActions",
+          "call": "CatalogMdblistQuickActions",
           "argument": "onSelected"
         }
       ],
@@ -292,7 +337,7 @@
       "sites": [
         {
           "member": "_CatalogItemDetailScreenState._buildActionRow",
-          "call": "_ActionRow",
+          "call": "CatalogActionRow",
           "argument": "onPlay"
         }
       ],
@@ -303,7 +348,7 @@
       "sites": [
         {
           "member": "_CatalogItemDetailScreenState._buildActionRow",
-          "call": "_ActionRow",
+          "call": "CatalogActionRow",
           "argument": "onBrowse"
         }
       ],
@@ -315,7 +360,7 @@
       "sites": [
         {
           "member": "_CatalogItemDetailScreenState._buildActionRow",
-          "call": "_ActionRow",
+          "call": "CatalogActionRow",
           "argument": "onArrowUp",
           "conditional_member": "_CatalogItemDetailScreenState._scrollWideToTop",
           "branch_count": 1
@@ -328,7 +373,7 @@
       "sites": [
         {
           "member": "_CatalogItemDetailScreenState._buildActionRow",
-          "call": "_ActionRow",
+          "call": "CatalogActionRow",
           "argument": "onPlayLongPress",
           "conditional_member": "_CatalogItemDetailScreenState._browsePrimarySources",
           "branch_count": 1
@@ -341,7 +386,7 @@
       "sites": [
         {
           "member": "_CatalogItemDetailScreenState._buildActionRow",
-          "call": "_ActionRow",
+          "call": "CatalogActionRow",
           "argument": "onToggleMyWatchlist",
           "conditional_member": "_CatalogItemDetailScreenState._toggleMyWatchlist",
           "branch_count": 1
@@ -567,5 +612,442 @@
     "member": "_CatalogItemDetailScreenState._secRecommendations",
     "local": "onTap",
     "target": "_CatalogItemDetailScreenState._openMetadataRecommendation"
+  },
+  "catalog_original_comments": {
+    "CatalogItemDetailScreen.item": [],
+    "CatalogItemDetailScreen.isTelevision": [],
+    "CatalogItemDetailScreen.showQuickPlay": [],
+    "CatalogItemDetailScreen.hasBoundSource": [],
+    "CatalogItemDetailScreen.onPlay": [
+      "/// Triggers the primary play action."
+    ],
+    "CatalogItemDetailScreen.onRewatch": [],
+    "CatalogItemDetailScreen.onLoaderArt": [
+      "/// Hands the host this title's loader artwork (backdrop, logo, meta line) as",
+      "/// it resolves, so a Play pressed from here opens the Marquee loader with the",
+      "/// enriched art rather than the sparse catalog row. Fires on mount and again",
+      "/// after each enrichment lands; the host keeps the latest. Presentation only",
+      "/// — a host that ignores it just gets the plain loader."
+    ],
+    "CatalogItemDetailScreen.resumeInfoLoader": [
+      "/// Resolves whether the title has prior progress and, for a series, the",
+      "/// season/episode [onPlay] would land on — so the button can read",
+      "/// \"Start Watching\" vs \"Resume · S3E4\". Null keeps the static \"Play\" label."
+    ],
+    "CatalogItemDetailScreen.onBrowse": [
+      "/// Opens the sources/episodes flow (was \"Sources\" / \"Episodes\" in the list)."
+    ],
+    "CatalogItemDetailScreen.onBrowsePrimaryEpisodeSources": [
+      "/// Opens manual sources for the same episode the primary Play/Resume action",
+      "/// would choose. When null, series Play remains tap-only; movies reuse",
+      "/// [onBrowse] directly because that already is their Sources action."
+    ],
+    "CatalogItemDetailScreen.enablePrimarySourcesHold": [
+      "/// False for detail surfaces whose [onBrowse] is not a source browser (for",
+      "/// example Stremio TV channel details, where both buttons play the channel)."
+    ],
+    "CatalogItemDetailScreen.traktMenuOptions": [
+      "/// Trakt actions. When non-empty a \"More\" button appears next to",
+      "/// Play/Browse and opens the cinematic action sheet."
+    ],
+    "CatalogItemDetailScreen.onTraktAction": [
+      "/// Invoked when the user picks a Trakt action from the \"More\" sheet."
+    ],
+    "CatalogItemDetailScreen.simklMenuOptions": [
+      "/// Simkl actions — renders as its own independent quick-actions section",
+      "/// next to Trakt's, not merged (both trackers run in parallel)."
+    ],
+    "CatalogItemDetailScreen.onSimklAction": [],
+    "CatalogItemDetailScreen.mdblistMenuOptions": [],
+    "CatalogItemDetailScreen.onMdblistAction": [],
+    "CatalogItemDetailScreen.simklStatusLoader": [
+      "/// Loads the item's live Simkl watchlist status. Used only to relabel the",
+      "/// primary button \"Rewatch\" (instead of \"Play\") for a movie already marked",
+      "/// `completed` — a completed movie has no Simkl resume session, so the play",
+      "/// path un-marks it watched first so the rewatch re-enters Continue Watching.",
+      "/// Null (disconnected / no IMDb id) keeps the plain \"Play\" label."
+    ],
+    "CatalogItemDetailScreen.recommendationsLoader": [
+      "/// Lazily loads \"Watch Next\" recommendations for [item]. When null (no",
+      "/// recommendation-capable addon, or this host doesn't support it) the",
+      "/// rail is omitted entirely. Resolves to an empty list to omit it too."
+    ],
+    "CatalogItemDetailScreen.onRecommendationTap": [
+      "/// Invoked when the user selects a recommended title from the rail."
+    ],
+    "CatalogItemDetailScreen.metaEnricher": [
+      "/// Lazily fetches catalog-quality metadata for [item] by IMDb id. Used to",
+      "/// enrich sparse items (e.g. a tapped \"Watch Next\" recommendation, which",
+      "/// arrives without year/rating/genres and a raw addon-formatted overview)",
+      "/// so the screen renders identically to a normal catalog open. Null skips",
+      "/// enrichment; resolving to null leaves the original item untouched."
+    ],
+    "CatalogItemDetailScreen.CatalogItemDetailScreen": [],
+    "CatalogItemDetailScreen.createState": [],
+    "_CatalogItemDetailScreenState._playFocus": [],
+    "_CatalogItemDetailScreenState._browseFocus": [],
+    "_CatalogItemDetailScreenState._watchlistFocus": [],
+    "_CatalogItemDetailScreenState._wideScroll": [
+      "/// Drives the wide/TV cinematic sheet. Needed so a D-pad \"up\" on the top",
+      "/// action row can reveal the (non-focusable) eyebrow/title/meta header:",
+      "/// focus traversal alone stops at Play/Sources and never scrolls past it."
+    ],
+    "_CatalogItemDetailScreenState._descriptionExpanded": [],
+    "_CatalogItemDetailScreenState._openMetadataRecommendation": [
+      "/// \"Watch Next\" recommendations. null = not yet loaded / still loading;",
+      "/// empty = loaded but nothing to show (rail stays hidden either way)."
+    ],
+    "_CatalogItemDetailScreenState._recommendations": [],
+    "_CatalogItemDetailScreenState._recommendationOriginals": [],
+    "_CatalogItemDetailScreenState._enriched": [
+      "/// Catalog-quality metadata fetched after first paint for a sparse item",
+      "/// (a tapped recommendation). null until/unless enrichment succeeds."
+    ],
+    "_CatalogItemDetailScreenState._parentsGuide": [
+      "/// Parents guide data. null = not yet loaded; result with empty categories =",
+      "/// loaded but nothing to show."
+    ],
+    "_CatalogItemDetailScreenState._imdbExtra": [
+      "/// Extra metadata from IMDb GraphQL (runtime, certificate, cast, etc.)."
+    ],
+    "_CatalogItemDetailScreenState._imdbLoaded": [],
+    "_CatalogItemDetailScreenState._parentsGuideLoaded": [],
+    "_CatalogItemDetailScreenState._recommendationsLoaded": [],
+    "_CatalogItemDetailScreenState.originalMetadata": [
+      "/// The item the screen renders — the enriched copy once available,",
+      "/// otherwise whatever the host handed us."
+    ],
+    "_CatalogItemDetailScreenState._item": [],
+    "_CatalogItemDetailScreenState._supportsMyWatchlist": [],
+    "_CatalogItemDetailScreenState._revealCtrl": [
+      "/// Drives the staggered entrance reveal of the content sections."
+    ],
+    "_CatalogItemDetailScreenState._hasBoundSource": [
+      "/// Live bound-source flag (drives the Play button's \"pinned\" accent). Seeded",
+      "/// from the parent's snapshot, then re-read when the player route pops back",
+      "/// onto this screen — so playing a movie (which auto-binds its source) flips",
+      "/// the accent on immediately instead of staying stale until reopen."
+    ],
+    "_CatalogItemDetailScreenState._resumeLoaded": [
+      "/// Primary-button resume state. Until loaded the button keeps its static \"Play\"",
+      "/// label; once resolved it reads \"Start Watching\" (no progress) or \"Resume\"",
+      "/// (+ an \"S3E4\" tag for series). Re-read when the player pops back."
+    ],
+    "_CatalogItemDetailScreenState._resumeStarted": [],
+    "_CatalogItemDetailScreenState._resumeSeason": [],
+    "_CatalogItemDetailScreenState._resumeEpisode": [],
+    "_CatalogItemDetailScreenState._resumePending": [
+      "/// A resume lookup is in flight and unanswered. The primary button shows a",
+      "/// spinner instead of a label so it never flashes \"Start Watching\" before",
+      "/// flipping to \"Resume · S1E7\". Errors clear it (static label fallback)."
+    ],
+    "_CatalogItemDetailScreenState._primaryBusy": [],
+    "_CatalogItemDetailScreenState._simklStatus": [
+      "/// Live Simkl status (drives the \"Rewatch\" relabel). Null until",
+      "/// [simklStatusLoader] resolves — the button keeps \"Play\" until then."
+    ],
+    "_CatalogItemDetailScreenState._localMovieFinished": [],
+    "_CatalogItemDetailScreenState._inMyWatchlist": [],
+    "_CatalogItemDetailScreenState._isCompletedMovie": [
+      "/// Policy-filtered completion shared across local and all three trackers."
+    ],
+    "_CatalogItemDetailScreenState.initState": [
+      "// TVs are low-powered — skip the staggered entrance reveal entirely",
+      "// (jump straight to the final state, controller stays idle).",
+      "// What we know before enrichment — usually just the backdrop. Emitted",
+      "// now so a Play pressed in the first second still gets a plate.",
+      "// Land focus on Play (or Sources when Play is hidden, e.g. PikPak) so",
+      "// the remote has a starting point. TV only — on mobile/desktop an",
+      "// auto-applied golden focus border just looks out of place."
+    ],
+    "_CatalogItemDetailScreenState._loadMyWatchlistState": [],
+    "_CatalogItemDetailScreenState._toggleMyWatchlist": [],
+    "_CatalogItemDetailScreenState._loadSimklStatus": [
+      "// Non-critical — leave the plain \"Play\" label."
+    ],
+    "_CatalogItemDetailScreenState._loadLocalMovieFinished": [],
+    "_CatalogItemDetailScreenState._movieCompletionGeneration": [],
+    "_CatalogItemDetailScreenState._onMovieProgressPolicyChanged": [],
+    "_CatalogItemDetailScreenState._loadResumeInfo": [
+      "// setState, not a plain assignment — this runs from the post-init loader",
+      "// fan (setState-safe), and the spinner must actually be scheduled to",
+      "// paint rather than riding a sibling loader's rebuild.",
+      "// Time-boxed: the guide advance inside the reconciler can hang on an",
+      "// unbounded body read; a timeout throws into catch/finally, falling",
+      "// back to the static label instead of spinning forever.",
+      "// Non-critical — leave the static label."
+    ],
+    "_CatalogItemDetailScreenState._primaryLabel": [
+      "/// The primary-button label: \"Start Watching\" before any progress, otherwise",
+      "/// \"Resume\" with an OTT-style \"· S3E4\" tag for series. Falls back to the",
+      "/// static \"Play\" until the resume state resolves."
+    ],
+    "_CatalogItemDetailScreenState._resolvedPrimaryLabel": [
+      "// Some entry points (for example the catalog browser) intentionally omit",
+      "// a resume loader. Local/Simkl completion is still enough to distinguish",
+      "// a new play from a rewatch, so do not hide that state behind the optional",
+      "// resume lookup."
+    ],
+    "_CatalogItemDetailScreenState._rewatchPending": [],
+    "_CatalogItemDetailScreenState._rewatchBusy": [],
+    "_CatalogItemDetailScreenState._playPrimary": [
+      "// Discard reads started before the reset."
+    ],
+    "_CatalogItemDetailScreenState.didChangeDependencies": [],
+    "_CatalogItemDetailScreenState.didPopNext": [
+      "/// The IN-APP player pushes on top of this detail screen, so it pops BACK",
+      "/// here when playback ends. Re-read the binding then: a movie auto-binds on",
+      "/// play, and the Sources screen (also pushed above) can bind/unbind too."
+    ],
+    "_CatalogItemDetailScreenState._onPlaybackReturned": [
+      "/// Native-TV / DeoVR / external playback runs in its own ACTIVITY and pushes",
+      "/// no Flutter route, so [didPopNext] never fires for it and the resume label",
+      "/// would stay stale. Mirrors the merged detail page — see",
+      "/// [MainPageBridge.notifyPlaybackReturned] for why this signal exists, and",
+      "/// why it's gated on this being the current route."
+    ],
+    "_CatalogItemDetailScreenState._refreshBoundState": [
+      "/// Re-read this title's bound-source count and flip the Play accent to match."
+    ],
+    "_CatalogItemDetailScreenState._boundKey": [
+      "/// The imdb key the binding store is keyed on — mirrors the host's `_imdbOf`",
+      "/// (a `tt…` id, whether it rode in as `imdbId` or the raw catalog id)."
+    ],
+    "_CatalogItemDetailScreenState._loadEnrichedMeta": [
+      "/// When the item arrived sparse — no year, rating, or genres, the",
+      "/// signature of a \"Watch Next\" recommendation built straight from an",
+      "/// addon stream entry — fetch full Cinemeta-grade metadata after first",
+      "/// paint and merge it in, so the screen ends up identical to a normal",
+      "/// catalog open. Fail-soft: any failure leaves the original item as-is.",
+      "// An item with no overview is never \"rich enough\": Trakt / Simkl / MDBList",
+      "// rows carry a year and rating but no description, and the page would show",
+      "// an empty summary if we skipped the fetch on their behalf.",
+      "// a normal catalog item — nothing to add",
+      "// Keep identity/source from the tapped item; take the structured",
+      "// fields and clean overview from the fetched meta, but never let a",
+      "// missing field blank out something we already had.",
+      "// Non-critical enrichment — swallow and keep the original item."
+    ],
+    "_CatalogItemDetailScreenState._emitLoaderArt": [
+      "/// Publishes the current best artwork for the play loader. Cheap and",
+      "/// idempotent — the host just keeps the latest."
+    ],
+    "_CatalogItemDetailScreenState._detailsMetadataGeneration": [],
+    "_CatalogItemDetailScreenState.onMetadataPolicyChanged": [],
+    "_CatalogItemDetailScreenState._loadImdbEnrichment": [
+      "// Adds the certificate to the loader's meta line."
+    ],
+    "_CatalogItemDetailScreenState._loadParentsGuide": [],
+    "_CatalogItemDetailScreenState._loadRecommendations": [
+      "/// Loads recommendations after first paint so the rail never blocks the",
+      "/// detail screen's appearance. Fail-soft: any error leaves the rail hidden."
+    ],
+    "_CatalogItemDetailScreenState.dispose": [],
+    "_CatalogItemDetailScreenState._artworkAccent": [
+      "/// This title's own colour, pulled from its poster.",
+      "///",
+      "/// Same one-tiny-decode path `merged_series_detail_screen` has always had,",
+      "/// through the shared cache so a revisit is free. Published into",
+      "/// [ArtworkAccentScope] rather than applied here, so descendants — including",
+      "/// the sheets and dialogs this screen raises, which inherit it because the",
+      "/// scope is an `InheritedTheme` — can take it where they paint IDENTITY, and",
+      "/// only there."
+    ],
+    "_CatalogItemDetailScreenState._loadArtworkAccent": [
+      "// The extractor normalises for a DARK ui; on a paper theme that lands",
+      "// low-contrast, so it is re-targeted against the ground it will be seen",
+      "// on before anything paints with it."
+    ],
+    "_CatalogItemDetailScreenState.build": [
+      "// The detail backdrop is a display-sized hero, not a shelf card. Upgrade",
+      "// MetaHub's catalog-sized art here without changing the item's shared",
+      "// poster URL (recommendation shelves continue to use their medium source)."
+    ],
+    "_CatalogItemDetailScreenState._buildBody": [
+      "// ── Backdrop ─────────────────────────────────────────────────────",
+      "// Wide screens: full-bleed. Narrow: top half only.",
+      "// ── Content ──────────────────────────────────────────────────────",
+      "// On wide layouts, content gravitates to the bottom-left third",
+      "// (Apple-TV/Netflix style). On narrow it scrolls under the",
+      "// backdrop normally.",
+      "// ── Back button ──────────────────────────────────────────────────"
+    ],
+    "_CatalogItemDetailScreenState._buildNarrowContent": [],
+    "_CatalogItemDetailScreenState._buildWideContent": [
+      "// Content sheet bottom-left over the full-bleed art. TVs overscan, so",
+      "// keep it well off the physical bezel — including the top: when the",
+      "// content is tall enough to fill the sheet (expanded synopsis + quick",
+      "// actions + recs) the eyebrow/title reach the top edge and the TV",
+      "// overscan clips them, so mirror the bottom inset there.",
+      "// Don't clip the focus glow on Play/Sources/quick actions."
+    ],
+    "_CatalogItemDetailScreenState._wide": [
+      "/// The cinematic bottom-left sheet is the premium look for landscape",
+      "/// screens (incl. TV). Portrait/narrow windows use the single-scroll",
+      "/// phone layout instead."
+    ],
+    "_CatalogItemDetailScreenState._tight": [
+      "/// Limited vertical space (Android TV is only ~540 logical px tall at",
+      "/// DPR 2.0) — shrink typography/spacing so the cinematic layout still",
+      "/// fits on one screen instead of overflowing."
+    ],
+    "_CatalogItemDetailScreenState._buildContentColumn": [
+      "/// Wide: cinematic bottom-left sheet — info first, Play/Sources at the end."
+    ],
+    "_CatalogItemDetailScreenState._buildNarrowColumn": [
+      "// ── Glass info card: synopsis + credits + cast ──",
+      "// All inner sections share the card's start time so they fade in",
+      "// together — no staggered holes inside the card.",
+      "// ── Glass details card: production details + parents guide ──"
+    ],
+    "_CatalogItemDetailScreenState._divider": [],
+    "_CatalogItemDetailScreenState._secEyebrow": [],
+    "_CatalogItemDetailScreenState._secTitle": [],
+    "_CatalogItemDetailScreenState._secMeta": [],
+    "_CatalogItemDetailScreenState._secGenres": [],
+    "_CatalogItemDetailScreenState._secAwards": [],
+    "_CatalogItemDetailScreenState._secCredits": [],
+    "_CatalogItemDetailScreenState._secCast": [],
+    "_CatalogItemDetailScreenState._secDetails": [],
+    "_CatalogItemDetailScreenState._sectionHeader": [],
+    "_CatalogItemDetailScreenState._secParentsGuide": [],
+    "_CatalogItemDetailScreenState._secSimklQuickActions": [],
+    "_CatalogItemDetailScreenState._secMdblistQuickActions": [],
+    "_CatalogItemDetailScreenState._secQuickActions": [
+      "// Phone (narrow layout): force a tidy 3-up grid. Wide/TV keeps",
+      "// its free-flowing wrap."
+    ],
+    "_CatalogItemDetailScreenState._secRecommendations": [],
+    "_CatalogItemDetailScreenState._secDescription": [],
+    "_CatalogItemDetailScreenState._scrollWideToTop": [
+      "/// Snap the wide/TV sheet back to the top so the (non-focusable) header",
+      "/// is visible again. Triggered by a D-pad \"up\" on the top action row,",
+      "/// where focus traversal would otherwise dead-end at Play/Sources."
+    ],
+    "_CatalogItemDetailScreenState._buildActionRow": [
+      "/// The Play / Sources action row.",
+      "// TV only: the top row is the highest focusable widget, so a D-pad",
+      "// \"up\" there reveals the header instead of dead-ending.",
+      "// Neither Play nor Browse pop here: the player pushes on top of",
+      "// this detail screen so the user returns here when playback ends.",
+      "// Browse keeps the detail for the same reason (series drill-down",
+      "// stacks on top). The host handles teardown via _returnToCatalogIfNeeded."
+    ],
+    "_CatalogItemDetailScreenState._canBrowsePrimarySources": [],
+    "_CatalogItemDetailScreenState._browsePrimarySources": [],
+    "_CatalogItemDetailScreenState._browsePrimarySourcesAsync": [],
+    "_CatalogItemDetailScreenState._dot": [],
+    "_Reveal": [
+      "/// Fades + slides a section in from below, on an [Interval] of [parent] so",
+      "/// successive sections cascade. Cheap: a single shared controller drives all.",
+      "/// Where on the 0‥1 timeline this section starts (earlier = sooner).",
+      "/// How far (px) it travels up into place."
+    ],
+    "_Backdrop": [
+      "/// Cinematic backdrop: a slow Ken-Burns push-in, a gentle fade-in once the",
+      "/// image decodes, a layered vertical scrim, a corner vignette, and (on wide)",
+      "/// a left-side scrim where the content sits.",
+      "/// When false (TV) the Ken-Burns push-in and fade-in are skipped — a",
+      "/// static image, so there's no continuous repaint on low-power devices."
+    ],
+    "_BackdropState": [
+      "// Static (TV): no fade-in, no Ken-Burns — cheapest possible.",
+      "// Base darkening wash — guarantees legibility even on pure-white",
+      "// or very bright posters. Uniform tint, no gradient.",
+      "// Corner vignette — frames the art, cinema style.",
+      "// Vertical scrim — heavier than before so content stays readable",
+      "// regardless of poster brightness.",
+      "// Side scrim on wide layouts — darken the left where content sits,",
+      "// fade to clear art on the right."
+    ],
+    "_CertBadge": [],
+    "_GenreChip": [],
+    "_MetacriticBadge": [],
+    "_CastAvatar": [],
+    "_RecCard": [],
+    "_RecCardState": [
+      "// Signal — this screen is never wrapped in a DetailThemeScope today, so",
+      "// the fallback IS the shipped gold. Hoisted out of the tree below so the",
+      "// lookup happens once per build, never inside an animated builder."
+    ],
+    "_Description": [],
+    "_ReadMoreToggle": [
+      "/// Focusable \"Read more / Show less\" toggle. A bare GestureDetector is not",
+      "/// reachable or activatable with a D-pad/remote, so this mirrors the",
+      "/// focus idiom used by [_QuickAction]: a [Focus] that tracks focus, accepts",
+      "/// select/enter/space, and shows a gold affordance when focused or hovered."
+    ],
+    "_ReadMoreToggleState": [
+      "// Inactive state is byte-identical to the old bare text link (no",
+      "// box/indent, so the phone/touch look is unchanged). Focus/hover is",
+      "// signalled with gold + underline + a transform-only scale (no",
+      "// layout reflow), echoing _QuickAction's scale feedback."
+    ],
+    "_ActionRow": [
+      "/// The primary button's label — progress-aware (\"Start Watching\" /",
+      "/// \"Resume · S3E4\"), computed by the host.",
+      "/// Resume state still resolving — Play shows a spinner instead of a label.",
+      "/// D-pad \"up\" handler — the row is the top focusable, so this scrolls the",
+      "/// sheet back to the header rather than letting focus dead-end. Null off TV.",
+      "// Play is the page's IDENTITY control, so it is where this title's own",
+      "// colour belongs — the one role `ArtworkAccentScope` exists to serve.",
+      "//",
+      "// Gated on `!isLegacy` deliberately. Signal declares `useArtworkAccent`,",
+      "// so `resolve` would hand the poster colour to legacy too, and legacy's",
+      "// Play button has always been this red. New behaviour goes to the themes",
+      "// a user opted into, not to the default look.",
+      "// An arbitrary poster colour is an arbitrary fill, so the label is",
+      "// SCORED against it rather than assumed white — the whole reason",
+      "// `inkOn` exists. Legacy keeps its shipped white on the red.",
+      "// Narrow screens: stack a full-width Play on top of Sources so every",
+      "// label has room and never gets clipped."
+    ],
+    "_kNetflixRed": [],
+    "_QuickActions": [
+      "/// Prime-style quick actions: a wrapped grid of uniform icon buttons with a",
+      "/// caption underneath. Everything is visible at once — no hidden scroll — so",
+      "/// users always see every action. Items are a fixed width so rows align.",
+      "/// Phone (narrow layout): lay out as an even 3-column grid so narrow",
+      "/// widths don't drop to an ugly 2-up. Wide/TV keeps the free wrap."
+    ],
+    "_QuickAction": [
+      "/// Grid mode: fill the parent cell instead of a fixed 80px box."
+    ],
+    "_QuickActionState": [],
+    "_MdblistQuickActions": [],
+    "_SimklQuickActions": [
+      "/// Simkl's quick-actions section — duplicated from [_QuickActions] rather",
+      "/// than genericized, since sharing a widget across [TraktMenuOption] and",
+      "/// [SimklMenuOption] would mean a shared type between the two trackers,",
+      "/// which the rest of this integration deliberately avoids."
+    ],
+    "_SimklQuickAction": [],
+    "_SimklQuickActionState": [],
+    "_PrimaryButton": [
+      "/// Filled buttons get a solid background ([accent] when provided, white",
+      "/// otherwise). Outlined buttons have a glass background.",
+      "/// Narrow screens: shorter button, smaller icon/text, tighter spacing.",
+      "/// TV: skip the focus tween (instant), keep the highlight.",
+      "/// Optional brand accent for a filled button. Falls back to white.",
+      "/// Ink for the label ON [accent], scored by the caller.",
+      "///",
+      "/// Null keeps the shipped rule (`accent == null ? black : white`), which is",
+      "/// right for legacy's fixed red and wrong for an arbitrary poster colour —",
+      "/// white on a pale artwork accent is unreadable.",
+      "/// D-pad \"up\" handler (TV). Set on the top action row so \"up\" reveals the",
+      "/// header rather than dead-ending focus traversal.",
+      "/// Resume state still resolving — spinner instead of icon+label so the",
+      "/// button never flashes a wrong status. Stays tappable."
+    ],
+    "_PrimaryButtonState": [
+      "// Focus is always shown as a bright gold ring + glow (+ a slight",
+      "// scale-up) regardless of the button's base colour, so it's obvious",
+      "// even on the red Play button.",
+      "// A bound source: hint with a soft gold resting border.",
+      "// Nothing focusable sits above this row, so consume \"up\" and use",
+      "// it to bring the header back into view instead of no-op."
+    ],
+    "_GlassCard": [],
+    "_GlassIconButton": []
   }
 }

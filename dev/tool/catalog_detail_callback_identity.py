@@ -61,6 +61,11 @@ def check_contracts(lookup, rows, source, config):
             expected=instances.get(target['owner'],'$State')+'.'+target['name']
             if path!=expected:errors.append('Catalog recommendation mapping tear-off changed')
         except (KeyError,StopIteration,ValueError):errors.append('Missing catalog recommendation callback assignment')
+    for member,expected in config.get('catalog_original_comments',{}).items():
+        try:
+            actual=[token['text'] for token in node_for(member)['tokens'] if token['comment']]
+            if actual!=expected:errors.append('Catalog original comment bytes changed: '+member)
+        except (KeyError,StopIteration):errors.append('Missing catalog original comment owner: '+member)
     state='_CatalogItemDetailScreenState.'
     for member,call,count in [('didChangeDependencies','subscribe',2),('dispose','unsubscribe',1)]:
         try:
