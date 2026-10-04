@@ -916,7 +916,7 @@ Claude’s semantic integration on the merged committed tree.
   classes now retain their private runtime types and exact constructors through
   pinned typedef/constructor exports. Six cohesive resource/state owners retain
   original initializers, collection identity and GlobalKey/focus/scroll instances.
-  Facade is 3,310 lines. Every destination is under 500; shape still totals 26.
+  Facade is 3,309 lines. Every destination is under 500; shape still totals 26.
 - Composition constructs resources once before initState, captures no widget,
   context or lazy reads, then binds its dependency object. The original two lazy
   declarations remain in the State; the new assigned late-final parts field is
@@ -1150,3 +1150,4 @@ All pre-existing; the extraction keeps each exactly.
 22. `_CastTile` can overflow its 92-pixel rail by two pixels for a two-line
     cast name (56-pixel image, 6-pixel gap, two text lines). Original fixtures
     use short cast names; the 12-member cap is still asserted. No layout fix.
+- Completion review (Claude): (1) the size baseline had a second, seam-only raise 5630 → 5659 at `4b65c7cf` for the 29-line frozen test accessor, then only fell, and the entry was removed at step 6. (2) Shared-tool changes not gated by config: `check_settings_moves.py` accepts only class declarations as widget headers for every feature; `torbox_callback_identity.py` `argument_expression` strips comment tokens and the alias lookup matches `path == alias` for every feature. All seven manifest self-tests pass with them. (3) The rewatch same-file/adjacency assertion lives in `test/features/merged_detail/.../merged_detail_source_contract_test.dart:117-130`, alongside `rewatch_launch_routing_test`'s declaration-scoped listener checks. (4) Final facade breakdown (434): imports 34, public widget 167 (byte-identical to `21320ff9`), State 204, frozen test accessor 26, separators 3. (5) Follow-ups: the orphaned palette comment above `_parts` (kept: the checker compares comments) and narrowing the generic checker receivers `s`/`state`/`this` to their members.

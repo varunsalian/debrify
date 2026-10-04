@@ -290,3 +290,8 @@ mid-field `_openMetadataRecommendation` shares `MergedDetailMetadataState` with
 its surrounding fields, keeping its placement before `_recommendations`. These
 owner decisions precede scaffolding fingerprints; no state or build dependency
 is evaluated during composition.
+
+## Composition files
+
+- `lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart`: the dependency record the State builds once (live getters for State, mixin and widget reads; tear-offs for actions).
+- `lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart`: the section holder built in the State constructor; sections only store their dependencies.
