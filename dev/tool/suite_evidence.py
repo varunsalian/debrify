@@ -141,7 +141,11 @@ def flutter_env(paths):
         sdk = {k: sdk.get(k) for k in ('frameworkVersion', 'frameworkRevision', 'dartSdkVersion')}
     except ValueError:
         sdk = {'raw': version.strip()}
-    return {'sdk': sdk, **git_tree_evidence(), 'root': str(ROOT), 'paths': list(paths)}
+    # Runner flags (e.g. --no-pub) are recorded apart from suite paths: only
+    # real paths make a run "scoped" for comparison purposes.
+    return {'sdk': sdk, **git_tree_evidence(), 'root': str(ROOT),
+            'paths': [p for p in paths if not p.startswith('-')],
+            'flags': [p for p in paths if p.startswith('-')]}
 
 
 def flutter_test_json(paths, out: Path) -> int:
@@ -220,7 +224,10 @@ def cmd_compare(args):
             before = (json.loads(against.read_text()) if against.suffix == '.json'
                       else outcomes(against)[0])
             after, suites = outcomes(run)
-            scoped = after_env and after_env.get('paths')
+            # Older env files recorded runner flags in `paths`; ignore them so a
+            # full run with --no-pub still reports suites missing vs baseline.
+            scoped = after_env and [p for p in after_env.get('paths', [])
+                                    if not p.startswith('-')]
             if scoped:
                 # A scoped run only answers for the suites it ran.
                 before = {k: v for k, v in before.items() if k.split('::')[0] in suites}
