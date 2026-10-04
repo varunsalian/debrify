@@ -30,8 +30,9 @@ TORBOX_COMPLETE = True
 PLAYBACK_SETTINGS_COMPLETE = True
 PLAYBACK_SETTINGS_FACADE = "lib/screens/settings/external_player_settings_page.dart"
 PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_playback_settings/"
-# Staged Spotlight extraction; facade cap is enabled only at step 7.
-SPOTLIGHT_BOARD_COMPLETE = False
+# Completed Spotlight composition facade; cap includes every physical line.
+SPOTLIGHT_BOARD_COMPLETE = True
+SPOTLIGHT_BOARD_FACADE_CAP = 451
 SPOTLIGHT_BOARD_FACADE = "lib/widgets/home/spotlight_board.dart"
 SPOTLIGHT_BOARD_BRIDGE = "lib/features/spotlight_board/presentation/legacy_spotlight_board/"
 # Only the whole original _buildCard method may exceed 500. Measure at creation;
@@ -110,6 +111,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # are not import-checked. Every other file in COMPOSITION is presentation and
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    # Spotlight facade wires concrete legacy bridge sections.
+    SPOTLIGHT_BOARD_FACADE,
     FACADE,
     PLAYLIST_CONTENT_FACADE,
     PIKPAK_FACADE,
@@ -426,6 +429,11 @@ def violations(path: Path) -> list[str]:
             problems.append("spotlight board temporary cross-call outside its bounded bridge")
         if re.search(r"\b(?:KeepAlive|AutomaticKeepAliveClientMixin|IndexedStack)\b|package:media_kit|hero_trailer_backdrop|video_player_launcher|features/player_launch", source):
             problems.append("spotlight board adds keep-alive or playback engine ownership")
+    if SPOTLIGHT_BOARD_COMPLETE and relative == SPOTLIGHT_BOARD_FACADE:
+        if lines > SPOTLIGHT_BOARD_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {SPOTLIGHT_BOARD_FACADE_CAP}-line spotlight board facade limit")
+        if "TEMP(spotlight_board)" in source:
+            problems.append("spotlight board temporary cross-call remains in the facade")
     if relative.startswith("lib/features/playlist_content/"):
         if lines > 500:
             problems.append(f"{lines} lines exceeds the 500-line playlist content extraction limit")
@@ -599,6 +607,8 @@ def main() -> int:
         paths.add(ROOT / PLAYBACK_SETTINGS_FACADE)
     if IPTV_SETTINGS_COMPLETE:
         paths.add(ROOT / IPTV_SETTINGS_FACADE)
+    if SPOTLIGHT_BOARD_COMPLETE:
+        paths.add(ROOT / SPOTLIGHT_BOARD_FACADE)
     if PLAYLIST_CONTENT_COMPLETE:
         paths.add(ROOT / PLAYLIST_CONTENT_FACADE)
     if PIKPAK_COMPLETE:

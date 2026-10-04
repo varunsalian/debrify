@@ -1306,6 +1306,23 @@ decomposition; bug fixes and behaviour changes, including everything below.
 - Formatted facade: **451**. Physical AST breakdown: imports export 13, widget docs 185, state header 3, lifecycle 142, forwarders overrides 26, bindings 54, composition 11, retained original bodies 0, remaining 17 (sum 451); detailed spans in `step6-cap.json`.
 - All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step6-focused.*` includes full end-of-run tree provenance before this Progress edit.
 
+### Step 7 — completed guard, facade and CI; gate 2
+
+- Previous checkpoint: `910b8f1d`.
+- Registered the facade in the real architecture checker and
+  composition-root set; enabled completion, the measured facade cap and
+  TEMP rejection. Real-tree negatives cover missing facade, cap + 1,
+  TEMP in facade/feature and the sole card-layout size exception. CI format
+  includes facade/support and analysis includes facade before tee. All
+  completed manifest destinations equal the frozen approved ledger.
+  Whole-repository analyzer comparison also passes: zero outside-slice
+  additions; 1,661 total diagnostics versus 1,657 original, with the four
+  anticipated public-widget key infos covered by the frozen inventory.
+- Full-suite gate 2 runs next on this committed tree against original base3
+  and gate 1. Final documentation records its completed evidence.
+- Formatted facade: **451**. Physical AST breakdown: imports export 13, widget docs 185, state header 3, lifecycle 142, forwarders overrides 26, bindings 54, composition 11, retained original bodies 0, remaining 17 (sum 451); detailed spans in `step7-cap.json`.
+- All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step7-focused.*` includes full end-of-run tree provenance before this Progress edit.
+
 ### Amendment after step 0b (design-reviewed before resuming)
 
 1. **Facade cap.** The hard maximum becomes 460 (see the size section); the

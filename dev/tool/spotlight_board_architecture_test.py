@@ -49,6 +49,35 @@ def main():
         bridge.write_text(service)
         run()
         bridge.unlink()
+        if guard.SPOTLIGHT_BOARD_COMPLETE:
+            facade = root / guard.SPOTLIGHT_BOARD_FACADE
+            original = facade.read_text()
+            facade.unlink()
+            try:
+                run('Registered extracted source is missing')
+            finally:
+                facade.write_text(original)
+            for source, error in [
+                ('// line\n' * (guard.SPOTLIGHT_BOARD_FACADE_CAP + 1), 'spotlight board facade limit'),
+                (original + '// TEMP(spotlight_board)\n', 'temporary cross-call remains in the facade'),
+            ]:
+                facade.write_text(source)
+                try:
+                    run(error)
+                finally:
+                    facade.write_text(original)
+            bridge.write_text('// TEMP(spotlight_board)\n')
+            try:
+                run('temporary cross-call')
+            finally:
+                bridge.unlink()
+            layout = root / (guard.SPOTLIGHT_BOARD_BRIDGE + 'spotlight_board_card_layout.dart')
+            original_layout = layout.read_text()
+            layout.write_text('// line\n' * (guard.SPOTLIGHT_BOARD_SIZE_EXCEPTIONS[str(layout.relative_to(root))] + 1))
+            try:
+                run('spotlight board extraction limit')
+            finally:
+                layout.write_text(original_layout)
         # Missing feature must fail instead of making its scans disappear.
         feature = root / 'lib/features/spotlight_board'
         backup = root / 'lib/features/spotlight_board_saved'
