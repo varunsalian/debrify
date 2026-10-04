@@ -285,7 +285,8 @@
         "mounted",
         "presentedMetadata",
         "heroPresentation",
-        "metadataPreferences"
+        "metadataPreferences",
+        "metadataArtworkPending"
       ]
     }
   },
@@ -1472,7 +1473,8 @@
         "metadataPreferences",
         "heroPresentation",
         "preloadMetadata",
-        "refreshMetadataPresentation"
+        "refreshMetadataPresentation",
+        "heroWarmupProvider"
       ]
     },
     "SpotlightBoardState._preloadHeroes": {
@@ -2816,7 +2818,8 @@
         "metadataPreferences",
         "heroPresentation",
         "preloadMetadata",
-        "refreshMetadataPresentation"
+        "refreshMetadataPresentation",
+        "originalMetadata"
       ]
     },
     "SpotlightBoardState.currentHeroId": {

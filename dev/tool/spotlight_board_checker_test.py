@@ -21,6 +21,8 @@ def self_test(package=None):
     lookup = all_nodes(parse(sources, package))
     assert not check(original, sources, rows, source, package, context_guard=True, config=config)
     print('Spotlight real configuration positive: PASS')
+    from spotlight_board_source_reader_test import self_test as reader_self_test
+    reader_self_test(package)
 
     def located(name):
         row = next(r for r in rows if r['original_name'] == name)
@@ -38,6 +40,8 @@ def self_test(package=None):
         body = node['text']
         if case['mutation'] == 'drop_stop':
             body, count = re.subn(r'(?:widget|view)\s*\.\s*onTrailerStop\?\.call\(\);', '', body, count=1)
+        elif case['mutation'] == 'drop_dispose':
+            body, count = re.subn(r'[\w.]+(?:\?\.)?(?:cancel|dispose)\(\);', '', body, count=1)
         elif case['mutation'] == 'wrong_this':
             body, count = re.subn(r'(onInteraction\?\.call\()\s*(?:this|cardState)', r'\1anotherState', body, count=1)
         elif case['mutation'] == 'dispose_order':
@@ -110,6 +114,12 @@ def self_test(package=None):
             assert normalize(receiver.split('.'),rows,row)!=normalize(['this'],rows,row)
         another=next(r for r in rows if r['original_name']=='_CardState._setHover')
         assert normalize(['cardState'],rows,another)!=normalize(['this'],rows,another)
+    with configured(config):
+        for setter in [['boardState', '.', 'setState'], ['(', 'callback', ')', '=>', 'setState', '(', 'callback', ')']]:
+            assert normalize(setter, rows, row) != normalize(['setState'], rows, row)
+    print('Spotlight board setState tear-off and wrapper negatives: rejected')
+    from spotlight_board_binding_fixtures import self_test as binding_self_test
+    binding_self_test(original, sources, rows, source, config, package)
     print('Spotlight exact bound-this positive, receiver-shadowing/protected setState/outside-site negatives: PASS')
 
     # Exercise the real whole-tree checker for the one registered header

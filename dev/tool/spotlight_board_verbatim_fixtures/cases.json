@@ -97,5 +97,22 @@
     "mutation": "replace",
     "before": "return Focus(",
     "after": "return const Focus("
+  },
+  {
+    "name": "inserted trailer opacity",
+    "member": "SpotlightBoardState._heroBackdrop",
+    "mutation": "replace",
+    "before": "if (!widget.animationsEnabled) return backdrop;",
+    "after": "if (!widget.animationsEnabled) return Opacity(opacity: 1, child: backdrop);"
+  },
+  {
+    "name": "dropped Card dispose step",
+    "member": "_CardState.dispose",
+    "mutation": "drop_dispose"
+  },
+  {
+    "name": "dropped Board dispose step",
+    "member": "SpotlightBoardState.dispose",
+    "mutation": "drop_dispose"
   }
 ]

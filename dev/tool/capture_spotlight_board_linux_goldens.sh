@@ -2,8 +2,8 @@
 # Capture ONLY the exact original characterization checkpoint, inside this clone.
 set -euo pipefail
 repo="$(git rev-parse --show-toplevel)"
-checkpoint="$(git log --format='%H%x09%s' HEAD | awk -F '\t' '$2 == "test(spotlight-board): step 0 original-code characterization checkpoint" { print $1; exit }')"
-reference="$(git log --format='%H%x09%s' HEAD | awk -F '\t' '$2 == "style(spotlight): format the original spotlight board" { print $1; exit }')"
+checkpoint="$(git log --format='%H%x09%s' HEAD | awk -F '\t' '$2 == "test(spotlight-board): step 0 original-code characterization checkpoint" && !found { print $1; found=1 }')"
+reference="$(git log --format='%H%x09%s' HEAD | awk -F '\t' '$2 == "style(spotlight): format the original spotlight board" && !found { print $1; found=1 }')"
 if [[ -z "$checkpoint" || -z "$reference" ]]; then
   echo 'Missing exact Spotlight step-0 checkpoint or approved reference R.' >&2
   exit 1
@@ -21,7 +21,7 @@ if [[ "$(uname -s)" != Linux ]]; then
   echo 'Run in the calibrated debrify-flutter:3.44.8 linux/amd64 image.' >&2
   exit 1
 fi
-flutter --version | head -1 | grep -F 'Flutter 3.44.8' >/dev/null
+flutter --version | awk 'NR == 1' | grep -F 'Flutter 3.44.8' >/dev/null
 common="$(git rev-parse --path-format=absolute --git-common-dir)"
 evidence="$common/refactor-evidence/spotlight_board"
 mkdir -p "$evidence" "$repo/.dart_tool/spotlight_board"
@@ -29,7 +29,7 @@ capture_root="$(mktemp -d "$repo/.dart_tool/spotlight_board/linux-original.XXXXX
 trap 'rm -rf "$capture_root"' EXIT
 git archive "$checkpoint" | tar -xf - -C "$capture_root"
 cd "$capture_root"
-flutter pub get
+flutter pub get --enforce-lockfile
 test_path='test/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_goldens_test.dart'
 flutter test --no-pub --dart-define=SPOTLIGHT_BOARD_CAPTURE_ORIGINAL_LINUX=true \
   --update-goldens "$test_path" 2>&1 | tee "$evidence/linux-original-capture.txt"

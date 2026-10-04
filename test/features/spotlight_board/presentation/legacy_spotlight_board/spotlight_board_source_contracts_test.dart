@@ -6,6 +6,17 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../../support/spotlight_board_source.dart';
 
 void main() {
+  test(
+    'AST reader accepts correct moves and rejects executable/comment mutations',
+    () {
+      final result = Process.runSync('python3', [
+        'dev/tool/spotlight_board_source_reader_test.py',
+        '--parser-package',
+        '.dart_tool/spotlight_board/parser/.dart_tool/package_config.json',
+      ]);
+      expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');
+    },
+  );
   final originals =
       jsonDecode(
             File(

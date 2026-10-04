@@ -14,6 +14,7 @@ import 'package:debrify/theme/widgets/parallax_focus.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 import 'package:debrify/widgets/home/spotlight_card_trailer.dart';
+import 'package:debrify/widgets/recoverable_network_image.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -104,102 +105,106 @@ void main() {
       });
     },
   );
-  for (final handoff in ['profile', 'unmount']) {
-    testWidgets('held description publishes nothing after $handoff', (
-      tester,
-    ) async {
-      await spotlightCase(tester, (f) async {
-        final prefs = await SharedPreferences.getInstance();
-        final addon = StremioAddon(
-          id: 'held',
-          name: 'Held metadata',
-          manifestUrl: 'https://metadata.test/manifest.json',
-          baseUrl: 'https://metadata.test',
-          resources: const ['meta'],
-          types: const ['movie'],
-        );
-        await prefs.setString(
-          'stremio_addons_v1',
-          jsonEncode([addon.toJson()]),
-        );
-        StremioService.instance.invalidateCache();
-        final entered = Completer<void>();
-        final response = Completer<http.Response>();
-        f.respond = (request) {
-          if (!entered.isCompleted) {
-            entered.complete();
-          }
-          return response.future;
-        };
-        final shelf = f.shelf('a');
-        f.sections = [
-          SpotlightShelf(
-            id: shelf.id,
-            title: shelf.title,
-            nodes: shelf.nodes,
-            items: [
-              for (var i = 0; i < shelf.items.length; i++)
-                SpotlightCard(
-                  title: 'Sparse $i',
-                  onOpen: () {},
-                  metadata: StremioMeta(
-                    id: 'tt999990$i',
-                    imdbId: 'tt999990$i',
-                    type: 'movie',
-                    name: 'Sparse $i',
-                  ),
-                ),
-            ],
-          ),
-        ];
-        await f.mount(tester);
-        await f.focus(tester, f.sections.first.nodes.first);
-        await f.pump(tester, 50);
-        for (var i = 0; i < 20 && !entered.isCompleted; i++) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+  for (final handoff in ['none', 'profile', 'unmount']) {
+    testWidgets(
+      'held description publication respects originating scope handoff=$handoff',
+      (tester) async {
+        await spotlightCase(tester, (f) async {
+          final prefs = await SharedPreferences.getInstance();
+          final addon = StremioAddon(
+            id: 'held',
+            name: 'Held metadata',
+            manifestUrl: 'https://metadata.test/manifest.json',
+            baseUrl: 'https://metadata.test',
+            resources: const ['meta'],
+            types: const ['movie'],
           );
-          await f.pump(tester);
-        }
-        expect(
-          entered.isCompleted,
-          isTrue,
-          reason: 'Exercise the actual held HTTP request',
-        );
-        if (handoff == 'profile') {
-          ProfileRuntime.initializeCommitted(
-            ProfileScope(
-              profileId: 'incoming',
-              dataGeneration: 1,
-              sessionEpoch: 2,
+          await prefs.setString(
+            'stremio_addons_v1',
+            jsonEncode([addon.toJson()]),
+          );
+          StremioService.instance.invalidateCache();
+          final entered = Completer<void>();
+          final response = Completer<http.Response>();
+          f.respond = (request) {
+            if (!entered.isCompleted) {
+              entered.complete();
+            }
+            return response.future;
+          };
+          final shelf = f.shelf('a');
+          f.sections = [
+            SpotlightShelf(
+              id: shelf.id,
+              title: shelf.title,
+              nodes: shelf.nodes,
+              items: [
+                for (var i = 0; i < shelf.items.length; i++)
+                  SpotlightCard(
+                    title: 'Sparse $i',
+                    onOpen: () {},
+                    metadata: StremioMeta(
+                      id: 'tt999990$i',
+                      imdbId: 'tt999990$i',
+                      type: 'movie',
+                      name: 'Sparse $i',
+                    ),
+                  ),
+              ],
+            ),
+          ];
+          await f.mount(tester);
+          await f.focus(tester, f.sections.first.nodes.first);
+          await f.pump(tester, 50);
+          for (var i = 0; i < 20 && !entered.isCompleted; i++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+            await f.pump(tester);
+          }
+          expect(
+            entered.isCompleted,
+            isTrue,
+            reason: 'Exercise the actual held HTTP request',
+          );
+          if (handoff == 'profile') {
+            ProfileRuntime.initializeCommitted(
+              ProfileScope(
+                profileId: 'incoming',
+                dataGeneration: 1,
+                sessionEpoch: 2,
+              ),
+            );
+          } else if (handoff == 'unmount') {
+            await tester.pumpWidget(const SizedBox.shrink());
+          }
+          response.complete(
+            http.Response(
+              jsonEncode({
+                'meta': {
+                  'id': 'tt9999900',
+                  'type': 'movie',
+                  'name': 'Sparse 0',
+                  'description': 'Late held description',
+                },
+              }),
+              200,
             ),
           );
-        } else {
-          await tester.pumpWidget(const SizedBox.shrink());
-        }
-        response.complete(
-          http.Response(
-            jsonEncode({
-              'meta': {
-                'id': 'tt9999900',
-                'type': 'movie',
-                'name': 'Sparse 0',
-                'description': 'Late held description',
-              },
-            }),
-            200,
-          ),
-        );
-        for (var i = 0; i < 10; i++) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          for (var i = 0; i < 10; i++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+            await f.pump(tester);
+          }
+          expect(
+            find.textContaining('Late held description'),
+            handoff == 'none' ? findsOneWidget : findsNothing,
           );
-          await f.pump(tester);
-        }
-        expect(find.textContaining('Late held description'), findsNothing);
-        expect(tester.takeException(), isNull);
-      });
-    });
+          expect(tester.takeException(), isNull);
+        });
+      },
+    );
   }
   for (final pointer in [false, true]) {
     testWidgets(
@@ -216,7 +221,6 @@ void main() {
                 w.runtimeType.toString() == '_Card' ||
                 w.runtimeType.toString() == 'SpotlightBoardCard',
           );
-          final states = tester.stateList<State>(cards).toList();
           final target = cards.at(1);
           if (pointer) {
             final region = tester.widget<MouseRegion>(
@@ -239,7 +243,6 @@ void main() {
           );
           expect(active, findsOneWidget);
           expect(find.descendant(of: target, matching: active), findsOneWidget);
-          expect(tester.state(target), same(states[1]));
           expect(tester.takeException(), isNull);
         });
       },
@@ -517,6 +520,7 @@ void main() {
         );
         region.onEnter!(const PointerEnterEvent());
         await f.pump(tester);
+        expect(f.events.where((event) => event == 'stop'), hasLength(1));
         expect(
           f.events.indexOf('stop'),
           lessThan(f.events.indexOf('preview a/0')),
@@ -528,6 +532,165 @@ void main() {
         await f.pump(tester);
         await f.pump(tester, 2000);
         expect(f.events.where((e) => e.startsWith('dwell')), ['dwell hero-a']);
+      });
+    },
+  );
+
+  testWidgets('hovering from card A to B keeps the desktop hero lease', (
+    tester,
+  ) async {
+    await spotlightCase(tester, (f) async {
+      f.dpad = false;
+      f.trailers = true;
+      f.largeInteractions = true;
+      f.sections = [f.shelf('a', preview: true)];
+      await f.mount(tester, size: const Size(1440, 900));
+      final cards = find.byWidgetPredicate(
+        (widget) =>
+            widget.runtimeType.toString() == '_Card' ||
+            widget.runtimeType.toString() == 'SpotlightBoardCard',
+      );
+      MouseRegion region(int index) => tester.widget<MouseRegion>(
+        find
+            .descendant(
+              of: cards.at(index),
+              matching: find.byWidgetPredicate(
+                (widget) => widget is MouseRegion && widget.onEnter != null,
+              ),
+            )
+            .first,
+      );
+      final a = region(0);
+      final b = region(1);
+      a.onEnter!(const PointerEnterEvent());
+      await f.pump(tester);
+      expect(f.events.where((event) => event == 'stop'), hasLength(1));
+      f.events.clear();
+      b.onEnter!(const PointerEnterEvent());
+      a.onExit!(const PointerExitEvent());
+      await f.pump(tester);
+      await f.pump(tester, 3000);
+      expect(f.events.where((event) => event.startsWith('dwell')), isEmpty);
+      expect(f.events.where((event) => event == 'stop'), hasLength(1));
+      expect(
+        f.events.indexOf('stop'),
+        lessThan(f.events.indexOf('preview a/1')),
+      );
+      b.onExit!(const PointerExitEvent());
+      await f.pump(tester);
+      await f.pump(tester, 1999);
+      expect(f.events.where((event) => event.startsWith('dwell')), isEmpty);
+      await f.pump(tester, 1);
+      expect(f.events.where((event) => event.startsWith('dwell')), [
+        'dwell hero-a',
+      ]);
+    });
+  });
+
+  for (final tv in [false, true]) {
+    test('groundLowOf uses the original Android TV gate TV=$tv', () {
+      PlatformUtil.debugSetAndroidTvCached(tv);
+      addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+      final app = PremiumLooks.byId('spotlight')!.build();
+      expect(
+        SpotlightBoard.groundLowOf(app),
+        tv ? app.home.bg : Color.lerp(app.home.bg, app.core.tx, 0.015),
+      );
+      if (!tv) {
+        expect(SpotlightBoard.groundLowOf(app), isNot(app.home.bg));
+      }
+    });
+    testWidgets(
+      'card focus tween uses the original Android TV duration TV=$tv',
+      (tester) async {
+        await spotlightCase(tester, (f) async {
+          PlatformUtil.debugSetAndroidTvCached(tv);
+          f.sections = [f.shelf('a')];
+          await f.mount(tester);
+          final card = find
+              .byWidgetPredicate(
+                (widget) =>
+                    widget.runtimeType.toString() == '_Card' ||
+                    widget.runtimeType.toString() == 'SpotlightBoardCard',
+              )
+              .first;
+          final tween = tester.widget<TweenAnimationBuilder<double>>(
+            find.descendant(
+              of: card,
+              matching: find.byType(TweenAnimationBuilder<double>),
+            ),
+          );
+          expect(tween.duration, Duration(milliseconds: tv ? 160 : 220));
+        });
+      },
+    );
+    for (final fade in ['in', 'out']) {
+      testWidgets(
+        'card image fade $fade uses the original Android TV gate TV=$tv',
+        (tester) async {
+          await spotlightCase(tester, (f) async {
+            PlatformUtil.debugSetAndroidTvCached(tv);
+            f.sections = [f.shelf('a', images: true)];
+            await f.mount(tester);
+            final image = tester
+                .widgetList<RecoverableNetworkImage>(
+                  find.byType(RecoverableNetworkImage),
+                )
+                .firstWhere(
+                  (image) => image.imageUrl == 'https://artwork.test/a-0.png',
+                );
+            expect(
+              fade == 'in' ? image.fadeInDuration : image.fadeOutDuration,
+              Duration(
+                milliseconds: fade == 'in'
+                    ? (tv ? 220 : 180)
+                    : (tv ? 180 : 100),
+              ),
+            );
+          });
+        },
+      );
+    }
+    testWidgets(
+      'card ensureVisible snaps on Android TV and glides elsewhere TV=$tv',
+      (tester) async {
+        await spotlightCase(tester, (f) async {
+          PlatformUtil.debugSetAndroidTvCached(tv);
+          f.shelvesOnly = true;
+          f.sections = [f.shelf('a', count: 12)];
+          await f.mount(tester);
+          final horizontal = tester
+              .stateList<ScrollableState>(find.byType(Scrollable))
+              .singleWhere(
+                (state) => state.axisDirection == AxisDirection.right,
+              )
+              .position;
+          expect(horizontal.pixels, 0);
+          f.sections.first.nodes[4].requestFocus();
+          await f.pump(tester);
+          await f.pump(tester);
+          expect(horizontal.pixels, tv ? greaterThan(0) : 0);
+          await f.pump(tester, 220);
+          expect(horizontal.pixels, greaterThan(0));
+        });
+      },
+    );
+  }
+
+  testWidgets(
+    'Android TV directional movement records parallax travel cadence',
+    (tester) async {
+      await spotlightCase(tester, (f) async {
+        PlatformUtil.debugSetAndroidTvCached(true);
+        f.sections = [f.shelf('a')];
+        await f.mount(tester);
+        await f.focus(tester, f.sections.first.nodes.first);
+        await f.keyPress(tester, LogicalKeyboardKey.arrowRight);
+        expect(ParallaxTravel.isTravelling, isFalse);
+        await f.pump(tester, 100);
+        await f.keyPress(tester, LogicalKeyboardKey.arrowRight);
+        expect(ParallaxTravel.isTravelling, isTrue);
+        expect(ParallaxTravel.isRapid, isTrue);
       });
     },
   );
@@ -699,7 +862,7 @@ void main() {
     for (final shape in [SpotlightCardShape.poster, SpotlightCardShape.wide]) {
       for (final dpr in [1.0, 2.0]) {
         testWidgets(
-          'card decode width stays stable across focus shape=$shape TV=$tv DPR=$dpr',
+          'card decode width reserves expanded resolution once and stays stable during growth shape=$shape TV=$tv DPR=$dpr',
           (tester) async {
             await spotlightCase(tester, (f) async {
               PlatformUtil.debugSetAndroidTvCached(tv);

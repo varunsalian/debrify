@@ -913,6 +913,126 @@ decomposition; bug fixes and behaviour changes, including everything below.
   hold/repeat and entry-lag burst remain pending, as do remote CI and merged
   integration. Found-not-fixed items above remain unchanged.
 
+### Step 0b — independent review corrections; facade cap blocks extraction
+
+- The characterization checkpoint (b) is
+  `54b4afa559b1341f6aece38c47072e0b2c8164e0`; the approved application
+  reference R remains format-only
+  `a65ad81aebbbcbe29730fc2de1d78b037a84539c`. No production code has moved.
+  Both revisions have lib tree `9c828d5bd303068f3bb2768fdce45c28f78fef80`,
+  pubspec blob `5f983ff8c68a01aef5c7a1ec393e677e7693591f`, and lock blob
+  `e0ff9cca69c00ae69bb4dfe111c18a89547cec98`. The review corrections change
+  tests and tooling only; the same application hashes remain required.
+- **Reviewed reader correction (P1).** The Dart reader now calls the Python
+  checker's AST token normalization with an explicitly isolated parser
+  package. It validates physical lexical/State context before normalization,
+  compares original comment tokens independently, then returns the verified
+  original body. It never reverses names in raw prose, literals or locals.
+  Correct simulated shelf, DOWN, warm-up, hero-open and card-layout moves
+  pass; executable/receiver and ordinary-comment mutations fail. Card bindings
+  cover widget, mounted and all inherited members actually read by layout,
+  including metadataArtworkPending. The warm-up and open sites also retain
+  the State's overridable heroWarmupProvider and originalMetadata dispatch.
+  Registered formatter exception sidecars use the same validator as the
+  checker; no general punctuation or context exception is introduced.
+- **Behavior corrections (P2/P3).** Desktop lease ordering first requires
+  exactly one stop. A-to-B hover transfer retains the original extra stop on
+  acquisition and never produces a hero dwell while B owns the preview;
+  leaving B re-arms the original two-second clock. Android TV behavior now
+  covers groundLowOf, card tween, both image fade durations, ensureVisible
+  snap and ParallaxTravel.note, each with the non-TV control where applicable.
+  The held-description case has a successful publication control; its profile
+  and unmount guards remain. The self-comparing State assertion is removed;
+  the decode test name now describes its measured growth behavior. Existing
+  meaningful assertions, golden tests and golden PNGs are unchanged.
+- **Checker negatives (P2).** Whole-checker fixtures reject the board State's
+  setter tear-off, setter wrapper, per-access section recreation and a
+  section constructed on every build, cached widget-property snapshots and
+  static wrappers. Real-config mutations also reject inserted Opacity and a
+  dropped dispose step in either State, alongside the existing negatives.
+- **Original proofs.** The contained ignored original copy is still on (b)
+  with application files equal R. Its final reviewed characterization run
+  passes all **146** cases: 49 behavior cases, 91 source/reader cases and six
+  strict macOS goldens. Start/end tree and SDK provenance and hashes of the
+  reviewed inputs are in `step0b-original-final.{env.json,jsonl}` and
+  `step0b-original-final-inputs.json`. All **20** application mutants compile
+  and fail the **entire contracts test file**, without name filtering;
+  `step0b-review-full-mutation-proofs.json` records commands, original and
+  mutated hashes, input hashes and individual logs. This supersedes the
+  earlier filtered mutation evidence. The reader's simulated positives and
+  negatives run through the entire source-contract file.
+- **Complete composition probe (P2-4): BLOCKED: facade cap.** A separate
+  ignored copy contains every actual planned owner, section, card and layout,
+  the retained lifecycle, typed live view and the real composition factory.
+  It compiles under the feature's strict configuration with **17 infos, zero
+  warnings/errors and zero added rule/symbol/message identities**. Sixteen
+  receiver-induced formatter wraps are individually pinned in that copy;
+  all ten original curly sites remain. Related getter declarations retain
+  the previously measured adjacent layout. The complete facade is **451
+  physical formatted lines**, exceeding the hard 450 maximum:
+
+  | AST span | Lines |
+  | --- | ---: |
+  | Imports and re-export | 13 |
+  | Widget and its docs | 185 |
+  | State header | 3 |
+  | Lifecycle | 142 |
+  | Forwarders and mixin overrides | 26 |
+  | Live widget/static bindings | 54 |
+  | Owners and cached composition | 11 |
+  | Remaining blank/comment/closing lines | 17 |
+  | **Total** | **451** |
+
+  The nominal 450-line variant bypassed the public State warm-up override.
+  Preserving that call through the owning State's tear-off adds one factory
+  binding line. Exposing that method in the implemented view instead also
+  requires an added override annotation. Neither permits accepting the
+  incomplete variant. No alternative layout, new size exception, deleted
+  comment or compressed formatting is adopted. Actual application facade
+  remains the original **3,896** lines. Sources, hashes, AST line sets, strict
+  inventory and the full probe scripts are retained under the own evidence
+  namespace (`step0b-real-composition-*`). The full probe's real checker also
+  rejects a newly formatted named-record comma in loadShelvesAndFinishDown
+  and its changed context prefix; this is recorded as an unresolved tooling
+  finding, not accepted or hidden by weakening the guard. The earlier original
+  compiling binding/header probe and its real-checker negatives still pass.
+- **Contract 13 choice.** Late ambient tint remains source-guard-only: the
+  original dominant-color/cache path does not provide a deterministic held
+  provider without an added production seam. Generation and mounted guards,
+  ambient dedupe, per-ID flip memo and pending-artwork branch are pinned
+  verbatim; held descriptions have behavioral controls. No ambient seam is
+  added; device behavior remains pending.
+- **Capture script and supplied Linux originals.** Exact-subject lookup now
+  consumes the entire git-log stream under pipefail; SDK first-line selection
+  also drains its input. Dependency setup uses --enforce-lockfile. Syntax,
+  original hash resolution and a long-stream pipefail control pass. The six
+  supplied Linux PNG hashes and provenance verify against (b), R and the
+  calibrated local linux/amd64 capture/strict logs. The user's as-run script
+  is retained in evidence. Golden tests were not changed in 0b; no recapture
+  is required for these review changes. PNGs remain separately untracked;
+  their dedicated commit and strict Linux enforcement are pending before
+  any builder move, per the user's stronger prerequisite.
+- **Xtream flaky-acceptance evidence.** The two stable default-concurrency
+  b-suite attempts reproduce only the unrelated 50k ingest responsiveness
+  timeout. Isolated current and original replays pass all ten cases; a
+  contended original replay reproduces the same timeout. The 75-file project
+  import closure, pubspec/lock and analyzer options hash-equal R/b
+  (`base3-xtream-input-audit.json`). A controlled R full-suite run with four
+  workers has exactly the original baseline identities and outcomes:
+  10,984 success, 13 failure, 28 error, 20 skipped. No Xtream failure is added
+  to any allowlist and no timeout/assertion is changed. Proper base3 will run
+  after this review commit with --no-pub and four workers, with the complete
+  start/end tree provenance; its result is recorded separately before stopping.
+- Local review checks: whole-repo analyzer comparison against base-fmt has
+  zero additions/removals; CI format and scoped analyzer pass (12 existing
+  allowlisted warnings). Architecture, size, storage declarations and
+  storage-reference self-tests pass. Every integrated manifest is rerun with
+  self-tests and the isolated parser package; final results follow in the
+  evidence checkpoint. Steps 1–7 and both full-suite gates remain pending
+  because extraction is blocked by the measured facade cap. The thirteen
+  original found-not-fixed behaviors below remain unchanged; device checks,
+  remote CI and merged integration remain pending.
+
 
 ## Found, not fixed
 
