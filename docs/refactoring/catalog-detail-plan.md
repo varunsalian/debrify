@@ -560,7 +560,39 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
 
 ## Progress
 
-(Not started.)
+- Execution base: `881ed25073c9cac0f80c5ae650118a9bcdcb4d41`, branch
+  `refactor/catalog-detail`, dedicated worktree only. Flutter 3.44.8 / Dart
+  3.12.2; first command `flutter pub get`, lockfile unchanged; no push or
+  branch switch. Evidence namespace `catalog_detail/`; parser and kernels
+  isolated under this worktree's `.dart_tool/catalog_detail_parser/`.
+- Untouched full baseline `catalog_detail/base`: 11,093 successes / 13
+  failures / 28 errors / 20 skips, stable committed tree
+  `b11d47e4c6824a9ed47202bf8f4dcac98509dba5`. Existing catalog hold cases all
+  pass; no new CI failure entries are authorized. Whole analyzer: 1,666
+  original diagnostics. The historical failure list is not the baseline.
+- Temporary oversized original: `lib/screens/catalog_item_detail_screen.dart`
+  retains all rendering, lifecycle, state, actions and private widgets until
+  the prescribed steps 1–5 extract them. Its format-only ceiling is 3,561;
+  step 6 enforces the final 360-line facade cap. This records retention,
+  remaining responsibilities and the extraction milestone before editing.
+- Format-only preparation preserves every application token, comment and
+  literal except the 15 AST-identified optional formatter commas. Only the
+  four formatter-broken catalog completion-listener assertions use the new
+  declaration-scoped helper; their notifier, operation and callback identity
+  remain exact. Every other catalog and merged assertion is retained.
+- Format proof PASS: 15 optional commas, token/comment/literal equality and
+  four scanner negatives; format idempotent. Listener guard fixture: 48/48
+  positives/negatives pass on unformatted and formatted originals; all three
+  unchanged rewatch guards pass. Root formatted analyzer: 1,667 diagnostics,
+  exactly the one accepted curly info added. Exact-import strict probe uses a
+  temporary local analysis config, restored after each run; 20 unformatted
+  versus 21 formatted diagnostics. Rejected package-import and symlink probes
+  remain evidence only and are never accepted as baselines.
+- Conservative decision: the single format-induced curly-braces info is
+  accepted by the exact user-approved rule/symbol/message identity; no braces,
+  suppression or info allowlist entry. `_simklStatus` remains untouched until
+  its private destination and both writers move together in step 3.
+
 
 ## Found, not fixed
 

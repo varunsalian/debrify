@@ -167,7 +167,14 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// empty = loaded but nothing to show (rail stays hidden either way).
   void _openMetadataRecommendation(StremioMeta item) {
     final onOpen = widget.onRecommendationTap;
-    if (onOpen != null) unawaited(openMetadataTitle(context, _recommendationOriginals[item] ?? item, onOpen));
+    if (onOpen != null)
+      unawaited(
+        openMetadataTitle(
+          context,
+          _recommendationOriginals[item] ?? item,
+          onOpen,
+        ),
+      );
   }
 
   List<StremioMeta>? _recommendations;
@@ -227,16 +234,20 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   bool _inMyWatchlist = false;
 
   /// Policy-filtered completion shared across local and all three trackers.
-  bool get _isCompletedMovie =>
-      _item.type != 'series' &&
-      _localMovieFinished;
+  bool get _isCompletedMovie => _item.type != 'series' && _localMovieFinished;
 
   @override
   void initState() {
     super.initState();
-    TrackingSourceStorage.trackingSourceRevision.addListener(_onMovieProgressPolicyChanged);
-    MovieProgressStorage.movieFinishedRevision.addListener(_loadLocalMovieFinished);
-    MdblistService.instance.watchedRevision.addListener(_loadLocalMovieFinished);
+    TrackingSourceStorage.trackingSourceRevision.addListener(
+      _onMovieProgressPolicyChanged,
+    );
+    MovieProgressStorage.movieFinishedRevision.addListener(
+      _loadLocalMovieFinished,
+    );
+    MdblistService.instance.watchedRevision.addListener(
+      _loadLocalMovieFinished,
+    );
     AnalyticsService.screenView('catalog_detail');
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     _revealCtrl = AnimationController(
@@ -326,7 +337,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         _item.effectiveImdbId ?? (_item.id.startsWith('tt') ? _item.id : null);
     if (imdbId == null || imdbId.isEmpty) return;
     final finished = await MovieCompletionService.load(imdbId);
-    if (mounted && generation == _movieCompletionGeneration && finished != _localMovieFinished) {
+    if (mounted &&
+        generation == _movieCompletionGeneration &&
+        finished != _localMovieFinished) {
       setState(() => _localMovieFinished = finished);
     }
   }
@@ -376,8 +389,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// The primary-button label: "Start Watching" before any progress, otherwise
   /// "Resume" with an OTT-style "· S3E4" tag for series. Falls back to the
   /// static "Play" until the resume state resolves.
-  String get _primaryLabel => widget.onRewatch == null && _resolvedPrimaryLabel == 'Rewatch'
-      ? 'Play' : _resolvedPrimaryLabel;
+  String get _primaryLabel =>
+      widget.onRewatch == null && _resolvedPrimaryLabel == 'Rewatch'
+      ? 'Play'
+      : _resolvedPrimaryLabel;
 
   String get _resolvedPrimaryLabel {
     if (_rewatchPending) return 'Rewatch';
@@ -403,15 +418,21 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   Future<void> _playPrimary() async {
     if (_rewatchBusy) return;
     final restart = widget.onRewatch;
-    if (restart == null || _item.type == 'series' || _primaryLabel != 'Rewatch') {
+    if (restart == null ||
+        _item.type == 'series' ||
+        _primaryLabel != 'Rewatch') {
       widget.onPlay();
       return;
     }
     _rewatchBusy = true;
     try {
-      final cleared = await resetProgressForRewatch(context,
-        id: _item.imdbId ?? _item.id, title: _item.name, isMovie: true,
-        onConfirmed: () => setState(() => _rewatchPending = true));
+      final cleared = await resetProgressForRewatch(
+        context,
+        id: _item.imdbId ?? _item.id,
+        title: _item.name,
+        isMovie: true,
+        onConfirmed: () => setState(() => _rewatchPending = true),
+      );
       if (!mounted || !cleared) return;
       ++_movieCompletionGeneration; // Discard reads started before the reset.
       setState(() {
@@ -421,7 +442,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         _resumeStarted = false;
       });
       restart();
-    } finally { _rewatchBusy = false; }
+    } finally {
+      _rewatchBusy = false;
+    }
   }
 
   @override
@@ -545,7 +568,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   void onMetadataPolicyChanged() {
     _detailsMetadataGeneration++;
     if (!mounted) return;
-    setState(() { _imdbExtra = null; _recommendations = []; });
+    setState(() {
+      _imdbExtra = null;
+      _recommendations = [];
+    });
     unawaited(_loadImdbEnrichment());
     unawaited(_loadRecommendations());
   }
@@ -554,14 +580,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final generation = _detailsMetadataGeneration;
     final scope = ProfileRuntime.scope.value;
     final revision = MetadataPreferencesService.revision.value;
-    bool valid() => mounted && generation == _detailsMetadataGeneration && scope == ProfileRuntime.scope.value && revision == MetadataPreferencesService.revision.value;
+    bool valid() =>
+        mounted &&
+        generation == _detailsMetadataGeneration &&
+        scope == ProfileRuntime.scope.value &&
+        revision == MetadataPreferencesService.revision.value;
     final imdbId = _item.effectiveImdbId;
     try {
       final extra = await MetadataDetailsService.instance.enrich(
         _item,
-        loadExisting: () async => imdbId == null
-            ? null
-            : ImdbEnrichmentService.fetch(imdbId),
+        loadExisting: () async =>
+            imdbId == null ? null : ImdbEnrichmentService.fetch(imdbId),
       );
       if (mounted && valid()) {
         setState(() {
@@ -601,7 +630,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final generation = _detailsMetadataGeneration;
     final scope = ProfileRuntime.scope.value;
     final revision = MetadataPreferencesService.revision.value;
-    bool valid() => mounted && generation == _detailsMetadataGeneration && scope == ProfileRuntime.scope.value && revision == MetadataPreferencesService.revision.value;
+    bool valid() =>
+        mounted &&
+        generation == _detailsMetadataGeneration &&
+        scope == ProfileRuntime.scope.value &&
+        revision == MetadataPreferencesService.revision.value;
     final loader = widget.recommendationsLoader;
     try {
       final recs = await MetadataDetailsService.instance.recommendations(
@@ -623,7 +656,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         }
       }
       if (!valid()) return;
-      await for (final batch in MetadataProviderService.instance.presentBatches(recs, isRelevant: valid)) {
+      await for (final batch in MetadataProviderService.instance.presentBatches(
+        recs,
+        isRelevant: valid,
+      )) {
         if (!valid()) return;
         for (var index = 0; index < batch.length; index++) {
           _recommendationOriginals[batch[index]] = recs[index];
@@ -637,9 +673,15 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   @override
   void dispose() {
-    TrackingSourceStorage.trackingSourceRevision.removeListener(_onMovieProgressPolicyChanged);
-    MovieProgressStorage.movieFinishedRevision.removeListener(_loadLocalMovieFinished);
-    MdblistService.instance.watchedRevision.removeListener(_loadLocalMovieFinished);
+    TrackingSourceStorage.trackingSourceRevision.removeListener(
+      _onMovieProgressPolicyChanged,
+    );
+    MovieProgressStorage.movieFinishedRevision.removeListener(
+      _loadLocalMovieFinished,
+    );
+    MdblistService.instance.watchedRevision.removeListener(
+      _loadLocalMovieFinished,
+    );
     appRouteObserver.unsubscribe(this);
     MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     _revealCtrl.dispose();
@@ -701,8 +743,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     String? backdropUrl,
   ) {
     return Scaffold(
-      floatingActionButton: MetadataExploreButton(item: _item,
-        onOpen: widget.onRecommendationTap, isTelevision: widget.isTelevision),
+      floatingActionButton: MetadataExploreButton(
+        item: _item,
+        onOpen: widget.onRecommendationTap,
+        isTelevision: widget.isTelevision,
+      ),
       backgroundColor: const Color(0xFF050507),
       body: Stack(
         fit: StackFit.expand,
@@ -882,8 +927,15 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         ..add(SizedBox(height: t ? 12 : 22))
         ..add(pg);
     }
-    children.add(MetadataFranchiseRail(item: _item,
-      onOpen: widget.onRecommendationTap == null ? null : _openMetadataRecommendation, isTelevision: widget.isTelevision));
+    children.add(
+      MetadataFranchiseRail(
+        item: _item,
+        onOpen: widget.onRecommendationTap == null
+            ? null
+            : _openMetadataRecommendation,
+        isTelevision: widget.isTelevision,
+      ),
+    );
     final r = _secRecommendations(0.66);
     if (r != null) {
       children
@@ -991,8 +1043,15 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         );
     }
 
-    children.add(MetadataFranchiseRail(item: _item,
-      onOpen: widget.onRecommendationTap == null ? null : _openMetadataRecommendation, isTelevision: widget.isTelevision));
+    children.add(
+      MetadataFranchiseRail(
+        item: _item,
+        onOpen: widget.onRecommendationTap == null
+            ? null
+            : _openMetadataRecommendation,
+        isTelevision: widget.isTelevision,
+      ),
+    );
     final r = _secRecommendations(0.66);
     if (r != null) {
       children
@@ -1620,7 +1679,9 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   Widget? _secRecommendations(double start) {
     final recs = _recommendations;
-    final onTap = widget.onRecommendationTap == null ? null : _openMetadataRecommendation;
+    final onTap = widget.onRecommendationTap == null
+        ? null
+        : _openMetadataRecommendation;
     final tight = _tight;
     final cardW = _wide ? (tight ? 104.0 : 120.0) : 112.0;
     final posterH = cardW * 1.5;

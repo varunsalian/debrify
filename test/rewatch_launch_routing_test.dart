@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/merged_detail_source.dart';
+import 'support/catalog_detail_source.dart';
 
 void main() {
   test(
@@ -38,12 +39,22 @@ void main() {
             );
           } else {
             expect(
-              source,
-              contains('$notifier.addListener(_loadLocalMovieFinished)'),
+              catalogCompletionListenerSite(
+                source,
+                'initState',
+                notifier,
+                'addListener',
+              ),
+              isTrue,
             );
             expect(
-              source,
-              contains('$notifier.removeListener(_loadLocalMovieFinished)'),
+              catalogCompletionListenerSite(
+                source,
+                'dispose',
+                notifier,
+                'removeListener',
+              ),
+              isTrue,
             );
           }
         }
