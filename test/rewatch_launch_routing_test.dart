@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/merged_detail_source.dart';
 
 void main() {
   test(
@@ -9,7 +10,9 @@ void main() {
         'catalog_item_detail_screen',
         'merged_series_detail_screen',
       ]) {
-        final source = File('lib/screens/$path.dart').readAsStringSync();
+        final source = path == 'merged_series_detail_screen'
+            ? mergedDetailSource()
+            : File('lib/screens/$path.dart').readAsStringSync();
         for (final notifier in [
           'MovieProgressStorage.movieFinishedRevision',
           'MdblistService.instance.watchedRevision',
@@ -61,9 +64,7 @@ void main() {
     );
     expect(action, contains('restart();'));
     expect(action, isNot(contains('(widget.onRewatch ?? widget.onPlay)()')));
-    final merged = File(
-      'lib/screens/merged_series_detail_screen.dart',
-    ).readAsStringSync();
+    final merged = mergedDetailSource();
     final rewatch = merged.substring(
       merged.indexOf('Future<void> _rewatchTitle()'),
       merged.indexOf('void _browsePrimarySources()'),

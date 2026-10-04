@@ -904,6 +904,40 @@ the behaviour suite compared against the latest recorded base.
   original members. No candidate identity participates in either baseline.
 
 
+### Step 3 — remaining widgets and resource owners
+
+- Eleven whole Widget/State declarations move into seven files. All 22 widget
+  classes now retain their private runtime types and exact constructors through
+  pinned typedef/constructor exports. Six cohesive resource/state owners retain
+  original initializers, collection identity and GlobalKey/focus/scroll instances.
+  Facade is 3,310 lines. Every destination is under 500; shape still totals 26.
+- Composition constructs resources once before initState, captures no widget,
+  context or lazy reads, then binds its dependency object. The original two lazy
+  declarations remain in the State; the new assigned late-final parts field is
+  assigned in the constructor, not initialized lazily. Short typed owner getters
+  keep reads at the original sites and avoid new format-induced diagnostics.
+  The original static action set has an exact constant projection, with no copy.
+  `seriesDone` is the extracted name for `_seriesCompleted`, keeping its original
+  one-line guard within the formatter width. No braces or allowances are added.
+- The accessor follows actual owners; its original typed receiver is normalized
+  only for manifest-owned members. All added construction/projection leaves are
+  pinned after the per-entry wiring review. Lifecycle, mixins, subscription target,
+  disposal order, lazy initializers, defaults and bodies pass all 235 leaf checks.
+- Source readers now select a declaration, not mere destination-file existence;
+  the rewatch test follows the complete slice with every assertion retained.
+  All 40 affected cases pass first on the formatted original, whose production
+  bytes remain identical (`original-step3-source-proof.json`), then on this tree.
+  The literal-safe mapper skips irrelevant renames without altering mappings.
+- `step3-final-characterization`: 115 PASS against base4. All seven integrated
+  manifests/self-tests and architecture, size, storage, theme, format/diff pass on
+  a stable tested tree. Whole/scoped/strict analyzer and allowlist comparisons
+  pass, with 16 traced original infos and zero additions. The first reader run's
+  two source-reader failures are preserved; neither assertion is weakened.
+- Evidence snapshot creation is serialized at the beginning/end of the checker
+  batch. Parallel per-command git stash-create snapshots collided at the worktree
+  index; that failed launcher is preserved, and every check was rerun successfully.
+
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

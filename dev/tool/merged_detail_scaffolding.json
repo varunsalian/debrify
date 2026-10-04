@@ -1,6 +1,166 @@
 {
   "scaffolds": [
     {
+      "file": "lib/screens/merged_series_detail_screen.dart",
+      "owner": "_MergedDetailScreenState",
+      "name": "_parts",
+      "tokens": [
+        "late",
+        "final",
+        "MergedDetailParts",
+        "_parts",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/merged_series_detail_screen.dart",
+      "owner": "_MergedDetailScreenState",
+      "name": "_MergedDetailScreenState",
+      "tokens": [
+        "_MergedDetailScreenState",
+        "(",
+        ")",
+        "{",
+        "final",
+        "deps",
+        "=",
+        "MergedDetailDependencies",
+        "(",
+        ")",
+        ";",
+        "_parts",
+        "=",
+        "MergedDetailParts",
+        "(",
+        "deps",
+        ")",
+        ";",
+        "deps",
+        ".",
+        "parts",
+        "=",
+        "_parts",
+        ";",
+        "}"
+      ]
+    },
+    {
+      "file": "lib/screens/merged_series_detail_screen.dart",
+      "owner": "_MergedDetailScreenState",
+      "name": "_f",
+      "tokens": [
+        "MergedDetailFocusState",
+        "get",
+        "_f",
+        "=>",
+        "_parts",
+        ".",
+        "focusState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/merged_series_detail_screen.dart",
+      "owner": "_MergedDetailScreenState",
+      "name": "_m",
+      "tokens": [
+        "MergedDetailMetadataState",
+        "get",
+        "_m",
+        "=>",
+        "_parts",
+        ".",
+        "metadataState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/merged_series_detail_screen.dart",
+      "owner": "_MergedDetailScreenState",
+      "name": "_b",
+      "tokens": [
+        "MergedDetailModelFactory",
+        "get",
+        "_b",
+        "=>",
+        "_parts",
+        ".",
+        "modelFactory",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/merged_series_detail_screen.dart",
+      "owner": "_MergedDetailScreenState",
+      "name": "_r",
+      "tokens": [
+        "MergedDetailResumeState",
+        "get",
+        "_r",
+        "=>",
+        "_parts",
+        ".",
+        "resumeState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/merged_series_detail_screen.dart",
+      "owner": "_MergedDetailScreenState",
+      "name": "_k",
+      "tokens": [
+        "MergedDetailTrackingState",
+        "get",
+        "_k",
+        "=>",
+        "_parts",
+        ".",
+        "trackingState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/merged_series_detail_screen.dart",
+      "owner": "_MergedDetailScreenState",
+      "name": "_t",
+      "tokens": [
+        "MergedDetailTrailerState",
+        "get",
+        "_t",
+        "=>",
+        "_parts",
+        ".",
+        "trailerState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_quick_actions_menu.dart",
+      "owner": "",
+      "name": "MergedQuickActionsMenu",
+      "tokens": [
+        "typedef",
+        "MergedQuickActionsMenu",
+        "=",
+        "_QuickActionsMenu",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_quick_actions_menu.dart",
+      "owner": "",
+      "name": "mergedQuickActionsMenuConstructor",
+      "tokens": [
+        "const",
+        "mergedQuickActionsMenuConstructor",
+        "=",
+        "_QuickActionsMenu",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
       "file": "lib/features/merged_detail/presentation/merged_tracker_pill.dart",
       "owner": "",
       "name": "MergedTrackerPill",
@@ -387,6 +547,314 @@
         "_SheetRatingStrip",
         ".",
         "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_ambient_still.dart",
+      "owner": "",
+      "name": "MergedAmbientStill",
+      "tokens": [
+        "typedef",
+        "MergedAmbientStill",
+        "=",
+        "_AmbientStill",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_ambient_still.dart",
+      "owner": "",
+      "name": "mergedAmbientStillConstructor",
+      "tokens": [
+        "const",
+        "mergedAmbientStillConstructor",
+        "=",
+        "_AmbientStill",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart",
+      "owner": "",
+      "name": "appOwnedActions",
+      "tokens": [
+        "const",
+        "appOwnedActions",
+        "=",
+        "MergedDetailTrackingState",
+        ".",
+        "appOwnedActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_trakt_sheet.dart",
+      "owner": "",
+      "name": "MergedTraktSheet",
+      "tokens": [
+        "typedef",
+        "MergedTraktSheet",
+        "=",
+        "_TraktSheet",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_trakt_sheet.dart",
+      "owner": "",
+      "name": "mergedTraktSheetConstructor",
+      "tokens": [
+        "const",
+        "mergedTraktSheetConstructor",
+        "=",
+        "_TraktSheet",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_cast_tile.dart",
+      "owner": "",
+      "name": "MergedCastTile",
+      "tokens": [
+        "typedef",
+        "MergedCastTile",
+        "=",
+        "_CastTile",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_cast_tile.dart",
+      "owner": "",
+      "name": "mergedCastTileConstructor",
+      "tokens": [
+        "const",
+        "mergedCastTileConstructor",
+        "=",
+        "_CastTile",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_simkl_status_row.dart",
+      "owner": "",
+      "name": "MergedSimklStatusRow",
+      "tokens": [
+        "typedef",
+        "MergedSimklStatusRow",
+        "=",
+        "_SimklStatusRow",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_simkl_status_row.dart",
+      "owner": "",
+      "name": "mergedSimklStatusRowConstructor",
+      "tokens": [
+        "const",
+        "mergedSimklStatusRowConstructor",
+        "=",
+        "_SimklStatusRow",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_simkl_sheet.dart",
+      "owner": "",
+      "name": "MergedSimklSheet",
+      "tokens": [
+        "typedef",
+        "MergedSimklSheet",
+        "=",
+        "_SimklSheet",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_simkl_sheet.dart",
+      "owner": "",
+      "name": "mergedSimklSheetConstructor",
+      "tokens": [
+        "const",
+        "mergedSimklSheetConstructor",
+        "=",
+        "_SimklSheet",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart",
+      "owner": "MergedDetailDependencies",
+      "name": "parts",
+      "tokens": [
+        "late",
+        "final",
+        "MergedDetailParts",
+        "parts",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart",
+      "owner": "MergedDetailDependencies",
+      "name": "MergedDetailDependencies",
+      "tokens": [
+        "MergedDetailDependencies",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_rec_card.dart",
+      "owner": "",
+      "name": "MergedRecCard",
+      "tokens": [
+        "typedef",
+        "MergedRecCard",
+        "=",
+        "_RecCard",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_rec_card.dart",
+      "owner": "",
+      "name": "mergedRecCardConstructor",
+      "tokens": [
+        "const",
+        "mergedRecCardConstructor",
+        "=",
+        "_RecCard",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "metadataState",
+      "tokens": [
+        "final",
+        "MergedDetailMetadataState",
+        "metadataState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "trailerState",
+      "tokens": [
+        "final",
+        "MergedDetailTrailerState",
+        "trailerState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "resumeState",
+      "tokens": [
+        "final",
+        "MergedDetailResumeState",
+        "resumeState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "focusState",
+      "tokens": [
+        "final",
+        "MergedDetailFocusState",
+        "focusState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "trackingState",
+      "tokens": [
+        "final",
+        "MergedDetailTrackingState",
+        "trackingState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "modelFactory",
+      "tokens": [
+        "final",
+        "MergedDetailModelFactory",
+        "modelFactory",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "MergedDetailParts",
+      "tokens": [
+        "MergedDetailParts",
+        "(",
+        "MergedDetailDependencies",
+        "deps",
+        ")",
+        ":",
+        "metadataState",
+        "=",
+        "MergedDetailMetadataState",
+        "(",
+        ")",
+        ",",
+        "trailerState",
+        "=",
+        "MergedDetailTrailerState",
+        "(",
+        ")",
+        ",",
+        "resumeState",
+        "=",
+        "MergedDetailResumeState",
+        "(",
+        ")",
+        ",",
+        "focusState",
+        "=",
+        "MergedDetailFocusState",
+        "(",
+        ")",
+        ",",
+        "trackingState",
+        "=",
+        "MergedDetailTrackingState",
+        "(",
+        ")",
+        ",",
+        "modelFactory",
+        "=",
+        "MergedDetailModelFactory",
+        "(",
+        ")",
         ";"
       ]
     }

@@ -721,6 +721,16 @@ def destination_ownership(parsed, rows, source_path, scaffolds=(), partition_spe
 
 def accessor_receiver_tokens(values, spec, rows):
     """Drop only frozen accessor receivers on named methods moved to functions."""
+    receiver = spec.get('original_receiver')
+    owner = spec.get('original_owner')
+    if receiver:
+        owned = {row['original_name'].split('.')[-1] for row in rows
+                 if row['original_name'].startswith(owner + '.')}
+        values = [value for i, value in enumerate(values)
+                  if not (value == receiver and values[i + 1:i + 2] == ['.']
+                          and values[i + 2:i + 3] and values[i + 2] in owned)
+                  and not (value == '.' and i and values[i - 1] == receiver
+                           and values[i + 1:i + 2] and values[i + 1] in owned)]
     rule = spec.get('unbound_tearoffs')
     if not rule:
         return values

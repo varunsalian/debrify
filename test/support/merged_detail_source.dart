@@ -14,10 +14,30 @@ String mergedMemberPath(String original) {
   final row = mergedManifest().singleWhere(
     (r) => r['original_name'] == original,
   );
-  return File(row['destination_file']!).existsSync()
-      ? row['destination_file']!
-      : 'lib/screens/merged_series_detail_screen.dart';
+  final destination = File(row['destination_file']!);
+  if (destination.existsSync() &&
+      RegExp(
+        r'^  [A-Za-z_][\w<>?, ]*\s+' +
+            RegExp.escape(row['new_name']!) +
+            r'\s*(?:\(|=>|=|;)',
+        multiLine: true,
+      ).hasMatch(destination.readAsStringSync())) {
+    return row['destination_file']!;
+  }
+  return 'lib/screens/merged_series_detail_screen.dart';
 }
+
+String mergedDetailSource() => mergedOriginalNames(
+  [
+    File('lib/screens/merged_series_detail_screen.dart').readAsStringSync(),
+    if (Directory('lib/features/merged_detail').existsSync())
+      ...Directory('lib/features/merged_detail')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'))
+          .map((f) => f.readAsStringSync()),
+  ].join('\n'),
+);
 
 /// Read the one declaration selected by the manifest, retaining its doc text.
 String mergedOriginalMember(String original) {
@@ -100,6 +120,9 @@ String mergedOriginalNames(String member, {String? owner}) {
     for (final row in rows) {
       final original = row['original_name']!.split('.').last;
       final current = row['new_name']!;
+      if (!code.contains(current)) {
+        continue;
+      }
       final receivers = [
         ...paths.entries
             .where((p) => p.value == row['destination_class'])

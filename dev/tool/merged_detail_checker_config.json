@@ -81,7 +81,9 @@
     {
       "name": "mergedDetailTestAccess",
       "tokens_file": "dev/tool/merged_detail_test_accessor.json",
-      "required": true
+      "required": true,
+      "original_receiver": "s",
+      "original_owner": "_MergedDetailScreenState"
     }
   ],
   "seams": [],
@@ -113,11 +115,51 @@
     "MergedDetailTrailerState",
     "MergedDetailWatchlistActions",
     "_deps",
-    "deps"
+    "deps",
+    "s",
+    "state",
+    "this"
   ],
-  "receiver_paths": {},
+  "receiver_paths": {
+    "_parts.metadataState": "MergedDetailMetadataState",
+    "_deps.parts.metadataState": "MergedDetailMetadataState",
+    "state._parts.metadataState": "MergedDetailMetadataState",
+    "_parts.trailerState": "MergedDetailTrailerState",
+    "_deps.parts.trailerState": "MergedDetailTrailerState",
+    "state._parts.trailerState": "MergedDetailTrailerState",
+    "_parts.resumeState": "MergedDetailResumeState",
+    "_deps.parts.resumeState": "MergedDetailResumeState",
+    "state._parts.resumeState": "MergedDetailResumeState",
+    "_parts.focusState": "MergedDetailFocusState",
+    "_deps.parts.focusState": "MergedDetailFocusState",
+    "state._parts.focusState": "MergedDetailFocusState",
+    "_parts.trackingState": "MergedDetailTrackingState",
+    "_deps.parts.trackingState": "MergedDetailTrackingState",
+    "state._parts.trackingState": "MergedDetailTrackingState",
+    "_parts.modelFactory": "MergedDetailModelFactory",
+    "_deps.parts.modelFactory": "MergedDetailModelFactory",
+    "state._parts.modelFactory": "MergedDetailModelFactory",
+    "_m": "MergedDetailMetadataState",
+    "s._parts.metadataState": "MergedDetailMetadataState",
+    "_t": "MergedDetailTrailerState",
+    "s._parts.trailerState": "MergedDetailTrailerState",
+    "_r": "MergedDetailResumeState",
+    "s._parts.resumeState": "MergedDetailResumeState",
+    "_f": "MergedDetailFocusState",
+    "s._parts.focusState": "MergedDetailFocusState",
+    "_k": "MergedDetailTrackingState",
+    "s._parts.trackingState": "MergedDetailTrackingState",
+    "_b": "MergedDetailModelFactory",
+    "s._parts.modelFactory": "MergedDetailModelFactory"
+  },
   "receiver_owners": {
-    "_MergedDetailScreenState": "_MergedDetailScreenState"
+    "_MergedDetailScreenState": "_MergedDetailScreenState",
+    "_m": "MergedDetailMetadataState",
+    "_t": "MergedDetailTrailerState",
+    "_r": "MergedDetailResumeState",
+    "_f": "MergedDetailFocusState",
+    "_k": "MergedDetailTrackingState",
+    "_b": "MergedDetailModelFactory"
   },
   "plain_sections": [
     {
@@ -135,6 +177,38 @@
     {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_simkl_descriptions.dart",
       "owner": "MergedDetailSimklDescriptions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_state.dart",
+      "owner": "MergedDetailMetadataState"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_trailer_state.dart",
+      "owner": "MergedDetailTrailerState"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_state.dart",
+      "owner": "MergedDetailResumeState"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_focus_state.dart",
+      "owner": "MergedDetailFocusState"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart",
+      "owner": "MergedDetailTrackingState"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart",
+      "owner": "MergedDetailDependencies"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts"
     }
   ],
   "callback_identities": [
@@ -881,9 +955,40 @@
     }
   ],
   "callback_instances": {
-    "_MergedDetailScreenState": "$State"
+    "_MergedDetailScreenState": "$State",
+    "MergedDetailMetadataState": "$State.parts.metadataState",
+    "MergedDetailTrailerState": "$State.parts.trailerState",
+    "MergedDetailResumeState": "$State.parts.resumeState",
+    "MergedDetailFocusState": "$State.parts.focusState",
+    "MergedDetailTrackingState": "$State.parts.trackingState",
+    "MergedDetailModelFactory": "$State.parts.modelFactory"
   },
-  "callback_receiver_aliases": {},
+  "callback_receiver_aliases": {
+    "_parts.metadataState": "$State.parts.metadataState",
+    "_deps.parts.metadataState": "$State.parts.metadataState",
+    "state._parts.metadataState": "$State.parts.metadataState",
+    "_parts.trailerState": "$State.parts.trailerState",
+    "_deps.parts.trailerState": "$State.parts.trailerState",
+    "state._parts.trailerState": "$State.parts.trailerState",
+    "_parts.resumeState": "$State.parts.resumeState",
+    "_deps.parts.resumeState": "$State.parts.resumeState",
+    "state._parts.resumeState": "$State.parts.resumeState",
+    "_parts.focusState": "$State.parts.focusState",
+    "_deps.parts.focusState": "$State.parts.focusState",
+    "state._parts.focusState": "$State.parts.focusState",
+    "_parts.trackingState": "$State.parts.trackingState",
+    "_deps.parts.trackingState": "$State.parts.trackingState",
+    "state._parts.trackingState": "$State.parts.trackingState",
+    "_parts.modelFactory": "$State.parts.modelFactory",
+    "_deps.parts.modelFactory": "$State.parts.modelFactory",
+    "state._parts.modelFactory": "$State.parts.modelFactory",
+    "_m": "$State.parts.metadataState",
+    "_t": "$State.parts.trailerState",
+    "_r": "$State.parts.resumeState",
+    "_f": "$State.parts.focusState",
+    "_k": "$State.parts.trackingState",
+    "_b": "$State.parts.modelFactory"
+  },
   "original_activation": {},
   "original_static_receivers": {
     "_MergedDetailScreenState": [
@@ -967,6 +1072,41 @@
       "file": "lib/features/merged_detail/presentation/merged_sheet_rating_strip.dart",
       "alias": "MergedSheetRatingStrip",
       "original_name": "_SheetRatingStrip"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_cast_tile.dart",
+      "alias": "MergedCastTile",
+      "original_name": "_CastTile"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_rec_card.dart",
+      "alias": "MergedRecCard",
+      "original_name": "_RecCard"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/merged_quick_actions_menu.dart",
+      "alias": "MergedQuickActionsMenu",
+      "original_name": "_QuickActionsMenu"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_trakt_sheet.dart",
+      "alias": "MergedTraktSheet",
+      "original_name": "_TraktSheet"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_simkl_sheet.dart",
+      "alias": "MergedSimklSheet",
+      "original_name": "_SimklSheet"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_simkl_status_row.dart",
+      "alias": "MergedSimklStatusRow",
+      "original_name": "_SimklStatusRow"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_ambient_still.dart",
+      "alias": "MergedAmbientStill",
+      "original_name": "_AmbientStill"
     }
   ]
 }
