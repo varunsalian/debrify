@@ -82,9 +82,42 @@
       "receiver": "_parts.rootLayout"
     }
   },
-  "sidecars": {},
+  "sidecars": {
+    "scaffolding": "dev/tool/catalog_detail_scaffolding.json"
+  },
   "test_accessors": [],
-  "type_aliases": [],
+  "type_aliases": [
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_reveal.dart",
+      "alias": "CatalogReveal",
+      "original_name": "_Reveal"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_cert_badge.dart",
+      "alias": "CatalogCertBadge",
+      "original_name": "_CertBadge"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_genre_chip.dart",
+      "alias": "CatalogGenreChip",
+      "original_name": "_GenreChip"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_metacritic_badge.dart",
+      "alias": "CatalogMetacriticBadge",
+      "original_name": "_MetacriticBadge"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_glass_card.dart",
+      "alias": "CatalogGlassCard",
+      "original_name": "_GlassCard"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_glass_icon_button.dart",
+      "alias": "CatalogGlassIconButton",
+      "original_name": "_GlassIconButton"
+    }
+  ],
   "additional_owners": [],
   "required_nodes": [],
   "receiver_paths": {},

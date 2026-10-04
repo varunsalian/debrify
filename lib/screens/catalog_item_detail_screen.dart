@@ -1,3 +1,9 @@
+import 'package:debrify/features/catalog_detail/presentation/catalog_cert_badge.dart';
+import 'package:debrify/features/catalog_detail/presentation/catalog_genre_chip.dart';
+import 'package:debrify/features/catalog_detail/presentation/catalog_glass_card.dart';
+import 'package:debrify/features/catalog_detail/presentation/catalog_glass_icon_button.dart';
+import 'package:debrify/features/catalog_detail/presentation/catalog_metacritic_badge.dart';
+import 'package:debrify/features/catalog_detail/presentation/catalog_reveal.dart';
 import 'package:debrify/services/storage/movie_progress_storage.dart';
 import 'package:debrify/services/storage/quick_play_storage.dart';
 import 'package:debrify/services/storage/tracking_source_storage.dart';
@@ -781,7 +787,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             child: SafeArea(
               child: Padding(
                 padding: EdgeInsets.all(widget.isTelevision ? 28 : 8),
-                child: _GlassIconButton(
+                child: CatalogGlassIconButton(
                   icon: Icons.arrow_back_rounded,
                   onTap: () => Navigator.of(context).pop(),
                 ),
@@ -994,10 +1000,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       children
         ..add(const SizedBox(height: 24))
         ..add(
-          _Reveal(
+          CatalogReveal(
             parent: _revealCtrl,
             start: infoStart,
-            child: _GlassCard(children: infoChildren),
+            child: CatalogGlassCard(children: infoChildren),
           ),
         );
     }
@@ -1035,10 +1041,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       children
         ..add(const SizedBox(height: 24))
         ..add(
-          _Reveal(
+          CatalogReveal(
             parent: _revealCtrl,
             start: detailStart,
-            child: _GlassCard(children: detailChildren),
+            child: CatalogGlassCard(children: detailChildren),
           ),
         );
     }
@@ -1085,7 +1091,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 
   // ── Sections ──────────────────────────────────────────────────────────────
 
-  Widget _secEyebrow(double start) => _Reveal(
+  Widget _secEyebrow(double start) => CatalogReveal(
     parent: _revealCtrl,
     start: start,
     child: Text(
@@ -1103,7 +1109,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     ),
   );
 
-  Widget _secTitle(double start) => _Reveal(
+  Widget _secTitle(double start) => CatalogReveal(
     parent: _revealCtrl,
     start: start,
     child: Text(
@@ -1142,7 +1148,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final voteCount = extra?.voteCountFormatted;
     final hasVotes = voteCount != null && voteCount.isNotEmpty;
     final showMetaShimmer = !_imdbLoaded && extra == null;
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: DefaultTextStyle(
@@ -1162,7 +1168,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             if (hasYear) Text(year),
-            if (cert != null) ...[if (hasYear) _dot(), _CertBadge(label: cert)],
+            if (cert != null) ...[
+              if (hasYear) _dot(),
+              CatalogCertBadge(label: cert),
+            ],
             if (runtime != null) ...[
               if (hasYear || cert != null) _dot(),
               Text(runtime),
@@ -1212,7 +1221,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
             ],
             if (extra?.metacriticScore != null) ...[
               _dot(),
-              _MetacriticBadge(score: extra!.metacriticScore!),
+              CatalogMetacriticBadge(score: extra!.metacriticScore!),
             ],
           ],
         ),
@@ -1228,7 +1237,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     );
     if (genres.isEmpty) {
       if (_imdbLoaded) return null;
-      return _Reveal(
+      return CatalogReveal(
         parent: _revealCtrl,
         start: start,
         child: Wrap(
@@ -1254,13 +1263,13 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         ),
       );
     }
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: Wrap(
         spacing: 7,
         runSpacing: 7,
-        children: [for (final g in genres.take(5)) _GenreChip(label: g)],
+        children: [for (final g in genres.take(5)) CatalogGenreChip(label: g)],
       ),
     );
   }
@@ -1268,7 +1277,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   Widget? _secAwards(double start) {
     final extra = _imdbExtra;
     if (extra == null || !extra.hasAwards) return null;
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: Container(
@@ -1312,7 +1321,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (extra == null) {
       if (_imdbLoaded) return null;
       final h = _tight ? 10.0 : 12.0;
-      return _Reveal(
+      return CatalogReveal(
         parent: _revealCtrl,
         start: start,
         child: Column(
@@ -1373,7 +1382,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       shadows: sh,
     );
 
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: Column(
@@ -1414,7 +1423,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final cast = _imdbExtra?.cast ?? const [];
     if (cast.isEmpty) {
       if (_imdbLoaded) return null;
-      return _Reveal(
+      return CatalogReveal(
         parent: _revealCtrl,
         start: start,
         child: Column(
@@ -1454,7 +1463,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
 
     final avatarSize = _tight ? 56.0 : 68.0;
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: Column(
@@ -1489,7 +1498,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     final extra = _imdbExtra;
     if (extra == null) {
       if (_imdbLoaded) return null;
-      return _Reveal(
+      return CatalogReveal(
         parent: _revealCtrl,
         start: start,
         child: Column(
@@ -1550,7 +1559,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       shadows: const [Shadow(color: Color(0x55000000), blurRadius: 4)],
     );
 
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: Column(
@@ -1592,7 +1601,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (guide == null) {
       if (_parentsGuideLoaded) return null;
       final rowH = _tight ? 38.0 : 44.0;
-      return _Reveal(
+      return CatalogReveal(
         parent: _revealCtrl,
         start: start,
         child: Column(
@@ -1618,7 +1627,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       );
     }
     if (guide.isEmpty) return null;
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: ParentsGuideSection(
@@ -1633,7 +1642,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (widget.simklMenuOptions.isEmpty || widget.onSimklAction == null) {
       return null;
     }
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: _SimklQuickActions(
@@ -1649,7 +1658,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (widget.mdblistMenuOptions.isEmpty || widget.onMdblistAction == null) {
       return null;
     }
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: _MdblistQuickActions(
@@ -1663,7 +1672,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (widget.traktMenuOptions.isEmpty || widget.onTraktAction == null) {
       return null;
     }
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: _QuickActions(
@@ -1694,7 +1703,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       return null;
     }
 
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: Column(
@@ -1782,7 +1791,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
     if (description.isEmpty) return null;
     final tagline = _imdbExtra?.tagline;
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       child: Column(
@@ -1848,7 +1857,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// The Play / Sources action row.
   Widget _buildActionRow(double start) {
     final item = widget.item;
-    return _Reveal(
+    return CatalogReveal(
       parent: _revealCtrl,
       start: start,
       dy: 16,
@@ -1938,49 +1947,6 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
 }
 
 // ── Staggered entrance reveal ───────────────────────────────────────────────
-
-/// Fades + slides a section in from below, on an [Interval] of [parent] so
-/// successive sections cascade. Cheap: a single shared controller drives all.
-class _Reveal extends StatelessWidget {
-  final AnimationController parent;
-
-  /// Where on the 0‥1 timeline this section starts (earlier = sooner).
-  final double start;
-
-  /// How far (px) it travels up into place.
-  final double dy;
-  final Widget child;
-
-  const _Reveal({
-    required this.parent,
-    required this.start,
-    required this.child,
-    this.dy = 26,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final anim = CurvedAnimation(
-      parent: parent,
-      curve: Interval(
-        start,
-        (start + 0.42).clamp(0.0, 1.0),
-        curve: Curves.easeOutCubic,
-      ),
-    );
-    return AnimatedBuilder(
-      animation: anim,
-      builder: (context, child) => Opacity(
-        opacity: anim.value,
-        child: Transform.translate(
-          offset: Offset(0, (1 - anim.value) * dy),
-          child: child,
-        ),
-      ),
-      child: child,
-    );
-  }
-}
 
 // ── Backdrop ────────────────────────────────────────────────────────────────
 
@@ -2147,101 +2113,9 @@ class _BackdropState extends State<_Backdrop>
 
 // ── Certificate badge ──────────────────────────────────────────────────────
 
-class _CertBadge extends StatelessWidget {
-  final String label;
-  const _CertBadge({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.30),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.50),
-          width: 1,
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.85),
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.3,
-          height: 1.3,
-        ),
-      ),
-    );
-  }
-}
-
 // ── Genre chip ──────────────────────────────────────────────────────────────
 
-class _GenreChip extends StatelessWidget {
-  final String label;
-  const _GenreChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.15),
-          width: 0.5,
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.88),
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.3,
-        ),
-      ),
-    );
-  }
-}
-
 // ── Metacritic badge ──────────────────────────────────────────────────────
-
-class _MetacriticBadge extends StatelessWidget {
-  final int score;
-  const _MetacriticBadge({required this.score});
-
-  @override
-  Widget build(BuildContext context) {
-    final Color bg;
-    if (score >= 61) {
-      bg = const Color(0xFF66CC33);
-    } else if (score >= 40) {
-      bg = const Color(0xFFFFCC33);
-    } else {
-      bg = const Color(0xFFFF0000);
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        '$score',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.w900,
-          height: 1.3,
-        ),
-      ),
-    );
-  }
-}
 
 // ── Cast avatar ──────────────────────────────────────────────────────────
 
@@ -3492,70 +3366,4 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
 
 // ── Glass card ────────────────────────────────────────────────────────────
 
-class _GlassCard extends StatelessWidget {
-  final List<Widget> children;
-  const _GlassCard({required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: const [
-          BoxShadow(color: Color(0x22000000), blurRadius: 20, spreadRadius: 2),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: children,
-      ),
-    );
-  }
-}
-
 // ── Glass icon button (back) ────────────────────────────────────────────────
-
-class _GlassIconButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _GlassIconButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.55),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.18),
-              width: 0.5,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x44000000),
-                blurRadius: 12,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: Icon(icon, color: Colors.white, size: 22),
-        ),
-      ),
-    );
-  }
-}

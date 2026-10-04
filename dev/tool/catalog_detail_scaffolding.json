@@ -1,0 +1,160 @@
+{
+  "scaffolds": [
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_reveal.dart",
+      "owner": "",
+      "name": "CatalogReveal",
+      "tokens": [
+        "typedef",
+        "CatalogReveal",
+        "=",
+        "_Reveal",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_reveal.dart",
+      "owner": "",
+      "name": "catalogRevealConstructor",
+      "tokens": [
+        "const",
+        "catalogRevealConstructor",
+        "=",
+        "_Reveal",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_cert_badge.dart",
+      "owner": "",
+      "name": "CatalogCertBadge",
+      "tokens": [
+        "typedef",
+        "CatalogCertBadge",
+        "=",
+        "_CertBadge",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_cert_badge.dart",
+      "owner": "",
+      "name": "catalogCertBadgeConstructor",
+      "tokens": [
+        "const",
+        "catalogCertBadgeConstructor",
+        "=",
+        "_CertBadge",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_genre_chip.dart",
+      "owner": "",
+      "name": "CatalogGenreChip",
+      "tokens": [
+        "typedef",
+        "CatalogGenreChip",
+        "=",
+        "_GenreChip",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_genre_chip.dart",
+      "owner": "",
+      "name": "catalogGenreChipConstructor",
+      "tokens": [
+        "const",
+        "catalogGenreChipConstructor",
+        "=",
+        "_GenreChip",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_metacritic_badge.dart",
+      "owner": "",
+      "name": "CatalogMetacriticBadge",
+      "tokens": [
+        "typedef",
+        "CatalogMetacriticBadge",
+        "=",
+        "_MetacriticBadge",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_metacritic_badge.dart",
+      "owner": "",
+      "name": "catalogMetacriticBadgeConstructor",
+      "tokens": [
+        "const",
+        "catalogMetacriticBadgeConstructor",
+        "=",
+        "_MetacriticBadge",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_glass_card.dart",
+      "owner": "",
+      "name": "CatalogGlassCard",
+      "tokens": [
+        "typedef",
+        "CatalogGlassCard",
+        "=",
+        "_GlassCard",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_glass_card.dart",
+      "owner": "",
+      "name": "catalogGlassCardConstructor",
+      "tokens": [
+        "const",
+        "catalogGlassCardConstructor",
+        "=",
+        "_GlassCard",
+        ".",
+        "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_glass_icon_button.dart",
+      "owner": "",
+      "name": "CatalogGlassIconButton",
+      "tokens": [
+        "typedef",
+        "CatalogGlassIconButton",
+        "=",
+        "_GlassIconButton",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/catalog_glass_icon_button.dart",
+      "owner": "",
+      "name": "catalogGlassIconButtonConstructor",
+      "tokens": [
+        "const",
+        "catalogGlassIconButtonConstructor",
+        "=",
+        "_GlassIconButton",
+        ".",
+        "new",
+        ";"
+      ]
+    }
+  ]
+}

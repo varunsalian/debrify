@@ -776,6 +776,29 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   five masters unconditionally; no opt-out or skip is present. These assets and
   verification are committed separately before step 1.
 
+- Step 1: moved the six leaf widget classes to their planned presentation files;
+  private names, constructors, runtime types, defaults and comments stay exact.
+  Actual production constructor sites use pinned typedefs; the six exact
+  constructor exports prevent new optional-parameter lint identities. All six
+  wiring rows reviewed. Destination sizes 34–48 lines; facade 3,369 lines.
+- Step 1 evidence: all 11 manifests/self-tests PASS with their own original
+  baselines/configs and worktree-local parser/kernel caches; catalog 135 leaves.
+  Architecture, sizes, storage, CI format, light-ink, scoped analyzer/12-warning
+  allowlist and strict per-symbol comparison PASS (21 ORIGINAL identities,
+  zero additions). Shape registers facade plus every destination, including
+  zeros, and totals 29; Classic details measures 238 sites. All 122 focused cases
+  in `catalog_detail/step1-focused` pass against `base0b-final-rerun`; all five
+  macOS and five calibrated Docker Linux goldens pass strict replay, unchanged
+  original PNG hashes. Source trees stay stable during both runner snapshots.
+- Conservative lint decision: root comparisons project only the four measured
+  ORIGINAL `prefer_const_constructors` infos from `formatted-strict.txt` onto
+  `base-fmt-analyze.txt`, because destination linting now exposes them. The
+  separate per-symbol strict checker still rejects every new identity; other
+  diagnostics retain file identity, with catalog-only relocation. No const,
+  braces, suppression or info allowlist change. The initial serial manifest
+  run's five completed results were reused on the identical staged source;
+  remaining independent manifests used separate local parser/kernel caches.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
