@@ -679,7 +679,44 @@ including everything below.
 
 ## Progress
 
-(empty)
+### Step 0 — formatted ORIGINAL checkpoint
+
+- Execution base: `81fff4bede4f244f95a96582db8e635cfa9e6e3b`, clean
+  dedicated `refactor/episodes-panel` worktree. `flutter pub get` ran here
+  first; the lockfile is unchanged. Flutter 3.44.8 / Dart 3.12.2.
+  No branch switch, push, or changes in any other checkout. Evidence writes
+  use only `refactor-evidence/episodes_panel/`. Parser/package/kernel caches
+  remain in this worktree's ignored `.dart_tool/episodes_panel_parser/`.
+- Untouched full suite `episodes_panel/base`: 11,093 successes, 13 failures,
+  28 errors, 20 skips, on committed execution base, tree
+  `143a6d533bba6ec2ee3e9687c97c3bf462d468c8`. Its env records `paths: []`,
+  `flags: ["--no-pub"]`, no untracked inputs, and no tree changes. The three
+  newly requested CI paths all pass; no failure entry is added.
+- `missing-full.comparison.txt` rejects removal of the original
+  `episode_simkl_menu_test` suite: four missing identities, FAIL. The same
+  synthetic outcomes paired with a real-path scoped env pass only the
+  remaining suites (`missing-scoped.comparison.txt`). No baseline is updated.
+- The format proof uses the unchanged shared Dart adapter by explicit path,
+  aligns mandatory token streams, and records exactly 38 inserted / 4
+  removed optional commas, including the completion-publishing relocation.
+  Tokens, comments and literals are equal; all six negatives are rejected.
+  `format-proof.json` records each comma's AST site and original owner.
+  Format idempotence passes. The observed zero-context diff has 35 hunks
+  (the plan predicted 34); the mandatory-token/comma proof is authoritative.
+  Whole-repo formatted analysis has zero added/removed diagnostics
+  (`format-analyzer-comparison.txt`: PASS). The facade grows 3,112 to 3,232 physical lines;
+  its baseline ceiling is raised by hand only for this format checkpoint.
+- Whole-repo original analyzer is `base-analyze.txt`, with matching tree/SDK
+  evidence. Strict detached-copy analysis qualifies relative imports only:
+  original and formatted each have exactly 19 infos (18 directive ordering,
+  one existing curly-braces info in `EpisodesPanelState._showSeasonOptions`),
+  zero warnings/errors, zero prefer-const findings. The curly info shifts
+  2306 → 2419 without changing its rule, symbol or message. No suppression
+  or allowlist entry is added.
+- This is the format-only application reference R; nothing has moved and no
+  seam is introduced. Remaining Step 0 characterization, dependency inventory,
+  checker fixtures, original proofs and golden capture precede extraction.
+
 
 ## Found, not fixed
 

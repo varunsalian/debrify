@@ -428,7 +428,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     StremioMeta show,
     int generation,
   ) async {
-    final policy = (await TrackingSourcePolicy.load()).forContent(show.progressId);
+    final policy = (await TrackingSourcePolicy.load()).forContent(
+      show.progressId,
+    );
     if (!mounted || generation != _episodeModeGeneration) return;
     _trackingPolicy = policy;
     // Direct-source mode: the host owns progress (URL-keyed player positions
@@ -439,7 +441,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       try {
         final map = await progressLoader();
         if (!mounted || generation != _episodeModeGeneration) return;
-        _logEpisodeProgress(map, {'direct_local': map}, {'direct_local': 'loaded'});
+        _logEpisodeProgress(
+          map,
+          {'direct_local': map},
+          {'direct_local': 'loaded'},
+        );
         setState(() => _episodeWatchProgress = map);
       } catch (e) {
         debugPrint('EpisodesPanel: direct progress fetch failed: $e');
@@ -462,8 +468,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final inputs = <String, Map<String, double>>{'local': Map.of(merged)};
     final statuses = <String, String>{
       for (final source in TrackingSource.values)
-        source.name: policy.progressFrom(source) ? 'not_connected' : 'excluded_by_policy',
-      'local': policy.progressFrom(TrackingSource.local) ? 'loaded' : 'excluded_by_policy',
+        source.name: policy.progressFrom(source)
+            ? 'not_connected'
+            : 'excluded_by_policy',
+      'local': policy.progressFrom(TrackingSource.local)
+          ? 'loaded'
+          : 'excluded_by_policy',
     };
 
     // Overlay Trakt state when connected — gated on auth like the Simkl block
@@ -483,10 +493,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         if (!mounted || generation != _episodeModeGeneration) return;
 
         // Fully-watched episodes win outright.
-        inputs['trakt'] = {
-          ...playback,
-          for (final key in watched) key: 100.0,
-        };
+        inputs['trakt'] = {...playback, for (final key in watched) key: 100.0};
         statuses['trakt'] = 'loaded';
         for (final key in watched) {
           merged[key] = 100.0;
@@ -531,10 +538,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         );
         if (!mounted || generation != _episodeModeGeneration) return;
 
-        inputs['simkl'] = {
-          ...playback,
-          for (final key in watched) key: 100.0,
-        };
+        inputs['simkl'] = {...playback, for (final key in watched) key: 100.0};
         statuses['simkl'] = 'loaded';
         for (final key in watched) {
           merged[key] = 100.0;
@@ -611,7 +615,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       ...merged.keys,
       for (final input in inputs.values) ...input.keys,
       for (final season in _episodeSeasons)
-        for (final episode in season.episodes) '${episode.season}-${episode.number}',
+        for (final episode in season.episodes)
+          '${episode.season}-${episode.number}',
     };
     final refresh = DateTime.now().microsecondsSinceEpoch;
     for (final key in keys) {
@@ -620,11 +625,16 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       final season = int.parse(coordinate.group(1)!);
       final episode = int.parse(coordinate.group(2)!);
       final progress = merged[key] ?? 0;
-      final winners = inputs.entries.where((entry) {
-        final value = entry.value[key];
-        return value != null && value > 0 && value == progress &&
-            (!const ['trakt', 'simkl'].contains(entry.key) || value > 5);
-      }).map((entry) => entry.key).toList();
+      final winners = inputs.entries
+          .where((entry) {
+            final value = entry.value[key];
+            return value != null &&
+                value > 0 &&
+                value == progress &&
+                (!const ['trakt', 'simkl'].contains(entry.key) || value > 5);
+          })
+          .map((entry) => entry.key)
+          .toList();
       final fields = <String, Object?>{
         'refresh': refresh,
         'season': season,
@@ -632,15 +642,25 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         'display_percent': progress,
         'watched': progress >= 100,
         'up_next': next?.season == season && next?.episode == episode,
-        'winning_sources': DiagnosticLabel(winners.isEmpty ? 'none' : winners.join('+')),
-        for (final entry in statuses.entries) '${entry.key}_status': DiagnosticLabel(entry.value),
-        for (final entry in inputs.entries) '${entry.key}_percent': entry.value[key],
+        'winning_sources': DiagnosticLabel(
+          winners.isEmpty ? 'none' : winners.join('+'),
+        ),
+        for (final entry in statuses.entries)
+          '${entry.key}_status': DiagnosticLabel(entry.value),
+        for (final entry in inputs.entries)
+          '${entry.key}_percent': entry.value[key],
       };
-      DiagnosticLog.instance.recordEvent(source: 'episode_progress', event: 'detail_merge', fields: fields);
-      debugPrint('EpisodeProgress: refresh=$refresh S${season}E$episode '
-          'inputs=${{for (final entry in inputs.entries) entry.key: entry.value[key]}} '
-          'status=$statuses displayed=$progress winners=${winners.join('+')} '
-          'watched=${progress >= 100} upNext=${fields['up_next']}');
+      DiagnosticLog.instance.recordEvent(
+        source: 'episode_progress',
+        event: 'detail_merge',
+        fields: fields,
+      );
+      debugPrint(
+        'EpisodeProgress: refresh=$refresh S${season}E$episode '
+        'inputs=${{for (final entry in inputs.entries) entry.key: entry.value[key]}} '
+        'status=$statuses displayed=$progress winners=${winners.join('+')} '
+        'watched=${progress >= 100} upNext=${fields['up_next']}',
+      );
     }
   }
 
@@ -665,10 +685,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   void _publishSeriesCompletion() {
-    widget.onSeriesCompletedChanged?.call(!_isDirectSource && isSeriesFullyWatched(
-      {for (final s in _episodeSeasons) s.number: s.episodes.map((e) => e.number)},
-      _episodeWatchProgress,
-    ));
+    widget.onSeriesCompletedChanged?.call(
+      !_isDirectSource &&
+          isSeriesFullyWatched({
+            for (final s in _episodeSeasons)
+              s.number: s.episodes.map((e) => e.number),
+          }, _episodeWatchProgress),
+    );
   }
 
   void _onMdblistPlaybackRevision() {
@@ -975,7 +998,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
     // 1) The title's own addon, or built-in metadata for tracker cards.
     if (widget.addon.id == NativeSeriesMetadataService.addon.id ||
-        MediaIdentity.isNative(show.id) || widget.addon.baseUrl.isNotEmpty ||
+        MediaIdentity.isNative(show.id) ||
+        widget.addon.baseUrl.isNotEmpty ||
         widget.addon.manifestUrl.isNotEmpty) {
       try {
         final videos = await _stremioService.fetchSeriesMeta(
@@ -1102,13 +1126,17 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       show = await _stremioService.scopeSeriesProgress(show, widget.addon);
     } on StateError {
       if (mounted && generation == _episodeModeGeneration) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not verify series episodes. Please retry.'),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not verify series episodes. Please retry.'),
+          ),
+        );
       }
       return;
     }
-    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(show.progressId);
+    final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(
+      show.progressId,
+    );
     if (!mounted || generation != _episodeModeGeneration) return;
     _trackingPolicy = trackingPolicy;
 
@@ -1242,16 +1270,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           effectiveEpisode == null) {
         final imdbId = show.progressId;
         if (imdbId != null) {
-          final lastPlayed = await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(
-            imdbId,
-          );
+          final lastPlayed =
+              await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(imdbId);
           if (!mounted || generation != _episodeModeGeneration) return;
           if (lastPlayed != null) {
             effectiveSeason = lastPlayed['season'] as int?;
             effectiveEpisode = lastPlayed['episode'] as int?;
           }
         }
-        if (!MediaIdentity.isNative(show.progressId) && !CustomSeriesIdentity.isCustom(show.imdbId) && effectiveSeason == null && effectiveEpisode == null) {
+        if (!MediaIdentity.isNative(show.progressId) &&
+            !CustomSeriesIdentity.isCustom(show.imdbId) &&
+            effectiveSeason == null &&
+            effectiveEpisode == null) {
           final byTitle = await EpisodeResumeStorage.getLastPlayedEpisode(
             seriesTitle: show.name,
           );
@@ -1690,7 +1720,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (videoId != null &&
         videoId.isNotEmpty &&
         !StremioService.isCanonicalEpisodeId(
-          selection.imdbId, videoId, episode.season, episode.number,
+          selection.imdbId,
+          videoId,
+          episode.season,
+          episode.number,
         )) {
       selection = selection.withStremioEpisodeIdentity(
         addonId: widget.addon.id,
@@ -1735,7 +1768,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (videoId != null &&
         videoId.isNotEmpty &&
         !StremioService.isCanonicalEpisodeId(
-          selection.imdbId, videoId, episode.season, episode.number,
+          selection.imdbId,
+          videoId,
+          episode.season,
+          episode.number,
         )) {
       selection = selection.withStremioEpisodeIdentity(
         addonId: widget.addon.id,
@@ -1919,80 +1955,96 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // per DPAD move on the weak TV GPU.
     final t = DetailThemeScope.maybeOf(context);
     return SeasonActionRegion(
-      onOptions: _isDirectSource ? null : () => _showSeasonOptions(_selectedSeasonNumber),
+      onOptions: _isDirectSource
+          ? null
+          : () => _showSeasonOptions(_selectedSeasonNumber),
       onTap: () async {
-        final number = await showModalBottomSheet<int>(context: context,
-          builder: (ctx) => TvHeldKeyGuard(child: SafeArea(child: ListView(
-            shrinkWrap: true, children: [for (final season in _episodeSeasons)
-              ListTile(title: Text('Season ${season.number}'),
-                onTap: () => Navigator.pop(ctx, season.number)),
-            ]))));
-        if (mounted && number != null) _onSeasonChanged(number);
-      },
-      child: ListenableBuilder(
-      listenable: _episodeSeasonDropdownFocusNode,
-      builder: (context, _) {
-        final hasFocus = _episodeSeasonDropdownFocusNode.hasFocus;
-        return AnimatedContainer(
-          // TV: snap the focus ring and skip the blurred glow — the animated
-          // blur shadow re-rasters every frame of the fade on the weak GPU.
-          duration: widget.isTelevision
-              ? Duration.zero
-              : const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: hasFocus ? 0.12 : 0.06),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: hasFocus ? t.focus : Colors.white.withValues(alpha: 0.10),
-              width: hasFocus ? 2.0 : 1.0,
-            ),
-            boxShadow: (hasFocus && !widget.isTelevision)
-                ? [
-                    BoxShadow(
-                      color: t.fade(t.focus, 0.32),
-                      blurRadius: 14,
-                      spreadRadius: 0,
+        final number = await showModalBottomSheet<int>(
+          context: context,
+          builder: (ctx) => TvHeldKeyGuard(
+            child: SafeArea(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final season in _episodeSeasons)
+                    ListTile(
+                      title: Text('Season ${season.number}'),
+                      onTap: () => Navigator.pop(ctx, season.number),
                     ),
-                  ]
-                : null,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              focusNode: _episodeSeasonDropdownFocusNode,
-              focusColor: Colors.transparent,
-              value: _selectedSeasonNumber,
-              isDense: true,
-              borderRadius: BorderRadius.circular(12),
-              dropdownColor: const Color(0xFF14141C),
-              icon: Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 20,
-                color: hasFocus
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.7),
+                ],
               ),
-              items: _episodeSeasons.map((s) {
-                return DropdownMenuItem(
-                  value: s.number,
-                  child: Text(
-                    s.displayLabel,
-                    // Explicit color: dropdown menu items render outside the
-                    // page's DefaultTextStyle. onSurface follows the
-                    // Appearance → Text Brightness preset.
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 13,
-                    ),
-                  ),
-                );
-              }).toList(),
-              onChanged: _onSeasonChanged,
             ),
           ),
         );
+        if (mounted && number != null) _onSeasonChanged(number);
       },
-    ));
+      child: ListenableBuilder(
+        listenable: _episodeSeasonDropdownFocusNode,
+        builder: (context, _) {
+          final hasFocus = _episodeSeasonDropdownFocusNode.hasFocus;
+          return AnimatedContainer(
+            // TV: snap the focus ring and skip the blurred glow — the animated
+            // blur shadow re-rasters every frame of the fade on the weak GPU.
+            duration: widget.isTelevision
+                ? Duration.zero
+                : const Duration(milliseconds: 150),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: hasFocus ? 0.12 : 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: hasFocus
+                    ? t.focus
+                    : Colors.white.withValues(alpha: 0.10),
+                width: hasFocus ? 2.0 : 1.0,
+              ),
+              boxShadow: (hasFocus && !widget.isTelevision)
+                  ? [
+                      BoxShadow(
+                        color: t.fade(t.focus, 0.32),
+                        blurRadius: 14,
+                        spreadRadius: 0,
+                      ),
+                    ]
+                  : null,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                focusNode: _episodeSeasonDropdownFocusNode,
+                focusColor: Colors.transparent,
+                value: _selectedSeasonNumber,
+                isDense: true,
+                borderRadius: BorderRadius.circular(12),
+                dropdownColor: const Color(0xFF14141C),
+                icon: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                  color: hasFocus
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: 0.7),
+                ),
+                items: _episodeSeasons.map((s) {
+                  return DropdownMenuItem(
+                    value: s.number,
+                    child: Text(
+                      s.displayLabel,
+                      // Explicit color: dropdown menu items render outside the
+                      // page's DefaultTextStyle. onSurface follows the
+                      // Appearance → Text Brightness preset.
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize: 13,
+                      ),
+                    ),
+                  );
+                }).toList(),
+                onChanged: _onSeasonChanged,
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   /// Inline "couldn't load episodes" panel with Retry (recovers a transient
@@ -2232,10 +2284,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (show == null) return;
     _seasonActionBusy = true;
     try {
-      final connected = [true, ...await Future.wait([
-        _traktService.isAuthenticated(), _simklService.isAuthenticated(),
-        _mdblistService.isAuthenticated(),
-      ])];
+      final connected = [
+        true,
+        ...await Future.wait([
+          _traktService.isAuthenticated(),
+          _simklService.isAuthenticated(),
+          _mdblistService.isAuthenticated(),
+        ]),
+      ];
       if (CustomSeriesIdentity.isCustom(show.imdbId)) {
         connected.fillRange(1, connected.length, false);
       }
@@ -2244,7 +2300,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         connected[3] = false;
       }
       if (!mounted) return;
-      final providers = [TrackingSource.local, TrackingSource.trakt, TrackingSource.simkl, TrackingSource.mdblist];
+      final providers = [
+        TrackingSource.local,
+        TrackingSource.trakt,
+        TrackingSource.simkl,
+        TrackingSource.mdblist,
+      ];
       final names = ['locally', 'on Trakt', 'on Simkl', 'on MDBList'];
       var season = _episodeSeasons.where((s) => s.number == number).firstOrNull;
       if (season == null || season.episodes.isEmpty) {
@@ -2253,59 +2314,118 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       }
       if (!mounted) return;
       if (season == null || season.episodes.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not load season episodes. Please retry.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not load season episodes. Please retry.'),
+          ),
+        );
         return;
       }
       final episodeNumbers = season.episodes.map((e) => e.number).toList();
       final statuses = await Future.wait([
         for (var i = 0; i < providers.length; i++)
-          connected[i] ? SeasonWatchedService.isWatched(show.progressId ?? show.id,
-            show.name, number, episodeNumbers, providers[i]) : Future<bool?>.value(null),
+          connected[i]
+              ? SeasonWatchedService.isWatched(
+                  show.progressId ?? show.id,
+                  show.name,
+                  number,
+                  episodeNumbers,
+                  providers[i],
+                )
+              : Future<bool?>.value(null),
       ]);
       if (!mounted) return;
       final id = show.progressId ?? show.id;
-      final retryTargets = [for (final provider in providers)
-        _seasonRetries.pending(id, number, provider)];
-      final targets = [for (var i = 0; i < providers.length; i++)
-        retryTargets[i] ?? (statuses[i] == null ? null : !statuses[i]!)];
-      final choice = await showModalBottomSheet<TrackingSource>(context: context,
+      final retryTargets = [
+        for (final provider in providers)
+          _seasonRetries.pending(id, number, provider),
+      ];
+      final targets = [
+        for (var i = 0; i < providers.length; i++)
+          retryTargets[i] ?? (statuses[i] == null ? null : !statuses[i]!),
+      ];
+      final choice = await showModalBottomSheet<TrackingSource>(
+        context: context,
         isScrollControlled: true,
-        showDragHandle: true, builder: (ctx) => TvHeldKeyGuard(child: SafeArea(child:
-          ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.7),
-            child: ListView(shrinkWrap: true, children: [
-            ListTile(title: Text('Season $number')),
-            for (var i = 0; i < providers.length; i++)
-              if (connected[i]) ListTile(leading: const Icon(Icons.done_all_rounded),
-                autofocus: widget.isTelevision && !connected.take(i).any((value) => value),
-                enabled: targets[i] != null,
-                title: Text(targets[i] == null ? 'Watch status unavailable ${names[i]}'
-                  : '${retryTargets[i] != null ? 'Retry: mark' : 'Mark'} season as ${targets[i]! ? 'watched' : 'unwatched'} ${names[i]}'),
-                subtitle: targets[i] == null ? const Text('Close and reopen to retry.') : null,
-                onTap: () => Navigator.pop(ctx, providers[i])),
-          ])))));
+        showDragHandle: true,
+        builder: (ctx) => TvHeldKeyGuard(
+          child: SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(ctx).height * 0.7,
+              ),
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  ListTile(title: Text('Season $number')),
+                  for (var i = 0; i < providers.length; i++)
+                    if (connected[i])
+                      ListTile(
+                        leading: const Icon(Icons.done_all_rounded),
+                        autofocus:
+                            widget.isTelevision &&
+                            !connected.take(i).any((value) => value),
+                        enabled: targets[i] != null,
+                        title: Text(
+                          targets[i] == null
+                              ? 'Watch status unavailable ${names[i]}'
+                              : '${retryTargets[i] != null ? 'Retry: mark' : 'Mark'} season as ${targets[i]! ? 'watched' : 'unwatched'} ${names[i]}',
+                        ),
+                        subtitle: targets[i] == null
+                            ? const Text('Close and reopen to retry.')
+                            : null,
+                        onTap: () => Navigator.pop(ctx, providers[i]),
+                      ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
       if (choice == null || !mounted) return;
       final name = names[providers.indexOf(choice)];
       final watched = targets[providers.indexOf(choice)]!;
       final action = watched ? 'watched' : 'unwatched';
       final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(SnackBar(content: Text('Marking Season $number $action $name…')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('Marking Season $number $action $name…')),
+      );
       // Retain intent through partial failure or an exception. A fresh status
       // may now be partial, but must not reverse the user's pending operation.
       _seasonRetries.begin(id, number, choice, watched);
-      final failures = await SeasonWatchedService.mark(id,
-        number, episodeNumbers, choice, seriesTitle: show.name, watched: watched);
+      final failures = await SeasonWatchedService.mark(
+        id,
+        number,
+        episodeNumbers,
+        choice,
+        seriesTitle: show.name,
+        watched: watched,
+      );
       if (failures == 0) _seasonRetries.complete(id, number, choice);
       if (!mounted) return;
       refreshWatchProgress();
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(SnackBar(content: Text(failures == 0
-        ? 'Season $number marked $action $name.'
-        : 'Could not mark $failures episodes $action $name. Reopen the season menu to retry.')));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            failures == 0
+                ? 'Season $number marked $action $name.'
+                : 'Could not mark $failures episodes $action $name. Reopen the season menu to retry.',
+          ),
+        ),
+      );
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Could not update season watch status. Please retry.')));
-    } finally { _seasonActionBusy = false; }
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not update season watch status. Please retry.',
+            ),
+          ),
+        );
+    } finally {
+      _seasonActionBusy = false;
+    }
   }
 
   void _stepSeason(int delta) {
