@@ -849,6 +849,17 @@ def _check(original_source, sources, rows, source_path, package=None,
     if set(original) != known:
         return ['Settings manifest coverage differs: ' + str(sorted(set(original) ^ known))]
     lookup = all_nodes(parsed)
+    for pair in CONFIG.get('co_located_declarations', []):
+        locations = []
+        for name in pair:
+            row = next(r for r in rows if r['original_name'] == name)
+            destination = (row['destination_file'], row['destination_class'], row['new_name'])
+            old_owner, _, old_name = name.rpartition('.')
+            locations.append(destination[0] if destination in lookup
+                             else source_path if (source_path, old_owner, old_name or name) in lookup
+                             else None)
+        if len(set(locations)) != 1 or locations[0] is None:
+            errors.append('Co-located declarations split: ' + str(pair))
     errors.extend(check_plain_sections(lookup))
     from torbox_callback_identity import check_callback_identities
     errors.extend(check_callback_identities(lookup, rows, source_path, CONFIG))

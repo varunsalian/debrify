@@ -31,6 +31,17 @@ def arguments(values, method):
     return found
 
 
+def callback_argument(call, site):
+    """Select one argument without treating named labels as callback tokens."""
+    if 'named_argument' in site:
+        name = site['named_argument']
+        matches = [arg[2:] for arg in call if arg[:2] == [name, ':']]
+        if len(matches) != 1:
+            raise ValueError(f'expected one named argument {name}, got {len(matches)}')
+        return matches[0]
+    return call[site['argument']]
+
+
 def check_callback_identities(lookup, rows, source_path, config):
     from check_settings_moves import tokens
     specs = config.get('callback_identities', [])
@@ -73,11 +84,16 @@ def check_callback_identities(lookup, rows, source_path, config):
         for site in spec['sites']:
             try:
                 node = node_for(site['member'])
-                calls = arguments(tokens(node), site['call'])
+                call_name = site['call']
+                call_row = by_original.get(call_name)
+                values = tokens(node)
+                if call_row and call_row['new_name'] in values:
+                    call_name = call_row['new_name']
+                calls = arguments(values, call_name)
                 if len(calls) != site.get('count', 1):
                     raise ValueError(f"expected {site.get('count', 1)} {site['call']} calls, got {len(calls)}")
                 for call in ([calls[site['occurrence']]] if 'occurrence' in site else calls):
-                    resolved.append(identity(call[site['argument']], node['owner']))
+                    resolved.append(identity(callback_argument(call, site), node['owner']))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
         if 'callback_member' in spec:

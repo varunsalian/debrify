@@ -1,0 +1,69 @@
+[
+  {
+    "name": "observer receiver changed",
+    "member": "_IptvSettingsPageState.initState",
+    "before": "addObserver(this)",
+    "after": "addObserver(otherObserver)"
+  },
+  {
+    "name": "ticker provider changed",
+    "member": "_IptvSettingsPageState.initState",
+    "before": "vsync: this",
+    "after": "vsync: otherTicker"
+  },
+  {
+    "name": "observer teardown placement",
+    "member": "_IptvSettingsPageState.dispose",
+    "before": "WidgetsBinding.instance.removeObserver(this);",
+    "after": ""
+  },
+  {
+    "name": "lost observer mixin",
+    "declaration": "_IptvSettingsPageState",
+    "before": ", WidgetsBindingObserver",
+    "after": ""
+  },
+  {
+    "name": "lost ticker mixin",
+    "declaration": "_IptvSettingsPageState",
+    "before": "SingleTickerProviderStateMixin, ",
+    "after": ""
+  },
+  {
+    "name": "profile body split out",
+    "member": "_IptvSettingsPageState._setStartupEnabled",
+    "mutation": "profile_body_split"
+  },
+  {
+    "name": "wrong listener callback",
+    "member": "_IptvSettingsPageState.initState",
+    "before": "_onTabChanged",
+    "after": "differentTabCallback"
+  },
+  {
+    "name": "changed manual refresh priority",
+    "member": "_IptvSettingsPageState._refreshPlaylistForProfile",
+    "before": "priority: true",
+    "after": "priority: false"
+  },
+  {
+    "name": "moved lifecycle",
+    "member": "_IptvSettingsPageState.dispose",
+    "mutation": "move_lifecycle"
+  },
+  {
+    "name": "split dialog and private State",
+    "declaration": "_SharedIptvSourceDeleteDialogState",
+    "mutation": "split_dialog"
+  },
+  {
+    "name": "first two disposal swap",
+    "member": "_IptvSettingsPageState.dispose",
+    "mutation": "dispose_first"
+  },
+  {
+    "name": "last two disposal swap",
+    "member": "_IptvSettingsPageState.dispose",
+    "mutation": "dispose_last"
+  }
+]

@@ -333,6 +333,11 @@ void main() {
           .listSync(recursive: true)
           .whereType<File>()
           .where((file) => file.path.endsWith('.dart')),
+      if (Directory('lib/features/iptv_settings').existsSync())
+        ...Directory('lib/features/iptv_settings')
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.dart')),
       ...Directory('lib/screens/settings')
           .listSync(recursive: true)
           .whereType<File>()

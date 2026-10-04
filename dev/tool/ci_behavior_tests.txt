@@ -159,3 +159,12 @@ test/features/pikpak_files/presentation/legacy_pikpak/pikpak_navigation_test.dar
 test/features/pikpak_files/presentation/legacy_pikpak/pikpak_profile_test.dart
 test/features/pikpak_files/presentation/legacy_pikpak/pikpak_source_contract_test.dart
 test/features/pikpak_files/presentation/legacy_pikpak/pikpak_views_test.dart
+
+# IPTV settings original-code characterization
+test/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_add_test.dart
+test/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_lists_preferences_test.dart
+test/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_profile_test.dart
+test/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_contract_test.dart
+test/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_sources_test.dart
+test/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_views_test.dart
+test/profiles/connection_secret_editor_repair_test.dart

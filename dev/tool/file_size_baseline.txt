@@ -10,7 +10,7 @@
 5475 lib/services/remote_control/remote_command_router.dart
 4700 lib/services/webdav_sync/webdav_sync_engine.dart
 4685 lib/services/download_service.dart
-4480 lib/screens/settings/iptv_settings_page.dart
+4585 lib/screens/settings/iptv_settings_page.dart
 4289 lib/screens/settings/external_player_settings_page.dart
 4182 lib/main.dart
 4140 lib/screens/playlist_content_view_screen.dart

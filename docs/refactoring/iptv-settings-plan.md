@@ -469,7 +469,71 @@ each parallel branch's additions, before claiming parity.
 
 ## Progress
 
-(empty)
+- Step 0 complete (commit recorded by its exact checkpoint subject) on `refactor/iptv-settings`, baseline `4f3ee3b3`.
+  `flutter pub get` ran here first; Flutter 3.44.8 / Dart 3.12.2, no dependency
+  or lockfile changes. Original facade: 4,480 lines; seam-only facade: 4,585.
+- Original full suite `iptv_settings/base`: 10,577 successes, 13 failures,
+  28 errors, 20 skipped. Seam-only `base2` has exactly the same identities
+  and outcomes; comparison PASS. The historical failure file was not used
+  to accept failures that passed in these observed runs.
+- Original-code proofs use a disposable detached `4f3ee3b3` worktree nested
+  under this authorized worktree's ignored `.dart_tool/iptv_settings_original`.
+  No pre-existing worktree or main-checkout source was accessed or modified.
+  Evidence is in the authorized common `refactor-evidence/iptv_settings/`
+  namespace. The parser is separately pinned there with the checked-in lock;
+  every manifest command explicitly supplies its isolated `--parser-package`.
+- The frozen accessor returns actual fields and method tear-offs; no service,
+  clock, constructor, or platform predicate seam. The seam-only 105-line size
+  increase is recorded once; later size ratchets only lower. The TV text-field
+  guard includes the original facade before characterization.
+- Original strict probe: 15 infos (9 directive-order, 2 const, 4 deprecated
+  Radio arguments). Manifest public-renames-only probe: 24 infos, adding
+  exactly nine widget-key constructor identities. Neither probe edits const
+  capability, constructor keys, bodies, or lint configuration. Import URI
+  qualification only; corrected preliminary URI probes are retained as
+  preliminary evidence, not accepted baselines. The checked-in symbol
+  inventory combines counts by maximum, never sum; the per-symbol checker
+  rejects any other identity or scaffold diagnostic.
+- Dependency report and all 168 manifest leaves have explicit destinations
+  and a per-entry wiring checklist. Callback checks have additive named-
+  argument resolution; real-config fixtures mutate every identity site's
+  member, receiver, closure wrapper and missing argument, plus disposal,
+  observer, ticker/mixins, profile-body boundaries and paired dialog ownership.
+- Characterization uses real profile paths, independent catalog files, actual
+  registry resources/grants, persisted preference adapters and sealed saves.
+  IO runs outside the fake clock; automatic refresh interval 0 isolates manual
+  loops. Actions/timers drain and dialogs close before owned databases do.
+  Profile cases cover gate remount, mounted confirmation replacement, pre-body
+  rejection and held preference/playlist/removal saves with each caller's
+  observed handling. No blanket mid-body authorization guard was invented.
+- Decisions: keep the original narrow source-form overflow; golden sub-section
+  is Startup at the required 400×800 viewport. Interactive narrow form tests
+  use 800×1,000 without changing app layout thresholds. Back keys lacking a
+  Flutter test Android raw-key mapping exercise the real focused key handler;
+  Enter, Select and Escape use dispatched key events. Dialog TV autofocus
+  targets Save/Import when initially valid, matching the original buttons.
+- Latest baseline is `iptv_settings/base3`: 10,686 successes, the same 13
+  failures / 28 errors / 20 skips; PASS versus base2 with exactly 109 added
+  successful identities and no regressions/missing/new skips. Original proof
+  `original-characterization`: 131 successes / the same observed profile log
+  guard failure; PASS against base3. Its tested staged tree is
+  `af981a48385d3819f9b032e93feb4f609630ac72`, with no untracked inputs or tree
+  change; all 14 new test/body/helper/PNG inputs are byte-identical here.
+- All seven manifest/self-test runs PASS (Settings 316, IPTV 384, TorBox 195,
+  Debrid 173, PikPak 128, player-launch 154, IPTV-settings 168 leaves).
+  Whole analyzer: 1,635 diagnostics, zero additions/removals; new tests/helpers
+  have zero diagnostics. Exact CI format (1,473 files), scoped analyzer and
+  strict five-warning allowlist PASS. Architecture, strict sizes, storage
+  references/self-tests/314 keys, shell syntax and staged diff checks PASS.
+  No assertion, known-failure file, warning allowlist or lint suppression was
+  weakened. Four original macOS PNGs were captured then strictly replayed;
+  the evidence namespace records their immutable input hashes.
+- Linux capture script resolves the exact checkpoint subject and uses only
+  that checkpoint's tests and fixture. Linux originals remain pending and
+  non-strict until verified, separately committed and strictly replayed before
+  any step-5 builder moves. Android engine/battery, physical Android TV and
+  provider accounts remain device-only pending checks. Remote CI and merged-
+  tree integration are pending Claude; no push or branch switch.
 
 ## Found, not fixed
 
@@ -504,4 +568,7 @@ All pre-existing; the extraction keeps each exactly.
   above).
 - Dialogs opened from the IPTV page's plain `MaterialPageRoute` that don't
   wrap `settingsPageTheme` themselves use the ambient theme.
+- The 400-pixel narrow source form has pre-existing tab-row overflow; it is
+  retained. URL/Xtream stale post-persistence throws can retain busy flags.
 - Stale comments (133; `lib/theme/app_looks.dart:22`).
+
