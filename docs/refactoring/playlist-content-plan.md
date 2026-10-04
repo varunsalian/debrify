@@ -18,14 +18,11 @@ integrates it and captures the Linux goldens. Commit after every step; never
 push. Gate commits contain `gate`. Remote CI stays pending until Claude
 pushes, so every step runs the local CI-equivalent commands.
 
-**Execution prerequisite (parallel worktrees).** `suite_evidence.py check`
-writes a fixed `/tmp/suite_evidence_check.jsonl` (and `.stderr`)
-(`dev/tool/suite_evidence.py:293`, `flutter_test_json` at 145), so parallel
-worktrees overwrite each other's results; `TMPDIR` does not change it.
-Before parallel execution starts, Claude either lands invocation-specific
-output paths in `suite_evidence.py` on `refactor/codebase`, or such checks
-are serialized through a shared lock. Execution does not start otherwise
-and does not edit the tool itself.
+**Execution prerequisite (parallel worktrees), satisfied before execution.**
+Commit `4f3ee3b3` replaced the old fixed `/tmp/suite_evidence_check.jsonl`
+outputs with invocation-specific filenames. Parallel `check` runs are safe;
+this execution copies its own raw result and tree/SDK environment evidence
+into the `playlist_content/` namespace without changing the shared tool.
 
 ## Goal
 
@@ -258,7 +255,7 @@ No member is over 200 lines (largest `_buildEpisodeCard`, 187).
 14. **Collection identity and mutable models:** Raw aliasing; `_folderPath`
     mutated in place; the WebDAV builder mutating `children`; in-place
     `SeriesPlaylist` updates; `widget.playlistItem` never refreshed.
-15. **Diagnostics.** All 18 analyzer warnings (step 0 item 7) keep firing
+15. **Diagnostics.** All 17 analyzer warnings (step 0 item 7) keep firing
     at their destinations, verified by rule and enclosing member; none may
     disappear. The 39 `print`s and their text stay.
 16. **Progress lookup and initial selection.** `_getProgressForFile`
@@ -328,7 +325,7 @@ As in the PikPak plan, with these points:
    normalization `widget.playlistItem` ↔ `playlistItem()` and
    `widget.onPlaybackStarted` ↔ `onPlaybackStarted()` (with negatives for a
    nullable return type, a copied map and a cached value), and every step
-   verifies all 18 occurrences by rule and enclosing member.
+   verifies all 17 occurrences by rule and enclosing member.
 2. **Private dormant and warned members stay private** in the section that
    owns them: `_loadProgressData` moves privately into the dormant section,
    keeping `unused_element` with its exact message. No warned member becomes
@@ -447,14 +444,14 @@ As in the PikPak plan, with these points:
    | 5 View modes | Saved mode read twice; auto seriesArrange only with nothing saved; persistence on every apply including navigation; Raw result identical to `children`; sorted order; missing folder resets; seriesArrange closes search. |
    | 6 Playback | Per site through the probe (rejection path): the HTTP log (start entry resolved only, Premiumize hash all, AllDebrid unlock errors swallowed), `onPlaybackStarted` once before the launcher's notify, the playback-stopped signal and settings snackbar. Start index through the accessor: sorted vs raw, `originalIndex` fallback, the Premiumize cloud clamp against pre-filter `videoFiles` (with a null-`path` node before the start) vs the hash and WebDAV clamps against built entries. Playlist contents (count, titles, relative paths incl. `_cleanTorboxPath` and the PikPak fallback) only through the successful-launch fixture if proven, else **pending device verification**. **Source guards** on the seven complete call expressions, the guard→callback→notify→push sequence, and all 14 `PlaylistEntry` constructions; remaining argument values (ids, flags, `viewMode`, WebDAV headers and fields) are **pending device verification**. |
    | 7 Return | With a `NavigatorObserver`, the screen pushed with each caller's construction reproduced verbatim (source guards pin both caller expressions). **Rejection path (probe):** Playlist-tab form → dialog popped before the launch, content route popped after the launcher returns; Home form → dialog popped after return, content screen still mounted. **In-app success:** the same two observations only through the proven observer-controlled fixture, else pending device verification. Native/external completion (immediate return): pending device verification. Plus the empty-list and catch paths. |
-   | 8 Watched | Mark and unmark arguments (title fallback, defaults, imdbId preference), the persisted completion, reload, snackbar text and colour, error snackbar; via the watched button (mobile and desktop widths, **TV false and TV true**: toggles both ways), the outer long-press (non-TV), D-pad hold; the outer card tap plays (non-TV) and is inert on TV. |
+   | 8 Watched | Mark and unmark arguments (defaults and imdbId preference; title fallback to the item is source-guard-only), the persisted completion, reload, snackbar text and colour, error snackbar; via the watched button (mobile and desktop widths, **TV false and TV true**: toggles both ways), the outer long-press (non-TV), D-pad hold; the outer card tap plays (non-TV) and is inert on TV. |
    | 9 Metadata | Fix Metadata with a fake dialog result: the cache-clear calls' order and counts (conditional pair; two TVMaze series clears, one transitive through `EpisodeInfoService.clearSeriesCache`) are pinned by **source guards**, since an HTTP mock can't spy on static calls; their effect is verified behaviourally through the resulting cache misses and requests; mapping, poster override and per-provider artwork or TorBox list write, forced imdbId, nulled fields, loading flag; cancel does nothing. Unforced imdbId save rules; detected-poster write; writes landing after unmount (recorded). |
    | 10 Timers/build | Fake time: auto-switch to A–Z at 2 s with persistence, timer object replaced per rebuild; missing-season post-frame `setState`; scroll retries and the 800 ms animation; `print` capture shows the per-card lines. |
    | 11 Search | Recursive video-only matches, paths, clear and close, hidden in seriesArrange. |
    | 12 D-pad | Clear-button keys, search-field arrows, file-card select/enter/space, episode KeyDown/hold 800 ms/repeat ignored/short press/300 ms suppression (host keys); via the TV setter (after the TV check settles): null outer `onTap`/`onLongPress`, the watched button still live, and the hold hint. |
-   | 13 Profile | A profile switch through the gate's picker disposes the route (handler gone, timers cancelled); two routes on the same item share no owners. Separately, with held futures and asserting persisted data **and tombstones** in both profiles (including writes the captured instance rejects): (a) a late operation (`.then` imdbId/poster save, watched toggle, Fix Metadata write) that starts after the handoff; (b) a switch between `getPlaylistItemsRaw` and `savePlaylistItemsRaw` in the poster and TorBox list writes; (c) a switch after a `ProfilePreferences` instance was acquired. Outcomes are recorded and preserved; no protection is added. |
+   | 13 Profile | A profile switch through the gate's picker disposes the route (handler gone, timers cancelled); two routes on the same item share no owners. Separately, with held futures and asserting persisted data **and tombstones** in both profiles (including writes the captured instance rejects): (a) a late operation (`.then` imdbId/poster save, watched toggle) that starts after the handoff; the Fix Metadata mapping-write variant is source-guard-only; (b) a switch between `getPlaylistItemsRaw` and `savePlaylistItemsRaw` in the poster and TorBox list writes; (c) a switch after a `ProfilePreferences` instance was acquired. Outcomes are recorded and preserved; no protection is added. |
    | 14 Identity | Through the accessor: Raw aliasing, `_folderPath` identity, `_searchResults` reassign-then-clear, `_applySortedPlaylistOrder` mutating its argument. |
-   | 16 Progress | Through the real tear-offs: `S_E` key hit; sequential key returned even when null (filename key then not consulted) vs filename fallback when the file is absent or there is no root; sortedAZ index; completion at 0.89/0.90 progress and 120,000/119,999 ms remaining, the manual `0/1` marker; `updatedAt` as int ms, numeric seconds string, ms string, ISO string, unparsable, and ties; initial season and episode index; the scheduled scroll and its 100/200/300 ms retries through `_scrollToEpisode` with an unattached controller, then the 800 ms animation once attached. |
+   | 16 Progress | Through the real tear-offs: `S_E` key hit; sequential key returned even when null (filename key then not consulted) vs filename fallback when the file is absent or there is no root; sortedAZ index; completion at 0.89/0.90 progress and 120,000/119,999 ms remaining, the manual `0/1` marker (independent predicate source-guard-only because remaining time also accepts it); `updatedAt` as int ms, numeric seconds string, ms string, ISO string, unparsable, and ties; initial season and episode index; the scheduled scroll and its 100/200/300 ms retries through `_scrollToEpisode` with an unattached controller, then the 800 ms animation once attached. |
 
    Pixel goldens (raw list, search, OTT mobile and desktop, error) on macOS
    and Linux, Linux captured by Claude from the original code. Record
@@ -464,7 +461,7 @@ As in the PikPak plan, with these points:
    swapped dispose statements, a non-recreated auto-switch timer, the
    Playlist-tab callback removed) each rejected.
 7. **Source-text inventory:**
-   - **Analyzer allowlist:** the 18 warnings — `unused_element`
+   - **Analyzer allowlist:** the 17 warnings — `unused_element`
      (`_loadProgressData`, 274), `dead_null_aware_expression` (440, 3526),
      `unnecessary_null_comparison` (832, 2212), `invalid_null_aware_operator`
      ×11 (2114–2132, 2232, 2329), `unnecessary_non_null_assertion` (2214).
@@ -472,7 +469,7 @@ As in the PikPak plan, with these points:
      at the facade path. Each moving commit relocates entries in the same
      commit; a facade entry leaves only when its last occurrence leaves.
      The checker matches sets, not counts, so the per-symbol relocation
-     comparison must also show all 18 occurrences, by rule and enclosing
+     comparison must also show all 17 occurrences, by rule and enclosing
      member, at every step.
    - **Shape:** 0 bare radii and **11 token calls** (1308, 1357, 1493, 1740,
      2540, 2545, 2777, 2820, 2873, 3033, 3224). The floor is **488 with zero
@@ -544,7 +541,7 @@ identities against the observed branch baselines and approved additions.
    both ways, `playlist_player_service.dart`, facade back-import).
 3. All manifest runs pass with self-tests; every characterization test
    passes unchanged; all seven launch-site guards are byte-identical.
-4. No new diagnostics or suppressions; all 18 warnings still fire, each
+4. No new diagnostics or suppressions; all 17 warnings still fire, each
    allowlisted at its destination with no stale entry; gate 2 passes against
    the latest base and gate 1.
 5. Local CI-equivalent checks pass; remote CI is pending until Claude
@@ -568,11 +565,314 @@ identities against the observed branch baselines and approved additions.
 
 ## Progress
 
-(empty)
+- Execution is confined to the dedicated `refactor/playlist-content` worktree
+  at `67b32702`; no branch switch or push. `flutter pub get` completed first
+  with Flutter 3.44.8 / Dart 3.12.2 and no dependency changes. The
+  invocation-specific suite checker prerequisite is present at `4f3ee3b3`.
+- Step 0: the original 4,140-line implementation is byte-identical, followed
+  by the frozen 99-line accessor (4,239-line temporary seam-only ratchet;
+  exits step 1). The 107-leaf manifest, dependency/wiring checklist,
+  real-config checker fixtures, named-argument callback checks and negative
+  wrappers/receiver swaps are installed. No implementation has moved.
+- Observed baselines: `playlist_content/base` and accessor-only `base2`
+  both have 10,577 successes, 13 failures, 28 errors and 20 skips; identity
+  comparison passes with no missing/new failures or changed skips. Whole
+  analyzer evidence is `base-analyze.txt` with tree/SDK provenance; the
+  first pub-enabled attempt hit concurrent Flutter iOS package housekeeping,
+  so the authoritative comparison uses `flutter analyze --no-pub`.
+  Existing vendor test-package errors are retained, not accepted as new.
+- Original characterization: `playlist_content/characterization-original`
+  passes all 151 identities before extraction. Every test uses the unchanged
+  original plus frozen accessor; the original-code proof runs here, not in a
+  second worktree, to obey the user's worktree confinement. After the
+  checkpoint, a clean-tree original replay will pin the checkpoint and
+  complete fixture/tests. `base3` is the full original-plus-tests baseline: 10,728 successes,
+  the same 13 failures / 28 errors / 20 skips; comparison to base/base2
+  passes, with exactly the 151 approved characterization additions.
+- The strict-lint original proof is inside this worktree's ignored
+  `.dart_tool/playlist_content_original_strict/`, with relative imports
+  qualified only. It records 12 `directives_ordering` infos and zero
+  `prefer_const_constructors`. Original warnings are pinned by rule,
+  member and message in `playlist_content_original_warnings.json`.
+  **Plan arithmetic correction:** the listed warning groups total 17, and
+  both original analyzer runs observe exactly 17 (1 unused + 2 dead-null +
+  2 null comparisons + 11 invalid-null-aware + 1 non-null assertion).
+  Preserve every observed occurrence; do not invent an eighteenth warning.
+- Metadata fixtures isolate TVMaze and EpisodeInfo caches, drain owned
+  timers, and use deterministic bundled fonts/artwork. Fake-time fixtures
+  advance frames while real IO runs through `runAsync`. The D-pad's 300 ms
+  check uses `DateTime.now`, so its fixture also advances real wall time.
+  Raw mode is mounted before completed-metadata mobile goldens to avoid
+  masking the original missing-thumbnail overflow. Original macOS captures
+  and strict comparisons cover raw, search, OTT mobile/desktop and error.
+- Profile evidence uses real file-backed tombstones reopened after writes,
+  disjoint A/B lists, and held decode continuations through Dart's existing
+  Zone boundary (no production hook). It preserves A-read/B-save data
+  replacement and displaced B tombstones for both detected-poster and
+  TorBox writes, stale captured-instance rejection, late metadata after
+  unmount/handoff, watched actions, and the real gate picker disposing the
+  route/timer/back handler. Ordinary IMDb progress remains title-keyed in
+  the current storage; the title/identity mismatch test uses a custom-series
+  identity, which is the current exact-key branch.
+- The launch probe proves rejection only at all seven sites and both caller
+  forms. No successful launcher fixture is claimed. Successful in-app
+  cleanup/playlist arguments, native TV, external/DeoVR completion, real
+  provider accounts and Android TV physical remote behavior remain device
+  checks. Remote CI and merged-tree integration remain pending.
+- Step 0 checks: all six configured manifests pass with self-tests using
+  the isolated playlist-content parser (107 / settings 316 / IPTV 384 /
+  TorBox 195 / Real-Debrid 173 / PikPak 128 leaves). Whole analyzer matches the original exactly;
+  scoped allowlist, per-member warnings, clean test analyzer, format,
+  architecture, size ratchet, storage keys/references, shape/source guards,
+  the new playlist-content manifest is LF-only and staged diff checks pass.
+  The pre-existing TorBox manifest uses CRLF; it remains untouched. Evidence is under
+  `playlist_content/`; no known-failure list changed.
+- Linux handoff script resolves the exact step-0 subject and uses only its
+  checkpoint-owned tests. Linux absence is permitted through step 5 only;
+  verified PNG hashes/provenance and a separate golden commit are required
+  before any builder moves in step 6.
+
+- Step 0b review closure (before any extraction): navigation persistence now
+  overwrites storage with `raw` before both sorted navigation directions.
+  Installed probes make the cloud-clamp and non-TV long-press assertions
+  observable. The cloud clamp reaches callback + screen notify before its
+  `RangeError`, without reaching launcher notify; this original behavior stays.
+  The late-metadata profile case checks show id/name and exact request count.
+  The formerly duplicate int/String timestamp tests have distinct typed names;
+  the other timestamp identities remain unchanged. New cases tap the outer
+  episode card and dispatch all six uppercase canonical provider names.
+- Coverage limits recorded by the review: manual `0/1` is **source-guard-only**
+  as an independent predicate (the remaining-time rule also accepts it).
+  Completion boundaries exercise only the episode-card copy (original 2686);
+  the search badge (1423) and file card (1646) copies rely on the verbatim checker.
+  Same-show-id Fix Metadata cache non-clearing, the 116 px mobile scroll estimate,
+  watched title fallback to the item, and profile scenario (a)'s Fix Metadata
+  mapping write starting after handoff are **source-guard-only**; no behavioral
+  characterization of those four branches is claimed. Their original method
+  bodies/calls remain guarded. The direct ProfilePreferences stale-instance
+  test is infrastructure coverage; screen scenario (c) is the interactions
+  test's stale acquisition case, not that direct preferences test.
+- TV overrides await the real async check before platform changes; false-to-false
+  setters in timer replacement and completion rendering are explicitly rebuild
+  triggers. The golden scenes/helpers/shared fixture are unchanged. ProfileFixture
+  moved unchanged from the PikPak test into `test/support/profile_fixture.dart`;
+  both its consumers are included in the original replay.
+- The main checker now invokes live binding validation for dependency records,
+  including nullable, uncached `onPlaybackStarted`; original service calls still
+  receive the map. Exact dependency-record callback aliases get a rule-level
+  positive and same-instance negative. Shared interpolation resolver commit
+  `def4e304` was cherry-picked as `456a442c` with the required Codex trailer.
+- The user's review explicitly authorizes a separate detached proof worktree at
+  `6e23a3c5`, inside this worktree's ignored `.dart_tool/playlist_content_original_proof`.
+  It supersedes the earlier same-worktree proof choice for the review cases.
+
+- Step 0b evidence: `step0b-original-proof-final` and `step0b-current` each
+  pass 163 identities (159 playlist + four affected PikPak profile cases).
+  The final awaited-long-press change is replayed separately on both inputs.
+  Six original-only behavioral mutants are rejected without invoking the checker;
+  both skipped navigation saves fail with `raw` instead of `sortedAZ`.
+  Long press additionally proves a toggle-plus-launch mutant fails its probe.
+  `base4` is the full original-code review baseline. Its comparison uses the
+  audited `base3-renamed.json`: the old duplicate's last String outcome is
+  renamed to the typed String identity, and int gains one distinct identity;
+  seven new play/tap cases are the other additions. The original base3 evidence
+  is immutable, all outcomes remain unchanged by normalization, and no failure
+  allowlist is updated. Exact mapping is checked in as
+  `playlist_content_step0b_identity_renames.json`.
+
+- Step 0b full result: `base4` versus audited `base3-renamed.json` **PASS**:
+  10,736 successes, unchanged 13 failures / 28 errors / 20 skips, eight added
+  identities and no missing/new failures or changed skips. Raw comparison's
+  sole missing spelling is exactly the documented duplicate rename; its nine
+  new spellings comprise that rename plus eight additions. All six manifests
+  and self-tests pass (107/316/384/195/173/128); whole analyzer has no added or
+  removed diagnostics, CI allowlist/format and all 17 warning occurrences pass.
+  Original checkpoint and current affected tests pass; no production move yet.
+
+- Step 1: the 14 pure helpers and search-result DTO use their planned
+  application/model destinations. Actual per-entry callers are reviewed in
+  the wiring checklist; the production caller and frozen accessor use those
+  functions. Feature/import/500-line destination guards and explicit theme
+  globs are registered. The facade ratchet is 3,935 lines; State resources,
+  loading/actions/layout and composition remain until their named steps.
+  Evidence `playlist_content/step1-*` passes against latest `base4`: 172 focused/source/shape identities, all six manifest self-tests, exact analyzer comparison, CI format/allowlist, all 17 warning occurrences, architecture/size and storage checks. No new strict-lint infos; original diagnostics are retained.
+
+- Step 2: 29 original fields now live in eight fresh route-owned state/resource
+  records. All production reads/writes and the accessor use the same objects;
+  original types/defaults and resource expressions remain unchanged. State
+  retains complete lifecycle bodies and cleanup order. Each field binding is
+  reviewed in the checklist before pinning the eight owner declarations.
+  The facade ratchet is 3,896 lines. Evidence `step2-*` versus `base4` passes: 172 focused/source/shape identities; all six manifest self-tests; CI format/allowlist, all 17 warnings, architecture/size and storage checks. Analyzer has no additions and only the documented private-field info removal. The final source reader again passes 26 original-checkpoint guards after its two string-composition lint fixes; no application/checker inputs changed in that final fix.
+
+- Step 2 conservative representation decisions: field documentation links
+  name the actual declaring record class. The newly wrapped AllDebrid link-index
+  `if` receives braces only around its unchanged `continue;`, with its complete
+  raw prefix pinned at the manifest entry. Body fixtures/assertions remain
+  frozen. Optional formatter commas are adapted by exact UTF-16 positions and
+  full-prefix SHA-256 hashes after the AST verifier proves token parity;
+  string-literal comma changes are rejected. The updated source reader passes
+  all 26 guards on original 6e23a3c5, as well as current source. The lone removed
+  `prefer_final_fields` info is the former private `_folderPath`: its public
+  owner field keeps the original mutable type/default, so that private-field
+  recommendation no longer applies. All 17 warnings remain required.
+  Initial failed source/lint evidence is preserved under `step2-attempt1-*`.
+
+
+- Step 3: six dependency-record sections now own initialization, navigation,
+  saved/view modes, debrid loading, cloud loading and playlist ordering.
+  All per-entry production bindings were reviewed before scaffold pinning;
+  lifecycle registration/removal keeps the same Navigation instance, and
+  item/context/mounted getters remain live. The facade is 3,316 lines.
+  Evidence `step3-*` passes against `base4`: 172 focused/source/shape tests,
+  all six manifests with self-tests, analyzer comparison with no additions,
+  CI format/allowlist, all 17 warnings, architecture/size and storage checks.
+  The initializer-removal checker fixture now locates its moved receiver
+  through the manifest and still rejects the mutation; its initial lookup
+  failure is retained as `step3-attempt1-*`. Only that affected self-test was
+  repeated; the other five manifests and unchanged application checks retain
+  their recorded passing inputs. Gate 1 follows on the committed tree.
+
+- Gate 1: committed step 3 `730c0a41`, tree
+  `adafe86d7c9e33c0580664fc54feec8ce637d584`; `gate1` versus latest `base4`
+  **PASS**: 10,736 successes, unchanged 13 failures / 28 errors / 20 skips,
+  no added/missing identities or changed outcomes. No tracked changes during
+  the run; the five pending Linux PNG paths were recorded as untracked and
+  deliberately excluded from the gate commit.
+- Linux original handoff: all five supplied PNG hashes match
+  `linux-original-sha256.txt`; revision resolves to the exact step-0 subject
+  at `6e23a3c5`. Capture and strict original-code logs each pass five scenes.
+  Provenance: calibrated `debrify-flutter:3.44.8` linux/amd64 Ubuntu 24.04
+  image under Colima, supplied local run dated 2026-10-04T03:04:05Z;
+  `linux-original-verified.json` records hashes and provenance. They are
+  committed separately. Missing Linux files now fail instead of returning
+  successfully; existing assertions and scene construction are retained.
+  Step 0b did not change golden scenes, seedSeries or shared fixtures, so
+  recapture of the original is unnecessary. A moved-code Linux comparison
+  will use this same locally available calibrated image after step 6.
+
+- Step 4: search, progress, watched actions, series/Fix Metadata, poster
+  writes and private dormant progress move into six reviewed records.
+  Provider/profile ownership, writes after handoff, mounted checks and
+  original unsafe continuations are preserved. Facade: 2,569 lines.
+  `step4-*` versus `base4` passes: 172 focused/source/shape identities, all
+  six manifest self-tests, analyzer comparison with no additions, CI
+  format/allowlist, all 17 warnings, architecture/size/storage checks.
+  The source reader accepts only whitespace around registered live getters
+  after Dart formatting splits a receiver; its 26 source guards pass on
+  original `6e23a3c5` as well as moved code. Frozen method bodies and all
+  assertions remain unchanged. An initial original-reader invocation with
+  a misspelled test path is retained as `step4-attempt1-original-*`; the
+  corrected run proves all 26 original guards.
+
+- Step 5: both play entries and all seven launch sites now use three
+  reviewed playback records. Live optional playback callback and item
+  getters, dialog builder contexts, exact launch arguments, sorting,
+  provider dispatch, headers and unsafe start-index policies remain intact.
+  The two formatter-induced empty-list canPop lints receive braces only
+  around their original pop statements; exact conditions, complete raw
+  prefixes and body tokens are pinned alongside the AllDebrid continue
+  site. No context acquisition or asynchronous operation is moved.
+  Facade: 1,780 lines. `step5-*` versus `base4` passes: 172 affected identities,
+  all six manifest self-tests, no added analyzer diagnostics, CI format/
+  allowlist, all 17 warnings, architecture/size/storage checks. A clean
+  committed focused replay follows before the builder move, so its tree
+  evidence includes all three new playback files.
+
+- Step 6: nine reviewed layout records now render the root, search, file
+  list, OTT/season selector, episode list/card and both responsive layouts.
+  State has the exact build forwarder; registered callback tear-offs retain
+  their original targets, lexical builder contexts stay lexical, and all
+  three timer protocols stay in their original builders/owners. A generator
+  collision with the external `Icons.build` constant was caught during
+  binding review and corrected before verification; the original icon stays
+  unchanged. The null-series selector's original return receives only exact
+  pinned braces for its formatter-induced lint. Four such sites are now
+  registered, with unchanged original statements and guards.
+  `step6-*` passes against `base4`: 172 identities including five macOS
+  goldens, all six manifest self-tests, no added diagnostics, CI format/
+  allowlist, all 17 warnings, architecture/size/storage checks. New files
+  were staged before these runs, so their stable tested trees include every
+  builder. Facade: 499 lines, retaining composition only until step 7.
+  Step 5's clean committed replay at `21d1d5ff`, tree
+  `df5875d68c18022c68ba543f22600ec164063290`, also passes its 172 tests,
+  complete 107-leaf comparison and local focused checks with no untracked
+  inputs or changes during the run. Strict moved-code Linux follows on
+  the committed step-6 archive in the calibrated image.
+
+- Strict moved-code Linux at committed step 6 `b73c1340` passes all five
+  original PNG comparisons in the calibrated linux/amd64 image
+  `sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`.
+  `step6-linux-moved` records the commit/archive/image/SDK and source hashes;
+  every lib/test file and the lockfile remain unchanged. Source copy and
+  archive stay inside this worktree's ignored `.dart_tool`; no other checkout
+  or worktree is used. Flutter 3.44.8 / Dart 3.12.2 matches the baseline.
+- Step 7: typed composition forwards the same eight route-owned objects
+  and live item/callback/context/mounted getter functions. All 24 constructors
+  retain their exact binding/order parity with step 6; no action starts in
+  composition. The public widget, verbatim lifecycle, build forwarder and
+  frozen 99-line accessor remain in the **204-line facade**. The composition
+  factory is 343 lines; every feature destination meets the 500-line cap.
+  Final facade/TEMP guards are enabled and their four cap/marker negatives
+  reject. Source ownership documentation and provider guidance name the new
+  production files. Typed getter forwarding has eager/cached/wrapper and
+  wrong-factory negatives in the main checker self-test.
+  `step7-*` versus latest `base4` passes: 172 affected identities, all six
+  manifest self-tests (107/316/384/195/173/128), no added analyzer diagnostics,
+  all 17 warning occurrences, CI format/allowlist, architecture/size/storage
+  checks and staged diffs. The sole removed original private-field info
+  remains the step-2 documented case. `step7-ci-behavior` passes with 3,187
+  successes and the same two observed known failures; neither known-failure
+  list nor frozen assertions/body fixtures is changed. All inputs were
+  staged before these stable tree-recording runs. Full gate 2 and a final
+  composition Linux replay follow on this committed code checkpoint.
+
+- Gate 2: committed step 7 `2e520a3a`, tree
+  `b98cdf73be4b7783f0ab133dcfc4606a168ab84c`; final `gate2` versus latest
+  `base4` **and gate 1 PASS**: identical complete outcome dictionaries,
+  10,736 successes / 13 failures / 28 errors / 20 skips, zero added/missing
+  identities, changed outcomes or newly skipped cases. Both gates ran on
+  committed trees; final gate has no untracked inputs or changes during run.
+- Gate 2's first attempt is preserved as `gate2-attempt1`, including its
+  failing comparison. Its sole new error was the unrelated member PIN
+  recovery dialog assertion. The test waits a fixed six × 30 ms wall-time
+  rounds. Its complete 116-file project import closure is byte-identical to
+  original `6e23a3c5`; isolated original and current replays both pass.
+  The full repeat after our Docker job completed restores every baseline
+  outcome. This is consistent with an existing timing limitation; no test,
+  production code or known-failure list was changed or accepted as a new
+  baseline. `gate2-pin-input-audit.json` records all 116 hashes.
+- Final step-7 Linux composition replay also passes all five strict original
+  PNG comparisons. `step7-linux-moved` records the exact committed archive,
+  calibrated image and matching SDK, with every lib/test file and lockfile
+  unchanged. The five macOS originals and five imported Linux PNG hashes
+  remain frozen, as does `playlist_content_original_bodies.json`. Step 0b
+  changed no golden scenes/helpers/shared fixtures; no recapture is needed.
+- `final-proof.json` fingerprints final source, tests, assets and checker
+  inputs and audits both gates against `base4`. This final report commit
+  changes Progress/evidence documentation only; tested application, tests,
+  tools, assets and dependencies remain exactly `2e520a3a`.
+- Completion: steps 0–7, review step 0b, both full gates and both host golden
+  comparisons are complete. Branch remains `refactor/playlist-content`; no
+  push or branch switch. Only this worktree and its explicitly authorized
+  nested original-code proof were used; shared metadata writes use only
+  `refactor-evidence/playlist_content/`. Pending: physical Android TV D-pad
+  hold/repeat/focus/hint, seven real provider launch sites with both public
+  callers and native/external/DeoVR successful-return cleanup, real accounts,
+  remote CI (no push), and Claude's merged-tree integration checks/full suite
+  including any newly integrated manifest. Stop after this report.
+
 
 ## Found, not fixed
 
-All pre-existing; the extraction keeps each exactly.
+All application findings are pre-existing; the extraction keeps each exactly.
+The unchanged PIN test also exposed its fixed-wait timing limitation once
+during gate 2; the failed attempt and passing original/current/full replays
+are preserved above. No test timing fix is included.
+- **Mobile missing-thumbnail placeholder:** the original 500-pixel layout
+  can overflow vertically by 5 pixels under the real app theme. Preserved;
+  completed-metadata goldens use deterministic thumbnails.
+- **Live IMDb during Fix Metadata:** a supplied in-memory IMDb identity can
+  retain precedence over the new mapping; no identity policy is changed.
 - **Dispatch mismatch:** `'rd'`, `'torbox_webdl'`, `'real_debrid'` and
   unknown providers load through RD but play nothing, silently (1175–1191,
   3458–3474); `'rd'` items show the whole torrent.
@@ -620,4 +920,5 @@ All pre-existing; the extraction keeps each exactly.
   the dialog was popped pops the content screen instead.
 - **Dormant and redundant code:** `_loadProgressData`;
   `_applySeriesArrangeView`'s nodes are never shown; the null-aware
-  operators behind the 18 warnings. A platform check sits in presentation.
+  operators behind the 17 warnings. A platform check sits in presentation.
+- Completion review (Claude): the facade is registered at 0 in `kExtractedShapeResidue`; the print-count scan reads the feature folder unconditionally; the deps header is current. Shared-tool note: step 0b's `path == alias` resolution in `torbox_callback_identity.py` applies to every feature's config (only looser when a callback argument is exactly a state-record alias); all other features' self-tests pass with it.

@@ -47,10 +47,20 @@ def arguments(values, method):
 
 
 def callback_argument(call, site):
-    """Resolve one exact positional or named callback without erasing its value."""
-    if 'named_argument' not in site:
+    """Resolve one exact positional or named callback without erasing its value.
+
+    A named argument is given either as `named_argument` or, in older
+    configurations, as a string `argument`; an int `argument` is positional.
+    A bare int or string may be passed instead of a site.
+    """
+    if not isinstance(site, dict):
+        site = {'argument': site}
+    if 'named_argument' in site:
+        name = site['named_argument']
+    elif isinstance(site['argument'], str):
+        name = site['argument']
+    else:
         return call[site['argument']]
-    name = site['named_argument']
     matches = [arg[2:] for arg in call if arg[:2] == [name, ':']]
     if len(matches) != 1 or not matches[0]:
         raise ValueError('expected exactly one named argument: ' + name)

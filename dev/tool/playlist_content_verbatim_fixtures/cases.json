@@ -1,0 +1,39 @@
+[
+  {
+    "name": "lifecycle moved out of State",
+    "member": "_PlaylistContentViewScreenState.initState",
+    "mutation": "move_lifecycle"
+  },
+  {
+    "name": "dispose order swapped",
+    "member": "_PlaylistContentViewScreenState.dispose",
+    "mutation": "dispose_order"
+  },
+  {
+    "name": "timer cancelled through wrong owner",
+    "member": "_PlaylistContentViewScreenState.dispose",
+    "mutation": "wrong_timer_owner"
+  },
+  {
+    "name": "duplicated workflow",
+    "member": "_PlaylistContentViewScreenState._loadContent",
+    "mutation": "duplicate_owner"
+  },
+  {
+    "name": "play callback removed",
+    "member": "_PlaylistContentViewScreenState._playRealDebridPlaylist",
+    "mutation": "drop_callback"
+  },
+  {
+    "name": "launch notify removed",
+    "member": "_PlaylistContentViewScreenState._playRealDebridPlaylist",
+    "mutation": "drop_notify"
+  },
+  {
+    "name": "async initialization starts after registration",
+    "member": "_PlaylistContentViewScreenState.initState",
+    "mutation": "replace",
+    "before": "_initializeScreen();",
+    "after": ""
+  }
+]

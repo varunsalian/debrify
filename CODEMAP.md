@@ -44,7 +44,16 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
   `download_service.dart`, `magnet_link_handler.dart`, `backup_restore_service.dart`, pickers, settings).
   AllDebrid is the newest = the template for adding a provider.
 - File-tree browse (per provider, post-add): `debrid_service.getTorrentFolderTree`,
-  `utils/{rd,torbox}_folder_tree_builder.dart`, `screens/playlist_content_view_screen.dart`.
+  `utils/{rd,torbox}_folder_tree_builder.dart`; saved playlist content uses the
+  facade `screens/playlist_content_view_screen.dart` and `features/playlist_content/`.
+- Saved playlist content: pure trees/sorting/formatting in `features/playlist_content/application/`,
+  search DTO in `models/`, route owners/composition/loading/navigation/metadata/progress/playback
+  and layouts in `presentation/legacy_playlist_content/` (all paths relative to that feature).
+  The facade retains the public widget and State lifecycle; `playlist_content_composition.dart`
+  wires live getters to fresh route sections. Playback sites live in
+  `playlist_content_{debrid_launches,cloud_launches}.dart`, preserving the legacy launcher bridge.
+  Inventory and staged verification: `docs/refactoring/playlist-content-plan.md` and
+  `docs/refactoring/playlist-content-deps.md`.
 - Cloud/downloads screens: `screens/{debrid_downloads,torbox/torbox_downloads,pikpak/pikpak_files,`
   `premiumize/premiumize_files,alldebrid/alldebrid_files}_screen.dart`, `screens/cloud_screen.dart`.
 - WebDAV: `services/webdav_service.dart` (read/browse only — no upload yet).

@@ -40,6 +40,20 @@ const Map<String, int> kShapeResidue = {
   'lib/features/iptv_settings/presentation/iptv_settings_playlist_name_dialog.dart':
       0,
   'lib/features/iptv_settings/presentation/iptv_settings_tv_tab_bar.dart': 0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_desktop_episode.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_card.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_metadata.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_file_list.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_mobile_episode.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_ott_view.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_search_layout.dart':
+      0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_bulk_delete.dart':
       0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selected_delete.dart':
@@ -127,7 +141,6 @@ const Map<String, int> kShapeResidue = {
   'lib/screens/debrify_tv/widgets/tv_focusable_card.dart': 0,
   'lib/screens/downloads_screen.dart': 2,
   'lib/screens/magic_tv_screen.dart': 7,
-  'lib/screens/playlist_content_view_screen.dart': 0,
   'lib/screens/playlist_screen.dart': 0,
   'lib/screens/premiumize/premiumize_files_screen.dart': 6,
   'lib/features/home/presentation/home_catalog_card.dart': 0,
@@ -368,6 +381,68 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/iptv_settings/models/iptv_settings_playlist_edit.dart': 0,
   'lib/features/iptv_settings/application/normalize_xtream_server_url.dart': 0,
 
+  'lib/screens/playlist_content_view_screen.dart': 0,
+  'lib/features/playlist_content/application/playlist_content_file_trees.dart':
+      0,
+  'lib/features/playlist_content/application/playlist_content_formatting.dart':
+      0,
+  'lib/features/playlist_content/application/playlist_content_sort_policy.dart':
+      0,
+  'lib/features/playlist_content/models/playlist_content_search_result.dart': 0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_catalog_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_cloud_launches.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_cloud_loading.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_composition.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_content_loading.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_debrid_launches.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_dormant.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_list.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_focus_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_initialization.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_navigation.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_navigation_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_ott_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_play_entries.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_playlist_order.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_posters.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_progress.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_root_layout.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_scroll_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_search.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_search_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_sections.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_metadata.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_view_modes.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_watched.dart':
+      0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_workflows_composition.dart':
       0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_state.dart':

@@ -478,22 +478,27 @@ at play time (links expire / spend points eagerly), so nothing stale is persiste
      entry). Reuses `_findFirstEpisodeIndex`, `_formatPikPakPlaylistTitle`,
      `_composePikPakEntryTitle`. Add `_PremiumizePlaylistCandidate` helper.
 
-### Playlist content browsing (`playlist_content_view_screen.dart`)
-- `_loadContent`: add `else if (provider == 'premiumize') _loadPremiumizeContent()`.
-- `_loadPremiumizeContent` + `_buildPremiumizeFileTree`: flat `RDFileNode` tree —
-  `name=fileName`, `path=file.path`, **`relativePath` = path with the first
-  (torrent) folder stripped**, `bytes=size`.
-- `_playFile` / `_playEpisode`: add `else if (provider == 'premiumize')
-  _playPremiumizePlaylist(...)` → re-resolve, build a `linkByPath` map, build
-  entries with `url` + `premiumizeHash` + `premiumizePath`.
-- `_saveImdbIdToPlaylist` / `_updatePlaylistPoster`: pass `premiumizeHash` (the
-  saved `torrent_hash`) to the storage updaters.
+### Playlist content browsing (`lib/features/playlist_content/`)
+The public facade is `lib/screens/playlist_content_view_screen.dart`; provider
+behavior lives in the bounded `presentation/legacy_playlist_content/` bridge.
+- `playlist_content_content_loading.dart` (`loadContent`) dispatches to
+  `playlist_content_cloud_loading.dart` (`loadPremiumizeContent`).
+- `application/playlist_content_file_trees.dart` (`buildPremiumizeFileTree`)
+  builds the flat `RDFileNode` tree: `name=fileName`, `path=file.path`,
+  **`relativePath` strips the first torrent folder**, `bytes=size`.
+- `playlist_content_play_entries.dart` (`playFile` / `playEpisode`) dispatches
+  to `playlist_content_cloud_launches.dart` (`playPremiumizePlaylist`), which
+  re-resolves links and retains hash/path entry identities.
+- `playlist_content_series_metadata.dart` (`saveImdbIdToPlaylist`) and
+  `playlist_content_posters.dart` (`updatePlaylistPoster`) retain the saved
+  `torrent_hash` storage identity. New section dependencies are wired in
+  `playlist_content_composition.dart` through typed live getters.
 
 ### Sorting — no Premiumize-specific branch
-`_applySortedPlaylistOrder` groups folders off `node.relativePath ?? node.path`.
-Because `_buildPremiumizeFileTree` **pre-strips** the torrent folder into
-`relativePath`, the default branch is correct. Do **NOT** copy Torbox's runtime
-first-folder-skip (Torbox needs it only because it doesn't pre-strip).
+`playlist_content_playlist_order.dart` (`applySortedPlaylistOrder`) groups
+folders off `node.relativePath ?? node.path`. `buildPremiumizeFileTree`
+**pre-strips** the torrent folder into `relativePath`, so the default branch
+is correct. Do **NOT** copy Torbox's runtime first-folder skip.
 
 ### Resume keys — RD-tier (filename-hash), by design
 Premiumize has **no** resume-key branch in `video_player_screen._resumeIdForEntry`,
@@ -570,9 +575,10 @@ the search-added hash+path path, not a replacement.
 - `playlist_player_service`: `_playPremiumizeItem` routes to a new
   `_playPremiumizeCloudItem` when there's no hash but cloud ids exist
   (single via `premiumizeFile`, collection via `premiumizeFiles`/`premiumizeItemIds`).
-- `playlist_content_view_screen`: `_loadPremiumizeContent` builds the tree from
-  stored file metadata (item id in `RDFileNode.path`); `_playPremiumizePlaylist`
-  has a cloud branch resolving the start item via `resolveItemById`.
+- Playlist content's `playlist_content_cloud_loading.dart` (`loadPremiumizeContent`)
+  builds the tree from stored file metadata (item id in `RDFileNode.path`);
+  `playlist_content_cloud_launches.dart` (`playPremiumizePlaylist`) has the cloud
+  branch resolving the start item via `resolveItemById`.
 - `storage_service.computePlaylistDedupeKey`: `premiumize:item:<id>` /
   `premiumize:items:<joined>` cases; `updatePlaylistItemImdbId`/`Poster` gained a
   `premiumizeItemId` match (content-view + series_browser pass it).

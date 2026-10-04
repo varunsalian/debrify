@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -30,6 +30,9 @@ TORBOX_COMPLETE = True
 PLAYBACK_SETTINGS_COMPLETE = True
 PLAYBACK_SETTINGS_FACADE = "lib/screens/settings/external_player_settings_page.dart"
 PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_playback_settings/"
+PLAYLIST_CONTENT_COMPLETE = True
+PLAYLIST_CONTENT_FACADE = "lib/screens/playlist_content_view_screen.dart"
+PLAYLIST_CONTENT_BRIDGE = "lib/features/playlist_content/presentation/legacy_playlist_content/"
 PIKPAK_COMPLETE = True
 PIKPAK_FACADE = "lib/screens/pikpak/pikpak_files_screen.dart"
 PIKPAK_BRIDGE = "lib/features/pikpak_files/presentation/legacy_pikpak/"
@@ -99,6 +102,7 @@ TORRENT_PLAYBACK_PIPELINES = {
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
     FACADE,
+    PLAYLIST_CONTENT_FACADE,
     PIKPAK_FACADE,
     PLAYBACK_SETTINGS_FACADE,
     DEBRID_FACADE,
@@ -298,6 +302,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     PLAYBACK_SETTINGS_BRIDGE,
     # Bounded move-only settings bridge; exit: IPTV settings data contracts.
     IPTV_SETTINGS_BRIDGE,
+    PLAYLIST_CONTENT_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -403,6 +408,16 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line PikPak facade limit")
         if "TEMP(pikpak)" in source:
             problems.append("temporary PikPak cross-call remains in the facade")
+    if relative.startswith("lib/features/playlist_content/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line playlist content extraction limit")
+        if "TEMP(playlist_content)" in source and (PLAYLIST_CONTENT_COMPLETE or not relative.startswith(PLAYLIST_CONTENT_BRIDGE)):
+            problems.append("playlist content temporary cross-call outside its bounded bridge")
+    if PLAYLIST_CONTENT_COMPLETE and relative == PLAYLIST_CONTENT_FACADE:
+        if lines > 400:
+            problems.append(f"{lines} lines exceeds the 400-line playlist content facade limit")
+        if "TEMP(playlist_content)" in source:
+            problems.append("playlist content facade retains a temporary cross-call")
     if relative in TORRENT_PLAYBACK_SOURCE_FILES:
         limit = 800 if relative in TORRENT_PLAYBACK_PIPELINES else 500
         if lines > limit:
@@ -472,6 +487,10 @@ def violations(path: Path) -> list[str]:
                 problems.append("pure PikPak application helper imports a legacy service")
             if relative.startswith("lib/features/debrid_downloads/application/") and target.startswith("lib/services/"):
                 problems.append("pure Real-Debrid application helper imports a legacy service")
+            if relative.startswith("lib/features/playlist_content/application/") and target.startswith("lib/services/"):
+                problems.append("pure playlist content application helper imports a legacy service")
+            if relative.startswith("lib/features/playlist_content/") and target == "lib/services/playlist_player_service.dart":
+                problems.append("playlist content imports the playlist player service")
             if layer in ("application", "data", "models"):
                 if (target.startswith(("lib/screens/", "lib/widgets/", "lib/ui/"))
                         or "/presentation/" in target
@@ -519,6 +538,13 @@ def violations(path: Path) -> list[str]:
                     problems.append("playback settings feature imports its facade")
                 if target.startswith("lib/features/") and {own, target.split("/")[2]} in ({"playback_settings", "settings"}, {"playback_settings", "iptv_settings"}) and "/models/" not in target:
                     problems.append("playback/settings cross-feature import outside models")
+                clouds = {"debrid_downloads", "torbox_downloads", "pikpak_files"}
+                if target.startswith("lib/features/"):
+                    other = target.split("/")[2]
+                    if (own == "playlist_content" and other in clouds) or (other == "playlist_content" and own in clouds):
+                        problems.append("playlist content/cloud cross-feature import")
+                if own == "playlist_content" and target == PLAYLIST_CONTENT_FACADE:
+                    problems.append("playlist content feature imports its facade")
                 if own == "pikpak_files" and target == PIKPAK_FACADE:
                     problems.append("PikPak feature imports the files facade")
                 if own == "debrid_downloads" and target == DEBRID_FACADE:
@@ -545,6 +571,8 @@ def main() -> int:
         paths.add(ROOT / PLAYBACK_SETTINGS_FACADE)
     if IPTV_SETTINGS_COMPLETE:
         paths.add(ROOT / IPTV_SETTINGS_FACADE)
+    if PLAYLIST_CONTENT_COMPLETE:
+        paths.add(ROOT / PLAYLIST_CONTENT_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:

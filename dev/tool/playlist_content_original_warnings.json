@@ -1,0 +1,104 @@
+[
+  [
+    "warning",
+    "dead_null_aware_expression",
+    "_PlaylistContentViewScreenState._loadTorboxContent",
+    "The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand"
+  ],
+  [
+    "warning",
+    "dead_null_aware_expression",
+    "_PlaylistContentViewScreenState._playRealDebridPlaylist",
+    "The left operand can't be null, so the right operand is never executed. Try removing the operator and the right operand"
+  ],
+  [
+    "warning",
+    "invalid_null_aware_operator",
+    "_PlaylistContentViewScreenState._parseSeriesPlaylist",
+    "The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['"
+  ],
+  [
+    "warning",
+    "invalid_null_aware_operator",
+    "_PlaylistContentViewScreenState._saveImdbIdToPlaylist",
+    "The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['"
+  ],
+  [
+    "warning",
+    "invalid_null_aware_operator",
+    "_PlaylistContentViewScreenState._saveImdbIdToPlaylist",
+    "The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['"
+  ],
+  [
+    "warning",
+    "invalid_null_aware_operator",
+    "_PlaylistContentViewScreenState._saveImdbIdToPlaylist",
+    "The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['"
+  ],
+  [
+    "warning",
+    "invalid_null_aware_operator",
+    "_PlaylistContentViewScreenState._saveImdbIdToPlaylist",
+    "The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['"
+  ],
+  [
+    "warning",
+    "invalid_null_aware_operator",
+    "_PlaylistContentViewScreenState._saveImdbIdToPlaylist",
+    "The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['"
+  ],
+  [
+    "warning",
+    "invalid_null_aware_operator",
+    "_PlaylistContentViewScreenState._saveImdbIdToPlaylist",
+    "The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['"
+  ],
+  [
+    "warning",
+    "invalid_null_aware_operator",
+    "_PlaylistContentViewScreenState._saveImdbIdToPlaylist",
+    "The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['"
+  ],
+  [
+    "warning",
+    "invalid_null_aware_operator",
+    "_PlaylistContentViewScreenState._saveImdbIdToPlaylist",
+    "The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['"
+  ],
+  [
+    "warning",
+    "invalid_null_aware_operator",
+    "_PlaylistContentViewScreenState._saveImdbIdToPlaylist",
+    "The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['"
+  ],
+  [
+    "warning",
+    "invalid_null_aware_operator",
+    "_PlaylistContentViewScreenState._showFixMetadataDialog",
+    "The receiver can't be null, so the null-aware operator '?[' is unnecessary. Try replacing the operator '?[' with '['"
+  ],
+  [
+    "warning",
+    "unnecessary_non_null_assertion",
+    "_PlaylistContentViewScreenState._parseSeriesPlaylist",
+    "The '!' will have no effect because the receiver can't be null. Try removing the '!' operator"
+  ],
+  [
+    "warning",
+    "unnecessary_null_comparison",
+    "_PlaylistContentViewScreenState._applyViewMode",
+    "The operand can't be 'null', so the condition is always 'true'. Remove the condition"
+  ],
+  [
+    "warning",
+    "unnecessary_null_comparison",
+    "_PlaylistContentViewScreenState._parseSeriesPlaylist",
+    "The operand can't be 'null', so the condition is always 'true'. Remove the condition"
+  ],
+  [
+    "warning",
+    "unused_element",
+    "_PlaylistContentViewScreenState._loadProgressData",
+    "The declaration '_loadProgressData' isn't referenced. Try removing the declaration of '_loadProgressData'"
+  ]
+]
