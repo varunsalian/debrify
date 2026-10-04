@@ -217,7 +217,10 @@ subscription, explicit controller besides the text field, or key literal.
    engine install awaits the download in the hub with no `mounted` check,
    and `LocalEngineStorage._pinned()` captures the scope only when
    `saveEngine` begins, so a switch during the download saves into the
-   then-active profile (outcome recorded, preserved); delete and import
+   then-active profile **if the download completes successfully after the
+   switch** (disposal closes the engine client, and an aborted download
+   returns null and never reaches storage, `remote_engine_manager.dart:329`;
+   both outcomes recorded, preserved); delete and import
    capture when their storage call begins; `ProfilePreferences.instance()`
    captures after `SharedPreferences.getInstance()` resolves, so the
    metadata write targets the profile active at acquisition. Engine sync
@@ -397,13 +400,15 @@ As in the playlist-content and IPTV-settings plans, with these points:
    per call into one shared log (convenience `http.get` creates and closes
    its own client; step 0 proves the engine field's client and its timeout
    replacement both come from the zone factory). **Marketplace cache reset
-   with existing APIs only:** each case first runs `fetchOfficial`/
+   with existing APIs only:** only warm-cache cases preseed; each such case first runs `fetchOfficial(forceRefresh: true)`/
    `fetchCommunity(forceRefresh: true)` under its own client, overwriting
    the `community` key and `communityFromNet`; a case that needs the
    fallback forces it (net failure), refreshing the separate legacy-URL
    entry, and no case relies on a legacy entry left by an earlier case.
-   Setup requests are logged apart from the case's. Cache-cold cases live in
-   their own file. No production reset. Temp documents directory for engines; fakes for
+   Setup requests are logged apart from the case's. Cache-cold cases never preseed:
+   each runs in a fresh isolate (its own test file) with no setup fetch, and
+   both methods are called with `forceRefresh: true` only where the case
+   says so. No production reset. Temp documents directory for engines; fakes for
    `FilePicker`, `UrlLauncherPlatform` (true, false, throw), clipboard and
    `MainPageBridge` sentinels; `logo: null` market fixtures. Prove one HTTP
    fixture on the original first.
@@ -429,10 +434,10 @@ As in the playlist-content and IPTV-settings plans, with these points:
    | 5 Addon actions | Each action's exact service effect and argument (`storageKey` versus `manifestUrl`, `revokeSharedProfiles` true/false with a borrower), confirmation presence, cancel writing nothing, snackbar text and colour, prefix stripping; metadata rollback on a failing write. |
    | 6 Engines | Install, delete and import as separate sequences with request lists; the blocking dialog on install/import success and failure; **no blocking progress at any point during delete**, including a failing delete; replace confirmation only for an existing id. |
    | 7 Network | Exact URLs and counts; market Retry forces; engine refresh/Retry within 5 minutes is a cache hit (no request); metadata success is one `metadata.yaml` request; a metadata failure then `tree` then per-file requests in order, uncached; a timeout closes the client and later requests use a new one; fallback hides the attribution. |
-   | 8 Profile | A switch through the real gate picker disposes the hub. Held engine **download** before save across a switch, then held `saveEngine`; held `ProfilePreferences` acquisition with the switch before and after capture; held `addAddon`; each inspects persisted data in **both** profiles and the recorded outcome is preserved; suppressed snackbars; the toggle's unhandled error; a same-profile switch. |
-   | 8 Sync | A recording `webDavSyncLocalChangeSink`: engine install, import and delete notify `(originating profile, 'engine_definitions_changed')` exactly once; failed or canceled saves and no-op deletes notify nothing; addon and metadata writes notify their profile and key; an incoming WebDAV refresh bumps `LocalEngineStorage.changes` and reloads the hub, distinct from ordinary listener notifications. |
+   | 8 Profile | A switch through the real gate picker disposes the hub. Held engine **download** before save across a switch, characterized both ways (aborted by disposal: no write; completing late through a tracking client: written to the scope storage captures), then held `saveEngine`; held `ProfilePreferences` acquisition with the switch before and after capture; held `addAddon`; each inspects persisted data in **both** profiles and the recorded outcome is preserved; suppressed snackbars; the toggle's unhandled error; a same-profile switch. |
+   | 8 Sync | A recording `webDavSyncLocalChangeSink`: engine install, import and delete notify `(profile, 'engine_definitions_changed')` exactly once, where profile is the scope **storage captures** (which can differ from the profile that initiated the action); failed or canceled saves and no-op deletes notify nothing; addon and metadata writes notify their profile and key; an incoming WebDAV refresh bumps `LocalEngineStorage.changes` and reloads the hub, distinct from ordinary listener notifications. |
    | 9 Platform | Configure true/false/throw (clipboard text, snackbar), attribution launch, Copy URL, picker arguments. |
-   | 10 D-pad | LEFT in-band versus sidebar (null still handled; ignored while searching); filter DOWN; `_focusFirstRow` per source; search arrows and submit; market button keys; post-install refocus to `fromNav`, `fromNav-1`, the search button; pool growth (never shrinks); TV setter → dropdown. Source guard: rename `TextFormField`, two `TvTextField`s, no `onKeyEvent =`. |
+   | 10 D-pad | LEFT in-band versus sidebar (null still handled; ignored while searching); filter DOWN; `_focusFirstRow` per source; search arrows and submit; market button keys; post-install refocus through the retained pool node (including installing the last focusable row; `_RowNav.focus` returns true even for a detached node, 3295), with the `fromNav-1` and search-button fallbacks preserved by the verbatim proof rather than required through normal UI installs; pool growth (never shrinks); TV setter → dropdown. Source guard: rename `TextFormField`, two `TvTextField`s, no `onKeyEvent =`. |
    | 11 Filters | Empty-`types` addons dropped under a type filter; alias-aware search; installed by id or URL; debrid chip; `_market` identical to the service list. |
 
    Pixel goldens (installed with the metadata picker, narrow and wide;
