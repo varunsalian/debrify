@@ -12,6 +12,9 @@
     "context_guard",
     "live_getter_callback",
     "retained_forwarder",
+    "formatter_if_braces",
+    "production_api_annotation",
+    "layout_body",
     "formatter_if_braces"
   ],
   "receivers": [
@@ -52,18 +55,18 @@
   ],
   "receiver_paths": {
     "_sections.selection": "SpotlightBoardSelection",
-    "_sections.hero_art": "SpotlightBoardHeroArt",
-    "_sections.hero_warmup": "SpotlightBoardHeroWarmup",
+    "_sections.heroArt": "SpotlightBoardHeroArt",
+    "_sections.heroWarmup": "SpotlightBoardHeroWarmup",
     "_sections.cadence": "SpotlightBoardCadence",
     "_sections.ambient": "SpotlightBoardAmbient",
     "_sections.movement": "SpotlightBoardMovement",
     "_sections.focus": "SpotlightBoardFocus",
-    "_sections.root_layout": "SpotlightBoardRootLayout",
-    "_sections.compact_hero": "SpotlightBoardCompactHero",
-    "_sections.wide_hero": "SpotlightBoardWideHero",
-    "_sections.hero_backdrop": "SpotlightBoardHeroBackdrop",
-    "_sections.hero_foreground": "SpotlightBoardHeroForeground",
-    "_sections.hero_identity": "SpotlightBoardHeroIdentity",
+    "_sections.rootLayout": "SpotlightBoardRootLayout",
+    "_sections.compactHero": "SpotlightBoardCompactHero",
+    "_sections.wideHero": "SpotlightBoardWideHero",
+    "_sections.heroBackdrop": "SpotlightBoardHeroBackdrop",
+    "_sections.heroForeground": "SpotlightBoardHeroForeground",
+    "_sections.heroIdentity": "SpotlightBoardHeroIdentity",
     "_sections.shelves": "SpotlightBoardShelves",
     "_owners.selection": "SpotlightBoardSelectionState",
     "_owners.hero": "SpotlightBoardHeroState",
@@ -71,22 +74,30 @@
     "_owners.scroll": "SpotlightBoardScrollState",
     "_owners.constants": "SpotlightBoardConstantsState",
     "cardState": "SpotlightBoardCardState",
-    "_layout": "SpotlightBoardCardLayout"
+    "_layout": "SpotlightBoardCardLayout",
+    "SpotlightBoardState": "SpotlightBoardState",
+    "SpotlightBoardSelectionState": "SpotlightBoardSelectionState",
+    "SpotlightBoardConstantsState": "SpotlightBoardConstantsState",
+    "SpotlightBoardCardState": "SpotlightBoardCardState",
+    "SpotlightBoardScrollState": "SpotlightBoardScrollState",
+    "SpotlightBoardCardLayout": "SpotlightBoardCardLayout",
+    "SpotlightBoardNavigationState": "SpotlightBoardNavigationState",
+    "SpotlightBoardHeroState": "SpotlightBoardHeroState"
   },
   "receiver_owners": {
     "_sections.selection": "SpotlightBoardSelection",
-    "_sections.hero_art": "SpotlightBoardHeroArt",
-    "_sections.hero_warmup": "SpotlightBoardHeroWarmup",
+    "_sections.heroArt": "SpotlightBoardHeroArt",
+    "_sections.heroWarmup": "SpotlightBoardHeroWarmup",
     "_sections.cadence": "SpotlightBoardCadence",
     "_sections.ambient": "SpotlightBoardAmbient",
     "_sections.movement": "SpotlightBoardMovement",
     "_sections.focus": "SpotlightBoardFocus",
-    "_sections.root_layout": "SpotlightBoardRootLayout",
-    "_sections.compact_hero": "SpotlightBoardCompactHero",
-    "_sections.wide_hero": "SpotlightBoardWideHero",
-    "_sections.hero_backdrop": "SpotlightBoardHeroBackdrop",
-    "_sections.hero_foreground": "SpotlightBoardHeroForeground",
-    "_sections.hero_identity": "SpotlightBoardHeroIdentity",
+    "_sections.rootLayout": "SpotlightBoardRootLayout",
+    "_sections.compactHero": "SpotlightBoardCompactHero",
+    "_sections.wideHero": "SpotlightBoardWideHero",
+    "_sections.heroBackdrop": "SpotlightBoardHeroBackdrop",
+    "_sections.heroForeground": "SpotlightBoardHeroForeground",
+    "_sections.heroIdentity": "SpotlightBoardHeroIdentity",
     "_sections.shelves": "SpotlightBoardShelves",
     "_owners.selection": "SpotlightBoardSelectionState",
     "_owners.hero": "SpotlightBoardHeroState",
@@ -94,7 +105,15 @@
     "_owners.scroll": "SpotlightBoardScrollState",
     "_owners.constants": "SpotlightBoardConstantsState",
     "cardState": "SpotlightBoardCardState",
-    "_layout": "SpotlightBoardCardLayout"
+    "_layout": "SpotlightBoardCardLayout",
+    "SpotlightBoardState": "SpotlightBoardState",
+    "SpotlightBoardSelectionState": "SpotlightBoardSelectionState",
+    "SpotlightBoardConstantsState": "SpotlightBoardConstantsState",
+    "SpotlightBoardCardState": "SpotlightBoardCardState",
+    "SpotlightBoardScrollState": "SpotlightBoardScrollState",
+    "SpotlightBoardCardLayout": "SpotlightBoardCardLayout",
+    "SpotlightBoardNavigationState": "SpotlightBoardNavigationState",
+    "SpotlightBoardHeroState": "SpotlightBoardHeroState"
   },
   "sidecars": {
     "scaffolding": "dev/tool/spotlight_board_scaffolding.json",
@@ -108,22 +127,22 @@
   ],
   "forwarders": {
     "SpotlightBoardState.prioritizeMetadata": {
-      "receiver": "_sections.hero_art"
+      "receiver": "_sections.heroArt"
     },
     "SpotlightBoardState.originalMetadata": {
-      "receiver": "_sections.hero_art"
+      "receiver": "_sections.heroArt"
     },
     "SpotlightBoardState.onMetadataPresentationChanged": {
-      "receiver": "_sections.hero_art"
+      "receiver": "_sections.heroArt"
     },
     "SpotlightBoardState.onMetadataPolicyChanged": {
-      "receiver": "_sections.hero_art"
+      "receiver": "_sections.heroArt"
     },
     "SpotlightBoardState.heroWarmupProvider": {
-      "receiver": "_sections.hero_art"
+      "receiver": "_sections.heroArt"
     },
     "SpotlightBoardState.currentHeroId": {
-      "receiver": "_sections.hero_art"
+      "receiver": "_sections.heroArt"
     },
     "SpotlightBoardState.heroAlignmentItemId": {
       "receiver": "_sections.ambient"
@@ -135,7 +154,7 @@
       "receiver": "_sections.focus"
     },
     "SpotlightBoardState.build": {
-      "receiver": "_sections.root_layout"
+      "receiver": "_sections.rootLayout"
     }
   },
   "callback_identities": [
@@ -252,18 +271,18 @@
   ],
   "callback_instances": {
     "SpotlightBoardSelection": "$State._sections.selection",
-    "SpotlightBoardHeroArt": "$State._sections.hero_art",
-    "SpotlightBoardHeroWarmup": "$State._sections.hero_warmup",
+    "SpotlightBoardHeroArt": "$State._sections.heroArt",
+    "SpotlightBoardHeroWarmup": "$State._sections.heroWarmup",
     "SpotlightBoardCadence": "$State._sections.cadence",
     "SpotlightBoardAmbient": "$State._sections.ambient",
     "SpotlightBoardMovement": "$State._sections.movement",
     "SpotlightBoardFocus": "$State._sections.focus",
-    "SpotlightBoardRootLayout": "$State._sections.root_layout",
-    "SpotlightBoardCompactHero": "$State._sections.compact_hero",
-    "SpotlightBoardWideHero": "$State._sections.wide_hero",
-    "SpotlightBoardHeroBackdrop": "$State._sections.hero_backdrop",
-    "SpotlightBoardHeroForeground": "$State._sections.hero_foreground",
-    "SpotlightBoardHeroIdentity": "$State._sections.hero_identity",
+    "SpotlightBoardRootLayout": "$State._sections.rootLayout",
+    "SpotlightBoardCompactHero": "$State._sections.compactHero",
+    "SpotlightBoardWideHero": "$State._sections.wideHero",
+    "SpotlightBoardHeroBackdrop": "$State._sections.heroBackdrop",
+    "SpotlightBoardHeroForeground": "$State._sections.heroForeground",
+    "SpotlightBoardHeroIdentity": "$State._sections.heroIdentity",
     "SpotlightBoardShelves": "$State._sections.shelves",
     "SpotlightBoardState": "$State",
     "SpotlightBoardCardState": "$CardState",
@@ -4780,5 +4799,6 @@
       ]
     }
   },
-  "context_exception_difference": "formatter_if_braces: unchanged original statement; physical prefix frozen"
+  "context_exception_difference": "formatter_if_braces: unchanged original statement; physical prefix frozen",
+  "annotation_exceptions": {}
 }

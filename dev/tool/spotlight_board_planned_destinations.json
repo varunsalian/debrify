@@ -1,0 +1,787 @@
+{
+  "SpotlightCard": {
+    "file": "lib/features/spotlight_board/presentation/spotlight_board_types.dart",
+    "owner": "",
+    "name": "SpotlightCard"
+  },
+  "SpotlightCardShape": {
+    "file": "lib/features/spotlight_board/presentation/spotlight_board_types.dart",
+    "owner": "",
+    "name": "SpotlightCardShape"
+  },
+  "SpotlightShelf": {
+    "file": "lib/features/spotlight_board/presentation/spotlight_board_types.dart",
+    "owner": "",
+    "name": "SpotlightShelf"
+  },
+  "SpotlightBoard": {
+    "file": "lib/widgets/home/spotlight_board.dart",
+    "owner": "",
+    "name": "SpotlightBoard"
+  },
+  "_Tier": {
+    "file": "lib/features/spotlight_board/presentation/spotlight_board_metrics.dart",
+    "owner": "",
+    "name": "SpotlightBoardTier"
+  },
+  "_M": {
+    "file": "lib/features/spotlight_board/presentation/spotlight_board_metrics.dart",
+    "owner": "",
+    "name": "SpotlightBoardMetrics"
+  },
+  "SpotlightBoardState._visibleCards": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart",
+    "owner": "SpotlightBoardSelectionState",
+    "name": "visibleCards"
+  },
+  "SpotlightBoardState._scrollingSources": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart",
+    "owner": "SpotlightBoardSelectionState",
+    "name": "scrollingSources"
+  },
+  "SpotlightBoardState._selectionViewport": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart",
+    "owner": "SpotlightBoardSelectionState",
+    "name": "selectionViewport"
+  },
+  "SpotlightBoardState._scrollRowId": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart",
+    "owner": "SpotlightBoardSelectionState",
+    "name": "scrollRowId"
+  },
+  "SpotlightBoardState._selectedCard": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart",
+    "owner": "SpotlightBoardSelectionState",
+    "name": "selectedCard"
+  },
+  "SpotlightBoardState._largeCardInteractions": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart",
+    "owner": "SpotlightBoardSelectionState",
+    "name": "largeCardInteractions"
+  },
+  "SpotlightBoardState._selectionQueued": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart",
+    "owner": "SpotlightBoardSelectionState",
+    "name": "selectionQueued"
+  },
+  "SpotlightBoardState._selectionFromScroll": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart",
+    "owner": "SpotlightBoardSelectionState",
+    "name": "selectionFromScroll"
+  },
+  "SpotlightBoardState._scrollInterruptedPreview": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart",
+    "owner": "SpotlightBoardSelectionState",
+    "name": "scrollInterruptedPreview"
+  },
+  "SpotlightBoardState._registerCard": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection.dart",
+    "owner": "SpotlightBoardSelection",
+    "name": "registerCard"
+  },
+  "SpotlightBoardState._unregisterCard": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection.dart",
+    "owner": "SpotlightBoardSelection",
+    "name": "unregisterCard"
+  },
+  "SpotlightBoardState._selectCard": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection.dart",
+    "owner": "SpotlightBoardSelection",
+    "name": "selectCard"
+  },
+  "SpotlightBoardState._interactWithCard": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection.dart",
+    "owner": "SpotlightBoardSelection",
+    "name": "interactWithCard"
+  },
+  "SpotlightBoardState._pointerOwnsScrollSelection": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection.dart",
+    "owner": "SpotlightBoardSelection",
+    "name": "pointerOwnsScrollSelection"
+  },
+  "SpotlightBoardState._onCardScroll": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection.dart",
+    "owner": "SpotlightBoardSelection",
+    "name": "onCardScroll"
+  },
+  "SpotlightBoardState._queueScrollSelection": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection.dart",
+    "owner": "SpotlightBoardSelection",
+    "name": "queueScrollSelection"
+  },
+  "SpotlightBoardState._lastMetrics": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_scroll_state.dart",
+    "owner": "SpotlightBoardScrollState",
+    "name": "lastMetrics"
+  },
+  "SpotlightBoardState.prioritizeMetadata": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "prioritizeMetadata"
+  },
+  "SpotlightBoardState.originalMetadata": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "originalMetadata"
+  },
+  "SpotlightBoardState.onMetadataPresentationChanged": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "onMetadataPresentationChanged"
+  },
+  "SpotlightBoardState.onMetadataPolicyChanged": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "onMetadataPolicyChanged"
+  },
+  "SpotlightBoardState._cancelHeroWarmups": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "cancelHeroWarmups"
+  },
+  "SpotlightBoardState._cancelWarmups": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_warmup.dart",
+    "owner": "SpotlightBoardHeroWarmup",
+    "name": "cancelWarmups"
+  },
+  "SpotlightBoardState._heroDecodeWidth": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "heroDecodeWidth"
+  },
+  "SpotlightBoardState._heroImageFadeIn": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "heroImageFadeIn"
+  },
+  "SpotlightBoardState._heroImageFadeOut": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "heroImageFadeOut"
+  },
+  "SpotlightBoardState.heroWarmupProvider": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "heroWarmupProvider"
+  },
+  "SpotlightBoardState._warmHeroImage": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_warmup.dart",
+    "owner": "SpotlightBoardHeroWarmup",
+    "name": "warmHeroImage"
+  },
+  "SpotlightBoardState._preloadHeroes": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_warmup.dart",
+    "owner": "SpotlightBoardHeroWarmup",
+    "name": "preloadHeroes"
+  },
+  "SpotlightBoardState._touchLoadMoreThreshold": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_constants_state.dart",
+    "owner": "SpotlightBoardConstantsState",
+    "name": "touchLoadMoreThreshold"
+  },
+  "SpotlightBoardState._heroFraction": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_constants_state.dart",
+    "owner": "SpotlightBoardConstantsState",
+    "name": "heroFraction"
+  },
+  "SpotlightBoardState._heroFractionCompact": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_constants_state.dart",
+    "owner": "SpotlightBoardConstantsState",
+    "name": "heroFractionCompact"
+  },
+  "SpotlightBoardState._shelfOverlapFraction": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_constants_state.dart",
+    "owner": "SpotlightBoardConstantsState",
+    "name": "shelfOverlapFraction"
+  },
+  "SpotlightBoardState._scroll": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_scroll_state.dart",
+    "owner": "SpotlightBoardScrollState",
+    "name": "scroll"
+  },
+  "SpotlightBoardState._heroBandH": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_scroll_state.dart",
+    "owner": "SpotlightBoardScrollState",
+    "name": "heroBandH"
+  },
+  "SpotlightBoardState._lastMaxExtent": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_scroll_state.dart",
+    "owner": "SpotlightBoardScrollState",
+    "name": "lastMaxExtent"
+  },
+  "SpotlightBoardState._veilMetricsRevision": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_scroll_state.dart",
+    "owner": "SpotlightBoardScrollState",
+    "name": "veilMetricsRevision"
+  },
+  "SpotlightBoardState._scrolledAway": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_constants_state.dart",
+    "owner": "SpotlightBoardConstantsState",
+    "name": "scrolledAway"
+  },
+  "SpotlightBoardState._onBoardScrolled": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection.dart",
+    "owner": "SpotlightBoardSelection",
+    "name": "onBoardScrolled"
+  },
+  "SpotlightBoardState._heroId": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "heroId"
+  },
+  "SpotlightBoardState._row": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_navigation_state.dart",
+    "owner": "SpotlightBoardNavigationState",
+    "name": "row"
+  },
+  "SpotlightBoardState._col": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_navigation_state.dart",
+    "owner": "SpotlightBoardNavigationState",
+    "name": "col"
+  },
+  "SpotlightBoardState._loadingMoreShelves": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_navigation_state.dart",
+    "owner": "SpotlightBoardNavigationState",
+    "name": "loadingMoreShelves"
+  },
+  "SpotlightBoardState._pendingProgressiveDown": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_navigation_state.dart",
+    "owner": "SpotlightBoardNavigationState",
+    "name": "pendingProgressiveDown"
+  },
+  "SpotlightBoardState._leftThird": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "leftThird"
+  },
+  "SpotlightBoardState._hiddenRetry": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "hiddenRetry"
+  },
+  "SpotlightBoardState._cadence": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "cadence"
+  },
+  "SpotlightBoardState._rolling": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "rolling"
+  },
+  "SpotlightBoardState._desktopPreviewOwners": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "desktopPreviewOwners"
+  },
+  "SpotlightBoardState._stopRolling": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_cadence.dart",
+    "owner": "SpotlightBoardCadence",
+    "name": "stopRolling"
+  },
+  "SpotlightBoardState._onDesktopPreviewActivityChanged": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_cadence.dart",
+    "owner": "SpotlightBoardCadence",
+    "name": "onDesktopPreviewActivityChanged"
+  },
+  "SpotlightBoardState._dwelledHeroId": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "dwelledHeroId"
+  },
+  "SpotlightBoardState._restartCadence": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_cadence.dart",
+    "owner": "SpotlightBoardCadence",
+    "name": "restartCadence"
+  },
+  "SpotlightBoardState._jumpTo": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_cadence.dart",
+    "owner": "SpotlightBoardCadence",
+    "name": "jumpTo"
+  },
+  "SpotlightBoardState._onArtDone": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_cadence.dart",
+    "owner": "SpotlightBoardCadence",
+    "name": "onArtDone"
+  },
+  "SpotlightBoardState._heroPoster": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "heroPoster"
+  },
+  "SpotlightBoardState._heroArt": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "heroArt"
+  },
+  "SpotlightBoardState._heroIndex": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "heroIndex"
+  },
+  "SpotlightBoardState._heroItem": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "heroItem"
+  },
+  "SpotlightBoardState._openHero": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "openHero"
+  },
+  "SpotlightBoardState.currentHeroId": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+    "owner": "SpotlightBoardHeroArt",
+    "name": "currentHeroId"
+  },
+  "SpotlightBoardState.initState": {
+    "file": "lib/widgets/home/spotlight_board.dart",
+    "owner": "SpotlightBoardState",
+    "name": "initState"
+  },
+  "SpotlightBoardState.didUpdateWidget": {
+    "file": "lib/widgets/home/spotlight_board.dart",
+    "owner": "SpotlightBoardState",
+    "name": "didUpdateWidget"
+  },
+  "SpotlightBoardState._onHeroFocus": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_cadence.dart",
+    "owner": "SpotlightBoardCadence",
+    "name": "onHeroFocus"
+  },
+  "SpotlightBoardState.dispose": {
+    "file": "lib/widgets/home/spotlight_board.dart",
+    "owner": "SpotlightBoardState",
+    "name": "dispose"
+  },
+  "SpotlightBoardState._probeGen": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "probeGen"
+  },
+  "SpotlightBoardState._tints": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "tints"
+  },
+  "SpotlightBoardState._lastAmbient": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "lastAmbient"
+  },
+  "SpotlightBoardState._lastAmbientSink": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "lastAmbientSink"
+  },
+  "SpotlightBoardState._emitAmbient": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart",
+    "owner": "SpotlightBoardAmbient",
+    "name": "emitAmbient"
+  },
+  "SpotlightBoardState._probe": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart",
+    "owner": "SpotlightBoardAmbient",
+    "name": "probe"
+  },
+  "SpotlightBoardState._remember": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart",
+    "owner": "SpotlightBoardAmbient",
+    "name": "remember"
+  },
+  "SpotlightBoardState._warmNext": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart",
+    "owner": "SpotlightBoardAmbient",
+    "name": "warmNext"
+  },
+  "SpotlightBoardState._flipFor": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "flipFor"
+  },
+  "SpotlightBoardState._flipValue": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart",
+    "owner": "SpotlightBoardHeroState",
+    "name": "flipValue"
+  },
+  "SpotlightBoardState.heroAlignmentItemId": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart",
+    "owner": "SpotlightBoardAmbient",
+    "name": "heroAlignmentItemId"
+  },
+  "SpotlightBoardState._flip": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart",
+    "owner": "SpotlightBoardAmbient",
+    "name": "flip"
+  },
+  "SpotlightBoardState._go": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart",
+    "owner": "SpotlightBoardMovement",
+    "name": "go"
+  },
+  "SpotlightBoardState._page": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart",
+    "owner": "SpotlightBoardMovement",
+    "name": "page"
+  },
+  "SpotlightBoardState.didChangeDependencies": {
+    "file": "lib/widgets/home/spotlight_board.dart",
+    "owner": "SpotlightBoardState",
+    "name": "didChangeDependencies"
+  },
+  "SpotlightBoardState._finishProgressiveDown": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart",
+    "owner": "SpotlightBoardMovement",
+    "name": "finishProgressiveDown"
+  },
+  "SpotlightBoardState._loadShelvesAndFinishDown": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart",
+    "owner": "SpotlightBoardMovement",
+    "name": "loadShelvesAndFinishDown"
+  },
+  "SpotlightBoardState._loadMoreShelvesForTouch": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart",
+    "owner": "SpotlightBoardMovement",
+    "name": "loadMoreShelvesForTouch"
+  },
+  "SpotlightBoardState._down": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart",
+    "owner": "SpotlightBoardMovement",
+    "name": "down"
+  },
+  "SpotlightBoardState._up": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart",
+    "owner": "SpotlightBoardMovement",
+    "name": "up"
+  },
+  "SpotlightBoardState._focusRow": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_focus.dart",
+    "owner": "SpotlightBoardFocus",
+    "name": "focusRow"
+  },
+  "SpotlightBoardState.focusShelf": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_focus.dart",
+    "owner": "SpotlightBoardFocus",
+    "name": "focusShelf"
+  },
+  "SpotlightBoardState._liveCol": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_focus.dart",
+    "owner": "SpotlightBoardFocus",
+    "name": "liveCol"
+  },
+  "SpotlightBoardState._liveRow": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_focus.dart",
+    "owner": "SpotlightBoardFocus",
+    "name": "liveRow"
+  },
+  "SpotlightBoardState._walk": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart",
+    "owner": "SpotlightBoardMovement",
+    "name": "walk"
+  },
+  "SpotlightBoardState._onKey": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_focus.dart",
+    "owner": "SpotlightBoardFocus",
+    "name": "onKey"
+  },
+  "SpotlightBoardState.focusTarget": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_focus.dart",
+    "owner": "SpotlightBoardFocus",
+    "name": "focusTarget"
+  },
+  "SpotlightBoardState.build": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_root_layout.dart",
+    "owner": "SpotlightBoardRootLayout",
+    "name": "build"
+  },
+  "SpotlightBoardState._board": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_root_layout.dart",
+    "owner": "SpotlightBoardRootLayout",
+    "name": "board"
+  },
+  "SpotlightBoardState._hero": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_compact_hero.dart",
+    "owner": "SpotlightBoardCompactHero",
+    "name": "hero"
+  },
+  "SpotlightBoardState._heroCompact": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_compact_hero.dart",
+    "owner": "SpotlightBoardCompactHero",
+    "name": "heroCompact"
+  },
+  "SpotlightBoardState._identityCompact": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_compact_hero.dart",
+    "owner": "SpotlightBoardCompactHero",
+    "name": "identityCompact"
+  },
+  "SpotlightBoardState._heroWide": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_wide_hero.dart",
+    "owner": "SpotlightBoardWideHero",
+    "name": "heroWide"
+  },
+  "SpotlightBoardState._heroBackdrop": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_wide_hero.dart",
+    "owner": "SpotlightBoardWideHero",
+    "name": "heroBackdrop"
+  },
+  "SpotlightBoardState._heroBackdropContent": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_backdrop.dart",
+    "owner": "SpotlightBoardHeroBackdrop",
+    "name": "heroBackdropContent"
+  },
+  "SpotlightBoardState._veil": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_backdrop.dart",
+    "owner": "SpotlightBoardHeroBackdrop",
+    "name": "veil"
+  },
+  "SpotlightBoardState._heroForeground": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_foreground.dart",
+    "owner": "SpotlightBoardHeroForeground",
+    "name": "heroForeground"
+  },
+  "SpotlightBoardState._identity": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_identity.dart",
+    "owner": "SpotlightBoardHeroIdentity",
+    "name": "identity"
+  },
+  "SpotlightBoardState._dots": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_identity.dart",
+    "owner": "SpotlightBoardHeroIdentity",
+    "name": "dots"
+  },
+  "SpotlightBoardState._shelfTitleStyle": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart",
+    "owner": "SpotlightBoardShelves",
+    "name": "shelfTitleStyle"
+  },
+  "SpotlightBoardState._shelfExtent": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart",
+    "owner": "SpotlightBoardShelves",
+    "name": "shelfExtent"
+  },
+  "SpotlightBoardState._shelfTitle": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart",
+    "owner": "SpotlightBoardShelves",
+    "name": "shelfTitle"
+  },
+  "SpotlightBoardState._shelfCardHeight": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart",
+    "owner": "SpotlightBoardShelves",
+    "name": "shelfCardHeight"
+  },
+  "SpotlightBoardState._shelfHasCaptions": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart",
+    "owner": "SpotlightBoardShelves",
+    "name": "shelfHasCaptions"
+  },
+  "SpotlightBoardState._shelf": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart",
+    "owner": "SpotlightBoardShelves",
+    "name": "shelf"
+  },
+  "_ShelfTitleLink": {
+    "file": "lib/features/spotlight_board/presentation/spotlight_shelf_title_link.dart",
+    "owner": "",
+    "name": "SpotlightShelfTitleLink"
+  },
+  "_ShelfTitleLinkState": {
+    "file": "lib/features/spotlight_board/presentation/spotlight_shelf_title_link.dart",
+    "owner": "",
+    "name": "SpotlightShelfTitleLinkState"
+  },
+  "_LogoOrTitle": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_logo_or_title.dart",
+    "owner": "",
+    "name": "SpotlightBoardLogoOrTitle"
+  },
+  "_HeroOpenPill": {
+    "file": "lib/features/spotlight_board/presentation/spotlight_hero_open_pill.dart",
+    "owner": "",
+    "name": "SpotlightHeroOpenPill"
+  },
+  "_Card": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "",
+    "name": "SpotlightBoardCard"
+  },
+  "_CardState._paintedGrowth": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "paintedGrowth"
+  },
+  "_CardState._scrollGrowth": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "scrollGrowth"
+  },
+  "_CardState._freezeScrollWidth": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "freezeScrollWidth"
+  },
+  "_CardState._wideSelected": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "wideSelected"
+  },
+  "_CardState._moving": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "moving"
+  },
+  "_CardState._activeCard": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "activeCard"
+  },
+  "_CardState._lastReducedMotion": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "lastReducedMotion"
+  },
+  "_CardState.didChangeDependencies": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "didChangeDependencies"
+  },
+  "_CardState.initState": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "initState"
+  },
+  "_CardState._setWideSelection": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "setWideSelection"
+  },
+  "_CardState.originalMetadata": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "originalMetadata"
+  },
+  "_CardState._f": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "f"
+  },
+  "_CardState._trailerDwell": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "trailerDwell"
+  },
+  "_CardState._trailerRequested": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "trailerRequested"
+  },
+  "_CardState._trailerPlaying": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "trailerPlaying"
+  },
+  "_CardState._trailerAttempted": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "trailerAttempted"
+  },
+  "_CardState._hideTrailerText": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "hideTrailerText"
+  },
+  "_CardState._trailerTextTimer": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "trailerTextTimer"
+  },
+  "_CardState._armCardTrailer": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "armCardTrailer"
+  },
+  "_CardState._descriptionTimer": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "descriptionTimer"
+  },
+  "_CardState._resolvedDescription": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "resolvedDescription"
+  },
+  "_CardState._descriptionScope": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "descriptionScope"
+  },
+  "_CardState._descriptionRequest": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "descriptionRequest"
+  },
+  "_CardState._loadFocusedDescription": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "loadFocusedDescription"
+  },
+  "_CardState._hold": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "hold"
+  },
+  "_CardState._h": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "h"
+  },
+  "_CardState._previewOwner": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "previewOwner"
+  },
+  "_CardState._previewActivityReported": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "previewActivityReported"
+  },
+  "_CardState._previewActive": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "cardPreviewActive"
+  },
+  "_CardState._setHover": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "setHover"
+  },
+  "_CardState._reportDesktopPreviewActivity": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "reportDesktopPreviewActivity"
+  },
+  "_CardState.didUpdateWidget": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "didUpdateWidget"
+  },
+  "_CardState.dispose": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "dispose"
+  },
+  "_CardState._canExpand": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "canExpand"
+  },
+  "_CardState.build": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart",
+    "owner": "SpotlightBoardCardState",
+    "name": "build"
+  },
+  "_CardState._buildCard": {
+    "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card_layout.dart",
+    "owner": "SpotlightBoardCardLayout",
+    "name": "buildCard"
+  }
+}

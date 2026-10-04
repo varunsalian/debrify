@@ -1,34 +1,39 @@
 import 'dart:async';
 import 'dart:math' show max;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_bindings.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_constants_state.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_logo_or_title.dart';
+import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_owners.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_board_metrics.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_board_types.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_hero_open_pill.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_shelf_title_link.dart';
+import 'package:debrify/models/metadata_preferences.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/services/debrify_image_cache.dart';
+import 'package:debrify/services/diagnostic_log.dart';
+import 'package:debrify/theme/app_theme.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/theme/widgets/parallax_focus.dart';
+import 'package:debrify/utils/artwork_url.dart';
+import 'package:debrify/utils/dominant_color.dart';
+import 'package:debrify/utils/platform_util.dart';
+import 'package:debrify/utils/spotlight_interaction_policy.dart';
+import 'package:debrify/widgets/home/home_row_focus.dart';
+import 'package:debrify/widgets/home/midnight_rain_background.dart';
+import 'package:debrify/widgets/home/moonlit_ocean_background.dart';
+import 'package:debrify/widgets/home/row_tag_pill.dart';
+import 'package:debrify/widgets/home/snowy_mountain_background.dart';
+import 'package:debrify/widgets/metadata_presentation_mixin.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
-import '../../models/metadata_preferences.dart';
-import '../../models/stremio_addon.dart';
-import '../../services/debrify_image_cache.dart';
-import '../../services/diagnostic_log.dart';
-import '../../theme/app_theme.dart';
-import '../../theme/app_theme_scope.dart';
-import '../../theme/widgets/parallax_focus.dart';
-import '../../utils/artwork_url.dart';
-import '../../utils/dominant_color.dart';
-import '../../utils/platform_util.dart';
-import '../../utils/spotlight_interaction_policy.dart';
-import '../metadata_presentation_mixin.dart';
-import 'home_row_focus.dart';
-import 'midnight_rain_background.dart';
-import 'moonlit_ocean_background.dart';
-import 'row_tag_pill.dart';
-import 'snowy_mountain_background.dart';
 
-export 'package:debrify/features/spotlight_board/presentation/spotlight_board_types.dart';
+export 'package:debrify/features/spotlight_board/presentation/spotlight_board_types.dart'
+    show SpotlightCard, SpotlightCardShape, SpotlightShelf;
 
 /// **Spotlight** — the tvOS Home idiom.
 ///
@@ -217,29 +222,24 @@ class SpotlightBoard extends StatefulWidget {
 }
 
 class SpotlightBoardState extends State<SpotlightBoard>
-    with MetadataPresentationMixin<SpotlightBoard> {
-  final Set<SpotlightBoardCardState> _visibleCards = {};
-  final Set<BuildContext> _scrollingSources = {};
-  Size? _selectionViewport;
-  Object? _scrollRowId;
-  SpotlightBoardCardState? _selectedCard;
-  bool _largeCardInteractions = false;
-  bool _selectionQueued = false;
-  bool _selectionFromScroll = false;
-  bool _scrollInterruptedPreview = false;
-
+    with MetadataPresentationMixin<SpotlightBoard>
+    implements SpotlightBoardWidgetView {
   void _registerCard(SpotlightBoardCardState card) {
-    _visibleCards.add(card);
-    if (_largeCardInteractions &&
-        (_selectedCard == null || _selectionFromScroll)) {
+    _owners.selection.visibleCards.add(card);
+    if (_owners.selection.largeCardInteractions &&
+        (_owners.selection.selectedCard == null ||
+            _owners.selection.selectionFromScroll)) {
       _queueScrollSelection();
     }
   }
 
   void _unregisterCard(SpotlightBoardCardState card) {
-    _visibleCards.remove(card);
-    if (identical(_selectedCard, card)) _selectedCard = null;
-    if (_largeCardInteractions && _scrollingSources.isNotEmpty) {
+    _owners.selection.visibleCards.remove(card);
+    if (identical(_owners.selection.selectedCard, card)) {
+      _owners.selection.selectedCard = null;
+    }
+    if (_owners.selection.largeCardInteractions &&
+        _owners.selection.scrollingSources.isNotEmpty) {
       _queueScrollSelection();
     }
   }
@@ -247,11 +247,11 @@ class SpotlightBoardState extends State<SpotlightBoard>
   void _selectCard(SpotlightBoardCardState? card, {required bool scrolling}) {
     // Changing widths during a drag can collapse a short row's scroll extent
     // and cancel the gesture. Hold painted widths until scrolling settles.
-    for (final visible in _visibleCards) {
+    for (final visible in _owners.selection.visibleCards) {
       if (visible.mounted) visible.freezeScrollWidth(scrolling);
     }
-    final previous = _selectedCard;
-    _selectedCard = card;
+    final previous = _owners.selection.selectedCard;
+    _owners.selection.selectedCard = card;
     if (!identical(previous, card) && previous?.mounted == true) {
       previous!.setWideSelection(false, moving: false);
     }
@@ -259,23 +259,24 @@ class SpotlightBoardState extends State<SpotlightBoard>
   }
 
   void _interactWithCard(SpotlightBoardCardState card, bool active) {
-    if (!_largeCardInteractions) return;
+    if (!_owners.selection.largeCardInteractions) return;
     // Hover can change as cards move beneath a stationary pointer.
     // Only scroll completion may release the moving state.
-    if (_scrollingSources.isNotEmpty) {
+    if (_owners.selection.scrollingSources.isNotEmpty) {
       if (_pointerOwnsScrollSelection) _queueScrollSelection();
       return;
     }
     if (active) {
-      _selectionFromScroll = false;
-      _scrollInterruptedPreview = false;
+      _owners.selection.selectionFromScroll = false;
+      _owners.selection.scrollInterruptedPreview = false;
       _selectCard(card, scrolling: false);
-    } else if (!_selectionFromScroll && identical(_selectedCard, card)) {
+    } else if (!_owners.selection.selectionFromScroll &&
+        identical(_owners.selection.selectedCard, card)) {
       // Hover and keyboard focus can overlap. Losing either one must not
       // hide the cursor while the other still owns this card.
       if (card.f || card.h) return;
       SpotlightBoardCardState? focused;
-      for (final candidate in _visibleCards) {
+      for (final candidate in _owners.selection.visibleCards) {
         if (candidate.mounted && candidate.f) {
           focused = candidate;
           break;
@@ -293,7 +294,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
   };
 
   bool _onCardScroll(ScrollNotification notification) {
-    if (!_largeCardInteractions) return false;
+    if (!_owners.selection.largeCardInteractions) return false;
     final userStarted =
         (notification is UserScrollNotification &&
             notification.direction != ScrollDirection.idle) ||
@@ -301,15 +302,19 @@ class SpotlightBoardState extends State<SpotlightBoard>
             notification.dragDetails != null);
     final source = notification.context;
     if (userStarted) {
-      _selectionFromScroll = true;
-      if (notification.metrics.axis == Axis.vertical) _scrollRowId = null;
-      if (source != null) _scrollingSources.add(source);
-      _scrollInterruptedPreview = true;
+      _owners.selection.selectionFromScroll = true;
+      if (notification.metrics.axis == Axis.vertical) {
+        _owners.selection.scrollRowId = null;
+      }
+      if (source != null) _owners.selection.scrollingSources.add(source);
+      _owners.selection.scrollInterruptedPreview = true;
       _queueScrollSelection();
     }
     // Layout corrections and ensureVisible are not new user gestures.
-    if (!_scrollingSources.contains(source)) return false;
-    if (notification is ScrollEndNotification) _scrollingSources.remove(source);
+    if (!_owners.selection.scrollingSources.contains(source)) return false;
+    if (notification is ScrollEndNotification) {
+      _owners.selection.scrollingSources.remove(source);
+    }
     if (notification is ScrollStartNotification ||
         notification is ScrollUpdateNotification ||
         notification is ScrollEndNotification) {
@@ -322,26 +327,29 @@ class SpotlightBoardState extends State<SpotlightBoard>
   /// Measure actual cards because Spotlight mixes shapes and expanded widths.
   /// Only one visible shelf/card owns it; cached offscreen cells never preview.
   void _queueScrollSelection() {
-    if (_selectionQueued) return;
-    _selectionQueued = true;
+    if (_owners.selection.selectionQueued) return;
+    _owners.selection.selectionQueued = true;
     WidgetsBinding.instance.ensureVisualUpdate();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _selectionQueued = false;
+      _owners.selection.selectionQueued = false;
       if (!mounted) return;
-      _scrollingSources.removeWhere((source) => !source.mounted);
-      if (!_visibleCards.any(
-        (card) => card.mounted && card.widget.rowId == _scrollRowId,
+      _owners.selection.scrollingSources.removeWhere(
+        (source) => !source.mounted,
+      );
+      if (!_owners.selection.visibleCards.any(
+        (card) =>
+            card.mounted && card.widget.rowId == _owners.selection.scrollRowId,
       )) {
-        _scrollRowId = null;
+        _owners.selection.scrollRowId = null;
       }
-      if (!_largeCardInteractions) {
+      if (!_owners.selection.largeCardInteractions) {
         _selectCard(null, scrolling: false);
         return;
       }
 
-      if (_scrollInterruptedPreview) {
-        _scrollInterruptedPreview = false;
-        _selectedCard?.setWideSelection(true, moving: true);
+      if (_owners.selection.scrollInterruptedPreview) {
+        _owners.selection.scrollInterruptedPreview = false;
+        _owners.selection.selectedCard?.setWideSelection(true, moving: true);
       }
       // Desktop scrolling must not replace the pointer with the touch
       // reading cursor. MouseRegion also updates when content moves under
@@ -349,17 +357,18 @@ class SpotlightBoardState extends State<SpotlightBoard>
       if (_pointerOwnsScrollSelection) {
         SpotlightBoardCardState? hovered;
         SpotlightBoardCardState? focused;
-        for (final card in _visibleCards) {
+        for (final card in _owners.selection.visibleCards) {
           if (!card.mounted || !card.widget.largeInteractions) continue;
           if (card.h) hovered = card;
           if (card.f) focused = card;
         }
-        _selectionFromScroll = false;
+        _owners.selection.selectionFromScroll = false;
         _selectCard(
           hovered ?? focused,
-          scrolling: _scrollingSources.isNotEmpty,
+          scrolling: _owners.selection.scrollingSources.isNotEmpty,
         );
-        if (_scrollingSources.isEmpty && _desktopPreviewOwners.isEmpty)
+        if (_owners.selection.scrollingSources.isEmpty &&
+            _owners.hero.desktopPreviewOwners.isEmpty)
           _restartCadence();
         return;
       }
@@ -367,15 +376,15 @@ class SpotlightBoardState extends State<SpotlightBoard>
       if (render is! RenderBox || !render.hasSize) return;
       final bounds = Offset.zero & render.size;
       final readingY = bounds.height * 0.6;
-      final readingX = _lastMetrics?.gutter ?? 24;
+      final readingX = _owners.scroll.lastMetrics?.gutter ?? 24;
       SpotlightBoardCardState? nearest;
       double bestRow = double.infinity;
       double bestColumn = double.infinity;
-      for (final card in _visibleCards) {
+      for (final card in _owners.selection.visibleCards) {
         if (!card.mounted || !card.widget.largeInteractions) continue;
-        if (_selectionFromScroll &&
-            _scrollRowId != null &&
-            card.widget.rowId != _scrollRowId)
+        if (_owners.selection.selectionFromScroll &&
+            _owners.selection.scrollRowId != null &&
+            card.widget.rowId != _owners.selection.scrollRowId)
           continue;
         final box = card.context.findRenderObject();
         if (box is! RenderBox || !box.hasSize || !box.attached) continue;
@@ -384,7 +393,10 @@ class SpotlightBoardState extends State<SpotlightBoard>
         final visible = rect.intersect(bounds);
         if (visible.height < rect.height * 0.65 || visible.width < 24) continue;
         // Preserve explicit selection only while its card remains visible.
-        if (!_selectionFromScroll && identical(card, _selectedCard)) return;
+        if (!_owners.selection.selectionFromScroll &&
+            identical(card, _owners.selection.selectedCard)) {
+          return;
+        }
         final row = (rect.center.dy - readingY).abs();
         final column = (rect.left - readingX).abs();
         if (row < bestRow - 4 ||
@@ -394,32 +406,35 @@ class SpotlightBoardState extends State<SpotlightBoard>
           bestColumn = column;
         }
       }
-      _selectCard(nearest, scrolling: _scrollingSources.isNotEmpty);
-      if (_scrollingSources.isEmpty && _desktopPreviewOwners.isEmpty)
+      _selectCard(
+        nearest,
+        scrolling: _owners.selection.scrollingSources.isNotEmpty,
+      );
+      if (_owners.selection.scrollingSources.isEmpty &&
+          _owners.hero.desktopPreviewOwners.isEmpty)
         _restartCadence();
     });
   }
 
-  SpotlightBoardMetrics? _lastMetrics;
   @override
   bool get prioritizeMetadata => true;
+
   @override
   StremioMeta? get originalMetadata =>
       widget.hero.isEmpty ? null : widget.hero[_heroIndex];
+
   @override
   void onMetadataPresentationChanged() => unawaited(_probe());
 
   @override
   void onMetadataPolicyChanged() {
     // A previous image's tint must not publish after the policy changes.
-    _probeGen++;
+    _owners.hero.probeGen++;
     _preloadHeroes();
   }
 
-  final _cancelHeroWarmups = <VoidCallback>{};
-
   void _cancelWarmups() {
-    for (final cancel in _cancelHeroWarmups.toList()) {
+    for (final cancel in _owners.hero.cancelHeroWarmups.toList()) {
       cancel();
     }
   }
@@ -460,7 +475,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
       if (result.isCompleted) return;
       timer?.cancel();
       stream.removeListener(listener);
-      _cancelHeroWarmups.remove(cancel);
+      _owners.hero.cancelHeroWarmups.remove(cancel);
       result.complete(success);
     }
 
@@ -469,7 +484,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
       image.dispose();
       finish(true);
     }, onError: (_, _) => finish(false));
-    _cancelHeroWarmups.add(cancel);
+    _owners.hero.cancelHeroWarmups.add(cancel);
     timer = Timer(const Duration(seconds: 15), cancel);
     stream.addListener(listener);
     return result.future;
@@ -502,74 +517,23 @@ class SpotlightBoardState extends State<SpotlightBoard>
     );
   }
 
-  /// Start fetching the next shelf batch before touch scrolling reaches the
-  /// hard end. TV has its own DPAD-at-last-shelf trigger in [_down].
-  static const double _touchLoadMoreThreshold = 600;
-
-  /// The hero as a FRACTION of the board: the art reaches the bottom edge of
-  /// the screen, and the first shelf sits ON it.
-  ///
-  /// Two things were wrong before. It was `540` logical pixels flat, and
-  /// logical size differs per device — so one constant drew a hero at ~89% of
-  /// an Android TV box and ~40% of an Apple TV. Same code, same number, a
-  /// different design on each, and on tvOS a trailer playing in a slot half its
-  /// intended height, which is why `cover` was discarding half the frame.
-  ///
-  /// And the target itself was wrong: ending the artwork above the first shelf
-  /// leaves a band of flat grey under the cards at rest, which is exactly what
-  /// "the poster is not full screen" describes. The ground is what you land on
-  /// once you SCROLL — that is where the measured `rgb(28,28,28)` gutter came
-  /// from, and it was taken from scrolled frames and applied to the resting one
-  /// by mistake.
-  static const double _heroFraction = 1.0;
-
-  /// Compact keeps the hero to ~64% of the board — the Apple phone measure —
-  /// with the rows below it in flow rather than riding over the art.
-  static const double _heroFractionCompact = 0.64;
-
-  /// How far the first shelf rides up over the hero's lower edge, as a
-  /// fraction of the hero. Was 88 of 540, kept in proportion — with a
-  /// full-height hero this is what puts the cards OVER the artwork rather than
-  /// below it. Compact has no overlap: the hero fades into the ground and the
-  /// first shelf starts ON the ground (the reference does exactly this).
-  static const double _shelfOverlapFraction = 88 / 540;
-
-  final ScrollController _scroll = ScrollController();
-
-  /// The hero band's height as of the last build — the scroll listener needs
-  /// it to decide "scrolled away", and a listener has no BuildContext to
-  /// measure with.
-  double _heroBandH = 0;
-
-  /// Lazy-list extent estimates can change during scrolling. Refresh only
-  /// the veil when metrics change, never the board and its mounted shelves.
-  double _lastMaxExtent = -1;
-  final _veilMetricsRevision = ValueNotifier<int>(0);
-
-  /// True once the board is scrolled far enough that the pinned hero is
-  /// effectively covered. Owns the trailer's lifecycle for SCROLLING, which
-  /// touch and wheel produce without ever telling the cursor: DPAD descent
-  /// goes through [_down] (which stops the trailer itself), but a swipe or a
-  /// wheel just moves the list — and the backdrop being permanently mounted
-  /// now, the video would keep decoding behind an opaque veil forever.
-  bool _scrolledAway = false;
-
   /// Crossing detector for [_scrolledAway]: teardown on the way out,
   /// re-arm on the way back. Also called on metrics corrections (see
   /// [_board]) because a clamped offset never notifies the controller.
   void _onBoardScrolled() {
-    if (!_scroll.hasClients) return;
+    if (!_owners.scroll.scroll.hasClients) return;
     if (!widget.dpad &&
-        _scroll.position.extentAfter <= _touchLoadMoreThreshold) {
+        _owners.scroll.scroll.position.extentAfter <=
+            SpotlightBoardConstantsState.touchLoadMoreThreshold) {
       unawaited(_loadMoreShelvesForTouch());
     }
-    if (_heroBandH <= 0) return;
-    final away = _scroll.offset > _heroBandH * 0.35;
-    if (away == _scrolledAway) return;
-    _scrolledAway = away;
+    if (_owners.scroll.heroBandH <= 0) return;
+    final away = _owners.scroll.scroll.offset > _owners.scroll.heroBandH * 0.35;
+    if (away == _owners.constants.scrolledAway) return;
+    _owners.constants.scrolledAway = away;
     if (away) {
-      _cadence?.cancel();
-      _cadence = null;
+      _owners.hero.cadence?.cancel();
+      _owners.hero.cadence = null;
       _stopRolling();
     } else {
       // Applies its own gates (DPAD hero focus, pref, dwell callback), so
@@ -578,63 +542,11 @@ class SpotlightBoardState extends State<SpotlightBoard>
     }
   }
 
-  /// Which hero item is showing. Held by ID so a rail re-order does not move
-  /// the page under the user.
-  String? _heroId;
-  int _row = -1; // -1 = the hero owns the cursor
-  final Map<int, int> _col = {};
-
-  /// A DOWN at the last loaded shelf owns the catalog fetch until it settles.
-  /// While true, repeated key events cannot start duplicate loads and the
-  /// board paints a visible acknowledgement instead of looking exhausted.
-  bool _loadingMoreShelves = false;
-  ({FocusNode origin, DateTime at})? _pendingProgressiveDown;
-
-  /// Left-third luminance per backdrop URL. Probed once; the result decides
-  /// which side the identity sits on.
-  final Map<String, double> _leftThird = {};
-
-  /// The hero's cadence: resolve its trailer as soon as it is eligible.
-  /// **Never an advance.**
-  ///
-  ///     art ──▶ resolve immediately ──▶ trailer (loops until a move)
-  ///      ▲                                      │
-  ///      └──────── swipe / LEFT/RIGHT ──────────┘
-  ///
-  /// The reel used to page itself (art → trailer → advance → next art, and a
-  /// plain timed advance with trailers off). Killed by user call, on every
-  /// device: a carousel that moves under you takes the choice away — the
-  /// reel now moves ONLY on a swipe, a dot tap, or a DPAD page. The one
-  /// timer is now only a cancellable next-event-loop handoff: trailer lookup
-  /// already takes noticeable time, so an artificial art dwell only makes the
-  /// hero feel unresponsive.
-  ///
-  /// ONE timer with ONE owner. The shared `_scheduleHeroTrailer` is excluded
-  /// for this style precisely so the two cannot interleave and start a trailer
-  /// under the wrong title.
-  static const Duration _hiddenRetry = Duration(seconds: 1);
-
-  Timer? _cadence;
-
-  /// Whether the cadence has asked the host for a trailer.
-  ///
-  /// Bookkeeping for the CLOCK only — it must never gate the trailer widget.
-  /// The host owns the engine's lifetime and tears it down on playback launch,
-  /// route push and style change; a second opinion here is how a released
-  /// engine stayed mounted.
-  bool _rolling = false;
-
-  /// Desktop previews and the hero share the process-wide video-output lease.
-  /// Keep a small owner set rather than a bool: when the pointer moves from
-  /// one live card to another, MouseRegion enter/exit ordering must never
-  /// briefly restart the hero between the two previews.
-  final Set<Object> _desktopPreviewOwners = <Object>{};
-
   /// One funnel for leaving the rolling state, so no exit path can forget to
   /// tell the host to tear the video down.
   void _stopRolling() {
-    if (!_rolling) return;
-    if (mounted) setState(() => _rolling = false);
+    if (!_owners.hero.rolling) return;
+    if (mounted) setState(() => _owners.hero.rolling = false);
     widget.onTrailerStop?.call();
   }
 
@@ -644,19 +556,21 @@ class SpotlightBoardState extends State<SpotlightBoard>
   /// hero only when the pointer has left every live card.
   void _onDesktopPreviewActivityChanged(Object owner, bool active) {
     if (widget.dpad) return;
-    final hadPreview = _desktopPreviewOwners.isNotEmpty;
+    final hadPreview = _owners.hero.desktopPreviewOwners.isNotEmpty;
     if (active) {
-      _desktopPreviewOwners.add(owner);
+      _owners.hero.desktopPreviewOwners.add(owner);
     } else {
-      _desktopPreviewOwners.remove(owner);
+      _owners.hero.desktopPreviewOwners.remove(owner);
     }
-    final hasPreview = _desktopPreviewOwners.isNotEmpty;
+    final hasPreview = _owners.hero.desktopPreviewOwners.isNotEmpty;
     if (hadPreview == hasPreview) return;
 
     if (hasPreview) {
-      _cadence?.cancel();
-      _cadence = null;
-      if (_rolling && mounted) setState(() => _rolling = false);
+      _owners.hero.cadence?.cancel();
+      _owners.hero.cadence = null;
+      if (_owners.hero.rolling && mounted) {
+        setState(() => _owners.hero.rolling = false);
+      }
       // Also cancels a hero resolve that has not reached its first frame yet.
       widget.onTrailerStop?.call();
       return;
@@ -665,21 +579,26 @@ class SpotlightBoardState extends State<SpotlightBoard>
     _restartCadence();
   }
 
-  String? _dwelledHeroId;
   void _restartCadence() {
-    if (_largeCardInteractions && _scrollingSources.isNotEmpty) return;
-    _cadence?.cancel();
+    if (_owners.selection.largeCardInteractions &&
+        _owners.selection.scrollingSources.isNotEmpty) {
+      return;
+    }
+    _owners.hero.cadence?.cancel();
     // Nulled, not just cancelled: didUpdateWidget's reconcile decides "is a
     // timer armed" by null-ness, and a cancelled-but-non-null handle reads
     // as armed.
-    _cadence = null;
+    _owners.hero.cadence = null;
     if (!mounted) return;
-    if (_dwelledHeroId != null && _dwelledHeroId == _heroItem?.id) return;
-    _rolling = false;
+    if (_owners.hero.dwelledHeroId != null &&
+        _owners.hero.dwelledHeroId == _heroItem?.id) {
+      return;
+    }
+    _owners.hero.rolling = false;
     // The active card owns the one available decoder. A rebuild caused by
     // loading more shelves or resolving hero art must not re-arm the hero
     // underneath it.
-    if (_desktopPreviewOwners.isNotEmpty) return;
+    if (_owners.hero.desktopPreviewOwners.isNotEmpty) return;
     // With no trailer to arm there is nothing to schedule. The reel itself
     // still moves only on input.
     if (!widget.trailersEnabled || widget.onDwell == null) return;
@@ -687,19 +606,22 @@ class SpotlightBoardState extends State<SpotlightBoard>
     // test: it stays -1 when focus goes to the sidebar, another tab, or a
     // pushed detail route — the node's own `hasFocus` is the real question.
     // Touch has no focus to gate on; visibility is checked at FIRE time.
-    if (widget.dpad && (_row >= 0 || !widget.heroNode.hasFocus)) return;
+    if (widget.dpad &&
+        (_owners.navigation.row >= 0 || !widget.heroNode.hasFocus)) {
+      return;
+    }
     // Keep the handoff cancellable so a focus/route change in this event loop
     // can still stop the resolve, but add no user-visible dwell.
-    _cadence = Timer(const Duration(seconds: 2), _onArtDone);
+    _owners.hero.cadence = Timer(const Duration(seconds: 2), _onArtDone);
   }
 
   /// Dot tap / swipe target: show slide [i] and restart the clock.
   void _jumpTo(int i) {
     if (i < 0 || i >= widget.hero.length) return;
-    if (widget.hero[i].id == _heroId) return;
+    if (widget.hero[i].id == _owners.hero.heroId) return;
     _stopRolling();
-    _dwelledHeroId = null;
-    setState(() => _heroId = widget.hero[i].id);
+    _owners.hero.dwelledHeroId = null;
+    setState(() => _owners.hero.heroId = widget.hero[i].id);
     refreshMetadataPresentation();
     _probe();
     _restartCadence();
@@ -709,13 +631,13 @@ class SpotlightBoardState extends State<SpotlightBoard>
     // The one-shot is consumed the moment this runs — null it, or the
     // reconcile in didUpdateWidget reads a dead handle as "armed" and a
     // disable→re-enable of trailers strands the cadence forever.
-    _cadence = null;
-    if (!mounted || _row >= 0) return;
+    _owners.hero.cadence = null;
+    if (!mounted || _owners.navigation.row >= 0) return;
     // Scrolled off the hero (touch/wheel — a DPAD descent goes through
     // [_down] and cancels the clock itself): do not start a decoder behind
     // the veil. No re-arm — scrolling back under the threshold restarts the
     // cadence via [_onBoardScrolled].
-    if (_scrolledAway) return;
+    if (_owners.constants.scrolledAway) return;
     // Touch: a covered or backgrounded board must not spin up an engine for
     // a hero nobody can see. Poll gently until visible; this retry delay is
     // not part of the visible start cadence.
@@ -726,7 +648,10 @@ class SpotlightBoardState extends State<SpotlightBoard>
           (route == null || route.isCurrent) &&
           (lifecycle == null || lifecycle == AppLifecycleState.resumed);
       if (!visible) {
-        _cadence = Timer(_hiddenRetry, _onArtDone);
+        _owners.hero.cadence = Timer(
+          SpotlightBoardHeroState.hiddenRetry,
+          _onArtDone,
+        );
         return;
       }
     }
@@ -737,10 +662,10 @@ class SpotlightBoardState extends State<SpotlightBoard>
       return;
     }
     if (widget.trailersEnabled && widget.onDwell != null) {
-      _dwelledHeroId = item.id;
+      _owners.hero.dwelledHeroId = item.id;
       // Once a trailer is rolling the reel stays put — the video loops until
       // the next deliberate move (swipe, dot tap, LEFT/RIGHT, DOWN).
-      setState(() => _rolling = true);
+      setState(() => _owners.hero.rolling = true);
       widget.onDwell!(item);
     }
     // Never an advance — see the cadence comment.
@@ -780,7 +705,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
 
   int get _heroIndex {
     if (widget.hero.isEmpty) return 0;
-    final i = widget.hero.indexWhere((m) => m.id == _heroId);
+    final i = widget.hero.indexWhere((m) => m.id == _owners.hero.heroId);
     return i < 0 ? 0 : i;
   }
 
@@ -800,9 +725,9 @@ class SpotlightBoardState extends State<SpotlightBoard>
   @override
   void initState() {
     super.initState();
-    _heroId = widget.hero.isNotEmpty ? widget.hero.first.id : null;
+    _owners.hero.heroId = widget.hero.isNotEmpty ? widget.hero.first.id : null;
     widget.heroNode.addListener(_onHeroFocus);
-    _scroll.addListener(_onBoardScrolled);
+    _owners.scroll.scroll.addListener(_onBoardScrolled);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _probe();
       _restartCadence();
@@ -814,18 +739,20 @@ class SpotlightBoardState extends State<SpotlightBoard>
   void didUpdateWidget(SpotlightBoard old) {
     super.didUpdateWidget(old);
     _finishProgressiveDown();
-    if (widget.dpad && PlatformUtil.isAndroidTvCached && _lastMetrics != null) {
+    if (widget.dpad &&
+        PlatformUtil.isAndroidTvCached &&
+        _owners.scroll.lastMetrics != null) {
       for (final section in old.sections) {
         if (section.id == null || !section.nodes.any((node) => node.hasFocus))
           continue;
         preserveHomeInsertionAnchor(
-          scroll: _scroll,
+          scroll: _owners.scroll.scroll,
           previous: [for (final s in old.sections) s.id ?? ''],
           next: [for (final s in widget.sections) s.id ?? ''],
           anchor: section.id!,
           extentOf: (id) => _shelfExtent(
             widget.sections.firstWhere((s) => s.id == id),
-            _lastMetrics!,
+            _owners.scroll.lastMetrics!,
           ),
         );
         break;
@@ -854,14 +781,17 @@ class SpotlightBoardState extends State<SpotlightBoard>
     if (old.trailersEnabled != widget.trailersEnabled) {
       _restartCadence();
     }
-    if (_heroId != null && !widget.hero.any((m) => m.id == _heroId)) {
+    if (_owners.hero.heroId != null &&
+        !widget.hero.any((m) => m.id == _owners.hero.heroId)) {
       // The title we were on is gone. Tear the trailer down FIRST: it was
       // resolved for that title, and leaving it rolling paints it over the new
       // head until the 20s cap expires.
       _stopRolling();
-      _heroId = widget.hero.isNotEmpty ? widget.hero.first.id : null;
+      _owners.hero.heroId = widget.hero.isNotEmpty
+          ? widget.hero.first.id
+          : null;
       _restartCadence();
-    } else if (_cadence == null && !_rolling) {
+    } else if (_owners.hero.cadence == null && !_owners.hero.rolling) {
       // Reconcile for BOTH inputs: the host often enables trailers (the
       // pref read lands) or grows the reel AFTER first build, with the
       // parked id intact — the branch above never runs then, and without
@@ -884,34 +814,36 @@ class SpotlightBoardState extends State<SpotlightBoard>
       }
 
       final remappedCols = <int, int>{};
-      for (final entry in _col.entries) {
+      for (final entry in _owners.navigation.col.entries) {
         final ni = remap(entry.key);
         if (ni >= 0) remappedCols[ni] = entry.value;
       }
-      _col
+      _owners.navigation.col
         ..clear()
         ..addAll(remappedCols);
-      if (_row >= 0) {
-        final ni = remap(_row);
-        if (ni >= 0) _row = ni;
+      if (_owners.navigation.row >= 0) {
+        final ni = remap(_owners.navigation.row);
+        if (ni >= 0) _owners.navigation.row = ni;
       }
     }
     // A board reload can shrink or reorder the shelves under a parked cursor.
     // `_row` is positional, so without this the next arrow key indexes past
     // the end of `rowNodes` and throws.
-    if (_row >= widget.sections.length) {
-      _row = widget.sections.isEmpty ? -1 : widget.sections.length - 1;
+    if (_owners.navigation.row >= widget.sections.length) {
+      _owners.navigation.row = widget.sections.isEmpty
+          ? -1
+          : widget.sections.length - 1;
     }
-    for (final row in _col.keys.toList()) {
+    for (final row in _owners.navigation.col.keys.toList()) {
       if (row >= widget.sections.length) {
-        _col.remove(row);
+        _owners.navigation.col.remove(row);
         continue;
       }
       final len = widget.sections[row].nodes.length;
       if (len == 0) {
-        _col.remove(row);
-      } else if ((_col[row] ?? 0) >= len) {
-        _col[row] = len - 1;
+        _owners.navigation.col.remove(row);
+      } else if ((_owners.navigation.col[row] ?? 0) >= len) {
+        _owners.navigation.col[row] = len - 1;
       }
     }
     _probe();
@@ -924,8 +856,8 @@ class SpotlightBoardState extends State<SpotlightBoard>
     if (widget.heroNode.hasFocus) {
       _restartCadence();
     } else {
-      _cadence?.cancel();
-      _dwelledHeroId = null;
+      _owners.hero.cadence?.cancel();
+      _owners.hero.dwelledHeroId = null;
       _stopRolling();
     }
   }
@@ -933,34 +865,30 @@ class SpotlightBoardState extends State<SpotlightBoard>
   @override
   void dispose() {
     _cancelWarmups();
-    _veilMetricsRevision.dispose();
+    _owners.scroll.veilMetricsRevision.dispose();
     widget.heroNode.removeListener(_onHeroFocus);
-    if (_rolling) widget.onTrailerStop?.call();
-    _cadence?.cancel();
-    _scroll.dispose();
+    if (_owners.hero.rolling) widget.onTrailerStop?.call();
+    _owners.hero.cadence?.cancel();
+    _owners.scroll.scroll.dispose();
     super.dispose();
   }
-
-  /// Bumped on every hero change. A probe that resolves after the user has
-  /// paged on must not publish its colour over the current one.
-  int _probeGen = 0;
-  final Map<String, Color?> _tints = {};
-  ({String? art, Color? tint})? _lastAmbient;
-  void Function(String?, Color?)? _lastAmbientSink;
 
   void _emitAmbient(String? art, Color? tint) {
     final next = (art: art, tint: tint);
     final sink = widget.onAmbient;
-    if (identical(sink, _lastAmbientSink) && next == _lastAmbient) return;
-    _lastAmbientSink = sink;
-    _lastAmbient = next;
+    if (identical(sink, _owners.hero.lastAmbientSink) &&
+        next == _owners.hero.lastAmbient) {
+      return;
+    }
+    _owners.hero.lastAmbientSink = sink;
+    _owners.hero.lastAmbient = next;
     sink?.call(art, tint);
   }
 
   Future<void> _probe() async {
     // The RESOLVED art, not the raw fields — tint and side-flip must be
     // measured on the image actually drawn.
-    final gen = ++_probeGen;
+    final gen = ++_owners.hero.probeGen;
     final item = _heroItem;
     final url = item == null ? null : _heroArt(item);
     if (url == null || url.isEmpty) {
@@ -971,8 +899,8 @@ class SpotlightBoardState extends State<SpotlightBoard>
     // Publish FIRST from cache when we have it. Skipping the publish for a
     // cached URL meant paging A→B→A left B's art and tint on the shell —
     // the cache short-circuited the only code path that told anyone.
-    if (_tints.containsKey(url)) {
-      _emitAmbient(url, _tints[url]);
+    if (_owners.hero.tints.containsKey(url)) {
+      _emitAmbient(url, _owners.hero.tints[url]);
     } else {
       // Update the shell immediately; colour extraction may wait on a decode.
       _emitAmbient(url, null);
@@ -982,7 +910,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
           cacheManager: DebrifyImageCache.manager,
         ),
       );
-      if (!mounted || gen != _probeGen) return;
+      if (!mounted || gen != _owners.hero.probeGen) return;
       setState(() => _remember(url, tint));
       _emitAmbient(url, tint);
     }
@@ -994,8 +922,8 @@ class SpotlightBoardState extends State<SpotlightBoard>
   /// text side cannot be trusted. A true left-third measurement would be
   /// better and is noted in the plan.
   void _remember(String url, Color? tint) {
-    _leftThird[url] = tint == null ? 0.0 : tint.computeLuminance();
-    _tints[url] = tint;
+    _owners.hero.leftThird[url] = tint == null ? 0.0 : tint.computeLuminance();
+    _owners.hero.tints[url] = tint;
   }
 
   /// Resolve the NEXT slide's art while this one is still showing.
@@ -1008,7 +936,9 @@ class SpotlightBoardState extends State<SpotlightBoard>
     if (widget.hero.length < 2) return;
     final next = widget.hero[(_heroIndex + 1) % widget.hero.length];
     final url = _heroArt(next);
-    if (url == null || url.isEmpty || _tints.containsKey(url)) return;
+    if (url == null || url.isEmpty || _owners.hero.tints.containsKey(url)) {
+      return;
+    }
     final tint = await extractDominantColor(
       CachedNetworkImageProvider(url, cacheManager: DebrifyImageCache.manager),
     );
@@ -1016,12 +946,8 @@ class SpotlightBoardState extends State<SpotlightBoard>
     setState(() => _remember(url, tint));
   }
 
-  /// Which item `_flipValue` was decided for.
-  String? _flipFor;
-  bool _flipValue = false;
-
   @visibleForTesting
-  String? get heroAlignmentItemId => _flipFor;
+  String? get heroAlignmentItemId => _owners.hero.flipFor;
 
   /// The side the identity sits on, FROZEN for as long as an item is showing.
   ///
@@ -1040,17 +966,17 @@ class SpotlightBoardState extends State<SpotlightBoard>
     // The missing URL is temporary during provider loading. Do not freeze
     // the default side before the resolved artwork's cached tint is usable.
     if (metadataArtworkPending(MetadataCategory.backgrounds)) return false;
-    if (_flipFor != item.id) {
-      _flipFor = item.id;
+    if (_owners.hero.flipFor != item.id) {
+      _owners.hero.flipFor = item.id;
       final url = _heroArt(item);
-      _flipValue =
-          url != null && (_leftThird[url] ?? 0) > SpotlightBoard.leftThirdBusy;
+      _owners.hero.flipValue =
+          url != null &&
+          (_owners.hero.leftThird[url] ?? 0) > SpotlightBoard.leftThirdBusy;
     }
-    return _flipValue;
+    return _owners.hero.flipValue;
   }
 
   // ── movement ───────────────────────────────────────────────────────────
-
   void _go(FocusNode node, Offset dir) {
     ParallaxTravel.note(dir);
     node.requestFocus();
@@ -1060,10 +986,10 @@ class SpotlightBoardState extends State<SpotlightBoard>
     if (widget.hero.length < 2) return;
     final n = widget.hero.length;
     final next = (_heroIndex + delta + n) % n;
-    if (widget.hero[next].id == _heroId) return;
+    if (widget.hero[next].id == _owners.hero.heroId) return;
     _stopRolling();
-    _dwelledHeroId = null;
-    setState(() => _heroId = widget.hero[next].id);
+    _owners.hero.dwelledHeroId = null;
+    setState(() => _owners.hero.heroId = widget.hero[next].id);
     refreshMetadataPresentation();
     ParallaxTravel.note(Offset(delta.toDouble(), 0));
     _probe();
@@ -1074,41 +1000,43 @@ class SpotlightBoardState extends State<SpotlightBoard>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!(ModalRoute.isCurrentOf(context) ?? true)) {
-      _pendingProgressiveDown = null;
+      _owners.navigation.pendingProgressiveDown = null;
     }
   }
 
   void _finishProgressiveDown() {
-    if (_pendingProgressiveDown == null) return;
+    if (_owners.navigation.pendingProgressiveDown == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final pending = _pendingProgressiveDown;
+      final pending = _owners.navigation.pendingProgressiveDown;
       if (!mounted || pending == null) return;
       if (!(ModalRoute.isCurrentOf(context) ?? true) ||
           !identical(FocusManager.instance.primaryFocus, pending.origin) ||
           DateTime.now().difference(pending.at) > const Duration(seconds: 3)) {
-        _pendingProgressiveDown = null;
+        _owners.navigation.pendingProgressiveDown = null;
         return;
       }
       final row = widget.sections.indexWhere(
         (s) => s.nodes.contains(pending.origin),
       );
       if (row < 0 || row + 1 >= widget.sections.length) {
-        if (!widget.pendingShelves) _pendingProgressiveDown = null;
+        if (!widget.pendingShelves) {
+          _owners.navigation.pendingProgressiveDown = null;
+        }
         return;
       }
-      _pendingProgressiveDown = null;
-      setState(() => _row = row + 1);
-      _focusRow(_row, const Offset(0, 1));
+      _owners.navigation.pendingProgressiveDown = null;
+      setState(() => _owners.navigation.row = row + 1);
+      _focusRow(_owners.navigation.row, const Offset(0, 1));
     });
   }
 
   Future<void> _loadShelvesAndFinishDown() async {
     final load = widget.onLoadMoreShelves;
-    if (load == null || _loadingMoreShelves) return;
+    if (load == null || _owners.navigation.loadingMoreShelves) return;
 
     final origin = FocusManager.instance.primaryFocus;
     final oldLength = widget.sections.length;
-    setState(() => _loadingMoreShelves = true);
+    setState(() => _owners.navigation.loadingMoreShelves = true);
 
     var appended = false;
     try {
@@ -1118,10 +1046,13 @@ class SpotlightBoardState extends State<SpotlightBoard>
       // DOWN can retry, and always remove the loading acknowledgement below.
     }
     if (!mounted) return;
-    setState(() => _loadingMoreShelves = false);
+    setState(() => _owners.navigation.loadingMoreShelves = false);
     if (!appended) {
       if (widget.pendingShelves && origin != null) {
-        _pendingProgressiveDown = (origin: origin, at: DateTime.now());
+        _owners.navigation.pendingProgressiveDown = (
+          origin: origin,
+          at: DateTime.now(),
+        );
         _finishProgressiveDown();
       }
       return;
@@ -1150,8 +1081,8 @@ class SpotlightBoardState extends State<SpotlightBoard>
         (section) => section.nodes.contains(origin),
       );
       if (currentRow < 0 || currentRow + 1 >= widget.sections.length) return;
-      setState(() => _row = currentRow + 1);
-      _focusRow(_row, const Offset(0, 1));
+      setState(() => _owners.navigation.row = currentRow + 1);
+      _focusRow(_owners.navigation.row, const Offset(0, 1));
     });
   }
 
@@ -1160,39 +1091,43 @@ class SpotlightBoardState extends State<SpotlightBoard>
   /// alone when the host appends the new shelves.
   Future<void> _loadMoreShelvesForTouch() async {
     final load = widget.onLoadMoreShelves;
-    if (widget.dpad || load == null || _loadingMoreShelves) return;
+    if (widget.dpad || load == null || _owners.navigation.loadingMoreShelves) {
+      return;
+    }
 
-    setState(() => _loadingMoreShelves = true);
+    setState(() => _owners.navigation.loadingMoreShelves = true);
     try {
       await load();
     } catch (_) {
       // A later scroll can retry a recoverable catalog failure.
     } finally {
-      if (mounted) setState(() => _loadingMoreShelves = false);
+      if (mounted) {
+        setState(() => _owners.navigation.loadingMoreShelves = false);
+      }
     }
   }
 
   void _down() {
-    if (_row < 0) {
+    if (_owners.navigation.row < 0) {
       if (widget.sections.isEmpty) return;
       _stopRolling();
-      setState(() => _row = 0);
-      _cadence?.cancel();
+      setState(() => _owners.navigation.row = 0);
+      _owners.hero.cadence?.cancel();
       _focusRow(0, const Offset(0, 1));
       return;
     }
-    if (_row + 1 >= widget.sections.length) {
+    if (_owners.navigation.row + 1 >= widget.sections.length) {
       // Out of shelves: retain this DOWN while the next batch loads. When it
       // lands, focus advances into its first shelf without a second keypress.
       unawaited(_loadShelvesAndFinishDown());
       return;
     }
-    setState(() => _row = _row + 1);
-    _focusRow(_row, const Offset(0, 1));
+    setState(() => _owners.navigation.row = _owners.navigation.row + 1);
+    _focusRow(_owners.navigation.row, const Offset(0, 1));
   }
 
   void _up() {
-    if (_row <= 0) {
+    if (_owners.navigation.row <= 0) {
       if (widget.shelvesOnly) {
         widget.onExitTop?.call();
         return;
@@ -1202,25 +1137,25 @@ class SpotlightBoardState extends State<SpotlightBoard>
       if (widget.hero.isEmpty || !(widget.heroNode.context?.mounted ?? false)) {
         return;
       }
-      setState(() => _row = -1);
+      setState(() => _owners.navigation.row = -1);
       _restartCadence();
       _go(widget.heroNode, const Offset(0, -1));
-      _scroll.animateTo(
+      _owners.scroll.scroll.animateTo(
         0,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOutCubic,
       );
       return;
     }
-    setState(() => _row = _row - 1);
-    _focusRow(_row, const Offset(0, -1));
+    setState(() => _owners.navigation.row = _owners.navigation.row - 1);
+    _focusRow(_owners.navigation.row, const Offset(0, -1));
   }
 
   void _focusRow(int row, Offset dir, {bool retried = false}) {
     if (row < 0 || row >= widget.sections.length) return;
     final nodes = widget.sections[row].nodes;
     if (nodes.isEmpty) return;
-    final col = (_col[row] ?? 0).clamp(0, nodes.length - 1);
+    final col = (_owners.navigation.col[row] ?? 0).clamp(0, nodes.length - 1);
     bool attached(FocusNode n) => n.context?.mounted ?? false;
     final target = nodes[col];
     if (attached(target)) {
@@ -1240,7 +1175,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
       if (d < bestDistance && attached(nodes[i])) {
         bestDistance = d;
         nearest = nodes[i];
-        _col[row] = i;
+        _owners.navigation.col[row] = i;
       }
     }
     if (nearest != null) {
@@ -1250,8 +1185,8 @@ class SpotlightBoardState extends State<SpotlightBoard>
     // The whole row is outside the lazy build window. Nudge the board's
     // scroll toward it so the builder mounts it, then finish the move next
     // frame — once only, so a row that stays unbuildable can't loop.
-    if (retried || !_scroll.hasClients) return;
-    final position = _scroll.position;
+    if (retried || !_owners.scroll.scroll.hasClients) return;
+    final position = _owners.scroll.scroll.position;
     final step = (dir.dy >= 0 ? 1.0 : -1.0) * 300.0;
     position.moveTo(
       (position.pixels + step).clamp(
@@ -1267,15 +1202,15 @@ class SpotlightBoardState extends State<SpotlightBoard>
   /// Enter a collection at its selected category, including off-screen rows.
   void focusShelf(int row) {
     if (row < 0 || row >= widget.sections.length) return;
-    final metrics = _lastMetrics;
-    if (metrics == null || !_scroll.hasClients) return;
-    setState(() => _row = row);
+    final metrics = _owners.scroll.lastMetrics;
+    if (metrics == null || !_owners.scroll.scroll.hasClients) return;
+    setState(() => _owners.navigation.row = row);
     final offset = widget.sections
         .take(row)
         .fold<double>(0, (sum, shelf) => sum + _shelfExtent(shelf, metrics));
     // A lazy list's maximum is only an estimate until distant rows mount.
     // Let layout clamp this exact offset, rather than stopping at that estimate.
-    _scroll.jumpTo(offset);
+    _owners.scroll.scroll.jumpTo(offset);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusRow(row, const Offset(0, 1));
     });
@@ -1291,7 +1226,10 @@ class SpotlightBoardState extends State<SpotlightBoard>
   int _liveCol(List<FocusNode> nodes) {
     final i = nodes.indexWhere((n) => n.hasFocus);
     if (i >= 0) return i;
-    return (_col[_row] ?? 0).clamp(0, nodes.length - 1);
+    return (_owners.navigation.col[_owners.navigation.row] ?? 0).clamp(
+      0,
+      nodes.length - 1,
+    );
   }
 
   /// The shelf that actually holds focus, or -1 for the hero.
@@ -1303,16 +1241,17 @@ class SpotlightBoardState extends State<SpotlightBoard>
   }
 
   void _walk(int delta) {
-    if (_row < 0 || _row >= widget.sections.length) {
+    if (_owners.navigation.row < 0 ||
+        _owners.navigation.row >= widget.sections.length) {
       _page(delta);
       return;
     }
-    final nodes = widget.sections[_row].nodes;
+    final nodes = widget.sections[_owners.navigation.row].nodes;
     if (nodes.isEmpty) return;
     final at = _liveCol(nodes);
     final next = at + delta;
     if (widget.shelvesOnly && delta > 0 && next >= nodes.length) {
-      widget.onLoadMoreRow?.call(_row);
+      widget.onLoadMoreRow?.call(_owners.navigation.row);
     }
     if (next < 0 || next >= nodes.length) return;
     // No setState: a horizontal step changes nothing this board PAINTS —
@@ -1321,12 +1260,14 @@ class SpotlightBoardState extends State<SpotlightBoard>
     // setState it rebuilt the hero stack and every shelf shell on every
     // LEFT/RIGHT of a held key — per-keypress cost a MiBox-class CPU
     // renders as visible lag.
-    _col[_row] = next;
+    _owners.navigation.col[_owners.navigation.row] = next;
     _go(nodes[next], Offset(delta.toDouble(), 0));
     // Four from the end is roughly one screen of posters — enough lead time
     // for a page to land before the cursor reaches where it would have
     // stopped.
-    if (next >= nodes.length - 4) widget.onLoadMoreRow?.call(_row);
+    if (next >= nodes.length - 4) {
+      widget.onLoadMoreRow?.call(_owners.navigation.row);
+    }
   }
 
   KeyEventResult _onKey(KeyEvent e) {
@@ -1335,7 +1276,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     }
     // Re-sync from reality before acting on it.
     final live = _liveRow();
-    if (live != _row) _row = live;
+    if (live != _owners.navigation.row) _owners.navigation.row = live;
     switch (e.logicalKey) {
       case LogicalKeyboardKey.arrowDown:
         _down();
@@ -1353,7 +1294,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
         // nothing at all, so the reel could be browsed and never opened.
         final item = _heroItem;
         final addon = widget.heroAddon;
-        if (_row < 0 && item != null && addon != null) {
+        if (_owners.navigation.row < 0 && item != null && addon != null) {
           _openHero();
           return KeyEventResult.handled;
         }
@@ -1366,8 +1307,9 @@ class SpotlightBoardState extends State<SpotlightBoard>
         // Tested against LIVE focus, not `_col`: falling through from the
         // middle of a row hands the key to a geometric search that lands in
         // another row, which is what made the sidebar hard to reach.
-        if (_row >= 0 && _row < widget.sections.length) {
-          final nodes = widget.sections[_row].nodes;
+        if (_owners.navigation.row >= 0 &&
+            _owners.navigation.row < widget.sections.length) {
+          final nodes = widget.sections[_owners.navigation.row].nodes;
           if (nodes.isEmpty || _liveCol(nodes) == 0) {
             return KeyEventResult.ignored;
           }
@@ -1376,7 +1318,8 @@ class SpotlightBoardState extends State<SpotlightBoard>
         // nothing to its left but the sidebar. It used to wrap round to the
         // last slide instead, which made the reel a loop with no exit — the
         // one gesture that opens the sidebar was the one gesture it ate.
-        if (_row < 0 && (widget.hero.length < 2 || _heroIndex == 0)) {
+        if (_owners.navigation.row < 0 &&
+            (widget.hero.length < 2 || _heroIndex == 0)) {
           return KeyEventResult.ignored;
         }
         _walk(-1);
@@ -1399,10 +1342,14 @@ class SpotlightBoardState extends State<SpotlightBoard>
         if (node.hasFocus && available(node)) return node;
       }
     }
-    if (_row >= 0 && _row < widget.sections.length) {
-      final nodes = widget.sections[_row].nodes;
+    if (_owners.navigation.row >= 0 &&
+        _owners.navigation.row < widget.sections.length) {
+      final nodes = widget.sections[_owners.navigation.row].nodes;
       if (nodes.isNotEmpty) {
-        final col = (_col[_row] ?? 0).clamp(0, nodes.length - 1);
+        final col = (_owners.navigation.col[_owners.navigation.row] ?? 0).clamp(
+          0,
+          nodes.length - 1,
+        );
         if (available(nodes[col])) return nodes[col];
         for (final node in nodes) {
           if (available(node)) return node;
@@ -1421,7 +1368,6 @@ class SpotlightBoardState extends State<SpotlightBoard>
   }
 
   // ── paint ──────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Focus(
@@ -1454,14 +1400,14 @@ class SpotlightBoardState extends State<SpotlightBoard>
               constraints.maxWidth,
               constraints.maxHeight,
             );
-            if (_selectionViewport != selectionViewport) {
-              _selectionViewport = selectionViewport;
-              _scrollRowId = null;
+            if (_owners.selection.selectionViewport != selectionViewport) {
+              _owners.selection.selectionViewport = selectionViewport;
+              _owners.selection.scrollRowId = null;
               _queueScrollSelection();
             }
-            if (large != _largeCardInteractions) {
-              _largeCardInteractions = large;
-              _scrollingSources.clear();
+            if (large != _owners.selection.largeCardInteractions) {
+              _owners.selection.largeCardInteractions = large;
+              _owners.selection.scrollingSources.clear();
               _queueScrollSelection();
             }
             // The hero is measured against the board's real height, so it is
@@ -1471,7 +1417,10 @@ class SpotlightBoardState extends State<SpotlightBoard>
                 : MediaQuery.sizeOf(context).height;
             return _board(
               m,
-              viewport * (m.compact ? _heroFractionCompact : _heroFraction),
+              viewport *
+                  (m.compact
+                      ? SpotlightBoardConstantsState.heroFractionCompact
+                      : SpotlightBoardConstantsState.heroFraction),
             );
           },
         ),
@@ -1480,8 +1429,8 @@ class SpotlightBoardState extends State<SpotlightBoard>
   }
 
   Widget _board(SpotlightBoardMetrics m, double heroH) {
-    _lastMetrics = m;
-    _heroBandH = heroH;
+    _owners.scroll.lastMetrics = m;
+    _owners.scroll.heroBandH = heroH;
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
     // One key per shelf, by rail IDENTITY (see [SpotlightShelf.id]).
@@ -1504,7 +1453,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     // shelf's nodes ATTACHED — a viewport of lead keeps the next rows built
     // ahead of the cursor without resurrecting the build-everything burst.
     final list = ListView.builder(
-      controller: _scroll,
+      controller: _owners.scroll.scroll,
       padding: EdgeInsets.zero,
       cacheExtent: 600,
       itemCount: widget.sections.length + 2,
@@ -1539,7 +1488,12 @@ class SpotlightBoardState extends State<SpotlightBoard>
           }
           return SizedBox(
             key: const ValueKey('spotlight-hero-band'),
-            height: heroH * (1 - (m.compact ? 0 : _shelfOverlapFraction)),
+            height:
+                heroH *
+                (1 -
+                    (m.compact
+                        ? 0
+                        : SpotlightBoardConstantsState.shelfOverlapFraction)),
             child: OverflowBox(
               alignment: Alignment.topCenter,
               maxHeight: heroH,
@@ -1555,13 +1509,13 @@ class SpotlightBoardState extends State<SpotlightBoard>
           key: ValueKey(shelfKey(i)),
           child: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
-              if (_largeCardInteractions &&
+              if (_owners.selection.largeCardInteractions &&
                   notification.metrics.axis == Axis.horizontal &&
                   ((notification is UserScrollNotification &&
                           notification.direction != ScrollDirection.idle) ||
                       (notification is ScrollStartNotification &&
                           notification.dragDetails != null))) {
-                _scrollRowId = widget.sections[i].id ?? i;
+                _owners.selection.scrollRowId = widget.sections[i].id ?? i;
               }
               if (notification is ScrollUpdateNotification &&
                   widget.shelvesOnly &&
@@ -1593,9 +1547,9 @@ class SpotlightBoardState extends State<SpotlightBoard>
           // cover silent layout corrections without rebuilding the shelves.
           if (!widget.dpad &&
               mounted &&
-              n.metrics.maxScrollExtent != _lastMaxExtent) {
-            _lastMaxExtent = n.metrics.maxScrollExtent;
-            _veilMetricsRevision.value++;
+              n.metrics.maxScrollExtent != _owners.scroll.lastMaxExtent) {
+            _owners.scroll.lastMaxExtent = n.metrics.maxScrollExtent;
+            _owners.scroll.veilMetricsRevision.value++;
           }
         }
         return false;
@@ -1651,7 +1605,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
                     ),
                   ),
                 content,
-                if (_loadingMoreShelves)
+                if (_owners.navigation.loadingMoreShelves)
                   Positioned(
                     left: 0,
                     right: 0,
@@ -1722,7 +1676,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     final posterUrl = _heroPoster(item);
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
-    final rolling = _rolling;
+    final rolling = _owners.hero.rolling;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1905,7 +1859,10 @@ class SpotlightBoardState extends State<SpotlightBoard>
     // layer away on scroll to reveal the fixed mountain instead of painting
     // an opaque ground veil over it. The trailer host stays mounted.
     return AnimatedBuilder(
-      animation: Listenable.merge([_scroll, _veilMetricsRevision]),
+      animation: Listenable.merge([
+        _owners.scroll.scroll,
+        _owners.scroll.veilMetricsRevision,
+      ]),
       // TV already snaps the hero visibility on row changes. Its existing
       // bottom scrim supplies the blend without an extra offscreen mask.
       child: widget.dpad
@@ -1921,9 +1878,11 @@ class SpotlightBoardState extends State<SpotlightBoard>
               child: backdrop,
             ),
       builder: (context, child) {
-        final off = _scroll.hasClients ? _scroll.offset : 0.0;
+        final off = _owners.scroll.scroll.hasClients
+            ? _owners.scroll.scroll.offset
+            : 0.0;
         final opacity = widget.dpad
-            ? (_row < 0 ? 1.0 : 0.0)
+            ? (_owners.navigation.row < 0 ? 1.0 : 0.0)
             : (1 - off / (heroH * 0.8)).clamp(0.0, 1.0);
         return Opacity(opacity: opacity, child: child);
       },
@@ -1950,7 +1909,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     //
     // Snapped, not tweened: animating a full-width gradient every frame is
     // exactly what the TV veil policy exists to avoid.
-    final rolling = _rolling;
+    final rolling = _owners.hero.rolling;
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
     // The legibility bed under the hero's white identity — always dark, see the
@@ -2101,14 +2060,21 @@ class SpotlightBoardState extends State<SpotlightBoard>
           RepaintBoundary(
             child: IgnorePointer(
               child: widget.dpad
-                  ? _veil(ground, _row < 0 ? 0.0 : (_row == 0 ? 0.72 : 1.0))
+                  ? _veil(
+                      ground,
+                      _owners.navigation.row < 0
+                          ? 0.0
+                          : (_owners.navigation.row == 0 ? 0.72 : 1.0),
+                    )
                   : AnimatedBuilder(
                       animation: Listenable.merge([
-                        _scroll,
-                        _veilMetricsRevision,
+                        _owners.scroll.scroll,
+                        _owners.scroll.veilMetricsRevision,
                       ]),
                       builder: (context, _) {
-                        final off = _scroll.hasClients ? _scroll.offset : 0.0;
+                        final off = _owners.scroll.scroll.hasClients
+                            ? _owners.scroll.scroll.offset
+                            : 0.0;
                         final t = (off / (heroH * 0.8)).clamp(0.0, 1.0);
                         return _veil(ground, t);
                       },
@@ -2137,7 +2103,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     // full tablet viewport — at heroH≈1024 the overlap alone is ~167, so the
     // absolute 128 parked the identity UNDER the first shelf's header (the
     // observed collision), with the dots on the posters below it.
-    final overlap = heroH * _shelfOverlapFraction;
+    final overlap = heroH * SpotlightBoardConstantsState.shelfOverlapFraction;
     final identityBottom = widget.dpad ? 128.0 : overlap + 40 * m.k;
     final dotsBottom = widget.dpad ? 92.0 : overlap + 4 * m.k;
     return Stack(
@@ -2453,10 +2419,12 @@ class SpotlightBoardState extends State<SpotlightBoard>
               // Let the last card reach the reading cursor even on short rows.
               padding: EdgeInsets.only(
                 left: m.gutter,
-                right: _largeCardInteractions && section.items.isNotEmpty
+                right:
+                    _owners.selection.largeCardInteractions &&
+                        section.items.isNotEmpty
                     ? max(
                         m.gutter,
-                        (_selectionViewport?.width ?? 0) -
+                        (_owners.selection.selectionViewport?.width ?? 0) -
                             m.gutter -
                             cardHeight * section.items.last.shape.aspect,
                       )
@@ -2466,7 +2434,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
               separatorBuilder: (_, __) => SizedBox(width: m.gap),
               itemBuilder: (context, c) => SpotlightBoardCard(
                 rowId: section.id ?? i,
-                largeInteractions: _largeCardInteractions,
+                largeInteractions: _owners.selection.largeCardInteractions,
                 register: _registerCard,
                 unregister: _unregisterCard,
                 onInteraction: _interactWithCard,
@@ -2484,10 +2452,11 @@ class SpotlightBoardState extends State<SpotlightBoard>
                 showCaption: captions && section.items[c].showCaption,
                 showTitleAndRating: widget.showCardTitlesAndRatings,
                 expandOnFocus:
-                    (widget.dpad || _largeCardInteractions) &&
+                    (widget.dpad || _owners.selection.largeCardInteractions) &&
                     widget.expandFocusedCard,
                 forceParallax:
-                    widget.forceCardParallax || _largeCardInteractions,
+                    widget.forceCardParallax ||
+                    _owners.selection.largeCardInteractions,
                 trailerEnabled: widget.trailersEnabled,
                 trailerVolume: widget.cardTrailerVolume,
                 onTrailerStart: widget.onTrailerStop,
@@ -2502,4 +2471,60 @@ class SpotlightBoardState extends State<SpotlightBoard>
       ],
     );
   }
+
+  @override
+  String get animationStyle => widget.animationStyle;
+  @override
+  bool get animationsEnabled => widget.animationsEnabled;
+  @override
+  double get cardTrailerVolume => widget.cardTrailerVolume;
+  @override
+  bool get dpad => widget.dpad;
+  @override
+  bool get expandFocusedCard => widget.expandFocusedCard;
+  @override
+  bool get forceCardParallax => widget.forceCardParallax;
+  @override
+  List<StremioMeta> get hero => widget.hero;
+  @override
+  StremioAddon? get heroAddon => widget.heroAddon;
+  @override
+  FocusNode get heroNode => widget.heroNode;
+  @override
+  bool get largeScreenInteractions => widget.largeScreenInteractions;
+  @override
+  void Function(String? art, Color? tint)? get onAmbient => widget.onAmbient;
+  @override
+  void Function(StremioMeta item)? get onDwell => widget.onDwell;
+  @override
+  VoidCallback? get onExitTop => widget.onExitTop;
+  @override
+  void Function(StremioMeta, StremioAddon) get onHeroOpen => widget.onHeroOpen;
+  @override
+  void Function(int row)? get onLoadMoreRow => widget.onLoadMoreRow;
+  @override
+  Future<bool> Function()? get onLoadMoreShelves => widget.onLoadMoreShelves;
+  @override
+  VoidCallback? get onTrailerStop => widget.onTrailerStop;
+  @override
+  bool get paintBackground => widget.paintBackground;
+  @override
+  bool get pendingShelves => widget.pendingShelves;
+  @override
+  List<SpotlightShelf> get sections => widget.sections;
+  @override
+  bool get shelvesOnly => widget.shelvesOnly;
+  @override
+  bool get showCardTitlesAndRatings => widget.showCardTitlesAndRatings;
+  @override
+  Widget? get trailer => widget.trailer;
+  @override
+  bool get trailersEnabled => widget.trailersEnabled;
+  @override
+  Color Function(AppTheme) get groundOf => SpotlightBoard.groundOf;
+  @override
+  Color Function(AppTheme) get groundLowOf => SpotlightBoard.groundLowOf;
+  @override
+  double get leftThirdBusy => SpotlightBoard.leftThirdBusy;
+  final _owners = SpotlightBoardOwners();
 }

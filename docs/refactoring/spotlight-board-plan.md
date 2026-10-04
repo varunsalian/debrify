@@ -1198,6 +1198,25 @@ decomposition; bug fixes and behaviour changes, including everything below.
   base3 passes. End-of-run full tree provenance is recorded before this
   Progress edit. Per-entry wiring checklist reviewed before scaffold pinning.
 
+### Step 3 — board owners and live view
+
+- Previous checkpoint: `aa29343a`.
+- Moved all 32 board fields into the five route-owned records and
+  wired 27 live widget/static getters. Lifecycle bodies retain original
+  order and virtual metadata/mixin dispatch. Per-entry dependencies and
+  wiring were reviewed before production scaffold pinning. For unmoved
+  methods the manifest registers the actual facade declaration, retaining
+  original private names; the immutable planned-destinations ledger retains
+  their final destinations. This keeps context/formatter/source-reader checks
+  active on the real intermediate code without relaxing comparisons.
+- Conservative temporary size decision: the live bindings and pinned
+  receiver-induced wraps add 25 lines at this boundary (2,505 to 2,530).
+  Raised only this intermediate facade ratchet by hand; original bodies
+  still retained exit in steps 4–6. No compression, deleted comments,
+  accessor or alternative layout. Complete measured cap remains 451.
+- Formatted facade: **2530**. Physical AST breakdown: imports export 35, widget docs 185, state header 3, lifecycle 142, forwarders overrides 0, bindings 54, composition 1, retained original bodies 2031, remaining 79 (sum 2530); detailed spans in `step3-cap.json`.
+- All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step3-focused.*` includes full end-of-run tree provenance before this Progress edit.
+
 ### Amendment after step 0b (design-reviewed before resuming)
 
 1. **Facade cap.** The hard maximum becomes 460 (see the size section); the
