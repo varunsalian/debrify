@@ -1921,7 +1921,7 @@ abstract final class AppThemes {
         0xFFB4A0FF,
       ).withValues(alpha: 0.12),
       wash: _legacyWash, // addon_hub bloom — the same gradient, verified
-      card: const Color(0xFF191B28), // addon_hub _kCardBg
+      card: const Color(0xFF191B28), // addonHubCardBackground
       danger: const Color(0xFFEF4444), // addon_hub destructive
       warning: const Color(0xFFF6B94A), // addon_hub "needs debrid" caveat
       listBg: const Color(0xFF0B0910), // mdblist_lists_see_all ground

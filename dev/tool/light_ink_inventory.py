@@ -72,6 +72,7 @@ PRIMARY = (
     'lib/screens/trakt_calendar_screen.dart',
     'lib/screens/see_all',
     'lib/screens/addons',
+    'lib/features/addon_hub',
     'lib/widgets/home',
     'lib/widgets/see_all',
     'lib/widgets/cloud',

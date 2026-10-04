@@ -137,7 +137,10 @@ subscription, explicit controller besides the text field, or key literal.
      with an order-preserving `where` (1586–1588). Adds and imports
      **append** service-side (imports in file order); remove keeps the
      others' order; toggle and alias rewrite in place. This order feeds
-     metadata "Automatic" and addon fan-out downstream.
+     metadata "Automatic" and addon fan-out downstream. Legacy fixtures show
+     Zulu/Cinemeta/Alpha; committed-mode resource fixtures show the registry
+     order Alpha/Cinemeta/Zulu. Installed-sort and metadata-sort mutations
+     are caught by the legacy fixtures, whose order distinguishes them.
    - **Market:** the service order; nav indices in list order for
      non-installed rows only (1897–1902).
    - **Metadata picker** (1621–1740): enabled `meta` addons with a
@@ -421,7 +424,7 @@ As in the playlist-content and IPTV-settings plans, with these points:
    animations drained before asserting pops; KeyDown versus KeyRepeat;
    viewport widths 375, 479/480 (filter bar, `c.maxWidth < 480`), 527/528
    (cards: list padding leaves viewport − 48 for `c.maxWidth < 480`),
-   579/580 (metadata picker: margin plus padding leave viewport − 80 for
+   581/582 (metadata picker: margin, padding and border leave viewport − 82 for
    `constraints.maxWidth < 500`) and wide, or the `LayoutBuilder`
    constraints asserted directly; no wall-clock engine subtitles.
 
@@ -537,6 +540,400 @@ committed tree**, reconciling each branch's approved additions.
 
 ## Progress
 
+- Step 0a starts at `fcf13373` in this dedicated worktree. `flutter pub get`
+  completed first; Flutter 3.44.8 / Dart 3.12.2; no dependency or lock changes.
+  The format-only original grows 3,415 → 3,416 lines. AST declaration structure,
+  tokens except exactly two parser-identified optional commas, comments, seven
+  bare radii and 13 shape calls are unchanged (`addon_hub/format-proof.json`).
+  The temporary oversized facade retains all responsibilities until steps 1–7;
+  this documented format raise exits through the planned extraction ratchets.
+  All parser/kernel caches live inside this worktree; shared evidence writes
+  are confined to `refactor-evidence/addon_hub/`. No branch switch or push.
+
+- Step 0a validation: six existing metadata tests pass; stable whole analyzer
+  comparison has zero added/removed identities. Initial concurrent analyzer
+  attempts are retained as inconclusive build-input evidence; both stable
+  probes use identical generated inputs and `--no-pub`. The facade has zero
+  root diagnostics. `git diff --check` passes.
+
+- Step 0 original-only work is frozen before any extraction. The approved
+  accessor is the sole application delta (3,416 + 58 = 3,474 lines including
+  its separating blank line); exact bytes are retained for the Linux capture
+  comparison. Its token sidecar covers the live tear-offs, fresh snapshots and
+  TV setter. The temporary facade ratchet exits with steps 1–7.
+- Baselines `base` and `base2` have identical identities: 10,984 successes,
+  13 failures, 28 errors and 20 skips; seam-only comparison passes. Evidence
+  records SDK, HEAD, staged/tested trees and untracked inputs. The original
+  proof worktree is detached at `227712b2` **inside this worktree** under
+  `.dart_tool/addon_hub/original`; only test/tool overlays and the frozen seam
+  are applied there. Parser packages remain checkout-local and explicitly
+  supplied, including source-contract probes.
+- Conservative fixture decisions: fresh close-tracking zone clients share one
+  request log; only warm cases preseed through forced existing marketplace APIs.
+  Four cache-cold files run in distinct isolates without setup fetches. Asset
+  futures are cleared between test zones; real filesystem/database operations
+  dispatch through `runAsync`, with the timeout case deliberately using fake
+  time. Teardown releases owned test gates before disposal. Draft failures and
+  corrected fixture assumptions remain in evidence; no accepted baseline or
+  golden is updated to admit a regression.
+- Original characterization: 119 affected tests pass, including the six
+  existing metadata tests, unconditional TV source guard and six macOS pixel
+  scenes. Scoped test analysis has no issues. Pixel goldens are captured only
+  from the unchanged original; Linux capture remains pending Claude's handoff.
+  `capture_addon_hub_linux_goldens.sh` resolves the exact step-0 subject and
+  checks every application file against step 0a plus the byte-exact accessor;
+  the empty `.gitkeep` directory marker is explicitly excluded as non-code.
+- Observed original behavior resolves plan arithmetic/service ambiguities:
+  metadata constraints are viewport minus 82 (border included), so 581/582
+  join the requested widths. Legacy addon order remains z9/Cinemeta/a2;
+  committed graph order is the registry's stored label order (Alpha/Cinemeta/
+  Zulu), with resource ids as keys. Committed addon mutations notify
+  `remote_webdav_sync_registry_records_v1`; legacy preference and metadata
+  writes retain their own logical keys. A same-profile picker action pops the
+  pushed hub without changing the current session. All are preserved.
+- The strict original probe observes four infos (three original const sites
+  plus import qualification ordering); the rename-only probe observes 21
+  (17 public-constructor key infos plus those four). The frozen inventory uses
+  per-symbol maxima, never sums. No production const or suppressions are added.
+  The dependency report covers all 127 leaves with planned destinations and
+  source bindings; destination wiring is reviewed and pinned when introduced.
+
+- Step 0 validation closes on original code: `base3` has 11,096 successes,
+  13 failures, 28 errors and 20 skips. Comparison against `base2` passes:
+  exactly 112 new accepted characterization identities, no new failures,
+  missing tests or new skips; the recorded tree is stable with no untracked
+  inputs. Detached-original `original-characterization` passes all 119
+  affected tests on its stable staged overlay. All ten real-config manifest
+  self-tests pass on the isolated parser, including the opt-in closure
+  extension and its individual identity/argument negatives. Existing configs
+  remain unchanged. Format, size, architecture, storage, shape/floor, runtime
+  source guards, CI analyzer and analyzer allowlist pass. Whole analysis has
+  zero added identities against `base-analyze`; removed duplicate/generated
+  diagnostics are retained as evidence (1,664 → 1,651). No allowlist changes.
+- Mutation evidence is recorded against the restored detached original for
+  all nine required mutations (`original-mutation-proofs.json`), each with
+  its rejected test identity and tested tree. The initial harness wrongly
+  expected `suite_evidence run` itself to return the Flutter failure code;
+  corrected proof checks recorded outcomes, as the tool's verdict is always
+  the comparison. No mutation is accepted and no application move occurred.
+  Failed command attempts (including a wrong runtime-guard path) remain in
+  this feature's evidence; corrected commands pass. Step 0b will record the
+  original-only proof closure and the latest `base4` before gate 1.
+
+- Step 0 checkpoint: `8c5981a4` (exact Linux-capture subject). The capture
+  script's macOS preflight proves every application file is the format-only
+  original plus the frozen seam, then deliberately rejects non-Linux capture.
+- Step 0b original-only proof closure: the detached original is restored;
+  all 119 affected tests passed before mutations. Each required mutation is
+  rejected individually by its named test on a stable recorded tree: installed
+  sort, missing Cinemeta sort, committed toggle by manifest URL, removed
+  confirmation, guarded stale engine assignment, mount-guarded engine load,
+  reordered cleanup, wrapped listener and trimmed row-node pool. Mutation
+  diagnostics were reviewed; none is a compile/loading failure. Evidence and
+  original macOS SHA-256 hashes remain in `refactor-evidence/addon_hub/`.
+  No review findings have arrived at this checkpoint. `base4` is recorded on
+  this committed original-plus-tests tree as the latest comparison base.
+
+- Step 0 checkpoint: `8c5981a4` (exact Linux-capture subject). The script's
+  macOS preflight proves every application blob is the format-only original
+  plus the frozen seam, then deliberately rejects non-Linux capture. Blob
+  identities verify all unchanged files in one tree listing.
+- Step 0b closes the restored-original mutation proofs: all 119 affected tests
+  pass before mutations; all nine mutations are rejected individually by named
+  tests on stable recorded trees. The rejected diagnostics were reviewed;
+  none is a compile/loading failure. No review findings have arrived here.
+  `base4` is recorded on this committed original-plus-tests tree as the latest
+  comparison base. An early baseline attempt begun before this documentation
+  commit is retained as incomplete; it is not used as evidence.
+
+- Linux originals received separately: all six supplied SHA-256 values match
+  the PNGs; capture revision is `8c5981a4`, strict original run is 6/6 PASS.
+  Provenance: calibrated `debrify-flutter:3.44.8` linux/amd64 Ubuntu 24.04,
+  official Flutter 3.44.8 archive and libsqlite3-dev under Colima; calibration
+  passed all 14 GitHub-captured TorBox/Debrid originals. Remote Actions remains
+  unavailable (spending limit). Evidence: `linux-original-*` and
+  `linux-provenance-verified.json` in this feature namespace. Assets are
+  committed separately; only the Linux strict-default flag changes, with
+  the six scenarios and macOS originals unchanged. Local Linux execution
+  after extraction remains pending a reachable calibrated runner.
+
+- Independent step-0 review closure (new step 0b, before extraction): all four
+  P2 gaps and the requested P3 items are closed. Failed Automatic selection
+  starts with the non-null z9 provider and restores that exact UI snapshot;
+  the underlying preference store retains z9. Committed-mode Update seeds
+  the actual resource graph, distinguishes the resource storage key from the
+  manifest URL, requests exactly `GET https://z9.addon.test/manifest.json`,
+  preserves resource identity/order and records the registry sync key.
+  Null-sidebar LEFT asserts handled for Down and Repeat, plus a parent key
+  probe proving the hub consumes it before ancestor traversal can do so.
+  YAML import fails the real storage write after its non-dismissible blocking
+  dialog shows (held external mutation barrier, then corrupt inventory);
+  dismissal, stripped red snackbar, no engine file and no sync are checked.
+- Review original proof: `review-original-final` runs all 121 affected tests
+  on the detached `227712b2` application plus the frozen accessor/test overlay;
+  all pass on a stable tree. `review-original-mutation-proofs.json` records
+  four behavioral rejections, each running its entire relevant file:
+  metadata-reset-null (16 cases), update-storage-key (16), left-null-ignored
+  (31), import-failure-dialog-retained (19). No loading/compilation failure
+  counts as a proof. Initial LEFT mutation survived the return assertion
+  because ancestor traversal also handles LEFT; its preserved evidence drove
+  the parent probe. Draft fixture/command failures remain evidence only.
+- P3 closure: remove only the explicitly reviewed tautology; document why
+  overlapping marketplace/engine requests require the frozen live tear-offs;
+  send actual TV passthrough arrow events and submit via the real platform
+  text-input search action; refocus the input before each action. Pin the
+  actual post-install primary focus to the retained `market-row-0` node.
+  The six golden scenarios and PNGs are unchanged. Step 0 item 6 now records
+  the actual 581/582 picker threshold; contract 4 distinguishes committed
+  registry order from the legacy order that catches both sort mutations.
+- No application move or configuration/accessor change in this review batch.
+  Scoped test analysis is clean; earlier checker, original strict-lint and
+  source evidence remains applicable to the identical application/tool inputs.
+  The previous full-suite run is preserved as `base4-pre-review`; the new
+  committed review checkpoint will supply `addon_hub/base4`, compared against
+  `base3` before any extraction. Expected change: only the two added test
+  identities; gate comparisons must use this latest base.
+
+- Review base is `da6bc0b4`: `base4` versus `base3` PASS, exactly two added
+  successful identities, no fixes, failures, missing identities or new skips.
+  Stable committed tree `344c80461bb2b74ed153d395ab370a75e68a84b3`, no untracked
+  inputs: 11,098 successes / 13 failures / 28 errors / 20 skips. Whole analyzer
+  also compares with zero added or removed identities. This is the required
+  latest original addon-hub base for both gates; the original strict maximum
+  remains 21 per-symbol infos, merged into `original-max-analyze.txt`.
+- Step 1 moves only the two kind/source enums, label/capability functions and
+  row-nav class. Every destination and the facade is registered for shape;
+  total bare radii remain 7 and the global floor remains 488 with zero slack.
+  Feature scanning is unconditional, theme patterns name each directory,
+  and the guard enforces the exact bridge, bidirectional sources/settings
+  bans and 500-line destinations. The per-entry pure bindings are reviewed.
+  Facade: 3,418 physical lines; remaining responsibilities exit at steps 2–6.
+  No parser/kernel cache uses a shared worktree namespace.
+
+- Parser execution decision: the unchanged pinned AST adapter is also
+  compiled as an ignored worktree-local AOT executable; its full production
+  AST equals the existing kernel output (`parser-aot-equivalence.json`). An
+  ignored local runtime dispatches only this exact parser-kernel path to it;
+  every checker still receives the isolated package and runs all positives
+  and negatives. The slow interrupted read-only attempt is retained; its
+  complete successor is the acceptance evidence. No shared cache or tracked
+  tool behavior changes.
+
+- Step 1 verification: all ten manifests and their self-tests PASS on the
+  isolated parser (aggregate `step1-checks.json`); 129 affected behavior,
+  shape/floor and stale-runtime cases PASS, comparison to `base4` PASS.
+  Strict per-symbol analysis has zero destination additions; whole diagnostic
+  relocation and exact CI analyzer allowlist PASS (12 existing warnings).
+  Architecture, size, storage, formatting and staged diff checks PASS.
+
+- Step 2 moves only the whole pure widgets and each companion private State
+  to presentation files, using manifest public names at the production caller.
+  Constructors, defaults, focus nodes, layout and callback arguments remain
+  verbatim; every moved comment is preserved. Imports are cleaned only for
+  unused directives/order, with no const/key fixes. Per-entry bindings and
+  strict original identities are reviewed. Facade: 2566 lines; all workflow,
+  service state, legacy rows and builders remain for their scheduled steps.
+  Every new destination remains in the shape manifest; the 7/488 budgets
+  and zero slack are unchanged.
+
+- Step 2 verification: all ten manifest/self-tests PASS; 129 affected tests
+  PASS on the corrected shape registry and compare to `base4` PASS. Original
+  strict diagnostics relocate with zero additions; exact CI analyzer allowlist,
+  architecture, size, storage and format/diff checks PASS. macOS pixels and
+  calibrated Docker strict Linux pixels both pass (6/6 Linux, unchanged PNGs).
+  Shape placement follows token presence, not a nonzero radius budget; the
+  first guard failure caught the wrong bucket, retained as evidence, and the
+  fix preserves both assertions, the seven original bare radii and floor 488.
+  Evidence snapshot startups are serialized after a concurrent index-lock
+  collision; failed startups produced no accepted test evidence.
+
+- Step 3 moves the 38 non-static/non-handler fields into four typed owners,
+  plus installed/market/debrid loads, engine loads and engine actions into
+  three plain sections. Nontrivial construction order remains installed
+  service, marketplace singleton, navigation resources, then owned engine
+  manager; the between-method revisions and blocking flag are placed with
+  their owners. All initialization/disposal statements stay on the State in
+  original order with receiver qualification only. Borrowed services stay
+  borrowed; the one remote manager stays owned and closes last.
+- Step 3 binding review pins 25 structural leaves, exact owner/section paths,
+  plain class headers and 11 dependency bindings. `context`/`mounted` remain
+  live functions and `setState` is the actual State tear-off. Both change
+  listeners use one lazily composed section instance before registration.
+  The short typed `_l` getter returns that existing engine-loading section;
+  it avoids changing unmoved kind-guard syntax and exits in step 5. Navigation
+  and engine handles `h`/`_e` likewise keep unmoved guards formatter-clean;
+  they preserve the same typed owner instances. No wrapper listener appears.
+- Orphan group banners and inline comments are carried byte for byte with
+  their original responsibility; draft checker failures exposed omissions
+  before any acceptance evidence. Three formatter-required brace sites are
+  pinned only in moved methods, with complete raw prefixes and bodies;
+  lifecycle has no formatting exception. No infos are added to the frozen
+  original strict inventory. Facade: 2190 lines; action/menu/list/layout
+  responsibilities remain for steps 4–6.
+
+- Step 3 source-guard attempt retained: the first navigation handle `n`
+  collided with the original local focus-node name in `_RowNav`; the unchanged
+  whole-widget assertion caught normalization ambiguity. The unique short `h`
+  handle avoids that collision and preserves unextracted one-line guard syntax.
+  `_n` was also evaluated, but needed a brace exception outside the moved set;
+  that draft is rejected. No source assertion or strict inventory is weakened.
+
+- Step 3 verification: `step3-final-checks.json` records all ten manifest
+  self-tests and architecture/size/storage/format/diff PASS. All 129 cases
+  in `step3-affected-final` pass and compare to the latest `base4` with zero
+  additions/missing/skips; macOS pixels pass. Strict Linux originals pass
+  6/6 (`step3-linux`), unchanged image hashes. `step3-final-analyze-recorded`
+  and its env record no added original strict identities or whole-repo
+  diagnostics; exact CI allowlist retains only its 12 existing warnings.
+  Gate 1 now runs on the committed step-3 tree, with no untracked inputs.
+
+- Gate 1: committed `9f84dd5f`, tested tree
+  `c66dae0a97b14237bb95c74945812989bfb5a8fb`, no untracked inputs or tree
+  change. `gate1` versus original `base4` (`da6bc0b4`) PASS: 11,098 success,
+  13 failure, 28 error, 20 skipped; no added/missing/newly skipped identities,
+  no new failures or fixes. The unchanged historical `test_baseline.py` parser
+  is replayed over those recorded events and the original base4 events:
+  both return 1 with exactly the same 41 failures (32 absent from the stale
+  nine-entry historical list). Its list is never updated; the observed
+  identity comparison is the gate. Replay evidence and stable-tree envs stay
+  in `addon_hub/`; no second full-suite run is needed to reparse those events.
+- Step 4 moves install/URL/JSON actions, addon management, sheets/details/menu
+  actions and the metadata write into their scheduled sections. All 32
+  actual composition bindings and per-entry dependencies are reviewed;
+  live State getters, captured messengers/themes, dialog `ctx`, post-frame
+  install refocus and the previous metadata value stay at their original
+  sites. The committed-mode Update still passes `manifestUrl`; toggle/rename/
+  remove still pass `storageKey`. Facade: 1511 lines. No new formatting site
+  beyond the three already required in moved loading methods.
+
+- Step 4 verification: all ten manifests/self-tests and guards PASS
+  (`step4-checks.json`); strict original-symbol and whole diagnostic comparisons
+  report zero additions, exact CI analyzer allowlist PASS. All 129 affected
+  cases and their comparison to base4 PASS; macOS and strict Linux originals
+  pass unchanged (Linux 6/6). No characterization assertion or failure list
+  changes. Commit follows this verified batch.
+
+- Step 5 Linux prerequisite is reverified at `2b91f04f`: all six received
+  SHA-256 hashes match both the worktree PNGs and their separately committed
+  `95955bfc` bytes (`step5-linux-prerequisite.json`). Tests remain strict;
+  no golden scenario or pixel is changed.
+- Step 5 moves navigation/key policy, filters, filter bar/search, installed/
+  market/engine lists and whole market/engine rows with their private States.
+  The 71 actual dependency bindings are reviewed before final scaffold pinning;
+  UI/listener callbacks remain genuine source tear-offs or the original
+  argument-capturing closures. All six exact brace sites are in moved methods;
+  lifecycle remains receiver-only. The earlier `_l` alias is removed. A typed
+  `_el` getter to the same engine-list instance keeps the retained body's
+  one-line guard unchanged and exits in step 6. The sole retained empty-state
+  builder is bound directly from the State, marked TEMP with exit step 6.
+  Facade: 271 lines; its oversized-file baseline is removed now at ≤800.
+
+- Step 5 strict analyzer caught a redundant facade `flutter/services.dart`
+  import after key handlers moved. That failed attempt is retained. Import
+  cleanup removes it without changing a declaration; the strict inventory
+  remains frozen. All ten self-tests passed the initial step-5 tree; the final
+  import-only recheck reruns this manifest/self-tests and all shared guards,
+  reusing the other nine complete results whose inputs are unchanged.
+
+- Step 5 verification: all ten manifest/self-tests PASS (nine unchanged
+  results reused, this feature rerun, `step5-final-checks.json`); all guards,
+  format/diff and exact CI analyzer allowlist PASS. Strict original symbols
+  and whole diagnostic relocation have zero additions. All 129 affected
+  identities match base4 and pass; macOS and strict original Linux pixels
+  pass (Linux 6/6), unchanged hashes and no golden-test changes.
+
+- Step 6 moves the original root layout into a plain layout section and
+  header/body/empty builders into Body; the State now has the exact annotated
+  `build(context) => _sections.layout.build(context)` forwarder. All 79 actual
+  bindings are reviewed and 79 structural leaves pinned. Three typed closures
+  defer the pure empty-state helper until Body is constructed, breaking only
+  that builder cycle; no UI/listener identity callback is wrapped. `_el` and
+  all TEMP(addon_hub) cross-calls are removed. Seven exact brace sites are
+  confined to moved methods, with no lifecycle exception.
+- A draft generator classified the original `[build]` documentation link as
+  an invoked dependency when moving the layout. It stopped before wiring the
+  cycle; its failure is retained. Comment references are now excluded from
+  receiver/dependency rewriting and the original comment stays byte-exact.
+  No accepted evidence comes from that draft.
+- Final facade physical count is 162: imports 14; public widget and its
+  original documentation 10; owners/cache/tab/TV handler 16; lifecycle 53;
+  build forwarder 2; frozen accessor 58; State shell 2; separating blank
+  lines 7. Largest feature file is 295 lines; all 32 destinations are ≤500.
+  `final-line-counts.json` records the measured breakdown.
+
+- Step 6 verification: all ten manifest/self-tests, architecture/size/storage,
+  format/diff and CI analyzer allowlist PASS. All 129 affected identities pass
+  and match base4; macOS and strict Linux goldens pass unchanged (6/6 Linux).
+  Original per-symbol strict diagnostics and whole diagnostic relocation have
+  zero additions; all three original const identities now live at their final
+  destinations. The final facade and every destination remain registered in
+  the unchanged seven-radius / 488-token, zero-slack shape inventory.
+
+- Step 7 enables ADDON_HUB_COMPLETE, registers the facade as an exact
+  composition root, activates its 400-line cap and rejects TEMP(addon_hub)
+  everywhere in the completed source set. All 127 per-entry destination
+  reviews are complete. CODEMAP names the feature and facade; the theme's
+  old card-symbol comment is updated to `addonHubCardBackground` only.
+  Original app_theme.dart already has formatter drift; its unchanged
+  formatter diff and the comment-only/equal-drift proof are retained, without
+  bulk-formatting that shared file. The scoped CI formatter remains exact.
+- Final acceptance checks include all ten manifests with isolated parser
+  self-tests, strict original-symbol and whole analyzer comparison, the exact
+  CI analyzer/formatter/behavior job, 129 affected cases, both platforms'
+  goldens, final guard/shape/size/storage checks, and gate 2 on a committed
+  stable tree versus both latest base4 and gate 1. Device Android TV D-pad
+  (including rename), live marketplace/gitlab endpoints, configure in a device
+  browser, remote CI (billing/no push), and Claude's integration union merge
+  and committed merged-tree revalidation remain pending.
+
+- Step 7 verification: all ten manifests with self-tests PASS on the
+  isolated parser; guards, size/storage, shape floor and scoped format/diff
+  PASS. Exact CI formatting checks 1,675 files with zero changes. Its unchanged
+  behavior checker records 3,567 successes and exactly two listed failures,
+  PASS versus base4 with no missing/added/newly skipped identities. Exact CI
+  analyzer allowlist PASS (12 original warnings); strict per-symbol analyzer
+  records 20 destination infos within the original maximum 21, all three const
+  identities relocated. Whole comparison has zero additions, only the original
+  import-order info removed. All 129 affected cases and macOS goldens pass;
+  strict Linux originals pass 6/6. `final-static-audit.json` confirms every
+  destination/facade registration, unchanged characterization/allowlists since
+  da6bc0b4, exact CI path placement and valid docs/capture-shell syntax.
+  Gate 2 now runs on the committed final source tree.
+
+- Gate 2: committed `0018d1e7`, tested tree
+  `34303532e37316515535981c5591fed1228b893d`, no snapshot/untracked inputs or
+  tree change. `gate2` versus both latest original `base4` (`da6bc0b4`) and
+  `gate1` PASS: 11,098 success, 13 failure, 28 error, 20 skipped; zero added,
+  missing or newly skipped identities, zero new failures or fixes. Historical
+  helper replay still returns the identical original verdict/failure set;
+  no known-failure list or analyzer inventory grows. Gate envs record the
+  same Flutter 3.44.8 / Dart 3.12.2 throughout.
+- Whole-unit comment audit additionally proves all 185 original comment
+  tokens survive exactly, including group banners and inline comments outside
+  declaration spans. Only manifest bracketed doc-symbol links are normalized;
+  there is no whitespace/text normalization (`final-all-comment-proof.json`).
+- Completion documentation changes only this plan after the gate; every
+  application, test, checker, dependency and other non-plan input remains
+  identical to the committed gate-2 tree (`final-head-equivalence.json`).
+  Final facade is 162 lines, largest destination 295; all bounded legacy
+  exceptions retain their stated later Riverpod/data/platform/localization
+  exit milestones. Stop after gate 2; no branch switch or push.
+
+| Step | Commit |
+| --- | --- |
+| 0a format-only | `227712b2` |
+| 0 original characterization | `8c5981a4` |
+| 0b initial original proof closures | `26e69f67`, `a7da3fe4` |
+| Separate verified Linux originals | `95955bfc` |
+| 0b independent review closure / latest original base | `da6bc0b4` |
+| 1 pure kinds/helpers/row pool | `8f3b61f7` |
+| 2 pure widgets | `28a679d8` |
+| 3 owners/loads/engines / gate 1 | `9f84dd5f` |
+| 4 addon actions/menus/metadata | `2b91f04f` |
+| 5 navigation/filters/lists/rows | `2033b568` |
+| 6 body/layout/build forwarder | `eb2759cc` |
+| 7 final guards/docs / gate 2 | `0018d1e7` |
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
@@ -573,3 +970,11 @@ All pre-existing; the extraction keeps each exactly.
 21. CI: `checks.yml` once listed two facades after `| tee analyze.txt`
     (not analyzed); fixed upstream at `b5e90a55`, kept as a rule.
 22. `'addons'` and `'addon_hub'` screen views both fire on every mount.
+
+23. A rejected metadata write leaves the SharedPreferences cache optimistic
+    even though the underlying store retains its prior value; the hub restores
+    its captured UI value. The extraction preserves this original behavior.
+
+24. app_theme.dart has pre-existing formatter drift. The planned card-symbol
+    comment changes alone; its formatter diff is identical after restoring that
+    comment. No unrelated shared theme code is formatted during this extraction.

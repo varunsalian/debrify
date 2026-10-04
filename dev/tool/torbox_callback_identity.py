@@ -109,7 +109,7 @@ def member_occurrences(values, member):
 
 
 def check_callback_identities(lookup, rows, source_path, config):
-    from check_settings_moves import tokens
+    from check_settings_moves import tokens, normalize
     specs = config.get('callback_identities', [])
     if not specs:
         return []
@@ -194,24 +194,53 @@ def check_callback_identities(lookup, rows, source_path, config):
                     raise ValueError(f"expected {count} {call_name} calls, got {len(calls)}")
                 for call in ([calls[occurrence]] if occurrence is not None else calls):
                     expr = callback_argument(call, site)
-                    if 'conditional_member' in site:
-                        # Check a direct branch tear-off in an otherwise
-                        # verbatim conditional argument. Its surrounding
-                        # conditions remain covered by the whole-leaf check.
-                        target = node_for(site['conditional_member'])['name']
-                        positions = member_occurrences(expr, target)
-                        branch = site.get('branch_occurrence', 0)
-                        if len(positions) != site.get('branch_count', 1):
-                            raise ValueError('conditional tear-off occurrence count changed: ' + target)
-                        end = positions[branch] + 1
-                        start = end - 1
-                        while start >= 2 and expr[start - 1] == '.':
-                            start -= 2
-                        if (expr[start - 1:start] not in (['?'], [':'])
-                                or expr[end:end + 1] not in ([], [':'], [')'])):
-                            raise ValueError('conditional branch must be a direct tear-off: ' + target)
-                        expr = expr[start:end]
-                    resolved.append(identity(expr, node['owner'], getter=is_getter))
+                    closure = spec.get('closure')
+                    if closure is not None:
+                        if config.get('callback_closure_binding') is not True:
+                            raise ValueError('closure binding requires config opt-in')
+                        parameters = closure['parameters']
+                        if expr[:len(parameters) + 1] != [*parameters, '=>']:
+                            raise ValueError('closure parameter list or arrow changed')
+                        body = expr[len(parameters) + 1:]
+                        if body.count('=>') or '(' not in body or body[-1:] != [')']:
+                            raise ValueError('closure must invoke exactly its bound member')
+                        opening = body.index('(')
+                        invoked = body[:opening]
+                        # Validate the receiver BEFORE normalization, using the
+                        # same instance/member resolution as direct tear-offs.
+                        bound = identity(invoked, node['owner'])
+                        calls_in_body = arguments(body, invoked[-1])
+                        if len(calls_in_body) != 1:
+                            raise ValueError('closure invocation shape changed')
+                        actual = [normalize(arg, rows) for arg in calls_in_body[0]]
+                        expected = [normalize(arg, rows) for arg in closure['arguments']]
+                        if actual != expected:
+                            raise ValueError('closure argument tokens changed')
+                        # No enclosing wrapper, chained invocation, or suffix.
+                        if body != [*invoked, '(', *sum(
+                            [arg + ([','] if i + 1 < len(calls_in_body[0]) else [])
+                             for i, arg in enumerate(calls_in_body[0])], []), ')']:
+                            raise ValueError('closure invocation is wrapped or chained')
+                        resolved.append(bound)
+                    else:
+                        if 'conditional_member' in site:
+                            # Check a direct branch tear-off in an otherwise
+                            # verbatim conditional argument. Its surrounding
+                            # conditions remain covered by the whole-leaf check.
+                            target = node_for(site['conditional_member'])['name']
+                            positions = member_occurrences(expr, target)
+                            branch = site.get('branch_occurrence', 0)
+                            if len(positions) != site.get('branch_count', 1):
+                                raise ValueError('conditional tear-off occurrence count changed: ' + target)
+                            end = positions[branch] + 1
+                            start = end - 1
+                            while start >= 2 and expr[start - 1] == '.':
+                                start -= 2
+                            if (expr[start - 1:start] not in (['?'], [':'])
+                                    or expr[end:end + 1] not in ([], [':'], [')'])):
+                                raise ValueError('conditional branch must be a direct tear-off: ' + target)
+                            expr = expr[start:end]
+                        resolved.append(identity(expr, node['owner'], getter=is_getter))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
         if 'callback_member' in spec:

@@ -1,0 +1,58 @@
+
+@visibleForTesting
+Map<String, Object?> addonHubTestAccess(State state) {
+  final s = state as _AddonHubScreenState;
+  return {
+    'searchController': s._searchController,
+    'kindFocus': s._kindFocus,
+    'sourceFocus': s._sourceFocus,
+    'typeFocus': s._typeFocus,
+    'addFocus': s._addFocus,
+    'moreFocus': s._moreFocus,
+    'searchFocus': s._searchFocus,
+    'searchBtnFocus': s._searchBtnFocus,
+    'metadataFocus': s._metadataFocus,
+    'firstRowFocus': s._firstRowFocus,
+    'tvFocusHandler': s._tvFocusHandler,
+    'isTv': s._isTv,
+    'kind': s._kind,
+    'source': s._source,
+    'typeFilter': s._typeFilter,
+    'search': s._search,
+    'searchOpen': s._searchOpen,
+    'installed': List<StremioAddon>.of(s._installed),
+    'installedLoading': s._installedLoading,
+    'metadataProviderPreference': s._metadataProviderPreference,
+    'market': List<MarketplaceAddon>.of(s._market),
+    'marketLoading': s._marketLoading,
+    'marketError': s._marketError,
+    'marketLoadedFor': s._marketLoadedFor,
+    'hasDebrid': s._hasDebrid,
+    'importedEngines': List<ImportedEngineMetadata>.of(s._importedEngines),
+    'availableEngines': List<RemoteEngineInfo>.of(s._availableEngines),
+    'knownRemoteEngines': List<RemoteEngineInfo>.of(s._knownRemoteEngines),
+    'enginesLoading': s._enginesLoading,
+    'enginesError': s._enginesError,
+    'enginesLoadedOnce': s._enginesLoadedOnce,
+    'installedLoadRevision': s._installedLoadRevision,
+    'engineLoadRevision': s._engineLoadRevision,
+    'blockingProgressUp': s._blockingProgressUp,
+    'marketNodes': <FocusNode>[
+      for (var i = 0; s._marketNav.nodeAt(i) != null; i++)
+        s._marketNav.nodeAt(i)!,
+    ],
+    'marketIdenticalTo': (Object list) => identical(s._market, list),
+    'onAddonsChanged': s._onAddonsChanged,
+    'onEnginesChanged': s._onEnginesChanged,
+    'loadInstalled': s._loadInstalled,
+    'loadMarket': s._loadMarket,
+    'loadEngines': s._loadEngines,
+    'focusFirstRow': s._focusFirstRow,
+    'setMetadataProvider': s._setMetadataProvider,
+    'toggleAddon': s._toggleAddon,
+    'setTv': (bool tv) {
+      s._isTv = tv;
+      (s.context as Element).markNeedsBuild();
+    },
+  };
+}

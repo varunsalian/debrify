@@ -28,6 +28,12 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
 - Stremio addons: `services/stremio_service.dart` (`_fetchStreamsFromAddon`, `_convertToTorrents` —
   where addon order + labels get overwritten), `models/stremio_addon.dart` (`StremioStream.fromJson`,
   `sizeFromTitle`), `services/stremio_marketplace_service.dart`, `screens/addons/addon_hub_screen.dart`.
+- Addon hub: `screens/addons/addon_hub_screen.dart` retains the widget, State lifecycle,
+  owners, lazy composition and build forwarder. Pure models/helpers/widgets live in
+  `features/addon_hub/{models,application,presentation}/`; the bounded State-driven
+  service/platform sections, loading, actions, navigation, lists and layout live in
+  `features/addon_hub/presentation/legacy_addon_hub/`. Inventory and verified contracts:
+  `docs/refactoring/addon-hub-plan.md` and `docs/refactoring/addon-hub-deps.md`.
 - Indexer managers (Prowlarr/Jackett): `services/indexer_manager_service.dart`
   (`_searchProwlarr*`, Torznab), `models/indexer_manager_config.dart`,
   `screens/settings/indexer_managers_settings_page.dart`.
