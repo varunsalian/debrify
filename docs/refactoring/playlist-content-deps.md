@@ -147,3 +147,37 @@ Step 1: actual production bindings reviewed before scaffold pinning. Pure functi
 | `_PlaylistContentViewScreenState._hasWebDavCredentials` | `_playWebDavPlaylist` → `hasWebDavCredentials` | Original signature/body and ownership retained. |
 | `_PlaylistContentViewScreenState._cleanTorboxPath` | `_playTorboxPlaylist` → `cleanTorboxPath` | Original signature/body and ownership retained. |
 | `_SearchResult` | `_performSearch` → `PlaylistContentSearchResult` | Original signature/body and ownership retained. |
+
+Step 2: all 29 fields reviewed at their actual owner bindings before scaffold pinning. Each owner is freshly constructed per State; original initializer expressions and borrowed object identity remain unchanged. Constructors start no action. State retains exact lifecycle order and disposes the original controller/focus/timer objects. Inline field comments remain attached to their original fields.
+
+| Entry | Actual State binding | Review |
+| --- | --- | --- |
+| `_PlaylistContentViewScreenState._isLoading` | `_catalog.isLoading` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._errorMessage` | `_catalog.errorMessage` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._folderPath` | `_navigation.folderPath` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._rootContent` | `_catalog.rootContent` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._currentViewNodes` | `_navigation.currentViewNodes` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._allDebridFiles` | `_catalog.allDebridFiles` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._currentViewMode` | `_navigation.currentViewMode` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._viewModeDropdownFocusNode` | `_focus.viewModeDropdownFocusNode` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._backButtonFocusNode` | `_focus.backButtonFocusNode` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._fileProgressCache` | `_series.fileProgressCache` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._seriesPlaylist` | `_series.seriesPlaylist` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._selectedSeasonNumber` | `_series.selectedSeasonNumber` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._isLoadingSeriesMetadata` | `_series.isLoadingSeriesMetadata` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._episodeListScrollController` | `_scroll.episodeListScrollController` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._targetEpisodeIndex` | `_scroll.targetEpisodeIndex` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._scrollRetryTimer` | `_scroll.scrollRetryTimer` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._isScrollScheduled` | `_scroll.isScrollScheduled` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._ottViewAutoSwitchTimer` | `_ott.ottViewAutoSwitchTimer` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._isSearchActive` | `_search.isSearchActive` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._searchController` | `_search.searchController` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._searchFocusNode` | `_focus.searchFocusNode` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._searchButtonFocusNode` | `_focus.searchButtonFocusNode` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._searchClearFocusNode` | `_focus.searchClearFocusNode` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._searchResults` | `_search.searchResults` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._episodeLongPressTimer` | `_episode.episodeLongPressTimer` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._episodeLongPressTriggered` | `_episode.episodeLongPressTriggered` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._lastEpisodeLongPressTime` | `_episode.lastEpisodeLongPressTime` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._episodeKeyDownReceived` | `_episode.episodeKeyDownReceived` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |
+| `_PlaylistContentViewScreenState._isAndroidTv` | `_episode.isAndroidTv` | Original type/default; route owns the resource; all reads/writes and accessor share this field. |

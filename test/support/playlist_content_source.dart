@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 /// Resolve the production declaration through the move manifest, then read
 /// only its owning method. Missing declaration/end markers are test failures.
 String playlistContentOriginalMember(String originalName) {
@@ -82,8 +84,11 @@ String playlistContentOriginalMember(String originalName) {
     const gap = r'(?:\s|//[^\n]*\n|/\*[\s\S]*?\*/)*';
     String pattern(List<dynamic> values) =>
         values.map((value) => RegExp.escape(value as String)).join(gap);
+    final prefix = site['prefix_source'] is String
+        ? RegExp.escape(site['prefix_source'] as String)
+        : pattern(site['prefix_tokens'] as List<dynamic>) + gap;
     final recorded = RegExp(
-      '(${pattern(site['prefix_tokens'] as List<dynamic>)}$gap)'
+      '($prefix)'
       '\\{$gap${pattern(site['body_tokens'] as List<dynamic>)}$gap\\}',
     );
     final matches = recorded.allMatches(member).toList();
@@ -139,6 +144,24 @@ String playlistContentOriginalMember(String originalName) {
       RegExp(r'\b(?:_deps|deps)\s*\.\s*' + RegExp.escape(current) + r'\b'),
       original,
     );
+    if (owner.isNotEmpty) {
+      member = member
+          .split('\n')
+          .map((line) {
+            if (!line.trimLeft().startsWith('///')) return line;
+            return line.replaceAll(
+              RegExp(
+                r'\b' +
+                    RegExp.escape(owner) +
+                    r'\.' +
+                    RegExp.escape(current) +
+                    r'\b',
+              ),
+              original,
+            );
+          })
+          .join('\n');
+    }
     // Unqualified names are methods/types, never a moved field's public name.
     final field = entry['step'] == '2';
     if (original != current && !field) {
@@ -155,5 +178,43 @@ String playlistContentOriginalMember(String originalName) {
   if (originalName.endsWith('.build')) {
     member = member.replaceFirst(RegExp(r'@override\s*'), '');
   }
-  return member;
+  return normalizePlaylistContentFormattingCommas(member, originalName);
+}
+
+/// Only AST-proven optional formatter punctuation at frozen prefix hashes.
+/// Original fixtures and every meaningful source assertion remain unchanged.
+String normalizePlaylistContentFormattingCommas(String member, String name) {
+  final metadata = File(
+    'dev/tool/playlist_content_source_formatting_commas.json',
+  );
+  if (!metadata.existsSync()) return member;
+  final table = jsonDecode(metadata.readAsStringSync()) as Map<String, dynamic>;
+  final sites = table[name] as List<dynamic>? ?? const [];
+  if (sites.isEmpty) return member;
+  var result = member.replaceAll(RegExp(r'\s+'), '');
+  for (final site in sites) {
+    final offset = site['offset'] as int;
+    if (offset >= result.length ||
+        sha256.convert(utf8.encode(result.substring(0, offset))).toString() !=
+            site['prefix_sha256']) {
+      throw StateError('Formatter comma prefix changed: $name at $offset');
+    }
+    final closer = site['closer'] as String;
+    if (site['kind'] == 'remove') {
+      if (result.substring(offset).startsWith(',$closer')) {
+        result = result.replaceRange(offset, offset + 1, '');
+      } else if (!result.substring(offset).startsWith(closer)) {
+        throw StateError('Formatter comma changed: $name at $offset');
+      }
+    } else if (site['kind'] == 'insert') {
+      if (result.substring(offset).startsWith(closer)) {
+        result = result.replaceRange(offset, offset, ',');
+      } else if (!result.substring(offset).startsWith(',$closer')) {
+        throw StateError('Original comma changed: $name at $offset');
+      }
+    } else {
+      throw StateError('Unknown formatter comma kind: $name');
+    }
+  }
+  return result;
 }

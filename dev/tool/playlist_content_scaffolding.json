@@ -1,3 +1,116 @@
 {
-  "scaffolds": []
+  "scaffolds": [
+    {
+      "file": "lib/screens/playlist_content_view_screen.dart",
+      "owner": "_PlaylistContentViewScreenState",
+      "name": "_catalog",
+      "tokens": [
+        "final",
+        "_catalog",
+        "=",
+        "PlaylistContentCatalogState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/playlist_content_view_screen.dart",
+      "owner": "_PlaylistContentViewScreenState",
+      "name": "_navigation",
+      "tokens": [
+        "final",
+        "_navigation",
+        "=",
+        "PlaylistContentNavigationState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/playlist_content_view_screen.dart",
+      "owner": "_PlaylistContentViewScreenState",
+      "name": "_focus",
+      "tokens": [
+        "final",
+        "_focus",
+        "=",
+        "PlaylistContentFocusState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/playlist_content_view_screen.dart",
+      "owner": "_PlaylistContentViewScreenState",
+      "name": "_series",
+      "tokens": [
+        "final",
+        "_series",
+        "=",
+        "PlaylistContentSeriesState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/playlist_content_view_screen.dart",
+      "owner": "_PlaylistContentViewScreenState",
+      "name": "_scroll",
+      "tokens": [
+        "final",
+        "_scroll",
+        "=",
+        "PlaylistContentScrollState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/playlist_content_view_screen.dart",
+      "owner": "_PlaylistContentViewScreenState",
+      "name": "_ott",
+      "tokens": [
+        "final",
+        "_ott",
+        "=",
+        "PlaylistContentOttState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/playlist_content_view_screen.dart",
+      "owner": "_PlaylistContentViewScreenState",
+      "name": "_search",
+      "tokens": [
+        "final",
+        "_search",
+        "=",
+        "PlaylistContentSearchState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/playlist_content_view_screen.dart",
+      "owner": "_PlaylistContentViewScreenState",
+      "name": "_episode",
+      "tokens": [
+        "final",
+        "_episode",
+        "=",
+        "PlaylistContentEpisodeState",
+        "(",
+        ")",
+        ";"
+      ]
+    }
+  ]
 }

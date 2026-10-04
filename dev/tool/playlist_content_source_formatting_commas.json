@@ -1,0 +1,62 @@
+{
+  "_PlaylistContentViewScreenState._buildWebDavFileTree": [
+    {
+      "offset": 859,
+      "kind": "insert",
+      "closer": ")",
+      "prefix_sha256": "4eae73cf3354cc17aa54ffa5236389a3c767d3b6c6a357995aa63a738d6719f4"
+    }
+  ],
+  "_PlaylistContentViewScreenState._applyViewMode": [
+    {
+      "offset": 921,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "afaaed78a2917f05c294a74dcc3b7f50e059a318c54cc9b5bfa7ae6b47611542"
+    },
+    {
+      "offset": 1026,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "48acbdebcdd782606f56ca93c7b5f6be14d203fdc75dfa54ce268f3144690c60"
+    }
+  ],
+  "_PlaylistContentViewScreenState._performSearch": [
+    {
+      "offset": 482,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "d096589a2a2cc41ed43d90325dded2f639a9b47d2e664b79fc2c610ac551a7c2"
+    }
+  ],
+  "_PlaylistContentViewScreenState._buildOTTView": [
+    {
+      "offset": 1198,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "0fcd9023bbdf46bddee6c5140b4e898eb8a8d1aa540612face6338d30773efcc"
+    }
+  ],
+  "_PlaylistContentViewScreenState._showFixMetadataDialog": [
+    {
+      "offset": 292,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "b9c1da98279be78e7451de2ae2c65f50b7cba1da808dca8ae2d48a32ccc4f723"
+    },
+    {
+      "offset": 917,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "dcba7f06dc44fcd3dde8c35a9a6df8178b15141537883a711631a6d43679c102"
+    }
+  ],
+  "_PlaylistContentViewScreenState._buildEpisodeCard": [
+    {
+      "offset": 500,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "3782899af874e2fd1485a22be6b739236a189adbf824135649f0e6e5547f4c22"
+    }
+  ]
+}

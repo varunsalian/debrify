@@ -700,6 +700,26 @@ identities against the observed branch baselines and approved additions.
   loading/actions/layout and composition remain until their named steps.
   Evidence `playlist_content/step1-*` passes against latest `base4`: 172 focused/source/shape identities, all six manifest self-tests, exact analyzer comparison, CI format/allowlist, all 17 warning occurrences, architecture/size and storage checks. No new strict-lint infos; original diagnostics are retained.
 
+- Step 2: 29 original fields now live in eight fresh route-owned state/resource
+  records. All production reads/writes and the accessor use the same objects;
+  original types/defaults and resource expressions remain unchanged. State
+  retains complete lifecycle bodies and cleanup order. Each field binding is
+  reviewed in the checklist before pinning the eight owner declarations.
+  The facade ratchet is 3,896 lines. Evidence `step2-*` versus `base4` passes: 172 focused/source/shape identities; all six manifest self-tests; CI format/allowlist, all 17 warnings, architecture/size and storage checks. Analyzer has no additions and only the documented private-field info removal. The final source reader again passes 26 original-checkpoint guards after its two string-composition lint fixes; no application/checker inputs changed in that final fix.
+
+- Step 2 conservative representation decisions: field documentation links
+  name the actual declaring record class. The newly wrapped AllDebrid link-index
+  `if` receives braces only around its unchanged `continue;`, with its complete
+  raw prefix pinned at the manifest entry. Body fixtures/assertions remain
+  frozen. Optional formatter commas are adapted by exact UTF-16 positions and
+  full-prefix SHA-256 hashes after the AST verifier proves token parity;
+  string-literal comma changes are rejected. The updated source reader passes
+  all 26 guards on original 6e23a3c5, as well as current source. The lone removed
+  `prefer_final_fields` info is the former private `_folderPath`: its public
+  owner field keeps the original mutable type/default, so that private-field
+  recommendation no longer applies. All 17 warnings remain required.
+  Initial failed source/lint evidence is preserved under `step2-attempt1-*`.
+
 
 ## Found, not fixed
 

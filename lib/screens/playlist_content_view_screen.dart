@@ -3,7 +3,14 @@ import 'package:debrify/features/playlist_content/application/playlist_content_f
 import 'package:debrify/features/playlist_content/application/playlist_content_formatting.dart';
 import 'package:debrify/features/playlist_content/application/playlist_content_sort_policy.dart';
 import 'package:debrify/features/playlist_content/models/playlist_content_search_result.dart';
-import 'package:debrify/models/alldebrid_file.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_catalog_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_focus_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_navigation_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_ott_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_scroll_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_search_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_state.dart';
 import 'package:debrify/models/playlist_view_mode.dart';
 import 'package:debrify/models/rd_file_node.dart';
 import 'package:debrify/models/series_playlist.dart';
@@ -67,88 +74,14 @@ class PlaylistContentViewScreen extends StatefulWidget {
 }
 
 class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
-  bool _isLoading = true;
-
-  String? _errorMessage;
-
-  // Current navigation state
-  List<String> _folderPath = [];
-
-  // Path segments for breadcrumbs
-  RDFileNode? _rootContent;
-
-  // Root content tree
-  List<RDFileNode>? _currentViewNodes;
-
-  // Current folder's visible nodes (after view mode transformation)
-  // AllDebrid: files in the order used to build the tree, so a node's linkIndex
-  // maps to its locked link (parallels Real-Debrid's links[] array).
-  List<AllDebridFile> _allDebridFiles = [];
-
-  // View mode state
-  FolderViewMode _currentViewMode = FolderViewMode.raw;
-
-  // Focus management for TV navigation
-  final FocusNode _viewModeDropdownFocusNode = FocusNode(
-    debugLabel: 'playlist-view-mode-dropdown',
-  );
-
-  final FocusNode _backButtonFocusNode = FocusNode(
-    debugLabel: 'playlist-back-button',
-  );
-
-  // Progress tracking cache
-  Map<String, Map<String, dynamic>> _fileProgressCache = {};
-
-  // OTT View state
-  SeriesPlaylist? _seriesPlaylist;
-
-  int _selectedSeasonNumber = 1;
-
-  bool _isLoadingSeriesMetadata = false;
-
-  // Auto-scroll state
-  final ScrollController _episodeListScrollController = ScrollController();
-
-  int? _targetEpisodeIndex;
-
-  // Episode to scroll to after list is built
-  Timer? _scrollRetryTimer;
-
-  // Timer for scroll retry to prevent memory leaks
-  bool _isScrollScheduled = false;
-
-  // Flag to prevent duplicate scroll scheduling
-  // OTT view auto-switch timer (for non-series content)
-  Timer? _ottViewAutoSwitchTimer;
-
-  // Search state (for Raw and Sort A-Z modes)
-  bool _isSearchActive = false;
-
-  final TextEditingController _searchController = TextEditingController();
-
-  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'playlist-search');
-
-  final FocusNode _searchButtonFocusNode = FocusNode(
-    debugLabel: 'playlist-search-button',
-  );
-
-  final FocusNode _searchClearFocusNode = FocusNode(
-    debugLabel: 'playlist-search-clear',
-  );
-
-  List<PlaylistContentSearchResult> _searchResults = [];
-
-  // Long-press state for episode cards (Android TV D-pad)
-  Timer? _episodeLongPressTimer;
-
-  bool _episodeLongPressTriggered = false;
-
-  DateTime? _lastEpisodeLongPressTime;
-
-  bool _episodeKeyDownReceived = false;
-
-  bool _isAndroidTv = false;
+  final _catalog = PlaylistContentCatalogState();
+  final _navigation = PlaylistContentNavigationState();
+  final _focus = PlaylistContentFocusState();
+  final _series = PlaylistContentSeriesState();
+  final _scroll = PlaylistContentScrollState();
+  final _ott = PlaylistContentOttState();
+  final _search = PlaylistContentSearchState();
+  final _episode = PlaylistContentEpisodeState();
 
   @override
   void initState() {
@@ -171,7 +104,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     // Parse series playlist BEFORE applying view mode
     // This ensures _seriesPlaylist is available when _applyViewMode() checks it
-    if (_rootContent != null) {
+    if (_catalog.rootContent != null) {
       await _parseSeriesPlaylist();
 
       // Auto-set Series View for detected series (only if no saved preference exists)
@@ -179,14 +112,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           await PlaylistPreferencesStorage.getPlaylistItemViewMode(
             widget.playlistItem,
           );
-      if (_seriesPlaylist?.isSeries == true && savedViewMode == null) {
+      if (_series.seriesPlaylist?.isSeries == true && savedViewMode == null) {
         setState(() {
-          _currentViewMode = FolderViewMode.seriesArrange;
+          _navigation.currentViewMode = FolderViewMode.seriesArrange;
         });
       }
 
       // THEN apply view mode (can now use _seriesPlaylist.isSeries)
-      _applyViewMode(_currentViewMode);
+      _applyViewMode(_navigation.currentViewMode);
     }
 
     // Note: Progress is now loaded within _parseSeriesPlaylist()
@@ -198,18 +131,19 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     // Unregister back navigation handler
     MainPageBridge.popRouteBackHandler(_handleBackNavigation);
 
-    _scrollRetryTimer
+    _scroll.scrollRetryTimer
         ?.cancel(); // Cancel any pending scroll retry to prevent memory leaks
-    _ottViewAutoSwitchTimer
+    _ott.ottViewAutoSwitchTimer
         ?.cancel(); // Cancel OTT view auto-switch timer to prevent memory leaks
-    _episodeLongPressTimer?.cancel(); // Cancel any pending long press timer
-    _viewModeDropdownFocusNode.dispose();
-    _backButtonFocusNode.dispose();
-    _episodeListScrollController.dispose();
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _searchButtonFocusNode.dispose();
-    _searchClearFocusNode.dispose();
+    _episode.episodeLongPressTimer
+        ?.cancel(); // Cancel any pending long press timer
+    _focus.viewModeDropdownFocusNode.dispose();
+    _focus.backButtonFocusNode.dispose();
+    _scroll.episodeListScrollController.dispose();
+    _search.searchController.dispose();
+    _focus.searchFocusNode.dispose();
+    _focus.searchButtonFocusNode.dispose();
+    _focus.searchClearFocusNode.dispose();
     super.dispose();
   }
 
@@ -219,7 +153,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       final isTv = await AndroidNativeDownloader.isTelevision();
       if (mounted) {
         setState(() {
-          _isAndroidTv = isTv;
+          _episode.isAndroidTv = isTv;
         });
       }
     } catch (e) {
@@ -231,11 +165,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   /// Returns true if handled (navigated up folder), false if at root (let Navigator.pop handle it).
   bool _handleBackNavigation() {
     // Close search first if active
-    if (_isSearchActive) {
+    if (_search.isSearchActive) {
       _toggleSearch();
       return true; // We handled the back press (closed search)
     }
-    if (_folderPath.isNotEmpty) {
+    if (_navigation.folderPath.isNotEmpty) {
       _navigateUp();
       return true; // We handled the back press (navigated up a folder)
     }
@@ -250,7 +184,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         );
     if (savedModeString != null && mounted) {
       setState(() {
-        _currentViewMode = _viewModeFromString(savedModeString);
+        _navigation.currentViewMode = _viewModeFromString(savedModeString);
       });
     }
   }
@@ -328,19 +262,19 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
 
       setState(() {
-        _fileProgressCache = episodeProgress;
+        _series.fileProgressCache = episodeProgress;
       });
     } catch (e) {
       print('❌ Error loading progress data: $e');
-      _fileProgressCache = {};
+      _series.fileProgressCache = {};
     }
   }
 
   /// Load content from provider
   Future<void> _loadContent() async {
     setState(() {
-      _isLoading = true;
-      _errorMessage = null;
+      _catalog.isLoading = true;
+      _catalog.errorMessage = null;
     });
 
     try {
@@ -367,12 +301,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     } catch (e) {
       print('Error loading content: $e');
       setState(() {
-        _errorMessage = 'Failed to load content: ${e.toString()}';
+        _catalog.errorMessage = 'Failed to load content: ${e.toString()}';
       });
     } finally {
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _catalog.isLoading = false;
         });
       }
     }
@@ -398,7 +332,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     // Use existing RDFolderTreeBuilder utility
-    _rootContent = RDFolderTreeBuilder.buildTree(
+    _catalog.rootContent = RDFolderTreeBuilder.buildTree(
       allFiles.cast<Map<String, dynamic>>(),
     );
   }
@@ -424,12 +358,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       throw Exception('No files found in magnet');
     }
 
-    _allDebridFiles = result.files;
+    _catalog.allDebridFiles = result.files;
     // Map AllDebrid files to RD-style file maps; linkIndex is assigned in this
     // same order by the tree builder, so it indexes back into _allDebridFiles.
     final fileMaps = <Map<String, dynamic>>[];
-    for (int i = 0; i < _allDebridFiles.length; i++) {
-      final f = _allDebridFiles[i];
+    for (int i = 0; i < _catalog.allDebridFiles.length; i++) {
+      final f = _catalog.allDebridFiles[i];
       fileMaps.add({
         'id': i,
         'path': f.path.startsWith('/') ? f.path : '/${f.path}',
@@ -437,7 +371,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         'selected': 1,
       });
     }
-    _rootContent = RDFolderTreeBuilder.buildTree(fileMaps);
+    _catalog.rootContent = RDFolderTreeBuilder.buildTree(fileMaps);
   }
 
   /// Load Torbox content
@@ -466,7 +400,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     // Use existing TorboxFolderTreeBuilder utility which accepts TorboxFile objects
-    _rootContent = TorboxFolderTreeBuilder.buildTree(allFiles);
+    _catalog.rootContent = TorboxFolderTreeBuilder.buildTree(allFiles);
   }
 
   /// Load PikPak content
@@ -476,13 +410,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     if (pikpakFileId != null) {
       // Preferred: Fetch fresh folder structure from PikPak
-      _rootContent = await _buildPikPakFolderTree(pikpakFileId);
+      _catalog.rootContent = await _buildPikPakFolderTree(pikpakFileId);
     } else {
       // Fallback: Use cached files (for old playlist items without pikpakFileId)
       final cachedFiles = widget.playlistItem['pikpakFiles'] as List?;
       if (cachedFiles != null && cachedFiles.isNotEmpty) {
         final files = cachedFiles.cast<Map<String, dynamic>>();
-        _rootContent = buildPikPakFileTree(files);
+        _catalog.rootContent = buildPikPakFileTree(files);
       } else {
         throw Exception(
           'No PikPak file data found. Please remove and re-add this item to playlist.',
@@ -573,13 +507,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // file metadata (each node carries its cloud item id for re-resolution).
       final filesRaw = widget.playlistItem['premiumizeFiles'];
       if (filesRaw is List && filesRaw.isNotEmpty) {
-        _rootContent = buildPremiumizeCloudFileTree(filesRaw);
+        _catalog.rootContent = buildPremiumizeCloudFileTree(filesRaw);
         return;
       }
       // Single cloud item: build a one-node tree from its metadata.
       final singleFile = widget.playlistItem['premiumizeFile'];
       if (singleFile is Map) {
-        _rootContent = buildPremiumizeCloudFileTree([singleFile]);
+        _catalog.rootContent = buildPremiumizeCloudFileTree([singleFile]);
         return;
       }
       throw Exception('No Premiumize torrent hash found');
@@ -595,7 +529,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       throw Exception('No files found in torrent');
     }
 
-    _rootContent = buildPremiumizeFileTree(files);
+    _catalog.rootContent = buildPremiumizeFileTree(files);
   }
 
   /// Load WebDAV content from the file metadata stored in the playlist item.
@@ -629,7 +563,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       );
     }
 
-    _rootContent = buildWebDavFileTree(
+    _catalog.rootContent = buildWebDavFileTree(
       files,
       rootPath: (widget.playlistItem['webdavFolderPath'] ?? '').toString(),
     );
@@ -637,21 +571,21 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Apply view mode transformation
   void _applyViewMode(FolderViewMode mode) {
-    if (_rootContent == null) return;
+    if (_catalog.rootContent == null) return;
 
     setState(() {
-      _currentViewMode = mode;
+      _navigation.currentViewMode = mode;
 
       // Close search when switching to Series Arrange mode
-      if (mode == FolderViewMode.seriesArrange && _isSearchActive) {
-        _isSearchActive = false;
-        _searchController.clear();
-        _searchResults.clear();
+      if (mode == FolderViewMode.seriesArrange && _search.isSearchActive) {
+        _search.isSearchActive = false;
+        _search.searchController.clear();
+        _search.searchResults.clear();
       }
 
       // Get current folder's nodes
-      RDFileNode currentFolder = _rootContent!;
-      for (final segment in _folderPath) {
+      RDFileNode currentFolder = _catalog.rootContent!;
+      for (final segment in _navigation.folderPath) {
         // Find child folder by name
         RDFileNode? child;
         try {
@@ -663,8 +597,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           print(
             'Warning: Folder "$segment" not found in current view, resetting to root',
           );
-          _folderPath.clear();
-          currentFolder = _rootContent!;
+          _navigation.folderPath.clear();
+          currentFolder = _catalog.rootContent!;
           break;
         }
 
@@ -676,13 +610,17 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Apply transformation based on mode
       switch (mode) {
         case FolderViewMode.raw:
-          _currentViewNodes = currentFolder.children;
+          _navigation.currentViewNodes = currentFolder.children;
           break;
         case FolderViewMode.sortedAZ:
-          _currentViewNodes = applySortedView(currentFolder.children);
+          _navigation.currentViewNodes = applySortedView(
+            currentFolder.children,
+          );
           break;
         case FolderViewMode.seriesArrange:
-          _currentViewNodes = _applySeriesArrangeView(currentFolder.children);
+          _navigation.currentViewNodes = _applySeriesArrangeView(
+            currentFolder.children,
+          );
           break;
       }
     });
@@ -704,7 +642,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   /// 3. Sorts folders by their top-level folder name (numerically aware, then alphabetically)
   /// 4. Rebuilds the list with sorted folders containing sorted files
   void _applySortedPlaylistOrder(List<RDFileNode> videoFiles) {
-    if (_currentViewMode != FolderViewMode.sortedAZ) {
+    if (_navigation.currentViewMode != FolderViewMode.sortedAZ) {
       return; // Only apply sorting in sortedAZ mode
     }
 
@@ -820,7 +758,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     // Use the already-parsed _seriesPlaylist instead of re-parsing filenames
     // This is more accurate (considers TVMaze mappings) and faster
-    if (_seriesPlaylist == null || !_seriesPlaylist!.isSeries) {
+    if (_series.seriesPlaylist == null || !_series.seriesPlaylist!.isSeries) {
       return applySortedView(nodes);
     }
 
@@ -858,29 +796,29 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     if (!folder.isFolder) return;
 
     setState(() {
-      _folderPath.add(folder.name);
+      _navigation.folderPath.add(folder.name);
     });
 
-    _applyViewMode(_currentViewMode);
+    _applyViewMode(_navigation.currentViewMode);
   }
 
   /// Navigate up one level
   void _navigateUp() {
-    if (_folderPath.isEmpty) {
+    if (_navigation.folderPath.isEmpty) {
       Navigator.of(context).pop();
       return;
     }
 
     setState(() {
-      _folderPath.removeLast();
+      _navigation.folderPath.removeLast();
     });
 
-    _applyViewMode(_currentViewMode);
+    _applyViewMode(_navigation.currentViewMode);
   }
 
   /// Play a file with full playlist support
   Future<void> _playFile(RDFileNode file) async {
-    if (file.isFolder || _rootContent == null) return;
+    if (file.isFolder || _catalog.rootContent == null) return;
 
     try {
       // Show loading dialog
@@ -903,7 +841,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       );
 
       // Get all video files from the entire tree
-      final allFiles = _rootContent!.getAllFiles();
+      final allFiles = _catalog.rootContent!.getAllFiles();
       final videoFiles = allFiles
           .where((node) => FileUtils.isVideoFile(node.name))
           .toList();
@@ -977,14 +915,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   /// Toggle search mode on/off
   void _toggleSearch() {
     setState(() {
-      _isSearchActive = !_isSearchActive;
-      if (!_isSearchActive) {
-        _searchController.clear();
-        _searchResults.clear();
+      _search.isSearchActive = !_search.isSearchActive;
+      if (!_search.isSearchActive) {
+        _search.searchController.clear();
+        _search.searchResults.clear();
       } else {
         // Focus the search field when activating
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _searchFocusNode.requestFocus();
+          _focus.searchFocusNode.requestFocus();
         });
       }
     });
@@ -992,8 +930,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Perform deep search across all files
   void _performSearch(String query) {
-    if (_rootContent == null || query.isEmpty) {
-      setState(() => _searchResults = []);
+    if (_catalog.rootContent == null || query.isEmpty) {
+      setState(() => _search.searchResults = []);
       return;
     }
 
@@ -1019,31 +957,31 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     // Start search from root's children (skip root name itself)
-    for (final child in _rootContent!.children) {
+    for (final child in _catalog.rootContent!.children) {
       searchNode(child, []);
     }
 
-    setState(() => _searchResults = results);
+    setState(() => _search.searchResults = results);
   }
 
   /// Build the search bar widget
   Widget _buildSearchBar() {
     final app = AppThemeScope.of(context);
-    final hasText = _searchController.text.isNotEmpty;
+    final hasText = _search.searchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Row(
         children: [
           Expanded(
             child: TvTextField(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
+              controller: _search.searchController,
+              focusNode: _focus.searchFocusNode,
               textInputAction: TextInputAction.search,
               // D-pad exits for Android TV (formerly a Focus/onKeyEvent wrapper)
-              onUpArrow: () => _searchFocusNode.unfocus(),
-              onDownArrow: () => _searchFocusNode.unfocus(),
+              onUpArrow: () => _focus.searchFocusNode.unfocus(),
+              onDownArrow: () => _focus.searchFocusNode.unfocus(),
               onRightArrow: hasText
-                  ? () => _searchClearFocusNode.requestFocus()
+                  ? () => _focus.searchClearFocusNode.requestFocus()
                   : null,
               // The shared TV shell/keyboard chrome follows settings.accent,
               // as Downloads established. The panel's ground and ink are the
@@ -1072,7 +1010,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               onChanged: _performSearch,
               onSubmitted: (_) {
                 // Unfocus TextField when user presses search/enter on TV keyboard
-                _searchFocusNode.unfocus();
+                _focus.searchFocusNode.unfocus();
               },
             ),
           ),
@@ -1081,7 +1019,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             Padding(
               padding: const EdgeInsets.only(left: 8),
               child: Focus(
-                focusNode: _searchClearFocusNode,
+                focusNode: _focus.searchClearFocusNode,
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
@@ -1089,16 +1027,16 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   // Select/Enter: clear search
                   if (isActivateKey(key)) {
                     setState(() {
-                      _searchController.clear();
-                      _searchResults.clear();
+                      _search.searchController.clear();
+                      _search.searchResults.clear();
                     });
-                    _searchFocusNode.requestFocus();
+                    _focus.searchFocusNode.requestFocus();
                     return KeyEventResult.handled;
                   }
 
                   // Arrow Left: go back to TextField
                   if (key == LogicalKeyboardKey.arrowLeft) {
-                    _searchFocusNode.requestFocus();
+                    _focus.searchFocusNode.requestFocus();
                     return KeyEventResult.handled;
                   }
 
@@ -1119,10 +1057,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         icon: const Icon(Icons.clear, color: Colors.grey),
                         onPressed: () {
                           setState(() {
-                            _searchController.clear();
-                            _searchResults.clear();
+                            _search.searchController.clear();
+                            _search.searchResults.clear();
                           });
-                          _searchFocusNode.requestFocus();
+                          _focus.searchFocusNode.requestFocus();
                         },
                       ),
                     );
@@ -1137,7 +1075,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Build the search results list
   Widget _buildSearchResults() {
-    if (_searchController.text.isEmpty) {
+    if (_search.searchController.text.isEmpty) {
       return const Center(
         child: Text(
           'Type to search all files',
@@ -1146,7 +1084,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       );
     }
 
-    if (_searchResults.isEmpty) {
+    if (_search.searchResults.isEmpty) {
       return const Center(
         child: Text('No files found', style: TextStyle(color: Colors.grey)),
       );
@@ -1154,9 +1092,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _searchResults.length,
+      itemCount: _search.searchResults.length,
       itemBuilder: (context, index) {
-        final result = _searchResults[index];
+        final result = _search.searchResults[index];
         return _buildSearchResultCard(result);
       },
     );
@@ -1287,18 +1225,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          focusNode: _backButtonFocusNode,
+          focusNode: _focus.backButtonFocusNode,
           icon: const Icon(Icons.arrow_back),
           onPressed: _navigateUp,
         ),
         actions: [
           // Search button (only for Raw and Sort A-Z modes)
-          if (_currentViewMode != FolderViewMode.seriesArrange)
+          if (_navigation.currentViewMode != FolderViewMode.seriesArrange)
             IconButton(
-              focusNode: _searchButtonFocusNode,
-              icon: Icon(_isSearchActive ? Icons.close : Icons.search),
+              focusNode: _focus.searchButtonFocusNode,
+              icon: Icon(_search.isSearchActive ? Icons.close : Icons.search),
               onPressed: _toggleSearch,
-              tooltip: _isSearchActive ? 'Close search' : 'Search files',
+              tooltip: _search.isSearchActive ? 'Close search' : 'Search files',
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -1310,21 +1248,23 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       body: Column(
         children: [
           // View mode dropdown
-          if (!_isLoading && _errorMessage == null)
+          if (!_catalog.isLoading && _catalog.errorMessage == null)
             ViewModeDropdown(
-              currentMode: _currentViewMode,
+              currentMode: _navigation.currentViewMode,
               onModeChanged: _applyViewMode,
-              focusNode: _viewModeDropdownFocusNode,
+              focusNode: _focus.viewModeDropdownFocusNode,
             ),
 
           // Search bar (only for Raw and Sort A-Z modes when active)
-          if (_isSearchActive &&
-              _currentViewMode != FolderViewMode.seriesArrange)
+          if (_search.isSearchActive &&
+              _navigation.currentViewMode != FolderViewMode.seriesArrange)
             _buildSearchBar(),
 
           // Content area
           Expanded(
-            child: _isSearchActive ? _buildSearchResults() : _buildContent(),
+            child: _search.isSearchActive
+                ? _buildSearchResults()
+                : _buildContent(),
           ),
         ],
       ),
@@ -1332,11 +1272,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   }
 
   Widget _buildContent() {
-    if (_isLoading) {
+    if (_catalog.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_errorMessage != null) {
+    if (_catalog.errorMessage != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -1346,7 +1286,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               const Icon(Icons.error_outline, size: 48, color: Colors.red),
               const SizedBox(height: 16),
               Text(
-                _errorMessage!,
+                _catalog.errorMessage!,
                 style: const TextStyle(color: Colors.red),
                 textAlign: TextAlign.center,
               ),
@@ -1361,21 +1301,22 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       );
     }
 
-    if (_currentViewNodes == null || _currentViewNodes!.isEmpty) {
+    if (_navigation.currentViewNodes == null ||
+        _navigation.currentViewNodes!.isEmpty) {
       return const Center(child: Text('No files found'));
     }
 
     // For Series Arrange mode, show OTT-style view
-    if (_currentViewMode == FolderViewMode.seriesArrange) {
+    if (_navigation.currentViewMode == FolderViewMode.seriesArrange) {
       return _buildOTTView();
     }
 
     // For Raw and Sort modes, show file browser
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _currentViewNodes!.length,
+      itemCount: _navigation.currentViewNodes!.length,
       itemBuilder: (context, index) {
-        final node = _currentViewNodes![index];
+        final node = _navigation.currentViewNodes![index];
         return _buildFileCard(node);
       },
     );
@@ -1561,7 +1502,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final seriesInfo = SeriesParser.parseFilename(file.name);
     if (seriesInfo.season != null && seriesInfo.episode != null) {
       final key = '${seriesInfo.season}_${seriesInfo.episode}';
-      final progressData = _fileProgressCache[key];
+      final progressData = _series.fileProgressCache[key];
       if (progressData != null) {
         return progressData;
       }
@@ -1569,8 +1510,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     // Fallback: For files without parseable season/episode, use sequential indexing
     // This is for non-series content like movies or special features
-    if (_rootContent != null) {
-      final allFiles = _rootContent!.getAllFiles();
+    if (_catalog.rootContent != null) {
+      final allFiles = _catalog.rootContent!.getAllFiles();
       final videoFiles = allFiles
           .where((node) => FileUtils.isVideoFile(node.name))
           .toList();
@@ -1586,33 +1527,34 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       if (fileIndex >= 0) {
         final key = '0_${fileIndex + 1}'; // season 0, 1-based episode index
-        return _fileProgressCache[key];
+        return _series.fileProgressCache[key];
       }
     }
 
     // Final fallback: try using filename as key
-    return _fileProgressCache[file.name];
+    return _series.fileProgressCache[file.name];
   }
 
   /// Build OTT-style view for Series Arrange mode
   Widget _buildOTTView() {
     // Parse series playlist if not already done
-    if (_seriesPlaylist == null && _rootContent != null) {
+    if (_series.seriesPlaylist == null && _catalog.rootContent != null) {
       _parseSeriesPlaylist();
     }
 
-    if (_seriesPlaylist == null) {
+    if (_series.seriesPlaylist == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (!_seriesPlaylist!.isSeries) {
+    if (!_series.seriesPlaylist!.isSeries) {
       // Auto-switch to Sort (A-Z) view after a brief delay
       // Cancel any pending timer to prevent duplicates
-      _ottViewAutoSwitchTimer?.cancel();
-      _ottViewAutoSwitchTimer = Timer(const Duration(seconds: 2), () {
-        if (mounted && _currentViewMode == FolderViewMode.seriesArrange) {
+      _ott.ottViewAutoSwitchTimer?.cancel();
+      _ott.ottViewAutoSwitchTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted &&
+            _navigation.currentViewMode == FolderViewMode.seriesArrange) {
           setState(() {
-            _currentViewMode = FolderViewMode.sortedAZ;
+            _navigation.currentViewMode = FolderViewMode.sortedAZ;
             _applyViewMode(FolderViewMode.sortedAZ);
           });
         }
@@ -1651,13 +1593,16 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       );
     }
 
-    final season = _seriesPlaylist!.getSeason(_selectedSeasonNumber);
+    final season = _series.seriesPlaylist!.getSeason(
+      _series.selectedSeasonNumber,
+    );
     if (season == null) {
       // Default to first available season
-      if (_seriesPlaylist!.seasons.isNotEmpty) {
+      if (_series.seriesPlaylist!.seasons.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           setState(() {
-            _selectedSeasonNumber = _seriesPlaylist!.seasons.first.seasonNumber;
+            _series.selectedSeasonNumber =
+                _series.seriesPlaylist!.seasons.first.seasonNumber;
           });
         });
       }
@@ -1670,7 +1615,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         _buildSeasonSelector(),
 
         // Loading indicator for metadata
-        if (_isLoadingSeriesMetadata) const LinearProgressIndicator(),
+        if (_series.isLoadingSeriesMetadata) const LinearProgressIndicator(),
 
         // Episode list
         Expanded(child: _buildEpisodeList(season)),
@@ -1681,13 +1626,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   /// Determine initial season based on most recently watched episode
   /// Returns the season number to start with (defaults to 1 if no progress)
   int _determineInitialSeason() {
-    if (_fileProgressCache.isEmpty) return 1;
+    if (_series.fileProgressCache.isEmpty) return 1;
 
     // Find most recently watched episode
     String? mostRecentKey;
     int? mostRecentTimestamp;
 
-    for (var entry in _fileProgressCache.entries) {
+    for (var entry in _series.fileProgressCache.entries) {
       final updatedAt = entry.value['updatedAt'];
       if (updatedAt != null) {
         try {
@@ -1751,13 +1696,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   /// Determine initial episode index to scroll to within the selected season
   /// Returns the episode index (0-based) or null if no specific episode to scroll to
   int? _determineInitialEpisodeIndex(SeriesSeason season) {
-    if (_fileProgressCache.isEmpty) return null;
+    if (_series.fileProgressCache.isEmpty) return null;
 
     // Find most recently watched episode in this season
     int? mostRecentTimestamp;
     int? mostRecentEpisodeNum;
 
-    for (var entry in _fileProgressCache.entries) {
+    for (var entry in _series.fileProgressCache.entries) {
       final key = entry.key;
       final parts = key.split('_');
 
@@ -1837,7 +1782,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Get the series/collection title from the playlist item
       // IMPORTANT: Use same logic as _parseSeriesPlaylist() for consistency
       final String? seriesTitle =
-          _seriesPlaylist?.seriesTitle ??
+          _series.seriesPlaylist?.seriesTitle ??
           widget.playlistItem['title'] as String?;
 
       if (seriesTitle != null && seriesTitle.isNotEmpty) {
@@ -1854,7 +1799,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
 
         setState(() {
-          _fileProgressCache = episodeProgress;
+          _series.fileProgressCache = episodeProgress;
         });
       }
     } catch (e) {
@@ -1865,7 +1810,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Parse series playlist from current view nodes
   Future<void> _saveImdbIdToPlaylist({bool force = false}) async {
-    final imdbId = _seriesPlaylist?.imdbId;
+    final imdbId = _series.seriesPlaylist?.imdbId;
     if (imdbId == null || !imdbId.startsWith('tt')) return;
     if (!force && (widget.playlistItem?['imdbId'] as String?) != null) return;
 
@@ -1901,11 +1846,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   }
 
   Future<void> _parseSeriesPlaylist() async {
-    if (_rootContent == null) return;
+    if (_catalog.rootContent == null) return;
 
     try {
       // Get ALL video files recursively from the entire content tree
-      final allFiles = _rootContent!.getAllFiles();
+      final allFiles = _catalog.rootContent!.getAllFiles();
       final videoFiles = allFiles
           .where((node) => FileUtils.isVideoFile(node.name))
           .toList();
@@ -1933,7 +1878,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           widget.playlistItem['seriesTitle'] as String? ??
           widget.playlistItem['title'] as String?;
 
-      _seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
+      _series.seriesPlaylist = SeriesPlaylist.fromPlaylistEntries(
         entries,
         collectionTitle: collectionTitle,
       );
@@ -1941,24 +1886,25 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // Reload progress with the clean extracted series/collection title!
       // This works for both series and movie collections
       final String? titleForProgress =
-          _seriesPlaylist!.seriesTitle ??
+          _series.seriesPlaylist!.seriesTitle ??
           widget.playlistItem['title'] as String?;
 
       if (titleForProgress != null && titleForProgress.isNotEmpty) {
         print('🔄 Reloading progress with clean title: $titleForProgress');
-        print('📌 isSeries: ${_seriesPlaylist!.isSeries}');
+        print('📌 isSeries: ${_series.seriesPlaylist!.isSeries}');
         final episodeProgress = await EpisodeProgressStorage.getEpisodeProgress(
           seriesTitle: titleForProgress,
         );
         print('📊 Loaded ${episodeProgress.length} episodes with progress');
         print('🔑 Progress keys: ${episodeProgress.keys.toList()}');
-        _fileProgressCache = episodeProgress;
+        _series.fileProgressCache = episodeProgress;
 
         // Determine initial season based on most recent viewing history
-        if (_seriesPlaylist!.isSeries && _fileProgressCache.isNotEmpty) {
+        if (_series.seriesPlaylist!.isSeries &&
+            _series.fileProgressCache.isNotEmpty) {
           final initialSeason = _determineInitialSeason();
           print('🎬 Setting initial season to: $initialSeason');
-          _selectedSeasonNumber = initialSeason;
+          _series.selectedSeasonNumber = initialSeason;
         }
       }
 
@@ -1976,13 +1922,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       if (showLoading) {
         setState(() {
-          _isLoadingSeriesMetadata = true;
+          _series.isLoadingSeriesMetadata = true;
         });
       }
 
       // Fetch TVMaze metadata asynchronously
-      if (_seriesPlaylist!.isSeries) {
-        _seriesPlaylist!
+      if (_series.seriesPlaylist!.isSeries) {
+        _series.seriesPlaylist!
             .fetchEpisodeInfo(
               playlistItem: widget.playlistItem,
               imdbId: widget.playlistItem?['imdbId'] as String?,
@@ -1992,7 +1938,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               await _saveDetectedSeriesPosterToPlaylist();
               if (mounted) {
                 setState(() {
-                  _isLoadingSeriesMetadata = false;
+                  _series.isLoadingSeriesMetadata = false;
                 });
               }
             })
@@ -2000,7 +1946,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               print('Failed to fetch episode metadata: $e');
               if (mounted) {
                 setState(() {
-                  _isLoadingSeriesMetadata = false;
+                  _series.isLoadingSeriesMetadata = false;
                 });
               }
             });
@@ -2008,7 +1954,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     } catch (e) {
       print('Failed to parse series playlist: $e');
       setState(() {
-        _isLoadingSeriesMetadata = false;
+        _series.isLoadingSeriesMetadata = false;
       });
     }
   }
@@ -2019,8 +1965,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final selectedShow = await showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
-      builder: (context) =>
-          TVMazeSearchDialog(initialQuery: _seriesPlaylist?.seriesTitle ?? ''),
+      builder: (context) => TVMazeSearchDialog(
+        initialQuery: _series.seriesPlaylist?.seriesTitle ?? '',
+      ),
     );
 
     if (selectedShow != null && mounted) {
@@ -2039,9 +1986,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // 3. Clear series name cache (existing logic)
       await EpisodeInfoService.clearSeriesCache(
-        _seriesPlaylist?.seriesTitle ?? '',
+        _series.seriesPlaylist?.seriesTitle ?? '',
       );
-      await TVMazeService.clearSeriesCache(_seriesPlaylist?.seriesTitle ?? '');
+      await TVMazeService.clearSeriesCache(
+        _series.seriesPlaylist?.seriesTitle ?? '',
+      );
 
       // 4. Save new mapping
       await TvMazeMappingStorage.saveTVMazeSeriesMapping(
@@ -2066,20 +2015,22 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
 
       // Reload episode info with the new show ID
-      if (_seriesPlaylist != null && _seriesPlaylist!.isSeries && mounted) {
+      if (_series.seriesPlaylist != null &&
+          _series.seriesPlaylist!.isSeries &&
+          mounted) {
         // Clear stale tvmazeShowId so fetchEpisodeInfo reads the new mapping.
         // The name goes with it: fetchEpisodeInfo rewrites it on success, but
         // a failed lookup must not leave the OLD show's name captioning the
         // player dock.
-        _seriesPlaylist!.tvmazeShowId = null;
-        _seriesPlaylist!.tvmazeShowName = null;
-        _seriesPlaylist!.showPosterUrl = null;
+        _series.seriesPlaylist!.tvmazeShowId = null;
+        _series.seriesPlaylist!.tvmazeShowName = null;
+        _series.seriesPlaylist!.showPosterUrl = null;
 
         setState(() {
-          _isLoadingSeriesMetadata = true;
+          _series.isLoadingSeriesMetadata = true;
         });
 
-        _seriesPlaylist!
+        _series.seriesPlaylist!
             .fetchEpisodeInfo(
               playlistItem: widget.playlistItem,
               imdbId: widget.playlistItem?['imdbId'] as String?,
@@ -2089,7 +2040,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               await _saveDetectedSeriesPosterToPlaylist();
               if (mounted) {
                 setState(() {
-                  _isLoadingSeriesMetadata = false;
+                  _series.isLoadingSeriesMetadata = false;
                 });
               }
             })
@@ -2097,7 +2048,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               print('Failed to refresh episode metadata: $e');
               if (mounted) {
                 setState(() {
-                  _isLoadingSeriesMetadata = false;
+                  _series.isLoadingSeriesMetadata = false;
                 });
               }
             });
@@ -2106,7 +2057,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   }
 
   Future<void> _saveDetectedSeriesPosterToPlaylist() async {
-    final posterUrl = _seriesPlaylist?.showPosterUrl;
+    final posterUrl = _series.seriesPlaylist?.showPosterUrl;
     if (posterUrl == null || posterUrl.isEmpty) return;
 
     try {
@@ -2238,7 +2189,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Build season selector dropdown
   Widget _buildSeasonSelector() {
-    if (_seriesPlaylist == null) return const SizedBox.shrink();
+    if (_series.seriesPlaylist == null) return const SizedBox.shrink();
     final app = AppThemeScope.of(context);
 
     return Container(
@@ -2257,10 +2208,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       child: Row(
         children: [
           DropdownButton<int>(
-            value: _selectedSeasonNumber,
+            value: _series.selectedSeasonNumber,
             dropdownColor: app.cloud.dialogSurface,
             underline: const SizedBox.shrink(),
-            items: _seriesPlaylist!.seasons.map((season) {
+            items: _series.seriesPlaylist!.seasons.map((season) {
               return DropdownMenuItem(
                 value: season.seasonNumber,
                 child: Text(
@@ -2274,15 +2225,15 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             onChanged: (value) {
               if (value != null) {
                 // Cancel any pending scroll retry timer before season change
-                _scrollRetryTimer?.cancel();
+                _scroll.scrollRetryTimer?.cancel();
 
                 setState(() {
-                  _selectedSeasonNumber = value;
+                  _series.selectedSeasonNumber = value;
                   // Reset target episode index when season changes manually
                   // so it recalculates for the new season
-                  _targetEpisodeIndex = null;
+                  _scroll.targetEpisodeIndex = null;
                   // Reset scroll scheduled flag to allow auto-scroll in new season
-                  _isScrollScheduled = false;
+                  _scroll.isScrollScheduled = false;
                 });
               }
             },
@@ -2331,24 +2282,25 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   Widget _buildEpisodeList(SeriesSeason season) {
     // Determine which episode to scroll to (if any)
     // Use _isScrollScheduled flag to prevent duplicate scroll scheduling during rebuilds
-    if (_targetEpisodeIndex == null && !_isScrollScheduled) {
-      _targetEpisodeIndex = _determineInitialEpisodeIndex(season);
+    if (_scroll.targetEpisodeIndex == null && !_scroll.isScrollScheduled) {
+      _scroll.targetEpisodeIndex = _determineInitialEpisodeIndex(season);
 
       // Schedule auto-scroll after the list is built
       // IMPORTANT: Always schedule the callback - hasClients will be checked inside
-      if (_targetEpisodeIndex != null) {
-        _isScrollScheduled = true; // Mark as scheduled to prevent duplicates
+      if (_scroll.targetEpisodeIndex != null) {
+        _scroll.isScrollScheduled =
+            true; // Mark as scheduled to prevent duplicates
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            _scrollToEpisode(_targetEpisodeIndex!);
+            _scrollToEpisode(_scroll.targetEpisodeIndex!);
           }
-          _isScrollScheduled = false; // Reset after scroll attempt
+          _scroll.isScrollScheduled = false; // Reset after scroll attempt
         });
       }
     }
 
     return ListView.builder(
-      controller: _episodeListScrollController,
+      controller: _scroll.episodeListScrollController,
       padding: const EdgeInsets.all(16),
       itemCount: season.episodes.length,
       itemBuilder: (context, index) {
@@ -2364,15 +2316,15 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   /// Scroll to a specific episode index with animation
   void _scrollToEpisode(int episodeIndex, {int retryCount = 0}) {
     // Cancel any existing retry timer to prevent memory leaks
-    _scrollRetryTimer?.cancel();
+    _scroll.scrollRetryTimer?.cancel();
 
-    if (!_episodeListScrollController.hasClients) {
+    if (!_scroll.episodeListScrollController.hasClients) {
       // Retry up to 3 times with increasing delay
       if (retryCount < 3) {
         print(
           '⏳ ScrollController not ready yet, scheduling retry ${retryCount + 1}/3',
         );
-        _scrollRetryTimer = Timer(
+        _scroll.scrollRetryTimer = Timer(
           Duration(milliseconds: 100 * (retryCount + 1)),
           () {
             if (mounted) {
@@ -2399,7 +2351,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     // Ensure we don't scroll beyond the max extent
     final maxScrollExtent =
-        _episodeListScrollController.position.maxScrollExtent;
+        _scroll.episodeListScrollController.position.maxScrollExtent;
     final finalOffset = targetOffset > maxScrollExtent
         ? maxScrollExtent
         : targetOffset;
@@ -2409,7 +2361,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     );
 
     // Scroll to the target episode with animation
-    _episodeListScrollController.animateTo(
+    _scroll.episodeListScrollController.animateTo(
       finalOffset,
       duration: const Duration(milliseconds: 800),
       curve: Curves.easeInOut,
@@ -2428,8 +2380,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       print(
         '🔍 Looking for progress with key: $key for ${episode.displayTitle}',
       );
-      print('💾 Available keys in cache: ${_fileProgressCache.keys.toList()}');
-      final progressData = _fileProgressCache[key];
+      print(
+        '💾 Available keys in cache: ${_series.fileProgressCache.keys.toList()}',
+      );
+      final progressData = _series.fileProgressCache[key];
       if (progressData != null) {
         print('✅ Found progress data: $progressData');
         final positionMs = progressData['positionMs'] as int? ?? 0;
@@ -2462,25 +2416,25 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       onFocusChange: (focused) {
         if (!focused) {
           // Clean up long press state when losing focus
-          _episodeLongPressTimer?.cancel();
-          _episodeLongPressTriggered = false;
-          _episodeKeyDownReceived = false;
+          _episode.episodeLongPressTimer?.cancel();
+          _episode.episodeLongPressTriggered = false;
+          _episode.episodeKeyDownReceived = false;
         }
       },
       onKeyEvent: (node, event) {
         // Handle Select/Enter button press for D-pad long press detection
         if (isActivateKey(event.logicalKey)) {
           if (event is KeyDownEvent) {
-            _episodeKeyDownReceived = true;
-            _episodeLongPressTriggered = false;
+            _episode.episodeKeyDownReceived = true;
+            _episode.episodeLongPressTriggered = false;
 
             // Start timer for long press (800ms) - marks as watched
-            _episodeLongPressTimer?.cancel();
-            _episodeLongPressTimer = Timer(
+            _episode.episodeLongPressTimer?.cancel();
+            _episode.episodeLongPressTimer = Timer(
               const Duration(milliseconds: 800),
               () {
-                _episodeLongPressTriggered = true;
-                _lastEpisodeLongPressTime = DateTime.now();
+                _episode.episodeLongPressTriggered = true;
+                _episode.lastEpisodeLongPressTime = DateTime.now();
                 _toggleWatchedState(episode);
               },
             );
@@ -2490,26 +2444,27 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             // Ignore key repeat events - don't restart the timer
             return KeyEventResult.handled;
           } else if (event is KeyUpEvent) {
-            _episodeLongPressTimer?.cancel();
+            _episode.episodeLongPressTimer?.cancel();
 
             // Only process KeyUp if we received KeyDown while focused
-            if (!_episodeKeyDownReceived) {
+            if (!_episode.episodeKeyDownReceived) {
               return KeyEventResult.handled;
             }
 
             // Check if we recently triggered a long press
-            final timeSinceLongPress = _lastEpisodeLongPressTime != null
+            final timeSinceLongPress = _episode.lastEpisodeLongPressTime != null
                 ? DateTime.now()
-                      .difference(_lastEpisodeLongPressTime!)
+                      .difference(_episode.lastEpisodeLongPressTime!)
                       .inMilliseconds
                 : 999999;
 
             // Short press - play episode
-            if (!_episodeLongPressTriggered && timeSinceLongPress > 300) {
+            if (!_episode.episodeLongPressTriggered &&
+                timeSinceLongPress > 300) {
               _playEpisode(episode);
             }
-            _episodeLongPressTriggered = false;
-            _episodeKeyDownReceived = false;
+            _episode.episodeLongPressTriggered = false;
+            _episode.episodeKeyDownReceived = false;
 
             return KeyEventResult.handled;
           }
@@ -2539,8 +2494,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   ),
                 ),
                 child: InkWell(
-                  onTap: _isAndroidTv ? null : () => _playEpisode(episode),
-                  onLongPress: _isAndroidTv
+                  onTap: _episode.isAndroidTv
+                      ? null
+                      : () => _playEpisode(episode),
+                  onLongPress: _episode.isAndroidTv
                       ? null
                       : () => _toggleWatchedState(episode),
                   child: isMobile
@@ -2561,7 +2518,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 ),
               ),
               // Long press hint for Android TV (bottom-right when focused)
-              if (_isAndroidTv && isFocused)
+              if (_episode.isAndroidTv && isFocused)
                 Positioned(
                   bottom: 8,
                   right: 8,
@@ -3035,7 +2992,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Toggle the watched state of an episode
   Future<void> _toggleWatchedState(SeriesEpisode episode) async {
-    if (_seriesPlaylist == null) return;
+    if (_series.seriesPlaylist == null) return;
 
     // Cloud-playlist rows are intentionally local-only: they have file/folder
     // identity but no reliable tracker title identity. Tracker-aware catalog
@@ -3043,7 +3000,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     // Get the series title for storage
     final String? seriesTitle =
-        _seriesPlaylist!.seriesTitle ?? widget.playlistItem['title'] as String?;
+        _series.seriesPlaylist!.seriesTitle ??
+        widget.playlistItem['title'] as String?;
 
     if (seriesTitle == null || seriesTitle.isEmpty) {
       print('❌ Cannot toggle watched state: No series title available');
@@ -3054,7 +3012,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     final season = episode.seriesInfo.season ?? 1;
     final episodeNum = episode.seriesInfo.episode ?? 1;
     final imdbId =
-        _seriesPlaylist?.imdbId ?? widget.playlistItem['imdbId'] as String?;
+        _series.seriesPlaylist?.imdbId ??
+        widget.playlistItem['imdbId'] as String?;
 
     try {
       // Check current watched state
@@ -3121,7 +3080,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Play episode from OTT view with full playlist support
   Future<void> _playEpisode(SeriesEpisode episode) async {
-    if (_rootContent == null || !mounted) return;
+    if (_catalog.rootContent == null || !mounted) return;
 
     try {
       // Show loading dialog
@@ -3144,7 +3103,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       );
 
       // Get all video files from the entire tree
-      final allFiles = _rootContent!.getAllFiles();
+      final allFiles = _catalog.rootContent!.getAllFiles();
       final videoFiles = allFiles
           .where((node) => FileUtils.isVideoFile(node.name))
           .toList();
@@ -3163,7 +3122,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // - sortedAZ: Sorting changes indices, so we MUST find by filename
       // - raw/series/collection: originalIndex is still accurate (faster and more reliable)
       int startIndex = 0;
-      if (_currentViewMode == FolderViewMode.sortedAZ) {
+      if (_navigation.currentViewMode == FolderViewMode.sortedAZ) {
         // After sorting, indices change - must find by filename
         for (int i = 0; i < videoFiles.length; i++) {
           if (videoFiles[i].name == episode.filename) {
@@ -3314,7 +3273,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     final String initialVideoUrl = entries[startIndex].url;
     final String seriesTitle =
-        _seriesPlaylist?.seriesTitle ??
+        _series.seriesPlaylist?.seriesTitle ??
         widget.playlistItem['title'] as String? ??
         'Series';
 
@@ -3334,7 +3293,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         rdTorrentId: rdTorrentId,
         disableAutoResume: true,
-        viewMode: _convertToPlaylistViewMode(_currentViewMode),
+        viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
         // Pass catalog metadata for optimized TVMaze lookup
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
@@ -3344,7 +3303,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   }
 
   /// Play AllDebrid playlist. Each node's linkIndex maps to its locked link in
-  /// [_allDebridFiles] (populated by [_loadAllDebridContent]); the start file is
+  /// [PlaylistContentCatalogState.allDebridFiles] (populated by [_loadAllDebridContent]); the start file is
   /// unlocked, the rest carry their locked link for lazy unlock by the player.
   Future<void> _playAllDebridPlaylist(
     List<RDFileNode> videoFiles,
@@ -3360,8 +3319,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     for (int i = 0; i < videoFiles.length; i++) {
       final file = videoFiles[i];
       final linkIndex = file.linkIndex;
-      if (linkIndex < 0 || linkIndex >= _allDebridFiles.length) continue;
-      final lockedLink = _allDebridFiles[linkIndex].link;
+      if (linkIndex < 0 || linkIndex >= _catalog.allDebridFiles.length) {
+        continue;
+      }
+      final lockedLink = _catalog.allDebridFiles[linkIndex].link;
 
       String url = '';
       if (i == startIndex) {
@@ -3388,7 +3349,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     final String initialVideoUrl = entries[startIndex].url;
     final String seriesTitle =
-        _seriesPlaylist?.seriesTitle ??
+        _series.seriesPlaylist?.seriesTitle ??
         widget.playlistItem['title'] as String? ??
         'Series';
 
@@ -3405,7 +3366,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
-        viewMode: _convertToPlaylistViewMode(_currentViewMode),
+        viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
         suppressTraktAutoSync: true,
@@ -3488,7 +3449,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     final String initialVideoUrl = entries[startIndex].url;
     final String seriesTitle =
-        _seriesPlaylist?.seriesTitle ??
+        _series.seriesPlaylist?.seriesTitle ??
         widget.playlistItem['title'] as String? ??
         'Series';
 
@@ -3508,7 +3469,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         torboxTorrentId: torboxTorrentId.toString(),
         disableAutoResume: true,
-        viewMode: _convertToPlaylistViewMode(_currentViewMode),
+        viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
         // Pass catalog metadata for optimized TVMaze lookup
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
@@ -3593,7 +3554,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     final String initialVideoUrl = entries[startIndex].url;
     final String seriesTitle =
-        _seriesPlaylist?.seriesTitle ??
+        _series.seriesPlaylist?.seriesTitle ??
         widget.playlistItem['title'] as String? ??
         'Series';
 
@@ -3613,7 +3574,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         pikpakCollectionId: widget.playlistItem['pikpakFileId'] as String?,
         disableAutoResume: true,
-        viewMode: _convertToPlaylistViewMode(_currentViewMode),
+        viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
         // Pass catalog metadata for optimized TVMaze lookup
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
@@ -3663,7 +3624,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       }
       if (cloudEntries.isEmpty) throw Exception('No playable files found');
       final String seriesTitleCloud =
-          _seriesPlaylist?.seriesTitle ??
+          _series.seriesPlaylist?.seriesTitle ??
           widget.playlistItem['title'] as String? ??
           'Series';
       if (!mounted) return;
@@ -3678,7 +3639,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           playlist: cloudEntries,
           startIndex: startIndex,
           disableAutoResume: true,
-          viewMode: _convertToPlaylistViewMode(_currentViewMode),
+          viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
           contentImdbId: widget.playlistItem['imdbId'] as String?,
           contentType: widget.playlistItem['contentType'] as String?,
           suppressTraktAutoSync: true,
@@ -3721,7 +3682,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     final String initialVideoUrl = entries[startIndex].url;
     final String seriesTitle =
-        _seriesPlaylist?.seriesTitle ??
+        _series.seriesPlaylist?.seriesTitle ??
         widget.playlistItem['title'] as String? ??
         'Series';
 
@@ -3739,7 +3700,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
-        viewMode: _convertToPlaylistViewMode(_currentViewMode),
+        viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
         suppressTraktAutoSync: true,
@@ -3780,7 +3741,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     final seriesTitle =
-        _seriesPlaylist?.seriesTitle ??
+        _series.seriesPlaylist?.seriesTitle ??
         widget.playlistItem['title'] as String? ??
         'Series';
 
@@ -3796,7 +3757,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       playlist: entries,
       startIndex: startIndex,
       disableAutoResume: true,
-      viewMode: _convertToPlaylistViewMode(_currentViewMode),
+      viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
       httpHeaders: WebDavService.authHeaders(config),
       disableExternalPlayer: hasWebDavCredentials(config),
       webDavServerId: (widget.playlistItem['webdavServerId'] ?? config.id)
@@ -3842,35 +3803,35 @@ Map<String, Object?> playlistContentTestAccess(
 ) {
   final s = state as _PlaylistContentViewScreenState;
   return {
-    'isLoading': s._isLoading,
-    'errorMessage': s._errorMessage,
-    'folderPath': s._folderPath,
-    'rootContent': s._rootContent,
-    'currentViewNodes': s._currentViewNodes,
-    'allDebridFiles': s._allDebridFiles,
-    'currentViewMode': s._currentViewMode,
-    'viewModeDropdownFocusNode': s._viewModeDropdownFocusNode,
-    'backButtonFocusNode': s._backButtonFocusNode,
-    'fileProgressCache': s._fileProgressCache,
-    'seriesPlaylist': s._seriesPlaylist,
-    'selectedSeasonNumber': s._selectedSeasonNumber,
-    'isLoadingSeriesMetadata': s._isLoadingSeriesMetadata,
-    'episodeListScrollController': s._episodeListScrollController,
-    'targetEpisodeIndex': s._targetEpisodeIndex,
-    'scrollRetryTimer': s._scrollRetryTimer,
-    'isScrollScheduled': s._isScrollScheduled,
-    'ottViewAutoSwitchTimer': s._ottViewAutoSwitchTimer,
-    'isSearchActive': s._isSearchActive,
-    'searchController': s._searchController,
-    'searchFocusNode': s._searchFocusNode,
-    'searchButtonFocusNode': s._searchButtonFocusNode,
-    'searchClearFocusNode': s._searchClearFocusNode,
-    'searchResults': s._searchResults,
-    'episodeLongPressTimer': s._episodeLongPressTimer,
-    'episodeLongPressTriggered': s._episodeLongPressTriggered,
-    'lastEpisodeLongPressTime': s._lastEpisodeLongPressTime,
-    'episodeKeyDownReceived': s._episodeKeyDownReceived,
-    'isAndroidTv': s._isAndroidTv,
+    'isLoading': s._catalog.isLoading,
+    'errorMessage': s._catalog.errorMessage,
+    'folderPath': s._navigation.folderPath,
+    'rootContent': s._catalog.rootContent,
+    'currentViewNodes': s._navigation.currentViewNodes,
+    'allDebridFiles': s._catalog.allDebridFiles,
+    'currentViewMode': s._navigation.currentViewMode,
+    'viewModeDropdownFocusNode': s._focus.viewModeDropdownFocusNode,
+    'backButtonFocusNode': s._focus.backButtonFocusNode,
+    'fileProgressCache': s._series.fileProgressCache,
+    'seriesPlaylist': s._series.seriesPlaylist,
+    'selectedSeasonNumber': s._series.selectedSeasonNumber,
+    'isLoadingSeriesMetadata': s._series.isLoadingSeriesMetadata,
+    'episodeListScrollController': s._scroll.episodeListScrollController,
+    'targetEpisodeIndex': s._scroll.targetEpisodeIndex,
+    'scrollRetryTimer': s._scroll.scrollRetryTimer,
+    'isScrollScheduled': s._scroll.isScrollScheduled,
+    'ottViewAutoSwitchTimer': s._ott.ottViewAutoSwitchTimer,
+    'isSearchActive': s._search.isSearchActive,
+    'searchController': s._search.searchController,
+    'searchFocusNode': s._focus.searchFocusNode,
+    'searchButtonFocusNode': s._focus.searchButtonFocusNode,
+    'searchClearFocusNode': s._focus.searchClearFocusNode,
+    'searchResults': s._search.searchResults,
+    'episodeLongPressTimer': s._episode.episodeLongPressTimer,
+    'episodeLongPressTriggered': s._episode.episodeLongPressTriggered,
+    'lastEpisodeLongPressTime': s._episode.lastEpisodeLongPressTime,
+    'episodeKeyDownReceived': s._episode.episodeKeyDownReceived,
+    'isAndroidTv': s._episode.isAndroidTv,
     'initializeScreen': s._initializeScreen,
     'checkIfAndroidTv': s._checkIfAndroidTv,
     'handleBackNavigation': s._handleBackNavigation,
@@ -3928,7 +3889,7 @@ Map<String, Object?> playlistContentTestAccess(
     'buildPremiumizeFileTree': buildPremiumizeFileTree,
     'buildWebDavFileTree': buildWebDavFileTree,
     'setAndroidTv': (bool value) {
-      s._isAndroidTv = value;
+      s._episode.isAndroidTv = value;
       (state.context as Element).markNeedsBuild();
     },
   };

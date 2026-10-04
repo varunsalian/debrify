@@ -206,6 +206,22 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/playlist_content/application/playlist_content_sort_policy.dart':
       0,
   'lib/features/playlist_content/models/playlist_content_search_result.dart': 0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_catalog_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_focus_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_navigation_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_ott_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_scroll_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_search_state.dart':
+      0,
+  'lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_state.dart':
+      0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_workflows_composition.dart':
       0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_state.dart':
