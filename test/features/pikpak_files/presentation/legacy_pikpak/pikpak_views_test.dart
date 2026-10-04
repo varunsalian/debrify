@@ -7,7 +7,10 @@ import '../../../../support/pikpak_files_fixture.dart';
 
 const captureLinux = bool.fromEnvironment('PIKPAK_CAPTURE_ORIGINAL_LINUX');
 const captureMac = bool.fromEnvironment('PIKPAK_CAPTURE_ORIGINAL_MACOS');
-const requireLinux = bool.fromEnvironment('PIKPAK_REQUIRE_ORIGINAL_LINUX');
+const requireLinux = bool.fromEnvironment(
+  'PIKPAK_REQUIRE_ORIGINAL_LINUX',
+  defaultValue: true,
+);
 void main() {
   testWidgets(
     'Raw aliases original list and choosing Raw clears it after sort',

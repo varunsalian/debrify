@@ -27,6 +27,11 @@
       "_PikPakFilesScreenState._navigateIntoFolder",
       "lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_folder_navigation.dart",
       "formatter_navigation_record_comma: Dart formatter adds one trailing comma to the expanded navigation-stack record; original expression and evaluation order unchanged"
+    ],
+    "root_build_forwarder": [
+      "_PikPakFilesScreenState.build",
+      "lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_root_layout.dart",
+      "root_build_forwarder: plan-approved plain PikpakRootLayout; move build verbatim except deps/receivers and removal of its @override; retain exact annotated State single-expression forwarder"
     ]
   },
   "annotation_exceptions": {},
@@ -82,11 +87,25 @@
         ")",
         ";"
       ]
+    },
+    {
+      "original_name": "_PikPakFilesScreenState.build",
+      "allowed_edit": "root_build_forwarder",
+      "difference_prefix": "root_build_forwarder:",
+      "before": [
+        "@",
+        "override"
+      ],
+      "after": []
     }
   ],
   "additional_owners": [],
   "required_nodes": [],
-  "forwarders": {},
+  "forwarders": {
+    "_PikPakFilesScreenState.build": {
+      "receiver": "_sections.rootLayout"
+    }
+  },
   "lifecycle": [
     "_PikPakFilesScreenState.initState",
     "_PikPakFilesScreenState.dispose"
@@ -120,6 +139,7 @@
     "PikpakDeleteActions",
     "PikpakFeedback",
     "PikpakFileDownload",
+    "PikpakFileList",
     "PikpakFilePlayback",
     "PikpakFocusActions",
     "PikpakFocusState",
@@ -130,11 +150,15 @@
     "PikpakLinkState",
     "PikpakNavigationState",
     "PikpakPlaylistActions",
+    "PikpakRootLayout",
     "PikpakSearchActions",
+    "PikpakSearchLayout",
     "PikpakSearchState",
     "PikpakSelectionActions",
     "PikpakSelectionState",
     "PikpakSourceBinding",
+    "PikpakStatusLayout",
+    "PikpakToolbarLayout",
     "PikpakViewModes",
     "PikpakViewState",
     "_deps",
@@ -170,7 +194,12 @@
     "_sections.folderDownload": "PikpakFolderDownload",
     "_sections.folderPlayback": "PikpakFolderPlayback",
     "_sections.playlistActions": "PikpakPlaylistActions",
-    "_sections.linkActions": "PikpakLinkActions"
+    "_sections.linkActions": "PikpakLinkActions",
+    "_sections.rootLayout": "PikpakRootLayout",
+    "_sections.statusLayout": "PikpakStatusLayout",
+    "_sections.fileList": "PikpakFileList",
+    "_sections.toolbarLayout": "PikpakToolbarLayout",
+    "_sections.searchLayout": "PikpakSearchLayout"
   },
   "receiver_owners": {
     "_PikPakFilesScreenState": "_PikPakFilesScreenState",
@@ -203,9 +232,19 @@
     "_sections.folderDownload": "PikpakFolderDownload",
     "_sections.folderPlayback": "PikpakFolderPlayback",
     "_sections.playlistActions": "PikpakPlaylistActions",
-    "_sections.linkActions": "PikpakLinkActions"
+    "_sections.linkActions": "PikpakLinkActions",
+    "_sections.rootLayout": "PikpakRootLayout",
+    "_sections.statusLayout": "PikpakStatusLayout",
+    "_sections.fileList": "PikpakFileList",
+    "_sections.toolbarLayout": "PikpakToolbarLayout",
+    "_sections.searchLayout": "PikpakSearchLayout"
   },
-  "plain_sections": [],
+  "plain_sections": [
+    {
+      "file": "lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_root_layout.dart",
+      "owner": "PikpakRootLayout"
+    }
+  ],
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in pikpak_context_exceptions.json; original guards and statement order unchanged",
   "callback_identities": [
     {

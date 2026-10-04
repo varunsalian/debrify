@@ -7,6 +7,7 @@ import 'pikpak_catalog_state.dart';
 import 'pikpak_delete_actions.dart';
 import 'pikpak_feedback.dart';
 import 'pikpak_file_download.dart';
+import 'pikpak_file_list.dart';
 import 'pikpak_file_playback.dart';
 import 'pikpak_focus_actions.dart';
 import 'pikpak_focus_state.dart';
@@ -17,11 +18,15 @@ import 'pikpak_link_actions.dart';
 import 'pikpak_link_state.dart';
 import 'pikpak_navigation_state.dart';
 import 'pikpak_playlist_actions.dart';
+import 'pikpak_root_layout.dart';
 import 'pikpak_search_actions.dart';
+import 'pikpak_search_layout.dart';
 import 'pikpak_search_state.dart';
 import 'pikpak_selection_actions.dart';
 import 'pikpak_selection_state.dart';
 import 'pikpak_source_binding.dart';
+import 'pikpak_status_layout.dart';
+import 'pikpak_toolbar_layout.dart';
 import 'pikpak_view_modes.dart';
 import 'pikpak_view_state.dart';
 
@@ -78,4 +83,14 @@ class PikpakSections {
   PikpakPlaylistActions get playlistActions => playlistActionsSlot!;
   PikpakLinkActions? linkActionsSlot;
   PikpakLinkActions get linkActions => linkActionsSlot!;
+  PikpakRootLayout? rootLayoutSlot;
+  PikpakRootLayout get rootLayout => rootLayoutSlot!;
+  PikpakStatusLayout? statusLayoutSlot;
+  PikpakStatusLayout get statusLayout => statusLayoutSlot!;
+  PikpakFileList? fileListSlot;
+  PikpakFileList get fileList => fileListSlot!;
+  PikpakToolbarLayout? toolbarLayoutSlot;
+  PikpakToolbarLayout get toolbarLayout => toolbarLayoutSlot!;
+  PikpakSearchLayout? searchLayoutSlot;
+  PikpakSearchLayout get searchLayout => searchLayoutSlot!;
 }

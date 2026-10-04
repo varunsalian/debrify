@@ -187,9 +187,12 @@ const Map<String, int> kShapeResidue = {
   'lib/widgets/tvmaze_search_dialog.dart': 0,
   'lib/widgets/youtube/youtube_video_card.dart': 0,
 
-  'lib/screens/pikpak/pikpak_files_screen.dart': 3,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_feedback.dart':
       0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_search_layout.dart':
+      2,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_toolbar_layout.dart':
+      1,
 };
 
 // Migration files with no remaining shape-token sites of their own. Keep their
@@ -644,6 +647,7 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/discover/presentation/discover_content.dart': 0,
   'lib/features/sources/presentation/source_keyword_field.dart': 1,
 
+  'lib/screens/pikpak/pikpak_files_screen.dart': 0,
   'lib/features/pikpak_files/application/pikpak_link_policy.dart': 0,
   'lib/features/pikpak_files/application/pikpak_playlist_titles.dart': 0,
   'lib/features/pikpak_files/application/pikpak_sort_policy.dart': 0,
@@ -666,6 +670,8 @@ const Map<String, int> kExtractedShapeResidue = {
       1,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_file_download.dart':
       0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_file_list.dart':
+      0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_file_playback.dart':
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_focus_actions.dart':
@@ -678,6 +684,8 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_folder_playback.dart':
       0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_layout_composition.dart':
+      0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_link_actions.dart':
       5,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_link_state.dart':
@@ -687,6 +695,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_navigation_state.dart':
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_playlist_actions.dart':
+      0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_root_layout.dart':
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_search_actions.dart':
       0,
@@ -699,6 +709,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_selection_state.dart':
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_source_binding.dart':
+      0,
+  'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_status_layout.dart':
       0,
   'lib/features/pikpak_files/presentation/legacy_pikpak/pikpak_view_modes.dart':
       0,
