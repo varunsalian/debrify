@@ -940,6 +940,24 @@ As in the PikPak plan, with these specifics:
   and floor 488; original characterization/fixture/helper/macOS hashes match.
   No new const, lifetime owner, storage operation or listener is introduced.
 
+### Step 3 — load and external actions; gate deferred for review closure
+
+- Step 2 source: `a58f052f`. Move load, mode and four platform action groups
+  verbatim. Review every step-3 dependency-report entry and actual record binding
+  before pinning: same field owners, parameter types, real State setState,
+  live mounted/context/section and direct action members; constructors only
+  retain dependencies. The original loadFonts tear-off remains borrowed from
+  State until step 4. Initial load still enters synchronously in initState.
+- All six manifests/self-tests pass; focused `step3` compares PASS to `base3`
+  (145 successes and the same original guard failure). Whole/max analyzer and
+  strict symbol comparisons pass with zero additions/scaffold diagnostics.
+  CI format, scoped analyzer/unchanged allowlist, behavior selector, architecture,
+  sizes, storage keys/references and staged diff pass. Shape/helper/test hashes
+  remain exact. Facade ratchet is 3,489 lines.
+- Independent step-0 review arrived after source verification. Commit this
+  verified source checkpoint, close all findings in a separate original-proved
+  step 0b, adopt its new base, then run gate 1. No gate is claimed yet.
+
 ## Found, not fixed
 
 All of these are pre-existing, and the extraction keeps each one exactly.

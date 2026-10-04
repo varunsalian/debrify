@@ -5,6 +5,7 @@ import 'package:debrify/features/playback_settings/presentation/legacy_playback_
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_linux_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_mac_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_rows_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_sections.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_rows_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_values_state.dart';
@@ -26,10 +27,8 @@ import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
 import 'package:debrify/screens/video_player/services/network_tuning.dart';
 import 'package:debrify/screens/video_player/services/subtitle_settings_service.dart';
 import 'package:debrify/services/analytics_service.dart';
-import 'package:debrify/services/android_native_downloader.dart';
 import 'package:debrify/services/external_player_service.dart';
 import 'package:debrify/services/skip_segment_service.dart';
-import 'package:debrify/services/storage/external_player_storage.dart';
 import 'package:debrify/services/storage/local_completion_storage.dart';
 import 'package:debrify/services/storage/player_network_storage.dart';
 import 'package:debrify/services/storage/player_settings_storage.dart';
@@ -73,12 +72,30 @@ class _ExternalPlayerSettingsPageState
   final _sub = PlaybackSubtitleState();
   final _rows = PlaybackRowsState();
   final _subRows = PlaybackSubtitleRowsState();
+  PlaybackSections? _cachedSections;
+  PlaybackSections get _sections => _cachedSections ??= createPlaybackSections(
+    core: _core,
+    mac: _mac,
+    ios: _ios,
+    linux: _linux,
+    win: _win,
+    vr: _vr,
+    values: _values,
+    sub: _sub,
+    rows: _rows,
+    subRows: _subRows,
+    setState: setState,
+    mounted: () => mounted,
+    context: () => context,
+    section: () => widget.section,
+    loadFonts: _loadFonts,
+  );
 
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('playback_${widget.section.name}_settings');
-    _loadSettings();
+    _sections.load.loadSettings();
     _mac.commandFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -361,664 +378,6 @@ class _ExternalPlayerSettingsPageState
     _rows.netPatienceFocusNode.dispose();
     _rows.netBufferFocusNode.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadSettings() async {
-    setState(() {
-      _core.loading = true;
-    });
-
-    try {
-      // Load default player mode
-      final mode = await ExternalPlayerStorage.getDefaultPlayerMode();
-
-      // Only Player needs external application discovery. The other categories
-      // can load without waiting for native app detection.
-      final needsExternalPlayers =
-          widget.section == PlaybackSettingsSection.player;
-
-      // Load macOS-specific settings
-      Map<ExternalPlayer, bool> installed = {};
-      String preferredKey = 'system_default';
-      String? customAppPath;
-      String? customAppName;
-      String? customCommand;
-
-      if (needsExternalPlayers && (Platform.isMacOS)) {
-        installed = await ExternalPlayerService.detectInstalledPlayers();
-        preferredKey = await ExternalPlayerStorage.getPreferredExternalPlayer();
-        customAppPath =
-            await ExternalPlayerStorage.getCustomExternalPlayerPath();
-        customAppName =
-            await ExternalPlayerStorage.getCustomExternalPlayerName();
-        customCommand =
-            await ExternalPlayerStorage.getCustomExternalPlayerCommand();
-        if (!mounted) return;
-        _mac.commandController.text = customCommand ?? '';
-      }
-
-      // Load iOS-specific settings
-      Map<iOSExternalPlayer, bool> installedIOS = {};
-      String iosPreferredKey = 'vlc';
-      String? iosCustomScheme;
-
-      if (needsExternalPlayers &&
-          (PlatformUtil.isIosMobile || PlatformUtil.isTvOS)) {
-        installedIOS = await ExternalPlayerService.detectInstalledIOSPlayers();
-        iosPreferredKey =
-            await ExternalPlayerStorage.getPreferredIOSExternalPlayer();
-        iosCustomScheme =
-            await ExternalPlayerStorage.getIOSCustomSchemeTemplate();
-        if (!mounted) return;
-        _ios.iosSchemeController.text = iosCustomScheme ?? '';
-      }
-
-      // Load Linux-specific settings
-      Map<LinuxExternalPlayer, bool> installedLinux = {};
-      String linuxPreferredKey = 'system_default';
-      String? linuxCustomCommand;
-
-      if (needsExternalPlayers && (Platform.isLinux)) {
-        installedLinux =
-            await LinuxExternalPlayerServiceExtension.detectInstalledLinuxPlayers();
-        linuxPreferredKey =
-            await ExternalPlayerStorage.getPreferredLinuxExternalPlayer();
-        linuxCustomCommand =
-            await ExternalPlayerStorage.getLinuxCustomCommand();
-        if (!mounted) return;
-        _linux.linuxCommandController.text = linuxCustomCommand ?? '';
-      }
-
-      // Load Windows-specific settings
-      Map<WindowsExternalPlayer, bool> installedWindows = {};
-      String windowsPreferredKey = 'system_default';
-      String? windowsCustomCommand;
-
-      if (needsExternalPlayers && (Platform.isWindows)) {
-        installedWindows =
-            await WindowsExternalPlayerServiceExtension.detectInstalledWindowsPlayers();
-        windowsPreferredKey =
-            await ExternalPlayerStorage.getPreferredWindowsExternalPlayer();
-        windowsCustomCommand =
-            await ExternalPlayerStorage.getWindowsCustomCommand();
-        if (!mounted) return;
-        _win.windowsCommandController.text = windowsCustomCommand ?? '';
-      }
-
-      // Load DeoVR settings (Android)
-      String vrScreenType = 'dome';
-      String vrStereoMode = 'sbs';
-      bool vrAutoDetect = true;
-      bool vrShowDialog = true;
-
-      if (Platform.isAndroid) {
-        vrScreenType = await QuickPlayStorage.getQuickPlayVrDefaultScreenType();
-        vrStereoMode = await QuickPlayStorage.getQuickPlayVrDefaultStereoMode();
-        vrAutoDetect = await QuickPlayStorage.getQuickPlayVrAutoDetectFormat();
-        vrShowDialog = await QuickPlayStorage.getQuickPlayVrShowDialog();
-      }
-
-      // Check if running on Android TV
-      bool isAndroidTv = false;
-      if (Platform.isAndroid) {
-        try {
-          isAndroidTv = await AndroidNativeDownloader.isTelevision();
-        } catch (_) {
-          isAndroidTv = false;
-        }
-      }
-
-      // Load Debrify Player default settings (use platform-specific aspect setting)
-      final defaultAspectIndex = isAndroidTv
-          ? await PlayerSettingsStorage.getPlayerDefaultAspectIndexTv()
-          : await PlayerSettingsStorage.getPlayerDefaultAspectIndex();
-      final nightModeIndex =
-          await PlayerSettingsStorage.getPlayerNightModeIndex();
-      final systemAudioEffects =
-          await PlayerSettingsStorage.getPlayerSystemAudioEffects();
-      final tvosForceSoftwareDecode = PlatformUtil.isTvOS
-          ? await PlayerSettingsStorage.getTvosForceSoftwareDecode()
-          : false;
-      final tvosForceStereo = PlatformUtil.isTvOS
-          ? await PlayerSettingsStorage.getTvosForceStereoAudio()
-          : false;
-      final tvosLegacyAudioOutput = PlatformUtil.isTvOS
-          ? await PlayerSettingsStorage.getTvosLegacyAudioOutput()
-          : false;
-      final audioPassthrough = Platform.isAndroid
-          ? await PlayerSettingsStorage.getAudioPassthroughEnabled()
-          : false;
-      final appleMultichannel =
-          (PlatformUtil.isTvOS || PlatformUtil.isIosMobile)
-          ? await PlayerSettingsStorage.getAppleMultichannelAudio()
-          : false;
-      final androidVideoRendererMode =
-          await PlayerSettingsStorage.getAndroidVideoRendererMode();
-      final contentDisplayMatchMode =
-          await PlayerNetworkStorage.getContentDisplayMatchMode();
-      final startPortrait =
-          await PlayerSettingsStorage.getPlayerStartPortrait();
-      final subtitleForcedOnly =
-          await SubtitleSettingsStorage.getSubtitleForcedOnly();
-      final subtitleOnlyForeignAudio =
-          await SubtitleSettingsStorage.getSubtitleOnlyForeignAudio();
-      final subtitleAutoSync =
-          await SubtitleSettingsStorage.getSubtitleAutoSyncEnabled();
-      final movieCompletionThreshold =
-          await LocalCompletionStorage.getMovieCompletionThreshold();
-      final episodeCompletionThreshold =
-          await LocalCompletionStorage.getEpisodeCompletionThreshold();
-      final skipSegmentsEnabled =
-          await SkipSegmentsStorage.getSkipSegmentsEnabled();
-      final storedSkipSegmentProvider =
-          await SkipSegmentsStorage.getSkipSegmentProvider();
-      final skipSegmentProvider =
-          SkipSegmentProviders.isAvailable(storedSkipSegmentProvider)
-          ? storedSkipSegmentProvider
-          : SkipSegmentProviders.auto;
-      final defaultSubtitleLanguage =
-          await SubtitleSettingsStorage.getDefaultSubtitleLanguage();
-      final defaultAudioLanguage =
-          await SubtitleSettingsStorage.getDefaultAudioLanguage();
-      final netPatience =
-          await PlayerNetworkStorage.getNetworkConnectPatience();
-      final iptvDecoderMode = await PlayerNetworkStorage.getIptvDecoderMode();
-      final netBuffer = await PlayerNetworkStorage.getNetworkBufferSize();
-
-      // Load subtitle settings
-      final subtitleSettings = await SubtitleSettingsService.instance.loadAll();
-
-      if (!mounted) return;
-      setState(() {
-        _core.defaultPlayerMode = mode;
-        _mac.installedPlayers = installed;
-        _mac.selectedPlayer = ExternalPlayerExtension.fromStorageKey(
-          preferredKey,
-        );
-        _mac.customAppPath = customAppPath;
-        _mac.customAppName = customAppName;
-        _mac.customCommand = customCommand;
-        // iOS settings
-        _ios.installedIOSPlayers = installedIOS;
-        _ios.selectedIOSPlayer = iOSExternalPlayerExtension.fromStorageKey(
-          iosPreferredKey,
-        );
-        _ios.iosCustomScheme = iosCustomScheme;
-        // Linux settings
-        _linux.installedLinuxPlayers = installedLinux;
-        _linux.selectedLinuxPlayer =
-            LinuxExternalPlayerExtension.fromStorageKey(linuxPreferredKey);
-        _linux.linuxCustomCommand = linuxCustomCommand;
-        // Windows settings
-        _win.installedWindowsPlayers = installedWindows;
-        _win.selectedWindowsPlayer =
-            WindowsExternalPlayerExtension.fromStorageKey(windowsPreferredKey);
-        _win.windowsCustomCommand = windowsCustomCommand;
-        // Other settings
-        _vr.vrDefaultScreenType = vrScreenType;
-        _vr.vrDefaultStereoMode = vrStereoMode;
-        _vr.vrAutoDetectFormat = vrAutoDetect;
-        _vr.vrShowDialog = vrShowDialog;
-        _values.isAndroidTv = isAndroidTv;
-        _values.defaultAspectIndex = defaultAspectIndex;
-        _values.nightModeIndex = nightModeIndex;
-        _values.systemAudioEffects = systemAudioEffects;
-        _values.tvosForceSoftwareDecode = tvosForceSoftwareDecode;
-        _values.audioPassthrough = audioPassthrough;
-        _values.appleMultichannel = appleMultichannel;
-        _values.tvosForceStereo = tvosForceStereo;
-        _values.tvosLegacyAudioOutput = tvosLegacyAudioOutput;
-        _values.androidVideoRendererMode = androidVideoRendererMode;
-        _values.contentDisplayMatchMode = contentDisplayMatchMode;
-        _values.iptvDecoderMode = iptvDecoderMode;
-        _values.startPortrait = startPortrait;
-        _sub.subtitleOnlyForeignAudio = subtitleOnlyForeignAudio;
-        _sub.subtitleForcedOnly = subtitleForcedOnly;
-        _sub.subtitleAutoSync = subtitleAutoSync;
-        _values.movieCompletionThreshold = movieCompletionThreshold;
-        _values.episodeCompletionThreshold = episodeCompletionThreshold;
-        _values.skipSegmentsEnabled = skipSegmentsEnabled;
-        _values.skipSegmentProvider = skipSegmentProvider;
-        // Unknown stored value (a downgrade across versions) falls back to
-        // Standard rather than crashing the dropdown.
-        _values.netPatience =
-            NetworkTuning.patienceOptions.containsKey(netPatience)
-            ? netPatience
-            : NetworkTuning.standard;
-        _values.netBuffer = NetworkTuning.bufferOptions.containsKey(netBuffer)
-            ? netBuffer
-            : NetworkTuning.standard;
-        _sub.defaultSubtitleLanguage = defaultSubtitleLanguage;
-        _sub.defaultAudioLanguage = defaultAudioLanguage;
-        _sub.subtitleSizeIndex = subtitleSettings.sizeIndex;
-        _sub.subtitleStyleIndex = subtitleSettings.styleIndex;
-        _sub.subtitleColorIndex = subtitleSettings.colorIndex;
-        _sub.subtitleBgIndex = subtitleSettings.bgIndex;
-        _sub.subtitleFontIndex = subtitleSettings.fontIndex;
-        _sub.subtitleBold = subtitleSettings.bold;
-        _core.loading = false;
-      });
-      // Load fonts (built-in + custom) separately (async)
-      _loadFonts();
-      // Entry focus on TV: land DPAD on the first row once content builds.
-      if (PlatformUtil.isTelevision) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          // Only seed focus if nothing concrete is focused yet — a bare
-          // FocusScopeNode as primary focus means DPAD is stranded.
-          final primary = FocusManager.instance.primaryFocus;
-          if (primary != null && primary is! FocusScopeNode) return;
-          _core.contentFocusNode.traversalDescendants.firstOrNull
-              ?.requestFocus();
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _core.loading = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to load settings: $e')));
-      }
-    }
-  }
-
-  Future<void> _setDefaultPlayerMode(String mode) async {
-    try {
-      await ExternalPlayerStorage.setDefaultPlayerMode(mode);
-      setState(() {
-        _core.defaultPlayerMode = mode;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
-      }
-    }
-  }
-
-  Future<void> _selectPlayer(ExternalPlayer player) async {
-    try {
-      await ExternalPlayerStorage.setPreferredExternalPlayer(player.storageKey);
-      setState(() {
-        _mac.selectedPlayer = player;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
-      }
-    }
-  }
-
-  Future<void> _browseForCustomApp() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['app'],
-        dialogTitle: 'Select Video Player Application',
-      );
-
-      if (result != null && result.files.isNotEmpty) {
-        final path = result.files.first.path;
-        if (path != null) {
-          final appName = path.split('/').last.replaceAll('.app', '');
-
-          await ExternalPlayerStorage.setCustomExternalPlayerPath(path);
-          await ExternalPlayerStorage.setCustomExternalPlayerName(appName);
-          await ExternalPlayerStorage.setPreferredExternalPlayer('custom_app');
-
-          setState(() {
-            _mac.customAppPath = path;
-            _mac.customAppName = appName;
-            _mac.selectedPlayer = ExternalPlayer.customApp;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to select application: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _clearCustomApp() async {
-    try {
-      await ExternalPlayerStorage.setCustomExternalPlayerPath(null);
-      await ExternalPlayerStorage.setCustomExternalPlayerName(null);
-
-      if (_mac.selectedPlayer == ExternalPlayer.customApp) {
-        await ExternalPlayerStorage.setPreferredExternalPlayer(
-          'system_default',
-        );
-        setState(() {
-          _mac.selectedPlayer = ExternalPlayer.systemDefault;
-        });
-      }
-
-      setState(() {
-        _mac.customAppPath = null;
-        _mac.customAppName = null;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to clear custom app: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _saveCustomCommand() async {
-    final command = _mac.commandController.text.trim();
-
-    final validation = ExternalPlayerService.validateCustomCommand(command);
-    if (!validation.isValid) {
-      setState(() {
-        _mac.commandError = validation.errorMessage;
-      });
-      return;
-    }
-
-    try {
-      await ExternalPlayerStorage.setCustomExternalPlayerCommand(command);
-      await ExternalPlayerStorage.setPreferredExternalPlayer('custom_command');
-
-      setState(() {
-        _mac.customCommand = command;
-        _mac.commandError = null;
-        _mac.selectedPlayer = ExternalPlayer.customCommand;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Custom command saved')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save command: $e')));
-      }
-    }
-  }
-
-  Future<void> _clearCustomCommand() async {
-    try {
-      await ExternalPlayerStorage.setCustomExternalPlayerCommand(null);
-
-      if (_mac.selectedPlayer == ExternalPlayer.customCommand) {
-        await ExternalPlayerStorage.setPreferredExternalPlayer(
-          'system_default',
-        );
-        setState(() {
-          _mac.selectedPlayer = ExternalPlayer.systemDefault;
-        });
-      }
-
-      _mac.commandController.clear();
-      setState(() {
-        _mac.customCommand = null;
-        _mac.commandError = null;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to clear command: $e')));
-      }
-    }
-  }
-
-  // iOS external player settings methods
-  Future<void> _selectIOSPlayer(iOSExternalPlayer player) async {
-    try {
-      await ExternalPlayerStorage.setPreferredIOSExternalPlayer(
-        player.storageKey,
-      );
-      setState(() {
-        _ios.selectedIOSPlayer = player;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
-      }
-    }
-  }
-
-  Future<void> _saveIOSCustomScheme() async {
-    final scheme = _ios.iosSchemeController.text.trim();
-
-    final validation = validateCustomScheme(scheme);
-    if (!validation.isValid) {
-      setState(() {
-        _ios.iosSchemeError = validation.errorMessage;
-      });
-      return;
-    }
-
-    try {
-      await ExternalPlayerStorage.setIOSCustomSchemeTemplate(scheme);
-      await ExternalPlayerStorage.setPreferredIOSExternalPlayer(
-        'custom_scheme',
-      );
-
-      setState(() {
-        _ios.iosCustomScheme = scheme;
-        _ios.iosSchemeError = null;
-        _ios.selectedIOSPlayer = iOSExternalPlayer.customScheme;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Custom URL scheme saved')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save URL scheme: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _clearIOSCustomScheme() async {
-    try {
-      await ExternalPlayerStorage.setIOSCustomSchemeTemplate(null);
-
-      if (_ios.selectedIOSPlayer == iOSExternalPlayer.customScheme) {
-        await ExternalPlayerStorage.setPreferredIOSExternalPlayer('vlc');
-        setState(() {
-          _ios.selectedIOSPlayer = iOSExternalPlayer.vlc;
-        });
-      }
-
-      _ios.iosSchemeController.clear();
-      setState(() {
-        _ios.iosCustomScheme = null;
-        _ios.iosSchemeError = null;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to clear URL scheme: $e')),
-        );
-      }
-    }
-  }
-
-  // Linux external player settings methods
-  Future<void> _selectLinuxPlayer(LinuxExternalPlayer player) async {
-    try {
-      await ExternalPlayerStorage.setPreferredLinuxExternalPlayer(
-        player.storageKey,
-      );
-      setState(() {
-        _linux.selectedLinuxPlayer = player;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
-      }
-    }
-  }
-
-  Future<void> _saveLinuxCustomCommand() async {
-    final command = _linux.linuxCommandController.text.trim();
-
-    final validation = validateLinuxCustomCommand(command);
-    if (!validation.isValid) {
-      setState(() {
-        _linux.linuxCommandError = validation.errorMessage;
-      });
-      return;
-    }
-
-    try {
-      await ExternalPlayerStorage.setLinuxCustomCommand(command);
-      await ExternalPlayerStorage.setPreferredLinuxExternalPlayer(
-        'custom_command',
-      );
-
-      setState(() {
-        _linux.linuxCustomCommand = command;
-        _linux.linuxCommandError = null;
-        _linux.selectedLinuxPlayer = LinuxExternalPlayer.customCommand;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Custom command saved')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save command: $e')));
-      }
-    }
-  }
-
-  Future<void> _clearLinuxCustomCommand() async {
-    try {
-      await ExternalPlayerStorage.setLinuxCustomCommand(null);
-
-      if (_linux.selectedLinuxPlayer == LinuxExternalPlayer.customCommand) {
-        await ExternalPlayerStorage.setPreferredLinuxExternalPlayer(
-          'system_default',
-        );
-        setState(() {
-          _linux.selectedLinuxPlayer = LinuxExternalPlayer.systemDefault;
-        });
-      }
-
-      _linux.linuxCommandController.clear();
-      setState(() {
-        _linux.linuxCustomCommand = null;
-        _linux.linuxCommandError = null;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to clear command: $e')));
-      }
-    }
-  }
-
-  // Windows external player settings methods
-  Future<void> _selectWindowsPlayer(WindowsExternalPlayer player) async {
-    try {
-      await ExternalPlayerStorage.setPreferredWindowsExternalPlayer(
-        player.storageKey,
-      );
-      setState(() {
-        _win.selectedWindowsPlayer = player;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
-      }
-    }
-  }
-
-  Future<void> _saveWindowsCustomCommand() async {
-    final command = _win.windowsCommandController.text.trim();
-
-    final validation = validateWindowsCustomCommand(command);
-    if (!validation.isValid) {
-      setState(() {
-        _win.windowsCommandError = validation.errorMessage;
-      });
-      return;
-    }
-
-    try {
-      await ExternalPlayerStorage.setWindowsCustomCommand(command);
-      await ExternalPlayerStorage.setPreferredWindowsExternalPlayer(
-        'custom_command',
-      );
-
-      setState(() {
-        _win.windowsCustomCommand = command;
-        _win.windowsCommandError = null;
-        _win.selectedWindowsPlayer = WindowsExternalPlayer.customCommand;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Custom command saved')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save command: $e')));
-      }
-    }
-  }
-
-  Future<void> _clearWindowsCustomCommand() async {
-    try {
-      await ExternalPlayerStorage.setWindowsCustomCommand(null);
-
-      if (_win.selectedWindowsPlayer == WindowsExternalPlayer.customCommand) {
-        await ExternalPlayerStorage.setPreferredWindowsExternalPlayer(
-          'system_default',
-        );
-        setState(() {
-          _win.selectedWindowsPlayer = WindowsExternalPlayer.systemDefault;
-        });
-      }
-
-      _win.windowsCommandController.clear();
-      setState(() {
-        _win.windowsCustomCommand = null;
-        _win.windowsCommandError = null;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to clear command: $e')));
-      }
-    }
   }
 
   // DeoVR settings setters
@@ -1477,7 +836,7 @@ class _ExternalPlayerSettingsPageState
       onChanged: canSelect
           ? (value) {
               if (value != null) {
-                _selectPlayer(value);
+                _sections.macActions.selectPlayer(value);
               }
             }
           : null,
@@ -1537,7 +896,7 @@ class _ExternalPlayerSettingsPageState
       groupValue: _ios.selectedIOSPlayer,
       onChanged: (value) {
         if (value != null) {
-          _selectIOSPlayer(value);
+          _sections.iosActions.selectIOSPlayer(value);
         }
       },
       secondary: Container(
@@ -1594,7 +953,7 @@ class _ExternalPlayerSettingsPageState
       groupValue: _linux.selectedLinuxPlayer,
       onChanged: (value) {
         if (value != null) {
-          _selectLinuxPlayer(value);
+          _sections.linuxActions.selectLinuxPlayer(value);
         }
       },
       secondary: Container(
@@ -1651,7 +1010,7 @@ class _ExternalPlayerSettingsPageState
       groupValue: _win.selectedWindowsPlayer,
       onChanged: (value) {
         if (value != null) {
-          _selectWindowsPlayer(value);
+          _sections.windowsActions.selectWindowsPlayer(value);
         }
       },
       secondary: Container(
@@ -1702,7 +1061,10 @@ class _ExternalPlayerSettingsPageState
             return InkWell(
               focusNode: focusNode,
               canRequestFocus: !disabled,
-              onTap: disabled ? null : () => _setDefaultPlayerMode(value),
+              onTap: disabled
+                  ? null
+                  : () =>
+                        _sections.playerModeActions.setDefaultPlayerMode(value),
               borderRadius: BorderRadius.circular(12),
               // Snap, don't tween — per-keypress decoration lerps jank TVs.
               child: Container(
@@ -1739,7 +1101,8 @@ class _ExternalPlayerSettingsPageState
                         groupValue: _core.defaultPlayerMode,
                         onChanged: disabled
                             ? null
-                            : (v) => _setDefaultPlayerMode(v!),
+                            : (v) => _sections.playerModeActions
+                                  .setDefaultPlayerMode(v!),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                       ),
@@ -1841,7 +1204,7 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _openPlayerSettings() async {
     await pushSettingsPage(context, const ExternalPlayerSettingsPage());
-    if (mounted) await _loadSettings();
+    if (mounted) await _sections.load.loadSettings();
   }
 
   Widget _playerAppearance() => SettingsSection(
@@ -3007,7 +2370,7 @@ class _ExternalPlayerSettingsPageState
                   children: [
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: _saveIOSCustomScheme,
+                        onPressed: _sections.iosActions.saveIOSCustomScheme,
                         icon: const Icon(Icons.save_rounded),
                         label: const Text('Save'),
                       ),
@@ -3016,7 +2379,7 @@ class _ExternalPlayerSettingsPageState
                         _ios.iosCustomScheme!.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       OutlinedButton(
-                        onPressed: _clearIOSCustomScheme,
+                        onPressed: _sections.iosActions.clearIOSCustomScheme,
                         child: const Text('Clear'),
                       ),
                     ],
@@ -3192,7 +2555,8 @@ class _ExternalPlayerSettingsPageState
                   children: [
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: _saveLinuxCustomCommand,
+                        onPressed:
+                            _sections.linuxActions.saveLinuxCustomCommand,
                         icon: const Icon(Icons.save_rounded),
                         label: const Text('Save'),
                       ),
@@ -3201,7 +2565,8 @@ class _ExternalPlayerSettingsPageState
                         _linux.linuxCustomCommand!.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       OutlinedButton(
-                        onPressed: _clearLinuxCustomCommand,
+                        onPressed:
+                            _sections.linuxActions.clearLinuxCustomCommand,
                         child: const Text('Clear'),
                       ),
                     ],
@@ -3377,7 +2742,8 @@ class _ExternalPlayerSettingsPageState
                   children: [
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: _saveWindowsCustomCommand,
+                        onPressed:
+                            _sections.windowsActions.saveWindowsCustomCommand,
                         icon: const Icon(Icons.save_rounded),
                         label: const Text('Save'),
                       ),
@@ -3386,7 +2752,8 @@ class _ExternalPlayerSettingsPageState
                         _win.windowsCustomCommand!.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       OutlinedButton(
-                        onPressed: _clearWindowsCustomCommand,
+                        onPressed:
+                            _sections.windowsActions.clearWindowsCustomCommand,
                         child: const Text('Clear'),
                       ),
                     ],
@@ -3557,7 +2924,7 @@ class _ExternalPlayerSettingsPageState
                   children: [
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: _browseForCustomApp,
+                        onPressed: _sections.macActions.browseForCustomApp,
                         icon: const Icon(Icons.folder_open_rounded),
                         label: Text(
                           _mac.customAppPath == null ? 'Browse' : 'Change',
@@ -3567,7 +2934,7 @@ class _ExternalPlayerSettingsPageState
                     if (_mac.customAppPath != null) ...[
                       const SizedBox(width: 8),
                       OutlinedButton(
-                        onPressed: _clearCustomApp,
+                        onPressed: _sections.macActions.clearCustomApp,
                         child: const Text('Clear'),
                       ),
                     ],
@@ -3660,7 +3027,7 @@ class _ExternalPlayerSettingsPageState
                   children: [
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: _saveCustomCommand,
+                        onPressed: _sections.macActions.saveCustomCommand,
                         icon: const Icon(Icons.save_rounded),
                         label: const Text('Save Command'),
                       ),
@@ -3669,7 +3036,7 @@ class _ExternalPlayerSettingsPageState
                         _mac.customCommand!.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       OutlinedButton(
-                        onPressed: _clearCustomCommand,
+                        onPressed: _sections.macActions.clearCustomCommand,
                         child: const Text('Clear'),
                       ),
                     ],
@@ -4058,22 +3425,24 @@ Map<String, Object?> playbackSettingsTestAccess(
     'stereoModeFocused': s._vr.stereoModeFocused,
     'autoDetectFocused': s._vr.autoDetectFocused,
     'showDialogFocused': s._vr.showDialogFocused,
-    'loadSettings': s._loadSettings,
-    'setDefaultPlayerMode': s._setDefaultPlayerMode,
-    'selectPlayer': s._selectPlayer,
-    'browseForCustomApp': s._browseForCustomApp,
-    'clearCustomApp': s._clearCustomApp,
-    'saveCustomCommand': s._saveCustomCommand,
-    'clearCustomCommand': s._clearCustomCommand,
-    'selectIOSPlayer': s._selectIOSPlayer,
-    'saveIOSCustomScheme': s._saveIOSCustomScheme,
-    'clearIOSCustomScheme': s._clearIOSCustomScheme,
-    'selectLinuxPlayer': s._selectLinuxPlayer,
-    'saveLinuxCustomCommand': s._saveLinuxCustomCommand,
-    'clearLinuxCustomCommand': s._clearLinuxCustomCommand,
-    'selectWindowsPlayer': s._selectWindowsPlayer,
-    'saveWindowsCustomCommand': s._saveWindowsCustomCommand,
-    'clearWindowsCustomCommand': s._clearWindowsCustomCommand,
+    'loadSettings': s._sections.load.loadSettings,
+    'setDefaultPlayerMode': s._sections.playerModeActions.setDefaultPlayerMode,
+    'selectPlayer': s._sections.macActions.selectPlayer,
+    'browseForCustomApp': s._sections.macActions.browseForCustomApp,
+    'clearCustomApp': s._sections.macActions.clearCustomApp,
+    'saveCustomCommand': s._sections.macActions.saveCustomCommand,
+    'clearCustomCommand': s._sections.macActions.clearCustomCommand,
+    'selectIOSPlayer': s._sections.iosActions.selectIOSPlayer,
+    'saveIOSCustomScheme': s._sections.iosActions.saveIOSCustomScheme,
+    'clearIOSCustomScheme': s._sections.iosActions.clearIOSCustomScheme,
+    'selectLinuxPlayer': s._sections.linuxActions.selectLinuxPlayer,
+    'saveLinuxCustomCommand': s._sections.linuxActions.saveLinuxCustomCommand,
+    'clearLinuxCustomCommand': s._sections.linuxActions.clearLinuxCustomCommand,
+    'selectWindowsPlayer': s._sections.windowsActions.selectWindowsPlayer,
+    'saveWindowsCustomCommand':
+        s._sections.windowsActions.saveWindowsCustomCommand,
+    'clearWindowsCustomCommand':
+        s._sections.windowsActions.clearWindowsCustomCommand,
     'setVrDefaultScreenType': s._setVrDefaultScreenType,
     'setVrDefaultStereoMode': s._setVrDefaultStereoMode,
     'setVrAutoDetectFormat': s._setVrAutoDetectFormat,

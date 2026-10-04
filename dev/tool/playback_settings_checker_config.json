@@ -313,20 +313,44 @@
       "owner": "PlaybackCoreState"
     },
     {
+      "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_ios_actions.dart",
+      "owner": "PlaybackIosActions"
+    },
+    {
       "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_ios_state.dart",
       "owner": "PlaybackIosState"
+    },
+    {
+      "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_linux_actions.dart",
+      "owner": "PlaybackLinuxActions"
     },
     {
       "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_linux_state.dart",
       "owner": "PlaybackLinuxState"
     },
     {
+      "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_mac_actions.dart",
+      "owner": "PlaybackMacActions"
+    },
+    {
       "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_mac_state.dart",
       "owner": "PlaybackMacState"
     },
     {
+      "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_mode_actions.dart",
+      "owner": "PlaybackPlayerModeActions"
+    },
+    {
       "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_rows_state.dart",
       "owner": "PlaybackRowsState"
+    },
+    {
+      "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_sections.dart",
+      "owner": "PlaybackSections"
+    },
+    {
+      "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_settings_load.dart",
+      "owner": "PlaybackSettingsLoad"
     },
     {
       "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_rows_state.dart",
@@ -343,6 +367,10 @@
     {
       "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_vr_state.dart",
       "owner": "PlaybackVrState"
+    },
+    {
+      "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_windows_actions.dart",
+      "owner": "PlaybackWindowsActions"
     },
     {
       "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_windows_state.dart",
