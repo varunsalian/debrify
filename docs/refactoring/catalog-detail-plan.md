@@ -768,6 +768,14 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   for ORIGINAL rich Linux; no builders or application responsibilities moved.
 
 
+- Rich Linux prerequisite: `tv_movie_rich.png` verified against supplied SHA-256
+  `18cf134f91daec347378d896b6487af1791558a5df50f4a9b91027dfe14e52d6`; exact step-0b and format-only
+  application objects match. Supplied calibrated Docker strict replay is 5/5,
+  and the existing four PNGs are byte-identical. Provenance/evidence hashes are
+  in `linux-rich-original-verification.json`. Linux tests already require all
+  five masters unconditionally; no opt-out or skip is present. These assets and
+  verification are committed separately before step 1.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
