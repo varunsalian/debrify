@@ -551,6 +551,12 @@ the behaviour suite compared against the latest recorded base.
 
 ## Progress
 
+**Completed:** Steps 0–7, independent-review Step 0b, separate Linux-original
+checkpoint, and both full-suite gates. Latest baseline is `merged_detail/base4`;
+final source Gate 2 is `a3057a82`. Earlier blocker/pending notes below are
+historical checkpoints. Remaining work is device verification, remote CI and
+Claude’s semantic integration on the merged committed tree.
+
 ### Step 0 — blocked at formatted-original analyzer parity
 
 - Execution base is `def4e30423c9d8344eeb340c665afc2ee866c11f`, clean
@@ -1060,6 +1066,45 @@ the behaviour suite compared against the latest recorded base.
   source, serially. Gate 2 must compare with latest `merged_detail/base4` and Gate 1;
   the following evidence commit changes documentation only. Device, remote-CI and
   Claude's semantic integration checks remain pending.
+
+
+### Gate 2 — full suite PASS; execution complete
+
+- Full-suite run from clean committed `a3057a829173471bd9afbd9de56c35a88dd62a33`,
+  tree `5d9a6d80a36b137da7b82dbacacbf3fe4fbda3a5`, Flutter 3.44.8 / Dart 3.12.2:
+  **10,686 successes, 13 failures, 28 errors, 20 skips**. The tree and untracked
+  inputs stayed unchanged. Raw Flutter exit 1 represents the same original
+  failure/error identities; both recorded comparison verdicts are PASS.
+- `gate2-comparison-vs-base4` and `gate2-comparison-vs-gate1` each report no new
+  failure, missing identity, added identity, newly skipped test or fixed failure.
+  Gate 1 likewise matched latest base4 from committed `26f90bea`.
+- Local CI checker also passes from committed `a3057a82`: 4,437 successes,
+  three failures and two errors, exactly the five approved original identities.
+  `step7-ci-comparison` passes against base4 with no added/missing/skipped/fixed
+  identities. No failure allowance, test assertion or golden was weakened.
+- Completion index: shared authorized `refactor-evidence/merged_detail/` only,
+  `completion-summary.json`. It joins execution base, formatted original, latest
+  base, gate source trees/SDKs and all final checker/analyzer/CI verdicts. Parser
+  package/kernel artifacts remain inside this worktree’s ignored `.dart_tool`.
+- Step commits: format `21320ff9`, historical blocker `fc2f72df`, original
+  checkpoint `4b65c7cf`, review closure `e3a312c2`, separate Linux `2d2ce60c`,
+  step 1 `fc5b23b7`, step 2 `7c778ac7`, step 3 `864c0979`, step 4/Gate 1
+  `26f90bea` (evidence `70fa4ec1`), step 5 `0f92cfe2`, step 6 `66735b61`,
+  step 7/Gate 2 `a3057a82`. This final evidence commit changes this plan only.
+- Final facade: **434 lines**; 49 feature Dart files, maximum 346 lines;
+  235 verified manifest entries; 109 unchanged characterization cases,
+  49 rejected original mutations; 115 focused cases; 18 strict Linux view cases
+  with all five original PNG hashes unchanged. All seven integrated manifests
+  with self-tests, architecture, size, storage, shape, theme, format, analyzer
+  comparison and warning allowlist pass. Sixteen original strict infos remain,
+  including all four accepted format-induced identities; zero new diagnostics.
+- All 22 found-not-fixed items remain preserved. Pending physical checks:
+  Android TV D-pad/hold-OK, trailer promotion/foreground/launcher and isolated
+  stream resolution, host playback handoffs from Home/Xtream, real tracker accounts.
+  Remote CI is pending until Claude pushes (local calibrated Linux evidence is
+  complete); semantic shared-file integration and all integrated checks/full-suite
+  comparison on that committed tree remain Claude’s work. No branch switch or
+  push was made. Stop here as instructed.
 
 
 ## Found, not fixed
