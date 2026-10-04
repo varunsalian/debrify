@@ -1110,6 +1110,62 @@ change below.
 - Frozen-input audit at step 4 verifies all eight test files, both helpers and
   all eight PNGs byte-identical to original `5753dee2`. No golden regenerated.
 
+### Step 5 — completion guards, facade cap and CI
+
+- Previous step is `714bd0e9`; `DETAIL_SHOWCASE_COMPLETE = True`. The facade
+  is registered as a compatibility composition root and scanned by real main:
+  exactly 18 public names, exports/comments only, measured cap 24. Actual facade
+  breakdown: 12 directives occupying 24 lines + 0 comment lines + 0 blank lines
+  = 24. It exports no alias, owns no declarations and has no size exception.
+- Real architecture main on a temporary complete tree copy passes unmodified
+  and rejects all 18 negatives: missing/declarative/importing/oversized/extra-name
+  facade, back-import, merged/catalog and reverse merged implementation imports,
+  unshown and inexact service imports, TEMP marker, oversized feature file,
+  owned focus node/timer, borrowed-node disposal, engine and launcher imports.
+  Feature guards remain unconditional. Evidence `step5/architecture-negatives.txt`.
+- CI format includes the facade and `test/support/detail_showcase_*.dart`;
+  analyze includes the facade inside its command, before `| tee analyze.txt`.
+  Actual workflow format command, complete scoped analyze and exact allowlist
+  passed (13 original warnings). No appended path is outside a command.
+- Every integrated manifest/self-test (11) passed with its own config and
+  original baseline, isolated parser-package/kernel per overlapping run.
+  Whole relocation: zero added diagnostics by ORIGINAL identities. Strict
+  comparison: original `_plateFill` warning plus 4 original episode const infos;
+  0 new key/private-public-API/import/brace diagnostics; qualification-induced
+  ordering infos at original lines 5/21 removed; maximum, never sum.
+- Focused + related: 118 passes, including all four strict macOS originals.
+  Completion-enabled frozen guards pass. Theme/shape and profile guards match
+  base7's observed identities (128/1 and 17/1); theme 750, light ink 5 / PRIMARY 0,
+  shapes exactly 18 / facade 0. All 69 per-entry wiring rows completed. Detail
+  manifest LF; all other manifests unchanged. Staged sizes/diff passed.
+- Conservative decisions: 15 files, cohesive 474-line guide, no fallback;
+  sorted facade exports and narrow exact per-file service/cache shows; no lint
+  suppression, callback wrapper, constructor/key/const/lifecycle change or
+  rewritten moved comment. Lazy hold/dispose order retain S classification.
+  Namespace whitespace correction was proven on original code at `5753dee2`
+  before these moves; all test/helper/PNG inputs remain frozen thereafter.
+- Gate 2 follows on this committed tree: full suite vs latest original base7
+  and gate 1, plus base6; strict Docker completion replay of four new Linux
+  PNGs and existing merged showcase. Original PNGs are never regenerated.
+
+| Final feature file | Formatted physical lines |
+| --- | --- |
+| `showcase_cast.dart` | 144 |
+| `showcase_did_you_know.dart` | 202 |
+| `showcase_episodes.dart` | 437 |
+| `showcase_grounds.dart` | 205 |
+| `showcase_guide.dart` | 474 |
+| `showcase_identity.dart` | 293 |
+| `showcase_identity_actions.dart` | 263 |
+| `showcase_identity_readouts.dart` | 374 |
+| `showcase_metrics.dart` | 122 |
+| `showcase_notes.dart` | 140 |
+| `showcase_recs.dart` | 120 |
+| `showcase_seasons.dart` | 234 |
+| `showcase_sources.dart` | 183 |
+| `showcase_style.dart` | 200 |
+| `showcase_universe.dart` | 158 |
+
 ## Found, not fixed
 
 All pre-existing; the move keeps each exactly.

@@ -33,8 +33,11 @@ PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_p
 PLAYLIST_CONTENT_COMPLETE = True
 PLAYLIST_CONTENT_FACADE = "lib/screens/playlist_content_view_screen.dart"
 PLAYLIST_CONTENT_BRIDGE = "lib/features/playlist_content/presentation/legacy_playlist_content/"
-DETAIL_SHOWCASE_COMPLETE = False
+DETAIL_SHOWCASE_COMPLETE = True
 DETAIL_SHOWCASE_FACADE = "lib/widgets/detail/showcase_parts.dart"
+# Measured at completion: twelve export directives occupy 24 physical lines.
+DETAIL_SHOWCASE_FACADE_LIMIT = 24
+DETAIL_SHOWCASE_PUBLIC_NAMES = frozenset(['ShowcaseMetrics', 'ShowcaseMetricsScope', 'kShowcaseGutter', 'ShowcaseAmbient', 'ShowcaseBackdropScrim', 'ShowcaseStickyLogo', 'ShowcaseIdentity', 'ShowcaseSeasons', 'ShowcaseEpisodeCell', 'ShowcaseEpisodeCardCompact', 'ShowcaseCast', 'ShowcaseSources', 'ShowcaseRecs', 'ShowcaseGuide', 'ShowcaseUniverse', 'ShowcaseDidYouKnow', 'ShowcaseBandNote', 'ShowcaseDetails'])
 MERGED_DETAIL_COMPLETE = True
 MERGED_DETAIL_FACADE = "lib/screens/merged_series_detail_screen.dart"
 MERGED_DETAIL_BRIDGE = "lib/features/merged_detail/presentation/legacy_merged_detail/"
@@ -108,6 +111,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 COMPOSITION_ROOTS = {
     FACADE,
     PLAYLIST_CONTENT_FACADE,
+    # Pure compatibility export surface; feature files own the widgets.
+    DETAIL_SHOWCASE_FACADE,
     PIKPAK_FACADE,
     PLAYBACK_SETTINGS_FACADE,
     DEBRID_FACADE,
@@ -436,6 +441,22 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line playback settings facade limit")
         if "TEMP(playback_settings)" in source:
             problems.append("temporary playback settings cross-call remains in the facade")
+    if DETAIL_SHOWCASE_COMPLETE and relative == DETAIL_SHOWCASE_FACADE:
+        if lines > DETAIL_SHOWCASE_FACADE_LIMIT:
+            problems.append(f"{lines} lines exceeds the {DETAIL_SHOWCASE_FACADE_LIMIT}-line detail showcase facade limit")
+        if "TEMP(detail_showcase)" in source:
+            problems.append("temporary detail showcase cross-call remains in the facade")
+        without_comments = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.DOTALL)
+        exports = re.compile(r"export\s+['\"]([^'\"]+)['\"]\s+show\s+([\w,\s]+);", re.MULTILINE)
+        names = [name.strip() for match in exports.finditer(without_comments)
+                 for name in match.group(2).split(",")]
+        if exports.sub("", without_comments).strip():
+            problems.append("detail showcase facade must contain only export directives and comments")
+        if len(names) != 18 or set(names) != DETAIL_SHOWCASE_PUBLIC_NAMES:
+            problems.append("detail showcase facade must export exactly the original eighteen names")
+        if any(not match.group(1).startswith("package:debrify/features/detail_showcase/presentation/showcase_")
+               for match in exports.finditer(without_comments)):
+            problems.append("detail showcase facade must export its feature destinations")
     # Always scan the feature, including intermediate extraction checkpoints.
     if relative.startswith("lib/features/detail_showcase/"):
         if lines > 500:
@@ -648,6 +669,8 @@ def main() -> int:
         paths.add(ROOT / IPTV_SETTINGS_FACADE)
     if PLAYLIST_CONTENT_COMPLETE:
         paths.add(ROOT / PLAYLIST_CONTENT_FACADE)
+    if DETAIL_SHOWCASE_COMPLETE:
+        paths.add(ROOT / DETAIL_SHOWCASE_FACADE)
     if MERGED_DETAIL_COMPLETE:
         paths.add(ROOT / MERGED_DETAIL_FACADE)
     if PIKPAK_COMPLETE:
