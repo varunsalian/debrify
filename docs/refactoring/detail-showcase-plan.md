@@ -35,28 +35,7 @@ are **full-suite**: since `8a527a4e` `suite_evidence.py` records runner flags
 such as `--no-pub` under `flags`, apart from `paths`, so a full run's env has
 empty `paths` and `compare` reports any baseline suite missing from it. Every
 base and gate is recorded with a `suite_evidence.py` at or after `8a527a4e`,
-and Progress shows each env's `paths` - Execution base: `14d173a9` on `refactor/detail-showcase`, dedicated
-  `/Users/varunbsalian/Documents/Projects/debrify-wt/detail-showcase`. Only this
-  worktree and owned nested proof worktrees are used; no branch switch or push.
-  `flutter pub get` ran first; `pubspec.yaml` and lockfile unchanged.
-- Step 0(a): format-only original, exact subject `style(showcase): format the
-  original showcase parts`. Retain the oversized original temporarily until
-  steps 1–4 move all 69 declarations and the shared band chrome. Ratchet
-  3394 → 3425 is the formatter-only raise; later checkpoints only lower it.
-- `detail_showcase/base`: full suite on untouched `14d173a9`, Flutter 3.44.8 /
-  Dart 3.12.2, paths `[]`, flags `["--no-pub"]`: 11,093 success, 13 failure,
-  28 error, 20 skipped. Stable tree; no untracked inputs. Whole analyzer
-  recorded as `base-analyze.txt`; historical failure lists are not changed.
-- `format-proof.json`: whole-file scanner tokens, comments and literals equal
-  after removing exactly six AST-identified optional commas (Explore circle
-  nested calls, SeasonDropdown, SeasonPill, ShowcaseCast constructor, cast tile
-  call). All four negatives reject and each mutation changes its input.
-  Parser and kernel live only under this worktree's `.dart_tool/`.
-- Conservative choices: no application seam, deterministic null artwork,
-  equal-length cross-file alias names to avoid body reflow; all moved comments
-  remain verbatim. Linux originals will be separately verified/committed at L;
-  absent originals block before builder moves. Original characterization/mutation replays and all-manifest replays are
-  complete; see step 0b below. Extraction remains blocked at L. and `flags`.
+and Progress shows each env's `paths` (empty) and `flags`.
 
 ## Goal
 
@@ -647,8 +626,9 @@ change below.
 - Conservative choices: no application seam, deterministic null artwork,
   equal-length cross-file alias names to avoid body reflow; all moved comments
   remain verbatim. Linux originals will be separately verified/committed at L;
-  absent originals block before builder moves. Original characterization/mutation replays and all-manifest replays are
-  complete; see step 0b below. Extraction remains blocked at L.
+  absent originals block before builder moves. Original characterization/mutation
+  replays and all-manifest replays are complete; see step 0b below. Extraction
+  remains blocked at L.
 
 ### Step 0(b) — frozen original characterization checkpoint
 
@@ -730,7 +710,8 @@ change below.
   `.dart_tool/detail_showcase_original`, detached at (b). Both initial and
   restored clean characterization runs pass 34/34, with identical outcomes,
   SDK and committed tree, no untracked inputs or changes during each run.
-- `step0b-original-mutations.json` records **14 actual assertion rejections**:
+- `original-b-mutations/step0b-original-mutations.json` records **14 actual
+  assertion rejections**:
   lazy hold, dispose order, hold routed to primary, trailer double-fire,
   dropped guide identity, selection not re-seated, TV hover ungated, visibility
   axis dropped, sources browse term dropped, k always one, visible guide radius,
@@ -777,8 +758,9 @@ change below.
   export/comment breakdown remain deliverables for steps 4–5.
 - Remaining: L (verify supplied Linux hashes/provenance, separate commit and
   strict Linux default), steps 1–5 and both full-suite extraction gates, each
-  compared with the latest original base (gate 2 also with gate 1). Keep all found behaviour
-  as documented; only item 3's formatting was resolved as explicitly planned.
+  compared with the latest original base (gate 2 also with gate 1). Keep all
+  found behaviour as documented; only item 3's formatting was resolved as
+  explicitly planned.
   Pending device checks: Android TV D-pad through bands/held Play/season popup,
   Apple TV trackpad circles versus cards, merged-shell trailer/play handoff;
   remote CI, completion Linux replay and Claude's integrated-tree checks.
@@ -796,11 +778,41 @@ change below.
   fixtures render the same original calendar labels; original strict macOS
   PNG hashes stay equal, and the script's application-tree equality rule still
   compares (b) with R. Linux provenance and hashes will be verified separately.
-- Application remains exactly R with no feature files/moves. The new checkpoint
-  is committed before repeating the detached original characterization and
-  mutation proofs and recording latest full original `base4`; evidence below
-  will name that checkpoint and compare base4 with base3. Step L remains blocked
-  until the four Linux PNGs and all five provenance files arrive.
+- New original checkpoint: `c74fb2cf` (`test(detail-showcase): step 0b
+  original-code proof checkpoint`). `step0b-utc-checkpoint.json` records its
+  unchanged R application hashes, frozen assertion/test bodies and macOS PNGs;
+  only the explicit UTC fixture and proof-runner refinements differ from (b).
+  No feature file or production declaration has been created/moved.
+- Detached replay `original-utc-checkpoint` passes **34/34** on that committed
+  checkpoint, with a clean, stable input tree; identity comparison with (b)'s
+  restored clean run passes. The refined runner then repeats **all 14 mutations
+  freshly**, each rejected by an actual assertion, without compilation/loading
+  errors or reused logs. Source/architecture files are restored byte-identically;
+  strict pixel failure artifacts are retained outside the proof tree. Previous
+  (b) mutation evidence remains in `original-b-mutations/`.
+- **Latest ORIGINAL base: `detail_showcase/base4` on `c74fb2cf`.** Full suite:
+  **11,127 success / 13 failure / 28 error / 20 skipped**. `base4-comparison.json`
+  records PASS against base3 (zero added/changed/missing/skipped identities) and
+  base/base-fmt (exactly 34 added passing cases, all previous outcomes identical).
+  Flutter 3.44.8 / Dart 3.12.2; `paths=[]`, `flags=["--no-pub"]`; tested tree
+  `3e9b548859e3d1cfd8ab414963708907cc3e470b`, start/end equal, no snapshot,
+  untracked inputs or changes during the run. Both extraction gates must use
+  this latest base; neither gate has run. Base4 is original baseline evidence.
+- UTC helper/test analyzer, fixture formatting, Linux script syntax and final
+  diff checks pass. All previous step-0 application/checker evidence remains
+  valid: no application, assertion, manifest, checker configuration, suppression
+  or dependency changed after those checks. The final report commit changes
+  documentation only; its application/test inputs equal `c74fb2cf`. The final
+  document audit restores an accidentally duplicated Progress block in the
+  execution preamble; all approved text outside Progress equals `14d173a9`.
+- **Step L remains BLOCKED:** all four Linux PNGs and all five required
+  provenance files are absent at this handoff. Capture still resolves exactly
+  (b) `887b1a8f` and R `1165b624`; do not move builders or sweep future Linux
+  inputs into another commit. Steps 1–5, both gates, final facade and device/
+  remote CI/integrated-tree checks remain pending. Current original facade is
+  still 3,425 lines (21 import lines + 3,404 other lines). Branch unchanged;
+  no push, no regression acceptance, no found behaviour fixed beyond the
+  authorized formatter cleanup. Stop and report this prerequisite.
 
 ## Found, not fixed
 
