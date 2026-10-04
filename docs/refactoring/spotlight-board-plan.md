@@ -3,6 +3,7 @@
 Written 2026-10-04 on `refactor/codebase` at `b5e90a55`. The file is
 unchanged since `88b54092`; the only later commit edits `checks.yml`.
 Revised 2026-10-04 after Codex design review round 1.
+Revised 2026-10-04 after Codex design review round 2.
 Follow [AGENTS.md](../../AGENTS.md).
 
 Read first: `docs/refactoring/playlist-content-plan.md`,
@@ -168,7 +169,8 @@ plus the feature files, with manifest renames and registered substitutions
    receiver and member; the per-build card tear-offs (2707–2731) and
    `onTrailerStart: widget.onTrailerStop` (2727) keep their targets; **the
    card's `this` arguments** (`onInteraction?.call(this, …)` at 3152 and,
-   inside `_buildCard`, 3690) pass the owning card State (Technique 4). A
+   inside `_buildCard`, 3690) pass the owning card State, reached in the
+layout through the registered `cardState` binding (Technique 4). A
    section that owns a tear-off target is created once per State, through a
    nullable cached field (never `late`, never per build).
 2. **Hero cadence: one clock, one owner.** `_restartCadence` (967–992)
@@ -268,14 +270,28 @@ plus the feature files, with manifest renames and registered substitutions
 
     Tests: **horizontal movement** (LEFT/RIGHT) between already-mounted
     cards, after async setup settles (post-frame probe, warm-up and
-    description timers drained by bounded pumps), causes zero rebuilds of
-    the board State and of each shelf shell (the `_shelf` `Column` subtree),
-    counted with `debugOnRebuildDirtyWidget`, and keeps the identities of
-    the `ScrollableState`s (vertical list and row), the card `State`s and
-    the `ParallaxFocus` `State`s. For **vertical movement** (DOWN/UP) and a
-    sections update, the board rebuild counts observed on the ORIGINAL are
-    recorded and must match, and the same State identities survive. The
-    existing widget-count tests stay.
+    description timers drained by bounded pumps), is observed two ways.
+    - **Board State:** `debugOnRebuildDirtyWidget` counts rebuilds of the
+      board's `StatefulElement` only (filtered to the `SpotlightBoard`
+      element, not all descendants); the count is zero.
+    - **Shelves:** a shelf `Column` is rebuilt by its parent, not marked
+      dirty, so the hook can't see it. Before and after the move, the test
+      records, for each already-mounted shelf, the root widget instance
+      `_shelf` returns (found by its `KeyedSubtree` key) and its `Element`;
+      both must be `identical` before and after. Card and `Focus` rebuilds
+      under a shelf are intended and are not counted.
+    - **Identities:** the `Element`s and `State`s of the `ScrollableState`s
+      (vertical list and row), the card `State`s and the `ParallaxFocus`
+      `State`s stay `identical`.
+    - **Positive control:** the same observer, run on a scene that forces a
+      shelf reconstruction (a board `setState` through a vertical step, or
+      a sections update), must report a changed shelf root widget, proving
+      it can detect one.
+
+    For **vertical movement** (DOWN/UP) and a sections update, the board
+    rebuild counts observed on the ORIGINAL are recorded and must match,
+    and the same State identities survive. The existing widget-count tests
+    stay.
 11. **D-pad and focus.** `_onKey` (1614–1668) handles KeyDown and KeyRepeat
     only; re-syncs `_row` from live focus; returns `ignored` for Left at
     column 0 or on the first slide, so the sidebar receives it; and opens
@@ -407,9 +423,10 @@ As in the playlist and merged-detail plans, plus:
 
 1. **Two step 0 originals.**
    - **(a) Format-only commit** (`style(spotlight): format the original
-     spotlight board`) is the **verbatim-comparison ORIGINAL**: the
-     manifest's `--baseline`, the relocation comparison, and the
-     application-file hash reference.
+     spotlight board`) is the **verbatim-comparison ORIGINAL** and the
+     default approved application reference R (below): the manifest's
+     `--baseline`, the relocation comparison, and the application-file
+     hash reference.
      The formatter changes 850 lines, making the file 3,896 (+172). The
      commit formats this file only and proves token equality with the
      original except whitespace and AST-identified optional formatter
@@ -426,15 +443,25 @@ As in the playlist and merged-detail plans, plus:
      statement, raw prefix pinned (the playlist precedent).
    - **(b) Characterization checkpoint** (`test(spotlight-board): step 0
      original-code characterization checkpoint`): a later step 0 commit
-     whose **application files are unchanged from (a)** and which adds the
+     whose **application files are unchanged from R** and which adds the
      frozen characterization tests, harness, source reader, fixtures,
      checker config and macOS goldens. It is the ORIGINAL for behaviour:
      the detached-worktree proofs, original replays, step 0b mutation
      negatives and the Linux capture all run **(b)'s own tests** against
      **(b)'s application code**. Progress records both hashes and proves
-     `git rev-parse <b>:lib` equals `<a>:lib` (and likewise `pubspec.yaml`
-     and `pubspec.lock`); if a recorded seam commit is needed (Step 0b),
-     the reference is that seam commit, with its diff recorded.
+     `git rev-parse <b>:lib` equals `<R>:lib` (and likewise `pubspec.yaml`
+     and `pubspec.lock`).
+   - **One approved application reference (R).** By default R is (a).
+     If step 0 proves a seam is needed (fixed artwork or another
+     original-code hook), execution commits it as an explicitly named
+     **seam checkpoint** (`test(spotlight-board): step 0 seam checkpoint`)
+     between (a) and (b); R is then that commit, Progress records its
+     `git diff <a> <R> -- lib pubspec.yaml pubspec.lock` and Claude
+     reviews it. Whichever R is chosen, it is used **everywhere**: the
+     manifest's `--baseline`, the relocation comparison, the hash rule
+     (`<b>:lib` = `<R>:lib`, plus `pubspec.yaml` and `pubspec.lock`), the
+     Linux capture script and every original replay. Progress names R once
+     at step 0; no step mixes (a) and a seam commit.
 2. **Strict-lint baseline.** Analyze (a) under
    `lib/features/analysis_options.yaml`, in a detached worktree inside the
    ignored `.dart_tool/`, qualifying relative imports only. Expected: 15
@@ -461,27 +488,58 @@ As in the playlist and merged-detail plans, plus:
    focus handler calls `widget.onInteraction?.call(this, v)` (3690), whose
    parameter is typed `_CardState`; moved into another class, `this` would
    be the layout owner and break the contract.
+   - **The binding is `cardState`, never `card`.** `_buildCard` already
+     declares a local widget `final card = widget.captionBelow ? … : …`
+     (3608, used as `child: card` at 3665); a field named `card` would be
+     shadowed there, so `onInteraction?.call(card, v)` would pass that
+     widget and `card.<member>` would resolve against it. The local `card`
+     widget stays exactly as it is.
    - `SpotlightBoardCardState` creates one `SpotlightBoardCardLayout` per
      State (nullable cached field, Contract 1), passing **itself** as the
-     final field `card`, plus its live getters. At the original site the
-     only change is `this` → `card`; every other card member is reached as
-     `card.<member>` (receiver-only qualification, manifest renames for
-     privates); `card.hold` keeps `_hold`'s lazy first access.
+     final field `cardState`, plus its live getters and its `setState`
+     tear-off. At the original site the only change is `this` →
+     `cardState`; every other card member except `setState` is reached as
+     `cardState.<member>` (receiver-only qualification, manifest renames
+     for privates); `cardState.hold` keeps `_hold`'s lazy first access.
+   - **`setState` is never State-qualified.** `State.setState` is
+     `@protected`, so `cardState.setState` would raise
+     `invalid_use_of_protected_member`. The card State passes its own
+     `setState` tear-off through the registered callback binding
+     (`live_widget_getters`, as Technique 3), and the four sites (3502,
+     3507, 3511, 3687) call the bound `setState` unchanged. Negatives: a
+     `cardState.setState` qualification; a tear-off of another State's
+     `setState` (the board's); a wrapper closure.
    - The checker gains a **registered bound-`this` substitution** for this
-     one method (`this` → `card`, the field bound to the owning
-     `SpotlightBoardCardState`), and the source reader reverses it.
+     one method (`this` → `cardState`, the field bound to the owning
+     `SpotlightBoardCardState`), and the source reader reverses **exactly
+     that registered binding**: only `cardState` tokens that resolve to the
+     layout's field, never any other identifier and never the local `card`.
      Negatives: `this` left unreplaced; a different State receiver (the
      board State, `widget`, a new or captured State, `_deps.state`); a
-     wrapper closure in place of `card`; the substitution applied outside
-     `_buildCard`.
+     wrapper closure in place of `cardState`; the substitution applied
+     outside `_buildCard`; and a **receiver-shadowing negative**: a moved
+     site whose receiver resolves to the local `card` widget (for example
+     `onInteraction?.call(card, v)` or a field named `card`) must be
+     rejected.
    - **The lexical `BuildContext` stays.** `_buildCard(BuildContext
      context, double growth)` keeps its parameter, and the
      `TweenAnimationBuilder` builder still passes its own `context`
      (`builder: (context, growth, _) => …build(context, growth)`). Body
-     uses (`AppThemeScope.of`, `findRenderObject`,
-     `Scrollable.ensureVisible`) stay the parameter, never the State's
-     `context` getter (the checker's shadowed-context rule,
-     `check_settings_moves.py:442–444`).
+     uses (`AppThemeScope.of` at 3239, `findRenderObject` at 3697,
+     `Scrollable.ensureVisible` at 3698) stay the parameter, never the
+     State's `context` getter.
+   - **The context guard learns bound-State receivers.** The
+     shadowed-context rule (`check_settings_moves.py:442–444`,
+     `builder_context_signature`) counts only `_deps.context`/`deps.context`
+     over a `context` parameter, and `normalize` would map
+     `cardState.context` onto a plain lexical `context`, hiding a swap. A
+     config-scoped key (`bound_state_receivers`, here `cardState` for
+     `_buildCard` only) makes the guard recognise `<receiver>.context` and
+     `<receiver>.mounted` **before** normalization and count them as
+     `state-context-over-parameter`. Negatives replace the lexical
+     `context` with `cardState.context` in `AppThemeScope.of(context)`,
+     `context.findRenderObject()` and `Scrollable.ensureVisible(context, …)`;
+     each must fail. Manifests without the key behave as today.
    - **The element tree is unchanged.** The owner is a plain class, not a
      widget; no `Builder` or wrapper is introduced. Goldens and the
      identity tests (Contract 10) pin it, and a behaviour test asserts the
@@ -497,7 +555,17 @@ As in the playlist and merged-detail plans, plus:
      dependency report; types come from the bridge, `models/` or Flutter),
      plus `Color Function(AppTheme) groundOf`, `Color Function(AppTheme)
      groundLowOf` and `double leftThirdBusy`.
-   - The facade State implements it: each getter **reads `widget.<p>`
+   - The facade State implements it, so its class header gains exactly
+     `implements SpotlightBoardWidgetView`. The checker compares retained
+     widget headers exactly (`check_settings_moves.py:1026`, `Widget class
+     header changed`), so the manifest registers **that one header
+     addition** for `SpotlightBoardState` only: `extends
+     State<SpotlightBoard> with MetadataPresentationMixin<SpotlightBoard>`
+     (555) stays token-identical and only the trailing `implements` clause
+     is allowed. Negatives: a changed superclass, a dropped or added mixin,
+     another or an extra interface, the addition on any other class, and
+     `final`/`base`/`sealed` modifiers must each fail.
+   - Each getter **reads `widget.<p>`
      live** on every call; the statics are bound as the
      `SpotlightBoard.groundOf`/`SpotlightBoard.groundLowOf` tear-offs and
      `SpotlightBoard.leftThirdBusy`, so `groundLowOf` still evaluates
@@ -510,13 +578,22 @@ As in the playlist and merged-detail plans, plus:
      import.
    - **Compiling composition before extraction.** Step 0b proves, on a
      throwaway branch of (b), that the facade State can implement the view
-     and pass it to one stub section under the strict config with no new
-     diagnostics; the evidence is kept and the branch discarded. The view
-     lands at step 3 with its first production consumer (no unused
-     scaffold).
-   - **Shared checker extensions.** The bound-`this` (4) and view/static
-     receiver (5) substitutions extend `check_settings_moves.py`
-     (`receiver_paths`, `live_widget_getters`) and the shared source-reader
+     (with the registered header addition) and pass it to one stub
+     section, and that a stub `SpotlightBoardCardLayout` bound through
+     `cardState` and the injected `setState` tear-off compiles, under the
+     strict config with no new diagnostics (in particular no
+     `invalid_use_of_protected_member`). The probe also runs **the real
+     manifest checker** (`check_settings_moves.py` with this config and an
+     isolated `--parser-package`) over the probe tree, which must accept
+     the header addition and reject each header negative. The evidence is
+     kept and the branch discarded. Step 3 reruns the real checker on the
+     real header. The view lands at step 3 with its first production
+     consumer (no unused scaffold).
+   - **Shared checker extensions.** The bound-`this` and bound-State
+     context guard (4), and the view/static receiver substitutions and
+     registered header addition (5), extend `check_settings_moves.py`
+     (`receiver_paths`, `live_widget_getters`, `bound_state_receivers`, a
+     per-class header-addition key) and the shared source-reader
      helper as opt-in config keys; every integrated manifest's self-tests
      must pass unchanged, and Claude reviews the diff at integration.
 
@@ -554,8 +631,9 @@ As in the playlist and merged-detail plans, plus:
    a trailer gated on `_rolling`; an inserted `Opacity`; a changed 2 s
    duration; a mixin call through a captured value or `super`; an eager
    `_hold`; a section built per build; a reworded comment; a new `const`;
-   plus the bound-`this` (Technique 4) and view/static (Technique 5)
-   negatives.
+   plus the bound-`this`, receiver-shadowing, `setState` and bound-State
+   context negatives (Technique 4) and the view/static and header-addition
+   negatives (Technique 5).
 4. **Harness** (`test/support/spotlight_board_fixture.dart`): mocked
    `SharedPreferences`; root `ProfileRuntime` init and reset;
    `AppThemeScope` with a named look (Spotlight parallax and one other);
@@ -627,9 +705,10 @@ As in the playlist and merged-detail plans, plus:
 9. **Linux capture script**
    (`dev/tool/capture_spotlight_board_linux_goldens.sh`). It resolves
    checkpoint (b) by its **exact subject**, uses only (b)'s tests, and
-   fails unless (b)'s application files hash-equal (a)'s (`git rev-parse
-   <b>:lib` = `<a>:lib`, plus `pubspec.yaml` and `pubspec.lock`), resolving
-   (a) by its exact subject too. Execution reports both hashes on a
+   fails unless (b)'s application files hash-equal R's (`git rev-parse
+   <b>:lib` = `<R>:lib`, plus `pubspec.yaml` and `pubspec.lock`), resolving
+   R by its exact subject too ((a)'s, or the seam checkpoint's when
+   Progress names one). Execution reports both hashes on a
    reachable ref. Claude clones the branch into a colima-mounted `$HOME`
    path, checks out (b), verifies `HEAD` and the hashes, runs the script in
    the calibrated `debrify-flutter:3.44.8` linux/amd64 image (the playlist
@@ -645,13 +724,14 @@ lease without the dpad return; `decodeW` with `growth`; an unconditional
 `FocusExpressionBox`; `hoverable` on dpad; a `setState` in `_walk`; an
 unsnapped TV veil; a touch backdrop without its `ShaderMask`; a mixin call
 that bypasses the override; `onInteraction` given a different State. It
-also records the compiling-composition probe (Technique 5). Record
-`base2` (after any seam) and `base3` (after tests, at (b)); each comparison
-must pass with only added, passing identities.
+also records the compiling-composition probe with its real-checker run
+(Technique 5). Record `base2` (at R, only when R is a seam checkpoint) and
+`base3` (after tests, at (b)); each comparison must pass with only added,
+passing identities.
 
 ### Per step and gates
 
-The playlist procedure applies, with `--baseline <(a)>` and
+The playlist procedure applies, with `--baseline <R>` (Technique 1) and
 `--relocate lib/widgets/home/spotlight_board.dart=lib/features/spotlight_board/`.
 Original-side behaviour replays use (b). Every step runs: every integrated manifest plus this one, with self-tests
 and an isolated `--parser-package`; the per-symbol relocation comparison
@@ -679,8 +759,8 @@ Merge rules: union and dedupe the registrations, exceptions, CI paths,
 known-failure identities, theme patterns, shape entries, the `main()`
 facade path and the `COMPOSITION_ROOTS` entry; keep every `*_COMPLETE`;
 take the lowest verified size ceiling; keep every `checks.yml` path before
-`| tee`; **review the checker extensions** (bound-`this`, view/static
-receivers) as a shared-tool change: opt-in only, with every other
+`| tee`; **review the checker extensions** (bound-`this`, bound-State
+context guard, view/static receivers, header addition) as a shared-tool change: opt-in only, with every other
 manifest's self-tests unchanged.
 
 Then, on the merged committed tree, Claude reruns every manifest with
@@ -710,7 +790,7 @@ push is approved.
    importers and the new tests; the known-failure list gains only the dated
    identities observed in `base`. The shape slice totals 3, with 0 in the
    facade; the theme surface is unchanged.
-6. **Progress.** It records the commits ((a), (b) and each step),
+6. **Progress.** It records the commits ((a), R if different, (b) and each step),
    ownership, exceptions with exits, the cap arithmetic and any seam, and
    lists as **pending device verification**: hero trailer start and stop on
    Android TV, tvOS and desktop; the desktop single-decoder handoff; card
