@@ -216,6 +216,12 @@ const Map<String, int> kShapeResidue = {
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
   // Spotlight board: facade and every destination, preserving three radii.
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_focus.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection.dart':
+      0,
   'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart':
       0,
   'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_cadence.dart':

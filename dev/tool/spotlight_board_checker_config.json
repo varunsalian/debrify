@@ -21,6 +21,9 @@
     "formatter_if_braces",
     "production_api_annotation",
     "layout_body",
+    "formatter_if_braces",
+    "production_api_annotation",
+    "layout_body",
     "formatter_if_braces"
   ],
   "receivers": [
@@ -92,7 +95,10 @@
     "SpotlightBoardHeroArt": "SpotlightBoardHeroArt",
     "SpotlightBoardHeroWarmup": "SpotlightBoardHeroWarmup",
     "SpotlightBoardAmbient": "SpotlightBoardAmbient",
-    "SpotlightBoardCadence": "SpotlightBoardCadence"
+    "SpotlightBoardCadence": "SpotlightBoardCadence",
+    "SpotlightBoardMovement": "SpotlightBoardMovement",
+    "SpotlightBoardSelection": "SpotlightBoardSelection",
+    "SpotlightBoardFocus": "SpotlightBoardFocus"
   },
   "receiver_owners": {
     "_sections.selection": "SpotlightBoardSelection",
@@ -127,7 +133,10 @@
     "SpotlightBoardHeroArt": "SpotlightBoardHeroArt",
     "SpotlightBoardHeroWarmup": "SpotlightBoardHeroWarmup",
     "SpotlightBoardAmbient": "SpotlightBoardAmbient",
-    "SpotlightBoardCadence": "SpotlightBoardCadence"
+    "SpotlightBoardCadence": "SpotlightBoardCadence",
+    "SpotlightBoardMovement": "SpotlightBoardMovement",
+    "SpotlightBoardSelection": "SpotlightBoardSelection",
+    "SpotlightBoardFocus": "SpotlightBoardFocus"
   },
   "sidecars": {
     "scaffolding": "dev/tool/spotlight_board_scaffolding.json",
@@ -4827,5 +4836,8 @@
   "spotlight_state_field_bindings": [
     "_CardState",
     "SpotlightBoardState"
-  ]
+  ],
+  "borrowed_member_aliases": {
+    "_deps.shelfExtent": "SpotlightBoardState._shelfExtent"
+  }
 }

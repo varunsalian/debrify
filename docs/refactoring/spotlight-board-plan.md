@@ -1267,6 +1267,30 @@ decomposition; bug fixes and behaviour changes, including everything below.
   original base3 remains authoritative. A fresh committed gate-1 run uses
   `gate1-final.*`, preserving the rejected first attempt.
 
+### Full-suite gate 1 — accepted committed correction
+
+- Accepted tree is committed step 4b `d0c77a60`; `gate1-final.*` records
+  `--no-pub --concurrency=4`, identical start/end head/tree, no untracked
+  inputs and complete end-of-run tree provenance. Outcome: **11,130 PASS,
+  13 pre-existing failures, 28 pre-existing errors, 20 unchanged skips**.
+  Comparison against original base3: zero new failures, missing identities,
+  additions or new skips. Complete identity-set comparison also passes.
+- The first rejected `gate1.*` and all causal original/current proofs remain
+  retained. No flaky acceptance was used; no baseline/allowlist was changed.
+  Step 5 may proceed.
+
+### Step 5 — selection, scrolling and movement
+
+- Previous checkpoint: `d0c77a60`.
+- Moved selection, scroll, movement, progressive DOWN and public
+  focus bodies. The original mixin/public virtual dispatch and State
+  callback identities remain intact. Shelf extent is temporarily borrowed
+  through the exact retained State tear-off; injection and constructors are
+  pinned. It exits when shelf rendering moves in step 6. Per-entry wiring
+  reviewed before production scaffold pinning.
+- Formatted facade: **1576**. Physical AST breakdown: imports export 30, widget docs 185, state header 3, lifecycle 142, forwarders overrides 24, bindings 54, composition 12, retained original bodies 1090, remaining 36 (sum 1576); detailed spans in `step5-cap.json`.
+- All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step5-focused.*` includes full end-of-run tree provenance before this Progress edit.
+
 ### Amendment after step 0b (design-reviewed before resuming)
 
 1. **Facade cap.** The hard maximum becomes 460 (see the size section); the

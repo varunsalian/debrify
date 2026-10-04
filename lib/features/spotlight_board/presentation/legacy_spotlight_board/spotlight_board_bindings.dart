@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_composition.dart';
 import 'package:debrify/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_owners.dart';
+import 'package:debrify/features/spotlight_board/presentation/spotlight_board_metrics.dart';
 import 'package:debrify/features/spotlight_board/presentation/spotlight_board_types.dart';
 import 'package:debrify/models/metadata_preferences.dart';
 import 'package:debrify/models/stremio_addon.dart';
@@ -50,7 +51,8 @@ abstract class SpotlightBoardWidgetView {
 
 class SpotlightBoardDependencies {
   // TEMP(spotlight_board): borrowed State callbacks until their planned step.
-
+  final double Function(SpotlightShelf section, SpotlightBoardMetrics m)
+  shelfExtent;
   final SpotlightBoardWidgetView view;
   final SpotlightBoardOwners owners;
   final BuildContext Function() context;
@@ -67,5 +69,6 @@ class SpotlightBoardDependencies {
     this.mounted,
     this.setState,
     this.heroWarmupProvider,
+    this.shelfExtent,
   );
 }
