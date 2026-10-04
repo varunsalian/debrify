@@ -62,6 +62,26 @@ def self_test(package=None):
                 bad=values[:start]+replacement+values[end:];changed=copy.deepcopy(lookup)
                 changed[key]['tokens']=[{'text':v,'offset':i,'comment':v.startswith(('//','/*'))} for i,v in enumerate(bad)];changed[key]['formatCommas']=[]
                 assert check_callback_identities(changed,rows,source,{**config,'callback_identities':[spec],'catalog_call_receivers':[],'catalog_live_reads':[],'callback_receiver_aliases':{**config.get('callback_receiver_aliases',{}),'secondInstance':'$OtherInstance.'+target['owner']},'receiver_paths':{**config.get('receiver_paths',{}),'secondInstance':target['owner']}}),'Accepted '+spec['name']+' '+label
+    for spec in config['callback_identities']:
+        borrowed=config.get('callback_borrowed_getters',{}).get(spec['name'],{})
+        if not borrowed:continue
+        for site in spec['sites']:
+            key,node=located(site['member']);values=tokens(node)
+            spans=argument_ranges(values,site['call'])[site.get('occurrence',0)]
+            start,end=next((a,b) for a,b in spans if [v for v in values[a:b] if not v.startswith(('//','/*'))][:2]==[site['argument'],':'])
+            start=next(i for i in range(start,end) if values[i]==':')+1
+            getter=spec['expected_identity'].split('.')[-1]
+            bad=values[:start]+['secondDependencies','.',getter,'(',')']+values[end:]
+            changed=copy.deepcopy(lookup);changed[key]['tokens']=[{'text':v,'offset':i,'comment':v.startswith(('//','/*'))} for i,v in enumerate(bad)];changed[key]['formatCommas']=[]
+            alias={**borrowed,'secondDependencies.'+getter+'()':'$OtherState.widget.'+getter}
+            negative={**config,'callback_identities':[spec],'catalog_call_receivers':[],'catalog_live_reads':[],'callback_borrowed_getters':{**config['callback_borrowed_getters'],spec['name']:alias}}
+            assert check_callback_identities(changed,rows,source,negative),'Accepted same-type borrowed callback getter receiver swap '+spec['name']
+            mutate(site['member'],'wrong borrowed host callback getter '+getter,lambda s,getter=getter:s.replace('_deps.'+getter+'()','_deps.onPlay()',1))
+            mutate(site['member'],'missing borrowed host callback getter invocation '+getter,lambda s,getter=getter:s.replace('_deps.'+getter+'()','_deps.'+getter,1))
+    for spec in config.get('catalog_borrowed_live_reads',[]):
+        mutate(spec['member'],'missing borrowed live getter invocation',lambda s:s.replace('_deps.metadataPreferences()','_deps.metadataPreferences',1))
+        mutate(spec['member'],'alternate borrowed live getter receiver',lambda s:s.replace('_deps.metadataPreferences()','otherDeps.metadataPreferences()',1))
+
     from catalog_detail_callback_identity import check_contracts
     for spec in config['catalog_call_receivers']:
         key,node=located(spec['member']);values=tokens(node)

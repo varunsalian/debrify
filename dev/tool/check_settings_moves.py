@@ -324,7 +324,8 @@ def normalize(values, rows, row=None):
             borrowed = CONFIG.get('borrowed_resource_aliases', {}).get(target)
             if borrowed:
                 out.append(borrowed.split('.')[-1]); i += 3; continue
-            if target in mapped or target in {'mounted', 'setState', 'context'} | set(CONFIG.get('live_widget_getters', [])):
+            borrowed_live = set(CONFIG.get('borrowed_live_getter_members', [])) & live_getters
+            if target in mapped or target in borrowed_live or target in {'mounted', 'setState', 'context'} | set(CONFIG.get('live_widget_getters', [])):
                 if value in {'_deps', 'deps'} and target in live_getters and values[i + 3:i + 5] == ['(', ')']:
                     out.append(target); i += 5; continue
                 if target in {'mounted', 'context'} | set(CONFIG.get('live_widget_getters', [])) and values[i + 3:i + 5] == ['(', ')']:

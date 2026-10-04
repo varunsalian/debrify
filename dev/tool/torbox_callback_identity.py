@@ -127,11 +127,16 @@ def check_callback_identities(lookup, rows, source_path, config):
         owner, _, name = original.rpartition('.')
         return lookup[(source_path, owner, name)]
 
-    def identity(expr, owner, *, getter=False):
+    def identity(expr, owner, *, getter=False, borrowed_getters=None):
         expr = list(expr)
         if expr[-1:] == ['!']:
             expr.pop()
         path = ''.join(expr)
+        # Exact per-spec dependency getter reads borrow a host callback. These
+        # aliases are separate from owned getter detection; all other specs and
+        # configs keep their direct-tear-off rule.
+        if path in (borrowed_getters or {}):
+            path = borrowed_getters[path]
         if getter and path in getter_aliases:
             path = getter_aliases[path]
         if not re.fullmatch(r'[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*', path):
@@ -211,7 +216,8 @@ def check_callback_identities(lookup, rows, source_path, config):
                                 or expr[end:end + 1] not in ([], [':'], [')'])):
                             raise ValueError('conditional branch must be a direct tear-off: ' + target)
                         expr = expr[start:end]
-                    resolved.append(identity(expr, node['owner'], getter=is_getter))
+                    resolved.append(identity(expr, node['owner'], getter=is_getter,
+                                             borrowed_getters=config.get('callback_borrowed_getters', {}).get(spec['name'], {})))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
         if 'callback_member' in spec:

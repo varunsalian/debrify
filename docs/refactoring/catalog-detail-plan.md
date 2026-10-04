@@ -893,6 +893,30 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   The other ten passing manifest results were reused on unchanged inputs within
   this step after the catalog-only fixture correction.
 
+- Step 4 commit: `90445004`. Step 5: all 27 rendering declarations are wired
+  into six cohesive owners (root/body, columns, hero, credits, rails, actions),
+  with the exact State build forwarder. Widget trees, raw host callbacks versus
+  mapped recommendation callbacks, context read sites, reveal timing, section
+  order, focus and scroll ownership stay exact. Every new wiring row reviewed
+  before scaffold pinning. Facade 320 lines; rendering owners 143–297; largest
+  destination remains 389. The below-800 facade size exception is removed.
+- Step 5 checks PASS: all 11 real-config manifests/self-tests with own baselines
+  and isolated parsers; all 135 catalog leaves and forwarders, original comment
+  bytes, structural/storage/format checks, shape 29, Classic sites 238,
+  light-ink, scoped warning allowlist and root comparison. Exactly the original
+  four const infos, accepted curly info and private-field warning remain;
+  strict additions zero. All 122 focused identities pass against the latest
+  base, and five macOS/five Linux originals pass strictly with unchanged hashes
+  and stable trees (`step5-checks.json`, `step5-final-linux-strict.env.json`).
+- Step 5 checker decisions: per-spec exact borrowed getter aliases preserve
+  the five raw host callback identities while every other config keeps its old
+  rule. Standalone same-type dependency-instance negatives map a real alternate
+  getter to another widget identity; wrapper, member, missing-invocation and
+  wrong-getter negatives also reject. The three inherited preference reads use
+  a catalog-only borrowed-live getter entry and exact invocation-count guard,
+  including missing-invocation/alternate-receiver negatives. Application wiring
+  was not changed to satisfy checker gaps; no assertions or diagnostics waived.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

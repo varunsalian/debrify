@@ -33,6 +33,16 @@ def check_contracts(lookup, rows, source, config):
             count=sum(values[i:i+3]==direct or values[i:i+5]==getter for i in range(len(values)))
             if count!=spec['count']:errors.append('Catalog live host read changed at original evaluation site: '+str(spec))
         except (KeyError,StopIteration):errors.append('Missing catalog host site: '+str(spec))
+    for spec in config.get('catalog_borrowed_live_reads',[]):
+        try:
+            node=node_for(spec['member']);values=tokens(node)
+            occurrences=[i for i,v in enumerate(values) if v==spec['getter']]
+            row=next(r for r in rows if r['original_name']==spec['member'])
+            moved=lookup.get((row['destination_file'],row['destination_class'],row['new_name'])) is node
+            if len(occurrences)!=spec['count'] or (moved and any(
+                    values[i-2:i+3]!=['_deps','.',spec['getter'],'(',')'] for i in occurrences)):
+                errors.append('Catalog borrowed live getter read changed: '+str(spec))
+        except (KeyError,StopIteration):errors.append('Missing catalog borrowed live getter: '+str(spec))
     for spec in config.get('catalog_host_assignments',[]):
         try:
             values=tokens(node_for(spec['member']))

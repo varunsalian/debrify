@@ -213,6 +213,12 @@
         "watchlist",
         "primaryAction",
         "boundSources",
+        "rootLayout",
+        "contentColumns",
+        "heroSections",
+        "creditsSections",
+        "railSections",
+        "actionLayout",
         "CatalogDetailParts"
       ]
     }
@@ -233,7 +239,25 @@
     "_p": "CatalogDetailPrimaryAction",
     "_parts.boundSources": "CatalogDetailBoundSources",
     "_deps.parts.boundSources": "CatalogDetailBoundSources",
-    "_b": "CatalogDetailBoundSources"
+    "_b": "CatalogDetailBoundSources",
+    "_parts.rootLayout": "CatalogDetailRootLayout",
+    "_deps.parts.rootLayout": "CatalogDetailRootLayout",
+    "_ro": "CatalogDetailRootLayout",
+    "_parts.contentColumns": "CatalogDetailContentColumns",
+    "_deps.parts.contentColumns": "CatalogDetailContentColumns",
+    "_co": "CatalogDetailContentColumns",
+    "_parts.heroSections": "CatalogDetailHeroSections",
+    "_deps.parts.heroSections": "CatalogDetailHeroSections",
+    "_he": "CatalogDetailHeroSections",
+    "_parts.creditsSections": "CatalogDetailCreditsSections",
+    "_deps.parts.creditsSections": "CatalogDetailCreditsSections",
+    "_cr": "CatalogDetailCreditsSections",
+    "_parts.railSections": "CatalogDetailRailSections",
+    "_deps.parts.railSections": "CatalogDetailRailSections",
+    "_ra": "CatalogDetailRailSections",
+    "_parts.actionLayout": "CatalogDetailActionLayout",
+    "_deps.parts.actionLayout": "CatalogDetailActionLayout",
+    "_a": "CatalogDetailActionLayout"
   },
   "receiver_owners": {
     "_CatalogItemDetailScreenState": "_CatalogItemDetailScreenState"
@@ -266,6 +290,30 @@
     {
       "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_bound_sources.dart",
       "owner": "CatalogDetailBoundSources"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_root_layout.dart",
+      "owner": "CatalogDetailRootLayout"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_content_columns.dart",
+      "owner": "CatalogDetailContentColumns"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_hero_sections.dart",
+      "owner": "CatalogDetailHeroSections"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_credits_sections.dart",
+      "owner": "CatalogDetailCreditsSections"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_rail_sections.dart",
+      "owner": "CatalogDetailRailSections"
+    },
+    {
+      "file": "lib/features/catalog_detail/presentation/legacy_catalog_detail/catalog_detail_action_layout.dart",
+      "owner": "CatalogDetailActionLayout"
     }
   ],
   "co_located_declarations": [
@@ -287,7 +335,13 @@
     "CatalogDetailMetadata": "$State.parts.metadata",
     "CatalogDetailWatchlist": "$State.parts.watchlist",
     "CatalogDetailPrimaryAction": "$State.parts.primaryAction",
-    "CatalogDetailBoundSources": "$State.parts.boundSources"
+    "CatalogDetailBoundSources": "$State.parts.boundSources",
+    "CatalogDetailRootLayout": "$State.parts.rootLayout",
+    "CatalogDetailContentColumns": "$State.parts.contentColumns",
+    "CatalogDetailHeroSections": "$State.parts.heroSections",
+    "CatalogDetailCreditsSections": "$State.parts.creditsSections",
+    "CatalogDetailRailSections": "$State.parts.railSections",
+    "CatalogDetailActionLayout": "$State.parts.actionLayout"
   },
   "callback_receiver_aliases": {
     "_parts.resources": "$State.parts.resources",
@@ -304,7 +358,25 @@
     "_p": "$State.parts.primaryAction",
     "_parts.boundSources": "$State.parts.boundSources",
     "_deps.parts.boundSources": "$State.parts.boundSources",
-    "_b": "$State.parts.boundSources"
+    "_b": "$State.parts.boundSources",
+    "_parts.rootLayout": "$State.parts.rootLayout",
+    "_deps.parts.rootLayout": "$State.parts.rootLayout",
+    "_ro": "$State.parts.rootLayout",
+    "_parts.contentColumns": "$State.parts.contentColumns",
+    "_deps.parts.contentColumns": "$State.parts.contentColumns",
+    "_co": "$State.parts.contentColumns",
+    "_parts.heroSections": "$State.parts.heroSections",
+    "_deps.parts.heroSections": "$State.parts.heroSections",
+    "_he": "$State.parts.heroSections",
+    "_parts.creditsSections": "$State.parts.creditsSections",
+    "_deps.parts.creditsSections": "$State.parts.creditsSections",
+    "_cr": "$State.parts.creditsSections",
+    "_parts.railSections": "$State.parts.railSections",
+    "_deps.parts.railSections": "$State.parts.railSections",
+    "_ra": "$State.parts.railSections",
+    "_parts.actionLayout": "$State.parts.actionLayout",
+    "_deps.parts.actionLayout": "$State.parts.actionLayout",
+    "_a": "$State.parts.actionLayout"
   },
   "callback_identities": [
     {
@@ -1435,5 +1507,42 @@
   ],
   "retained_override_bodies": [
     "_CatalogItemDetailScreenState.onMetadataPolicyChanged"
-  ]
+  ],
+  "borrowed_live_getter_members": [
+    "metadataPreferences"
+  ],
+  "catalog_borrowed_live_reads": [
+    {
+      "member": "_CatalogItemDetailScreenState.build",
+      "getter": "metadataPreferences",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._secMeta",
+      "getter": "metadataPreferences",
+      "count": 1
+    },
+    {
+      "member": "_CatalogItemDetailScreenState._secGenres",
+      "getter": "metadataPreferences",
+      "count": 1
+    }
+  ],
+  "callback_borrowed_getters": {
+    "_buildBody onOpen": {
+      "_deps.onRecommendationTap()": "widget.onRecommendationTap"
+    },
+    "_secQuickActions onSelected": {
+      "_deps.onTraktAction()": "widget.onTraktAction"
+    },
+    "_secSimklQuickActions onSelected": {
+      "_deps.onSimklAction()": "widget.onSimklAction"
+    },
+    "_secMdblistQuickActions onSelected": {
+      "_deps.onMdblistAction()": "widget.onMdblistAction"
+    },
+    "_buildActionRow onBrowse": {
+      "_deps.onBrowse()": "widget.onBrowse"
+    }
+  }
 }
