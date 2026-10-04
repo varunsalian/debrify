@@ -329,7 +329,7 @@ def normalize(values, rows, row=None):
                     and values[i + 4:i + 7] == ['(', ')', '}']):
                 target = values[i + 3]
                 alias = CONFIG.get('live_getter_aliases', {}).get(target)
-                out.extend(['$', alias.split('.')[-1] if alias else mapping.get(target, target)])
+                out.extend(['$', mapping.get(alias.split('.')[-1], alias.split('.')[-1]) if alias else mapping.get(target, target)])
                 i += 7
                 continue
             path = receiver_path_match(values, i + 1)
@@ -372,7 +372,7 @@ def normalize(values, rows, row=None):
             getter_alias = CONFIG.get('live_getter_aliases', {}).get(target)
             if (getter_alias and target in live_getters
                     and values[i + 3:i + 5] == ['(', ')']):
-                out.append(getter_alias.split('.')[-1]); i += 5; continue
+                out.append(mapping.get(getter_alias.split('.')[-1], getter_alias.split('.')[-1])); i += 5; continue
             borrowed = CONFIG.get('borrowed_resource_aliases', {}).get(target)
             if borrowed:
                 out.append(borrowed.split('.')[-1]); i += 3; continue
@@ -871,6 +871,29 @@ def normalized_accessor_tokens(values, spec, rows):
     return result
 
 
+def check_live_widget_factory(lookup, config):
+    """Opt-in exact live getters at the one State composition boundary."""
+    spec = config.get('live_widget_factory')
+    if not spec or config.get('completed_step', 0) < spec['active_step']:
+        return []
+    node = lookup.get((spec['file'], spec['owner'], spec['member']))
+    if node is None:
+        return ['Missing live widget factory']
+    from torbox_callback_identity import arguments, argument_expression
+    calls = arguments(tokens(node), spec['call'])
+    if len(calls) != 1:
+        return ['Live widget factory must be constructed once per State']
+    errors = []
+    for property_name in config['live_widget_getters']:
+        try:
+            expression = argument_expression(calls[0], property_name)
+        except (KeyError, ValueError, IndexError):
+            expression = []
+        if expression != ['(', ')', '=>', 'widget', '.', property_name]:
+            errors.append('Widget getter must read current widget: ' + property_name)
+    return errors
+
+
 def check_scaffolds(lookup, scaffolds):
     errors = []
     for scaffold in scaffolds:
@@ -1019,9 +1042,13 @@ def _check(original_source, sources, rows, source_path, package=None,
     for alias, member in CONFIG.get('live_getter_aliases', {}).items():
         declared = original.get(member)
         retained = next((r for r in rows if r['original_name'] == member), None)
+        staged = CONFIG.get('retained_getter_steps', {}).get(member)
+        in_place = all_nodes(parsed).get((source_path, *member.rsplit('.', 1))) if staged else None
+        is_retained = retained and (retained['destination_file'] == source_path or (
+            staged == int(retained.get('step', -1))
+            and int(CONFIG.get('completed_step', -1)) < staged and in_place is not None))
         if (not declared or declared['parameters'] is not None
-                or declared['bodyOffset'] is None or not retained
-                or retained['destination_file'] != source_path
+                or declared['bodyOffset'] is None or not is_retained
                 or alias not in CONFIG.get('live_getter_callbacks', [])):
             errors.append('Live getter alias must name one retained facade getter: ' + alias)
     for alias, member in CONFIG.get('borrowed_resource_aliases', {}).items():
@@ -1045,6 +1072,29 @@ def _check(original_source, sources, rows, source_path, package=None,
                              else None)
         if len(set(locations)) != 1 or locations[0] is None:
             errors.append('Co-located declarations split: ' + str(pair))
+    # Opt-in original declaration contracts: exact owner adjacency and bytes.
+    for group in CONFIG.get('adjacent_declarations', []):
+        locations = []
+        for original_name in group:
+            row = next(r for r in rows if r['original_name'] == original_name)
+            key = (row['destination_file'], row['destination_class'], row['new_name'])
+            if key not in lookup:
+                owner, _, name = original_name.rpartition('.')
+                key = (source_path, owner, name)
+            locations.append(key)
+        members = sorted((node for key, node in lookup.items()
+                          if key[:2] == locations[0][:2]), key=lambda node: node['start'])
+        adjacent_names = [node['name'] for node in members]
+        expected = [key[2] for key in locations]
+        if (any(key[:2] != locations[0][:2] for key in locations)
+                or not any(adjacent_names[i:i + len(expected)] == expected
+                           for i in range(len(adjacent_names) - len(expected) + 1))):
+            errors.append('Original declaration adjacency changed: ' + str(group))
+    for name, reference_path in CONFIG.get('byte_identical_declarations', {}).items():
+        node = lookup.get((source_path, '', name))
+        expected = (ROOT / reference_path).read_text().rstrip()
+        if node is None or node['text'].rstrip() != expected:
+            errors.append('Public declaration bytes changed: ' + name)
     errors.extend(check_plain_sections(lookup))
     errors.extend(check_type_aliases(lookup, rows, CONFIG))
     if CONFIG.get('file_aliases'):
@@ -1055,6 +1105,7 @@ def _check(original_source, sources, rows, source_path, package=None,
     partitions = sidecar('partitions', 'partitions', {})
     scaffolds = sidecar('scaffolding', 'scaffolds', []) if source_path == CONFIG['source'] else []
     errors.extend(check_scaffolds(lookup, scaffolds))
+    errors.extend(check_live_widget_factory(lookup, CONFIG))
     active_partitions = [partitions[r['original_name']] for r in rows
                          if r['original_name'] in partitions
                          and (r['destination_file'], r['destination_class'], r['new_name']) in lookup]

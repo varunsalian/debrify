@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -48,6 +48,17 @@ DETAIL_SHOWCASE_FACADE = "lib/widgets/detail/showcase_parts.dart"
 # Measured at completion: twelve export directives occupy 24 physical lines.
 DETAIL_SHOWCASE_FACADE_LIMIT = 24
 DETAIL_SHOWCASE_PUBLIC_NAMES = frozenset(['ShowcaseMetrics', 'ShowcaseMetricsScope', 'kShowcaseGutter', 'ShowcaseAmbient', 'ShowcaseBackdropScrim', 'ShowcaseStickyLogo', 'ShowcaseIdentity', 'ShowcaseSeasons', 'ShowcaseEpisodeCell', 'ShowcaseEpisodeCardCompact', 'ShowcaseCast', 'ShowcaseSources', 'ShowcaseRecs', 'ShowcaseGuide', 'ShowcaseUniverse', 'ShowcaseDidYouKnow', 'ShowcaseBandNote', 'ShowcaseDetails'])
+EPISODES_PANEL_COMPLETE = True
+EPISODES_PANEL_FACADE = "lib/widgets/episodes_panel.dart"
+EPISODES_PANEL_BRIDGE = "lib/features/episodes_panel/presentation/legacy_episodes_panel/"
+# One immutable DTO import, scoped to this exact model and target.
+EPISODES_PANEL_MODEL_IMPORTS = {
+    "lib/features/episodes_panel/models/episodes_panel_view.dart": {
+        "lib/services/trakt/trakt_episode_model.dart",
+    },
+}
+# Set to the measured completed facade at step 7 (at most 450).
+EPISODES_PANEL_FACADE_LIMIT = 281
 MERGED_DETAIL_COMPLETE = True
 MERGED_DETAIL_FACADE = "lib/screens/merged_series_detail_screen.dart"
 MERGED_DETAIL_BRIDGE = "lib/features/merged_detail/presentation/legacy_merged_detail/"
@@ -126,6 +137,8 @@ COMPOSITION_ROOTS = {
     # Spotlight facade wires concrete legacy bridge sections.
     SPOTLIGHT_BOARD_FACADE,
     FACADE,
+    # Episodes panel's composition root owns live State wiring and lifecycle.
+    EPISODES_PANEL_FACADE,
     PLAYLIST_CONTENT_FACADE,
     # Pure compatibility export surface; feature files own the widgets.
     DETAIL_SHOWCASE_FACADE,
@@ -364,6 +377,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     MERGED_DETAIL_BRIDGE,
     ADDON_HUB_BRIDGE,
     SPOTLIGHT_BOARD_BRIDGE,
+    EPISODES_PANEL_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -485,6 +499,18 @@ def violations(path: Path) -> list[str]:
             problems.append("detail showcase constructs an owned resource")
         if re.search(r"\b(?:node|focusNode|nodes\[[^]]+\])\s*\.\s*dispose\s*\(", source):
             problems.append("detail showcase disposes a borrowed focus node")
+    if relative.startswith("lib/features/episodes_panel/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line episodes panel extraction limit")
+        if "TEMP(episodes_panel)" in source and (EPISODES_PANEL_COMPLETE or not relative.startswith(EPISODES_PANEL_BRIDGE)):
+            problems.append("episodes panel temporary cross-call outside its staged legacy bridge")
+        if re.search(r"\b(?:VideoPlayerLauncher|VideoPlayerScreen|SeriesSourceFetcher|mergeSources|TorrentPlayback\w*)\b", source):
+            problems.append("episodes panel contains a playback/source-launch symbol")
+    if EPISODES_PANEL_COMPLETE and relative == EPISODES_PANEL_FACADE:
+        if lines > EPISODES_PANEL_FACADE_LIMIT:
+            problems.append(f"{lines} lines exceeds the {EPISODES_PANEL_FACADE_LIMIT}-line episodes panel facade limit")
+        if "TEMP(episodes_panel)" in source:
+            problems.append("episodes panel temporary cross-call remains in the facade")
     if relative.startswith("lib/features/merged_detail/"):
         if lines > 500:
             problems.append(f"{lines} lines exceeds the 500-line merged-detail extraction limit")
@@ -610,6 +636,21 @@ def violations(path: Path) -> list[str]:
                 other_feature = target.split("/")[2]
                 if {own_feature, other_feature} == {"spotlight_board", "home"} and not target.startswith(f"lib/features/{other_feature}/models/"):
                     problems.append("spotlight board/home implementation cross-import")
+            if relative.startswith("lib/features/episodes_panel/"):
+                if target == EPISODES_PANEL_FACADE:
+                    problems.append("episodes panel feature imports its facade")
+                if (not relative.startswith(EPISODES_PANEL_BRIDGE)
+                        and target.startswith("lib/services/")
+                        and target not in EPISODES_PANEL_MODEL_IMPORTS.get(relative, set())):
+                    problems.append("episodes panel service/storage import outside its exact legacy bridge")
+            if target.startswith("lib/features/") and relative.startswith("lib/features/"):
+                own_panel_feature = relative.split("/")[2]
+                other_panel_feature = target.split("/")[2]
+                panel_peers = {"merged_detail", "catalog_detail", "detail_showcase"}
+                if ((own_panel_feature == "episodes_panel" and other_panel_feature in panel_peers)
+                        or (other_panel_feature == "episodes_panel" and own_panel_feature in panel_peers)):
+                    if not target.startswith(f"lib/features/{other_panel_feature}/models/"):
+                        problems.append("episodes panel/detail implementation cross-import")
             if relative.startswith("lib/features/playback_settings/") and not relative.startswith(PLAYBACK_SETTINGS_BRIDGE) and target.startswith("lib/services/"):
                 problems.append("playback settings outside the legacy bridge imports a service")
             if relative.startswith("lib/features/iptv_settings/"):
@@ -734,6 +775,8 @@ def main() -> int:
         paths.add(ROOT / PLAYLIST_CONTENT_FACADE)
     if DETAIL_SHOWCASE_COMPLETE:
         paths.add(ROOT / DETAIL_SHOWCASE_FACADE)
+    if EPISODES_PANEL_COMPLETE:
+        paths.add(ROOT / EPISODES_PANEL_FACADE)
     if MERGED_DETAIL_COMPLETE:
         paths.add(ROOT / MERGED_DETAIL_FACADE)
     if ADDON_HUB_COMPLETE:

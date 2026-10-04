@@ -329,6 +329,53 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/spotlight_board/presentation/spotlight_board_metrics.dart': 0,
   'lib/features/spotlight_board/presentation/spotlight_board_types.dart': 0,
 
+  // Episodes panel move-only slice: seven original bare radii.
+  'lib/widgets/episodes_panel.dart': 0,
+  'lib/features/episodes_panel/application/episodes_panel_policies.dart': 0,
+  'lib/features/episodes_panel/models/episodes_panel_view.dart': 0,
+  'lib/features/episodes_panel/presentation/episodes_panel_season_step.dart': 0,
+  'lib/features/episodes_panel/presentation/episodes_panel_source_button.dart':
+      1,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_classic_chrome.dart':
+      3,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_classic_content.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_layout.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart':
+      3,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_enrichment.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_episode_options.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_metadata.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_mode.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_navigation.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_parts.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_resources.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_root_layout.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_season_options.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_seasons.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_watched_actions.dart':
+      0,
   // Playback settings: every remaining destination and the facade, at zero.
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart':
       0,
