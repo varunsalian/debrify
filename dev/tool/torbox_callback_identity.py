@@ -23,7 +23,10 @@ def arguments(values, method):
                 args.append(current)
                 current = []
                 continue
-            if token in ('(', '[', '{'):
+            # '${' opens a string interpolation whose '}' is counted as a
+            # closer; without it the depth never returns to 0 and the call
+            # is silently dropped.
+            if token in ('(', '[', '{', '${'):
                 depth += 1
             elif token in (')', ']', '}'):
                 depth -= 1
