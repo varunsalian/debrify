@@ -30,7 +30,7 @@ def rewatch_adjacency(lookup, rows, source):
 def self_test(package=None):
     from check_settings_moves import ROOT, all_nodes, check, tokens
     from check_verbatim_moves import parse
-    from torbox_callback_identity import argument_expression, argument_ranges, arguments, check_callback_identities
+    from torbox_callback_identity import argument_expression, argument_ranges, arguments, check_callback_identities, member_occurrences
     config = json.loads((ROOT / 'dev/tool/merged_detail_checker_config.json').read_text())
     rows = list(csv.DictReader((ROOT / 'dev/tool/merged_detail_manifest.tsv').open(), delimiter='\t'))
     source = config['source']
@@ -127,7 +127,7 @@ def self_test(package=None):
                 start += 1
             if 'conditional_member' in site:
                 _, target = located(site['conditional_member'])
-                positions = [j for j in range(start, end) if values[j] == target['name']]
+                positions = [start + j for j in member_occurrences(values[start:end], target['name'])]
                 end = positions[site.get('branch_occurrence', 0)] + 1
                 start = end - 1
                 while start >= 2 and values[start - 1] == '.':
@@ -148,6 +148,12 @@ def self_test(package=None):
         except ValueError: pass
         else: raise AssertionError('Named selector accepted missing/duplicate argument')
     print('Merged named argument / interpolation positive and negatives: PASS')
+    assert member_occurrences(['X', '(', 'theme', ':', 'theme', ')'], 'theme') == [4]
+    assert member_occurrences(['X', '(', 'theme', ':', 'other', ')'], 'theme') == []
+    assert member_occurrences(['c', '?', 'theme', ':', 'other'], 'theme') == [2]
+    assert member_occurrences(['{', 'theme', ':', 'v', '}'], 'theme') == [1]
+    assert member_occurrences(['(', 'theme', ':', 'theme', ')'], 'theme') == [3]
+    print('Merged named labels versus member reads/ternary/map/record negatives: PASS')
     from check_settings_moves import configured, normalize, check_type_aliases
     alias_rows = [{'original_name': '_PrivateProbe', 'destination_file': 'alias.dart',
                    'destination_class': '', 'new_name': '_PrivateProbe'}]

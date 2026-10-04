@@ -9,6 +9,7 @@ import 'package:debrify/services/simkl/simkl_menu_helpers.dart';
 import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
 import 'package:debrify/services/trakt/trakt_service.dart';
+import 'package:debrify/widgets/detail/detail_model.dart';
 import 'package:debrify/widgets/trakt/trakt_menu_helpers.dart';
 import 'package:flutter/material.dart';
 
@@ -76,7 +77,7 @@ class MergedDetailDependencies {
   final Future<List<TraktSeason>> Function()? Function() seasonsLoader;
   final Future<void> Function(TraktEpisode episode)? Function() onPlayEpisode;
   final Future<Map<String, double>> Function()? Function() watchProgressLoader;
-  final bool Function() isMovie;
+  final DetailFocusCoordinator Function() focusCoordinator;
   final StremioMeta Function() presentedItem;
   final void Function() refreshAfterPlayback;
   final String Function() style;
@@ -125,7 +126,7 @@ class MergedDetailDependencies {
     required this.seasonsLoader,
     required this.onPlayEpisode,
     required this.watchProgressLoader,
-    required this.isMovie,
+    required this.focusCoordinator,
     required this.presentedItem,
     required this.refreshAfterPlayback,
     required this.style,

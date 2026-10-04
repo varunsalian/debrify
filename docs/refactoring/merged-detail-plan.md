@@ -997,6 +997,38 @@ the behaviour suite compared against the latest recorded base.
   the calibrated image, without generating or updating any golden.
 
 
+### Step 6 — renderer and model factory
+
+- Move the complete build/model/body/pane/key-handler/hero/action/episode/rail
+  leaves to their reviewed manifest owners. The facade is 434 formatted lines;
+  all 50 feature files are below 500. Public widget bytes, the two lazy fields,
+  mixins, original lifecycle order and direct action tear-offs remain exact.
+  Composition captures live getters and constructs inert owners once per route;
+  it reads no widget, context, lazy field or service during construction.
+- Per-entry wiring was reviewed before pinning: root/body rendering uses live
+  presentation, panel source identity remains the host's original item, every
+  host callback remains the same object, and focus/resource reads retain their
+  original sites. The model factory keeps bound-source loading and its comment
+  fragments in the original order. Shape budgets reconcile to exactly 26.
+- The callback resolver now distinguishes named labels from member reads, while
+  retaining ternary/map reads and interpolation. Real-config wrapper/receiver
+  negatives and all seven integrated manifests/self-tests pass. Architecture,
+  sizes, storage, theme, light-ink, format and diff pass. Whole/scoped/strict
+  analyzer and warning allowlist pass, with no diagnostic additions.
+- The complete source-body assertions caught reader bugs around a ternary colon,
+  a spread call and comment-separated named labels. The reader now carries code
+  context across comments and preserves literal text. Every assertion stays;
+  all 40 affected source cases pass on unchanged original production code, and
+  all 115 focused cases pass on the moved code (`step6-characterization-context`).
+  The 21 related files also compare PASS to base4 (1,306 success, one failure,
+  two errors; the same three observed original identities).
+- Linux strict rendering passes all 18 view cases in the calibrated amd64 image
+  (`step6-linux-strict`, stable archived tree). All five committed original PNG
+  hashes remain unchanged. That run preceded only the source-reader correction;
+  application, view-test, fixture and golden inputs are identical. The separate
+  original-golden commit remains separate. No golden was generated or updated.
+
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

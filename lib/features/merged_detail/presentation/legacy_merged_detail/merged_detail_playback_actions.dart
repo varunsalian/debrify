@@ -4,6 +4,7 @@ import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_menus.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_state.dart';
+import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/stremio_addon.dart';
@@ -17,7 +18,6 @@ import 'package:flutter/material.dart';
 class MergedDetailPlaybackActions {
   final MergedDetailDependencies _deps;
   MergedDetailPlaybackActions(this._deps);
-  bool get _isMovie => _deps.isMovie();
   StremioMeta get _item => _deps.presentedItem();
   bool get mounted => _deps.mounted();
   void Function(VoidCallback) get setState => _deps.setState;
@@ -25,6 +25,7 @@ class MergedDetailPlaybackActions {
   MergedDetailMenus get _mn => _deps.parts.menus;
   MergedDetailResumeActions get _ra => _deps.parts.resumeActions;
   MergedDetailResumeState get _r => _deps.parts.resumeState;
+  MergedDetailRootLayout get _ro => _deps.parts.rootLayout;
   MergedDetailTrackingState get _k => _deps.parts.trackingState;
 
   Future<void> guardPlay(Future<void> Function() launch) async {
@@ -72,7 +73,7 @@ class MergedDetailPlaybackActions {
     // resolves to S01E01 with no evidence behind it, hence the started gate.
     final season = _r.resumeSeason;
     final episode = _r.resumeEpisode;
-    return (!_isMovie &&
+    return (!_ro.isMovie &&
             _r.resumeStarted &&
             _r.hasMergedEpisodeTarget &&
             season != null &&
@@ -106,7 +107,7 @@ class MergedDetailPlaybackActions {
       _deps.context(),
       id: _item.imdbId ?? _item.id,
       title: _item.name,
-      isMovie: _isMovie,
+      isMovie: _ro.isMovie,
       onConfirmed: () => setState(() => _r.rewatchPending = true),
     );
     if (!mounted) return;
@@ -131,7 +132,7 @@ class MergedDetailPlaybackActions {
   }
 
   Future<void> browsePrimarySourcesAsync() async {
-    if (_isMovie) {
+    if (_ro.isMovie) {
       _deps.onBrowse()?.call();
       return;
     }

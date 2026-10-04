@@ -722,10 +722,18 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_cast_tile.dart':
       0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart':
+      0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart':
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_focus_state.dart':
       0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart':
+      2,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_menus.dart':
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_actions.dart':
@@ -736,13 +744,19 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart':
       0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart':
+      0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart':
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_playback_actions.dart':
       0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_rail_layout.dart':
+      2,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart':
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_state.dart':
+      0,
+  'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart':
       0,
   'lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_simkl_descriptions.dart':
       0,
@@ -783,7 +797,7 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/merged_detail/presentation/merged_tracker_pill.dart': 1,
   'lib/features/merged_detail/presentation/merged_tracker_sheet_header.dart': 0,
   'lib/features/merged_detail/presentation/merged_trailer_playing_chip.dart': 1,
-  'lib/screens/merged_series_detail_screen.dart': 4,
+  'lib/screens/merged_series_detail_screen.dart': 0,
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(

@@ -395,12 +395,12 @@
         ".",
         "watchProgressLoader",
         ",",
-        "isMovie",
+        "focusCoordinator",
         ":",
         "(",
         ")",
         "=>",
-        "_isMovie",
+        "_focusCoordinator",
         ",",
         "presentedItem",
         ":",
@@ -466,36 +466,6 @@
     {
       "file": "lib/screens/merged_series_detail_screen.dart",
       "owner": "_MergedDetailScreenState",
-      "name": "_mn",
-      "tokens": [
-        "MergedDetailMenus",
-        "get",
-        "_mn",
-        "=>",
-        "_parts",
-        ".",
-        "menus",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/screens/merged_series_detail_screen.dart",
-      "owner": "_MergedDetailScreenState",
-      "name": "_ma",
-      "tokens": [
-        "MergedDetailMetadataActions",
-        "get",
-        "_ma",
-        "=>",
-        "_parts",
-        ".",
-        "metadataActions",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/screens/merged_series_detail_screen.dart",
-      "owner": "_MergedDetailScreenState",
       "name": "_ml",
       "tokens": [
         "MergedDetailMetadataLoading",
@@ -535,21 +505,6 @@
         "_parts",
         ".",
         "modelFactory",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/screens/merged_series_detail_screen.dart",
-      "owner": "_MergedDetailScreenState",
-      "name": "_pl",
-      "tokens": [
-        "MergedDetailPlaybackActions",
-        "get",
-        "_pl",
-        "=>",
-        "_parts",
-        ".",
-        "playbackActions",
         ";"
       ]
     },
@@ -601,21 +556,6 @@
     {
       "file": "lib/screens/merged_series_detail_screen.dart",
       "owner": "_MergedDetailScreenState",
-      "name": "_k",
-      "tokens": [
-        "MergedDetailTrackingState",
-        "get",
-        "_k",
-        "=>",
-        "_parts",
-        ".",
-        "trackingState",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/screens/merged_series_detail_screen.dart",
-      "owner": "_MergedDetailScreenState",
       "name": "_tr",
       "tokens": [
         "MergedDetailTrailerActions",
@@ -625,21 +565,6 @@
         "_parts",
         ".",
         "trailerActions",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/screens/merged_series_detail_screen.dart",
-      "owner": "_MergedDetailScreenState",
-      "name": "_t",
-      "tokens": [
-        "MergedDetailTrailerState",
-        "get",
-        "_t",
-        "=>",
-        "_parts",
-        ".",
-        "trailerState",
         ";"
       ]
     },
@@ -1126,6 +1051,519 @@
       ]
     },
     {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "MergedDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "MergedDetailActionLayout",
+      "tokens": [
+        "MergedDetailActionLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "mounted",
+      "tokens": [
+        "bool",
+        "get",
+        "mounted",
+        "=>",
+        "_deps",
+        ".",
+        "mounted",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "setState",
+      "tokens": [
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "get",
+        "setState",
+        "=>",
+        "_deps",
+        ".",
+        "setState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_f",
+      "tokens": [
+        "MergedDetailFocusState",
+        "get",
+        "_f",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "focusState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_mn",
+      "tokens": [
+        "MergedDetailMenus",
+        "get",
+        "_mn",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "menus",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_ma",
+      "tokens": [
+        "MergedDetailMetadataActions",
+        "get",
+        "_ma",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadataActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_m",
+      "tokens": [
+        "MergedDetailMetadataState",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadataState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_pa",
+      "tokens": [
+        "MergedDetailPaneLayout",
+        "get",
+        "_pa",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "paneLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_pl",
+      "tokens": [
+        "MergedDetailPlaybackActions",
+        "get",
+        "_pl",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "playbackActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_ra",
+      "tokens": [
+        "MergedDetailResumeActions",
+        "get",
+        "_ra",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "resumeActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_ro",
+      "tokens": [
+        "MergedDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_ta",
+      "tokens": [
+        "MergedDetailTrackingActions",
+        "get",
+        "_ta",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "trackingActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_k",
+      "tokens": [
+        "MergedDetailTrackingState",
+        "get",
+        "_k",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "trackingState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_tr",
+      "tokens": [
+        "MergedDetailTrailerActions",
+        "get",
+        "_tr",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "trailerActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_t",
+      "tokens": [
+        "MergedDetailTrailerState",
+        "get",
+        "_t",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "trailerState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout",
+      "name": "_wa",
+      "tokens": [
+        "MergedDetailWatchlistActions",
+        "get",
+        "_wa",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "watchlistActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "MergedDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "MergedDetailRootLayout",
+      "tokens": [
+        "MergedDetailRootLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "_item",
+      "tokens": [
+        "StremioMeta",
+        "get",
+        "_item",
+        "=>",
+        "_deps",
+        ".",
+        "presentedItem",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "_style",
+      "tokens": [
+        "String",
+        "get",
+        "_style",
+        "=>",
+        "_deps",
+        ".",
+        "style",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "metadataPreferences",
+      "tokens": [
+        "MetadataPreferences",
+        "get",
+        "metadataPreferences",
+        "=>",
+        "_deps",
+        ".",
+        "metadataPreferences",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "mounted",
+      "tokens": [
+        "bool",
+        "get",
+        "mounted",
+        "=>",
+        "_deps",
+        ".",
+        "mounted",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "setState",
+      "tokens": [
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "get",
+        "setState",
+        "=>",
+        "_deps",
+        ".",
+        "setState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "_bo",
+      "tokens": [
+        "MergedDetailBodyLayout",
+        "get",
+        "_bo",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "bodyLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "_f",
+      "tokens": [
+        "MergedDetailFocusState",
+        "get",
+        "_f",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "focusState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "_m",
+      "tokens": [
+        "MergedDetailMetadataState",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadataState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "_ri",
+      "tokens": [
+        "MergedDetailRailLayout",
+        "get",
+        "_ri",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "railLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "_r",
+      "tokens": [
+        "MergedDetailResumeState",
+        "get",
+        "_r",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "resumeState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "_tr",
+      "tokens": [
+        "MergedDetailTrailerActions",
+        "get",
+        "_tr",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "trailerActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout",
+      "name": "_t",
+      "tokens": [
+        "MergedDetailTrailerState",
+        "get",
+        "_t",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "trailerState",
+        ";"
+      ]
+    },
+    {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart",
       "owner": "",
       "name": "appOwnedActions",
@@ -1231,6 +1669,150 @@
         "parts",
         ".",
         "trackingState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart",
+      "owner": "MergedDetailBodyLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "MergedDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart",
+      "owner": "MergedDetailBodyLayout",
+      "name": "MergedDetailBodyLayout",
+      "tokens": [
+        "MergedDetailBodyLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart",
+      "owner": "MergedDetailBodyLayout",
+      "name": "_style",
+      "tokens": [
+        "String",
+        "get",
+        "_style",
+        "=>",
+        "_deps",
+        ".",
+        "style",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart",
+      "owner": "MergedDetailBodyLayout",
+      "name": "_ep",
+      "tokens": [
+        "MergedDetailEpisodesLayout",
+        "get",
+        "_ep",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "episodesLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart",
+      "owner": "MergedDetailBodyLayout",
+      "name": "_f",
+      "tokens": [
+        "MergedDetailFocusState",
+        "get",
+        "_f",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "focusState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart",
+      "owner": "MergedDetailBodyLayout",
+      "name": "_he",
+      "tokens": [
+        "MergedDetailHeroLayout",
+        "get",
+        "_he",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "heroLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart",
+      "owner": "MergedDetailBodyLayout",
+      "name": "_b",
+      "tokens": [
+        "MergedDetailModelFactory",
+        "get",
+        "_b",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "modelFactory",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart",
+      "owner": "MergedDetailBodyLayout",
+      "name": "_pa",
+      "tokens": [
+        "MergedDetailPaneLayout",
+        "get",
+        "_pa",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "paneLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart",
+      "owner": "MergedDetailBodyLayout",
+      "name": "_ro",
+      "tokens": [
+        "MergedDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
         ";"
       ]
     },
@@ -1475,23 +2057,6 @@
     {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_actions.dart",
       "owner": "MergedDetailTrackingActions",
-      "name": "_isMovie",
-      "tokens": [
-        "bool",
-        "get",
-        "_isMovie",
-        "=>",
-        "_deps",
-        ".",
-        "isMovie",
-        "(",
-        ")",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_actions.dart",
-      "owner": "MergedDetailTrackingActions",
       "name": "_item",
       "tokens": [
         "StremioMeta",
@@ -1539,6 +2104,23 @@
         "_deps",
         ".",
         "setState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_actions.dart",
+      "owner": "MergedDetailTrackingActions",
+      "name": "_ro",
+      "tokens": [
+        "MergedDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
         ";"
       ]
     },
@@ -1606,23 +2188,6 @@
         "this",
         ".",
         "_deps",
-        ")",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart",
-      "owner": "MergedDetailResumeActions",
-      "name": "_isMovie",
-      "tokens": [
-        "bool",
-        "get",
-        "_isMovie",
-        "=>",
-        "_deps",
-        ".",
-        "isMovie",
-        "(",
         ")",
         ";"
       ]
@@ -1700,6 +2265,23 @@
     {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart",
       "owner": "MergedDetailResumeActions",
+      "name": "_ro",
+      "tokens": [
+        "MergedDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_actions.dart",
+      "owner": "MergedDetailResumeActions",
       "name": "_k",
       "tokens": [
         "MergedDetailTrackingState",
@@ -1737,6 +2319,116 @@
         "_SimklSheet",
         ".",
         "new",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_rail_layout.dart",
+      "owner": "MergedDetailRailLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "MergedDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_rail_layout.dart",
+      "owner": "MergedDetailRailLayout",
+      "name": "MergedDetailRailLayout",
+      "tokens": [
+        "MergedDetailRailLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_rail_layout.dart",
+      "owner": "MergedDetailRailLayout",
+      "name": "_item",
+      "tokens": [
+        "StremioMeta",
+        "get",
+        "_item",
+        "=>",
+        "_deps",
+        ".",
+        "presentedItem",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_rail_layout.dart",
+      "owner": "MergedDetailRailLayout",
+      "name": "_f",
+      "tokens": [
+        "MergedDetailFocusState",
+        "get",
+        "_f",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "focusState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_rail_layout.dart",
+      "owner": "MergedDetailRailLayout",
+      "name": "_m",
+      "tokens": [
+        "MergedDetailMetadataState",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadataState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_rail_layout.dart",
+      "owner": "MergedDetailRailLayout",
+      "name": "_pa",
+      "tokens": [
+        "MergedDetailPaneLayout",
+        "get",
+        "_pa",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "paneLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_rail_layout.dart",
+      "owner": "MergedDetailRailLayout",
+      "name": "_ro",
+      "tokens": [
+        "MergedDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
         ";"
       ]
     },
@@ -2812,14 +3504,14 @@
     {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart",
       "owner": "MergedDetailDependencies",
-      "name": "isMovie",
+      "name": "focusCoordinator",
       "tokens": [
         "final",
-        "bool",
+        "DetailFocusCoordinator",
         "Function",
         "(",
         ")",
-        "isMovie",
+        "focusCoordinator",
         ";"
       ]
     },
@@ -3111,7 +3803,7 @@
         "required",
         "this",
         ".",
-        "isMovie",
+        "focusCoordinator",
         ",",
         "required",
         "this",
@@ -3325,23 +4017,6 @@
     {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_playback_actions.dart",
       "owner": "MergedDetailPlaybackActions",
-      "name": "_isMovie",
-      "tokens": [
-        "bool",
-        "get",
-        "_isMovie",
-        "=>",
-        "_deps",
-        ".",
-        "isMovie",
-        "(",
-        ")",
-        ";"
-      ]
-    },
-    {
-      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_playback_actions.dart",
-      "owner": "MergedDetailPlaybackActions",
       "name": "_item",
       "tokens": [
         "StremioMeta",
@@ -3463,6 +4138,23 @@
     {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_playback_actions.dart",
       "owner": "MergedDetailPlaybackActions",
+      "name": "_ro",
+      "tokens": [
+        "MergedDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_playback_actions.dart",
+      "owner": "MergedDetailPlaybackActions",
       "name": "_k",
       "tokens": [
         "MergedDetailTrackingState",
@@ -3518,6 +4210,17 @@
         "final",
         "MergedDetailFocusState",
         "focusState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "rootLayout",
+      "tokens": [
+        "final",
+        "MergedDetailRootLayout",
+        "rootLayout",
         ";"
       ]
     },
@@ -3634,6 +4337,72 @@
     {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
       "owner": "MergedDetailParts",
+      "name": "bodyLayout",
+      "tokens": [
+        "final",
+        "MergedDetailBodyLayout",
+        "bodyLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "paneLayout",
+      "tokens": [
+        "final",
+        "MergedDetailPaneLayout",
+        "paneLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "heroLayout",
+      "tokens": [
+        "final",
+        "MergedDetailHeroLayout",
+        "heroLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "actionLayout",
+      "tokens": [
+        "final",
+        "MergedDetailActionLayout",
+        "actionLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "episodesLayout",
+      "tokens": [
+        "final",
+        "MergedDetailEpisodesLayout",
+        "episodesLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
+      "name": "railLayout",
+      "tokens": [
+        "final",
+        "MergedDetailRailLayout",
+        "railLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_parts.dart",
+      "owner": "MergedDetailParts",
       "name": "MergedDetailParts",
       "tokens": [
         "MergedDetailParts",
@@ -3665,6 +4434,13 @@
         "=",
         "MergedDetailFocusState",
         "(",
+        ")",
+        ",",
+        "rootLayout",
+        "=",
+        "MergedDetailRootLayout",
+        "(",
+        "deps",
         ")",
         ",",
         "resumeActions",
@@ -3735,6 +4511,48 @@
         "(",
         "deps",
         ")",
+        ",",
+        "bodyLayout",
+        "=",
+        "MergedDetailBodyLayout",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "paneLayout",
+        "=",
+        "MergedDetailPaneLayout",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "heroLayout",
+        "=",
+        "MergedDetailHeroLayout",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "actionLayout",
+        "=",
+        "MergedDetailActionLayout",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "episodesLayout",
+        "=",
+        "MergedDetailEpisodesLayout",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "railLayout",
+        "=",
+        "MergedDetailRailLayout",
+        "(",
+        "deps",
+        ")",
         ";"
       ]
     },
@@ -3766,6 +4584,23 @@
     {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
       "owner": "MergedDetailModelFactory",
+      "name": "_focusCoordinator",
+      "tokens": [
+        "DetailFocusCoordinator",
+        "get",
+        "_focusCoordinator",
+        "=>",
+        "_deps",
+        ".",
+        "focusCoordinator",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
       "name": "_item",
       "tokens": [
         "StremioMeta",
@@ -3775,6 +4610,23 @@
         "_deps",
         ".",
         "presentedItem",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "metadataPreferences",
+      "tokens": [
+        "MetadataPreferences",
+        "get",
+        "metadataPreferences",
+        "=>",
+        "_deps",
+        ".",
+        "metadataPreferences",
         "(",
         ")",
         ";"
@@ -3813,6 +4665,644 @@
         "_deps",
         ".",
         "setState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_f",
+      "tokens": [
+        "MergedDetailFocusState",
+        "get",
+        "_f",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "focusState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_mn",
+      "tokens": [
+        "MergedDetailMenus",
+        "get",
+        "_mn",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "menus",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_ma",
+      "tokens": [
+        "MergedDetailMetadataActions",
+        "get",
+        "_ma",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadataActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_m",
+      "tokens": [
+        "MergedDetailMetadataState",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadataState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_pl",
+      "tokens": [
+        "MergedDetailPlaybackActions",
+        "get",
+        "_pl",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "playbackActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_ra",
+      "tokens": [
+        "MergedDetailResumeActions",
+        "get",
+        "_ra",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "resumeActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_ro",
+      "tokens": [
+        "MergedDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_ta",
+      "tokens": [
+        "MergedDetailTrackingActions",
+        "get",
+        "_ta",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "trackingActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_k",
+      "tokens": [
+        "MergedDetailTrackingState",
+        "get",
+        "_k",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "trackingState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_tr",
+      "tokens": [
+        "MergedDetailTrailerActions",
+        "get",
+        "_tr",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "trailerActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_t",
+      "tokens": [
+        "MergedDetailTrailerState",
+        "get",
+        "_t",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "trailerState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_model_factory.dart",
+      "owner": "MergedDetailModelFactory",
+      "name": "_wa",
+      "tokens": [
+        "MergedDetailWatchlistActions",
+        "get",
+        "_wa",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "watchlistActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "MergedDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout",
+      "name": "MergedDetailPaneLayout",
+      "tokens": [
+        "MergedDetailPaneLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout",
+      "name": "_item",
+      "tokens": [
+        "StremioMeta",
+        "get",
+        "_item",
+        "=>",
+        "_deps",
+        ".",
+        "presentedItem",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout",
+      "name": "metadataPreferences",
+      "tokens": [
+        "MetadataPreferences",
+        "get",
+        "metadataPreferences",
+        "=>",
+        "_deps",
+        ".",
+        "metadataPreferences",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout",
+      "name": "_ac",
+      "tokens": [
+        "MergedDetailActionLayout",
+        "get",
+        "_ac",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "actionLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout",
+      "name": "_f",
+      "tokens": [
+        "MergedDetailFocusState",
+        "get",
+        "_f",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "focusState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout",
+      "name": "_he",
+      "tokens": [
+        "MergedDetailHeroLayout",
+        "get",
+        "_he",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "heroLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout",
+      "name": "_m",
+      "tokens": [
+        "MergedDetailMetadataState",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadataState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout",
+      "name": "_ri",
+      "tokens": [
+        "MergedDetailRailLayout",
+        "get",
+        "_ri",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "railLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout",
+      "name": "_ro",
+      "tokens": [
+        "MergedDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart",
+      "owner": "MergedDetailEpisodesLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "MergedDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart",
+      "owner": "MergedDetailEpisodesLayout",
+      "name": "MergedDetailEpisodesLayout",
+      "tokens": [
+        "MergedDetailEpisodesLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart",
+      "owner": "MergedDetailEpisodesLayout",
+      "name": "mounted",
+      "tokens": [
+        "bool",
+        "get",
+        "mounted",
+        "=>",
+        "_deps",
+        ".",
+        "mounted",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart",
+      "owner": "MergedDetailEpisodesLayout",
+      "name": "setState",
+      "tokens": [
+        "void",
+        "Function",
+        "(",
+        "VoidCallback",
+        ")",
+        "get",
+        "setState",
+        "=>",
+        "_deps",
+        ".",
+        "setState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart",
+      "owner": "MergedDetailEpisodesLayout",
+      "name": "_f",
+      "tokens": [
+        "MergedDetailFocusState",
+        "get",
+        "_f",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "focusState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart",
+      "owner": "MergedDetailEpisodesLayout",
+      "name": "_pl",
+      "tokens": [
+        "MergedDetailPlaybackActions",
+        "get",
+        "_pl",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "playbackActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart",
+      "owner": "MergedDetailEpisodesLayout",
+      "name": "_ri",
+      "tokens": [
+        "MergedDetailRailLayout",
+        "get",
+        "_ri",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "railLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart",
+      "owner": "MergedDetailEpisodesLayout",
+      "name": "_ra",
+      "tokens": [
+        "MergedDetailResumeActions",
+        "get",
+        "_ra",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "resumeActions",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart",
+      "owner": "MergedDetailEpisodesLayout",
+      "name": "_r",
+      "tokens": [
+        "MergedDetailResumeState",
+        "get",
+        "_r",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "resumeState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart",
+      "owner": "MergedDetailHeroLayout",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "MergedDetailDependencies",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart",
+      "owner": "MergedDetailHeroLayout",
+      "name": "MergedDetailHeroLayout",
+      "tokens": [
+        "MergedDetailHeroLayout",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart",
+      "owner": "MergedDetailHeroLayout",
+      "name": "_item",
+      "tokens": [
+        "StremioMeta",
+        "get",
+        "_item",
+        "=>",
+        "_deps",
+        ".",
+        "presentedItem",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart",
+      "owner": "MergedDetailHeroLayout",
+      "name": "metadataPreferences",
+      "tokens": [
+        "MetadataPreferences",
+        "get",
+        "metadataPreferences",
+        "=>",
+        "_deps",
+        ".",
+        "metadataPreferences",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart",
+      "owner": "MergedDetailHeroLayout",
+      "name": "_ac",
+      "tokens": [
+        "MergedDetailActionLayout",
+        "get",
+        "_ac",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "actionLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart",
+      "owner": "MergedDetailHeroLayout",
+      "name": "_m",
+      "tokens": [
+        "MergedDetailMetadataState",
+        "get",
+        "_m",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "metadataState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart",
+      "owner": "MergedDetailHeroLayout",
+      "name": "_ri",
+      "tokens": [
+        "MergedDetailRailLayout",
+        "get",
+        "_ri",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "railLayout",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart",
+      "owner": "MergedDetailHeroLayout",
+      "name": "_ro",
+      "tokens": [
+        "MergedDetailRootLayout",
+        "get",
+        "_ro",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "rootLayout",
         ";"
       ]
     }

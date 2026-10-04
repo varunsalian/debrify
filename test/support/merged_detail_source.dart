@@ -120,7 +120,7 @@ String mergedOriginalNames(String member, {String? owner}) {
           as Map<String, dynamic>;
   final rows = mergedManifest();
   final paths = config['receiver_paths'] as Map<String, dynamic>? ?? const {};
-  String rewrite(String code) {
+  String rewrite(String code, String previousCode) {
     code = code.replaceAll('_deps.setState', 'setState');
     for (final receiver in ['_deps', 'deps']) {
       for (final name in ['mounted', 'context']) {
@@ -166,9 +166,20 @@ String mergedOriginalNames(String member, {String? owner}) {
           (owner == null || owner == row['destination_class'])) {
         // An implicit read of this owner's member keeps the compiler's local
         // binding. Named-argument labels and qualified external reads stay exact.
-        code = code.replaceAll(
-          RegExp(r'(?<![\w.])' + RegExp.escape(current) + r'\b(?!\s*:)'),
-          original,
+        final beforeRename = code;
+        code = code.replaceAllMapped(
+          RegExp(r'\b' + RegExp.escape(current) + r'\b'),
+          (match) {
+            final prefix =
+                (previousCode + beforeRename.substring(0, match.start))
+                    .trimRight();
+            final suffix = beforeRename.substring(match.end).trimLeft();
+            final external = prefix.endsWith('.') && !prefix.endsWith('...');
+            final namedLabel =
+                suffix.startsWith(':') &&
+                (prefix.endsWith('(') || prefix.endsWith(','));
+            return external || namedLabel ? match[0]! : original;
+          },
         );
       }
       // Only declaration names are unqualified after a move. Values always
@@ -200,7 +211,7 @@ String mergedOriginalNames(String member, {String? owner}) {
 
 /// Preserve comments and literal text; rewrite only Dart code/interpolations.
 class _MergedSourceMapper {
-  final String Function(String) rewrite;
+  final String Function(String, String) rewrite;
   final bool canonical;
   _MergedSourceMapper(this.rewrite, {this.canonical = false});
 
@@ -305,7 +316,7 @@ class _MergedSourceMapper {
           out.write(s[j++]);
           continue;
         }
-        final value = rewrite(name[0]!);
+        final value = rewrite(name[0]!, '');
         out.write(
           canonical
               ? '\u0000{$value}\u0000'
@@ -326,6 +337,7 @@ class _MergedSourceMapper {
     final out = StringBuffer();
     var i = 0;
     var start = 0;
+    var previousCode = '';
     while (i < s.length) {
       final comment = s.startsWith('//', i) || s.startsWith('/*', i);
       final quoted = quote(s, i) != null;
@@ -333,16 +345,21 @@ class _MergedSourceMapper {
         i++;
         continue;
       }
-      out.write(rewrite(s.substring(start, i)));
+      final code = s.substring(start, i);
+      out.write(rewrite(code, previousCode));
+      previousCode += code;
       final end = comment ? commentEnd(s, i) : stringEnd(s, i);
       out.write(
         comment
-            ? (canonical ? rewrite(s.substring(i, end)) : s.substring(i, end))
+            ? (canonical
+                  ? rewrite(s.substring(i, end), previousCode)
+                  : s.substring(i, end))
             : literal(s, i, end),
       );
+      if (!comment) previousCode += 'literal';
       start = i = end;
     }
-    out.write(rewrite(s.substring(start)));
+    out.write(rewrite(s.substring(start), previousCode));
     return out.toString();
   }
 }
@@ -351,7 +368,7 @@ class _MergedSourceMapper {
 /// NUL delimiters canonicalize simple/braced interpolations without ambiguity
 /// between `${name}Suffix` and `$nameSuffix`. Comments retain their tokens.
 String mergedCanonicalSource(String source) => _MergedSourceMapper(
-  (code) => code
+  (code, _) => code
       .replaceAllMapped(RegExp(r',\s*([)\]}])'), (m) => m[1]!)
       .replaceAll(RegExp(r'\s+'), ''),
   canonical: true,

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_resume_state.dart';
+import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/utils/episode_progress_merge.dart';
@@ -9,11 +10,11 @@ import 'package:flutter/material.dart';
 class MergedDetailResumeActions {
   final MergedDetailDependencies _deps;
   MergedDetailResumeActions(this._deps);
-  bool get _isMovie => _deps.isMovie();
   StremioMeta get _item => _deps.presentedItem();
   bool get mounted => _deps.mounted();
   void Function(VoidCallback) get setState => _deps.setState;
   MergedDetailResumeState get _r => _deps.parts.resumeState;
+  MergedDetailRootLayout get _ro => _deps.parts.rootLayout;
   MergedDetailTrackingState get _k => _deps.parts.trackingState;
 
   bool get primaryBusy => _r.resumePending && !_r.resumeLoaded;
@@ -55,7 +56,7 @@ class MergedDetailResumeActions {
       // overwrite (for example) E7 back to a completed E6. (Pre-settle the
       // engine only stashes, so this guard fires solely on post-settle
       // re-reads — e.g. didPopNext after playback.)
-      if (!_isMovie && _r.hasMergedEpisodeTarget) {
+      if (!_ro.isMovie && _r.hasMergedEpisodeTarget) {
         debugPrint(
           '[SeriesResume] detail-loader-discarded title="${_item.name}" '
           'reason=engine-already-authoritative',
@@ -73,7 +74,7 @@ class MergedDetailResumeActions {
       // back empty-handed — merged in-page progress beats "Start Watching".
       final stash = _r.pendingEngineTarget;
       _r.pendingEngineTarget = null;
-      if (!_isMovie && !info.started && stash != null && stash.started) {
+      if (!_ro.isMovie && !info.started && stash != null && stash.started) {
         debugPrint(
           '[SeriesResume] detail-loader-arbitration title="${_item.name}" '
           'winner=engine target=S${stash.season}E${stash.episode} '
@@ -121,7 +122,7 @@ class MergedDetailResumeActions {
   }
 
   void onNextEpisodeChanged(EpisodeResumeTarget next, {bool mutation = false}) {
-    if (!mounted || _isMovie) return;
+    if (!mounted || _ro.isMovie) return;
     debugPrint(
       '[SeriesResume] detail-engine-emission title="${_item.name}" '
       'target=S${next.season}E${next.episode} started=${next.started} '
@@ -204,25 +205,25 @@ class MergedDetailResumeActions {
       : resolvedPrimaryLabel;
 
   String get resolvedPrimaryLabel {
-    if (_r.rewatchPending || (!_isMovie && _r.seriesDone)) return 'Rewatch';
+    if (_r.rewatchPending || (!_ro.isMovie && _r.seriesDone)) return 'Rewatch';
     // Completion is available independently of the optional resume loader.
     // Keep the rewatch affordance visible for movie routes that omit one.
     if (!_r.resumeLoaded) {
-      if (_isMovie && _k.localMovieFinished) {
+      if (_ro.isMovie && _k.localMovieFinished) {
         return 'Rewatch';
       }
-      return _isMovie ? 'Play' : 'Resume';
+      return _ro.isMovie ? 'Play' : 'Resume';
     }
     if (!_r.resumeStarted) {
       // A movie already finished on Simkl (status `completed`) has no resume
       // session; its Play un-marks it watched so the rewatch re-enters
       // Continue Watching — surface that intent as "Rewatch".
-      if (_isMovie && _k.localMovieFinished) {
+      if (_ro.isMovie && _k.localMovieFinished) {
         return 'Rewatch';
       }
-      return _isMovie ? 'Play' : 'Start Watching';
+      return _ro.isMovie ? 'Play' : 'Start Watching';
     }
-    if (_isMovie || _r.resumeSeason == null || _r.resumeEpisode == null) {
+    if (_ro.isMovie || _r.resumeSeason == null || _r.resumeEpisode == null) {
       return 'Resume';
     }
     return 'Resume · S${_r.resumeSeason}E${_r.resumeEpisode}';

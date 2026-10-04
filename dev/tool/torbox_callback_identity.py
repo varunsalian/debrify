@@ -50,6 +50,27 @@ def argument_expression(call, selector):
     return matches[0]
 
 
+def member_occurrences(values, member):
+    """Find member reads, excluding constructor/record named labels.
+
+    A renamed getter can have the same name as a nested named argument. Map
+    keys remain expressions; only labels within parentheses are excluded.
+    """
+    stack, found = [], []
+    for i, value in enumerate(values):
+        previous = next((v for v in reversed(values[:i])
+                         if not v.startswith(('//', '/*'))), None)
+        label = (stack[-1:] == ['('] and previous in ('(', ',')
+                 and values[i + 1:i + 2] == [':'])
+        if value == member and not label:
+            found.append(i)
+        if value in ('(', '[', '{', '${'):
+            stack.append(value)
+        elif value in (')', ']', '}') and stack:
+            stack.pop()
+    return found
+
+
 def check_callback_identities(lookup, rows, source_path, config):
     from check_settings_moves import tokens
     specs = config.get('callback_identities', [])
@@ -102,7 +123,7 @@ def check_callback_identities(lookup, rows, source_path, config):
                         # verbatim conditional argument. Its surrounding
                         # conditions remain covered by the whole-leaf check.
                         target = node_for(site['conditional_member'])['name']
-                        positions = [i for i, value in enumerate(expr) if value == target]
+                        positions = member_occurrences(expr, target)
                         occurrence = site.get('branch_occurrence', 0)
                         if len(positions) != site.get('branch_count', 1):
                             raise ValueError('conditional tear-off occurrence count changed: ' + target)

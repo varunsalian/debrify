@@ -70,6 +70,9 @@
   "forwarders": {
     "_MergedDetailScreenState.onMetadataPolicyChanged": {
       "receiver": "_parts.metadataLoading"
+    },
+    "_MergedDetailScreenState.build": {
+      "receiver": "_parts.rootLayout"
     }
   },
   "lifecycle": [
@@ -195,7 +198,42 @@
     "s._parts.metadataActions": "MergedDetailMetadataActions",
     "_parts.metadataActions": "MergedDetailMetadataActions",
     "_deps.parts.metadataActions": "MergedDetailMetadataActions",
-    "state._parts.metadataActions": "MergedDetailMetadataActions"
+    "state._parts.metadataActions": "MergedDetailMetadataActions",
+    "_ro": "MergedDetailRootLayout",
+    "s._parts.rootLayout": "MergedDetailRootLayout",
+    "_parts.rootLayout": "MergedDetailRootLayout",
+    "_deps.parts.rootLayout": "MergedDetailRootLayout",
+    "state._parts.rootLayout": "MergedDetailRootLayout",
+    "_bo": "MergedDetailBodyLayout",
+    "s._parts.bodyLayout": "MergedDetailBodyLayout",
+    "_parts.bodyLayout": "MergedDetailBodyLayout",
+    "_deps.parts.bodyLayout": "MergedDetailBodyLayout",
+    "state._parts.bodyLayout": "MergedDetailBodyLayout",
+    "_pa": "MergedDetailPaneLayout",
+    "s._parts.paneLayout": "MergedDetailPaneLayout",
+    "_parts.paneLayout": "MergedDetailPaneLayout",
+    "_deps.parts.paneLayout": "MergedDetailPaneLayout",
+    "state._parts.paneLayout": "MergedDetailPaneLayout",
+    "_he": "MergedDetailHeroLayout",
+    "s._parts.heroLayout": "MergedDetailHeroLayout",
+    "_parts.heroLayout": "MergedDetailHeroLayout",
+    "_deps.parts.heroLayout": "MergedDetailHeroLayout",
+    "state._parts.heroLayout": "MergedDetailHeroLayout",
+    "_ac": "MergedDetailActionLayout",
+    "s._parts.actionLayout": "MergedDetailActionLayout",
+    "_parts.actionLayout": "MergedDetailActionLayout",
+    "_deps.parts.actionLayout": "MergedDetailActionLayout",
+    "state._parts.actionLayout": "MergedDetailActionLayout",
+    "_ep": "MergedDetailEpisodesLayout",
+    "s._parts.episodesLayout": "MergedDetailEpisodesLayout",
+    "_parts.episodesLayout": "MergedDetailEpisodesLayout",
+    "_deps.parts.episodesLayout": "MergedDetailEpisodesLayout",
+    "state._parts.episodesLayout": "MergedDetailEpisodesLayout",
+    "_ri": "MergedDetailRailLayout",
+    "s._parts.railLayout": "MergedDetailRailLayout",
+    "_parts.railLayout": "MergedDetailRailLayout",
+    "_deps.parts.railLayout": "MergedDetailRailLayout",
+    "state._parts.railLayout": "MergedDetailRailLayout"
   },
   "receiver_owners": {
     "_MergedDetailScreenState": "_MergedDetailScreenState",
@@ -212,7 +250,14 @@
     "_mn": "MergedDetailMenus",
     "_ml": "MergedDetailMetadataLoading",
     "_tr": "MergedDetailTrailerActions",
-    "_ma": "MergedDetailMetadataActions"
+    "_ma": "MergedDetailMetadataActions",
+    "_ro": "MergedDetailRootLayout",
+    "_bo": "MergedDetailBodyLayout",
+    "_pa": "MergedDetailPaneLayout",
+    "_he": "MergedDetailHeroLayout",
+    "_ac": "MergedDetailActionLayout",
+    "_ep": "MergedDetailEpisodesLayout",
+    "_ri": "MergedDetailRailLayout"
   },
   "plain_sections": [
     {
@@ -294,6 +339,34 @@
     {
       "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_metadata_actions.dart",
       "owner": "MergedDetailMetadataActions"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart",
+      "owner": "MergedDetailRootLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_body_layout.dart",
+      "owner": "MergedDetailBodyLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_pane_layout.dart",
+      "owner": "MergedDetailPaneLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_hero_layout.dart",
+      "owner": "MergedDetailHeroLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_action_layout.dart",
+      "owner": "MergedDetailActionLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_episodes_layout.dart",
+      "owner": "MergedDetailEpisodesLayout"
+    },
+    {
+      "file": "lib/features/merged_detail/presentation/legacy_merged_detail/merged_detail_rail_layout.dart",
+      "owner": "MergedDetailRailLayout"
     }
   ],
   "callback_identities": [
@@ -1054,7 +1127,14 @@
     "MergedDetailMenus": "$State.parts.menus",
     "MergedDetailMetadataLoading": "$State.parts.metadataLoading",
     "MergedDetailTrailerActions": "$State.parts.trailerActions",
-    "MergedDetailMetadataActions": "$State.parts.metadataActions"
+    "MergedDetailMetadataActions": "$State.parts.metadataActions",
+    "MergedDetailRootLayout": "$State.parts.rootLayout",
+    "MergedDetailBodyLayout": "$State.parts.bodyLayout",
+    "MergedDetailPaneLayout": "$State.parts.paneLayout",
+    "MergedDetailHeroLayout": "$State.parts.heroLayout",
+    "MergedDetailActionLayout": "$State.parts.actionLayout",
+    "MergedDetailEpisodesLayout": "$State.parts.episodesLayout",
+    "MergedDetailRailLayout": "$State.parts.railLayout"
   },
   "callback_receiver_aliases": {
     "_parts.metadataState": "$State.parts.metadataState",
@@ -1113,7 +1193,35 @@
     "_ma": "$State.parts.metadataActions",
     "_parts.metadataActions": "$State.parts.metadataActions",
     "_deps.parts.metadataActions": "$State.parts.metadataActions",
-    "state._parts.metadataActions": "$State.parts.metadataActions"
+    "state._parts.metadataActions": "$State.parts.metadataActions",
+    "_ro": "$State.parts.rootLayout",
+    "_parts.rootLayout": "$State.parts.rootLayout",
+    "_deps.parts.rootLayout": "$State.parts.rootLayout",
+    "state._parts.rootLayout": "$State.parts.rootLayout",
+    "_bo": "$State.parts.bodyLayout",
+    "_parts.bodyLayout": "$State.parts.bodyLayout",
+    "_deps.parts.bodyLayout": "$State.parts.bodyLayout",
+    "state._parts.bodyLayout": "$State.parts.bodyLayout",
+    "_pa": "$State.parts.paneLayout",
+    "_parts.paneLayout": "$State.parts.paneLayout",
+    "_deps.parts.paneLayout": "$State.parts.paneLayout",
+    "state._parts.paneLayout": "$State.parts.paneLayout",
+    "_he": "$State.parts.heroLayout",
+    "_parts.heroLayout": "$State.parts.heroLayout",
+    "_deps.parts.heroLayout": "$State.parts.heroLayout",
+    "state._parts.heroLayout": "$State.parts.heroLayout",
+    "_ac": "$State.parts.actionLayout",
+    "_parts.actionLayout": "$State.parts.actionLayout",
+    "_deps.parts.actionLayout": "$State.parts.actionLayout",
+    "state._parts.actionLayout": "$State.parts.actionLayout",
+    "_ep": "$State.parts.episodesLayout",
+    "_parts.episodesLayout": "$State.parts.episodesLayout",
+    "_deps.parts.episodesLayout": "$State.parts.episodesLayout",
+    "state._parts.episodesLayout": "$State.parts.episodesLayout",
+    "_ri": "$State.parts.railLayout",
+    "_parts.railLayout": "$State.parts.railLayout",
+    "_deps.parts.railLayout": "$State.parts.railLayout",
+    "state._parts.railLayout": "$State.parts.railLayout"
   },
   "original_activation": {},
   "original_static_receivers": {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:debrify/features/merged_detail/application/merged_detail_simkl_labels.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_dependencies.dart';
+import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_root_layout.dart';
 import 'package:debrify/features/merged_detail/presentation/legacy_merged_detail/merged_detail_tracking_state.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/movie_completion_service.dart';
@@ -10,10 +11,10 @@ import 'package:flutter/services.dart';
 class MergedDetailTrackingActions {
   final MergedDetailDependencies _deps;
   MergedDetailTrackingActions(this._deps);
-  bool get _isMovie => _deps.isMovie();
   StremioMeta get _item => _deps.presentedItem();
   bool get mounted => _deps.mounted();
   void Function(VoidCallback) get setState => _deps.setState;
+  MergedDetailRootLayout get _ro => _deps.parts.rootLayout;
   MergedDetailTrackingState get _k => _deps.parts.trackingState;
 
   /// Resolve the user's Trakt relationship to this title so the menu shows
@@ -71,7 +72,7 @@ class MergedDetailTrackingActions {
 
   Future<void> loadLocalMovieFinished() async {
     final generation = ++_k.movieCompletionGeneration;
-    if (!_isMovie) return;
+    if (!_ro.isMovie) return;
     final imdbId =
         _item.effectiveImdbId ?? (_item.id.startsWith('tt') ? _item.id : null);
     if (imdbId == null || imdbId.isEmpty) return;
