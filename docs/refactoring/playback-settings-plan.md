@@ -2,6 +2,7 @@
 
 Written 2026-10-04 on `refactor/codebase` (facts verified at `ec997117`; the
 page is unchanged since `47169f6e`). Follow [AGENTS.md](../../AGENTS.md).
+Revised 2026-10-04 after Codex design review round 1 (nine findings).
 Read `pikpak-files-plan.md`, `debrid-downloads-plan.md`,
 `torbox-downloads-plan.md` and `iptv-settings-plan.md` first, including
 their Progress sections. Read `settings-screen-plan.md` for the settings
@@ -39,7 +40,8 @@ The State holds:
 - the external-player choice for macOS, iOS/tvOS, Linux and Windows:
   detection, custom app, command and scheme;
 - DeoVR on Android;
-- 33 instant-save setters, plus the subtitle-appearance and font setters;
+- 33 instant-save setters: 4 DeoVR, 23 other settings, and 6 subtitle
+  appearance/font setters;
 - custom subtitle fonts;
 - four platform tile builders and three generic row builders;
 - the section builders.
@@ -113,11 +115,11 @@ only public symbol. These callers must compile unchanged:
 | Lines | Area |
 | --- | --- |
 | 1–49 | 33 imports; the widget |
-| 51–219 | 133 fields (no `late`; each has an initializer) |
+| 51–219 | 133 fields (no `late`; 121 have declaration initializers, and 12 nullable `String?` fields rely on implicit null: the three macOS custom fields, `_commandError`, `_iosCustomScheme`, `_iosSchemeError`, `_linuxCustomCommand`, `_linuxCommandError`, `_windowsCustomCommand`, `_windowsCommandError`, `_defaultSubtitleLanguage`, `_defaultAudioLanguage`) |
 | 221–447, 449–495 | `initState` (analytics, unawaited `_loadSettings()`, 36 focus listeners); `dispose` (42 disposals, then `super.dispose()`) |
 | 497–743 | `_loadSettings` (247 lines) |
 | 745–1121 | Mode setter; macOS, iOS/tvOS, Linux and Windows actions (select, browse, save, clear) |
-| 1123–1309 | 4 DeoVR, 29 built-in and 6 subtitle-appearance setters; the completion-threshold getter and index |
+| 1123–1309 | 33 setters: 4 DeoVR, 23 other settings, 6 subtitle appearance/font; the completion-threshold getter and index |
 | 1311–1400 | `_loadFonts`, `_importCustomFont`, `_removeCustomFont` |
 | 1402–1522 | `_aspectLabels`; the `static const` lists `_nightModeLabels`, `_subtitleLanguageOptions` (51) and `_audioLanguageOptions` (21); the index getters |
 | 1524–1773 | Four platform tile builders, holding all four `app.shape.br(10)` calls |
@@ -165,12 +167,25 @@ only public symbol. These callers must compile unchanged:
      non-scope node already has focus; otherwise focus the first
      `traversalDescendants` node;
    - the catch path: `mounted`, `setState`, `if (mounted)`, snackbar.
-4. **One-time subtitle migration on open.** The chain is `loadAll` →
-   `_ensurePrefs` → `_adoptExtremeBottomDefault`
-   (`subtitle_settings_service.dart:210–230`). It can write
-   `subtitle_elevation_index` and
-   `subtitle_extreme_bottom_default_adopted_v1` once per profile, and it
-   must still be triggered at the same point.
+4. **Writes on open.** Opening any section, on any host, can write
+   preferences. Both write paths live in out-of-scope storage/services and
+   must still be triggered at the same point and in the same order.
+   - **Renderer migration (first).** `_loadSettings` calls
+     `PlayerSettingsStorage.getAndroidVideoRendererMode()`
+     **unconditionally** (619, before `loadAll`), not only on Android or
+     Video. That one awaited page call
+     (`player_settings_storage.dart:154–173`) can make **two** storage
+     writes, in order: `android_video_renderer_mode` =
+     `'direct_mediacodec'`, when the stored mode is absent or the legacy
+     `'direct_surface'`, then `android_video_renderer_gpu_migration_v1` =
+     `true`. An explicit `'automatic'` or `'direct_mediacodec'` without
+     the flag only gains the flag. Once the flag is set, nothing is
+     written.
+   - **Subtitle migration (last read).** The chain is `loadAll` →
+     `_ensurePrefs` → `_adoptExtremeBottomDefault`
+     (`subtitle_settings_service.dart:210–230`). It can write
+     `subtitle_elevation_index` and
+     `subtitle_extreme_bottom_default_adopted_v1` once per profile.
 5. **Detection.** The page calls these detectors; the services aren't
    touched. Each call site, its arguments, and its order relative to the
    reads stay as they are.
@@ -185,7 +200,8 @@ only public symbol. These callers must compile unchanged:
    - `external_player_preferred` and its `ios_`, `linux_` and `windows_`
      variants, with the values `storageKey`, `'custom_app'`,
      `'custom_command'`, `'custom_scheme'`, `'system_default'` or `'vlc'`;
-   - `external_player_custom_path`, `_custom_name` and `_custom_command`;
+   - `external_player_custom_path`, `external_player_custom_name` and
+     `external_player_custom_command`;
    - `ios_custom_scheme_template`, `linux_custom_command` and
      `windows_custom_command`.
 
@@ -197,14 +213,19 @@ only public symbol. These callers must compile unchanged:
      ['app'], dialogTitle: 'Select Video Player Application')`, with its
      app-name derivation and the path, name and preferred writes in order;
    - the snackbar texts, including `$e`.
-7. **Instant-save setters.** This covers the 33 setters at 1124–1309, plus
-   subtitle appearance and font index. Each calls `setState` **before** its
-   single await, has no try/catch, and returns a Future that callers drop.
+7. **Instant-save setters.** This covers the 33 setters at 1124–1309: 4
+   DeoVR, 23 other settings, and 6 subtitle appearance/font (size, style,
+   colour, background, font index, bold). The mode setter (745) is
+   separate and belongs to contract 6. Each setter calls `setState`
+   **before** its single await, has no try/catch, and returns a Future that
+   callers drop. A single awaited call is not a single write: the renderer
+   setter's one call writes `android_video_renderer_mode` and then
+   `android_video_renderer_gpu_migration_v1` = `true`.
 
    | Group | Keys |
    | --- | --- |
-   | DeoVR | `quick_play_vr_default_screen_type`, `_stereo_mode`, `_auto_detect_format`, `_show_dialog` |
-   | Player | `player_default_aspect_index` (the `_tv` key when `_isAndroidTv`), `player_night_mode_index`, `player_system_audio_effects`, `tvos_force_software_decode`, `tvos_force_stereo_audio_v1`, `tvos_legacy_audio_output_v1`, `player_audio_passthrough`, `player_apple_multichannel_audio`, `android_video_renderer_mode`, `player_start_portrait` |
+   | DeoVR | `quick_play_vr_default_screen_type`, `quick_play_vr_default_stereo_mode`, `quick_play_vr_auto_detect_format`, `quick_play_vr_show_dialog` |
+   | Player | `player_default_aspect_index` (`player_default_aspect_index_tv` when `_isAndroidTv`), `player_night_mode_index`, `player_system_audio_effects`, `tvos_force_software_decode`, `tvos_force_stereo_audio_v1`, `tvos_legacy_audio_output_v1`, `player_audio_passthrough`, `player_apple_multichannel_audio`, `android_video_renderer_mode` then `android_video_renderer_gpu_migration_v1`, `player_start_portrait` |
    | Network | `content_display_match_mode`, `iptv_decoder_mode`, `network_connect_patience`, `network_buffer_size` |
    | Subtitles | `subtitle_only_foreign_audio`, `subtitle_forced_only`, `subtitle_auto_sync_enabled`, `player_default_subtitle_language`, `player_default_audio_language`, `subtitle_size_index`, `subtitle_style_index`, `subtitle_color_index`, `subtitle_bg_index`, `subtitle_bold`, `subtitle_selected_font_id` |
    | Completion and skip | `movie_completion_threshold`, `episode_completion_threshold`, `skip_segments_enabled`, `skip_segment_provider` |
@@ -213,9 +234,22 @@ only public symbol. These callers must compile unchanged:
    captures the scope on each call.
 
    Only `subtitle_custom_fonts` (`DevicePreferences`) and the font files are
-   **device-wide**. Native projection and portability stay in storage. The
-   page relies on the profile gate remounting it. No scoping is added or
-   removed.
+   **device-wide**. Native projection and portability stay in storage. No
+   scoping is added or removed.
+
+   **Profile handoff is a route pop, not a remount.** `MaterialApp`'s root
+   Navigator sits *above* `ProfileGate` (`main.dart:1285`, `home:
+   ProfileGate(child: AppInitializer())`). The gate's epoch
+   `KeyedSubtree` (`profile_gate.dart:590`) remounts only its child.
+   `pushSettingsPage` pushes onto that root Navigator, outside the keyed
+   child, so a pushed playback page is never remounted. Instead, every
+   picker entry runs `_openPicker`, which pops every route above the
+   gate's own route by identity (`popUntil(identical(route, own))`,
+   `profile_gate.dart:360`) **before** it locks, clears session state and
+   shows the picker. The page is therefore disposed by that pop; a write
+   still in flight finishes in the scope `ProfilePreferences.instance()`
+   captured when it started. The extraction keeps this contract and adds
+   nothing to it.
 9. **Fonts.**
    - **Import:** `pickFiles(type: FileType.any, allowMultiple: false)`; the
      extension rule (`.ttf`, `.otf` or none); the null-path message;
@@ -249,8 +283,11 @@ only public symbol. These callers must compile unchanged:
       node. Only macOS passes `onUpArrow`/`onDownArrow`.
     - **Never set `node.onKeyEvent` on a `TvTextField` node.** Add no raw
       `TextField(`.
-    - The 32 ring flags, the "snap, don't tween" decorations and the debug
-      label `playback-settings-content` stay unchanged.
+    - The 36 focused flags (28 built-in and 4 DeoVR ring flags, plus the 4
+      external text-field flags `_commandFocused`, `_iosSchemeFocused`,
+      `_linuxCommandFocused` and `_windowsCommandFocused`), the "snap,
+      don't tween" decorations and the debug label
+      `playback-settings-content` stay unchanged.
 12. **Callback forms.** These 35 method tear-offs are passed as callbacks:
     2350, 2386, 2398, 2436, 2446, 2495, 2505, 2559, 2606, 2638, 2674, 2716,
     2733, 2751, 2772, 2787, 2991, 3005, 3023, 3129, 3386, 3395, 3571, 3580,
@@ -270,6 +307,15 @@ only public symbol. These callers must compile unchanged:
     The two "TV" truths stay distinct: the asynchronous `_isAndroidTv`
     versus the synchronous `PlatformUtil.isTelevision` and `isTvOS`. The
     unreachable unsupported branch stays.
+
+    **Host reachability.** `_isAndroidTv` is set only inside `if
+    (Platform.isAndroid)` (586–592), and no debug flag makes
+    `Platform.isAndroid` true, so on macOS and Linux it is always false.
+    `debugSetAndroidTvCached(true)` flips `PlatformUtil.isTelevision`
+    only. Simulated tvOS (`debugSetTvOS(true)`) on a desktop host keeps
+    `Platform.isMacOS`/`isLinux` and `PlatformUtil.isDesktop` true
+    alongside `isTvOS`: on macOS, load runs macOS detection and then iOS
+    detection, and in `external` mode both E2–E4 and E11–E14 render.
 14. **Read-only player helpers** are used exactly as now:
     - `NetworkTuning.standard`, `patienceOptions` and `bufferOptions`;
     - the `SubtitleSize`/`Style`/`Color`/`Background.options` lists;
@@ -369,27 +415,72 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
    - macOS, E11–E14 (≈282);
    - DeoVR, E15 (≈98).
 
-   A piece repeats the `theme` and `t` locals only where it uses them. The
-   checker proves the joined elements match the original token for token.
-   E3, E6 and E9 are never merged. `_playerSettings` and
-   `_subtitleSettings` move whole.
+   A piece repeats the `theme` and `t` locals only where it uses them. E3,
+   E6 and E9 are never merged. `_playerSettings` and `_subtitleSettings`
+   move whole.
+
+   **The existing partition check cannot express this join.**
+   `check_partition` in `check_settings_moves.py` requires the slices to
+   start at element 0 and cover every original element (582–596), and it
+   requires the dispatcher to be exactly a fresh `final b = Builder(…)`
+   followed only by ordered `...b.slice()` spreads (623–655). It has no way
+   to represent a retained preamble, an inline E1, or repeated locals in
+   the pieces. Step 0 therefore adds an explicit **configuration-scoped
+   extension**, enabled only by keys in
+   `playback_settings_checker_config.json`. It must:
+   - leave every existing config's behaviour unchanged, proved by all
+     existing manifests and self-tests passing unmodified;
+   - accept a join method that keeps the original preamble (`theme`, `t`)
+     and E1 inline, then spreads exactly the five pieces in branch order;
+   - map each piece to its exact original element range (E2–E4, E5–E7,
+     E8–E10, E11–E14, E15) and compare the joined elements token for token
+     with the original, after the existing comma normalization;
+   - permit a piece to repeat the original `theme`/`t` declarations
+     verbatim, and only those, and only where the piece uses them;
+   - pass a **positive fixture** built from the real config and the actual
+     planned join;
+   - reject negatives for a reordered piece, an omitted element or piece, a
+     duplicated element or piece, an element split across pieces, a changed
+     inline E1 or preamble, and an unpermitted extra local.
 4. **Owners by group.** Rules:
-   - at most about 30 fields per owner;
-   - every initializer stays at its declaration;
+   - at most 30 fields per owner;
+   - every declaration initializer stays at its declaration, and the 12
+     implicit-null fields stay without one (no `= null` is added);
    - orphan field and group comments move beside their fields, checked by a
      comment multiset.
 
-   The step 0 report fixes the exact sets. The planned owners are:
-   - **core:** `_loading`, `_defaultPlayerMode`, `_contentFocusNode`,
+   Membership is frozen here (4 + 30 + 12 + 19 + 12 + 56 = 133); the step
+   0 report records the exact field lists and handles, and the checker
+   rejects any field outside its owner:
+   - **core (4):** `_loading`, `_defaultPlayerMode`, `_contentFocusNode`,
      `_firstModeFocusNode`;
-   - **one owner per external platform:** macOS (9), iOS (7), Linux (7),
-     Windows (7);
-   - **DeoVR:** 4 values, 4 nodes and 4 flags;
-   - **playback values** (≈19), including `_isAndroidTv` and
-     `_iptvDecoderMode`, which is declared among the flags at 193;
-   - **subtitle and language values** (≈11), including `_allFonts`;
-   - **two built-in focus owners,** split by the section that renders them:
-     one for video and audio, one for subtitle, completion and skip.
+   - **external platforms (30), one owner each:** macOS (9: selected,
+     installed, custom path, name and command, controller, node, focused
+     flag, error), iOS (7), Linux (7), Windows (7), each with its
+     controller, node, focused flag and error;
+   - **DeoVR (12):** 4 values, 4 nodes and 4 flags;
+   - **playback values (19):** `_isAndroidTv`, aspect, night mode, system
+     audio effects, the three tvOS values, passthrough, Apple
+     multichannel, renderer, content display match, start portrait, both
+     completion thresholds, skip enabled and provider, `_netPatience`,
+     `_netBuffer`, and `_iptvDecoderMode` (declared among the flags at
+     193);
+   - **subtitle and language values (12):** only-foreign, forced-only,
+     auto-sync, both default languages, size, style, colour, background,
+     font index, bold, and `_allFonts`;
+   - **built-in focus (56): 28 node/flag pairs in two owners of 28
+     fields,** split by the rows that render them:
+     - **video, audio and player-section rows (14 pairs):** aspect,
+       content display match, IPTV decoder, renderer, tvOS software
+       decode, default audio language, system audio effects, passthrough,
+       Apple multichannel, tvOS stereo, tvOS legacy audio, start portrait,
+       and the **network pairs** `_netPatienceFocusNode`/`_netPatienceFocused`
+       and `_netBufferFocusNode`/`_netBufferFocused` (rendered by
+       `_playerSettings`, 2496 and 2506);
+     - **subtitle, completion and skip rows (14 pairs):** default subtitle
+       language, only-foreign, forced-only, auto-sync, size, style, colour,
+       background, font, bold, both completion thresholds, skip enabled and
+       skip provider.
 5. **Callback identity.** At all 35 sites the checker compares the receiver
    path and the member. One of those sites is `_openPlayerSettings`, which
    must reach the layout as the State's own tear-off.
@@ -405,19 +496,38 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
    Once the owners move, its body moves into the bridge as one function
    over the composition. The facade keeps only a forwarder of at most 5
    lines.
-7. **No new `const`.** These infos stay (CI ignores infos):
-   - the 6 `prefer_const_constructors` on `SettingsInfoBanner(` (3267,
-     3454, 3638, 3822, 4105, 4204);
-   - the 12 `deprecated_member_use`.
+7. **No new `const`; destination-lint baseline.** The original file under
+   the root configuration has **12** diagnostics, all
+   `deprecated_member_use`. The destination
+   `lib/features/analysis_options.yaml` adds `directives_ordering` and
+   `prefer_const_constructors`, so the same code there yields **29**: the
+   12, plus 11 `directives_ordering`, plus 6 `prefer_const_constructors`
+   on `SettingsInfoBanner(` (3267, 3454, 3638, 3822, 4105, 4204). CI's
+   ignoring of infos is not the comparison. Follow the Debrid strict-lint
+   procedure (`debrid-downloads-plan.md` Progress, "Conservative analyzer
+   decision"; restated in `iptv-settings-plan.md` technique 5):
+   - step 0 analyzes the **original** code under the unchanged destination
+     lint configuration, in the original-code worktree, with import-URI
+     qualification as the only edit, and records that original strict
+     baseline;
+   - the relocation comparison combines the root and strict observed
+     baselines **by maximum observed count per identity, never by
+     summing**;
+   - a per-symbol check maps every destination diagnostic to the same
+     original symbol, rule and message, with zero additions;
+   - any new scaffold diagnostic is a failure, including
+     `use_key_in_widget_constructors`, `prefer_const_constructors` on new
+     code, and `directives_ordering` in a new file. No suppression, broad
+     info ignore, or allowlist growth.
 
-   The only allowed edits are import sorting (11 `directives_ordering`
-   infos) and receiver qualification.
+   The only allowed edits to moved code are import sorting and receiver
+   qualification; no `const` is added.
 
 ## Steps
 
 | # | Work | Notes |
 | --- | --- | --- |
-| 0 | Baseline, format-only commit, dependency report, manifest and config, accessor, characterization and baselines, source-text inventory, CI list, Linux capture script | Nothing moves. |
+| 0 | Baseline, original strict-lint evidence, format-only commit, dependency report, manifest and config, configuration-scoped partition checker extension, accessor, characterization and baselines, source-text inventory, CI list, Linux capture script | Nothing moves. |
 | 1 | Guard registration; the three generic row builders | Contract 11 |
 | 2 | State owners by group; lifecycle verbatim | Contract 2 |
 | 3 | `_loadSettings`, the mode setter, the macOS, iOS, Linux and Windows actions | Contracts 3–6 and 8. **Full-suite gate 1.** |
@@ -431,7 +541,17 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
 1. **Baseline.** Run `suite_evidence.py run playback_settings/base` and the
    whole analyzer on the unformatted HEAD, with tree provenance, on Flutter
    3.44.8. Each worktree gets its own parser-kernel cache, because PikPak's
-   concurrent runs collided on a shared one.
+   concurrent runs collided on a shared one. `suite_evidence.py check`
+   already writes a per-run temp file (`4f3ee3b3`), so parallel worktrees
+   no longer overwrite a shared `/tmp/suite_evidence_check.jsonl`; no
+   tooling change is needed. Always invoke the executing worktree's own
+   `dev/tool/suite_evidence.py`: `check` strips that script's checkout
+   root (it has no `.env.json`), while `run` records its root and
+   `compare` strips each run's recorded root. A run made from another
+   checkout must not be compared by path.
+
+   Also record the **original strict-lint baseline** (Technique 7) from the
+   same revision, in the original-code worktree.
 2. **Format-only commit.** Apply Technique 1 and commit it as
    `style(playback-settings): step 0 format original`. The same commit
    adds the facade to the format and analyze lists in `checks.yml`. The
@@ -455,6 +575,11 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
    - a platform piece out of order;
    - the self-push moved into the feature.
 
+   Add the configuration-scoped partition extension (Technique 3) with its
+   positive real-join fixture and its reorder, omission, duplication and
+   split-element negatives. Every existing checker config and self-test
+   runs unchanged and passes before the extension is committed.
+
    Use LF line endings and run the staged diff check before every commit
    (PikPak's TSV writer emitted CRLF).
 5. **Harness.** It uses:
@@ -465,7 +590,19 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
    - a temp-dir `PathProviderPlatform`;
    - a `debrify/tvurl` mock handler and a fake `UrlLauncherPlatform`;
    - `tester.runAsync` for real host detection;
-   - resets of the subtitle settings and font services;
+   - a reset of the subtitle settings service;
+   - **font isolation without touching the services.**
+     `SubtitleFontService.resetProfileScope()` clears only `_profilePrefs`;
+     the singleton keeps `_devicePrefs`, `_cachedCustomFonts` and
+     `_loadedFontFamilies`, and `AppStorage` caches its directories. So:
+     reset or override `AppStorage` explicitly in every test
+     (`debugReset`, or `debugOverride` to the temp dir); keep one stable
+     device-prefs fixture for the whole file; and return the custom-font
+     list to its starting state through the existing public
+     `importCustomFont`/`removeCustomFont` operations. Where that can't
+     isolate a case, run it in a separate test file (its own isolate).
+     Before freezing, prove the import/remove fixtures pass when run in
+     different orders. The font and subtitle services stay unmodified;
    - a committed two-profile registry for scope tests (the
      `connection_secret_editor_repair_test.dart` recipe).
 
@@ -484,13 +621,13 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
    | 1 Routing | Each section renders its own builder, header and title. Also: the spinner; the banner text for `external` and `deovr`, with "Choose player"; the unsupported branch, by source guard. The 6 existing navigation tests are kept. |
    | 2 Lifecycle | Source guards on the `initState` order (all 36 listeners) and the 42-disposal sequence; unmount during a pending load; a focus change flips its ring flag. Mutations that must fail: a swapped disposal pair; a reordered listener. |
    | 3 Load | Seeded prefs give every published value (read through the accessor) for each section. An unknown patience or buffer falls back to `standard`; an unavailable skip provider falls back to `auto`. A storage throw clears the spinner and shows "Failed to load settings". TV entry focus with `debugSetAndroidTvCached(true)` seeds the first stop, but not when a concrete node already has focus. |
-   | 4 Migration | Elevation 0 with no flag: the index becomes `SubtitleElevation.defaultIndex` and the flag is set. An explicit index: only the flag is written. A second open writes nothing. |
-   | 5 Detection | tvOS (`debugSetTvOS`): the exact `canOpen` calls in `iOSExternalPlayer.values` order (the tvOS catalog, custom skipped), made only on Player. macOS and Linux run real `which`: host-tolerant tile assertions, plus source guards on sites, arguments and order. iOS-mobile, Windows and Android `isTelevision`: source guards, with device verification **pending**. |
+   | 4 Writes on open | A write-recording preferences fixture captures the **ordered** writes of one open, from an empty and from a seeded profile. **Renderer:** absent mode → `android_video_renderer_mode` = `'direct_mediacodec'`, then `android_video_renderer_gpu_migration_v1` = `true`; legacy `'direct_surface'` → the same two writes; a retained explicit mode (`'automatic'`) without the flag → only the flag; any open after the flag is set → no renderer write. Run on every host and for each section, because the call is unconditional. **Subtitle:** elevation 0 with no flag → the index becomes `SubtitleElevation.defaultIndex` and the flag is set; an explicit index → only the flag; a second open writes nothing. The renderer writes precede the subtitle writes. |
+   | 5 Detection | tvOS (`debugSetTvOS`): the exact `canOpen` calls in `iOSExternalPlayer.values` order (the tvOS catalog, custom skipped), made only on Player; on a macOS host the simulated-tvOS run also performs the real macOS detection first, because desktop detection stays true alongside tvOS. macOS and Linux run real `which`: host-tolerant tile assertions, plus source guards on sites, arguments and order. iOS-mobile, Windows and Android `isTelevision`: source guards, with device verification **pending**. |
    | 6 Actions | macOS host: select (exact key and value); browse with the fake picker (exact arguments, three writes in order; cancel writes nothing); custom command (invalid → error and no write; valid → write); clear (keys removed, preferred reset, controller cleared, no dialog). tvOS select and scheme likewise; Linux in Docker; Windows by source guard. Snackbar texts. |
-   | 7 Setters | **Every** setter, through the accessor's real tear-offs: exact key, exact value, and `setState` before the write (observed while the write is held). The aspect setter writes the `_tv` key only with `_isAndroidTv`. Host-reachable rows are also driven through the UI. |
-   | 8 Scope | With two committed profiles, a setter writes only the active profile's key, and an imported font list is visible from both. |
+   | 7 Setters | **Every** setter, through the accessor's real tear-offs: exact keys, exact values, in order, and `setState` before the first write (observed while the write is held). The renderer setter's expected map includes both `android_video_renderer_mode` and `android_video_renderer_gpu_migration_v1` = `true`, in that order. The aspect setter's `player_default_aspect_index` path is asserted on desktop; its `player_default_aspect_index_tv` branch is unreachable there (`_isAndroidTv` is false and the tear-off cannot supply it), so it is a source guard with device verification **pending**. Host-reachable rows are also driven through the UI. |
+   | 8 Scope | With two committed profiles, a setter writes only the active profile's key, and an imported font list is visible from both. **Route handoff, original-proved:** with a pushed playback page (via `pushSettingsPage`) over the gate, a profile switch through the picker entry pops the page by identity (it is disposed, not remounted), the incoming profile's open writes and reads only its own keys, and the outgoing profile receives no write after the pop. |
    | 9 Fonts | Import: a wrong extension is rejected with no copy; no extension is accepted; the null-path message; success puts the file in the temp `subtitle_fonts`, refreshes the list and shows the message. Remove: no dialog; the file is deleted; removing the selected font resets the selection; the message. |
-   | 10 Navigation | Each appearance tile pushes its page, including TV gating through `debugSetTvOS`. "Choose player" pushes Player and reloads on return (existing test 5). A source guard keeps the self-push in the facade. |
+   | 10 Navigation | Each host-reachable appearance tile pushes its page: `PlayerDockPage` on desktop, hidden under `debugSetTvOS(true)` (`!PlatformUtil.isTelevision`); `PlayerGuideStylePage`; `PlayLoaderStylePage`; `SubtitlePriorityPage`. The `_isAndroidTv` destinations — `TvPlayerControlsStylePage` and the `DebrifyTvPlayerStylePage` tile — are unreachable on desktop: source guards on their predicates and targets, with device verification **pending**. No new seam is added to reach them. "Choose player" pushes Player and reloads on return (existing test 5). A source guard keeps the self-push in the facade. |
    | 11 D-pad | Arrow keys through dropdown and checkbox rows, not wrapping at either end. Mode rows are single stops. The macOS `TvTextField` arrows. Existing test 6. Night-mode activation: accessor, source guard, and a pending device check. |
    | 12 Callbacks | Checker identity at all 35 sites, plus a widget test that the "Choose player" `onTap` is the State's `_openPlayerSettings`. |
    | 13 Platform | Source guards: each member's predicate multiset is unchanged, and E1–E15 stay in order. |
@@ -527,10 +664,14 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
    - **Guards to extend, keeping their purpose.**
      - `test/settings_tv_input_source_guard_test.dart` gains the facade and
        the feature; today it doesn't cover this page.
-     - The `print(` redaction scan
-       (`test/profiles/profile_source_guard_test.dart:336`) already covers
-       `lib/screens/settings` and gains the feature. Its observed
-       pre-existing failure stays.
+     - The `print(` redaction scan, `profile_source_guard_test.dart::profile,
+       download, deep-link, and remote logs stay redacted` (326), already
+       covers `lib/screens/settings` and gains the feature. It keeps its
+       observed baseline outcome. The file's one observed pre-existing
+       failure is a **different** identity,
+       `profile_source_guard_test.dart::direct SharedPreferences opens stay
+       inside reviewed adapters/stores` (7); it stays as observed and is
+       not touched.
    - **Also update** `file_size_baseline.txt:14`, the architecture rules,
      and `checks.yml`, including any `test/support/playback_settings_*`
      helper.
@@ -554,7 +695,11 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
 
 As in the PikPak plan, with these specifics:
 - **Analyzer comparison:** run with `--relocate
-  lib/screens/settings/external_player_settings_page.dart=lib/features/playback_settings/`.
+  lib/screens/settings/external_player_settings_page.dart=lib/features/playback_settings/`
+  against the root and original strict baselines combined by maximum, plus
+  the per-symbol strict check (Technique 7).
+- **Suite evidence:** run `check`/`compare` with the executing worktree's
+  own script (Step 0.1); the per-run temp file is already in place.
 - **Manifests:** every manifest runs with its self-tests: settings, IPTV,
   TorBox, Real-Debrid, PikPak, IPTV-settings once integrated, and this one.
 - **Focused tests:** run against the latest base.
@@ -581,8 +726,9 @@ As in the PikPak plan, with these specifics:
 3. **Manifests and characterization.** All manifest runs pass with their
    self-tests, and every characterization test passes unchanged. The macOS
    goldens are strict; the Linux originals are verified and strict.
-4. **Analyzer.** There are no new diagnostics or suppressions, and the
-   allowlist check passes.
+4. **Analyzer.** There are no new diagnostics or suppressions against the
+   max-combined root and original strict baselines; the per-symbol strict
+   check has zero additions; and the allowlist check passes.
 5. **Gates.** Gate 2 passes against the latest base and gate 1. The shape
    counts stay at 20 radii and 4 token calls, with the floor at 488.
 6. **CI.** The local CI-equivalent checks pass, and remote CI is pending
@@ -595,8 +741,9 @@ As in the PikPak plan, with these specifics:
    - the seams: the format commit, the accessor, and the size raises.
 8. **Pending device verification** is recorded for:
    - **Android and Android TV:** DeoVR, night mode and its activation key,
-     the TV aspect key, passthrough, the renderer, the IPTV decoder, and
-     `isTelevision`;
+     the TV aspect key write, the `TvPlayerControlsStylePage` destination
+     and `DebrifyTvPlayerStylePage` tile, passthrough, the renderer, the
+     IPTV decoder, and `isTelevision`;
    - **iOS-mobile:** detection and the scheme;
    - **Windows;**
    - **real tvOS and desktop detection.**
@@ -642,6 +789,9 @@ All of these are pre-existing, and the extraction keeps each one exactly.
   - an unreachable unsupported branch.
 - **DeoVR mode off Android:** a stored `deovr` mode on a non-Android device
   shows no DeoVR card, yet the other sections still say DeoVR manages them.
+- **Writes on open on every host:** the unconditional renderer read
+  migrates `android_video_renderer_mode` and sets its flag even on iOS,
+  tvOS and desktops, which never use it.
 - **Unguarded font index:** `_allFonts[_subtitleFontIndex]` (3172, 3177).
 - **Mixed focus rings:** macOS uses a border plus a shadow, while iOS, Linux
   and Windows use a shadow only.
