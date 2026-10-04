@@ -41,7 +41,7 @@ class ShowcaseFixture {
     number: n,
     title: 'Episode $n',
     overview: 'Synopsis $n.',
-    firstAired: '2026-01-0$n',
+    firstAired: DateTime.utc(2026, 1, n).toIso8601String(),
     runtime: 47,
   );
 

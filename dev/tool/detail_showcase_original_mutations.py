@@ -12,6 +12,7 @@ def main():
     parser.add_argument('--worktree', type=Path, required=True)
     parser.add_argument('--checkpoint', required=True)
     parser.add_argument('--evidence', type=Path, required=True)
+    parser.add_argument('--only', nargs='*', help='Rerun named cases; validate retained assertion logs for other cases')
     args = parser.parse_args()
     root = args.worktree.resolve()
     evidence = args.evidence.resolve()
@@ -46,8 +47,9 @@ def main():
     case('visibility-axis-dropped',hover,'identity circles retain their MouseRegion', [('if (scrollable.position.axis != Axis.horizontal) return;','// Deliberate original-only mutation: axis guard removed.')])
     case('sources-browse-term-dropped',bands,'sources browse term mounts', [('itemCount: 2 + (onBrowseAll != null ? 1 : 0),','itemCount: 2,')])
     case('metrics-k-always-one',bands,'wide touch scale and scope notification', [('double get k => (compact || !touch) ? 1.0 : wideTouchScale(w);','double get k => 1.0;')])
-    case('visible-guide-radius', 'detail_showcase_goldens_test.dart','original pixel golden wide_series_bands', [('borderRadius: BorderRadius.circular(10),','borderRadius: BorderRadius.circular(30),')])
+    case('visible-guide-radius', 'detail_showcase_goldens_test.dart','original pixel golden wide_series_bands', [('border: Border.all(color: _ink.withValues(alpha: 0.07)),\n        borderRadius: BorderRadius.circular(10),','border: Border.all(color: _ink.withValues(alpha: 0.07)),\n        borderRadius: BorderRadius.circular(30),')])
     case('lost-original-declaration',source_test,'manifest reader covers every original leaf', [('Color _plateFill(AppTheme app) => Color.lerp(app.home.bg, app.core.tx, 0.10)!;','')])
+    case('namespace-changed','detail_showcase_surface_test.dart','facade exported namespace', [('const double kShowcaseGutter = 42;', 'const double kChangedShowcaseGutter = 42;')])
     case('completion-topology-on-original',source_test,'manifest reader covers every original leaf', [('\n','\nDETAIL_SHOWCASE_COMPLETE = True\n')],file=architecture)
     results = []
     for label, test_file, test_name, replacements, file in cases:
@@ -61,22 +63,28 @@ def main():
         out = evidence / ('original-mutation-' + label + '.jsonl')
         try:
             cmd = ['flutter','test','--no-pub','--reporter','json',prefix+test_file,'--plain-name',test_name]
-            with out.open('w') as stdout, out.with_suffix('.stderr').open('w') as stderr:
-                code = subprocess.run(cmd,cwd=root,stdout=stdout,stderr=stderr).returncode
+            reused = bool(args.only and label not in args.only)
+            if not reused:
+                with out.open('w') as stdout, out.with_suffix('.stderr').open('w') as stderr:
+                    code = subprocess.run(cmd,cwd=root,stdout=stdout,stderr=stderr).returncode
+            else:
+                assert out.exists(), 'Missing retained assertion evidence: ' + label
+                code = 1
             events = [json.loads(line) for line in out.read_text().splitlines() if line.startswith('{')]
+            assert any(e.get('type') == 'done' and not e.get('success') for e in events), label
             names = {e['test']['id']: e['test']['name'] for e in events if e.get('type')=='testStart'}
-            failures = [names[e['testID']] for e in events if e.get('type')=='testDone' and e.get('result')=='failure' and not e.get('hidden')]
+            failures = [names[e['testID']] for e in events if e.get('type')=='testDone' and e.get('result') in ('failure','error') and not e.get('hidden')]
             messages = '\n'.join(str(e.get('message',e.get('error',''))) for e in events if e.get('type') in ['print','error'])
             assert code != 0 and failures and all(test_name in n for n in failures), (label, failures, messages[-3000:])
             assert 'Compilation failed' not in messages and 'Failed to load' not in messages, label
             assert 'Expected:' in messages or 'Golden' in messages or 'TestFailure' in messages or 'StateError' in messages, label
-            results.append(dict(name=label,test=test_file,assertion_failures=failures,exit_code=code,sha256=hashlib.sha256(mutated.encode()).hexdigest(),compilation_error=False))
+            results.append(dict(name=label,test=test_file,assertion_failures=failures,exit_code=None if reused else code,sha256=hashlib.sha256(mutated.encode()).hexdigest(),compilation_error=False,reused_assertion_log=reused,log_sha256=hashlib.sha256(out.read_bytes()).hexdigest()))
             print(label+': assertion rejected',flush=True)
         finally:
             file.write_text(before)
             assert file.read_text()==before
     assert source.read_text() == original
-    result = dict(checkpoint=git('rev-parse','HEAD'),lib=git('rev-parse','HEAD:lib'),test=git('rev-parse','HEAD:test'),original_source_sha256=hashlib.sha256(original.encode()).hexdigest(),cases=results,restored=True)
+    result = dict(checkpoint=git('rev-parse','HEAD'),lib=git('rev-parse','HEAD:lib'),test=git('rev-parse','HEAD:test'),original_source_sha256=hashlib.sha256(original.encode()).hexdigest(),mutation_runner_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),cases=results,restored=True)
     (evidence/'step0b-original-mutations.json').write_text(json.dumps(result,indent=2)+'\n')
 
 
