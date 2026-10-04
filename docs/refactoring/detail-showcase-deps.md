@@ -36,24 +36,24 @@ Original application reference R: `1165b624` (format-only). Every row is a whole
 | `_PrimaryState` | `showcase_identity_actions.dart` | _ink → sInk; _activate → sActivate | widget, context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
 | `_Circle` | `showcase_identity_actions.dart` | none | none | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
 | `_CircleState` | `showcase_identity_actions.dart` | _ink → sInk; _activate → sActivate; _keepVisible → sKeepVisible | widget, context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `ShowcaseSeasons` | `showcase_seasons.dart` | none | context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_SeasonDropdown` | `showcase_seasons.dart` | none | none | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_SeasonDropdownState` | `showcase_seasons.dart` | _ink → sInk; _t → st; _activate → sActivate | widget, context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_SeasonPill` | `showcase_seasons.dart` | none | none | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_SeasonPillState` | `showcase_seasons.dart` | _ink → sInk; _t → st; _activate → sActivate; _keepVisible → sKeepVisible | widget, context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `ShowcaseEpisodeCell` | `showcase_episodes.dart` | _ink → sInk; _slotFill → sSlotFill; _t → st | context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `ShowcaseEpisodeCardCompact` | `showcase_episodes.dart` | _ink → sInk; _slotFill → sSlotFill; _t → st | context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_KebabButton` | `showcase_episodes.dart` | none | context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_Badge` | `showcase_episodes.dart` | _t → st | context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `ShowcaseCast` | `showcase_cast.dart` | _Band → SBand | context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_CastTile` | `showcase_cast.dart` | none | none | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_CastTileState` | `showcase_cast.dart` | _t → st; _activate → sActivate; _keepVisible → sKeepVisible; _Hover → SHover | widget, context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `ShowcaseSources` | `showcase_sources.dart` | _Band → SBand | context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_SourceCard` | `showcase_sources.dart` | none | none | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_SourceCardState` | `showcase_sources.dart` | _ink → sInk; _t → st; _activate → sActivate; _keepVisible → sKeepVisible; _Hover → SHover | widget, context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `ShowcaseRecs` | `showcase_recs.dart` | _Band → SBand | context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_Poster` | `showcase_recs.dart` | none | none | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
-| `_PosterState` | `showcase_recs.dart` | _slotFill → sSlotFill; _activate → sActivate; _keepVisible → sKeepVisible; _Hover → SHover | widget, context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseSeasons` | `showcase_seasons.dart` | none | context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_SeasonDropdown` | `showcase_seasons.dart` | none | none | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_SeasonDropdownState` | `showcase_seasons.dart` | _ink → sInk; _t → st; _activate → sActivate | widget, context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_SeasonPill` | `showcase_seasons.dart` | none | none | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_SeasonPillState` | `showcase_seasons.dart` | _ink → sInk; _t → st; _activate → sActivate; _keepVisible → sKeepVisible | widget, context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseEpisodeCell` | `showcase_episodes.dart` | _ink → sInk; _slotFill → sSlotFill; _t → st | context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseEpisodeCardCompact` | `showcase_episodes.dart` | _ink → sInk; _slotFill → sSlotFill; _t → st | context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_KebabButton` | `showcase_episodes.dart` | none | context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_Badge` | `showcase_episodes.dart` | _t → st | context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseCast` | `showcase_cast.dart` | _Band → SBand | context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_CastTile` | `showcase_cast.dart` | none | none | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_CastTileState` | `showcase_cast.dart` | _t → st; _activate → sActivate; _keepVisible → sKeepVisible; _Hover → SHover | widget, context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseSources` | `showcase_sources.dart` | _Band → SBand | context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_SourceCard` | `showcase_sources.dart` | none | none | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_SourceCardState` | `showcase_sources.dart` | _ink → sInk; _t → st; _activate → sActivate; _keepVisible → sKeepVisible; _Hover → SHover | widget, context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseRecs` | `showcase_recs.dart` | _Band → SBand | context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_Poster` | `showcase_recs.dart` | none | none | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
+| `_PosterState` | `showcase_recs.dart` | _slotFill → sSlotFill; _activate → sActivate; _keepVisible → sKeepVisible; _Hover → SHover | widget, context | Wired step 3; production via unchanged facade, owner-local spelling, same callback objects |
 | `_plainOf` | `showcase_guide.dart` | none | none | Pending step 4; production via unchanged facade, owner-local spelling, same callback objects |
 | `_spoilersOf` | `showcase_guide.dart` | none | none | Pending step 4; production via unchanged facade, owner-local spelling, same callback objects |
 | `_severityLevel` | `showcase_guide.dart` | none | none | Pending step 4; production via unchanged facade, owner-local spelling, same callback objects |

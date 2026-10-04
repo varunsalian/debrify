@@ -197,11 +197,25 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
     # Detail showcase exact type/cache imports. No service logic.
+    'lib/features/detail_showcase/presentation/showcase_cast.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+        'lib/services/imdb_enrichment_service.dart': {'CastMember'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_episodes.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+        'lib/services/trakt/trakt_episode_model.dart': {'TraktEpisode'},
+    },
     'lib/features/detail_showcase/presentation/showcase_grounds.dart': {
         'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
     },
     'lib/features/detail_showcase/presentation/showcase_identity_readouts.dart': {
         'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_recs.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_sources.dart': {
+        'lib/services/series_source_service.dart': {'SeriesSource'},
     },
     # End detail showcase imports.
     # Immutable session identity declaration only; no static state or I/O.
