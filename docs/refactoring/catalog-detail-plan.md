@@ -917,6 +917,31 @@ against gate 1. Never use `--record` or `--update` to accept a regression.
   including missing-invocation/alternate-receiver negatives. Application wiring
   was not changed to satisfy checker gaps; no assertions or diagnostics waived.
 
+- Step 5 commit: `005ea4c8`. Step 6: `CATALOG_DETAIL_COMPLETE = True`; every
+  other completion flag unchanged. CI formats/analyzes the facade and formats
+  all six catalog support helpers plus the configured child fixture. All paths
+  remain inside their commands, before `tee`. Twelve synthetic guard negatives
+  prove destination/facade caps, TEMP rejection, facade back-import rejection,
+  service/storage boundary, model-inclusive cross-import rejection in both
+  directions, and feature guards active with completion disabled
+  (`step6-guard-negatives.json`). No application cleanup or further move needed.
+- Final facade: **320 physical lines**. Imports/leading blank 23; public widget
+  including doc 105 (byte-identical); widget/State gap 1; composition/owner getters
+  41; retained metadata and late fields 12; lifecycle 91; forwarders 4; State
+  syntax/spacing 19; retained separator comments/spacing 24. Sum 320, no comment
+  deletion or compressed formatting (`final-facade-breakdown.json`). All 27
+  destinations are registered in shape, including zeros; maximum 389 lines.
+- Step 6 checks PASS: all 11 manifests/self-tests with own configs/originals
+  and isolated parser/kernel caches; catalog 135 leaves/forwarders; structural,
+  storage, actual CI scopes, shape 29, Classic theme 238, light-ink, scoped
+  allowlist and root analyzer comparison. Strict: the four original const infos,
+  one accepted curly info and private `_simklStatus` warning, zero additions.
+  All 122 focused identities pass against `base0b-final-rerun`; all five macOS
+  and five calibrated Linux originals pass strictly, unchanged hashes/stable
+  runner trees (`step6-checks.json`, `step6-final-linux-strict.env.json`).
+  Full-suite gate 2 follows from the clean committed completion checkpoint,
+  against both the latest catalog base and gate 1.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
