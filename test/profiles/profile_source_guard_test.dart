@@ -333,6 +333,10 @@ void main() {
           .listSync(recursive: true)
           .whereType<File>()
           .where((file) => file.path.endsWith('.dart')),
+      ...Directory('lib/features/playback_settings')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart')),
       ...Directory('lib/screens/settings')
           .listSync(recursive: true)
           .whereType<File>()

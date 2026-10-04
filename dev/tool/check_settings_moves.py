@@ -240,6 +240,21 @@ def normalize(values, rows, row=None):
     i = 0
     while i < len(values):
         value = values[i]
+        # A named record cannot have a private field name. This exact borrowed
+        # callback alias preserves the retained State member's identity; it is
+        # opt-in and never erases a closure or an arbitrary receiver path.
+        borrowed = CONFIG.get('borrowed_member_aliases', {})
+        matched_alias = False
+        for path, original_name in borrowed.items():
+            expression = re.split(r'(\.)', path)
+            if values[i:i + len(expression)] == expression:
+                original_row = next(r for r in rows if r['original_name'] == original_name)
+                out.append(original_row['new_name'])
+                i += len(expression)
+                matched_alias = True
+                break
+        if matched_alias:
+            continue
         # A member qualification needs braces in a formerly simple string
         # interpolation. Canonicalize only an otherwise identical single read.
         if value == '${':
@@ -534,6 +549,9 @@ def partition_virtual(current, spec, lookup, sources, package=None):
     initializer order are independently checked. Re-parsing restores original
     callback scope numbering across slice files and local-to-member functions.
     """
+    if spec.get('retained_preamble_join'):
+        from playback_settings_partition import virtual
+        return virtual(current, spec, lookup, sources, package)
     from check_verbatim_moves import parse
     path, owner = spec['builder_file'], spec['builder_class']
     constructor = lookup[(path, owner, owner)]
@@ -580,6 +598,9 @@ def partition_virtual(current, spec, lookup, sources, package=None):
 
 
 def check_partition(before, current, spec, lookup, rows, package=None, row=None):
+    if spec.get('retained_preamble_join'):
+        from playback_settings_partition import check_partition as retained_check
+        return retained_check(before, current, spec, lookup, rows, package, row)
     errors = []
     original = partition_elements(before)
     slices = spec['slices']
@@ -688,6 +709,10 @@ def destination_ownership(parsed, rows, source_path, scaffolds=(), partition_spe
                      for item in spec['slices'])
     for extra in CONFIG.get('additional_owners', []):
         known.update((extra['file'], extra['owner'], name) for name in extra['names'])
+    for accessor in CONFIG.get('test_accessors', []):
+        relocation = accessor.get('composition')
+        if relocation:
+            known.add((relocation['file'], '', relocation['name']))
     owners = {(path, owner) for path, owner, _ in known if owner}
     errors = []
     for path, unit in parsed.items():
@@ -722,6 +747,25 @@ def accessor_receiver_tokens(values, spec, rows):
     while i < len(values):
         if (values[i:i + 2] == [rule['receiver'], '.']
                 and i + 2 < len(values) and values[i + 2] in allowed):
+            i += 2
+        result.append(values[i])
+        i += 1
+    return result
+
+
+def normalized_accessor_tokens(values, spec, rows):
+    values = normalize(accessor_receiver_tokens(values, spec, rows), rows)
+    receiver = spec.get('borrowed_receiver')
+    if not receiver:
+        return values
+    # Only this frozen accessor's local borrowed State/composition receiver.
+    # Qualified paths were already validated against exact configured owners.
+    members = {r['new_name'] for r in rows}
+    result = []
+    i = 0
+    while i < len(values):
+        if (values[i:i + 2] == [receiver, '.']
+                and i + 2 < len(values) and values[i + 2] in members):
             i += 2
         result.append(values[i])
         i += 1
@@ -1040,8 +1084,13 @@ def _check(original_source, sources, rows, source_path, package=None,
                 errors.append('Missing registered test accessor: ' + spec['name'])
             continue
         expected = json.loads((ROOT / spec['tokens_file']).read_text())
-        if (normalize(accessor_receiver_tokens(tokens(accessor), spec, rows), rows)
-                != normalize(accessor_receiver_tokens(expected, spec, rows), rows)):
+        if spec.get('composition'):
+            from playback_settings_accessor import check_accessor
+            errors.extend(check_accessor(lookup, source_path, spec, expected, rows,
+                                         normalized_accessor_tokens, tokens))
+            continue
+        if (normalized_accessor_tokens(tokens(accessor), spec, rows)
+                != normalized_accessor_tokens(expected, spec, rows)):
             errors.append('Test accessor changed outside its registered receiver edits')
     return errors
 

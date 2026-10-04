@@ -35,6 +35,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_tiles.dart':
+      0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_bulk_delete.dart':
       0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selected_delete.dart':
@@ -136,7 +138,6 @@ const Map<String, int> kShapeResidue = {
   // Raised 2026-10-03 to the counts found at refactor/codebase 17db33f2: these
   // radii arrived with feature work after the sweep (see the settings plan's
   // "Found, not fixed"). The guard stays armed against further growth.
-  'lib/screens/settings/external_player_settings_page.dart': 20,
   'lib/screens/settings/filter_settings_page.dart': 2,
   'lib/screens/settings/iptv_hidden_categories_page.dart': 1,
   'lib/screens/settings/iptv_settings_page.dart': 2,
@@ -199,6 +200,88 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  // Playback settings: every remaining destination and the facade, at zero.
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_core_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_defaults_card.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_external_section.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_font_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_ios_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_ios_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_linux_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_linux_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_mac_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_mac_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_appearance.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_mode_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_section.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_setters.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_rows_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_sections.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_settings_layout.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_settings_load.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_settings_test_access.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_rows_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_setters.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_values_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_video_section.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_vr_section.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_vr_setters.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_vr_state.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_windows_actions.dart':
+      0,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_windows_state.dart':
+      0,
+  'lib/screens/settings/external_player_settings_page.dart': 0,
+  'lib/features/playback_settings/presentation/playback_setting_dropdown.dart':
+      1,
+  'lib/features/playback_settings/presentation/playback_dropdown_setting.dart':
+      1,
+  'lib/features/playback_settings/presentation/playback_checkbox_tile.dart': 2,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_windows_section.dart':
+      2,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_section.dart':
+      1,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_mode_option.dart':
+      3,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_night_mode_section.dart':
+      3,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_mac_section.dart':
+      3,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_linux_section.dart':
+      2,
+  'lib/features/playback_settings/presentation/legacy_playback_settings/playback_ios_section.dart':
+      2,
+
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_workflows_composition.dart':
       0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_catalog_state.dart':
@@ -738,7 +821,18 @@ void main() {
           'remove its entry if the file was deleted',
         );
       }
-      final found = _radius.allMatches(file.readAsStringSync()).length;
+      var source = file.readAsStringSync();
+      // Playback's extraction changes indentation; tall formatting can add a
+      // trailing comma to the same literal call. Preserve its original count.
+      if (entry.key.startsWith('lib/features/playback_settings/') ||
+          entry.key ==
+              'lib/screens/settings/external_player_settings_page.dart') {
+        source = source.replaceAllMapped(
+          RegExp(r'(BorderRadius\.circular\(\s*[0-9]+(?:\.[0-9]+)?\s*),'),
+          (match) => match.group(1)!,
+        );
+      }
+      final found = _radius.allMatches(source).length;
       if (found > entry.value) {
         grew.add('${entry.key}: ${entry.value} → $found');
       }

@@ -411,8 +411,8 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
    rounded up and at most 440, with the exception and exit milestone above.
    Lifecycle code never moves out of the facade to meet the cap.
 3. **Partition.** `_externalPlayerSettings` splits at whole collection-`if`
-   elements, kept in their original order. The joining method keeps the
-   preamble and E1 inline. It then spreads one piece per platform, in branch
+   elements, kept in their original order. The joining method keeps only preamble locals used by E1/the join,
+   and E1 inline. E1/the join use neither theme nor t. It then spreads one piece per platform, in branch
    order:
    - iOS/tvOS, E2–E4 (≈186 lines);
    - Linux, E5–E7 (≈183);
@@ -429,14 +429,14 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
    start at element 0 and cover every original element (582–596), and it
    requires the dispatcher to be exactly a fresh `final b = Builder(…)`
    followed only by ordered `...b.slice()` spreads (623–655). It has no way
-   to represent a retained preamble, an inline E1, or repeated locals in
+   to represent used join locals, an inline E1, or repeated locals in
    the pieces. Step 0 therefore adds an explicit **configuration-scoped
    extension**, enabled only by keys in
    `playback_settings_checker_config.json`. It must:
    - leave every existing config's behaviour unchanged, proved by all
      existing manifests and self-tests passing unmodified;
-   - accept a join method that keeps the original preamble (`theme`, `t`)
-     and E1 inline, then spreads exactly the five pieces in branch order;
+   - accept a join method that keeps only original preamble locals used by
+     E1/the join (none here), with E1 inline, then spreads exactly the five pieces in branch order;
    - map each piece to its exact original element range (E2–E4, E5–E7,
      E8–E10, E11–E14, E15) and compare the joined elements token for token
      with the original, after the existing comma normalization;
@@ -768,7 +768,404 @@ As in the PikPak plan, with these specifics:
 
 ## Progress
 
-(empty)
+### Step 0 — baseline and format checkpoint
+
+- Dedicated `refactor/playback-settings` worktree starts at `452d8a8b`; Flutter
+  3.44.8 / Dart 3.12.2. `flutter pub get` completed without lockfile changes.
+  Untouched full suite `playback_settings/base`: 10,577 success, 13 failure,
+  28 error, 20 skipped; stable committed tree
+  `6ef59f2099e8a01e0bb0027dc4efec29733ce930`, no overlay or untracked input.
+  These observed identities, not the historical allowlist, are authoritative.
+- Original strict-lint evidence reproduces exactly 29 diagnostics (12
+  deprecations, 11 import-order infos, six const-constructor infos). The root
+  analyzer and per-symbol strict inventory are retained in the shared evidence
+  namespace. Parser package/cache is isolated under `playback_settings/parser`,
+  initialized with the pinned lockfile; every manifest run passes its package
+  config explicitly.
+- Workspace restriction decision: all original-code proofs run in this dedicated
+  worktree before any extraction, with exact original hashes and tested-tree
+  evidence. No other checkout/worktree is opened or modified. The strict-only
+  original copy is under this worktree's ignored `build/` directory, using the
+  unchanged destination lint file and import URI qualification only.
+- Format proof: AST structure equal; token diff contains exactly nine inserted
+  and one removed formatter-owned commas (positions in `format-token-proof.json`);
+  unchanged comment multiset and 20 bare radii/four shape calls. All six original
+  navigation identities pass against `base`. Whole analyzer comparison is PASS
+  with zero additions/removals; the temporary strict/tool Dart copies were renamed
+  to `.dart.txt` before the clean whole-repo check, since the analyzer scans
+  ignored build directories too. Architecture, file-size and staged diff checks
+  pass. The facade is added to both CI format/analyzer command lists.
+- Temporary oversized facade: all original lifecycle, load/actions, values,
+  focus resources and builders remain until steps 1–7. Format-only ratchet raise
+  4,289 → 4,314 is intentional; extraction lowers it thereafter. Lifecycle stays
+  whole; eventual facade cap is determined by the step-0 simulation.
+- The obsolete cloud `**` finding is removed: `452d8a8b` already registers
+  explicit per-directory patterns. New playback theme entries will use the same
+  explicit pattern convention. No push, branch switch, dependency upgrade,
+  behavior fix, assertion weakening or allowlist growth is authorized.
+
+
+### Step 0 — original characterization preparation
+
+- Frozen all 214 original leaves and the 133-field owner membership in the
+  dependency report; normal facade simulation is 351 lines, so the final cap
+  remains 400. Accessor seam has 191 keys, fresh collection snapshots and real
+  action/setter tear-offs. Accessor-only full `base2` compares exactly with
+  `base`, and its whole analyzer adds/removes no identities.
+- Original characterization covers 123 new identities across values, views,
+  actions, interactions, committed-profile boundaries, acquisition timing and
+  source guards. The original-focused draft is 145 successes and the one
+  observed pre-existing profile storage-adapter guard failure; comparison with
+  `base` passes with only added passing identities. Final staged proof and
+  `base3` are recorded before extraction. Five macOS original PNGs were captured
+  before extraction; only original capture uses golden update flags.
+- Three original-code mutations fail their exact tests: swapped first disposals,
+  reordered listeners, and negated subtitle-bold publication. The original
+  source is restored byte-for-byte. Font import/remove cases also pass with
+  random ordering seed 731. No proved assertion was weakened.
+- Conservative fixture decisions: real host detection runs in `tester.runAsync`;
+  one stable device-preferences object lives per isolate; dropped `loadFonts`
+  work drains before resetting caches; font cleanup uses existing public APIs.
+  Preference acquisition replacement has a separate isolate. The gate fixture
+  uses existing deterministic test typography and invokes picker actions in the
+  real async zone. Down at the macOS command field's lower boundary stays there;
+  Up exits. Incoming/outgoing aspect values are explicitly seeded separately.
+- The original profile hazards are now reproduced: before acquisition a setter
+  captures B; an already-issued renderer write lands in A and the next write
+  rejects its stale session; a pending font picker imports device-wide and selects
+  in B after its route pop. Idle picker handoff pops the pushed route by identity,
+  disposes the State, preserves A, and opens a new State reading/writing B.
+- The URL-launcher test interface is promoted from the already-locked transitive
+  2.3.2 version to an exact dev dependency; no version or runtime dependency
+  changes. Concurrent Flutter commands initially collided in ephemeral pub-get
+  cleanup; subsequent checks use `--no-pub` after this worktree's completed get.
+- The retained-preamble checker extension is opt-in, with a real original join
+  positive and complete partition/callback negatives. Every named callback
+  rejects closures, same-class receiver swaps, wrong members and missing named
+  arguments. The original 36-listener and 42-resource sequences, predicates,
+  detection/read order, unsupported branch, TV aspect key, navigation and helper
+  hashes remain pinned. TV input/redaction guards and explicit per-directory
+  theme registry entries are extended additively. Linux capture script resolves
+  this checkpoint by its exact subject and passes shell syntax checks.
+
+
+### Step 0 — frozen original evidence
+
+- Full `playback_settings/base3`: **10,700 successes / 13 failures / 28 errors /
+  20 skips**, PASS against `base2`. The unfiltered identity audit verifies all
+  prior outcomes exactly and exactly 123 added successes; staged tested tree
+  `a7d92d14d0fa50b9b8b8fa3a9c3a03d9c69b203e`, no untracked inputs or tree changes.
+  `original-freeze` separately proves every characterization identity on the
+  unchanged formatted original/accessor. The source guard pins the unsupported
+  branch body independently of the named root-build annotation exception.
+- Root analyzer is unchanged (1,635 records). Original root/strict evidence is
+  combined by maximum: 1,652 records. Per-symbol proof: 12 current / 29 original
+  strict, zero additions and zero scaffold diagnostics. CI format: 1,473 files,
+  zero changes. Scoped CI analyze and the unchanged five-warning allowlist pass.
+  All six manifests/self-tests pass with the isolated parser, including all
+  214 playback leaves, every named callback and the real partition fixtures.
+  Architecture, sizes, storage keys/references and staged diff pass.
+- Exact retained-State callback aliases permit the legal public record field
+  `openPlayerSettings` while preserving `_openPlayerSettings` as the State's
+  actual tear-off. Direct positive, closure and receiver negatives prove this
+  configuration-scoped spelling; other configs retain their behavior. Fresh CI
+  clones initialize the source guard's own pinned, isolated parser package.
+- CI selector decision: the pre-existing known-failure inventory names the
+  WebDAV hot-merge suite but its concrete test list omitted that file. Add its
+  existing path (no code/assertion/failure-list change) so the CI command can
+  exercise both already-observed listed failures. The full baseline already
+  contains those exact identities. Full-suite historical helper discrepancies
+  remain historical evidence, never accepted with a record/update flag.
+- Actual CI behavior command passes: 3,157 successes and the two unchanged
+  listed failures. The concrete selector repair is additive. Context-guard
+  checks are enabled for every receiver-qualified manifest row, and the final
+  real-config/self-test replay passes. Historical full-suite helper replay
+  still reports original discrepancies; no failure inventory is changed.
+
+### Step 1 — parameter-only row builders
+
+- Move the three generic row builders into public presentation functions. Their
+  original dependency report is parameter-only; real production callers use
+  the new functions and the three separate Shortcuts/Actions bodies remain exact.
+  No owner/composition scaffold is introduced in this step.
+- Register the feature, exact legacy bridge prefix, 500-line file limits,
+  service/import boundaries and bidirectional settings/IPTV-settings bans.
+  Final facade cap/TEMP rejection remains scheduled for step 7.
+- All six manifests plus self-tests pass, including 214 playback leaves and
+  all 35 callback identities/negative fixtures. Focused `step1` compares PASS
+  against `base3`: 145 successes and the same original profile source failure.
+  Strict-symbol proof: zero additions/scaffold diagnostics; max-combined whole
+  analyzer comparison PASS. CI format, scoped analyzer/unchanged allowlist,
+  behavior selector, architecture, sizes, storage and staged diff pass.
+- Facade ratchet is lowered to 4,231 lines. Exact shape ownership moves four
+  radii into the three functions: total remains 20 radii/four token calls and
+  floor 488. Original characterization/fixture/helper/macOS PNG hashes match.
+  Linux artifacts supplied during this step remain outside this source commit.
+
+### Linux original artifacts — separate checkpoint
+
+- Verify all five supplied SHA-256 hashes, source revision
+  `7bf567c9cc2d728d1a5ef3a0769c6b965628eb4b` and both five-test passing
+  capture/strict logs. Commit PNGs separately with adjacent provenance.
+- Capture used calibrated `debrify-flutter:3.44.8`, linux/amd64 Ubuntu 24.04,
+  official SDK and sqlite development library; 14 cloud Linux originals were
+  strict-reverified after the sqlite layer. Remote Actions were unavailable
+  because of the spending limit. Full provenance/logs remain in the evidence
+  namespace. Linux default stays non-strict through step 5 as planned, then
+  becomes strict before moving the layout. macOS cannot validate Linux pixels.
+
+### Step 2 — frozen field owners and whole State lifecycle
+
+- Step 1 source checkpoint: `acd2f2ba`; separate Linux artifact checkpoint:
+  `a69da7c8`. Move all 133 fields into the ten frozen owners (largest: 28).
+  Initializers stay at declarations; all 12 implicit-null fields retain no
+  initializer. Actual State handles bind one owner each, with no constructor
+  actions; all reads, writes and accessor snapshots use those same owners.
+  Review every field entry against the dependency report before pinning handles.
+- Keep initState/dispose whole in State, including original analytics, the
+  initial load, all 36 listener closures and the 42 ordered disposals followed
+  by super. Exact comment multiset proof: 192 original/current comments.
+  Trailing field comments move with their own fields, including orphan groups.
+- Conservative checker decision: the frozen accessor needs an opt-in borrowed
+  receiver rule after fields move. Normalize only its exact registered paths
+  and frozen members; wrong-owner/same-class receiver negatives run directly,
+  independently of scaffold failures. Other configurations have no such rule.
+- `step2` focused comparison against latest `base3`: 145 successes and the same
+  observed original profile guard failure; no identity changes. Whole analyzer
+  comparison PASS; strict per-symbol proof has zero additions and zero scaffold
+  diagnostics (12 current vs 29 original strict). Local CI checks pass with the
+  unchanged allowlists; all six manifests/self-tests pass. Root analyzer exit 1
+  remains original vendor errors, with unchanged identities, not a new failure.
+- Facade ratchet: 4,120 lines. Exact shape counts remain 20 radii/four token calls
+  and floor 488; original characterization/fixture/helper/macOS hashes match.
+  No new const, lifetime owner, storage operation or listener is introduced.
+
+### Step 3 — load and external actions; gate deferred for review closure
+
+- Step 2 source: `a58f052f`. Move load, mode and four platform action groups
+  verbatim. Review every step-3 dependency-report entry and actual record binding
+  before pinning: same field owners, parameter types, real State setState,
+  live mounted/context/section and direct action members; constructors only
+  retain dependencies. The original loadFonts tear-off remains borrowed from
+  State until step 4. Initial load still enters synchronously in initState.
+- All six manifests/self-tests pass; focused `step3` compares PASS to `base3`
+  (145 successes and the same original guard failure). Whole/max analyzer and
+  strict symbol comparisons pass with zero additions/scaffold diagnostics.
+  CI format, scoped analyzer/unchanged allowlist, behavior selector, architecture,
+  sizes, storage keys/references and staged diff pass. Shape/helper/test hashes
+  remain exact. Facade ratchet is 3,489 lines.
+- Independent step-0 review arrived after source verification. Commit this
+  verified source checkpoint, close all findings in a separate original-proved
+  step 0b, adopt its new base, then run gate 1. No gate is claimed yet.
+
+### Step 0b — independent review closure (after source step 3)
+
+- Verified source step 3: `ded9f666`. Cherry-pick shared interpolation resolver
+  `def4e304` as `5a380c77`, retaining Codex/Claude attribution. All 35 playback
+  callback sites and their negatives remain unchanged.
+- User explicitly authorized a detached original proof worktree at `7bf567c9`.
+  Create it only under this worktree's ignored `build/step0b-original`, prove all
+  changed/new cases there, and remove it before the next whole-root analyzer.
+  No main checkout or pre-existing other worktree is used. App source is unchanged
+  except temporary scratch/mutation proofs, restored byte-for-byte each time.
+- P1 conservative structural decision: the join retains only locals actually
+  used by E1/the join. Neither theme nor t is used there; both remain verbatim
+  only in their platform pieces. The opt-in checker reconstructs their identical
+  original locals for whole-method comparison. Positive/negative fixtures cover
+  the real empty-preamble join and a genuinely split E3 child list across iOS/
+  Linux pieces. Scratch real join compiles all six navigation cases; unchanged
+  destination strict lint gives exactly 29 original diagnostics, zero new
+  diagnostics and zero warnings. No new const or allowlist entry is added.
+- Strengthen concrete TV focus retention using the later content-match row,
+  rendered with simulated tvOS. Exact dropdown traversal pins first → middle →
+  last and both ends; checkbox end targets stay exact. Mode Down targets the
+  External Player row. Non-macOS command-field cases explicitly skip.
+- Seed all omitted VR, tvOS, passthrough, Apple and external-player keys away from
+  defaults. Simulated tvOS makes its three values/Apple and iOS scheme reachable;
+  native desktop still loads its own external keys. Android-only VR/passthrough
+  seeds intentionally remain unread on desktop, with original guards/order pinned
+  and device execution pending. No fake Android seam is introduced.
+- Profile assertions pin A's initial ordered migration writes, zero A writes
+  during the picker handoff before clearing, and B's exact three ordered page
+  migration writes after its original defaults bootstrap. Removing B's renderer
+  migration fails, so the incoming assertion cannot pass vacuously.
+- Second-open cases now mount a fresh State. Font import pins the complete ordered
+  device-list/selection writes; invalid command/scheme errors use exact original
+  text. The storage failure resets preference acquisition in the views isolate
+  and uses failRead; its exact original snackbar is asserted. Golden test bodies,
+  all ten PNGs and the player helper files stay unchanged.
+- Source predicates are ordered, including E1–E15; detection sites, arguments,
+  enclosing read/guard prefix and all five detector calls are pinned from the
+  original. Source tests own a checkout-local pinned parser/kernel and never
+  initialize or recompile the shared evidence parser.
+- Eight original-only mutations fail their intended assertions: focus guard,
+  Apple/tvOS/external-command load, dropdown Down target, incoming migrations,
+  platform-element order and detector arguments. Original focused freeze has
+  130 successes (all 124 characterization identities plus six navigation cases).
+  New test analyzer has zero diagnostics. Mutation logs/proofs and all accepted
+  test hashes are in `playback_settings/`; no assertion is weakened.
+- Latest original `base4`: 10,701 successes / 13 failures / 28 errors / 20 skips;
+  comparison to `base3` PASS with exactly one added success and every old outcome
+  unchanged. Stable tested tree `618aa214e5955f4f1cb584891a7f7ebb0c3cb563` at
+  `7bf567c9`, staged review-only test/tool overlay, no untracked inputs. Current
+  replay: 146 successes and the same original profile guard failure, PASS versus
+  `base4`. All six manifests and local CI-equivalent checks pass with unchanged
+  inventories. Gate 1 will compare committed current source against `base4`.
+- Record the previously omitted accessor size raise: original formatted facade
+  4,314 → 4,515 with the 191-key test seam; this temporary raise exits when its
+  body moves in step 7. The 351-line sizing artifact and AST span breakdown are
+  now preserved in evidence and documented in the dependency report. The sketch
+  excludes final import details; step 7 measures the compiling facade again.
+- CI selector decision: retain the existing WebDAV hot-merge test path solely
+  because the unchanged exact CI failure inventory requires its observed failure
+  to be exercised. Dropping it fails the missing-known-identity check; filtering
+  or editing the inventory would weaken that check. No WebDAV code, assertion or
+  failure entry changes; the original whole baseline already observes it.
+
+### Gate 1 — committed source after step 0b
+
+- Source `0a9ec24736b43c6244d15901dd52cba48efe7be2`, tested tree
+  `34abc7614d8cb4318111b396b786553a4e24e11e`: unfiltered full suite
+  10,701 success / 13 failure / 28 error / 20 skipped. Every outcome identity
+  equals the latest original `base4`; comparison PASS, zero additions/removals
+  or changed outcomes. Same SDK, stable committed tree, no overlay/untracked
+  inputs. `gate1.env.json`, `gate1-complete-identity-audit.json` and comparison logs
+  preserve the evidence in `playback_settings/`.
+- Historical helper replay still reports its original stale failure inventory;
+  the exact observed original comparison is authoritative. No failure inventory,
+  assertion or analyzer allowlist changes. This commit records evidence only.
+
+### Step 4 — instant setters, fonts and labels
+
+- Moved all 44 step-4 manifest entries: 33 instant setters, font operations,
+  three unchanged statics and live label/index getters. Wiring reviewed before
+  scaffold pinning (`step4-wiring-review.json`): the same owner instances and
+  State `setState` tear-off; live `mounted`/`context`; getter bodies read current
+  values. No constructor actions, preference/service changes or new consts.
+- Facade 3,125 lines; extracted files at most 309 lines, composition 187.
+  All six manifest/self-test runs pass. Focused replay: 146 successes and the
+  same original profile-adapter guard failure; PASS against `base4`. Whole
+  analyzer relocation/max comparison and per-symbol strict comparison PASS,
+  zero additions/scaffold diagnostics. Local CI passes with unchanged inventories.
+- Formatter decision: one retained radius wraps with a trailing comma after
+  receiver qualification. Normalize only such playback literal calls in the
+  shape source counter; preserve all other feature inventories. Initial broad
+  normalization exposed unrelated historical omissions and was discarded.
+  Final scoped check retains all 20 original radii/four token calls and floor 488;
+  affected shape, focused, CI and whole-analyzer checks were rerun successfully.
+  Frozen step-0b characterization, original PNGs and helper hashes are unchanged.
+
+### Step 5 — builders and platform partition
+
+- Moved all 13 step-5 entries and split the external list into the exact five
+  configured whole-element ranges. E1 remains inline; join has no theme/t locals;
+  each piece retains both original locals where used. Join borrows only core and
+  the five real piece tear-offs. The step-0b real join scratch compile and strict
+  analyzer proof already passed; production join adds zero diagnostics now.
+- Per-entry/piece wiring reviewed before pinning (`step5-wiring-review.json`):
+  live State context, lexical builder contexts, original owner instances, real
+  setter/action tear-offs, live completion options getter. No new widget classes,
+  consts, combined platform cards or navigation changes. Original comment-token
+  multiset remains exactly 192. All 35 callback sites and negatives pass.
+- Facade 660 lines; largest feature file 433 (subtitle section), composition
+  372, external join 36. Six manifests/self-tests, local CI, focused `base4`
+  comparison, whole analyzer/max comparison and strict symbol comparison PASS.
+  Focused outcomes remain 146 successes plus the same original guard failure.
+  Shape totals 20/four, floor 488; frozen characterization, PNG/helper hashes
+  unchanged. Linux tests remain non-strict at this checkpoint as planned.
+
+### Linux prerequisite — verified originals and strict tests
+
+- Original artifacts remain separately committed at `a69da7c8`, from exact
+  checkpoint `7bf567c9`. Reverified all five hashes and original capture/strict
+  logs and calibrated Linux provenance; no PNG changes.
+- Before moving `build`, Linux golden comparison is strict by default. Sole
+  frozen-test delta is `requireLinux` false → true, byte-proved against step 0b;
+  original strict capture already passed with the equivalent true define.
+  No golden body/assertion changes or recapture. macOS views 27/27 pass,
+  affected test analyzer zero diagnostics.
+- Calibrated `debrify-flutter:3.44.8`, linux/amd64: current step-5 source plus
+  the flag passes all five original PNG comparisons without update flags.
+  Read-only archive of this dedicated worktree's staged tree was tested in
+  the disposable container; host source/lock/goldens unchanged. Exact tree,
+  image ID, hashes and logs are in `linux-strict-prerequisite.json` and related
+  evidence. This separate commit closes the prerequisite before step 6.
+
+### Step 6 — layout and exact facade dispatch
+
+- `build` moved whole into plain `PlaybackSettingsLayout`; facade retains its
+  exact annotated signature and argument dispatch. State's self-push stays whole
+  and its real `_openPlayerSettings` tear-off is borrowed under the public record
+  field `openPlayerSettings`. Live `widget.section`, lexical build context and
+  original core/section owner instances are preserved. Wiring reviewed before
+  pinning (`step6-wiring-review.json`). Facade 579 lines, composition 386; all
+  feature files below 500.
+- Four new checker negatives cover missing forwarder/annotation, wrong receiver
+  and wrong argument. Missing forwarder initially exposed an enforcement gap;
+  strengthen the frozen build row with the already-supported `retained_forwarder`
+  flag (same 214 entries, no widened token permission). The affected playback
+  self-test rerun passes all negatives; five unchanged shared configs pass.
+- Focused replay rerun after the stronger manifest: 146 successes and the same
+  original guard failure; PASS against `base4`. Local CI, whole analyzer/max and
+  strict symbol comparisons PASS, zero additions/scaffold diagnostics. All
+  frozen inputs unchanged except the exact planned Linux strict-default delta.
+  Twenty radii/four token calls, floor 488, original helper/PNG hashes retained.
+- Calibrated Linux image strictly compares the moved layout against all five
+  original PNGs: 5/5 PASS, no update flags (`linux-step6-strict.json` and log).
+  The later manifest-only enforcement flag does not alter tested app/golden code.
+
+### Step 7 — completed source set and facade guard
+
+- All 214 original leaves occupy their registered destinations. Frozen 191-key
+  accessor body moves over `PlaybackSections`; the original typed State seam is
+  retained as a four-line facade forwarder. Composition stores the same borrowed
+  State self-push tear-off used by layout. Exact original body/header comparison
+  is opt-in through this config only; bridge accessor is excluded from scaffold
+  pins. Independent positives and 13 negatives cover missing/wrong/wrapped
+  accessors, State type/cast, owner, key, action, snapshot and five-line limit.
+  Existing checker configs follow the unchanged path and all six self-tests pass.
+- Final facade **365 formatted lines**, cap 400; lifecycle 240 + 47, self-push
+  four, build forwarder two, accessor four. Full breakdown and 214-entry wiring
+  checklist are retained; dependency report explains the 351 → 365 difference.
+  Largest feature file 433; composition 389; accessor bridge 207. Completion
+  guard enables facade cap and `TEMP(playback_settings)` rejection. No source
+  duplicates, facade back-imports, cross-feature imports or new consts.
+- Focused replay 146 successes plus the unchanged original profile-adapter guard
+  failure; PASS against `base4`. Whole analyzer relocation/max and strict symbol
+  comparisons PASS with zero additions/scaffold diagnostics. Local CI and six
+  manifest/self-test runs PASS with unchanged allowlists. Shape 20/four, floor
+  488; helpers, PNGs and frozen characterization retained, with only the proven
+  Linux strict-default delta. Original comment-token multiset remains 192.
+- Final source passes all five strict original Linux goldens in the calibrated
+  linux/amd64 image, without update flags (`linux-step7-strict.json` and log).
+  Remote CI remains pending until integration/push by Claude. Android/Android TV,
+  iOS-mobile, Windows and real tvOS/desktop device checks remain pending exactly
+  as listed in DoD 8. Legacy lifecycle, persistence and error hazards are retained.
+- Step 7 source is committed before unfiltered full-suite gate 2; its evidence
+  will be recorded separately under a gate subject, then execution stops.
+
+### Gate 2 — completion and stop
+
+- Committed source `2f7b7226ecba3e823c655e402ff47b7692c6f765`, tested tree
+  `f7742212faf250bf97a737504bfaf2579e00cc3c`: unfiltered full suite
+  10,701 success / 13 failure / 28 error / 20 skipped. Every outcome identity
+  equals latest original `base4` and gate 1: PASS, no added/removed identities
+  or changed outcomes. Same SDK; stable committed tree, no overlay/untracked
+  inputs. `gate2.env.json`, `gate2-complete-identity-audit.json`,
+  `gate2-comparison.txt` and `gate2-vs-gate1.txt` retain exact provenance.
+- Historical helper replay has the same original stale inventory and exit 1;
+  it is retained as evidence, never recorded/updated to accept a regression.
+  Observed original outcomes remain the acceptance criterion. Original 13
+  failures/28 errors are found-not-fixed full-suite limitations, not new failures.
+- Steps 0–7 and review closure 0b are complete. Final six manifests/self-tests,
+  35 callback identities/negatives, partition/accessor/lifecycle negatives,
+  per-symbol strict analyzer, unchanged allowlists, local CI, both strict host
+  golden sets, shape totals/floor and helper/frozen-input hashes pass.
+  Facade 365, bridge cap 500 respected; no facade cap exception needed.
+- Pending only: DoD 8 device verification (Android/Android TV, iOS-mobile,
+  Windows, real tvOS and representative desktop detection), remote CI after
+  Claude integrates/pushes, and cross-worktree integration review. No push or
+  branch switch. Stop after this Progress-only gate evidence commit.
 
 ## Found, not fixed
 
@@ -802,9 +1199,6 @@ All of these are pre-existing, and the extraction keeps each one exactly.
   and Windows use a shadow only.
 - **Legacy surface:** 20 legacy bare radii, hard-coded English, and label
   copies in the search index that no test checks.
-- **Unverified:** the `cloud` `**` glob in `theme_surface_manifest.txt`
-  looks non-recursive in both consumers, so it may miss `legacy_pikpak/`.
-  That file isn't touched by this plan.
 - **Late writes after a profile pop.** Popping the page doesn't cancel
   in-flight work: an issued write can land after the switch, a later one can
   be rejected as stale, and a pending picker result can resume its storage

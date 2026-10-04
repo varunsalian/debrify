@@ -6,6 +6,11 @@ void main() {
   test('settings dialogs never bypass the TV-safe text field', () {
     final paths = [
       File('lib/screens/settings_screen.dart'),
+      File('lib/screens/settings/external_player_settings_page.dart'),
+      ...Directory('lib/features/playback_settings')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart')),
       ...Directory('lib/features/settings')
           .listSync(recursive: true)
           .whereType<File>()

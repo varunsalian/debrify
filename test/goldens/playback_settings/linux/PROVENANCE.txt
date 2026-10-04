@@ -1,0 +1,13 @@
+Original-code playback settings Linux goldens
+
+Revision: 7bf567c9cc2d728d1a5ef3a0769c6b965628eb4b
+local capture: Docker image debrify-flutter:3.44.8 (linux/amd64 ubuntu:24.04, official flutter_linux_3.44.8-stable tarball, + libsqlite3-dev) under colima on macOS, 2026-10-04T03:12:26Z, from 7bf567c9; GitHub Actions unavailable (spending limit). Container calibrated against GitHub-captured TorBox/Debrid Linux goldens (re-verified after the sqlite layer: 14/14 cloud goldens strict-pass).
+
+Both capture and strict replay: five passing golden tests.
+Evidence: .git/refactor-evidence/playback_settings/linux-original-{capture,strict,sha256,revision,run-url}.txt
+
+62f87f34cff9729b2b5d527f96dff16a60149a4f8eb27b905372e85bf5311e08  test/goldens/playback_settings/linux/audio.png
+c7ce51a4381938d3fa7f7503cdfdab43cb790682c211c6cad0cdfcfa834fb12f  test/goldens/playback_settings/linux/managed_video.png
+f12a753cbcea4ca37b3fbf64b0787dab9b216486b440e47a48ec3b71956ee9fe  test/goldens/playback_settings/linux/player.png
+b683b48d0ac510f0d14b7c77b4c85279018247b3ff1414a1df921983fd3561c5  test/goldens/playback_settings/linux/subtitles.png
+fb33b032d3c2d96c703c9549b798fa61fc961326ebead5270fc9009e646ee20e  test/goldens/playback_settings/linux/video.png
