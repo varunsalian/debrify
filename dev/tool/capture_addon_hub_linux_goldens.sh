@@ -20,20 +20,26 @@ python3 - "$format_revision" "$original_revision" <<'PY'
 import subprocess,sys
 base,checkpoint=sys.argv[1:]
 def git(*args):return subprocess.check_output(['git',*args])
-paths=git('ls-tree','-r','--name-only',base,'lib').decode().splitlines()
-new_paths=git('ls-tree','-r','--name-only',checkpoint,'lib').decode().splitlines()
-# Empty directory marker exists only so pre-move source guards scan unconditionally.
+def blobs(revision):
+    result={}
+    for line in git('ls-tree','-r',revision,'lib').decode().splitlines():
+        meta,path=line.split('\t',1)
+        result[path]=meta.split()[2]
+    return result
+before,after=blobs(base),blobs(checkpoint)
+# Empty directory marker exists so original source guards scan unconditionally.
 marker='lib/features/addon_hub/.gitkeep'
 assert git('show',checkpoint+':'+marker)==b''
-assert paths==[p for p in new_paths if p!=marker]
+after.pop(marker)
+assert before.keys()==after.keys()
 source='lib/screens/addons/addon_hub_screen.dart'
-for path in paths:
-    old=git('show',base+':'+path);new=git('show',checkpoint+':'+path)
+for path,blob in before.items():
     if path==source:
+        old=git('show',base+':'+path);new=git('show',checkpoint+':'+path)
         seam=git('show',checkpoint+':dev/tool/addon_hub_accessor.dart.txt')
         assert new==old+seam, 'Checkpoint application differs beyond the frozen accessor'
     else:
-        assert old==new, 'Checkpoint changed application file: '+path
+        assert blob==after[path], 'Checkpoint changed application file: '+path
 print('All application files equal the format-only original after the exact frozen accessor is removed.')
 PY
 if [[ "$(uname -s)" != Linux ]]; then

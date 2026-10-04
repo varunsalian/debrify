@@ -631,6 +631,18 @@ committed tree**, reconciling each branch's approved additions.
   No review findings have arrived at this checkpoint. `base4` is recorded on
   this committed original-plus-tests tree as the latest comparison base.
 
+- Step 0 checkpoint: `8c5981a4` (exact Linux-capture subject). The script's
+  macOS preflight proves every application blob is the format-only original
+  plus the frozen seam, then deliberately rejects non-Linux capture. Blob
+  identities verify all unchanged files in one tree listing.
+- Step 0b closes the restored-original mutation proofs: all 119 affected tests
+  pass before mutations; all nine mutations are rejected individually by named
+  tests on stable recorded trees. The rejected diagnostics were reviewed;
+  none is a compile/loading failure. No review findings have arrived here.
+  `base4` is recorded on this committed original-plus-tests tree as the latest
+  comparison base. An early baseline attempt begun before this documentation
+  commit is retained as incomplete; it is not used as evidence.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
