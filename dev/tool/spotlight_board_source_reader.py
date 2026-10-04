@@ -26,6 +26,12 @@ SOURCE = 'lib/widgets/home/spotlight_board.dart'
 
 
 def package_at(path):
+    from check_verbatim_moves import parser_lock
+    with parser_lock(path.parent.parent):
+        return _package_at(path)
+
+
+def _package_at(path):
     if not path.exists():
         directory = path.parent.parent
         directory.mkdir(parents=True, exist_ok=True)

@@ -10,7 +10,9 @@ ROOT=Path(__file__).resolve().parents[2]
 def main():
     args=argparse.ArgumentParser();args.add_argument('--parser-package',type=Path,required=True);options=args.parse_args()
     package=options.parser_package.resolve()
-    if not package.exists():
+    from check_verbatim_moves import parser_lock
+    with parser_lock(package.parent.parent):
+      if not package.exists():
         directory=package.parent.parent;directory.mkdir(parents=True,exist_ok=True)
         (directory/'pubspec.yaml').write_text("name: refactor_verbatim_parser\nenvironment:\n  sdk: '>=3.12.0 <4.0.0'\ndependencies:\n  analyzer: 14.3.0\n")
         (directory/'pubspec.lock').write_bytes((ROOT/'dev/tool/verbatim_parser.pubspec.lock').read_bytes())

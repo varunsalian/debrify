@@ -16,9 +16,12 @@ its default original is git show 204b1011:lib/services/video_player_launcher.dar
 """
 from collections import Counter
 import argparse
+import contextlib
 import csv
 import difflib
+import fcntl
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -28,10 +31,29 @@ SOURCE = 'lib/services/video_player_launcher.dart'
 FEATURE = 'lib/features/player_launch'
 
 
+@contextlib.contextmanager
+def parser_lock(directory):
+    """Serialize parser setup across concurrent test processes (cold CI cache)."""
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    with open(directory / '.parser.lock', 'w') as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def parser_package():
     from suite_evidence import evidence_dir
     package = evidence_dir() / 'verbatim-parser'
     config = package / '.dart_tool/package_config.json'
+    with parser_lock(package):
+        ensure_parser_package(package, config)
+    return config
+
+
+def ensure_parser_package(package, config):
     if not config.exists():
         package.mkdir(parents=True, exist_ok=True)
         (package / 'pubspec.yaml').write_text(
@@ -41,17 +63,21 @@ def parser_package():
             (ROOT / 'dev/tool/verbatim_parser.pubspec.lock').read_text())
         subprocess.run(['dart', 'pub', 'get', '--enforce-lockfile', '--directory', str(package)],
                        check=True, stdout=subprocess.DEVNULL)
-    return config
 
 
 def parse(sources, package=None):
     package = package or parser_package()
     adapter = ROOT / 'dev/tool/verbatim_ast.dart.txt'
     kernel = package.parent / 'verbatim_ast.dill'
-    if not kernel.exists() or kernel.stat().st_mtime < adapter.stat().st_mtime:
-        subprocess.run(['dart', 'compile', 'kernel', '--packages=' + str(package),
-                        '-o', str(kernel), str(adapter)], check=True,
-                       stdout=subprocess.DEVNULL)
+    with parser_lock(package.parent):
+        if not kernel.exists() or kernel.stat().st_mtime < adapter.stat().st_mtime:
+            # Compile beside the target and rename atomically, so a concurrent
+            # reader never executes a partially written kernel.
+            partial = kernel.with_name(kernel.name + f'.{os.getpid()}.tmp')
+            subprocess.run(['dart', 'compile', 'kernel', '--packages=' + str(package),
+                            '-o', str(partial), str(adapter)], check=True,
+                           stdout=subprocess.DEVNULL)
+            os.replace(partial, kernel)
     result = subprocess.run(
         ['dart', str(kernel)],
         input=json.dumps(sources), text=True, capture_output=True, check=True)
