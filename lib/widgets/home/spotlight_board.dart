@@ -48,27 +48,35 @@ import '../../utils/spotlight_interaction_policy.dart';
 class SpotlightCard {
   final StremioMeta? metadata;
   final bool episodeArtwork;
+
   /// Poster, channel logo, or a user override. Null draws the placeholder.
   final String? image;
 
   /// Used when [image] fails to load. Landscape title cards point this at the
   /// portrait poster because synchronously-derived MetaHub backdrops can 404.
   final String? fallbackImage;
+
   /// Image-download errors obey the same policy as missing metadata artwork.
   String? imageErrorFallback(
     StremioMeta? presented,
     MetadataPreferences preferences,
   ) {
     if (episodeArtwork) {
-      return preferences.provider(MetadataCategory.episodeArtwork) != MetadataPreferences.current &&
-          !preferences.fallback ? null : fallbackImage;
+      return preferences.provider(MetadataCategory.episodeArtwork) !=
+                  MetadataPreferences.current &&
+              !preferences.fallback
+          ? null
+          : fallbackImage;
     }
-    if (presented == null || identical(presented, metadata)) return fallbackImage;
+    if (presented == null || identical(presented, metadata))
+      return fallbackImage;
     bool selected(MetadataCategory category) =>
         preferences.provider(category) != MetadataPreferences.current;
     final selectedArtwork =
-        (shape == SpotlightCardShape.wide && selected(MetadataCategory.backgrounds)) ||
-        (shape == SpotlightCardShape.poster && selected(MetadataCategory.posters));
+        (shape == SpotlightCardShape.wide &&
+            selected(MetadataCategory.backgrounds)) ||
+        (shape == SpotlightCardShape.poster &&
+            selected(MetadataCategory.posters));
     if (selectedArtwork && !preferences.fallback) return null;
     return selectedArtwork || selected(MetadataCategory.posters)
         ? presented.poster
@@ -285,7 +293,6 @@ class SpotlightBoard extends StatefulWidget {
   /// dead-focus reclaim can land on it.
   final FocusNode heroNode;
 
-
   /// Ask the host for another page of [row]'s items. Called when focus nears
   /// the end of a shelf — without it only each shelf's FIRST page is ever
   /// reachable, because this board owns its own scroll and the host's
@@ -459,13 +466,13 @@ class _M {
   final _Tier tier;
 
   _M(this.w, {this.dpad = true})
-      : tier = dpad
-            ? _Tier.wide
-            : w < 600
-                ? _Tier.compact
-                : w < 1100
-                    ? _Tier.mid
-                    : _Tier.wide;
+    : tier = dpad
+          ? _Tier.wide
+          : w < 600
+          ? _Tier.compact
+          : w < 1100
+          ? _Tier.mid
+          : _Tier.wide;
 
   bool get compact => tier == _Tier.compact;
 
@@ -492,34 +499,35 @@ class _M {
   /// shipped.
   double get gutter => compact ? w * 0.048 : w * (84 / 1920);
   double get poster => switch (tier) {
-        _Tier.compact => w * 0.257,
-        _Tier.mid => w * 0.16,
-        _Tier.wide => w * (260 / 1920),
-      };
+    _Tier.compact => w * 0.257,
+    _Tier.mid => w * 0.16,
+    _Tier.wide => w * (260 / 1920),
+  };
   double get posterH => poster * (390 / 260);
+
   /// Landscape title-card width. Sized so a 16:9 card keeps roughly
   /// two-thirds of the poster row's height — at the poster's own width a
   /// wide card is barely half as tall and the whole rail reads shrunken.
   /// TV shows ~3.4 cards per band, tablet ~2.6, phone ~1.7 with a peek
   /// (user-tuned 2026-08: the first pass a step smaller read too timid).
   double get wideCardW => switch (tier) {
-        _Tier.compact => w * 0.50,
-        _Tier.mid => w * 0.33,
-        _Tier.wide => w * (470 / 1920),
-      };
+    _Tier.compact => w * 0.50,
+    _Tier.mid => w * 0.33,
+    _Tier.wide => w * (470 / 1920),
+  };
   double get gap => switch (tier) {
-        _Tier.compact => w * 0.034,
-        _Tier.mid => w * 0.026,
-        _Tier.wide => w * (40 / 1920),
-      };
+    _Tier.compact => w * 0.034,
+    _Tier.mid => w * 0.026,
+    _Tier.wide => w * (40 / 1920),
+  };
 
   /// Card corner radius. 7 is the TV mock's number, moved here from the
   /// card's hardcode; compact grows it the way every phone card idiom does.
   double get radius => switch (tier) {
-        _Tier.compact => 10.0,
-        _Tier.mid => 8.0,
-        _Tier.wide => 7.0,
-      };
+    _Tier.compact => 10.0,
+    _Tier.mid => 8.0,
+    _Tier.wide => 7.0,
+  };
 
   /// What the focus effect paints OUTSIDE the resting card, which the row
   /// reserves so the lift lands on ground instead of on the headings.
@@ -535,12 +543,10 @@ class _M {
   ///
   /// Zero on compact: nothing there ever focuses or hovers, so the lift
   /// never fires and the reservation would just be dead air between rows.
-  double liftUpFor(double cardHeight) =>
-      compact ? 0 : cardHeight * 0.05 + 7;
+  double liftUpFor(double cardHeight) => compact ? 0 : cardHeight * 0.05 + 7;
 
   /// Downward the rise works in our favour, so only the growth is reserved.
-  double liftDownFor(double cardHeight) =>
-      compact ? 0 : cardHeight * 0.05;
+  double liftDownFor(double cardHeight) => compact ? 0 : cardHeight * 0.05;
   double get title => compact ? 19.0 : w * (26 / 1920);
   double get caption => compact ? 12.0 : w * (21 / 1920);
 
@@ -552,7 +558,8 @@ class _M {
   double get captionBlock => compact ? 40.0 : 0;
 }
 
-class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentationMixin<SpotlightBoard> {
+class SpotlightBoardState extends State<SpotlightBoard>
+    with MetadataPresentationMixin<SpotlightBoard> {
   final Set<_CardState> _visibleCards = {};
   final Set<BuildContext> _scrollingSources = {};
   Size? _selectionViewport;
@@ -565,7 +572,8 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
 
   void _registerCard(_CardState card) {
     _visibleCards.add(card);
-    if (_largeCardInteractions && (_selectedCard == null || _selectionFromScroll)) {
+    if (_largeCardInteractions &&
+        (_selectedCard == null || _selectionFromScroll)) {
       _queueScrollSelection();
     }
   }
@@ -620,15 +628,19 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   }
 
   bool get _pointerOwnsScrollSelection => switch (Theme.of(context).platform) {
-    TargetPlatform.macOS || TargetPlatform.windows || TargetPlatform.linux => true,
+    TargetPlatform.macOS ||
+    TargetPlatform.windows ||
+    TargetPlatform.linux => true,
     _ => false,
   };
 
   bool _onCardScroll(ScrollNotification notification) {
     if (!_largeCardInteractions) return false;
     final userStarted =
-        (notification is UserScrollNotification && notification.direction != ScrollDirection.idle) ||
-        (notification is ScrollStartNotification && notification.dragDetails != null);
+        (notification is UserScrollNotification &&
+            notification.direction != ScrollDirection.idle) ||
+        (notification is ScrollStartNotification &&
+            notification.dragDetails != null);
     final source = notification.context;
     if (userStarted) {
       _selectionFromScroll = true;
@@ -659,7 +671,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       _selectionQueued = false;
       if (!mounted) return;
       _scrollingSources.removeWhere((source) => !source.mounted);
-      if (!_visibleCards.any((card) => card.mounted && card.widget.rowId == _scrollRowId)) {
+      if (!_visibleCards.any(
+        (card) => card.mounted && card.widget.rowId == _scrollRowId,
+      )) {
         _scrollRowId = null;
       }
       if (!_largeCardInteractions) {
@@ -683,8 +697,12 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
           if (card._f) focused = card;
         }
         _selectionFromScroll = false;
-        _selectCard(hovered ?? focused, scrolling: _scrollingSources.isNotEmpty);
-        if (_scrollingSources.isEmpty && _desktopPreviewOwners.isEmpty) _restartCadence();
+        _selectCard(
+          hovered ?? focused,
+          scrolling: _scrollingSources.isNotEmpty,
+        );
+        if (_scrollingSources.isEmpty && _desktopPreviewOwners.isEmpty)
+          _restartCadence();
         return;
       }
       final render = context.findRenderObject();
@@ -697,24 +715,30 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       double bestColumn = double.infinity;
       for (final card in _visibleCards) {
         if (!card.mounted || !card.widget.largeInteractions) continue;
-        if (_selectionFromScroll && _scrollRowId != null && card.widget.rowId != _scrollRowId) continue;
+        if (_selectionFromScroll &&
+            _scrollRowId != null &&
+            card.widget.rowId != _scrollRowId)
+          continue;
         final box = card.context.findRenderObject();
         if (box is! RenderBox || !box.hasSize || !box.attached) continue;
-        final rect = box.localToGlobal(Offset.zero, ancestor: render) & box.size;
+        final rect =
+            box.localToGlobal(Offset.zero, ancestor: render) & box.size;
         final visible = rect.intersect(bounds);
         if (visible.height < rect.height * 0.65 || visible.width < 24) continue;
         // Preserve explicit selection only while its card remains visible.
         if (!_selectionFromScroll && identical(card, _selectedCard)) return;
         final row = (rect.center.dy - readingY).abs();
         final column = (rect.left - readingX).abs();
-        if (row < bestRow - 4 || ((row - bestRow).abs() <= 4 && column < bestColumn)) {
+        if (row < bestRow - 4 ||
+            ((row - bestRow).abs() <= 4 && column < bestColumn)) {
           nearest = card;
           bestRow = row;
           bestColumn = column;
         }
       }
       _selectCard(nearest, scrolling: _scrollingSources.isNotEmpty);
-      if (_scrollingSources.isEmpty && _desktopPreviewOwners.isEmpty) _restartCadence();
+      if (_scrollingSources.isEmpty && _desktopPreviewOwners.isEmpty)
+        _restartCadence();
     });
   }
 
@@ -722,7 +746,8 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   @override
   bool get prioritizeMetadata => true;
   @override
-  StremioMeta? get originalMetadata => widget.hero.isEmpty ? null : widget.hero[_heroIndex];
+  StremioMeta? get originalMetadata =>
+      widget.hero.isEmpty ? null : widget.hero[_heroIndex];
   @override
   void onMetadataPresentationChanged() => unawaited(_probe());
 
@@ -736,13 +761,17 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   final _cancelHeroWarmups = <VoidCallback>{};
 
   void _cancelWarmups() {
-    for (final cancel in _cancelHeroWarmups.toList()) { cancel(); }
+    for (final cancel in _cancelHeroWarmups.toList()) {
+      cancel();
+    }
   }
 
   int get _heroDecodeWidth => widget.dpad
       ? 1400
-      : (MediaQuery.devicePixelRatioOf(context) * MediaQuery.sizeOf(context).width)
-          .round().clamp(720, 1920);
+      : (MediaQuery.devicePixelRatioOf(context) *
+                MediaQuery.sizeOf(context).width)
+            .round()
+            .clamp(720, 1920);
 
   Duration get _heroImageFadeIn =>
       (MediaQuery.maybeOf(context)?.disableAnimations ?? false)
@@ -756,12 +785,16 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
 
   @visibleForTesting
   ImageProvider heroWarmupProvider(String url) => ResizeImage.resizeIfNeeded(
-      _heroDecodeWidth, null,
-      CachedNetworkImageProvider(url, cacheManager: DebrifyImageCache.manager));
+    _heroDecodeWidth,
+    null,
+    CachedNetworkImageProvider(url, cacheManager: DebrifyImageCache.manager),
+  );
 
   Future<bool> _warmHeroImage(String url) {
     final result = Completer<bool>();
-    final stream = heroWarmupProvider(url).resolve(createLocalImageConfiguration(context));
+    final stream = heroWarmupProvider(
+      url,
+    ).resolve(createLocalImageConfiguration(context));
     Timer? timer;
     late ImageStreamListener listener;
     late VoidCallback cancel;
@@ -772,6 +805,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       _cancelHeroWarmups.remove(cancel);
       result.complete(success);
     }
+
     cancel = () => finish(false);
     listener = ImageStreamListener((image, _) {
       image.dispose();
@@ -785,19 +819,29 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
 
   void _preloadHeroes() {
     _cancelWarmups();
-    unawaited(preloadMetadata(widget.hero, (item, prefs) async {
-      if (!mounted) return;
-      final selected = prefs.provider(MetadataCategory.backgrounds) != MetadataPreferences.current;
-      final url = highQualityArtworkUrl(item.background) ??
-          (!selected && (item.imdbId ?? item.id).startsWith('tt')
-              ? 'https://images.metahub.space/background/large/${item.imdbId ?? item.id}/img'
-              : !selected || prefs.fallback ? highQualityArtworkUrl(item.poster) : null);
-      if (url == null || url.isEmpty) return;
-      final timer = Stopwatch()..start();
-      final failed = !await _warmHeroImage(url);
-      DiagnosticLog.instance.recordEvent(source: 'metadata', event: 'hero_image_warm',
-        fields: {'elapsed_ms': timer.elapsedMilliseconds, 'failed': failed});
-    }));
+    unawaited(
+      preloadMetadata(widget.hero, (item, prefs) async {
+        if (!mounted) return;
+        final selected =
+            prefs.provider(MetadataCategory.backgrounds) !=
+            MetadataPreferences.current;
+        final url =
+            highQualityArtworkUrl(item.background) ??
+            (!selected && (item.imdbId ?? item.id).startsWith('tt')
+                ? 'https://images.metahub.space/background/large/${item.imdbId ?? item.id}/img'
+                : !selected || prefs.fallback
+                ? highQualityArtworkUrl(item.poster)
+                : null);
+        if (url == null || url.isEmpty) return;
+        final timer = Stopwatch()..start();
+        final failed = !await _warmHeroImage(url);
+        DiagnosticLog.instance.recordEvent(
+          source: 'metadata',
+          event: 'hero_image_warm',
+          fields: {'elapsed_ms': timer.elapsedMilliseconds, 'failed': failed},
+        );
+      }),
+    );
   }
 
   /// Start fetching the next shelf batch before touch scrolling reaches the
@@ -1020,7 +1064,8 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     if (!widget.dpad) {
       final route = ModalRoute.of(context);
       final lifecycle = WidgetsBinding.instance.lifecycleState;
-      final visible = (route == null || route.isCurrent) &&
+      final visible =
+          (route == null || route.isCurrent) &&
           (lifecycle == null || lifecycle == AppLifecycleState.resumed);
       if (!visible) {
         _cadence = Timer(_hiddenRetry, _onArtDone);
@@ -1054,15 +1099,19 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   /// (~350px of 2:3 art cover-cropped over a full screen), so it is LAST, not
   /// second.
   String? _heroPoster(StremioMeta item) =>
-      metadataArtworkPending(MetadataCategory.backgrounds) ? null :
-      usesMetadataProvider(MetadataCategory.backgrounds) && !metadataPreferences.fallback
-          ? null : highQualityArtworkUrl(item.poster);
+      metadataArtworkPending(MetadataCategory.backgrounds)
+      ? null
+      : usesMetadataProvider(MetadataCategory.backgrounds) &&
+            !metadataPreferences.fallback
+      ? null
+      : highQualityArtworkUrl(item.poster);
 
   String? _heroArt(StremioMeta item) {
     if (metadataArtworkPending(MetadataCategory.backgrounds)) return null;
     final b = item.background;
     if (b != null && b.isNotEmpty) return highQualityArtworkUrl(b);
-    if (usesMetadataProvider(MetadataCategory.backgrounds)) return _heroPoster(item);
+    if (usesMetadataProvider(MetadataCategory.backgrounds))
+      return _heroPoster(item);
     final tt = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
     if (tt != null) {
       return 'https://images.metahub.space/background/large/$tt/img';
@@ -1109,20 +1158,26 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     _finishProgressiveDown();
     if (widget.dpad && PlatformUtil.isAndroidTvCached && _lastMetrics != null) {
       for (final section in old.sections) {
-        if (section.id == null || !section.nodes.any((node) => node.hasFocus)) continue;
-        preserveHomeInsertionAnchor(scroll: _scroll,
+        if (section.id == null || !section.nodes.any((node) => node.hasFocus))
+          continue;
+        preserveHomeInsertionAnchor(
+          scroll: _scroll,
           previous: [for (final s in old.sections) s.id ?? ''],
           next: [for (final s in widget.sections) s.id ?? ''],
           anchor: section.id!,
           extentOf: (id) => _shelfExtent(
-            widget.sections.firstWhere((s) => s.id == id), _lastMetrics!),
+            widget.sections.firstWhere((s) => s.id == id),
+            _lastMetrics!,
+          ),
         );
         break;
       }
     }
     if (old.hero.length != widget.hero.length ||
-        List.generate(widget.hero.length, (i) => i).any((i) =>
-            !identical(old.hero[i], widget.hero[i]))) {
+        List.generate(
+          widget.hero.length,
+          (i) => i,
+        ).any((i) => !identical(old.hero[i], widget.hero[i]))) {
       _preloadHeroes();
     }
     // The reel can change under us as sections load. Keep the parked item if
@@ -1264,8 +1319,10 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       // Update the shell immediately; colour extraction may wait on a decode.
       _emitAmbient(url, null);
       final tint = await extractDominantColor(
-        CachedNetworkImageProvider(url,
-            cacheManager: DebrifyImageCache.manager),
+        CachedNetworkImageProvider(
+          url,
+          cacheManager: DebrifyImageCache.manager,
+        ),
       );
       if (!mounted || gen != _probeGen) return;
       setState(() => _remember(url, tint));
@@ -1328,8 +1385,8 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     if (_flipFor != item.id) {
       _flipFor = item.id;
       final url = _heroArt(item);
-      _flipValue = url != null &&
-          (_leftThird[url] ?? 0) > SpotlightBoard.leftThirdBusy;
+      _flipValue =
+          url != null && (_leftThird[url] ?? 0) > SpotlightBoard.leftThirdBusy;
     }
     return _flipValue;
   }
@@ -1374,7 +1431,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         _pendingProgressiveDown = null;
         return;
       }
-      final row = widget.sections.indexWhere((s) => s.nodes.contains(pending.origin));
+      final row = widget.sections.indexWhere(
+        (s) => s.nodes.contains(pending.origin),
+      );
       if (row < 0 || row + 1 >= widget.sections.length) {
         if (!widget.pendingShelves) _pendingProgressiveDown = null;
         return;
@@ -1553,8 +1612,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     final metrics = _lastMetrics;
     if (metrics == null || !_scroll.hasClients) return;
     setState(() => _row = row);
-    final offset = widget.sections.take(row).fold<double>(
-      0, (sum, shelf) => sum + _shelfExtent(shelf, metrics));
+    final offset = widget.sections
+        .take(row)
+        .fold<double>(0, (sum, shelf) => sum + _shelfExtent(shelf, metrics));
     // A lazy list's maximum is only an estimate until distant rows mount.
     // Let layout clamp this exact offset, rather than stopping at that estimate.
     _scroll.jumpTo(offset);
@@ -1721,12 +1781,18 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         child: LayoutBuilder(
           builder: (context, constraints) {
             final m = _M(constraints.maxWidth, dpad: widget.dpad);
-            final large = widget.largeScreenInteractions && !widget.dpad && spotlightUsesRichCards(
-              viewport: MediaQuery.sizeOf(context),
-              platform: Theme.of(context).platform,
-              availableWidth: constraints.maxWidth,
+            final large =
+                widget.largeScreenInteractions &&
+                !widget.dpad &&
+                spotlightUsesRichCards(
+                  viewport: MediaQuery.sizeOf(context),
+                  platform: Theme.of(context).platform,
+                  availableWidth: constraints.maxWidth,
+                );
+            final selectionViewport = Size(
+              constraints.maxWidth,
+              constraints.maxHeight,
             );
-            final selectionViewport = Size(constraints.maxWidth, constraints.maxHeight);
             if (_selectionViewport != selectionViewport) {
               _selectionViewport = selectionViewport;
               _scrollRowId = null;
@@ -1828,12 +1894,16 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
           key: ValueKey(shelfKey(i)),
           child: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
-              if (_largeCardInteractions && notification.metrics.axis == Axis.horizontal &&
-                  ((notification is UserScrollNotification && notification.direction != ScrollDirection.idle) ||
-                   (notification is ScrollStartNotification && notification.dragDetails != null))) {
+              if (_largeCardInteractions &&
+                  notification.metrics.axis == Axis.horizontal &&
+                  ((notification is UserScrollNotification &&
+                          notification.direction != ScrollDirection.idle) ||
+                      (notification is ScrollStartNotification &&
+                          notification.dragDetails != null))) {
                 _scrollRowId = widget.sections[i].id ?? i;
               }
-              if (notification is ScrollUpdateNotification && widget.shelvesOnly &&
+              if (notification is ScrollUpdateNotification &&
+                  widget.shelvesOnly &&
                   notification.metrics.axis == Axis.horizontal &&
                   notification.metrics.extentAfter < 400) {
                 widget.onLoadMoreRow?.call(i);
@@ -1895,8 +1965,12 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
                 if (widget.animationsEnabled)
                   Positioned.fill(
                     child: switch (widget.animationStyle) {
-                      'moonlit_ocean' => MoonlitOceanBackground(lowPower: widget.dpad),
-                      'midnight_rain' => MidnightRainBackground(lowPower: widget.dpad),
+                      'moonlit_ocean' => MoonlitOceanBackground(
+                        lowPower: widget.dpad,
+                      ),
+                      'midnight_rain' => MidnightRainBackground(
+                        lowPower: widget.dpad,
+                      ),
                       _ => SnowyMountainBackground(lowPower: widget.dpad),
                     },
                   ),
@@ -1994,8 +2068,10 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       onHorizontalDragEnd: (details) {
         final v = details.primaryVelocity ?? 0;
         if (v.abs() < 120) return;
-        _jumpTo((_heroIndex + (v < 0 ? 1 : -1) + widget.hero.length) %
-            widget.hero.length);
+        _jumpTo(
+          (_heroIndex + (v < 0 ? 1 : -1) + widget.hero.length) %
+              widget.hero.length,
+        );
       },
       onTap: () {
         final addon = widget.heroAddon;
@@ -2022,18 +2098,17 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
               // metahub art can miss, and the poster beats a blank hero.
               errorWidget: (_, __, ___) =>
                   (posterUrl != null &&
-                          posterUrl.isNotEmpty &&
-                          posterUrl != url)
-                      ? CachedNetworkImage(
-                          imageUrl: posterUrl,
-                          fit: BoxFit.cover,
-                          cacheManager: DebrifyImageCache.manager,
-                          memCacheWidth: 900,
-                          placeholder: (_, __) => ColoredBox(color: ground),
-                          errorWidget: (_, __, ___) =>
-                              ColoredBox(color: ground),
-                        )
-                      : ColoredBox(color: ground),
+                      posterUrl.isNotEmpty &&
+                      posterUrl != url)
+                  ? CachedNetworkImage(
+                      imageUrl: posterUrl,
+                      fit: BoxFit.cover,
+                      cacheManager: DebrifyImageCache.manager,
+                      memCacheWidth: 900,
+                      placeholder: (_, __) => ColoredBox(color: ground),
+                      errorWidget: (_, __, ___) => ColoredBox(color: ground),
+                    )
+                  : ColoredBox(color: ground),
             ),
           // The trailer, when the host supplies one. This was mounted only in
           // the WIDE hero — so the phone resolved a stream into a layer that
@@ -2146,8 +2221,10 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       onHorizontalDragEnd: (details) {
         final v = details.primaryVelocity ?? 0;
         if (v.abs() < 120 || widget.hero.length < 2) return;
-        _jumpTo((_heroIndex + (v < 0 ? 1 : -1) + widget.hero.length) %
-            widget.hero.length);
+        _jumpTo(
+          (_heroIndex + (v < 0 ? 1 : -1) + widget.hero.length) %
+              widget.hero.length,
+        );
       },
       onTap: () {
         final addon = widget.heroAddon;
@@ -2170,16 +2247,18 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       animation: Listenable.merge([_scroll, _veilMetricsRevision]),
       // TV already snaps the hero visibility on row changes. Its existing
       // bottom scrim supplies the blend without an extra offscreen mask.
-      child: widget.dpad ? backdrop : ShaderMask(
-        blendMode: BlendMode.dstIn,
-        shaderCallback: (bounds) => const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.white, Colors.white, Colors.transparent],
-          stops: [0, 0.7, 1],
-        ).createShader(bounds),
-        child: backdrop,
-      ),
+      child: widget.dpad
+          ? backdrop
+          : ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (bounds) => const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.white, Colors.white, Colors.transparent],
+                stops: [0, 0.7, 1],
+              ).createShader(bounds),
+              child: backdrop,
+            ),
       builder: (context, child) {
         final off = _scroll.hasClients ? _scroll.offset : 0.0;
         final opacity = widget.dpad
@@ -2240,19 +2319,16 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
             // for that title), fall back to the poster rather than a flat
             // ground: a soft hero beats a blank one.
             errorWidget: (_, __, ___) =>
-                (posterUrl != null &&
-                        posterUrl.isNotEmpty &&
-                        posterUrl != url)
-                    ? CachedNetworkImage(
-                        imageUrl: posterUrl,
-                        fit: BoxFit.cover,
-                        cacheManager: DebrifyImageCache.manager,
-                        memCacheWidth: 1400,
-                        placeholder: (_, __) => ColoredBox(color: ground),
-                        errorWidget: (_, __, ___) =>
-                            ColoredBox(color: ground),
-                      )
-                    : ColoredBox(color: ground),
+                (posterUrl != null && posterUrl.isNotEmpty && posterUrl != url)
+                ? CachedNetworkImage(
+                    imageUrl: posterUrl,
+                    fit: BoxFit.cover,
+                    cacheManager: DebrifyImageCache.manager,
+                    memCacheWidth: 1400,
+                    placeholder: (_, __) => ColoredBox(color: ground),
+                    errorWidget: (_, __, ___) => ColoredBox(color: ground),
+                  )
+                : ColoredBox(color: ground),
           ),
         // Mounted whenever the HOST supplies one — never gated on this
         // board's own `_rolling`.
@@ -2275,7 +2351,9 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
           child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: flip ? const Alignment(1, -0.2) : const Alignment(-1, -0.2),
+                begin: flip
+                    ? const Alignment(1, -0.2)
+                    : const Alignment(-1, -0.2),
                 end: flip ? const Alignment(-1, 0.2) : const Alignment(1, 0.2),
                 colors: rolling
                     ? const [
@@ -2364,7 +2442,10 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
               child: widget.dpad
                   ? _veil(ground, _row < 0 ? 0.0 : (_row == 0 ? 0.72 : 1.0))
                   : AnimatedBuilder(
-                      animation: Listenable.merge([_scroll, _veilMetricsRevision]),
+                      animation: Listenable.merge([
+                        _scroll,
+                        _veilMetricsRevision,
+                      ]),
                       builder: (context, _) {
                         final off = _scroll.hasClients ? _scroll.offset : 0.0;
                         final t = (off / (heroH * 0.8)).clamp(0.0, 1.0);
@@ -2475,37 +2556,38 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
   }
 
   Widget _dots({bool tappable = false}) => Row(
-        // Keyed so the single-page guard is pinnable: the board grew other
-        // AnimatedContainers (the off-parallax focus ring), so "no
-        // AnimatedContainer anywhere" stopped meaning "no dots".
-        key: const ValueKey('spotlight-hero-dots'),
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (var i = 0; i < widget.hero.length; i++)
-            GestureDetector(
-              // A 4px dot is not a tap target — the padding is.
-              onTap: tappable ? () => _jumpTo(i) : null,
-              behavior: tappable ? HitTestBehavior.opaque : null,
-              child: Padding(
-                padding: tappable
-                    ? const EdgeInsets.symmetric(horizontal: 2, vertical: 8)
-                    : EdgeInsets.zero,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOut,
-                  margin: const EdgeInsets.symmetric(horizontal: 2.25),
-                  width: i == _heroIndex ? 11 : 4,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white
-                        .withValues(alpha: i == _heroIndex ? 0.95 : 0.34),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+    // Keyed so the single-page guard is pinnable: the board grew other
+    // AnimatedContainers (the off-parallax focus ring), so "no
+    // AnimatedContainer anywhere" stopped meaning "no dots".
+    key: const ValueKey('spotlight-hero-dots'),
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      for (var i = 0; i < widget.hero.length; i++)
+        GestureDetector(
+          // A 4px dot is not a tap target — the padding is.
+          onTap: tappable ? () => _jumpTo(i) : null,
+          behavior: tappable ? HitTestBehavior.opaque : null,
+          child: Padding(
+            padding: tappable
+                ? const EdgeInsets.symmetric(horizontal: 2, vertical: 8)
+                : EdgeInsets.zero,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+              margin: const EdgeInsets.symmetric(horizontal: 2.25),
+              width: i == _heroIndex ? 11 : 4,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(
+                  alpha: i == _heroIndex ? 0.95 : 0.34,
                 ),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-        ],
-      );
+          ),
+        ),
+    ],
+  );
 
   /// The row heading. Off TV it takes the reference's measure — larger,
   /// brighter, bolder than the TV board's quiet labels (there the hero
@@ -2518,8 +2600,8 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
     final fontSize = widget.dpad
         ? m.title
         : m.compact
-            ? 22.0
-            : (m.title < 24.0 ? 24.0 : m.title);
+        ? 22.0
+        : (m.title < 24.0 ? 24.0 : m.title);
     return TextStyle(
       fontSize: fontSize,
       fontWeight: widget.dpad ? FontWeight.w600 : FontWeight.w700,
@@ -2528,17 +2610,19 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       // on artwork, so it is the one that has to follow the ink. The
       // hero's text, the dots and the card captions all sit over a
       // photograph and stay white whatever the ground is.
-      color: AppThemeScope.of(context)
-          .core
-          .tx
-          .withValues(alpha: widget.dpad ? 0.84 : 0.96),
+      color: AppThemeScope.of(
+        context,
+      ).core.tx.withValues(alpha: widget.dpad ? 0.84 : 0.96),
     );
   }
 
   double _shelfExtent(SpotlightShelf section, _M m) {
     double textHeight(String text, TextStyle style) {
       final painter = TextPainter(
-        text: TextSpan(text: text, style: DefaultTextStyle.of(context).style.merge(style)),
+        text: TextSpan(
+          text: text,
+          style: DefaultTextStyle.of(context).style.merge(style),
+        ),
         textDirection: Directionality.of(context),
         textScaler: MediaQuery.textScalerOf(context),
         maxLines: 1,
@@ -2547,20 +2631,28 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
       painter.dispose();
       return height;
     }
+
     var header = 0.0;
     if (section.showHeader) {
       header = textHeight(section.title, _shelfTitleStyle(m));
       final tag = section.tag;
       if (tag != null && tag.isNotEmpty) {
         final size = widget.dpad ? m.title * .72 : 10.0;
-        final tagHeight = textHeight(tag.toUpperCase(), RowTagPill.textStyle(size)) +
-            size * .56 + 2; // vertical padding and the two 1px borders
+        final tagHeight =
+            textHeight(tag.toUpperCase(), RowTagPill.textStyle(size)) +
+            size * .56 +
+            2; // vertical padding and the two 1px borders
         if (tagHeight > header) header = tagHeight;
       }
     }
     final cardHeight = _shelfCardHeight(section, m);
-    return (section.showHeader ? (widget.dpad ? 20 : 34) : (widget.dpad ? 8 : 14)) + header +
-        m.liftUpFor(cardHeight) + cardHeight + m.liftDownFor(cardHeight) +
+    return (section.showHeader
+            ? (widget.dpad ? 20 : 34)
+            : (widget.dpad ? 8 : 14)) +
+        header +
+        m.liftUpFor(cardHeight) +
+        cardHeight +
+        m.liftDownFor(cardHeight) +
         (_shelfHasCaptions(section, m) ? m.captionBlock : 0);
   }
 
@@ -2597,10 +2689,7 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
         const SizedBox(width: 9),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 150),
-          child: RowTagPill(
-            tag,
-            fontSize: widget.dpad ? m.title * 0.72 : 10,
-          ),
+          child: RowTagPill(tag, fontSize: widget.dpad ? m.title * 0.72 : 10),
         ),
       ],
     );
@@ -2695,8 +2784,12 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
               padding: EdgeInsets.only(
                 left: m.gutter,
                 right: _largeCardInteractions && section.items.isNotEmpty
-                    ? max(m.gutter, (_selectionViewport?.width ?? 0) - m.gutter -
-                        cardHeight * section.items.last.shape.aspect)
+                    ? max(
+                        m.gutter,
+                        (_selectionViewport?.width ?? 0) -
+                            m.gutter -
+                            cardHeight * section.items.last.shape.aspect,
+                      )
                     : m.gutter,
               ),
               itemCount: section.items.length,
@@ -2720,8 +2813,11 @@ class SpotlightBoardState extends State<SpotlightBoard> with MetadataPresentatio
                 captionBlock: captions ? m.captionBlock : 0,
                 showCaption: captions && section.items[c].showCaption,
                 showTitleAndRating: widget.showCardTitlesAndRatings,
-                expandOnFocus: (widget.dpad || _largeCardInteractions) && widget.expandFocusedCard,
-                forceParallax: widget.forceCardParallax || _largeCardInteractions,
+                expandOnFocus:
+                    (widget.dpad || _largeCardInteractions) &&
+                    widget.expandFocusedCard,
+                forceParallax:
+                    widget.forceCardParallax || _largeCardInteractions,
                 trailerEnabled: widget.trailersEnabled,
                 trailerVolume: widget.cardTrailerVolume,
                 onTrailerStart: widget.onTrailerStop,
@@ -2851,8 +2947,8 @@ class _LogoOrTitle extends StatelessWidget {
     final corner = align == TextAlign.right
         ? Alignment.bottomRight
         : align == TextAlign.center
-            ? Alignment.bottomCenter
-            : Alignment.bottomLeft;
+        ? Alignment.bottomCenter
+        : Alignment.bottomLeft;
     // A RESERVED slot, not a maximum.
     //
     // This was a `ConstrainedBox(maxWidth: 235, maxHeight: 60)`, which sizes
@@ -2981,7 +3077,7 @@ class _Card extends StatefulWidget {
   /// Announces a pointer-owned live preview before it mounts, so the board
   /// can release the hero trailer's single video-output lease first.
   final void Function(Object owner, bool active)?
-      onDesktopPreviewActivityChanged;
+  onDesktopPreviewActivityChanged;
 
   const _Card({
     this.rowId,
@@ -3031,7 +3127,9 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final reduced = MediaQuery.disableAnimationsOf(context);
-    if (_lastReducedMotion != null && _lastReducedMotion != reduced && widget.largeInteractions) {
+    if (_lastReducedMotion != null &&
+        _lastReducedMotion != reduced &&
+        widget.largeInteractions) {
       _trailerAttempted = false;
       _armCardTrailer();
     }
@@ -3054,6 +3152,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     _loadFocusedDescription();
     _reportDesktopPreviewActivity(_previewActive);
   }
+
   @override
   StremioMeta? get originalMetadata => widget.card.metadata;
   bool _f = false;
@@ -3071,18 +3170,31 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     if (!_activeCard || _moving) _trailerAttempted = false;
     _trailerRequested = false;
     _trailerPlaying = false;
-    if (_trailerAttempted || !_activeCard || _moving || !_canExpand || !widget.trailerEnabled ||
-        MediaQuery.disableAnimationsOf(context)) return;
+    if (_trailerAttempted ||
+        !_activeCard ||
+        _moving ||
+        !_canExpand ||
+        !widget.trailerEnabled ||
+        MediaQuery.disableAnimationsOf(context))
+      return;
     _trailerDwell = Timer(const Duration(seconds: 2), () {
-      if (!mounted || !_activeCard || _moving || !widget.trailerEnabled || !_canExpand ||
-          ModalRoute.of(context)?.isCurrent == false || !TickerMode.of(context) ||
+      if (!mounted ||
+          !_activeCard ||
+          _moving ||
+          !widget.trailerEnabled ||
+          !_canExpand ||
+          ModalRoute.of(context)?.isCurrent == false ||
+          !TickerMode.of(context) ||
           (WidgetsBinding.instance.lifecycleState != null &&
-           WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed)) return;
+              WidgetsBinding.instance.lifecycleState !=
+                  AppLifecycleState.resumed))
+        return;
       widget.onTrailerStart?.call();
       _trailerAttempted = true;
       setState(() => _trailerRequested = true);
     });
   }
+
   Timer? _descriptionTimer;
   String? _resolvedDescription;
   Object? _descriptionScope;
@@ -3094,22 +3206,29 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     final item = originalMetadata;
     if (!_canExpand || !_activeCard || _moving || item == null) return;
     final scope = ProfileRuntime.scope.value;
-    bool current() => mounted && _activeCard && _canExpand &&
+    bool current() =>
+        mounted &&
+        _activeCard &&
+        _canExpand &&
         request == _descriptionRequest &&
-        identical(originalMetadata, item) && ProfileRuntime.scope.value == scope;
+        identical(originalMetadata, item) &&
+        ProfileRuntime.scope.value == scope;
     _descriptionTimer = Timer(const Duration(milliseconds: 300), () async {
       try {
         final prefs = await MetadataPreferencesService.loadForBackground(
           isCurrent: current,
         );
         if (prefs == null || !current()) return;
-        if (prefs.provider(MetadataCategory.information) != MetadataPreferences.current &&
-            !prefs.fallback) return;
+        if (prefs.provider(MetadataCategory.information) !=
+                MetadataPreferences.current &&
+            !prefs.fallback)
+          return;
         if ((heroPresentation?.description ?? '').trim().isNotEmpty) return;
         final imdb = item.effectiveImdbId;
         if (imdb == null) return;
         final details = await StremioService.instance.fetchMetaDetails(
-          imdbId: imdb, type: item.type,
+          imdbId: imdb,
+          type: item.type,
         );
         if (!current()) return;
         final description = details?.description?.trim();
@@ -3154,7 +3273,8 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   }
 
   void _reportDesktopPreviewActivity(bool active) {
-    final report = active &&
+    final report =
+        active &&
         !widget.dpad &&
         (widget.card.previewBuilder != null ||
             widget.card.collectionVideoUrl != null ||
@@ -3212,7 +3332,9 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     super.dispose();
   }
 
-  bool get _canExpand => widget.expandOnFocus && (widget.dpad || widget.largeInteractions) &&
+  bool get _canExpand =>
+      widget.expandOnFocus &&
+      (widget.dpad || widget.largeInteractions) &&
       (widget.card.metadata?.type == 'movie' ||
           widget.card.metadata?.type == 'series') &&
       !widget.captionBelow;
@@ -3221,14 +3343,20 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     // Focused title cards use the same landscape width and growth stages,
     // regardless of the resting poster preference.
-    tween: Tween(end: _scrollGrowth ?? (_canExpand && _activeCard && !_moving
-        ? (widget.expandedHeight * SpotlightCardShape.wide.aspect /
-            (widget.height * widget.card.shape.aspect)) *
-            (_trailerPlaying ? 1.38 : 1.18)
-        : 1.0)),
+    tween: Tween(
+      end:
+          _scrollGrowth ??
+          (_canExpand && _activeCard && !_moving
+              ? (widget.expandedHeight *
+                        SpotlightCardShape.wide.aspect /
+                        (widget.height * widget.card.shape.aspect)) *
+                    (_trailerPlaying ? 1.38 : 1.18)
+              : 1.0),
+    ),
     duration: _scrollGrowth != null || MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : _trailerPlaying ? const Duration(milliseconds: 700)
+        : _trailerPlaying
+        ? const Duration(milliseconds: 700)
         : Duration(milliseconds: PlatformUtil.isAndroidTvCached ? 160 : 220),
     curve: Curves.easeOutCubic,
     builder: (context, growth, _) => _buildCard(context, growth),
@@ -3253,19 +3381,28 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // headroom and makes each upload cheaper.
     // A stable decode size avoids creating a new cached image every animation
     // frame. Eligible cards reserve their expanded resolution once.
-    final decodeW = ((expanded ? widget.expandedHeight : widget.height) * (expanded ? SpotlightCardShape.wide.aspect : c.shape.aspect) *
-        (_canExpand && !PlatformUtil.isAndroidTvCached ? 1.18 : 1.0) * MediaQuery.devicePixelRatioOf(context) * 1.1)
-        .round()
-        .clamp(100, 1000);
+    final decodeW =
+        ((expanded ? widget.expandedHeight : widget.height) *
+                (expanded ? SpotlightCardShape.wide.aspect : c.shape.aspect) *
+                (_canExpand && !PlatformUtil.isAndroidTvCached ? 1.18 : 1.0) *
+                MediaQuery.devicePixelRatioOf(context) *
+                1.1)
+            .round()
+            .clamp(100, 1000);
     final meta = presentedMetadata;
     final suppliedDescription = (heroPresentation?.description ?? '').trim();
     final allowDescriptionFallback =
-        metadataPreferences.provider(MetadataCategory.information) == MetadataPreferences.current ||
+        metadataPreferences.provider(MetadataCategory.information) ==
+            MetadataPreferences.current ||
         metadataPreferences.fallback;
-    final description = !expanded ? '' : suppliedDescription.isNotEmpty
+    final description = !expanded
+        ? ''
+        : suppliedDescription.isNotEmpty
         ? suppliedDescription
-        : allowDescriptionFallback && _descriptionScope == ProfileRuntime.scope.value
-            ? (_resolvedDescription ?? '') : '';
+        : allowDescriptionFallback &&
+              _descriptionScope == ProfileRuntime.scope.value
+        ? (_resolvedDescription ?? '')
+        : '';
     final showDescription = description.isNotEmpty;
     final changed = meta != null && !identical(meta, originalMetadata);
     final artwork = expanded && c.shape != SpotlightCardShape.wide
@@ -3279,17 +3416,30 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
             fallbackImage: c.image,
           )
         : c;
-    final pending = !artwork.episodeArtwork && metadataArtworkPending(
-      artwork.shape == SpotlightCardShape.wide ? MetadataCategory.backgrounds : MetadataCategory.posters);
-    final url = pending ? null : artwork.imageForPresentation(meta, metadataPreferences);
+    final pending =
+        !artwork.episodeArtwork &&
+        metadataArtworkPending(
+          artwork.shape == SpotlightCardShape.wide
+              ? MetadataCategory.backgrounds
+              : MetadataCategory.posters,
+        );
+    final url = pending
+        ? null
+        : artwork.imageForPresentation(meta, metadataPreferences);
     final displayedTitle = changed ? meta.name : c.title;
     final fallbackUrl = artwork.imageErrorFallback(meta, metadataPreferences);
-    Widget artPlaceholder() => Center(child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Text(displayedTitle, maxLines: 2, overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: TextStyle(color: app.core.tx.withValues(alpha: 0.5))),
-    ));
+    Widget artPlaceholder() => Center(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(
+          displayedTitle,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: app.core.tx.withValues(alpha: 0.5)),
+        ),
+      ),
+    );
     final contained = c.shape.fit == BoxFit.contain;
     // The caption's second line — kind and/or rating, dot-joined. One line
     // whatever it carries, so the caption bed math stays two-state.
@@ -3313,7 +3463,8 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // scaled. 1.2 is Flutter's normal line box; 33 is the existing 26 + 7
     // vertical padding around those lines.
     final captionLineHeight = widget.caption * 1.2;
-    final captionBedHeight = (showDescription ? height : 33.0) +
+    final captionBedHeight =
+        (showDescription ? height : 33.0) +
         (hasTitle ? captionLineHeight : 0) +
         (hasSubtitle ? captionLineHeight * 0.85 : 0);
 
@@ -3324,73 +3475,75 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // or letting the travelling glare wash through them.
     final tvCaptionFamily = PlatformUtil.isTvOS ? 'CupertinoSystemText' : null;
     final overlayCaption =
-        widget.captionBelow || (!widget.showCaption && !showDescription) || !hasCaptionContent
-            ? null
-            : IgnorePointer(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Padding(
-                      padding: expanded
-                          ? const EdgeInsets.fromLTRB(12, 10, 12, 10)
-                          : const EdgeInsets.fromLTRB(7, 26, 7, 7),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: expanded
-                            ? CrossAxisAlignment.start
-                            : CrossAxisAlignment.center,
-                        children: [
-                          if (hasTitle)
-                            Text(
-                              displayedTitle,
-                              maxLines: 1,
-                              textAlign: TextAlign.center,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontFamily: tvCaptionFamily,
-                                fontSize: widget.caption,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white.withValues(alpha: 0.96),
-                              ),
+        widget.captionBelow ||
+            (!widget.showCaption && !showDescription) ||
+            !hasCaptionContent
+        ? null
+        : IgnorePointer(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                width: double.infinity,
+                child: Padding(
+                  padding: expanded
+                      ? const EdgeInsets.fromLTRB(12, 10, 12, 10)
+                      : const EdgeInsets.fromLTRB(7, 26, 7, 7),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: expanded
+                        ? CrossAxisAlignment.start
+                        : CrossAxisAlignment.center,
+                    children: [
+                      if (hasTitle)
+                        Text(
+                          displayedTitle,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: tvCaptionFamily,
+                            fontSize: widget.caption,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white.withValues(alpha: 0.96),
+                          ),
+                        ),
+                      if (hasSubtitle)
+                        Text(
+                          metaLine,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: tvCaptionFamily,
+                            fontSize: widget.caption * 0.85,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.72),
+                          ),
+                        ),
+                      if (showDescription) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          description,
+                          maxLines: height >= 180 ? 3 : 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: tvCaptionFamily,
+                            fontSize: (widget.caption * 0.75).clamp(10.5, 12.0),
+                            fontWeight: FontWeight.w400,
+                            height: 1.35,
+                            // Paint alpha avoids an offscreen opacity layer.
+                            color: Colors.white.withValues(
+                              alpha: ((growth - 1) / 0.18).clamp(0.0, 1.0),
                             ),
-                          if (hasSubtitle)
-                            Text(
-                              metaLine,
-                              maxLines: 1,
-                              textAlign: TextAlign.center,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontFamily: tvCaptionFamily,
-                                fontSize: widget.caption * 0.85,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white.withValues(alpha: 0.72),
-                              ),
-                            ),
-                          if (showDescription) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              description,
-                              maxLines: height >= 180 ? 3 : 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontFamily: tvCaptionFamily,
-                                fontSize: (widget.caption * 0.75).clamp(10.5, 12.0),
-                                fontWeight: FontWeight.w400,
-                                height: 1.35,
-                                // Paint alpha avoids an offscreen opacity layer.
-                                color: Colors.white.withValues(
-                                  alpha: ((growth - 1) / 0.18).clamp(0.0, 1.0),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              );
+              ),
+            ),
+          );
 
     final art = ParallaxFocus(
       forceEnabled: widget.forceParallax,
@@ -3426,7 +3579,17 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                 )!,
               ),
               if (c.coverEmoji != null)
-                Center(child: Padding(padding: const EdgeInsets.all(20), child: FittedBox(child: Text(c.coverEmoji!, style: const TextStyle(fontSize: 64))))),
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: FittedBox(
+                      child: Text(
+                        c.coverEmoji!,
+                        style: const TextStyle(fontSize: 64),
+                      ),
+                    ),
+                  ),
+                ),
               if ((url == null || url.isEmpty) && c.metadata != null)
                 artPlaceholder(),
               if (url != null && url.isNotEmpty)
@@ -3435,9 +3598,7 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                   // SHORTER side: on a wide channel tile a width-derived
                   // inset would eat a quarter of the height.
                   padding: EdgeInsets.all(
-                    contained
-                        ? (w < height ? w : height) * 0.14
-                        : 0,
+                    contained ? (w < height ? w : height) * 0.14 : 0,
                   ),
                   child: RecoverableNetworkImage(
                     imageUrl: url,
@@ -3470,11 +3631,9 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                             fit: c.shape.fit,
                             cacheManager: DebrifyImageCache.manager,
                             memCacheWidth: decodeW,
-                            fadeInDuration:
-                                const Duration(milliseconds: 220),
+                            fadeInDuration: const Duration(milliseconds: 220),
                             placeholder: (_, __) => artPlaceholder(),
-                            errorWidget: (_, __, ___) =>
-                                artPlaceholder(),
+                            errorWidget: (_, __, ___) => artPlaceholder(),
                           )
                         : artPlaceholder(),
                   ),
@@ -3491,14 +3650,22 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
                 // so a channel card never flashes to an empty/black plate
                 // while a stream resolves or buffers.
                 IgnorePointer(child: preview(context)),
-              if (_trailerRequested && _activeCard && !_moving && _canExpand && widget.trailerEnabled)
+              if (_trailerRequested &&
+                  _activeCard &&
+                  !_moving &&
+                  _canExpand &&
+                  widget.trailerEnabled)
                 SpotlightCardTrailer(
                   key: ValueKey(c.metadata!.id),
                   item: c.metadata!,
                   volume: widget.trailerVolume,
                   onPlayingChanged: (playing) {
-                    if (!mounted || !_activeCard || _moving || !_trailerRequested ||
-                        _trailerPlaying == playing) return;
+                    if (!mounted ||
+                        !_activeCard ||
+                        _moving ||
+                        !_trailerRequested ||
+                        _trailerPlaying == playing)
+                      return;
                     setState(() => _trailerPlaying = playing);
                     _trailerTextTimer?.cancel();
                     if (playing) {
@@ -3570,7 +3737,8 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // FocusExpressionBox: its parallax arm clips the glare at the theme's
     // scaled radius, and Spotlight's 0.7 shape scale would shrink the
     // shipped look's clip from 7 to 4.9.
-    final cursor = widget.forceParallax || app.focus.expression == FocusExpression.parallax
+    final cursor =
+        widget.forceParallax || app.focus.expression == FocusExpression.parallax
         ? art
         : FocusExpressionBox(
             focused: widget.largeInteractions ? _wideSelected : _f || _h,
@@ -3589,18 +3757,22 @@ class _CardState extends State<_Card> with MetadataPresentationMixin<_Card> {
     // Keep this wrapper mounted on both focus states: swapping Stack for its
     // child destroys ParallaxFocus's spring exactly when it should animate.
     final cursored = Stack(
-            fit: StackFit.passthrough,
-            children: [
-              focusArt,
-              if (expanded && overlayCaption != null)
-                Positioned.fill(child: AnimatedOpacity(
-                  key: ValueKey('spotlight-trailer-text-${c.metadata?.id}'),
-                  opacity: _hideTrailerText ? 0 : 1,
-                  duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 300),
-                  child: overlayCaption,
-                )),
-            ],
-          );
+      fit: StackFit.passthrough,
+      children: [
+        focusArt,
+        if (expanded && overlayCaption != null)
+          Positioned.fill(
+            child: AnimatedOpacity(
+              key: ValueKey('spotlight-trailer-text-${c.metadata?.id}'),
+              opacity: _hideTrailerText ? 0 : 1,
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 300),
+              child: overlayCaption,
+            ),
+          ),
+      ],
+    );
 
     // Compact: art + its caption below, one Column — the caption is part of
     // the card so the tap target covers both. Keep the same metadata line as
