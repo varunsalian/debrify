@@ -694,6 +694,38 @@ committed tree**, reconciling each branch's approved additions.
   `base3` before any extraction. Expected change: only the two added test
   identities; gate comparisons must use this latest base.
 
+- Review base is `da6bc0b4`: `base4` versus `base3` PASS, exactly two added
+  successful identities, no fixes, failures, missing identities or new skips.
+  Stable committed tree `344c80461bb2b74ed153d395ab370a75e68a84b3`, no untracked
+  inputs: 11,098 successes / 13 failures / 28 errors / 20 skips. Whole analyzer
+  also compares with zero added or removed identities. This is the required
+  latest original addon-hub base for both gates; the original strict maximum
+  remains 21 per-symbol infos, merged into `original-max-analyze.txt`.
+- Step 1 moves only the two kind/source enums, label/capability functions and
+  row-nav class. Every destination and the facade is registered for shape;
+  total bare radii remain 7 and the global floor remains 488 with zero slack.
+  Feature scanning is unconditional, theme patterns name each directory,
+  and the guard enforces the exact bridge, bidirectional sources/settings
+  bans and 500-line destinations. The per-entry pure bindings are reviewed.
+  Facade: 3,418 physical lines; remaining responsibilities exit at steps 2–6.
+  No parser/kernel cache uses a shared worktree namespace.
+
+- Parser execution decision: the unchanged pinned AST adapter is also
+  compiled as an ignored worktree-local AOT executable; its full production
+  AST equals the existing kernel output (`parser-aot-equivalence.json`). An
+  ignored local runtime dispatches only this exact parser-kernel path to it;
+  every checker still receives the isolated package and runs all positives
+  and negatives. The slow interrupted read-only attempt is retained; its
+  complete successor is the acceptance evidence. No shared cache or tracked
+  tool behavior changes.
+
+- Step 1 verification: all ten manifests and their self-tests PASS on the
+  isolated parser (aggregate `step1-checks.json`); 129 affected behavior,
+  shape/floor and stale-runtime cases PASS, comparison to `base4` PASS.
+  Strict per-symbol analysis has zero destination additions; whole diagnostic
+  relocation and exact CI analyzer allowlist PASS (12 existing warnings).
+  Architecture, size, storage, formatting and staged diff checks PASS.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

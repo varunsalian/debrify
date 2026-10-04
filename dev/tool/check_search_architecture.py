@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "addon_hub")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -33,6 +33,9 @@ PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_p
 PLAYLIST_CONTENT_COMPLETE = True
 PLAYLIST_CONTENT_FACADE = "lib/screens/playlist_content_view_screen.dart"
 PLAYLIST_CONTENT_BRIDGE = "lib/features/playlist_content/presentation/legacy_playlist_content/"
+ADDON_HUB_COMPLETE = False
+ADDON_HUB_FACADE = "lib/screens/addons/addon_hub_screen.dart"
+ADDON_HUB_BRIDGE = "lib/features/addon_hub/presentation/legacy_addon_hub/"
 PIKPAK_COMPLETE = True
 PIKPAK_FACADE = "lib/screens/pikpak/pikpak_files_screen.dart"
 PIKPAK_BRIDGE = "lib/features/pikpak_files/presentation/legacy_pikpak/"
@@ -303,6 +306,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     # Bounded move-only settings bridge; exit: IPTV settings data contracts.
     IPTV_SETTINGS_BRIDGE,
     PLAYLIST_CONTENT_BRIDGE,
+    ADDON_HUB_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -418,6 +422,16 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line playlist content facade limit")
         if "TEMP(playlist_content)" in source:
             problems.append("playlist content facade retains a temporary cross-call")
+    if relative.startswith("lib/features/addon_hub/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line addon hub extraction limit")
+        if "TEMP(addon_hub)" in source and (ADDON_HUB_COMPLETE or not relative.startswith(ADDON_HUB_BRIDGE)):
+            problems.append("addon hub temporary cross-call outside its exact legacy bridge")
+    if ADDON_HUB_COMPLETE and relative == ADDON_HUB_FACADE:
+        if lines > 400:
+            problems.append(f"{lines} lines exceeds the 400-line addon hub facade limit")
+        if "TEMP(addon_hub)" in source:
+            problems.append("addon hub facade retains a temporary cross-call")
     if relative in TORRENT_PLAYBACK_SOURCE_FILES:
         limit = 800 if relative in TORRENT_PLAYBACK_PIPELINES else 500
         if lines > limit:
@@ -465,6 +479,16 @@ def violations(path: Path) -> list[str]:
                 resolved = (path.parent / uri).resolve()
                 if resolved.is_relative_to(ROOT):
                     target = resolved.relative_to(ROOT).as_posix()
+            if relative.startswith("lib/features/addon_hub/"):
+                if target in (ADDON_HUB_FACADE, "lib/screens/addons_screen.dart", "lib/screens/settings/stremio_addons_page.dart"):
+                    problems.append("addon hub feature imports a legacy addon screen")
+                if not relative.startswith(ADDON_HUB_BRIDGE) and target.startswith("lib/services/"):
+                    problems.append("addon hub service import outside its exact legacy bridge")
+            if relative.startswith("lib/features/") and target.startswith("lib/features/"):
+                own, other = relative.split("/")[2], target.split("/")[2]
+                if ((own == "addon_hub" and other in ("sources", "settings")) or
+                    (other == "addon_hub" and own in ("sources", "settings"))):
+                    problems.append("addon hub/sources/settings cross-feature import")
             if relative.startswith("lib/features/playback_settings/") and not relative.startswith(PLAYBACK_SETTINGS_BRIDGE) and target.startswith("lib/services/"):
                 problems.append("playback settings outside the legacy bridge imports a service")
             if relative.startswith("lib/features/iptv_settings/"):
@@ -573,6 +597,8 @@ def main() -> int:
         paths.add(ROOT / IPTV_SETTINGS_FACADE)
     if PLAYLIST_CONTENT_COMPLETE:
         paths.add(ROOT / PLAYLIST_CONTENT_FACADE)
+    if ADDON_HUB_COMPLETE:
+        paths.add(ROOT / ADDON_HUB_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:

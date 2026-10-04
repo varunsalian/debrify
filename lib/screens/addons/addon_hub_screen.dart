@@ -1,3 +1,6 @@
+import 'package:debrify/features/addon_hub/application/addon_hub_labels.dart';
+import 'package:debrify/features/addon_hub/models/addon_hub_kinds.dart';
+import 'package:debrify/features/addon_hub/presentation/addon_hub_row_nav.dart';
 import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -28,16 +31,6 @@ import '../../utils/tv_keys.dart';
 import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 import '../../widgets/tv_text_field.dart';
-
-/// What the hub is managing: Stremio addons or torrent-engine plugins. They are
-/// different features, so they get their own top-level dropdown instead of being
-/// mixed into one source list.
-enum _HubKind { addons, engines }
-
-/// Which addon list is shown when [_HubKind.addons] is active. Official/Community
-/// are 1-click marketplaces (Stremio's official collection + the community
-/// `addon_catalog`).
-enum _AddonSource { installed, official, community }
 
 /// A single, Stremio-themed home for addons: one list with a source + type
 /// filter, a search box, an "Add addon" URL flow, and a 1-click Discover
@@ -76,14 +69,14 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   /// rows have variable buttons (Install / Install+Configure / Configure), so
   /// geometric DOWN is unreliable — vertical moves go through these instead, and
   /// always land on the NEXT row's first button regardless of its layout.
-  final _RowNav _marketNav = _RowNav();
+  final AddonHubRowNav _marketNav = AddonHubRowNav();
 
   VoidCallback? _tvFocusHandler;
 
   bool _isTv = false;
 
-  _HubKind _kind = _HubKind.addons;
-  _AddonSource _source = _AddonSource.installed;
+  AddonHubKind _kind = AddonHubKind.addons;
+  AddonHubSource _source = AddonHubSource.installed;
   String _typeFilter = ''; // '' == All
   String _search = '';
   bool _searchOpen = false;
@@ -97,7 +90,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   List<MarketplaceAddon> _market = const [];
   bool _marketLoading = false;
   String? _marketError;
-  _AddonSource? _marketLoadedFor; // which source _market currently holds
+  AddonHubSource? _marketLoadedFor; // which source _market currently holds
 
   /// Whether any debrid/cloud provider is configured — drives the "Needs debrid"
   /// honesty badge on stream addons (debrify can't play torrents P2P).
@@ -202,7 +195,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     }
   }
 
-  Future<void> _loadMarket(_AddonSource source, {bool force = false}) async {
+  Future<void> _loadMarket(AddonHubSource source, {bool force = false}) async {
     if (!mounted) return;
     setState(() {
       _marketLoading = true;
@@ -210,7 +203,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       _marketLoadedFor = source;
     });
     try {
-      final addons = source == _AddonSource.community
+      final addons = source == AddonHubSource.community
           ? await _marketplace.fetchCommunity(forceRefresh: force)
           : await _marketplace.fetchOfficial(forceRefresh: force);
       if (mounted && _marketLoadedFor == source) {
@@ -505,12 +498,13 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   /// single first-card node).
   void _focusFirstRow() {
     final isMarket =
-        _kind == _HubKind.addons &&
-        (_source == _AddonSource.official || _source == _AddonSource.community);
+        _kind == AddonHubKind.addons &&
+        (_source == AddonHubSource.official ||
+            _source == AddonHubSource.community);
     if (isMarket) {
       _marketNav.focus(0);
-    } else if (_kind == _HubKind.addons &&
-        _source == _AddonSource.installed &&
+    } else if (_kind == AddonHubKind.addons &&
+        _source == AddonHubSource.installed &&
         _metadataFocus.context != null) {
       _metadataFocus.requestFocus();
     } else if (_firstRowFocus.context != null) {
@@ -532,16 +526,16 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     }
   }
 
-  void _selectKind(_HubKind kind) {
+  void _selectKind(AddonHubKind kind) {
     if (kind == _kind) return;
     setState(() => _kind = kind);
-    if (kind == _HubKind.engines && !_enginesLoadedOnce) _loadEngines();
+    if (kind == AddonHubKind.engines && !_enginesLoadedOnce) _loadEngines();
   }
 
-  void _selectSource(_AddonSource source) {
+  void _selectSource(AddonHubSource source) {
     if (source == _source) return;
     setState(() => _source = source);
-    if (source != _AddonSource.installed && _marketLoadedFor != source) {
+    if (source != AddonHubSource.installed && _marketLoadedFor != source) {
       _loadMarket(source);
     }
   }
@@ -1332,7 +1326,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Widget _buildFilterBar() {
-    final isAddon = _kind == _HubKind.addons;
+    final isAddon = _kind == AddonHubKind.addons;
     return LayoutBuilder(
       builder: (context, c) {
         // Phone-width: the labelled dropdowns + buttons wrap into four ragged
@@ -1341,7 +1335,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         // the free-flowing Wrap for wide layouts.
         final narrow = c.maxWidth < 480;
 
-        final manageDd = StremioDropdown<_HubKind>(
+        final manageDd = StremioDropdown<AddonHubKind>(
           // Stremio addons and torrent engines are separate features — the
           // first dropdown picks which one is being managed.
           label: narrow ? null : 'Manage',
@@ -1349,20 +1343,20 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           focusNode: _kindFocus,
           isTelevision: _isTv,
           options: const [
-            StremioDropdownOption(_HubKind.addons, 'Stremio Addons'),
-            StremioDropdownOption(_HubKind.engines, 'Torrent Engines'),
+            StremioDropdownOption(AddonHubKind.addons, 'Stremio Addons'),
+            StremioDropdownOption(AddonHubKind.engines, 'Torrent Engines'),
           ],
           onSelected: _selectKind,
         );
-        final sourceDd = StremioDropdown<_AddonSource>(
+        final sourceDd = StremioDropdown<AddonHubSource>(
           label: narrow ? null : 'Source',
           value: _source,
           focusNode: _sourceFocus,
           isTelevision: _isTv,
           options: const [
-            StremioDropdownOption(_AddonSource.installed, 'Installed'),
-            StremioDropdownOption(_AddonSource.official, 'Official'),
-            StremioDropdownOption(_AddonSource.community, 'Community'),
+            StremioDropdownOption(AddonHubSource.installed, 'Installed'),
+            StremioDropdownOption(AddonHubSource.official, 'Official'),
+            StremioDropdownOption(AddonHubSource.community, 'Community'),
           ],
           onSelected: _selectSource,
         );
@@ -1566,12 +1560,12 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Widget _buildBody() {
-    if (_kind == _HubKind.engines) return _buildEngineList();
+    if (_kind == AddonHubKind.engines) return _buildEngineList();
     switch (_source) {
-      case _AddonSource.installed:
+      case AddonHubSource.installed:
         return _buildInstalledList();
-      case _AddonSource.official:
-      case _AddonSource.community:
+      case AddonHubSource.official:
+      case AddonHubSource.community:
         return _buildMarketList();
     }
   }
@@ -1769,7 +1763,8 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         // Attribution required by the stremio-addons.net API terms — shown only
         // on the Community list AND only when that source actually served the
         // data (not the legacy fallback, which would be a misattribution).
-        if (_source == _AddonSource.community && _marketplace.communityFromNet)
+        if (_source == AddonHubSource.community &&
+            _marketplace.communityFromNet)
           _communityAttribution(),
       ],
     );
@@ -2387,7 +2382,7 @@ class _AddonMeta extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          types.isEmpty ? 'Addon' : types.map(_capitalize).join(' & '),
+          types.isEmpty ? 'Addon' : types.map(addonHubCapitalize).join(' & '),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -2396,13 +2391,13 @@ class _AddonMeta extends StatelessWidget {
             fontWeight: FontWeight.w500,
           ),
         ),
-        if (_capabilities(resources).isNotEmpty || warnDebrid) ...[
+        if (addonHubCapabilities(resources).isNotEmpty || warnDebrid) ...[
           const SizedBox(height: 9),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
-              for (final cap in _capabilities(resources))
+              for (final cap in addonHubCapabilities(resources))
                 _CapabilityChip(label: cap.$1, highlight: cap.$2),
               if (warnDebrid) const _WarningChip(label: 'Needs debrid'),
             ],
@@ -2434,7 +2429,7 @@ class _MarketRow extends StatelessWidget {
 
   /// Row-to-row DPAD navigation. [navIndex] is this row's slot in [nav] (null
   /// for installed rows, which aren't focusable); [navCount] is the total.
-  final _RowNav nav;
+  final AddonHubRowNav nav;
   final int? navIndex;
   final int navCount;
   final bool warnDebrid;
@@ -3273,57 +3268,6 @@ class _HubDialogButtonState extends State<_HubDialogButton> {
       ),
     );
   }
-}
-
-String _capitalize(String s) =>
-    s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
-
-/// A grow-only pool of focus nodes, one per focusable marketplace row, used to
-/// hop DPAD focus row-to-row deterministically. Grow-only (never disposes mid-
-/// session) so a shrinking filtered list can't dispose a node that holds focus.
-class _RowNav {
-  final List<FocusNode> _nodes = [];
-
-  void ensure(int n) {
-    while (_nodes.length < n) {
-      _nodes.add(FocusNode(debugLabel: 'market-row-${_nodes.length}'));
-    }
-  }
-
-  FocusNode? nodeAt(int i) => (i >= 0 && i < _nodes.length) ? _nodes[i] : null;
-
-  /// Focus row [i] if it exists; returns whether it did.
-  bool focus(int i) {
-    final node = nodeAt(i);
-    if (node == null) return false;
-    node.requestFocus();
-    return true;
-  }
-
-  void dispose() {
-    for (final n in _nodes) {
-      n.dispose();
-    }
-    _nodes.clear();
-  }
-}
-
-/// Map a manifest's `resources` to user-facing capability labels, in importance
-/// order. The `bool` is "highlight" — Streams is what Debrify is built around,
-/// so it's the accented chip. Unknown/irrelevant resources are dropped.
-List<(String, bool)> _capabilities(List<String> resources) {
-  const order = <String, (String, bool)>{
-    'stream': ('Streams', true),
-    'catalog': ('Catalog', false),
-    'meta': ('Metadata', false),
-    'subtitles': ('Subtitles', false),
-    'addon_catalog': ('Addon list', false),
-  };
-  final out = <(String, bool)>[];
-  for (final entry in order.entries) {
-    if (resources.contains(entry.key)) out.add(entry.value);
-  }
-  return out;
 }
 
 /// A small pill stating one thing an addon provides (Streams / Catalog / …).

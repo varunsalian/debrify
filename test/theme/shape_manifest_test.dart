@@ -35,6 +35,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  // Addon hub: every destination and the facade, including zero budgets.
+  'lib/screens/addons/addon_hub_screen.dart': 7,
+
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_player_tiles.dart':
       0,
   'lib/features/iptv_settings/presentation/iptv_settings_playlist_name_dialog.dart':
@@ -131,7 +134,6 @@ const Map<String, int> kShapeResidue = {
   'lib/features/home/presentation/category_tag.dart': 0,
   'lib/features/search/presentation/search_mode_toggle.dart': 0,
   'lib/ui/core/see_all_link.dart': 0,
-  'lib/screens/addons/addon_hub_screen.dart': 7,
   'lib/screens/alldebrid/alldebrid_files_screen.dart': 1,
   'lib/screens/cloud_screen.dart': 0,
   'lib/screens/debrify_tv/dialogs/community_channels_dialog.dart': 12,
@@ -215,6 +217,11 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  // Addon hub: every destination and the facade, including zero budgets.
+  'lib/features/addon_hub/application/addon_hub_labels.dart': 0,
+  'lib/features/addon_hub/models/addon_hub_kinds.dart': 0,
+  'lib/features/addon_hub/presentation/addon_hub_row_nav.dart': 0,
+
   // Playback settings: every remaining destination and the facade, at zero.
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart':
       0,
@@ -986,6 +993,7 @@ void main() {
       // Playback's extraction changes indentation; tall formatting can add a
       // trailing comma to the same literal call. Preserve its original count.
       if (entry.key.startsWith('lib/features/playback_settings/') ||
+          entry.key.startsWith('lib/features/addon_hub/') ||
           entry.key ==
               'lib/screens/settings/external_player_settings_page.dart') {
         source = source.replaceAllMapped(

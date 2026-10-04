@@ -17,6 +17,10 @@ void main() {
           .listSync(recursive: true)
           .whereType<File>()
           .where((file) => file.path.endsWith('.dart')),
+      ...Directory('lib/features/addon_hub')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart')),
       ...Directory('lib/features/settings')
           .listSync(recursive: true)
           .whereType<File>()
