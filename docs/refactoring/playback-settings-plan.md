@@ -902,6 +902,18 @@ As in the PikPak plan, with these specifics:
   floor 488. Original characterization/fixture/helper/macOS PNG hashes match.
   Linux artifacts supplied during this step remain outside this source commit.
 
+### Linux original artifacts — separate checkpoint
+
+- Verify all five supplied SHA-256 hashes, source revision
+  `7bf567c9cc2d728d1a5ef3a0769c6b965628eb4b` and both five-test passing
+  capture/strict logs. Commit PNGs separately with adjacent provenance.
+- Capture used calibrated `debrify-flutter:3.44.8`, linux/amd64 Ubuntu 24.04,
+  official SDK and sqlite development library; 14 cloud Linux originals were
+  strict-reverified after the sqlite layer. Remote Actions were unavailable
+  because of the spending limit. Full provenance/logs remain in the evidence
+  namespace. Linux default stays non-strict through step 5 as planned, then
+  becomes strict before moving the layout. macOS cannot validate Linux pixels.
+
 ## Found, not fixed
 
 All of these are pre-existing, and the extraction keeps each one exactly.
