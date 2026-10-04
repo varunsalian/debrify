@@ -16,6 +16,7 @@ import 'iptv_settings_preferences_views.dart';
 import 'iptv_settings_profile_actions.dart';
 import 'iptv_settings_recording_actions.dart';
 import 'iptv_settings_recording_view.dart';
+import 'iptv_settings_root_layout.dart';
 import 'iptv_settings_source_edit.dart';
 import 'iptv_settings_source_forms.dart';
 import 'iptv_settings_source_refresh.dart';
@@ -289,6 +290,19 @@ IptvSettingsSections createIptvSettingsSections(
     buildContinueWatchingView:
         sections.preferencesViews.buildContinueWatchingView,
     buildRecordingView: sections.recordingView.buildRecordingView,
+  ));
+  sections.rootLayoutSlot = IptvSettingsRootLayout((
+    mounted: scope.mounted,
+    setState: scope.setState,
+    sourcesOwner: owners.sourcesOwner,
+    layoutOwner: owners.layoutOwner,
+    enterPhoneSection: sections.layoutActions.enterPhoneSection,
+    focusOwner: owners.focusOwner,
+    twoPaneKey: scope.twoPaneKey,
+    focusAndReveal: sections.focusActions.focusAndReveal,
+    inputOwner: owners.inputOwner,
+    buildTwoPane: sections.twoPane.buildTwoPane,
+    buildSingleColumn: sections.layoutActions.buildSingleColumn,
   ));
   return sections;
 }

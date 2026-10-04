@@ -679,6 +679,25 @@ each parallel branch's additions, before claiming parity.
   final exact CI format passes. Failed draft logs are retained, never accepted.
   Final checks, comparisons, tree env and Linux provenance use iptv_settings/.
 
+- Step 6 complete: the exact annotated State build forwards its original
+  context argument to plain RootLayout; only the implementation's @override
+  is removed through the named exception. The retained forwarder is required.
+  Live State mounted/setState, the same key, actual owners and section
+  tear-offs are reviewed per entry. Layout writes and the post-frame rebuild
+  retain their original timing; the build-side-effect exception still applies.
+  Facade ratchet 267 lines. Duplicate/import-order draft diagnostics were
+  corrected by import-only edits; URI targets keep the existing screen widget.
+  The frozen reader reconstructs only the explicitly registered implementation
+  annotation while the checker pins State's annotated forwarder. All 27-body
+  assertions and the frozen JSON remain unchanged; four source cases pass on
+  original 8a6e1cf9. Draft failures are preserved and never accepted.
+- Step 6 verification: affected 146 successes / unchanged source-guard failure,
+  PASS versus base4 on stable staged tree 7b156ec3525b7527cbec7bd21df96a4d0ac5636c.
+  All seven manifest/self-tests and repaired exact CI checks pass, including
+  the unchanged five-warning allowlist. Whole analyzer 1646, zero additions;
+  strict per-symbol comparison passes. Four Linux originals pass strictly on
+  that tree in the calibrated image. Evidence remains under iptv_settings/.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

@@ -22,6 +22,7 @@ import 'iptv_settings_preferences_views.dart';
 import 'iptv_settings_profile_actions.dart';
 import 'iptv_settings_recording_actions.dart';
 import 'iptv_settings_recording_view.dart';
+import 'iptv_settings_root_layout.dart';
 import 'iptv_settings_source_edit.dart';
 import 'iptv_settings_source_forms.dart';
 import 'iptv_settings_source_refresh.dart';
@@ -97,4 +98,6 @@ class IptvSettingsSections {
   IptvSettingsPreferencesViews get preferencesViews => preferencesViewsSlot!;
   IptvSettingsRecordingView? recordingViewSlot;
   IptvSettingsRecordingView get recordingView => recordingViewSlot!;
+  IptvSettingsRootLayout? rootLayoutSlot;
+  IptvSettingsRootLayout get rootLayout => rootLayoutSlot!;
 }

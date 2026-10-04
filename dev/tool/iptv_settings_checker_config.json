@@ -12,15 +12,34 @@
     "context_guard",
     "unchanged",
     "live_getter_callback",
-    "formatter_if_braces"
+    "formatter_if_braces",
+    "root_build_forwarder",
+    "retained_forwarder"
   ],
   "sidecars": {
     "scaffolding": "dev/tool/iptv_settings_scaffolding.json",
     "context_exceptions": "dev/tool/iptv_settings_context_exceptions.json"
   },
-  "named_exceptions": {},
+  "named_exceptions": {
+    "root_build_forwarder": [
+      "_IptvSettingsPageState.build",
+      "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_root_layout.dart",
+      "root_build_forwarder: plan-approved plain IptvSettingsRootLayout; move build verbatim except deps/receivers and removal of its @override; retain exact annotated State single-expression forwarder"
+    ]
+  },
   "annotation_exceptions": {},
-  "token_rules": [],
+  "token_rules": [
+    {
+      "original_name": "_IptvSettingsPageState.build",
+      "allowed_edit": "root_build_forwarder",
+      "difference_prefix": "root_build_forwarder:",
+      "before": [
+        "@",
+        "override"
+      ],
+      "after": []
+    }
+  ],
   "live_getter_callbacks": [
     "appearanceVisible",
     "customLists",
@@ -34,7 +53,11 @@
   ],
   "additional_owners": [],
   "required_nodes": [],
-  "forwarders": {},
+  "forwarders": {
+    "_IptvSettingsPageState.build": {
+      "receiver": "_sections.rootLayout"
+    }
+  },
   "lifecycle": [
     "_IptvSettingsPageState.initState",
     "_IptvSettingsPageState.dispose",
@@ -94,7 +117,8 @@
     "_sections.twoPane": "IptvSettingsTwoPaneLayout",
     "_sections.phoneHub": "IptvSettingsPhoneHub",
     "_sections.preferencesViews": "IptvSettingsPreferencesViews",
-    "_sections.recordingView": "IptvSettingsRecordingView"
+    "_sections.recordingView": "IptvSettingsRecordingView",
+    "_sections.rootLayout": "IptvSettingsRootLayout"
   },
   "receiver_owners": {
     "_focus": "IptvSettingsFocusOwner",
@@ -220,6 +244,10 @@
     {
       "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_recording_view.dart",
       "owner": "IptvSettingsRecordingView"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_root_layout.dart",
+      "owner": "IptvSettingsRootLayout"
     }
   ],
   "callback_identities": [
@@ -643,7 +671,8 @@
     "IptvSettingsPhoneHub": "$State._sections.phoneHub",
     "IptvSettingsPreferencesViews": "$State._sections.preferencesViews",
     "IptvSettingsRecordingView": "$State._sections.recordingView",
-    "IptvSettingsTwoPaneLayout": "$State._sections.twoPane"
+    "IptvSettingsTwoPaneLayout": "$State._sections.twoPane",
+    "IptvSettingsRootLayout": "$State._sections.rootLayout"
   },
   "callback_receiver_aliases": {
     "_deps.ensureFocusNodes": "$State._sections.focusActions.ensureFocusNodes",

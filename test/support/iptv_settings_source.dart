@@ -112,6 +112,22 @@ String iptvSettingsOriginalMember(String originalName) {
             ).readAsStringSync(),
           )
           as Map<String, dynamic>;
+  if (moved &&
+      originalName == '_IptvSettingsPageState.build' &&
+      row['allowed_edits']!.split(',').contains('root_build_forwarder')) {
+    // The exact named exception removes @override from the plain section.
+    // The checker separately requires State's annotated, exact forwarder.
+    final exception =
+        (config['named_exceptions']
+                as Map<String, dynamic>)['root_build_forwarder']
+            as List<dynamic>;
+    if (exception[0] != originalName ||
+        exception[1] != path ||
+        member.trimLeft().startsWith('@override')) {
+      throw StateError('Root build annotation registration changed');
+    }
+    member = '  @override\n$member';
+  }
   for (final entry
       in (config['borrowed_resource_aliases'] as Map<String, dynamic>? ??
               const {})

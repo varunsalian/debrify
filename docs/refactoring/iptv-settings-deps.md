@@ -506,22 +506,22 @@ Review every entry against actual composition before pinning scaffold tokens. De
 | `IptvSettingsLayoutActions` | `_twoPaneActive` | `IptvSettingsLayoutOwner.twoPaneActive` | Reviewed step 5 |
 | `IptvSettingsLayoutActions` | `mounted` | `State live mounted getter` | Reviewed step 5 |
 | `IptvSettingsLayoutActions` | `setState` | `State setState tear-off` | Reviewed step 5 |
-| `IptvSettingsRootLayout` | `_backButtonFocusNode` | `IptvSettingsFocusOwner.backButtonFocusNode` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_buildSingleColumn` | `IptvSettingsLayoutActions.buildSingleColumn` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_buildTwoPane` | `IptvSettingsTwoPane.buildTwoPane` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_enterPhoneSection` | `IptvSettingsLayoutActions.enterPhoneSection` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_fileTabFocusNode` | `IptvSettingsFocusOwner.fileTabFocusNode` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_focusAndReveal` | `IptvSettingsFocusActions.focusAndReveal` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_loading` | `IptvSettingsSourcesOwner.loading` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_phoneSection` | `IptvSettingsLayoutOwner.phoneSection` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_phoneViewMarker` | `IptvSettingsFocusOwner.phoneViewMarker` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_tabController` | `IptvSettingsInputOwner.tabController` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_twoPaneActive` | `IptvSettingsLayoutOwner.twoPaneActive` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_twoPaneKey` | `_IptvSettingsPageState._twoPaneKey` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_urlTabFocusNode` | `IptvSettingsFocusOwner.urlTabFocusNode` | Pending step 6 |
-| `IptvSettingsRootLayout` | `_xcTabFocusNode` | `IptvSettingsFocusOwner.xcTabFocusNode` | Pending step 6 |
-| `IptvSettingsRootLayout` | `mounted` | `State live mounted getter` | Pending step 6 |
-| `IptvSettingsRootLayout` | `setState` | `State setState tear-off` | Pending step 6 |
+| `IptvSettingsRootLayout` | `_backButtonFocusNode` | `IptvSettingsFocusOwner.backButtonFocusNode` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_buildSingleColumn` | `IptvSettingsLayoutActions.buildSingleColumn` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_buildTwoPane` | `IptvSettingsTwoPaneLayout.buildTwoPane` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_enterPhoneSection` | `IptvSettingsLayoutActions.enterPhoneSection` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_fileTabFocusNode` | `IptvSettingsFocusOwner.fileTabFocusNode` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_focusAndReveal` | `IptvSettingsFocusActions.focusAndReveal` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_loading` | `IptvSettingsSourcesOwner.loading` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_phoneSection` | `IptvSettingsLayoutOwner.phoneSection` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_phoneViewMarker` | `IptvSettingsFocusOwner.phoneViewMarker` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_tabController` | `IptvSettingsInputOwner.tabController` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_twoPaneActive` | `IptvSettingsLayoutOwner.twoPaneActive` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_twoPaneKey` | `_IptvSettingsPageState._twoPaneKey` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_urlTabFocusNode` | `IptvSettingsFocusOwner.urlTabFocusNode` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `_xcTabFocusNode` | `IptvSettingsFocusOwner.xcTabFocusNode` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `mounted` | `State live mounted getter` | Reviewed step 6 |
+| `IptvSettingsRootLayout` | `setState` | `State setState tear-off` | Reviewed step 6 |
 
 ## Zones and deferred work
 
@@ -599,3 +599,5 @@ Step 3 wiring review: the six owners are created once by each facade State; all 
 Step 4 wiring review: CatalogActions, ListsActions, PreferencesActions and RecordingActions use the existing actual owners and live State callbacks. The Step 3 scope catalog/list delegates now bind their real section members. FocusActions gets lazy fresh-list getters; neither getter runs during factory construction. All actions preserve the original profile wrapping or lack of wrapping, arguments/defaults and write/await order. The list row and its callbacks move as one whole widget. The local lambda parameter l remains local. Exact formatter-only brace sites are recorded without adding guards.
 
 Step 5 wiring review: every child-builder dependency is live or an actual stable section tear-off. The phone-hub/layout cycle has one deferred dispatch lambda for enterPhoneSection, which is invoked only by the original inline interaction callbacks; all other method bindings are direct. Actual getters read current owner values at the original read sites. The same key is passed to the existing external two-pane widget. The new bridge section is named IptvSettingsTwoPaneLayout to avoid colliding with that existing widget; its body still constructs the unchanged widget. Exact callback method and getter aliases are pinned to this reviewed composition; callable getter aliases are accepted only for original getters. All four named-callback negatives remain active.
+
+Step 6 wiring review: the retained annotated State build forwards the same BuildContext argument once to RootLayout. The original build body keeps both BuildContext parameters local. mounted remains a live read of State, and setState is the original State tear-off; the presence of a context parameter does not change those owners. The same two-pane key and all four actual resource owners are borrowed. Builders, focusAndReveal and enterPhoneSection bind actual section tear-offs. The synchronous layout flags, post-frame callback and guard timing are unchanged. Relative imports from the facade resolve against its original screens/settings directory, including the existing two-pane widget; the bridge basename does not change that target.
