@@ -8,7 +8,7 @@ home_search_discover = lib/screens/search_screen.dart
 home_widgets = lib/widgets/home/*.dart
 see_all = lib/widgets/see_all/*.dart lib/screens/see_all/*.dart
 shell = lib/main.dart lib/widgets/tv_sidebar_nav.dart lib/widgets/mobile_classic_nav.dart lib/widgets/mobile_floating_nav.dart lib/widgets/desktop_sidebar_nav.dart lib/widgets/tv_ambient_art_stage.dart lib/widgets/animated_background.dart
-details_themed = lib/features/merged_detail/application/*.dart lib/features/merged_detail/presentation/*.dart lib/features/merged_detail/presentation/legacy_merged_detail/*.dart lib/screens/merged_series_detail_screen.dart lib/widgets/detail/*.dart lib/widgets/detail/theme/*.dart
+details_themed = lib/features/merged_detail/application/*.dart lib/features/merged_detail/presentation/*.dart lib/features/merged_detail/presentation/legacy_merged_detail/*.dart lib/screens/merged_series_detail_screen.dart lib/widgets/detail/*.dart lib/widgets/detail/theme/*.dart lib/features/detail_showcase/presentation/*.dart
 
 # ── Phase two (see plan/APP_THEME_PHASE_TWO_PLAN.md) ────────────────────────
 # Rendered sets, not directory globs: each line lists the files that actually

@@ -606,7 +606,612 @@ change below.
 
 ## Progress
 
-(empty)
+- Execution base: `14d173a9` on `refactor/detail-showcase`, dedicated
+  `/Users/varunbsalian/Documents/Projects/debrify-wt/detail-showcase`. Only this
+  worktree and owned nested proof worktrees are used; no branch switch or push.
+  `flutter pub get` ran first; `pubspec.yaml` and lockfile unchanged.
+- Step 0(a): format-only original, exact subject `style(showcase): format the
+  original showcase parts`. Retain the oversized original temporarily until
+  steps 1–4 move all 69 declarations and the shared band chrome. Ratchet
+  3394 → 3425 is the formatter-only raise; later checkpoints only lower it.
+- `detail_showcase/base`: full suite on untouched `14d173a9`, Flutter 3.44.8 /
+  Dart 3.12.2, paths `[]`, flags `["--no-pub"]`: 11,093 success, 13 failure,
+  28 error, 20 skipped. Stable tree; no untracked inputs. Whole analyzer
+  recorded as `base-analyze.txt`; historical failure lists are not changed.
+- `format-proof.json`: whole-file scanner tokens, comments and literals equal
+  after removing exactly six AST-identified optional commas (Explore circle
+  nested calls, SeasonDropdown, SeasonPill, ShowcaseCast constructor, cast tile
+  call). All four negatives reject and each mutation changes its input.
+  Parser and kernel live only under this worktree's `.dart_tool/`.
+- Conservative choices: no application seam, deterministic null artwork,
+  equal-length cross-file alias names to avoid body reflow; all moved comments
+  remain verbatim. Linux originals will be separately verified/committed at L;
+  absent originals block before builder moves. Original characterization/mutation
+  replays and all-manifest replays are complete; see step 0b below. Extraction
+  remains blocked at L.
+
+### Step 0(b) — frozen original characterization checkpoint
+
+- R / step 0(a) is `1165b624`. `base-fmt` is a full-suite run with paths `[]`
+  and flags `["--no-pub"]`: 11,093 success, 13 failure, 28 error, 20 skips;
+  every identity/outcome equals `base`. No new/fixed/missing/skipped identity.
+- First concurrent `base-fmt-analyze.txt` transiently exposed nine additional
+  unchanged-file diagnostics (generated assets, vendor lint options, existing
+  dock metrics tests). Sequential original/reference replays establish zero
+  format-induced additions. `base-fmt-analyze-replay.txt` and
+  `step0-whole-analyze-final.txt` exactly equal `base-analyze.txt` (1,666
+  diagnostic occurrences); preserve all attempted logs in the own namespace.
+- `strict-original.txt` / `strict-baseline-identities.json`: original under
+  feature rules, qualified imports only, one `_plateFill` warning, four
+  `_Badge` const infos, and two qualification-induced `directives_ordering`
+  infos at 5/21. `alias-probe.txt` has only the warning and four const infos;
+  no unused/unnecessary import, key or private-public API diagnostic. Compare
+  by maximum, never sum. No suppression or constructor changes.
+- `detail-showcase-deps.md`, LF manifest and real-config fixtures pin all 69
+  whole declarations, comment-fragment owners, State reads and per-entry wiring.
+  Fixed aliases: `_ink→sInk`, `_t→st`, `_activate→sActivate`,
+  `_keepVisible→sKeepVisible`, `_slotFill→sSlotFill`, `_Hover→SHover`,
+  `_Band→SBand`, `_LogoOrTitle→SLogoOrTitle`,
+  `_ExpandableSynopsis→SExpandableSynopsis`, `_Chip→SChip`,
+  `_MetaLine→SMetaLine`, `_HonorsLine→SHonorsLine`, `_TechLine→STechLine`,
+  `_Primary→SPrimary`, `_Circle→SCircle`. Typedef and file-aware alias entries
+  remain empty in the production config until their owner creation; the full
+  virtual split accepts all pins and rejects registration ahead of the owner.
+  Constructor consts use `showcase<Name>Constructor`, plus
+  `showcaseCircleMarkConstructor`; functions/consts use exact tear-off pins.
+- The feature-aware normalization is opt-in; code/interpolation identifiers
+  reverse aliases while comments/literal contents remain intact. Owner-local
+  alias use, changed targets (including `.mark`), class rename, changed comment,
+  added const/key, lifecycle/hold/guide, trailer wrapper, TV and axis negatives
+  reject. Callback identity is checked independently against direct original
+  expressions, including swapped model, wrong callback and wrapper negatives.
+- No guide fallback: complete strict alias probe sizes range 120–474; guide
+  474. Alias names preserve identifier length. `alias-reflow-proof.json` checks
+  all 69 declarations' raw scanner tokens/comments after actual formatting,
+  code-only reversal, with zero added commas/braces and a separate owned cache.
+- 34 new original characterization cases pass, including all four strict macOS
+  goldens, with frozen public-parts fixture, source reader and surface namespace.
+  The source reader requires one physical owner for every manifest entry;
+  final topology activates only from `DETAIL_SHOWCASE_COMPLETE = True`.
+- Golden choices: `signal`, null artwork, DPR 1, en-US, text scale 1, January
+  dates, host-owned nodes, bounded pumps (600 + 240 ms after frame dispatch).
+  `tv_movie`: 1920×1080, original page/dpad, identity focused, trailer absent.
+  `compact_series`: 390×844 direct parts (no scroll offset), season pill and
+  compact episode. `wide_series_bands`: 1280×2600 direct fixed-column parts,
+  metrics `w=1280`, `compact=false`, `touch=false`, k=1, all promised bands
+  asserted in capture bounds. `compact_guide`: 390×844, category 1 open.
+  Initial capture was only on R; later runs compare without regeneration.
+- CI behaviour list gains three direct-importer tests and seven new files. The
+  five existing related files remain 69/69 passing. Shape/theme/related guards
+  have 197 passes and the unchanged detail-theme raw-colour failure; corrected
+  profile-guard run retains the observed profile adapter guard failure. Two
+  erroneous test paths in the first invocation are retained as development
+  evidence, then rerun at their actual paths; no failure list is changed.
+- Architecture, size, CI format, scoped analyzer/12-warning allowlist, new-test
+  analyzer and diff checks pass. Source inventory: 18 bare radii, zero shape
+  tokens; theme/light ink measurements recorded, classification unchanged;
+  shape registrations wait for actual file creation at step 1. Storage member
+  map and unrelated application/importer files remain unchanged.
+- Linux capture script resolves the exact format and characterization subjects,
+  consumes all log output, requires checkpoint application hashes equal R,
+  validates Linux/amd64 and Flutter 3.44.8, records image ID/input hashes, then
+  captures once and strictly compares the originals. Linux PNGs are exclusively
+  staged/committed in L, and Linux becomes strict at L. They are never swept into
+  the characterization commit.
+
+### Step 0b — original proofs closed; Linux handoff blocks extraction
+
+- Characterization checkpoint (b): `887b1a8f`, application exactly R
+  `1165b624`. `two-originals-proof.json`: `lib` tree
+  `283bb5e83f819343c30c08137bf8bf98f899b0c8`, pubspec
+  `5f983ff8c68a01aef5c7a1ec393e677e7693591f`, lockfile
+  `e0ff9cca69c00ae69bb4dfe111c18a89547cec98` equal at both commits.
+- Original proof worktree was owned inside this worktree's ignored
+  `.dart_tool/detail_showcase_original`, detached at (b). Both initial and
+  restored clean characterization runs pass 34/34, with identical outcomes,
+  SDK and committed tree, no untracked inputs or changes during each run.
+- `original-b-mutations/step0b-original-mutations.json` records **14 actual
+  assertion rejections**:
+  lazy hold, dispose order, hold routed to primary, trailer double-fire,
+  dropped guide identity, selection not re-seated, TV hover ungated, visibility
+  axis dropped, sources browse term dropped, k always one, visible guide radius,
+  deleted original declaration, namespace change, and final-topology flag on
+  original. All source/guard files restored byte-identically. No compilation or
+  loading failure is used as proof; widget TestFailures are classified by the
+  runner as `error`, so evidence inspects their actual assertion messages.
+- The first radius attempt hit the honors chip outside the scene and passed;
+  reject that proof. The corrected unique guide-plate anchor fails the strict
+  `wide_series_bands` pixels. Captured diff images are retained under the own
+  `golden-mutation-failures/` evidence folder. Successful earlier assertion logs
+  are validated/reused; no assertions or goldens are changed to obtain rejection.
+  Mutation runner refinements retain all frozen assertions. The final fixture
+  audit below adds explicit UTC encoding; every PNG still equals (b). The
+  planned Linux strict-default delta is reserved for L.
+- **Original base3 is `detail_showcase/base3` on committed ORIGINAL (b).** Full
+  suite: 11,127 success, unchanged 13 failure, 28 error, 20 skips. PASS against
+  `base-fmt` and `base`: exactly 34 added passing identities; every previous
+  identity/outcome unchanged, zero missing/newly skipped/new failures. SDK
+  Flutter 3.44.8 / Dart 3.12.2; `paths=[]`, `flags=["--no-pub"]`; tested tree
+  `ed509a7c81b3bd2f97c1b60ac4f55c82af282739`, start/end equal, no overlay or
+  untracked inputs. Base3 is original evidence, not either extraction gate.
+- All **11 manifests with self-tests pass**: detail showcase, settings, IPTV,
+  TorBox, Real-Debrid, PikPak, playback settings, IPTV settings, playlist content,
+  merged detail and player launch. Every configuration uses its original
+  baseline; merged detail specifically `21320ff9`. Runs sharing the owned
+  `.dart_tool/detail_showcase_parser` are serialized; the overlapping format/
+  alias reflow proof owns `.dart_tool/detail_showcase_probe_parser` and kernel.
+  `step0-all-manifests.json` fingerprints the logs.
+- Final step-0 checks: architecture 1,261 files; size 2,321 files/173 ratchets;
+  CI format, scoped analyzer/12-warning allowlist and whole analyzer comparison
+  pass (zero additions/removals). New Dart tests/helpers analyze clean. Four
+  macOS originals stay hash-identical; full base3 also passes the existing
+  merged `showcase` golden. Source slice remains 18 literal radii/zero shape
+  calls; theme `details_themed` remains 65 files/750 sites; light ink 5 candidate
+  sites, zero PRIMARY. LF, shell/Python syntax, diff and caller/source-set checks
+  pass. No new application seam, suppression, dependency or failure-list entry.
+- **BLOCKED at step L:** no Linux originals or
+  `linux-original-{capture,strict,sha256,revision,run-url}.txt` provenance are
+  present. Do not begin builder moves. No production feature file has been
+  created and no declaration moved; current original facade is **3,425 lines**
+  (20 import directives occupying 21 lines; 3,404 remaining lines containing
+  the 69 declarations/docs/separators). The pure-export facade and its final
+  export/comment breakdown remain deliverables for steps 4–5.
+- Remaining: L (verify supplied Linux hashes/provenance, separate commit and
+  strict Linux default), steps 1–5 and both full-suite extraction gates, each
+  compared with the latest original base (gate 2 also with gate 1). Keep all
+  found behaviour as documented; only item 3's formatting was resolved as
+  explicitly planned.
+  Pending device checks: Android TV D-pad through bands/held Play/season popup,
+  Apple TV trackpad circles versus cards, merged-shell trailer/play handoff;
+  remote CI, completion Linux replay and Claude's integrated-tree checks.
+  Branch stays `refactor/detail-showcase`; no push. Stop at this handoff.
+
+### Step 0b UTC fixture audit — new original checkpoint
+
+- Pin episode `firstAired` with `DateTime.utc(2026, 1, n).toIso8601String()`
+  to satisfy the plan's explicit UTC fixture rule. The original parts display
+  `firstAired.split('T').first`, so the January calendar text is unchanged;
+  strict replay confirms all four (b) PNGs without regeneration. No assertion
+  is weakened or removed; this is the sole Dart helper delta from (b), outside
+  the planned future Linux strict-default change.
+- The capture script still uses exactly (b)'s tests, as required. Both encoded
+  fixtures render the same original calendar labels; original strict macOS
+  PNG hashes stay equal, and the script's application-tree equality rule still
+  compares (b) with R. Linux provenance and hashes will be verified separately.
+- New original checkpoint: `c74fb2cf` (`test(detail-showcase): step 0b
+  original-code proof checkpoint`). `step0b-utc-checkpoint.json` records its
+  unchanged R application hashes, frozen assertion/test bodies and macOS PNGs;
+  only the explicit UTC fixture and proof-runner refinements differ from (b).
+  No feature file or production declaration has been created/moved.
+- Detached replay `original-utc-checkpoint` passes **34/34** on that committed
+  checkpoint, with a clean, stable input tree; identity comparison with (b)'s
+  restored clean run passes. The refined runner then repeats **all 14 mutations
+  freshly**, each rejected by an actual assertion, without compilation/loading
+  errors or reused logs. Source/architecture files are restored byte-identically;
+  strict pixel failure artifacts are retained outside the proof tree. Previous
+  (b) mutation evidence remains in `original-b-mutations/`.
+- **Latest ORIGINAL base: `detail_showcase/base4` on `c74fb2cf`.** Full suite:
+  **11,127 success / 13 failure / 28 error / 20 skipped**. `base4-comparison.json`
+  records PASS against base3 (zero added/changed/missing/skipped identities) and
+  base/base-fmt (exactly 34 added passing cases, all previous outcomes identical).
+  Flutter 3.44.8 / Dart 3.12.2; `paths=[]`, `flags=["--no-pub"]`; tested tree
+  `3e9b548859e3d1cfd8ab414963708907cc3e470b`, start/end equal, no snapshot,
+  untracked inputs or changes during the run. Both extraction gates must use
+  base4 at that handoff; neither gate had run. The independent-review bases
+  below supersede it. Base4 remains original baseline evidence.
+- UTC helper/test analyzer, fixture formatting, Linux script syntax and final
+  diff checks pass. All previous step-0 application/checker evidence remains
+  valid: no application, assertion, manifest, checker configuration, suppression
+  or dependency changed after those checks. The final report commit changes
+  documentation only; its application/test inputs equal `c74fb2cf`. The final
+  document audit restores an accidentally duplicated Progress block in the
+  execution preamble; all approved text outside Progress equals `14d173a9`.
+- **Step L remains BLOCKED:** all four Linux PNGs and all five required
+  provenance files are absent at this handoff. Capture still resolves exactly
+  (b) `887b1a8f` and R `1165b624`; do not move builders or sweep future Linux
+  inputs into another commit. Steps 1–5, both gates, final facade and device/
+  remote CI/integrated-tree checks remain pending. Current original facade is
+  still 3,425 lines (21 import lines + 3,404 other lines). Branch unchanged;
+  no push, no regression acceptance, no found behaviour fixed beyond the
+  authorized formatter cleanup. Stop and report this prerequisite.
+
+### Further step 0b — independent review closure on ORIGINAL
+
+- The independent step-0 review supersedes the earlier golden host and Linux
+  capture checkpoint. Keep production application exactly R `1165b624`;
+  no builder move, application edit, dependency change or assertion removal.
+  New exact capture subject: `test(detail-showcase): step 0b review
+  characterization checkpoint`. Record original proofs and latest full-suite
+  base after that commit; old bases/proofs remain historical evidence.
+- P1 coverage: guide-card D-pad Select reveals then hides the focused category's
+  spoilers; recommendation pointer/Select callbacks receive the identical item;
+  all eight identity buttons have ordered positions/labels and independent
+  pointer/Select callbacks; the real page's action count mounts eight nodes;
+  explicit primary refocus dispatches `focused`; wide TV season tapping selects
+  the tapped season rather than the current season.
+- P2 coverage: hover entry/exit and equivalent keyboard focus lift on source,
+  guide, recommendation, universe, DYK entry and DYK remainder cards; hover never
+  focuses the node. Compact season popup selected Text uses the actual scoped
+  accent, and unselected Text remains white.
+- User decision: recapture all four macOS originals with `MergedDetailPalette.bg`
+  (`0xFF0B0B0E`, production root Scaffold at
+  `merged_detail_root_layout.dart:108`) painted **inside** the capture boundary.
+  This captures the real detail surface rather than a white ancestor or a
+  transparent boundary. `tv_movie` has seven callback-populated circles, no
+  trailer, and keeps primary focus. The separate action test renders all eight.
+  Old macOS PNGs are retained in `superseded-macos-capture-887b1a8f/`; Claude's
+  old Linux evidence is retained in `superseded-linux-capture-887b1a8f/` and is
+  superseded, not usable at L. Original-only capture and subsequent strict
+  replay pass; dark compact guide/TV originals inspected visually.
+- P3 coverage: unknown severity preserves its uppercase word and all eight
+  empty meter segments (card + plate); an initially empty category list mounts
+  no band/scrollable in either layout; ambient fade duration is pinned to 550 ms.
+  The known focused-to-empty update/clamp edge case remains found-not-fixed.
+  Lazy hold/dispose ordering remain **source-guard (S)** class per the plan;
+  ambient fade duration is also S. Interaction/hover cases are widget behavior
+  tests; golden mutations are pixel assertions. Do not label S as runtime proof.
+- The mutation runner adds a recorded negative for every new test, separately
+  exercises recommendation pointer/Select, swaps complete Explore/More blocks,
+  rewires More, changes the real page action count, drops each card's own hover
+  lift, and changes each dark scene's ink. Failure PNGs are archived under the
+  run's own evidence namespace and the `failures/` folder is removed after each
+  mutation, including error paths; original bytes are restored in `finally`.
+- Linux script now independently captures the exact new checkpoint in **two
+  clean detached worktrees**, each beginning without Linux PNGs or the other
+  checkout's build cache. It compares all four SHA256s and PNG bytes and strictly
+  replays both captures before copying files into this worktree. The second
+  capture/hash/strict logs and `reproduction=independent-second-worktree-byte-identical`
+  provenance supplement the five required files. Application hashes must equal
+  R. No early-exit awk or shared parser/kernel cache is introduced.
+- Development characterization: 49/49 passing (15 added cases), unchanged
+  original application. First severity development run observed two meters;
+  the new test was corrected before freezing to assert both and all eight
+  segments. Existing frozen assertions remain. `ci_behavior_tests.txt` gains
+  only the new identity-actions test. New committed original replay, fresh
+  mutation proofs and full-suite latest base are recorded below when complete.
+
+### Step 0b viewport checkpoint — final capture framing
+
+- Independent review checkpoint is `de904b55`: committed original replay passes
+  49/49 and `review-step0b/step0b-original-mutations.json` records all **36 fresh
+  assertion rejections**, covering all 15 added cases, the ambient S guard and
+  every corrected dark golden. Restored original is clean, with no `failures/`.
+  `base5` passes against base4: 11,142 success / 13 failure / 28 error / 20 skips;
+  exactly 15 added successes, zero missing/changed/skipped previous outcomes.
+- Final PNG dimension audit finds the compact guide's shrink-wrapped Column
+  produced 390×291 rather than the plan's 390×844 capture. Correct only the
+  golden host with `SizedBox.fromSize(size: size)` and assert the boundary's
+  actual size for every scene. Recapture on ORIGINAL: compact guide is now
+  390×844; the other three PNG hashes remain exactly `de904b55`'s. The dark
+  surface fills the viewport, and no application behavior/leaf changes.
+- This final framing correction supersedes `de904b55` as the Linux capture
+  checkpoint. Script exact subject becomes `test(detail-showcase): step 0b
+  viewport characterization checkpoint`; two-clean-worktree independent capture,
+  SHA256/byte comparison and two strict replay protocol remains unchanged.
+  Application/pubspec/lock hashes must still equal R. Four strict development
+  goldens pass without regeneration after the original-only capture.
+- Final capture checkpoint: **`439a1be5`**, exact subject above. `lib` remains
+  `283bb5e83f819343c30c08137bf8bf98f899b0c8` (R), with unchanged pubspec/lock.
+  Test tree `21af0a96e23e519a113eca833960326f16699a98`; committed whole tree
+  `fef548abf46ab22e9979bea914888b92a3dadc6c`. Detached committed original replay
+  passes **49/49**. `review-step0b-viewport/original-checkpoint.json` records all
+  four PNG hashes/dimensions; full compact-guide framing inspected visually.
+- `review-step0b-viewport/step0b-original-mutations.json`: **all 36 mutations
+  freshly rerun**, each rejected by a named assertion, no reused logs or
+  compilation/loading failure. `new-test-mutation-coverage.json` maps each of
+  the 15 added identities to its rejection. S/pixel/widget classifications are
+  explicit. Five pixel diff folders are archived in the owned evidence folder;
+  original application/guard files restored and proof tree clean, no `failures/`.
+- **Latest ORIGINAL full-suite base is `detail_showcase/base6` at `439a1be5`.**
+  **11,142 success / 13 failure / 28 error / 20 skipped**. PASS against base5
+  (all identities/outcomes identical), base4/base3 (exactly 15 added passing
+  identities) and base/base-fmt (exactly 49 added passing identities); zero
+  missing, changed, newly skipped, new failures or fixed previous failures.
+  `base6-comparison.json` records the comparisons and env: Flutter 3.44.8 /
+  Dart 3.12.2, `paths=[]`, `flags=["--no-pub"]`, original committed tree above
+  start/end equal, no snapshot/untracked inputs/tree change. This supersedes
+  earlier originals for both future gates; neither extraction gate has run.
+- All **11 manifests/self-tests freshly pass**, each with its own configuration
+  and original baseline (merged detail `21320ff9`). Logs/fingerprints are in
+  `review-step0b/all-manifests.json`; all checker inputs/application leaves are
+  unchanged between `de904b55` and `439a1be5`. These runs share only the owned
+  `.dart_tool/detail_showcase_parser`, serialized, with its own kernel. They
+  overlap no other parser/kernel run using that package. Suite-evidence runs
+  and index operations remain serialized; no commit or git add overlaps a run.
+- CI format passes (1,701 files), scoped analyzer/12-warning allowlist passes,
+  whole analyzer exactly matches the original's 1,666 occurrences by identity.
+  Final affected tests/helpers analyze/format clean. Architecture 1,261 files,
+  sizes 2,321 files/173 ratchets, LF/diff, shell/Python syntax, documentation
+  links and unchanged approved plan text outside Progress all verified.
+  Strict lint/alias probes and inventories remain applicable: application
+  bytes equal R; source/shape/theme registrations are unchanged (18 literal
+  radii, zero shape calls, `details_themed` 65 files/750 sites, light ink zero
+  PRIMARY). No failure list, suppression, dependency or application code changed.
+- **BLOCKED: Linux goldens.** Old `887b1a8f` Linux evidence is superseded.
+  No current Linux PNGs/provenance are present. Claude must capture exactly
+  **`439a1be5`** with the updated script, supplying both independent capture/
+  strict logs and reproduction hashes as well as the five required files.
+  Step L verifies these against the new checkpoint/R and commits separately,
+  enables strict Linux, then steps 1–5 and both gates resume against base6.
+- Current original facade still **3,425 lines** (20 imports occupying 21 lines,
+  plus 3,404 remaining lines); pure export facade/final count remain pending.
+  Found-not-fixed behavior unchanged, including the focused-to-empty guide
+  clamp edge case; no original bug fixed. Device (Android TV/Apple TV/playback
+  handoff), remote CI, completion Linux replay and integrated-tree checks remain
+  pending. Final report commit changes only Progress; its application/tests
+  equal `439a1be5`. Root branch unchanged and clean; no push. Stop at this handoff.
+
+### Step L — supplied original Linux checkpoint verified
+
+- Verified all four supplied PNG SHA256s and dimensions against both independent
+  captures from `439a1be5`, plus both capture and both strict replay logs (4/4
+  each). Application/lib and pubspec inputs equal format-only `1165b624`;
+  characterized test tree is `21af0a96e23e519a113eca833960326f16699a98`.
+- Provenance: linux/amd64, Flutter 3.44.8 / Dart 3.12.2, calibrated image
+  `sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`,
+  local Docker capture. Evidence: own `detail_showcase/linux-original-*`,
+  reproduction files, Dockerfile and `step-L-verification.json`.
+- Linux hashes: tv_movie `622f489000682914f88ea3dd9f3afcbf69defec57ae5a031f93827545037bccc`;
+  compact_series `66574249bae4c127192e91e77e984b081038b3a308452b136c232f28005368d2`;
+  wide_series_bands `db696a270be27d73a986c4a6ce6b05d9b52623a30702217710191e439cd120c7`;
+  compact_guide `1becde95506ac84ed35433a355e657d162628bf35819517bb892f414e8dfa443`.
+- Decision: enable strict Linux by default through the single planned environment
+  default; retain every frozen assertion and original PNG. This separate L commit
+  contains no builder moves. Both future extraction gates compare with base6.
+
+### Step 0c — original proof for formatted-export namespace parsing
+
+- Step 1 exposed a lexical gap in the frozen surface reader: its export regex
+  accepted only a space before `show`, while normal Dart formatting wraps the
+  required long export URIs. Restored all uncommitted extraction changes before
+  correcting the two regexes to accept Dart whitespace. Every assertion remains
+  unchanged: exact 18 names, exact count, each physical declaration present,
+  and final facade containing only exports. No application behavior changed.
+- Original code (lib/pubspec inputs still equal R) passes all 49 characterizations,
+  including strict macOS originals. Recorded two real assertion-failing ORIGINAL
+  mutations: renamed public metrics declaration (missing name), and an added
+  wrapped export (19 names). The second proves the corrected reader detects a
+  duplicate that the earlier regex silently missed; neither failed to compile.
+  Evidence: own `step0c-original-{focused,namespace-mutation,wrapped-export-mutation}`.
+- Decision: original-proof checkpoint before resuming extraction, then a new
+  full-suite original base7. Linux capture provenance remains `439a1be5`: golden
+  fixtures, renderer and application are unchanged; the supplied PNGs are kept
+  byte-identical. No recapture or assertion weakening. Incomplete step1 attempts
+  are retained as investigation evidence and are not claimed as passed checks.
+
+### Step 1 — metrics/style wired and guards registered
+
+- L is `df7d646f`; the original formatted-export checkpoint is `5753dee2`.
+  New original base7: 11,142 success / 13 failure / 28 error / 20 skipped,
+  identical identities to base6 (zero added/missing/fixed/newly skipped).
+  `base7.env.json`: HEAD `5753dee2`, tested tree
+  `1e2b2c1a3b1e15274a2a59ca34d032543b39e4da`, paths `[]`, flags
+  `["--no-pub"]`, no snapshot/untracked inputs/tree changes; Flutter 3.44.8 /
+  Dart 3.12.2. Both extraction gates now compare with base7, also preserving
+  base6's observed passing identities. Detached step0c proof is recorded in
+  `step0c-detached-proofs.json` at that exact original checkpoint.
+- Moved metrics (122 lines) and style (200), whole declarations/comments intact.
+  Seven aliases registered only with their created owner; `_plateFill` remains
+  private and unused. Exact original warning entered the destination allowlist
+  at creation; complete CI-scoped analyzer accepts 13 existing warnings, no
+  new/stale entry. Remaining original facade is 3,132 lines, ratcheted down;
+  its grounds/identity and remaining bands leave at steps 2–4.
+- Registered unconditional feature size/import/playback/resource/back-import
+  guards, exact per-file service-show enforcement, and both-direction detail
+  implementation boundaries. Shape includes both destinations and the facade:
+  exact total 18, zero in metrics/style. Theme uses one explicit directory
+  pattern: 750 sites unchanged; light-ink candidates 5, PRIMARY 0.
+- Every integrated manifest (11), each with its own config/original baseline
+  (merged_detail `21320ff9`), passes with self-tests. Overlapping runs have
+  separate parser-package/kernel directories inside this worktree; no shared
+  parser/evidence namespace. Existing other manifests are byte-unchanged;
+  only this plan's manifest is required to be LF (TorBox's historical CRLF is
+  retained rather than normalized outside scope).
+- Evidence `detail_showcase/step1/`: zero whole-analyzer additions with explicit
+  relocation; original-only per-identity maximum includes the four strict const
+  infos once (never sum with duplicate root warning). Strict lint traces one
+  `_plateFill` warning and two infos each in the two episode builds; the two
+  import-qualification ordering infos at lines 5/21 disappear under sorting.
+  CI format, scoped analyzer/allowlist, architecture, sizes and staged diff pass.
+  Characterization 49 + related 69 = 118 passes, strict macOS goldens unchanged.
+  Shape/theme guards 128 success / 1 original failure; profile guards 17 success /
+  1 original failure, both compared to base7 with zero new/missing/skipped.
+- Decision: sorted facade export directives, preserving its exact namespace and
+  every declaration's original ordering. No assertion, constructor, callback,
+  lifecycle or moved comment changes. Lazy hold/dispose ordering remain S class.
+
+### Step 2 — extraction checkpoint
+
+- Previous step commit `86f72054`. Whole declarations, comments, constructor
+  signatures, constness, private runtime names, callback expressions and State
+  lifecycle remain verbatim after registered code-only alias reversal.
+- Measured sizes: showcase_grounds.dart 205; showcase_identity.dart 293; showcase_identity_actions.dart 263; showcase_identity_readouts.dart 374; showcase_metrics.dart 122; showcase_style.dart 200. Remaining facade: 2050 lines;
+  size ratchet lowered/removed at this checkpoint. Every created destination
+  and the facade are registered in the shape manifest; exact slice total 18.
+  Theme sites remain 750; light-ink candidates 5, PRIMARY 0.
+- All 15 aliases are active, with the original private spelling inside each owner and pinned typedef/function/constructor targets. Registered the two exact cache-manager show imports at creation. Facade retains only the bands pending steps 3/4; callback object identity and all eight button actions are preserved.
+- Evidence `detail_showcase/step2/`: every integrated manifest (11) and
+  self-test passed using each config/original baseline, including merged_detail
+  `21320ff9`, with one dedicated parser-package/kernel per overlapping run.
+  Whole-analyzer relocation has zero additions against ORIGINAL identities;
+  strict per-symbol comparison retains one original warning and four infos,
+  and removes the two qualification-induced ordering infos (max, never sum).
+  Architecture, sizes, CI format, complete scoped analyzer/allowlist (13 warnings),
+  LF detail manifest, unchanged other manifests and staged diff passed.
+  Frozen characterizations plus existing related tests: 118 passes; four strict
+  macOS originals unchanged. Theme/shape guards 128 success / 1 original failure;
+  profile guards 17 success / 1 original failure, exact base7 identities.
+- Decision: no incidental behavior fixes or lint suppressions. The original
+  base7 (`5753dee2`, full-suite paths `[]`, flags `["--no-pub"]`) remains the
+  gate comparison reference; S-class hold/dispose guards remain source guards.
+
+### Step 3 — extraction checkpoint
+
+- Previous step commit `56420ea8`. Whole declarations, comments, constructor
+  signatures, constness, private runtime names, callback expressions and State
+  lifecycle remain verbatim after registered code-only alias reversal.
+- Measured sizes: showcase_cast.dart 144; showcase_episodes.dart 437; showcase_grounds.dart 205; showcase_identity.dart 293; showcase_identity_actions.dart 263; showcase_identity_readouts.dart 374; showcase_metrics.dart 122; showcase_recs.dart 120; showcase_seasons.dart 234; showcase_sources.dart 183; showcase_style.dart 200. Remaining facade: 978 lines;
+  size ratchet lowered/removed at this checkpoint. Every created destination
+  and the facade are registered in the shape manifest; exact slice total 18.
+  Theme sites remain 750; light-ink candidates 5, PRIMARY 0.
+- The four episode const infos now appear under feature options and trace two each to ShowcaseEpisodeCell.build and ShowcaseEpisodeCardCompact.build. They were already recorded in the ORIGINAL strict baseline; no new identity is accepted. Gate 1 follows on this committed tree before step 4.
+- Evidence `detail_showcase/step3/`: every integrated manifest (11) and
+  self-test passed using each config/original baseline, including merged_detail
+  `21320ff9`, with one dedicated parser-package/kernel per overlapping run.
+  Whole-analyzer relocation has zero additions against ORIGINAL identities;
+  strict per-symbol comparison retains one original warning and four infos,
+  and removes the two qualification-induced ordering infos (max, never sum).
+  Architecture, sizes, CI format, complete scoped analyzer/allowlist (13 warnings),
+  LF detail manifest, unchanged other manifests and staged diff passed.
+  Frozen characterizations plus existing related tests: 118 passes; four strict
+  macOS originals unchanged. Theme/shape guards 128 success / 1 original failure;
+  profile guards 17 success / 1 original failure, exact base7 identities.
+- Decision: no incidental behavior fixes or lint suppressions. The original
+  base7 (`5753dee2`, full-suite paths `[]`, flags `["--no-pub"]`) remains the
+  gate comparison reference; S-class hold/dispose guards remain source guards.
+
+### Step 4 — extraction checkpoint
+
+- Previous step commit `786cd167`. Whole declarations, comments, constructor
+  signatures, constness, private runtime names, callback expressions and State
+  lifecycle remain verbatim after registered code-only alias reversal.
+- Measured sizes: showcase_cast.dart 144; showcase_did_you_know.dart 202; showcase_episodes.dart 437; showcase_grounds.dart 205; showcase_guide.dart 474; showcase_identity.dart 293; showcase_identity_actions.dart 263; showcase_identity_readouts.dart 374; showcase_metrics.dart 122; showcase_notes.dart 140; showcase_recs.dart 120; showcase_seasons.dart 234; showcase_sources.dart 183; showcase_style.dart 200; showcase_universe.dart 158. Remaining facade: 24 lines;
+  size ratchet lowered/removed at this checkpoint. Every created destination
+  and the facade are registered in the shape manifest; exact slice total 18.
+  Theme sites remain 750; light-ink candidates 5, PRIMARY 0.
+- The guide is 474 lines, so the 15-file layout needs no fallback or size exception. All 69 per-entry wiring rows are complete. The original is now a pure 18-name facade: 12 export directives spanning 24 physical lines, zero comments, zero blank lines or declarations. Its size ratchet is removed; shape residue is zero in the facade. Completion rules activate only at step 5.
+- Evidence `detail_showcase/step4/`: every integrated manifest (11) and
+  self-test passed using each config/original baseline, including merged_detail
+  `21320ff9`, with one dedicated parser-package/kernel per overlapping run.
+  Whole-analyzer relocation has zero additions against ORIGINAL identities;
+  strict per-symbol comparison retains one original warning and four infos,
+  and removes the two qualification-induced ordering infos (max, never sum).
+  Architecture, sizes, CI format, complete scoped analyzer/allowlist (13 warnings),
+  LF detail manifest, unchanged other manifests and staged diff passed.
+  Frozen characterizations plus existing related tests: 118 passes; four strict
+  macOS originals unchanged. Theme/shape guards 128 success / 1 original failure;
+  profile guards 17 success / 1 original failure, exact base7 identities.
+- Decision: no incidental behavior fixes or lint suppressions. The original
+  base7 (`5753dee2`, full-suite paths `[]`, flags `["--no-pub"]`) remains the
+  gate comparison reference; S-class hold/dispose guards remain source guards.
+
+### Gate 1 — committed full-suite parity
+
+- Gate commit `786cd1673c2da23719ac3725b5e71e44d2af4f57`; tested tree `dc22f26c17298bef24c8b64f5474637f623c584a`;
+  application lib `0062114fb7490090046c63bb4eeb76d364c3bca7`, test `ad2e053406e9084d2c5c419f0cdd35eab2127fef`.
+  Full suite paths `[]`, flags `["--no-pub"]`, Flutter 3.44.8 / Dart 3.12.2.
+  HEAD/index/tested/end trees match, no snapshot or untracked input and no
+  changes during the run. Evidence: `gate1.jsonl`, `.env.json`, `gate1-audit.json`
+  and comparisons with base7 and base6 in this plan's own evidence namespace.
+- 11,142 success / 13 failure / 28 error / 20 skipped. Every outcome and test
+  identity equals both originals: zero new failures/errors, missing tests,
+  new skips, additions, fixes or changed old outcomes. The full-suite runner's
+  expected exit 1 is the original 13/28 set; both baseline comparisons PASS.
+- Frozen-input audit at step 4 verifies all eight test files, both helpers and
+  all eight PNGs byte-identical to original `5753dee2`. No golden regenerated.
+
+### Step 5 — completion guards, facade cap and CI
+
+- Previous step is `714bd0e9`; `DETAIL_SHOWCASE_COMPLETE = True`. The facade
+  is registered as a compatibility composition root and scanned by real main:
+  exactly 18 public names, exports/comments only, measured cap 24. Actual facade
+  breakdown: 12 directives occupying 24 lines + 0 comment lines + 0 blank lines
+  = 24. It exports no alias, owns no declarations and has no size exception.
+- Real architecture main on a temporary complete tree copy passes unmodified
+  and rejects all 18 negatives: missing/declarative/importing/oversized/extra-name
+  facade, back-import, merged/catalog and reverse merged implementation imports,
+  unshown and inexact service imports, TEMP marker, oversized feature file,
+  owned focus node/timer, borrowed-node disposal, engine and launcher imports.
+  Feature guards remain unconditional. Evidence `step5/architecture-negatives.txt`.
+- CI format includes the facade and `test/support/detail_showcase_*.dart`;
+  analyze includes the facade inside its command, before `| tee analyze.txt`.
+  Actual workflow format command, complete scoped analyze and exact allowlist
+  passed (13 original warnings). No appended path is outside a command.
+- Every integrated manifest/self-test (11) passed with its own config and
+  original baseline, isolated parser-package/kernel per overlapping run.
+  Whole relocation: zero added diagnostics by ORIGINAL identities. Strict
+  comparison: original `_plateFill` warning plus 4 original episode const infos;
+  0 new key/private-public-API/import/brace diagnostics; qualification-induced
+  ordering infos at original lines 5/21 removed; maximum, never sum.
+- Focused + related: 118 passes, including all four strict macOS originals.
+  Completion-enabled frozen guards pass. Theme/shape and profile guards match
+  base7's observed identities (128/1 and 17/1); theme 750, light ink 5 / PRIMARY 0,
+  shapes exactly 18 / facade 0. All 69 per-entry wiring rows completed. Detail
+  manifest LF; all other manifests unchanged. Staged sizes/diff passed.
+- Conservative decisions: 15 files, cohesive 474-line guide, no fallback;
+  sorted facade exports and narrow exact per-file service/cache shows; no lint
+  suppression, callback wrapper, constructor/key/const/lifecycle change or
+  rewritten moved comment. Lazy hold/dispose order retain S classification.
+  Namespace whitespace correction was proven on original code at `5753dee2`
+  before these moves; all test/helper/PNG inputs remain frozen thereafter.
+- Gate 2 follows on this committed tree: full suite vs latest original base7
+  and gate 1, plus base6; strict Docker completion replay of four new Linux
+  PNGs and existing merged showcase. Original PNGs are never regenerated.
+
+| Final feature file | Formatted physical lines |
+| --- | --- |
+| `showcase_cast.dart` | 144 |
+| `showcase_did_you_know.dart` | 202 |
+| `showcase_episodes.dart` | 437 |
+| `showcase_grounds.dart` | 205 |
+| `showcase_guide.dart` | 474 |
+| `showcase_identity.dart` | 293 |
+| `showcase_identity_actions.dart` | 263 |
+| `showcase_identity_readouts.dart` | 374 |
+| `showcase_metrics.dart` | 122 |
+| `showcase_notes.dart` | 140 |
+| `showcase_recs.dart` | 120 |
+| `showcase_seasons.dart` | 234 |
+| `showcase_sources.dart` | 183 |
+| `showcase_style.dart` | 200 |
+| `showcase_universe.dart` | 158 |
+
+### Gate 2 and final Linux completion — stop checkpoint
+
+- Gate 2 commit `5010272d0e025764201b80ae9c739af445b97ef0`; tested tree `f08827dc252becff1d7e50086afb80bd8b184198`;
+  lib `b850142b28d5aa573b9ae432b586ba3f701a72e9`, test `0c1c00c1a50f560ff83146b491cfeb3e18fab01b`. Full suite paths
+  `[]`, flags `["--no-pub"]`; Flutter 3.44.8 / Dart 3.12.2. Committed
+  HEAD/index/tested/end trees are equal, no snapshot/untracked inputs/tree change.
+  `gate2.jsonl`, `.env.json`, `gate2-audit.json` and comparisons with base7,
+  base6 and gate1 record exactly 11,142 success / 13 failure / 28 error /
+  20 skipped: zero added/missing/changed identities, new failures or skips.
+  All three comparisons PASS; historical failures/errors remain unchanged.
+- Strict Linux completion replay checked out that same gate 2 revision in a
+  fresh isolated clone under this worktree's ignored `.dart_tool/`, preserving
+  the root branch and app checkout. Calibrated linux/amd64 image
+  `sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`,
+  Flutter 3.44.8 / Dart 3.12.2, libsqlite3; revision lib/test/pubspec/lock inputs
+  equal gate2-audit. Four new originals PASS strictly, existing merged
+  `reachable pixel golden showcase` PASS strictly. No regeneration; all five
+  before/after PNG hashes match, the four showcase hashes equal step L.
+  Merged showcase SHA256: `94895f58b6f48c4f61ede89503b6b00c44c845366ccc056da62957506a311c52`.
+  Evidence `linux-completion-{driver,revision,sdk,strict,merged-strict,sha256,run-url}.txt`
+  and `linux-completion-audit.json`. Own clone removed after successful replay.
+- Final checkpoints: step 1 `86f72054`; step 2 `56420ea8`; step 3/gate 1
+  `786cd167`; step 4 `714bd0e9`; step 5/gate 2 `5010272d`. L `df7d646f`;
+  original format R `1165b624`, final 0b `439a1be5`, formatted-export original
+  proof/new full-suite base7 `5753dee2`. All commits carry the requested
+  Co-Authored-By stanza; no push or root branch switch occurred.
+- Completion: 15 feature files (120–474 lines), facade 24 physical export lines
+  (12 directives), no comments/blank lines/declarations/aliases exported;
+  all 69 wiring entries, 15 aliases and every shape destination/facade registered.
+  Every required checker and original diagnostic comparison passed at each step.
+  Frozen tests/helpers and all eight PNGs remain byte-identical to `5753dee2`.
+  Approved plan text outside Progress and the retained Found inventory remain
+  unchanged. This final evidence commit changes only documentation; its lib,
+  test and pubspec inputs equal the tested/replayed gate 2 tree.
+- Found-not-fixed: retained inventory below, including `_plateFill`, TV circle
+  hover, season popup mounted/inset edge, focused-to-empty guide clamp, short
+  action-node list, autofocus/decode sizing, raw colours, English strings and
+  semantics/metrics/topology limitations. Original full-suite 13 failures /
+  28 errors remain; strict const infos preserved. Formatting alone was resolved
+  in R. Lazy hold/dispose order remain S source-guard class.
+- Pending: Android TV D-pad through every band, hold-OK on Play and season
+  popup; Apple TV trackpad circles versus cards; trailer/play handoff through
+  the merged shell. Remote CI awaits Claude's push. Claude's semantic union
+  integration of shared files, integrated full-suite comparisons/checkers and
+  strict five-PNG Linux replay remain pending. No further work is authorized
+  here after this report; stop with the dedicated worktree clean.
 
 ## Found, not fixed
 

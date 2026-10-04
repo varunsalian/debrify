@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -33,6 +33,11 @@ PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_p
 PLAYLIST_CONTENT_COMPLETE = True
 PLAYLIST_CONTENT_FACADE = "lib/screens/playlist_content_view_screen.dart"
 PLAYLIST_CONTENT_BRIDGE = "lib/features/playlist_content/presentation/legacy_playlist_content/"
+DETAIL_SHOWCASE_COMPLETE = True
+DETAIL_SHOWCASE_FACADE = "lib/widgets/detail/showcase_parts.dart"
+# Measured at completion: twelve export directives occupy 24 physical lines.
+DETAIL_SHOWCASE_FACADE_LIMIT = 24
+DETAIL_SHOWCASE_PUBLIC_NAMES = frozenset(['ShowcaseMetrics', 'ShowcaseMetricsScope', 'kShowcaseGutter', 'ShowcaseAmbient', 'ShowcaseBackdropScrim', 'ShowcaseStickyLogo', 'ShowcaseIdentity', 'ShowcaseSeasons', 'ShowcaseEpisodeCell', 'ShowcaseEpisodeCardCompact', 'ShowcaseCast', 'ShowcaseSources', 'ShowcaseRecs', 'ShowcaseGuide', 'ShowcaseUniverse', 'ShowcaseDidYouKnow', 'ShowcaseBandNote', 'ShowcaseDetails'])
 MERGED_DETAIL_COMPLETE = True
 MERGED_DETAIL_FACADE = "lib/screens/merged_series_detail_screen.dart"
 MERGED_DETAIL_BRIDGE = "lib/features/merged_detail/presentation/legacy_merged_detail/"
@@ -110,6 +115,8 @@ COMPOSITION_ROOTS = {
     ADDON_HUB_FACADE,
     FACADE,
     PLAYLIST_CONTENT_FACADE,
+    # Pure compatibility export surface; feature files own the widgets.
+    DETAIL_SHOWCASE_FACADE,
     PIKPAK_FACADE,
     PLAYBACK_SETTINGS_FACADE,
     DEBRID_FACADE,
@@ -198,6 +205,38 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # Detail showcase exact type/cache imports. No service logic.
+    'lib/features/detail_showcase/presentation/showcase_cast.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+        'lib/services/imdb_enrichment_service.dart': {'CastMember'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_did_you_know.dart': {
+        'lib/services/imdb_enrichment_service.dart': {'DidYouKnowEntry'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_episodes.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+        'lib/services/trakt/trakt_episode_model.dart': {'TraktEpisode'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_grounds.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_guide.dart': {
+        'lib/services/imdb_parents_guide_service.dart': {'ParentsGuideResult', 'ParentsGuideCategory', 'ParentsGuideItem'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_identity_readouts.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_recs.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_sources.dart': {
+        'lib/services/series_source_service.dart': {'SeriesSource'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_universe.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+        'lib/services/imdb_enrichment_service.dart': {'UniverseTitle'},
+    },
+    # End detail showcase imports.
     # Immutable session identity declaration only; no static state or I/O.
     "lib/features/discover/presentation/discover_session_lifecycle.dart": {
         "lib/services/profiles/profile_session_memory.dart": {"ProfileSessionOwner"},
@@ -407,6 +446,32 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line playback settings facade limit")
         if "TEMP(playback_settings)" in source:
             problems.append("temporary playback settings cross-call remains in the facade")
+    if DETAIL_SHOWCASE_COMPLETE and relative == DETAIL_SHOWCASE_FACADE:
+        if lines > DETAIL_SHOWCASE_FACADE_LIMIT:
+            problems.append(f"{lines} lines exceeds the {DETAIL_SHOWCASE_FACADE_LIMIT}-line detail showcase facade limit")
+        if "TEMP(detail_showcase)" in source:
+            problems.append("temporary detail showcase cross-call remains in the facade")
+        without_comments = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.DOTALL)
+        exports = re.compile(r"export\s+['\"]([^'\"]+)['\"]\s+show\s+([\w,\s]+);", re.MULTILINE)
+        names = [name.strip() for match in exports.finditer(without_comments)
+                 for name in match.group(2).split(",")]
+        if exports.sub("", without_comments).strip():
+            problems.append("detail showcase facade must contain only export directives and comments")
+        if len(names) != 18 or set(names) != DETAIL_SHOWCASE_PUBLIC_NAMES:
+            problems.append("detail showcase facade must export exactly the original eighteen names")
+        if any(not match.group(1).startswith("package:debrify/features/detail_showcase/presentation/showcase_")
+               for match in exports.finditer(without_comments)):
+            problems.append("detail showcase facade must export its feature destinations")
+    # Always scan the feature, including intermediate extraction checkpoints.
+    if relative.startswith("lib/features/detail_showcase/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line detail showcase extraction limit")
+        if "TEMP(detail_showcase)" in source:
+            problems.append("temporary detail showcase cross-call remains")
+        if re.search(r"\b(?:FocusNode|[A-Za-z]*Controller|Timer|KeepAlive)\s*\(", source):
+            problems.append("detail showcase constructs an owned resource")
+        if re.search(r"\b(?:node|focusNode|nodes\[[^]]+\])\s*\.\s*dispose\s*\(", source):
+            problems.append("detail showcase disposes a borrowed focus node")
     if relative.startswith("lib/features/merged_detail/"):
         if lines > 500:
             problems.append(f"{lines} lines exceeds the 500-line merged-detail extraction limit")
@@ -504,6 +569,11 @@ def violations(path: Path) -> list[str]:
                 if ((own == "addon_hub" and other in ("sources", "settings")) or
                     (other == "addon_hub" and own in ("sources", "settings"))):
                     problems.append("addon hub/sources/settings cross-feature import")
+            if relative.startswith("lib/features/detail_showcase/") or relative == DETAIL_SHOWCASE_FACADE:
+                if any(name in target for name in ("media_kit", "hero_trailer_backdrop", "trailer_engine", "video_player_launcher", "player_launch")):
+                    problems.append("detail showcase imports a playback implementation")
+                if relative.startswith("lib/features/detail_showcase/") and target == DETAIL_SHOWCASE_FACADE:
+                    problems.append("detail showcase feature imports its facade")
             if relative.startswith("lib/features/playback_settings/") and not relative.startswith(PLAYBACK_SETTINGS_BRIDGE) and target.startswith("lib/services/"):
                 problems.append("playback settings outside the legacy bridge imports a service")
             if relative.startswith("lib/features/iptv_settings/"):
@@ -543,6 +613,8 @@ def violations(path: Path) -> list[str]:
             if isinstance(bridge, dict) and target in bridge:
                 shown = re.search(r"\bshow\s+([\w,\s]+)$", declaration)
                 names = set(re.findall(r"\w+", shown.group(1))) if shown else set()
+                if relative.startswith("lib/features/detail_showcase/") and names != bridge[target]:
+                    problems.append(f"detail showcase service import must show the exact registered declarations: {uri}")
                 if not names or not names <= bridge[target]:
                     problems.append(f"legacy presentation import must show only allowed declarations: {uri}")
             legacy_bridge = (relative.startswith(LEGACY_PLAYBACK_BRIDGES)
@@ -577,6 +649,12 @@ def violations(path: Path) -> list[str]:
                     problems.append("playback settings feature imports its facade")
                 if target.startswith("lib/features/") and {own, target.split("/")[2]} in ({"playback_settings", "settings"}, {"playback_settings", "iptv_settings"}) and "/models/" not in target:
                     problems.append("playback/settings cross-feature import outside models")
+                if target.startswith("lib/features/"):
+                    other = target.split("/")[2]
+                    if ((own == "detail_showcase" and other in ("merged_detail", "catalog_detail")) or
+                            (other == "detail_showcase" and own in ("merged_detail", "catalog_detail"))):
+                        if not target.startswith(f"lib/features/{other}/models/"):
+                            problems.append("detail showcase/detail implementation cross-import")
                 clouds = {"debrid_downloads", "torbox_downloads", "pikpak_files"}
                 if target.startswith("lib/features/"):
                     other = target.split("/")[2]
@@ -616,6 +694,8 @@ def main() -> int:
         paths.add(ROOT / IPTV_SETTINGS_FACADE)
     if PLAYLIST_CONTENT_COMPLETE:
         paths.add(ROOT / PLAYLIST_CONTENT_FACADE)
+    if DETAIL_SHOWCASE_COMPLETE:
+        paths.add(ROOT / DETAIL_SHOWCASE_FACADE)
     if MERGED_DETAIL_COMPLETE:
         paths.add(ROOT / MERGED_DETAIL_FACADE)
     if ADDON_HUB_COMPLETE:

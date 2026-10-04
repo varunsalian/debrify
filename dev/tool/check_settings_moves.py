@@ -210,7 +210,7 @@ def names(rows, owner=None):
                     candidates[old] = local
     # A frozen public type alias exposes a constructor while its original
     # private widget declaration (including keyless constructor) stays exact.
-    for alias in CONFIG.get('type_aliases', []):
+    for alias in ([] if CONFIG.get('file_aliases') else CONFIG.get('type_aliases', [])):
         matching = [r for r in rows if r['original_name'] == alias['original_name']]
         if len(matching) == 1:
             candidates[alias['original_name']] = {alias['alias']}
@@ -248,6 +248,13 @@ def normalize(values, rows, row=None):
     i = 0
     while i < len(values):
         value = values[i]
+        # Opt-in library aliases affect code identifiers, never literal/comment text.
+        file_aliases = CONFIG.get('file_aliases', [])
+        if file_aliases:
+            if value.startswith(('//', '/*')):
+                out.append(value); i += 1; continue
+            reverse = {a['alias']: a['original_name'] for a in file_aliases}
+            value = reverse.get(value, value)
         # A named record cannot have a private field name. This exact borrowed
         # callback alias preserves the retained State member's identity; it is
         # opt-in and never erases a closure or an arbitrary receiver path.
@@ -985,6 +992,9 @@ def _check(original_source, sources, rows, source_path, package=None,
             errors.append('Co-located declarations split: ' + str(pair))
     errors.extend(check_plain_sections(lookup))
     errors.extend(check_type_aliases(lookup, rows, CONFIG))
+    if CONFIG.get('file_aliases'):
+        from detail_showcase_aliases import check_file_aliases
+        errors.extend(check_file_aliases(lookup, rows, source_path, CONFIG))
     from torbox_callback_identity import check_callback_identities
     errors.extend(check_callback_identities(lookup, rows, source_path, CONFIG))
     partitions = sidecar('partitions', 'partitions', {})

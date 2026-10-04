@@ -1099,6 +1099,25 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/merged_detail/presentation/merged_tracker_sheet_header.dart': 0,
   'lib/features/merged_detail/presentation/merged_trailer_playing_chip.dart': 1,
   'lib/screens/merged_series_detail_screen.dart': 0,
+  // Detail showcase: exact slice total 18; every created file and facade.
+  'lib/features/detail_showcase/presentation/showcase_cast.dart': 0,
+  'lib/features/detail_showcase/presentation/showcase_did_you_know.dart': 0,
+  'lib/features/detail_showcase/presentation/showcase_episodes.dart': 6,
+  'lib/features/detail_showcase/presentation/showcase_grounds.dart': 0,
+  'lib/features/detail_showcase/presentation/showcase_guide.dart': 5,
+  'lib/features/detail_showcase/presentation/showcase_identity.dart': 0,
+  'lib/features/detail_showcase/presentation/showcase_identity_actions.dart': 0,
+  'lib/features/detail_showcase/presentation/showcase_identity_readouts.dart':
+      1,
+  'lib/features/detail_showcase/presentation/showcase_metrics.dart': 0,
+  'lib/features/detail_showcase/presentation/showcase_notes.dart': 0,
+  'lib/features/detail_showcase/presentation/showcase_recs.dart': 2,
+  'lib/features/detail_showcase/presentation/showcase_seasons.dart': 2,
+  'lib/features/detail_showcase/presentation/showcase_sources.dart': 0,
+  'lib/features/detail_showcase/presentation/showcase_style.dart': 0,
+  'lib/features/detail_showcase/presentation/showcase_universe.dart': 2,
+  'lib/widgets/detail/showcase_parts.dart': 0,
+  // End detail showcase.
 };
 
 /// Both spellings of a literal circular radius. `BorderRadius.all(
