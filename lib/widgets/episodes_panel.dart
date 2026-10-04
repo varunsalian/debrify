@@ -1,144 +1,48 @@
-import 'package:debrify/services/storage/episode_resume_storage.dart';
-import '../models/media_identity.dart';
-import '../services/metadata_preferences_service.dart';
-import '../services/diagnostic_log.dart';
-import '../services/profiles/profile_runtime.dart';
-import '../services/metadata_episode_service.dart';
-import '../services/native_series_metadata_service.dart';
 import 'dart:async';
-
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/features/episodes_panel/application/episodes_panel_policies.dart';
+import 'package:debrify/features/episodes_panel/models/episodes_panel_view.dart';
+import 'package:debrify/models/advanced_search_selection.dart';
+import 'package:debrify/models/custom_series_identity.dart';
+import 'package:debrify/models/media_identity.dart';
+import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import 'package:debrify/services/debrify_image_cache.dart';
+import 'package:debrify/services/diagnostic_log.dart';
+import 'package:debrify/services/local_series_completion_service.dart';
+import 'package:debrify/services/mdblist/mdblist_continue_watching_service.dart';
+import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
+import 'package:debrify/services/mdblist/mdblist_models.dart';
+import 'package:debrify/services/mdblist/mdblist_service.dart';
+import 'package:debrify/services/metadata_episode_service.dart';
+import 'package:debrify/services/metadata_preferences_service.dart';
+import 'package:debrify/services/native_series_metadata_service.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/season_watched_service.dart';
+import 'package:debrify/services/simkl/simkl_service.dart';
+import 'package:debrify/services/storage/episode_resume_storage.dart';
+import 'package:debrify/services/stremio_service.dart';
+import 'package:debrify/services/tracking_source_policy.dart';
+import 'package:debrify/services/trakt/trakt_episode_model.dart';
+import 'package:debrify/services/trakt/trakt_service.dart';
+import 'package:debrify/services/tvmaze_service.dart';
+import 'package:debrify/services/watched_action_coordinator.dart';
+import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/utils/episode_progress_merge.dart';
+import 'package:debrify/utils/platform_util.dart';
+import 'package:debrify/utils/series_rewatch.dart';
+import 'package:debrify/utils/tv_keys.dart';
+import 'package:debrify/widgets/detail/detail_style.dart';
+import 'package:debrify/widgets/detail/theme/detail_theme.dart';
+import 'package:debrify/widgets/episode_tile.dart';
+import 'package:debrify/widgets/home/home_theme.dart';
+import 'package:debrify/widgets/season_action_region.dart';
+import 'package:debrify/widgets/trakt/trakt_menu_helpers.dart';
 import 'package:flutter/material.dart';
-import '../models/custom_series_identity.dart';
 import 'package:flutter/services.dart';
 
-import '../models/stremio_addon.dart';
-import '../models/advanced_search_selection.dart';
-import '../services/debrify_image_cache.dart';
-import '../services/stremio_service.dart';
-import '../services/trakt/trakt_episode_model.dart';
-import '../services/trakt/trakt_service.dart';
-import '../services/tvmaze_service.dart';
-import '../services/local_series_completion_service.dart';
-import '../utils/platform_util.dart';
-import '../utils/episode_progress_merge.dart';
-import '../utils/tv_keys.dart';
-import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
-import '../theme/app_theme_scope.dart';
-import 'detail/detail_style.dart';
-import 'detail/theme/detail_theme.dart';
-import 'episode_tile.dart';
-import 'trakt/trakt_menu_helpers.dart';
-import '../services/simkl/simkl_service.dart';
-import '../services/mdblist/mdblist_service.dart';
-import '../services/mdblist/mdblist_continue_watching_service.dart';
-import '../services/mdblist/mdblist_models.dart';
-import '../services/mdblist/mdblist_menu_helpers.dart';
-import 'home/home_theme.dart';
-import '../services/tracking_source_policy.dart';
-import '../services/watched_action_coordinator.dart';
-import '../services/season_watched_service.dart';
-import 'season_action_region.dart';
-import '../utils/series_rewatch.dart';
-
-/// The episode drill-down engine + UI, extracted out of `EpisodesScreen` so it
-/// can be hosted both as a standalone route (the existing `EpisodesScreen`
-/// wrapper) and inline inside the merged series page — without forking the
-/// season-fetch / landing / playback-selection logic.
-///
-/// This widget is **navigation-agnostic**: it never pushes or pops routes.
-/// Terminal actions (episode picked / quick-play / fallback-to-search) build an
-/// [AdvancedSearchSelection] and, just before dispatching it, call
-/// [onBeforeTerminalDispatch] so the host can tear its route stack down to
-/// wherever the result should land. The back affordance calls [onBack].
-/// What a custom arrangement should move focus to when the view generation
-/// changes. Mirrors what Classic does implicitly.
-enum EpisodeFocusIntent {
-  /// Nothing should move (a rebuild that isn't a data change).
-  none,
-
-  /// A fresh load or deep link resolved — reveal and focus [EpisodesPanelView.landing].
-  landing,
-
-  /// The user stepped the season; their attention is on the stepper, so the
-  /// layout re-focuses its own season control. Classic does the same thing by
-  /// re-requesting `_episodeSeasonDropdownFocusNode`.
-  seasonControl,
-}
-
-/// Everything a custom episode arrangement needs, so alternate layouts can be
-/// drawn without forking the engine (season loading, the Trakt/Simkl watch
-/// merge, enrichment, playback dispatch and the options sheet all stay here).
-///
-/// Handed to [EpisodesPanel.contentBuilder]. Layouts own their own FocusNodes —
-/// they must NOT reach for the engine's, which are disposed and rebuilt on
-/// every season change.
-class EpisodesPanelView {
-  final List<TraktSeason> seasons;
-  final int selectedSeasonNumber;
-
-  /// Episodes of the selected season. Empty while loading or on failure.
-  final List<TraktEpisode> episodes;
-  final bool loading;
-  final bool unavailable;
-
-  /// Poster fallback for episodes with no still of their own.
-  final String? showImageUrl;
-
-  /// Bumped when resolved episodes are PUBLISHED and on every season swap.
-  ///
-  /// Deliberately not the engine's internal load generation, which bumps when a
-  /// load *starts* (and guards enrichment) — a layout first built during
-  /// loading would then never see it change when the data actually landed.
-  final int generation;
-
-  /// The episode the engine resolved to land on — an explicit deep link, else
-  /// Trakt next-up, else local last-played, else the season's first. Validated
-  /// as a pair: a stored episode number is only honoured when its season is the
-  /// season that was actually selected. Null while loading / when empty.
-  final TraktEpisode? landing;
-
-  final EpisodeFocusIntent focusIntent;
-
-  /// 0..100, or null when the episode has no progress.
-  final double? Function(TraktEpisode) progressOf;
-  final bool Function(TraktEpisode) isNext;
-  final void Function(TraktEpisode) play;
-  final void Function(TraktEpisode) options;
-  final void Function(int delta) stepSeason;
-  final void Function(int seasonNumber) selectSeason;
-  final void Function(int seasonNumber)? seasonOptions;
-
-  /// Host's stable LEFT-crossing target, when it supplied one.
-  final VoidCallback? onLeftEdge;
-
-  /// Failure terminals. [onSearchForSources] is null when the host gave no
-  /// `onItemSelected` — direct-source shows have no torrent-search fallback.
-  final VoidCallback onRetry;
-  final VoidCallback? onSearchForSources;
-
-  const EpisodesPanelView({
-    required this.seasons,
-    required this.selectedSeasonNumber,
-    required this.episodes,
-    required this.loading,
-    required this.unavailable,
-    required this.showImageUrl,
-    required this.generation,
-    required this.landing,
-    required this.focusIntent,
-    required this.progressOf,
-    required this.isNext,
-    required this.play,
-    required this.options,
-    required this.stepSeason,
-    required this.selectSeason,
-    this.seasonOptions,
-    required this.onLeftEdge,
-    required this.onRetry,
-    required this.onSearchForSources,
-  });
-}
+export 'package:debrify/features/episodes_panel/models/episodes_panel_view.dart'
+    show EpisodeFocusIntent, EpisodesPanelView;
 
 class EpisodesPanel extends StatefulWidget {
   /// The series to browse.
@@ -280,15 +184,22 @@ class EpisodesPanel extends StatefulWidget {
 /// GlobalKey when the player pops back.
 class EpisodesPanelState extends State<EpisodesPanel> {
   final StremioService _stremioService = StremioService.instance;
+
   final TraktService _traktService = TraktService.instance;
+
   final SimklService _simklService = SimklService.instance;
+
   final MdblistService _mdblistService = MdblistService.instance;
 
   // Episode drill-down state
   int _episodeModeGeneration = 0;
+
   StremioMeta? _selectedShow;
+
   List<TraktSeason> _episodeSeasons = [];
+
   int _selectedSeasonNumber = 1;
+
   bool _isLoadingEpisodes = false;
 
   /// True when a season fetch yielded no episodes. Instead of auto-diverting to
@@ -297,7 +208,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// error+Retry panel — matching old home — with an explicit "Search for
   /// sources" action that preserves the catalog pack-search path on demand.
   bool _episodesUnavailable = false;
+
   Map<String, double> _episodeWatchProgress = {};
+
   TrackingSourcePolicy _trackingPolicy = const TrackingSourcePolicy(
     scrobbleTargets: <TrackingSource>{
       TrackingSource.local,
@@ -313,13 +226,16 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       TrackingSource.mdblist,
     },
   );
+
   Map<String, int> _episodeMdblistRatings = {};
 
   /// Bumped when resolved episodes are PUBLISHED and on every season swap —
   /// see [EpisodesPanelView.generation] for why this is not the load
   /// generation. Only read by custom arrangements.
   int _viewGeneration = 0;
+
   TraktEpisode? _landing;
+
   EpisodeFocusIntent _focusIntent = EpisodeFocusIntent.none;
 
   /// True when a custom arrangement is driving. Gates every engine side effect
@@ -340,16 +256,20 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Discover/catalog without Trakt, so the Trakt-only episode menu (mark
   /// watched/unwatched, rate) is only offered when this is true.
   bool _traktAuthenticated = false;
+
   bool get _isTraktAuthenticated =>
       _traktAuthenticated &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
 
   /// Whether Simkl is connected, for watched-action destinations and options.
   bool _simklAuthenticated = false;
+
   bool _mdblistAuthenticated = false;
+
   bool get _isSimklAuthenticated =>
       _simklAuthenticated &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
+
   bool get _isMdblistAuthenticated =>
       _mdblistAuthenticated &&
       !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
@@ -363,13 +283,17 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   int _mdblistRefreshToken = 0;
 
   final List<FocusNode> _episodeFocusNodes = [];
+
   final ScrollController _episodeScrollController = ScrollController();
+
   final FocusNode _episodeBackButtonFocusNode = FocusNode(
     debugLabel: 'catalog-ep-back',
   );
+
   final FocusNode _episodeSeasonDropdownFocusNode = FocusNode(
     debugLabel: 'catalog-ep-season',
   );
+
   // Retry button in the "couldn't load episodes" panel, so the back button can
   // hand focus to it (the season dropdown / episode list aren't in the tree
   // in that state).
@@ -786,11 +710,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     return targets;
   }
 
-  /// "Trakt, Simkl and this device"
-  static String _joinNames(List<String> names) => names.length <= 1
-      ? names.join()
-      : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
-
   /// Set an episode's watched state everywhere at once: local playback
   /// storage plus every connected tracker. The ticks this panel paints are an
   /// OR-union of all of those sources (see [_loadEpisodeWatchProgress]), so a
@@ -850,7 +769,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     }
     final label =
         'Marked as ${watched ? 'Watched' : 'Unwatched'}'
-        '${done.isEmpty ? '' : ' on ${_joinNames(done)}'}';
+        '${done.isEmpty ? '' : ' on ${EpisodesPanelPolicies.joinNames(done)}'}';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -963,7 +882,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   // ── Episode drill-down ──────────────────────────────────────────────────
-
   /// Fallback: dispatch series directly to torrent search (bypasses episode mode).
   void _fallbackToDirectSearch(StremioMeta show) {
     if (!mounted) return;
@@ -1074,7 +992,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       final title = (v['title'] as String?) ?? (v['name'] as String?) ?? '';
       final overview = v['overview'] as String?;
       final released = v['released'] as String?;
-      final thumbnail = _downsizeMetahubThumb(v['thumbnail'] as String?);
+      final thumbnail = EpisodesPanelPolicies.downsizeMetahubThumb(
+        v['thumbnail'] as String?,
+      );
       final ratingRaw = v['imdbRating'] ?? v['rating'];
       final rating = ratingRaw is num
           ? ratingRaw.toDouble()
@@ -1105,15 +1025,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         episodes: episodes,
       );
     }).toList()..sort(seasonsSpecialsLast);
-  }
-
-  /// Cinemeta episode stills come as episodes.metahub.space/…/w780.jpg — a 301
-  /// to the full-width TMDB image (~50 KB) for a 124-logical-px row thumb. The
-  /// size token maps straight to TMDB sizes, so ask for w300 (~11 KB) instead;
-  /// on TV-grade WiFi that's the difference between a snap and a trickle.
-  static String? _downsizeMetahubThumb(String? url) {
-    if (url == null || !url.contains('episodes.metahub.space')) return url;
-    return url.replaceFirst(RegExp(r'/w\d+\.jpg$'), '/w300.jpg');
   }
 
   void _enterEpisodeMode(
@@ -1591,7 +1502,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   final _episodeMetadataBaselines = <int, TraktSeason>{};
+
   int _episodeMetadataGeneration = 0;
+
   void _episodePolicyChanged() {
     _episodeMetadataGeneration++;
     if (!mounted) return;
@@ -2271,11 +2184,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   // ── Compact (Stremio) rendering ──────────────────────────────────────────
-
   int get _currentSeasonIndex =>
       _episodeSeasons.indexWhere((s) => s.number == _selectedSeasonNumber);
 
   bool _seasonActionBusy = false;
+
   final _seasonRetries = SeasonWatchedRetryState();
 
   Future<void> _showSeasonOptions(int number) async {
@@ -2637,7 +2550,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
               'Mark as Watched',
               () => _setEpisodeWatchedEverywhere(episode, watched: true),
               subtitle: _watchedSyncTargets(watched: true).length > 1
-                  ? 'On ${_joinNames(_watchedSyncTargets(watched: true))}'
+                  ? 'On ${EpisodesPanelPolicies.joinNames(_watchedSyncTargets(watched: true))}'
                   : null,
             ),
           if (watched && !_isDirectSource)
@@ -2647,7 +2560,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
               () => _setEpisodeWatchedEverywhere(episode, watched: false),
               subtitle: _watchedSyncTargets(watched: false).length > 1
                   ? 'Clears it on '
-                        '${_joinNames(_watchedSyncTargets(watched: false))} — '
+                        '${EpisodesPanelPolicies.joinNames(_watchedSyncTargets(watched: false))} — '
                         'all at once, so the tick can\'t come back'
                   : null,
             ),
@@ -2725,7 +2638,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 }
 
 // ─── Select Source Button for catalog episode browser ────────────────────────
-
 class _CatalogSelectSourceButton extends StatefulWidget {
   final bool hasBoundSource;
   final int sourceCount;
@@ -2855,7 +2767,6 @@ class _CatalogSelectSourceButtonState
 }
 
 // ─── Season stepper (compact header ‹ ›) ─────────────────────────────────────
-
 class _SeasonStepButton extends StatelessWidget {
   final IconData icon;
   final bool enabled;
@@ -2898,7 +2809,6 @@ class _SeasonStepButton extends StatelessWidget {
 }
 
 // ─── Compact Stremio-style episode row (merged series page) ───────────────────
-
 class _CompactEpisodeRow extends StatefulWidget {
   final TraktEpisode episode;
   final String? showImageUrl;

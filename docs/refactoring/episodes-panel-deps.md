@@ -34,8 +34,8 @@ actual binding evidence is filled at the owning step.
 
 | Original leaf | Destination / owner / member | Step | Live reads | Initial wiring |
 | --- | --- | --- | --- | --- |
-| `EpisodeFocusIntent` | `lib/features/episodes_panel/models/episodes_panel_view.dart` / `<top level>` / `EpisodeFocusIntent` | 1 |  | pending step 1 |
-| `EpisodesPanelView` | `lib/features/episodes_panel/models/episodes_panel_view.dart` / `<top level>` / `EpisodesPanelView` | 1 | this | pending step 1 |
+| `EpisodeFocusIntent` | `lib/features/episodes_panel/models/episodes_panel_view.dart` / `<top level>` / `EpisodeFocusIntent` | 1 |  | reviewed step 1: verbatim types/re-export or static call at the original site |
+| `EpisodesPanelView` | `lib/features/episodes_panel/models/episodes_panel_view.dart` / `<top level>` / `EpisodesPanelView` | 1 | this | reviewed step 1: verbatim types/re-export or static call at the original site |
 | `EpisodesPanel` | `lib/widgets/episodes_panel.dart` / `<top level>` / `EpisodesPanel` | 0 | context, this | retained |
 | `EpisodesPanelState._stremioService` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart` / `EpisodesPanelServices` / `stremioService` | 3 |  | pending step 3 |
 | `EpisodesPanelState._traktService` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart` / `EpisodesPanelServices` / `traktService` | 3 |  | pending step 3 |
@@ -83,14 +83,14 @@ actual binding evidence is filled at the owning step.
 | `EpisodesPanelState._resolveSimklAuth` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart` / `EpisodesPanelAuth` / `resolveSimklAuth` | 4 | mounted, setState | pending step 4 |
 | `EpisodesPanelState._resolveMdblistAuth` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart` / `EpisodesPanelAuth` / `resolveMdblistAuth` | 4 | mounted, setState | pending step 4 |
 | `EpisodesPanelState._watchedSyncTargets` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_watched_actions.dart` / `EpisodesPanelWatchedActions` / `watchedSyncTargets` | 4 | this | pending step 4 |
-| `EpisodesPanelState._joinNames` | `lib/features/episodes_panel/application/episodes_panel_policies.dart` / `EpisodesPanelPolicies` / `joinNames` | 1 | this | pending step 1 |
+| `EpisodesPanelState._joinNames` | `lib/features/episodes_panel/application/episodes_panel_policies.dart` / `EpisodesPanelPolicies` / `joinNames` | 1 | this | reviewed step 1: verbatim types/re-export or static call at the original site |
 | `EpisodesPanelState._setEpisodeWatchedEverywhere` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_watched_actions.dart` / `EpisodesPanelWatchedActions` / `setEpisodeWatchedEverywhere` | 4 | context, mounted, setState, this | pending step 4 |
 | `EpisodesPanelState._onEpisodeMenuAction` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_watched_actions.dart` / `EpisodesPanelWatchedActions` / `onEpisodeMenuAction` | 4 | context, mounted | pending step 4 |
 | `EpisodesPanelState._onEpisodeMdblistMenuAction` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_watched_actions.dart` / `EpisodesPanelWatchedActions` / `onEpisodeMdblistMenuAction` | 4 | context, mounted, setState | pending step 4 |
 | `EpisodesPanelState._fallbackToDirectSearch` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_navigation.dart` / `EpisodesPanelNavigation` / `fallbackToDirectSearch` | 5 | widget.onBeforeTerminalDispatch, widget.onItemSelected, mounted | pending step 5 |
 | `EpisodesPanelState._fetchSeasons` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_seasons.dart` / `EpisodesPanelSeasons` / `fetchSeasons` | 4 | widget.addon, widget.seasonsLoader, this | pending step 4 |
 | `EpisodesPanelState._groupVideosIntoSeasons` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_seasons.dart` / `EpisodesPanelSeasons` / `groupVideosIntoSeasons` | 4 |  | pending step 4 |
-| `EpisodesPanelState._downsizeMetahubThumb` | `lib/features/episodes_panel/application/episodes_panel_policies.dart` / `EpisodesPanelPolicies` / `downsizeMetahubThumb` | 1 |  | pending step 1 |
+| `EpisodesPanelState._downsizeMetahubThumb` | `lib/features/episodes_panel/application/episodes_panel_policies.dart` / `EpisodesPanelPolicies` / `downsizeMetahubThumb` | 1 |  | reviewed step 1: verbatim types/re-export or static call at the original site |
 | `EpisodesPanelState._enterEpisodeMode` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_mode.dart` / `EpisodesPanelMode` / `enterEpisodeMode` | 4 | widget.addon, context, mounted, setState, this | pending step 4 |
 | `EpisodesPanelState._directLandingTarget` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_mode.dart` / `EpisodesPanelMode` / `directLandingTarget` | 4 |  | pending step 4 |
 | `EpisodesPanelState._enrichEpisodeRatings` | `lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_enrichment.dart` / `EpisodesPanelEnrichment` / `enrichEpisodeRatings` | 4 | mounted, setState | pending step 4 |

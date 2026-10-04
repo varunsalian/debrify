@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "episodes_panel")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -33,6 +33,17 @@ PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_p
 PLAYLIST_CONTENT_COMPLETE = True
 PLAYLIST_CONTENT_FACADE = "lib/screens/playlist_content_view_screen.dart"
 PLAYLIST_CONTENT_BRIDGE = "lib/features/playlist_content/presentation/legacy_playlist_content/"
+EPISODES_PANEL_COMPLETE = False
+EPISODES_PANEL_FACADE = "lib/widgets/episodes_panel.dart"
+EPISODES_PANEL_BRIDGE = "lib/features/episodes_panel/presentation/legacy_episodes_panel/"
+# One immutable DTO import, scoped to this exact model and target.
+EPISODES_PANEL_MODEL_IMPORTS = {
+    "lib/features/episodes_panel/models/episodes_panel_view.dart": {
+        "lib/services/trakt/trakt_episode_model.dart",
+    },
+}
+# Set to the measured completed facade at step 7 (at most 450).
+EPISODES_PANEL_FACADE_LIMIT = 450
 MERGED_DETAIL_COMPLETE = True
 MERGED_DETAIL_FACADE = "lib/screens/merged_series_detail_screen.dart"
 MERGED_DETAIL_BRIDGE = "lib/features/merged_detail/presentation/legacy_merged_detail/"
@@ -307,6 +318,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     IPTV_SETTINGS_BRIDGE,
     PLAYLIST_CONTENT_BRIDGE,
     MERGED_DETAIL_BRIDGE,
+    EPISODES_PANEL_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -402,6 +414,18 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line playback settings facade limit")
         if "TEMP(playback_settings)" in source:
             problems.append("temporary playback settings cross-call remains in the facade")
+    if relative.startswith("lib/features/episodes_panel/"):
+        if lines > 500:
+            problems.append(f"{lines} lines exceeds the 500-line episodes panel extraction limit")
+        if "TEMP(episodes_panel)" in source and (EPISODES_PANEL_COMPLETE or not relative.startswith(EPISODES_PANEL_BRIDGE)):
+            problems.append("episodes panel temporary cross-call outside its staged legacy bridge")
+        if re.search(r"\b(?:VideoPlayerLauncher|VideoPlayerScreen|SeriesSourceFetcher|mergeSources|TorrentPlayback\w*)\b", source):
+            problems.append("episodes panel contains a playback/source-launch symbol")
+    if EPISODES_PANEL_COMPLETE and relative == EPISODES_PANEL_FACADE:
+        if lines > EPISODES_PANEL_FACADE_LIMIT:
+            problems.append(f"{lines} lines exceeds the {EPISODES_PANEL_FACADE_LIMIT}-line episodes panel facade limit")
+        if "TEMP(episodes_panel)" in source:
+            problems.append("episodes panel temporary cross-call remains in the facade")
     if relative.startswith("lib/features/merged_detail/"):
         if lines > 500:
             problems.append(f"{lines} lines exceeds the 500-line merged-detail extraction limit")
@@ -479,6 +503,21 @@ def violations(path: Path) -> list[str]:
                 resolved = (path.parent / uri).resolve()
                 if resolved.is_relative_to(ROOT):
                     target = resolved.relative_to(ROOT).as_posix()
+            if relative.startswith("lib/features/episodes_panel/"):
+                if target == EPISODES_PANEL_FACADE:
+                    problems.append("episodes panel feature imports its facade")
+                if (not relative.startswith(EPISODES_PANEL_BRIDGE)
+                        and target.startswith("lib/services/")
+                        and target not in EPISODES_PANEL_MODEL_IMPORTS.get(relative, set())):
+                    problems.append("episodes panel service/storage import outside its exact legacy bridge")
+            if target.startswith("lib/features/") and relative.startswith("lib/features/"):
+                own_panel_feature = relative.split("/")[2]
+                other_panel_feature = target.split("/")[2]
+                panel_peers = {"merged_detail", "catalog_detail", "detail_showcase"}
+                if ((own_panel_feature == "episodes_panel" and other_panel_feature in panel_peers)
+                        or (other_panel_feature == "episodes_panel" and own_panel_feature in panel_peers)):
+                    if not target.startswith(f"lib/features/{other_panel_feature}/models/"):
+                        problems.append("episodes panel/detail implementation cross-import")
             if relative.startswith("lib/features/playback_settings/") and not relative.startswith(PLAYBACK_SETTINGS_BRIDGE) and target.startswith("lib/services/"):
                 problems.append("playback settings outside the legacy bridge imports a service")
             if relative.startswith("lib/features/iptv_settings/"):
@@ -591,6 +630,8 @@ def main() -> int:
         paths.add(ROOT / IPTV_SETTINGS_FACADE)
     if PLAYLIST_CONTENT_COMPLETE:
         paths.add(ROOT / PLAYLIST_CONTENT_FACADE)
+    if EPISODES_PANEL_COMPLETE:
+        paths.add(ROOT / EPISODES_PANEL_FACADE)
     if MERGED_DETAIL_COMPLETE:
         paths.add(ROOT / MERGED_DETAIL_FACADE)
     if PIKPAK_COMPLETE:

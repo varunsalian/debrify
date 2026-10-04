@@ -144,7 +144,9 @@
     "deps.parts.watchedActions": "EpisodesPanelWatchedActions"
   },
   "source_locations": [
-    "lib/widgets/episodes_panel.dart"
+    "lib/widgets/episodes_panel.dart",
+    "lib/features/episodes_panel/application/episodes_panel_policies.dart",
+    "lib/features/episodes_panel/models/episodes_panel_view.dart"
   ],
   "co_located_declarations": [
     [
@@ -433,7 +435,7 @@
       ]
     }
   ],
-  "completed_step": 0,
+  "completed_step": 1,
   "callback_whole_class_members": true,
   "adjacent_declarations": [
     [
@@ -473,5 +475,11 @@
     "member": "EpisodesPanelState",
     "call": "EpisodesPanelDeps",
     "active_step": 3
-  }
+  },
+  "plain_sections": [
+    {
+      "file": "lib/features/episodes_panel/application/episodes_panel_policies.dart",
+      "owner": "EpisodesPanelPolicies"
+    }
+  ]
 }

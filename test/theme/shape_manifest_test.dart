@@ -215,6 +215,10 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  // Episodes panel move-only slice: seven original bare radii.
+  'lib/widgets/episodes_panel.dart': 7,
+  'lib/features/episodes_panel/models/episodes_panel_view.dart': 0,
+  'lib/features/episodes_panel/application/episodes_panel_policies.dart': 0,
   // Playback settings: every remaining destination and the facade, at zero.
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart':
       0,

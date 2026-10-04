@@ -827,6 +827,41 @@ including everything below.
   Their asynchronous arrival invalidated `step1-behavior`'s untracked-input
   snapshot; that attempt is retained and will be replayed after staging.
 
+### Step 1 — models and policies
+
+- Moved the enum's original doc block and the complete view class, re-exported
+  from the unchanged facade path. Both pure static helpers move with their
+  comments; every caller qualifies only the helper's owner. The widget class
+  remains byte-identical; no production host or service changes.
+- Architecture registration is unconditional: exact DTO allowance, bridge,
+  both-direction named detail-feature bans, playback symbols, destination cap
+  and staged TEMP rejection. Real tree-copy fixtures pass positives and reject
+  service/UI/DI imports, missing facade, caps, facade back-imports, temporary
+  calls, source/player symbols and each cross-import in both directions.
+  Completion-only facade checks are exercised in the copy before step 7.
+- Shape registration includes the facade and both destinations (zero included);
+  slice remains 7. Four explicit theme directory patterns preserve 238 sites
+  and the `EpisodesScreen` rendered boundary (171 lines, one site, no white
+  lines or Theme.of). No recursive glob is introduced.
+- Strict evidence traces one original curly info and zero additions/warnings;
+  all 18 import-ordering infos disappear through sorted imports. Whole-repo
+  final relocation comparison adds/removes zero diagnostics. The first whole
+  analysis duplicated the detached original's package context; the completed
+  proof checkout was removed and the clean replay is authoritative.
+- Temporary facade exception: `lib/widgets/episodes_panel.dart`, 3,142 lines.
+  Leading state/resources exit at step 3; engine/actions at steps 4–5;
+  rendering at step 6. The facade ratchet is lowered by hand. Destinations
+  are 102 lines (model) and 15 lines (policies), each below 500.
+  Wiring inventory is reviewed for every step-1 entry before completion.
+- `step1-behavior-final` versus `base4`: PASS, 180 successes and the same
+  pre-existing profile raw-preferences source-guard failure, zero missing
+  identities/new skips; compile-only importer check adds one success. Its env
+  has no untracked inputs or tree changes. CI format checks 1,707 files with
+  zero changes; scoped analyze retains the same 12 allowed warnings and no
+  stale/new warning. Architecture, sizes, storage references and LF/diff pass.
+  All 93 own leaves/self-tests and every other manifest/self-test pass with
+  its own config/original (merged: `21320ff9`) and isolated parser/kernel.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
