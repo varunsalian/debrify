@@ -137,7 +137,10 @@ subscription, explicit controller besides the text field, or key literal.
      with an order-preserving `where` (1586–1588). Adds and imports
      **append** service-side (imports in file order); remove keeps the
      others' order; toggle and alias rewrite in place. This order feeds
-     metadata "Automatic" and addon fan-out downstream.
+     metadata "Automatic" and addon fan-out downstream. Legacy fixtures show
+     Zulu/Cinemeta/Alpha; committed-mode resource fixtures show the registry
+     order Alpha/Cinemeta/Zulu. Installed-sort and metadata-sort mutations
+     are caught by the legacy fixtures, whose order distinguishes them.
    - **Market:** the service order; nav indices in list order for
      non-installed rows only (1897–1902).
    - **Metadata picker** (1621–1740): enabled `meta` addons with a
@@ -421,7 +424,7 @@ As in the playlist-content and IPTV-settings plans, with these points:
    animations drained before asserting pops; KeyDown versus KeyRepeat;
    viewport widths 375, 479/480 (filter bar, `c.maxWidth < 480`), 527/528
    (cards: list padding leaves viewport − 48 for `c.maxWidth < 480`),
-   579/580 (metadata picker: margin plus padding leave viewport − 80 for
+   581/582 (metadata picker: margin, padding and border leave viewport − 82 for
    `constraints.maxWidth < 500`) and wide, or the `LayoutBuilder`
    constraints asserted directly; no wall-clock engine subtitles.
 
@@ -654,6 +657,43 @@ committed tree**, reconciling each branch's approved additions.
   the six scenarios and macOS originals unchanged. Local Linux execution
   after extraction remains pending a reachable calibrated runner.
 
+- Independent step-0 review closure (new step 0b, before extraction): all four
+  P2 gaps and the requested P3 items are closed. Failed Automatic selection
+  starts with the non-null z9 provider and restores that exact UI snapshot;
+  the underlying preference store retains z9. Committed-mode Update seeds
+  the actual resource graph, distinguishes the resource storage key from the
+  manifest URL, requests exactly `GET https://z9.addon.test/manifest.json`,
+  preserves resource identity/order and records the registry sync key.
+  Null-sidebar LEFT asserts handled for Down and Repeat, plus a parent key
+  probe proving the hub consumes it before ancestor traversal can do so.
+  YAML import fails the real storage write after its non-dismissible blocking
+  dialog shows (held external mutation barrier, then corrupt inventory);
+  dismissal, stripped red snackbar, no engine file and no sync are checked.
+- Review original proof: `review-original-final` runs all 121 affected tests
+  on the detached `227712b2` application plus the frozen accessor/test overlay;
+  all pass on a stable tree. `review-original-mutation-proofs.json` records
+  four behavioral rejections, each running its entire relevant file:
+  metadata-reset-null (16 cases), update-storage-key (16), left-null-ignored
+  (31), import-failure-dialog-retained (19). No loading/compilation failure
+  counts as a proof. Initial LEFT mutation survived the return assertion
+  because ancestor traversal also handles LEFT; its preserved evidence drove
+  the parent probe. Draft fixture/command failures remain evidence only.
+- P3 closure: remove only the explicitly reviewed tautology; document why
+  overlapping marketplace/engine requests require the frozen live tear-offs;
+  send actual TV passthrough arrow events and submit via the real platform
+  text-input search action; refocus the input before each action. Pin the
+  actual post-install primary focus to the retained `market-row-0` node.
+  The six golden scenarios and PNGs are unchanged. Step 0 item 6 now records
+  the actual 581/582 picker threshold; contract 4 distinguishes committed
+  registry order from the legacy order that catches both sort mutations.
+- No application move or configuration/accessor change in this review batch.
+  Scoped test analysis is clean; earlier checker, original strict-lint and
+  source evidence remains applicable to the identical application/tool inputs.
+  The previous full-suite run is preserved as `base4-pre-review`; the new
+  committed review checkpoint will supply `addon_hub/base4`, compared against
+  `base3` before any extraction. Expected change: only the two added test
+  identities; gate comparisons must use this latest base.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
@@ -690,3 +730,7 @@ All pre-existing; the extraction keeps each exactly.
 21. CI: `checks.yml` once listed two facades after `| tee analyze.txt`
     (not analyzed); fixed upstream at `b5e90a55`, kept as a rule.
 22. `'addons'` and `'addon_hub'` screen views both fire on every mount.
+
+23. A rejected metadata write leaves the SharedPreferences cache optimistic
+    even though the underlying store retains its prior value; the hub restores
+    its captured UI value. The extraction preserves this original behavior.

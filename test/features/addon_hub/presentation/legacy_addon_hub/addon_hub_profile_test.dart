@@ -9,6 +9,7 @@ import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/webdav_sync/webdav_sync_active_profile_refresh.dart';
+import 'package:debrify/widgets/see_all/stremio_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -190,6 +191,44 @@ void main() {
         ]);
         expect(await t.runAsync(() => p.addonIds(p.b)), isEmpty);
         expect(f.requests, isEmpty);
+      }, committed: true);
+    },
+  );
+  testWidgets(
+    'committed Update uses manifest URL rather than resource storage key',
+    (t) async {
+      await hubCase(t, (f) async {
+        final p = AddonHubProfiles(f);
+        await t.runAsync(() => p.open(seed: true));
+        await f.mount(t);
+        final addon = (f.member('installed') as List<StremioAddon>).singleWhere(
+          (e) => e.name == 'Zulu',
+        );
+        expect(addon.storageKey, isNot(addon.manifestUrl));
+        expect(addon.manifestUrl, 'https://z9.addon.test/manifest.json');
+        f.responses[addon.manifestUrl] = f.json(
+          hubManifest('z9', 'Zulu', version: '2.0.0'),
+        );
+        final pushed = f.observer.pushes.length;
+        await f.options(t, 'Zulu', 'Update');
+        await f.until(
+          t,
+          () =>
+              find.text('Zulu updated (v1.0.0 → v2.0.0)').evaluate().isNotEmpty,
+        );
+        expect(f.requests, ['GET https://z9.addon.test/manifest.json']);
+        expect(f.observer.pushes.length, pushed + 1); // the options sheet only
+        final saved = await f.saved(t);
+        expect(saved.map((e) => e.name), ['Alpha', 'Cinemeta', 'Zulu']);
+        expect(saved.singleWhere((e) => e.name == 'Zulu').version, '2.0.0');
+        expect(
+          saved.singleWhere((e) => e.name == 'Zulu').storageKey,
+          addon.storageKey,
+        );
+        expect(f.sync, [
+          (p.a.profileId, ProfilePreferences.webDavSyncRegistryLogicalKey),
+        ]);
+        expect(await t.runAsync(() => p.addonIds(p.b)), isEmpty);
       }, committed: true);
     },
   );
@@ -393,10 +432,25 @@ void main() {
     'failed metadata write rolls back previous UI snapshot and records no successful sync',
     (t) async {
       await hubCase(t, (f) async {
+        final previous = StremioService.metadataProviderValue(
+          f.installed.singleWhere((e) => e.id == 'z9'),
+        );
+        await (await SharedPreferences.getInstance()).setString(
+          'stremio_metadata_provider_v1',
+          previous,
+        );
         await f.mount(t);
+        expect(f.member('metadataProviderPreference'), previous);
         final store = (await t.runAsync(AddonHubHeldPreferences.install))!;
         store.failKey = 'stremio_metadata_provider_v1';
-        await f.dropdown(t, 'Cinemeta · Recommended', 'Automatic');
+        final picker = find.byWidgetPredicate(
+          (w) =>
+              w is StremioDropdown<String> &&
+              w.focusNode == f.member('metadataFocus'),
+        );
+        await t.tap(picker);
+        await t.pumpAndSettle();
+        await f.tap(t, 'Automatic');
         await f.until(
           t,
           () => find
@@ -404,7 +458,13 @@ void main() {
               .evaluate()
               .isNotEmpty,
         );
-        expect(f.member('metadataProviderPreference'), isNull);
+        expect(f.member('metadataProviderPreference'), previous);
+        expect(
+          (await t.runAsync(
+            store.getAll,
+          ))!['flutter.stremio_metadata_provider_v1'],
+          previous,
+        );
         expect(
           t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor,
           Colors.red,

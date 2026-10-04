@@ -20,6 +20,8 @@ void main() {
         f.responses[addonHubOfficialUrl] = f.json([
           hubMarketEntry('new8', 'New result'),
         ]);
+        // Retry is hidden while the first request loads, so the UI cannot
+        // start the overlapping forced load. Use the frozen original tear-off.
         final load = f.member('loadMarket') as dynamic;
         final next = load(f.member('source'), force: true) as Future<void>;
         await f.until(t, () => f.ids('market').contains('new8'));
@@ -34,6 +36,8 @@ void main() {
         await f.dropdown(t, 'Official', 'Installed', wait: false);
         await f.dropdown(t, 'Installed', 'Official', wait: false);
         f.held.remove(addonHubOfficialUrl);
+        // Loading also hides Retry after returning to Official; the seam
+        // starts the newer same-source request on the original live owner.
         final newer = load(f.member('source'), force: true) as Future<void>;
         await f.until(t, () => f.ids('market').contains('new8'));
         await newer;

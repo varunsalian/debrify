@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/screens/addons/addon_hub_screen.dart';
 import 'package:debrify/services/main_page_bridge.dart';
 import 'package:debrify/services/stremio_marketplace_service.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/widgets/see_all/stremio_dropdown.dart';
-import 'package:debrify/widgets/tv_text_field.dart';
+import 'package:debrify/utils/platform_util.dart';
+import 'package:debrify/services/storage/tv_display_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,10 +51,6 @@ void main() {
         await t.pumpWidget(const SizedBox.shrink());
         expect(s.mounted, isFalse);
         expect(f.clients.last.closed, isTrue);
-        final prefs = await SharedPreferences.getInstance();
-        final revision = before['installedLoadRevision'];
-        await prefs.setString('stremio_metadata_provider_v1', 'automatic');
-        expect(revision, 1);
       });
     },
   );
@@ -319,6 +317,14 @@ void main() {
     (t) async {
       await hubCase(t, (f) async {
         await f.mount(t);
+        // Real TV passthrough arrows are active only in the TV input mode.
+        final keyboard = TvDisplayStorage.tvKeyboardEnabledCached;
+        TvDisplayStorage.tvKeyboardEnabledCached = false;
+        addTearDown(() => TvDisplayStorage.tvKeyboardEnabledCached = keyboard);
+        PlatformUtil.debugSetAndroidTvCached(true);
+        addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+        (f.member('setTv') as void Function(bool))(true);
+        await t.pump();
         (f.member('typeFocus') as FocusNode).requestFocus();
         await t.pump();
         await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -331,14 +337,18 @@ void main() {
         await t.pump();
         await t.pump();
         expect((f.member('searchFocus') as FocusNode).hasFocus, isTrue);
-        final text = t.widget<TvTextField>(find.byType(TvTextField));
-        text.onDownArrow!();
+        expect(await t.sendKeyEvent(LogicalKeyboardKey.arrowDown), isTrue);
         await t.pump();
         expect((f.member('metadataFocus') as FocusNode).hasFocus, isTrue);
-        text.onUpArrow!();
+        (f.member('searchFocus') as FocusNode).requestFocus();
+        await t.pump();
+        expect(await t.sendKeyEvent(LogicalKeyboardKey.arrowUp), isTrue);
         await t.pump();
         expect((f.member('searchBtnFocus') as FocusNode).hasFocus, isTrue);
-        text.onSubmitted!('');
+        (f.member('searchFocus') as FocusNode).requestFocus();
+        await t.pump();
+        // Passthrough submission arrives through the platform text-input action.
+        await t.testTextInput.receiveAction(TextInputAction.search);
         await t.pump();
         expect((f.member('metadataFocus') as FocusNode).hasFocus, isTrue);
         await t.tap(find.byIcon(Icons.search_rounded).first);
@@ -351,7 +361,21 @@ void main() {
     'LEFT exits leftmost to sidebar including null, caret LEFT ignored',
     (t) async {
       await hubCase(t, (f) async {
-        await f.mount(t);
+        final bubbled = <KeyEvent>[];
+        await f.mount(
+          t,
+          home: Focus(
+            canRequestFocus: false,
+            onKeyEvent: (_, event) {
+              if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+                  (event is KeyDownEvent || event is KeyRepeatEvent)) {
+                bubbled.add(event);
+              }
+              return KeyEventResult.ignored;
+            },
+            child: AddonHubScreen(key: f.key),
+          ),
+        );
         var sidebar = 0;
         MainPageBridge.focusTvSidebar = () => sidebar++;
         (f.member('kindFocus') as FocusNode).requestFocus();
@@ -360,7 +384,16 @@ void main() {
         await t.pump();
         expect(sidebar, 1);
         MainPageBridge.focusTvSidebar = null;
-        await t.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        expect(await t.sendKeyEvent(LogicalKeyboardKey.arrowLeft), isTrue);
+        expect(await t.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft), isTrue);
+        expect(
+          await t.sendKeyRepeatEvent(LogicalKeyboardKey.arrowLeft),
+          isTrue,
+        );
+        await t.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+        // Root traversal can also consume LEFT. The parent probe proves the
+        // hub itself handles the null-sidebar Down/Repeat before it bubbles.
+        expect(bubbled, isEmpty);
         await t.pump();
         expect((f.member('kindFocus') as FocusNode).hasFocus, isTrue);
         await t.tap(find.byIcon(Icons.search_rounded).first);
@@ -403,6 +436,8 @@ void main() {
         await t.pumpAndSettle();
         expect(f.member('marketNodes'), nodes);
         expect(nodes.last.hasFocus, isFalse);
+        expect(FocusManager.instance.primaryFocus, same(nodes.first));
+        expect(nodes.first.hasFocus, isTrue);
         expect((await f.saved(t)).map((e) => e.id), [
           'z9',
           'com.linvo.cinemeta',

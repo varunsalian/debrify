@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/services/engine/engine_registry.dart';
 import 'package:debrify/services/engine/local_engine_storage.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../../support/addon_hub_fixture.dart';
 
@@ -14,6 +17,10 @@ String engineUrl(String name) =>
     'https://gitlab.com/mediacontent/search-engines/-/raw/main/torrents/$name';
 
 void main() {
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
   testWidgets(
     'metadata single request remote order and refresh cache hits load once',
     (t) async {
@@ -89,6 +96,8 @@ void main() {
         await f.dropdown(t, 'Stremio Addons', 'Torrent Engines', wait: false);
         await f.until(t, () => f.requests.isNotEmpty);
         f.held.remove(addonHubMetadataUrl);
+        // The loading UI hides refresh/Retry, so it cannot start overlapping B.
+        // The frozen accessor invokes the original load on its live owner.
         final b = (f.member('loadEngines') as Future<void> Function())();
         await f.until(t, () => f.member('enginesLoading') == false);
         await b;
@@ -295,6 +304,88 @@ void main() {
         expect(f.ids('importedEngines'), ['z9']);
         expect(f.requests, ['GET $addonHubMetadataUrl']);
       });
+    },
+  );
+  testWidgets(
+    'YAML import save failure dismisses shown blocking dialog strips red snackbar and never syncs',
+    (t) async {
+      await hubCase(t, (f) async {
+        f.picker.supply('middle.yaml', hubEngineYaml('m5', 'Middle engine'));
+        await f.mount(t);
+        await f.engines(t);
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        f.releases.add(() {
+          if (!release.isCompleted) release.complete();
+        });
+        late Future<void> barrier;
+        await t.runAsync(() async {
+          barrier = ProfilePreferences.captureMutationSnapshot((_) async {
+            entered.complete();
+            await release.future;
+          });
+          await entered.future;
+        });
+        await f.tap(t, 'Import YAML');
+        await f.until(t, () => f.member('blockingProgressUp') == true);
+        await t.pump();
+        expect(find.text('Importing Middle engine…'), findsOneWidget);
+        expect(
+          (f.observer.pushes.last as DialogRoute).barrierDismissible,
+          isFalse,
+        );
+        await t.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        expect(
+          ProfilePreferences.diagnosticMutationState['preferenceBarrierHeld'],
+          isTrue,
+        );
+        final directory = (await t.runAsync(
+          LocalEngineStorage.instance.getEnginesDirectoryPath,
+        ))!;
+        await t.runAsync(() => Directory(directory).create(recursive: true));
+        const corrupt = 'bad inventory';
+        await t.runAsync(
+          () => File('$directory/metadata.json').writeAsString(corrupt),
+        );
+        release.complete();
+        await t.runAsync(() => barrier);
+        await f.until(t, () => find.byType(SnackBar).evaluate().isNotEmpty);
+        expect(f.member('blockingProgressUp'), isFalse);
+        await t.pumpAndSettle();
+        expect(find.byType(Dialog), findsNothing);
+        expect(find.text('Importing Middle engine…'), findsNothing);
+        Object? parseError;
+        try {
+          jsonDecode(corrupt);
+        } catch (e) {
+          parseError = e;
+        }
+        expect(parseError, isA<FormatException>());
+        expect(
+          find.text(parseError.toString().replaceFirst('Exception: ', '')),
+          findsOneWidget,
+        );
+        expect(
+          t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor,
+          Colors.red,
+        );
+        expect(f.sync, isEmpty);
+        expect(f.ids('importedEngines'), isEmpty);
+        expect(
+          await t.runAsync(() => File('$directory/middle.yaml').exists()),
+          isFalse,
+        );
+        expect(f.requests, ['GET $addonHubMetadataUrl']);
+        // Restore the invalid fixture after observing the real save failure.
+        await t.runAsync(
+          () => File('$directory/metadata.json').writeAsString('{}'),
+        );
+        await t.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+      }, committed: true);
     },
   );
   for (final variant in [
