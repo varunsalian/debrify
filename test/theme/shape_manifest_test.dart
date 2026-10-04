@@ -215,6 +215,11 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  // Spotlight board: facade and every destination, preserving three radii.
+  'lib/widgets/home/spotlight_board.dart': 3,
+  'lib/features/spotlight_board/presentation/spotlight_board_metrics.dart': 0,
+  'lib/features/spotlight_board/presentation/spotlight_board_types.dart': 0,
+
   // Playback settings: every remaining destination and the facade, at zero.
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart':
       0,

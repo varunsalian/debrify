@@ -1130,6 +1130,33 @@ decomposition; bug fixes and behaviour changes, including everything below.
   provenance/strictness commit before step 2. Device and remote CI checks
   remain pending.
 
+### Step 1 — public types, numerical metrics and guards
+
+- Step 0c is `b46b514e`. Extracted the three public types with the facade
+  re-export and the numerical metrics/tier with their exact constructors,
+  constants and expressions. Reviewed every step-1 dependency/caller entry.
+  Identifier-token edits preserve all moved comments and string literals.
+- Registered the feature and exact bridge unconditionally, 500-line limits,
+  the single future card-layout exception, both Home/Spotlight import
+  directions, facade back-import, playback and keep-alive bans. The real
+  checker passes and its missing-directory/size/import/ownership negatives
+  reject. Facade completion enforcement remains scheduled for step 7.
+- Registered the facade and both new files in the extracted shape slice
+  (3 + 0 + 0); added explicit patterns for both presentation directories and
+  the light-ink registry. The theme surface remains **118 sites**. Sorted
+  facade imports remove its original directive-order infos.
+- Formatted facade: **3,569 lines**, lowered ratchet. All ten manifest suites
+  and self-tests, architecture (1,213 files), size, storage, shape/theme,
+  CI format and analyzer allowlist checks pass. Strict analysis has **13
+  inventoried infos, no warnings/errors and zero per-symbol additions**.
+  `step1-focused*` compares with base3: **176 PASS / one unchanged profile
+  source-guard failure**, no new failures, missing identities or skips.
+  New sources are staged for the frozen final focused replay, so its tree
+  includes every extracted application input. No characterization assertion
+  or original golden scene changes.
+- The supplied Linux originals remain separate; their provenance/strictness
+  commit is next, before the first builder move.
+
 ### Amendment after step 0b (design-reviewed before resuming)
 
 1. **Facade cap.** The hard maximum becomes 460 (see the size section); the

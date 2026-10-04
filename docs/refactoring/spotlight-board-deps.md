@@ -1,17 +1,17 @@
 # Spotlight board dependencies and wiring checklist
 
-Approved original R: `a65ad81aebbbcbe29730fc2de1d78b037a84539c` (format-only checkpoint). Nothing has moved.
+Approved original R: `a65ad81aebbbcbe29730fc2de1d78b037a84539c` (format-only checkpoint). Step 1 moves the public types and numerical metrics; all later entries remain pending.
 
 Every original declaration/member below has one destination. Types and initializers stay unchanged. State getters and metadata overrides are live, context parameters remain lexical, and the layout receives the owning card State as `cardState`. Timer ownership follows the original declarations and sites.
 
 | Original leaf | Destination | Reads and binding requirements | Production wiring review |
 | --- | --- | --- | --- |
-| `SpotlightCard` | `features/spotlight_board/presentation/spotlight_board_types.dart::SpotlightCard` | this | Step 1: `_CardState._buildCard`; pending move review |
-| `SpotlightCardShape` | `features/spotlight_board/presentation/spotlight_board_types.dart::SpotlightCardShape` | this | Step 1: `SpotlightBoardState._shelf`, `SpotlightBoardState._shelfCardHeight`, `SpotlightCard`, `_CardState._buildCard`, `_CardState.build`; pending move review |
-| `SpotlightShelf` | `features/spotlight_board/presentation/spotlight_board_types.dart::SpotlightShelf` | this | Step 1: whole declaration/public callers retained; pending move review |
+| `SpotlightCard` | `features/spotlight_board/presentation/spotlight_board_types.dart::SpotlightCard` | this | Step 1: `_CardState._buildCard`; reviewed step 1: facade re-export / original metrics callers; exact body |
+| `SpotlightCardShape` | `features/spotlight_board/presentation/spotlight_board_types.dart::SpotlightCardShape` | this | Step 1: `SpotlightBoardState._shelf`, `SpotlightBoardState._shelfCardHeight`, `SpotlightCard`, `_CardState._buildCard`, `_CardState.build`; reviewed step 1: facade re-export / original metrics callers; exact body |
+| `SpotlightShelf` | `features/spotlight_board/presentation/spotlight_board_types.dart::SpotlightShelf` | this | Step 1: whole declaration/public callers retained; reviewed step 1: facade re-export / original metrics callers; exact body |
 | `SpotlightBoard` | `widgets/home/spotlight_board.dart::SpotlightBoard` | context (live State receiver); this | Step 0: `SpotlightBoardState._board`, `SpotlightBoardState._flip`, `SpotlightBoardState._heroBackdropContent`, `SpotlightBoardState._heroCompact`, `_ShelfTitleLink`; pending move review |
-| `_Tier` | `features/spotlight_board/presentation/spotlight_board_metrics.dart::SpotlightBoardTier` | pure declaration; original dependencies | Step 1: `_M`; pending move review |
-| `_M` | `features/spotlight_board/presentation/spotlight_board_metrics.dart::SpotlightBoardMetrics` | context (live State receiver); this | Step 1: `SpotlightBoardState.build`; pending move review |
+| `_Tier` | `features/spotlight_board/presentation/spotlight_board_metrics.dart::SpotlightBoardTier` | pure declaration; original dependencies | Step 1: `_M`; reviewed step 1: facade re-export / original metrics callers; exact body |
+| `_M` | `features/spotlight_board/presentation/spotlight_board_metrics.dart::SpotlightBoardMetrics` | numeric viewport arguments; `WideTouchScale`; constructor `this`; no State context | Step 1: `SpotlightBoardState.build`; reviewed step 1: facade re-export / original metrics callers; exact body |
 | `SpotlightBoardState._visibleCards` | `features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart::SpotlightBoardSelectionState.visibleCards` | pure declaration; original dependencies | Step 3: `SpotlightBoardState._interactWithCard`, `SpotlightBoardState._queueScrollSelection`, `SpotlightBoardState._registerCard`, `SpotlightBoardState._selectCard`, `SpotlightBoardState._unregisterCard`; pending move review |
 | `SpotlightBoardState._scrollingSources` | `features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart::SpotlightBoardSelectionState.scrollingSources` | pure declaration; original dependencies | Step 3: `SpotlightBoardState._interactWithCard`, `SpotlightBoardState._onCardScroll`, `SpotlightBoardState._queueScrollSelection`, `SpotlightBoardState._restartCadence`, `SpotlightBoardState._unregisterCard`, `SpotlightBoardState.build`; pending move review |
 | `SpotlightBoardState._selectionViewport` | `features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart::SpotlightBoardSelectionState.selectionViewport` | pure declaration; original dependencies | Step 3: `SpotlightBoardState._shelf`, `SpotlightBoardState.build`; pending move review |

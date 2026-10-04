@@ -1,256 +1,42 @@
-import '../../services/diagnostic_log.dart';
-import '../../services/stremio_service.dart';
-import '../../services/metadata_preferences_service.dart';
-import '../../services/profiles/profile_runtime.dart';
-import '../recoverable_network_image.dart';
-import '../../models/metadata_preferences.dart';
-import '../metadata_presentation_mixin.dart';
 import 'dart:async';
 import 'dart:math' show max;
-
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:debrify/features/spotlight_board/presentation/spotlight_board_metrics.dart';
+import 'package:debrify/features/spotlight_board/presentation/spotlight_board_types.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
-
+import 'package:flutter/services.dart';
+import '../../models/metadata_preferences.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/debrify_image_cache.dart';
+import '../../services/diagnostic_log.dart';
+import '../../services/metadata_preferences_service.dart';
+import '../../services/profiles/profile_runtime.dart';
+import '../../services/stremio_service.dart';
 import '../../theme/app_focus.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/focus_expression.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/artwork_url.dart';
-import '../../utils/dominant_color.dart';
 import '../../utils/dialog_tap_guard.dart';
+import '../../utils/dominant_color.dart';
+import '../../utils/platform_util.dart';
+import '../../utils/spotlight_interaction_policy.dart';
 import '../../utils/tv_keys.dart';
-import 'row_tag_pill.dart';
+import '../collections/collection_focus_art.dart';
+import '../collections/collection_focus_glow.dart';
+import '../metadata_presentation_mixin.dart';
+import '../movie_watched_badge.dart';
+import '../recoverable_network_image.dart';
 import 'home_row_focus.dart';
-import 'spotlight_card_trailer.dart';
-import 'snowy_mountain_background.dart';
 import 'midnight_rain_background.dart';
 import 'moonlit_ocean_background.dart';
-import '../collections/collection_focus_glow.dart';
-import '../collections/collection_focus_art.dart';
-import '../movie_watched_badge.dart';
-import '../../utils/platform_util.dart';
-import '../../utils/wide_touch_scale.dart';
-import '../../utils/spotlight_interaction_policy.dart';
+import 'row_tag_pill.dart';
+import 'snowy_mountain_background.dart';
+import 'spotlight_card_trailer.dart';
 
-/// What a card is, once a shelf stops being a list of TITLES.
-///
-/// Continue Watching and the catalog are `StremioMeta`; the favourites rails
-/// are not. A playlist is a container, not a title — it has no poster of its
-/// own, which is why poster OVERRIDES exist — and an IPTV channel's logo is a
-/// wide, often transparent mark that a 2:3 crop destroys. Forcing all four
-/// through a poster model is how they end up looking wrong in four different
-/// ways.
-class SpotlightCard {
-  final StremioMeta? metadata;
-  final bool episodeArtwork;
-
-  /// Poster, channel logo, or a user override. Null draws the placeholder.
-  final String? image;
-
-  /// Used when [image] fails to load. Landscape title cards point this at the
-  /// portrait poster because synchronously-derived MetaHub backdrops can 404.
-  final String? fallbackImage;
-
-  /// Image-download errors obey the same policy as missing metadata artwork.
-  String? imageErrorFallback(
-    StremioMeta? presented,
-    MetadataPreferences preferences,
-  ) {
-    if (episodeArtwork) {
-      return preferences.provider(MetadataCategory.episodeArtwork) !=
-                  MetadataPreferences.current &&
-              !preferences.fallback
-          ? null
-          : fallbackImage;
-    }
-    if (presented == null || identical(presented, metadata))
-      return fallbackImage;
-    bool selected(MetadataCategory category) =>
-        preferences.provider(category) != MetadataPreferences.current;
-    final selectedArtwork =
-        (shape == SpotlightCardShape.wide &&
-            selected(MetadataCategory.backgrounds)) ||
-        (shape == SpotlightCardShape.poster &&
-            selected(MetadataCategory.posters));
-    if (selectedArtwork && !preferences.fallback) return null;
-    return selectedArtwork || selected(MetadataCategory.posters)
-        ? presented.poster
-        : fallbackImage;
-  }
-
-  String? imageForPresentation(
-    StremioMeta? presented,
-    MetadataPreferences preferences,
-  ) {
-    final changed = presented != null && !identical(presented, metadata);
-    bool selected(MetadataCategory category) =>
-        preferences.provider(category) != MetadataPreferences.current;
-    final primary = !changed || episodeArtwork
-        ? image
-        : shape == SpotlightCardShape.poster &&
-              selected(MetadataCategory.posters)
-        ? presented.poster
-        : shape == SpotlightCardShape.wide &&
-              selected(MetadataCategory.backgrounds)
-        ? presented.background
-        : image;
-    return primary?.trim().isNotEmpty == true
-        ? primary
-        : imageErrorFallback(presented, preferences);
-  }
-
-  final String? coverEmoji;
-  final String title;
-
-  /// Item count, "LIVE", a genre — whatever this KIND of thing is identified
-  /// by beyond its name.
-  final String? subtitle;
-
-  /// IMDb rating (0–10) for TITLE cards, drawn as "★ 8.1" on the caption's
-  /// meta line. Null or non-positive draws nothing — catalog list items
-  /// frequently omit the rating, and an empty star would read as a zero.
-  final double? rating;
-
-  /// 0..100, or null.
-  final double? progress;
-
-  final VoidCallback onOpen;
-  final VoidCallback? onOptions;
-  final SpotlightCardShape shape;
-  final bool showCaption;
-
-  /// Title identity for the effective watched marker. Null for channels,
-  /// playlists, and other non-title cards.
-  final String? watchedImdbId;
-  final String? watchedContentType;
-
-  /// Collection GIFs follow the device preference; collection videos need focus.
-  final String? collectionGifUrl;
-  final String? collectionVideoUrl;
-
-  /// A lightweight, in-card preview for the one card the user is actively
-  /// inspecting. It is built only while the card is hovered on pointer
-  /// surfaces, or holds DPAD focus on television; resting cards never mount a
-  /// player/decoder.
-  final WidgetBuilder? previewBuilder;
-  final bool focusGlowEnabled;
-
-  /// Collection art also follows keyboard focus on desktop. Live IPTV keeps
-  /// its pointer-only desktop preview policy.
-  final bool previewOnKeyboardFocus;
-
-  const SpotlightCard({
-    this.metadata,
-    this.episodeArtwork = false,
-    required this.title,
-    required this.onOpen,
-    this.image,
-    this.fallbackImage,
-    this.coverEmoji,
-    this.subtitle,
-    this.rating,
-    this.progress,
-    this.onOptions,
-    this.shape = SpotlightCardShape.poster,
-    this.showCaption = true,
-    this.previewBuilder,
-    this.collectionGifUrl,
-    this.collectionVideoUrl,
-    this.focusGlowEnabled = false,
-    this.previewOnKeyboardFocus = false,
-    this.watchedImdbId,
-    this.watchedContentType,
-  });
-}
-
-/// Aspect and fit, per kind.
-enum SpotlightCardShape {
-  /// 2:3, art cropped to fill. Titles.
-  poster(2 / 3, BoxFit.cover),
-
-  /// Square collection cover, cropped to fill.
-  square(1, BoxFit.cover),
-
-  /// 1:1, art CONTAINED on a plate. A channel logo is a mark, not a still:
-  /// cropping it to fill cuts the wordmark in half.
-  channel(1, BoxFit.contain),
-
-  /// 16:9, cropped. Containers and wide art.
-  wide(16 / 9, BoxFit.cover),
-
-  /// 16:9, mark CONTAINED on a plate — a channel tile at the landscape
-  /// rail's full card size. The logo is never cropped to fill (that cuts
-  /// wordmarks in half); the live preview, which IS 16:9, fills the tile
-  /// edge to edge on focus/hover.
-  wideChannel(16 / 9, BoxFit.contain);
-
-  const SpotlightCardShape(this.aspect, this.fit);
-
-  /// width ÷ height.
-  final double aspect;
-  final BoxFit fit;
-}
-
-/// One row on the board.
-///
-/// [progressOf] is what makes Continue Watching possible without the board
-/// knowing what Continue Watching IS: a shelf that returns null for every
-/// item simply draws no bars.
-class SpotlightShelf {
-  final String title;
-  final List<SpotlightCard> items;
-
-  /// This shelf's focus nodes, owned by the host so focus survives a rebuild.
-  /// Carried HERE rather than in a parallel list, because two lists that must
-  /// stay the same length eventually will not be.
-  final List<FocusNode> nodes;
-
-  /// Opens this row's See-All destination. Null when the row leads nowhere
-  /// (the favourites rails browse in place), and the heading then draws no
-  /// chevron — the reference's own rule, not an oversight.
-  final VoidCallback? onSeeAll;
-
-  /// The row's provenance — the addon or tracker filling it ("Cinemeta",
-  /// "Trakt") — worn as a small [RowTagPill] beside the heading on every
-  /// device. Null draws no pill (the favourites rails ARE their source).
-  final String? tag;
-
-  /// Whether this shelf's cards keep their captions off TV. Catalog rows say
-  /// false — the art is the label, and a caption repeating the poster's own
-  /// title is the noise the reference never has. Rows whose caption carries
-  /// INFORMATION keep true: Continue Watching (which title, how far),
-  /// channels (a logo tile without its name is a guess), playlists. TV keeps
-  /// captions regardless — this flag is a non-TV presentation choice.
-  final bool captions;
-
-  /// Whether the shelf heading, provenance pill and See-All affordance paint.
-  /// Collection rows may opt out while their cards remain fully interactive.
-  final bool showHeader;
-
-  /// Stable identity for element reuse across board updates. Tracker rows
-  /// stream in and FRONT-INSERT above the catalog rows; without identity the
-  /// board's list reconciles shelves by position and remounts every shelf
-  /// below the insertion point — horizontal scroll offsets reset and every
-  /// visible card's texture re-resolves and re-uploads, which a Mali box
-  /// renders as a jank burst. Null falls back to positional (no reuse).
-  final String? id;
-
-  const SpotlightShelf({
-    required this.title,
-    required this.items,
-    required this.nodes,
-    this.onSeeAll,
-    this.tag,
-    this.captions = true,
-    this.showHeader = true,
-    this.id,
-  });
-}
+export 'package:debrify/features/spotlight_board/presentation/spotlight_board_types.dart';
 
 /// **Spotlight** — the tvOS Home idiom.
 ///
@@ -438,126 +224,6 @@ class SpotlightBoard extends StatefulWidget {
   State<SpotlightBoard> createState() => SpotlightBoardState();
 }
 
-/// Card metrics as FRACTIONS of the space the board is actually GIVEN.
-///
-/// The reference is 1920 wide and its posters are 260 with a 40 gap — a pitch
-/// of 300. Expressed as absolute logical pixels those only match a panel whose
-/// logical width happens to be exactly half of 1920; on anything else the
-/// cards come out the wrong size relative to the screen, which is precisely
-/// how "a bit big, and less space between them" happens.
-///
-/// Proportions hold everywhere. The divisors are the raw 1920-scale numbers.
-///
-/// Measured against the board's own constraints rather than
-/// `MediaQuery.sizeOf`, because those differ: tvOS reports a full-screen size
-/// while the shell insets the content for overscan safe area (and, under
-/// non-pill sidebar styles, for the rail). Sizing off the screen makes every
-/// card proportionally too large for the region it is drawn in — a 260-wide
-/// card in a 1920 screen becomes a 260-wide card in a ~1800 visible band.
-/// The presentation tier — the SIZE axis, chosen from the board's own width
-/// but only ever leaving `wide` when the input is not a remote. A narrow TV
-/// (UI scale, odd panel) keeps the wide presentation with proportionally
-/// smaller cards, so the DPAD ladder never targets widgets that don't exist.
-enum _Tier { compact, mid, wide }
-
-class _M {
-  final double w;
-  final bool dpad;
-  final _Tier tier;
-
-  _M(this.w, {this.dpad = true})
-    : tier = dpad
-          ? _Tier.wide
-          : w < 600
-          ? _Tier.compact
-          : w < 1100
-          ? _Tier.mid
-          : _Tier.wide;
-
-  bool get compact => tier == _Tier.compact;
-
-  /// The type scale for the wide TOUCH tiers — the same correction the
-  /// Showcase detail page applies (see `ShowcaseMetrics.k`).
-  ///
-  /// The wide hero's fixed values (identity type, the logo slot, the
-  /// identity/dots insets' non-overlap share) are 960-canvas numbers, and a
-  /// TV's logical width IS ~960. A tablet reaches the same layout at its real
-  /// width — 1366 on an iPad Pro — where those absolutes render at ~70% of
-  /// their designed proportion. Exactly 1.0 on TV (every shipped pixel keeps)
-  /// and on compact (its absolutes are phone-measured, not derived); the
-  /// formula lives in [wideTouchScale], shared with the detail page.
-  double get k => (dpad || compact) ? 1.0 : wideTouchScale(w);
-
-  /// Compact values are MEASURED off the Apple TV phone app on the reference
-  /// device (see dev/design/mockups/spotlight_responsive_mockup/, re-measured
-  /// 2026-08-16 for the home_rows_mockup pass): gutter 4.8%, posters 25.7%
-  /// with 3.4% gaps — three cards and a real sliver of the fourth, the peek
-  /// that says "this scrolls". The earlier 24.3%/4.6% pairing spent the
-  /// difference on gaps and read smaller than the reference next to it.
-  /// Mid is the tablet tier — the TV fractions with the posters bumped for
-  /// fingers. Wide is the TV mock's 1920-scale table, byte-for-byte what
-  /// shipped.
-  double get gutter => compact ? w * 0.048 : w * (84 / 1920);
-  double get poster => switch (tier) {
-    _Tier.compact => w * 0.257,
-    _Tier.mid => w * 0.16,
-    _Tier.wide => w * (260 / 1920),
-  };
-  double get posterH => poster * (390 / 260);
-
-  /// Landscape title-card width. Sized so a 16:9 card keeps roughly
-  /// two-thirds of the poster row's height — at the poster's own width a
-  /// wide card is barely half as tall and the whole rail reads shrunken.
-  /// TV shows ~3.4 cards per band, tablet ~2.6, phone ~1.7 with a peek
-  /// (user-tuned 2026-08: the first pass a step smaller read too timid).
-  double get wideCardW => switch (tier) {
-    _Tier.compact => w * 0.50,
-    _Tier.mid => w * 0.33,
-    _Tier.wide => w * (470 / 1920),
-  };
-  double get gap => switch (tier) {
-    _Tier.compact => w * 0.034,
-    _Tier.mid => w * 0.026,
-    _Tier.wide => w * (40 / 1920),
-  };
-
-  /// Card corner radius. 7 is the TV mock's number, moved here from the
-  /// card's hardcode; compact grows it the way every phone card idiom does.
-  double get radius => switch (tier) {
-    _Tier.compact => 10.0,
-    _Tier.mid => 8.0,
-    _Tier.wide => 7.0,
-  };
-
-  /// What the focus effect paints OUTSIDE the resting card, which the row
-  /// reserves so the lift lands on ground instead of on the headings.
-  ///
-  /// The card grows about its centre, so half of the 10% goes upward, and
-  /// `ParallaxFocus` rises it a further 7. Reserving that much means nothing
-  /// OPAQUE ever reaches the title above.
-  ///
-  /// The shadow reaches 9 higher still (25 of blur less its 16 of downward
-  /// offset) and is deliberately NOT reserved: it is a soft blur whose far
-  /// edge is invisible, and paying for it would push every row apart by more
-  /// than the reference puts between them.
-  ///
-  /// Zero on compact: nothing there ever focuses or hovers, so the lift
-  /// never fires and the reservation would just be dead air between rows.
-  double liftUpFor(double cardHeight) => compact ? 0 : cardHeight * 0.05 + 7;
-
-  /// Downward the rise works in our favour, so only the growth is reserved.
-  double liftDownFor(double cardHeight) => compact ? 0 : cardHeight * 0.05;
-  double get title => compact ? 19.0 : w * (26 / 1920);
-  double get caption => compact ? 12.0 : w * (21 / 1920);
-
-  /// The caption strip below the art — compact only; wide overlays it on the
-  /// card. It reserves two lines because the second carries useful playback
-  /// context (season/episode) and ratings. The compact renderer used to
-  /// reserve and paint only the title, silently dropping that metadata even
-  /// though the same card showed it in the wide layout.
-  double get captionBlock => compact ? 40.0 : 0;
-}
-
 class SpotlightBoardState extends State<SpotlightBoard>
     with MetadataPresentationMixin<SpotlightBoard> {
   final Set<_CardState> _visibleCards = {};
@@ -742,7 +408,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     });
   }
 
-  _M? _lastMetrics;
+  SpotlightBoardMetrics? _lastMetrics;
   @override
   bool get prioritizeMetadata => true;
   @override
@@ -1780,7 +1446,10 @@ class SpotlightBoardState extends State<SpotlightBoard>
       child: ParallaxRichScope(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final m = _M(constraints.maxWidth, dpad: widget.dpad);
+            final m = SpotlightBoardMetrics(
+              constraints.maxWidth,
+              dpad: widget.dpad,
+            );
             final large =
                 widget.largeScreenInteractions &&
                 !widget.dpad &&
@@ -1818,7 +1487,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     );
   }
 
-  Widget _board(_M m, double heroH) {
+  Widget _board(SpotlightBoardMetrics m, double heroH) {
     _lastMetrics = m;
     _heroBandH = heroH;
     final app = AppThemeScope.of(context);
@@ -2042,7 +1711,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     );
   }
 
-  Widget _hero(_M m, double heroH) {
+  Widget _hero(SpotlightBoardMetrics m, double heroH) {
     if (m.compact) return _heroCompact(m);
     return _heroWide(m, heroH);
   }
@@ -2054,7 +1723,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
   /// exactly (the seam rule), swipe paging, tappable dots. No description
   /// line and no side-flip heuristic: there is no "side" when the stack is
   /// centered.
-  Widget _heroCompact(_M m) {
+  Widget _heroCompact(SpotlightBoardMetrics m) {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final url = _heroArt(item);
@@ -2159,7 +1828,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     );
   }
 
-  Widget _identityCompact(StremioMeta item, _M m) {
+  Widget _identityCompact(StremioMeta item, SpotlightBoardMetrics m) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -2205,7 +1874,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
   /// node. The picture it reads against is [_heroBackdrop], pinned behind the
   /// list — split so the text can ride away with the shelves while the art
   /// stays put.
-  Widget _heroWide(_M m, double heroH) {
+  Widget _heroWide(SpotlightBoardMetrics m, double heroH) {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final wide = _heroForeground(m, item, heroH);
@@ -2463,7 +2132,11 @@ class SpotlightBoardState extends State<SpotlightBoard>
       ? const SizedBox.shrink()
       : ColoredBox(color: ground.withValues(alpha: t));
 
-  Widget _heroForeground(_M m, StremioMeta item, double heroH) {
+  Widget _heroForeground(
+    SpotlightBoardMetrics m,
+    StremioMeta item,
+    double heroH,
+  ) {
     final flip = _flip;
     // TV keeps the shipped absolutes: on a ~960×540 canvas, 128 is the
     // proportional shelf overlap (88) plus 40 of clearance, and 92 is the
@@ -2517,7 +2190,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     );
   }
 
-  Widget _identity(StremioMeta item, bool flip, _M m) {
+  Widget _identity(StremioMeta item, bool flip, SpotlightBoardMetrics m) {
     final cross = flip ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final align = flip ? TextAlign.right : TextAlign.left;
     return Column(
@@ -2596,7 +2269,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
   /// rail paginates as focus walks it — there is nothing to tap. The
   /// provenance pill is the one piece BOTH inputs wear: which addon fills a
   /// row is a fact on every device.
-  TextStyle _shelfTitleStyle(_M m) {
+  TextStyle _shelfTitleStyle(SpotlightBoardMetrics m) {
     final fontSize = widget.dpad
         ? m.title
         : m.compact
@@ -2616,7 +2289,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     );
   }
 
-  double _shelfExtent(SpotlightShelf section, _M m) {
+  double _shelfExtent(SpotlightShelf section, SpotlightBoardMetrics m) {
     double textHeight(String text, TextStyle style) {
       final painter = TextPainter(
         text: TextSpan(
@@ -2656,7 +2329,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
         (_shelfHasCaptions(section, m) ? m.captionBlock : 0);
   }
 
-  Widget _shelfTitle(SpotlightShelf section, _M m) {
+  Widget _shelfTitle(SpotlightShelf section, SpotlightBoardMetrics m) {
     final style = _shelfTitleStyle(m);
     final fontSize = style.fontSize!;
     final onSeeAll = section.onSeeAll;
@@ -2695,7 +2368,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
     );
   }
 
-  double _shelfCardHeight(SpotlightShelf section, _M m) {
+  double _shelfCardHeight(SpotlightShelf section, SpotlightBoardMetrics m) {
     // Wide cards use their own rail width. Keeping the portrait card's
     // width makes a 16:9 tile too short to read, while keeping its height
     // makes it enormous and leaves only two titles on a TV row. The rule is
@@ -2709,7 +2382,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
         : m.posterH;
   }
 
-  bool _shelfHasCaptions(SpotlightShelf section, _M m) {
+  bool _shelfHasCaptions(SpotlightShelf section, SpotlightBoardMetrics m) {
     // Caption-free rows off TV (see [SpotlightShelf.captions]); TV keeps its
     // overlay captions everywhere. Compact must also keep a caption whenever
     // a card carries metadata: otherwise portrait mode discards ratings and
@@ -2725,7 +2398,7 @@ class SpotlightBoardState extends State<SpotlightBoard>
         (widget.dpad || section.captions || (m.compact && hasCardMetadata));
   }
 
-  Widget _shelf(int i, _M m) {
+  Widget _shelf(int i, SpotlightBoardMetrics m) {
     final section = widget.sections[i];
     final nodes = section.nodes;
     final cardHeight = _shelfCardHeight(section, m);
