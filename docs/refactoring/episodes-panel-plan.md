@@ -1100,6 +1100,45 @@ including everything below.
   untracked inputs/tree changes. Linux strict comparison follows on the clean
   committed step 6 tree without a capture/update flag.
 
+- Strict Linux verification on clean step 6 `622427c4`: all five originals
+  match without capture/update flags in calibrated linux/amd64
+  `debrify-flutter:3.44.8`, image
+  `sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`.
+  The committed archive runs at `/root/episodes_panel` inside `$HOME`.
+  SDK equals `base5`; pubspec/lock and original PNG hashes are unchanged.
+  `step6-linux-strict.{jsonl,env.json}` records five successes, no dirty or
+  untracked inputs and no tree changes. The owned temporary Dart package is
+  removed before any subsequent analyzer run.
+
+### Step 7 — completion guards and gate 2 checkpoint
+
+- Step 6: `622427c4`. `EPISODES_PANEL_COMPLETE = True`; facade is a named
+  composition root and included in the unconditional completed-source scan.
+  Measured cap is 281 (below 450); all destination caps remain 500. Temporary
+  markers, facade back-imports, playback symbols and named peer imports are
+  rejected. Every original manifest entry's wiring checklist is reviewed.
+- Permanent CI format scope includes the facade and both actual support
+  files; analyzer scope includes the facade. Every path remains inside its
+  command, before `| tee`. No allowlist entry or suppression is added.
+  Completion config retains only actual registered source locations and the
+  planned forwarder; staged getter aliases are gone. Application bytes and
+  original goldens are unchanged from step 6.
+
+- Step 7 local checks: all 93 leaves/forwarders, real-config negatives and
+  every other manifest/self-test PASS with isolated packages/kernels and each
+  original/config. Architecture and completion fixtures, sizes, storage,
+  shape/theme/rendered sets, actual permanent CI format/analyze scopes,
+  allowlist and strict/whole relocation comparisons PASS. Only the original
+  curly info remains; no new diagnostic or suppression, same 12 unrelated CI
+  warnings. Scoped suite versus `base5` PASS: 1,270 successes plus the original
+  profile source-guard failure; 85 cases, five macOS goldens and 22 importers
+  pass, no untracked inputs/tree changes. All LF and diff checks PASS.
+- Full-suite gate 2 follows on this committed checkpoint with no suite paths,
+  against latest `base5` and accepted `gate1`. Pending device-only checks:
+  Android TV D-pad/held OK on season options and Classic chrome; real tracker
+  watched writes/season marks; post-playback MDBList refresh. Remote CI and
+  Claude's union merge/integration full suite are pending; no branch is pushed.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

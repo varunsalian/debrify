@@ -33,7 +33,7 @@ PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_p
 PLAYLIST_CONTENT_COMPLETE = True
 PLAYLIST_CONTENT_FACADE = "lib/screens/playlist_content_view_screen.dart"
 PLAYLIST_CONTENT_BRIDGE = "lib/features/playlist_content/presentation/legacy_playlist_content/"
-EPISODES_PANEL_COMPLETE = False
+EPISODES_PANEL_COMPLETE = True
 EPISODES_PANEL_FACADE = "lib/widgets/episodes_panel.dart"
 EPISODES_PANEL_BRIDGE = "lib/features/episodes_panel/presentation/legacy_episodes_panel/"
 # One immutable DTO import, scoped to this exact model and target.
@@ -43,7 +43,7 @@ EPISODES_PANEL_MODEL_IMPORTS = {
     },
 }
 # Set to the measured completed facade at step 7 (at most 450).
-EPISODES_PANEL_FACADE_LIMIT = 450
+EPISODES_PANEL_FACADE_LIMIT = 281
 MERGED_DETAIL_COMPLETE = True
 MERGED_DETAIL_FACADE = "lib/screens/merged_series_detail_screen.dart"
 MERGED_DETAIL_BRIDGE = "lib/features/merged_detail/presentation/legacy_merged_detail/"
@@ -116,6 +116,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
     FACADE,
+    # Episodes panel's composition root owns live State wiring and lifecycle.
+    EPISODES_PANEL_FACADE,
     PLAYLIST_CONTENT_FACADE,
     PIKPAK_FACADE,
     PLAYBACK_SETTINGS_FACADE,
