@@ -617,6 +617,20 @@ committed tree**, reconciling each branch's approved additions.
   this feature's evidence; corrected commands pass. Step 0b will record the
   original-only proof closure and the latest `base4` before gate 1.
 
+- Step 0 checkpoint: `8c5981a4` (exact Linux-capture subject). The capture
+  script's macOS preflight proves every application file is the format-only
+  original plus the frozen seam, then deliberately rejects non-Linux capture.
+- Step 0b original-only proof closure: the detached original is restored;
+  all 119 affected tests passed before mutations. Each required mutation is
+  rejected individually by its named test on a stable recorded tree: installed
+  sort, missing Cinemeta sort, committed toggle by manifest URL, removed
+  confirmation, guarded stale engine assignment, mount-guarded engine load,
+  reordered cleanup, wrapped listener and trimmed row-node pool. Mutation
+  diagnostics were reviewed; none is a compile/loading failure. Evidence and
+  original macOS SHA-256 hashes remain in `refactor-evidence/addon_hub/`.
+  No review findings have arrived at this checkpoint. `base4` is recorded on
+  this committed original-plus-tests tree as the latest comparison base.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
