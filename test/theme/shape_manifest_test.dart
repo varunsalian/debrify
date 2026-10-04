@@ -201,6 +201,17 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_catalog_actions.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_list_row.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_lists_actions.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_preferences_actions.dart':
+      0,
+  'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_recording_actions.dart':
+      0,
+
   'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_xtream_add.dart':
       0,
   'lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_url_add.dart':

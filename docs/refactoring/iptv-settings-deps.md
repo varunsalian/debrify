@@ -194,12 +194,12 @@ Review every entry against actual composition before pinning scaffold tokens. De
 | `IptvSettingsFocusActions` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Reviewed step 3 |
 | `IptvSettingsFocusActions` | `node.context` | Original FocusNode property; no State context dependency | Reviewed step 3 |
 | `IptvSettingsFocusActions` | `mounted` | `State live mounted getter` | Reviewed step 3 |
-| `IptvSettingsCatalogActions` | `_hiddenCounts` | `IptvSettingsSourcesOwner.hiddenCounts` | Pending step 4 |
-| `IptvSettingsCatalogActions` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Pending step 4 |
-| `IptvSettingsCatalogActions` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Pending step 4 |
-| `IptvSettingsCatalogActions` | `context` | `State live context getter` | Pending step 4 |
-| `IptvSettingsCatalogActions` | `mounted` | `State live mounted getter` | Pending step 4 |
-| `IptvSettingsCatalogActions` | `setState` | `State setState tear-off` | Pending step 4 |
+| `IptvSettingsCatalogActions` | `_hiddenCounts` | `IptvSettingsSourcesOwner.hiddenCounts` | Reviewed step 4 |
+| `IptvSettingsCatalogActions` | `_playlists` | `IptvSettingsSourcesOwner.playlists` | Reviewed step 4 |
+| `IptvSettingsCatalogActions` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Reviewed step 4 |
+| `IptvSettingsCatalogActions` | `context` | `State live context getter` | Reviewed step 4 |
+| `IptvSettingsCatalogActions` | `mounted` | `State live mounted getter` | Reviewed step 4 |
+| `IptvSettingsCatalogActions` | `setState` | `State setState tear-off` | Reviewed step 4 |
 | `IptvSettingsLoadSettings` | `_autoRefreshHours` | `IptvSettingsPreferencesOwner.autoRefreshHours` | Reviewed step 3 |
 | `IptvSettingsLoadSettings` | `_batteryExempt` | `IptvSettingsRecordingOwner.batteryExempt` | Reviewed step 3 |
 | `IptvSettingsLoadSettings` | `_channelPreviewEnabled` | `IptvSettingsPreferencesOwner.channelPreviewEnabled` | Reviewed step 3 |
@@ -287,35 +287,35 @@ Review every entry against actual composition before pinning scaffold tokens. De
 | `IptvSettingsSourceRefresh` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Reviewed step 3 |
 | `IptvSettingsSourceRefresh` | `mounted` | `State live mounted getter` | Reviewed step 3 |
 | `IptvSettingsSourceRefresh` | `setState` | `State setState tear-off` | Reviewed step 3 |
-| `IptvSettingsListsActions` | `_createListFocusNode` | `IptvSettingsFocusOwner.createListFocusNode` | Pending step 4 |
-| `IptvSettingsListsActions` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Pending step 4 |
-| `IptvSettingsListsActions` | `_focusAndReveal` | `IptvSettingsFocusActions.focusAndReveal` | Pending step 4 |
-| `IptvSettingsListsActions` | `_listFocusNodes` | `IptvSettingsFocusOwner.listFocusNodes` | Pending step 4 |
-| `IptvSettingsListsActions` | `_lists` | `IptvSettingsSourcesOwner.lists` | Pending step 4 |
-| `IptvSettingsListsActions` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Pending step 4 |
-| `IptvSettingsListsActions` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Pending step 4 |
-| `IptvSettingsListsActions` | `context` | `State live context getter` | Pending step 4 |
-| `IptvSettingsListsActions` | `mounted` | `State live mounted getter` | Pending step 4 |
-| `IptvSettingsListsActions` | `setState` | `State setState tear-off` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `_autoRefreshHours` | `IptvSettingsPreferencesOwner.autoRefreshHours` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `_channelPreviewEnabled` | `IptvSettingsPreferencesOwner.channelPreviewEnabled` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `_iptvStyle` | `IptvSettingsPreferencesOwner.iptvStyle` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `_lastLiveChannel` | `IptvSettingsPreferencesOwner.lastLiveChannel` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `_playerGuideStyle` | `IptvSettingsPreferencesOwner.playerGuideStyle` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `_startupChannel` | `IptvSettingsPreferencesOwner.startupChannel` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `_startupEnabled` | `IptvSettingsPreferencesOwner.startupEnabled` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `_startupMode` | `IptvSettingsPreferencesOwner.startupMode` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `_trackContinueWatching` | `IptvSettingsPreferencesOwner.trackContinueWatching` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `context` | `State live context getter` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `mounted` | `State live mounted getter` | Pending step 4 |
-| `IptvSettingsPreferencesActions` | `setState` | `State setState tear-off` | Pending step 4 |
-| `IptvSettingsRecordingActions` | `_maxConcurrent` | `IptvSettingsRecordingOwner.maxConcurrent` | Pending step 4 |
-| `IptvSettingsRecordingActions` | `_recheckBatteryOnResume` | `IptvSettingsRecordingOwner.recheckBatteryOnResume` | Pending step 4 |
-| `IptvSettingsRecordingActions` | `_scheduledCount` | `IptvSettingsRecordingOwner.scheduledCount` | Pending step 4 |
-| `IptvSettingsRecordingActions` | `context` | `State live context getter` | Pending step 4 |
-| `IptvSettingsRecordingActions` | `mounted` | `State live mounted getter` | Pending step 4 |
-| `IptvSettingsRecordingActions` | `setState` | `State setState tear-off` | Pending step 4 |
+| `IptvSettingsListsActions` | `_createListFocusNode` | `IptvSettingsFocusOwner.createListFocusNode` | Reviewed step 4 |
+| `IptvSettingsListsActions` | `_ensureFocusNodes` | `IptvSettingsFocusActions.ensureFocusNodes` | Reviewed step 4 |
+| `IptvSettingsListsActions` | `_focusAndReveal` | `IptvSettingsFocusActions.focusAndReveal` | Reviewed step 4 |
+| `IptvSettingsListsActions` | `_listFocusNodes` | `IptvSettingsFocusOwner.listFocusNodes` | Reviewed step 4 |
+| `IptvSettingsListsActions` | `_lists` | `IptvSettingsSourcesOwner.lists` | Reviewed step 4 |
+| `IptvSettingsListsActions` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Reviewed step 4 |
+| `IptvSettingsListsActions` | `_showSnackBar` | `IptvSettingsFeedback.showSnackBar` | Reviewed step 4 |
+| `IptvSettingsListsActions` | `context` | `State live context getter` | Reviewed step 4 |
+| `IptvSettingsListsActions` | `mounted` | `State live mounted getter` | Reviewed step 4 |
+| `IptvSettingsListsActions` | `setState` | `State setState tear-off` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `_autoRefreshHours` | `IptvSettingsPreferencesOwner.autoRefreshHours` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `_channelPreviewEnabled` | `IptvSettingsPreferencesOwner.channelPreviewEnabled` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `_iptvStyle` | `IptvSettingsPreferencesOwner.iptvStyle` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `_lastLiveChannel` | `IptvSettingsPreferencesOwner.lastLiveChannel` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `_playerGuideStyle` | `IptvSettingsPreferencesOwner.playerGuideStyle` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `_runProfileAction` | `IptvSettingsProfileActions.runProfileAction` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `_startupChannel` | `IptvSettingsPreferencesOwner.startupChannel` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `_startupEnabled` | `IptvSettingsPreferencesOwner.startupEnabled` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `_startupMode` | `IptvSettingsPreferencesOwner.startupMode` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `_trackContinueWatching` | `IptvSettingsPreferencesOwner.trackContinueWatching` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `context` | `State live context getter` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `mounted` | `State live mounted getter` | Reviewed step 4 |
+| `IptvSettingsPreferencesActions` | `setState` | `State setState tear-off` | Reviewed step 4 |
+| `IptvSettingsRecordingActions` | `_maxConcurrent` | `IptvSettingsRecordingOwner.maxConcurrent` | Reviewed step 4 |
+| `IptvSettingsRecordingActions` | `_recheckBatteryOnResume` | `IptvSettingsRecordingOwner.recheckBatteryOnResume` | Reviewed step 4 |
+| `IptvSettingsRecordingActions` | `_scheduledCount` | `IptvSettingsRecordingOwner.scheduledCount` | Reviewed step 4 |
+| `IptvSettingsRecordingActions` | `context` | `State live context getter` | Reviewed step 4 |
+| `IptvSettingsRecordingActions` | `mounted` | `State live mounted getter` | Reviewed step 4 |
+| `IptvSettingsRecordingActions` | `setState` | `State setState tear-off` | Reviewed step 4 |
 | `IptvSettingsSourceForms` | `_addButtonFocusNode` | `IptvSettingsFocusOwner.addButtonFocusNode` | Pending step 5 |
 | `IptvSettingsSourceForms` | `_addPlaylist` | `IptvSettingsUrlAdd.addPlaylist` | Pending step 5 |
 | `IptvSettingsSourceForms` | `_addXtreamCodes` | `IptvSettingsXtreamAdd.addXtreamCodes` | Pending step 5 |
@@ -595,3 +595,5 @@ re-export preserves callers. Explicit imports and shape registrations follow
 the transferred token/bare sites; all original behavior and pixels pass.
 
 Step 3 wiring review: the six owners are created once by each facade State; all initializers and lifecycle disposal order are manifest checked. The factory passes actual owner instances, live State context/mounted/openAddSource getters, the State setState tear-off, and direct section method tear-offs. The same retained two-pane GlobalKey is borrowed without resolving currentState during composition; a dedicated wrong-key negative rejects substitution. Catalog/list callbacks temporarily bind the retained facade methods/getters; Step 4 replaces these with the extracted owners. The FocusActions context reference is node.context, not State.context. Recording/layout receiver names r/l preserve the original lifecycle single-line guards under formatting; no lifecycle braces or guards change. Narrow dependency records were checked against every row above before scaffold pinning.
+
+Step 4 wiring review: CatalogActions, ListsActions, PreferencesActions and RecordingActions use the existing actual owners and live State callbacks. The Step 3 scope catalog/list delegates now bind their real section members. FocusActions gets lazy fresh-list getters; neither getter runs during factory construction. All actions preserve the original profile wrapping or lack of wrapping, arguments/defaults and write/await order. The list row and its callbacks move as one whole widget. The local lambda parameter l remains local. Exact formatter-only brace sites are recorded without adding guards.

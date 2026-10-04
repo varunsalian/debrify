@@ -75,13 +75,26 @@ String iptvSettingsOriginalMember(String originalName) {
       continue;
     }
     const gap = r'(?:\s|//[^\n]*\n|/\*[\s\S]*?\*/)*';
-    String pattern(List<dynamic> values) =>
-        values.map((value) => RegExp.escape(value as String)).join(gap);
+    String pattern(List<dynamic> values) => values
+        .map((value) {
+          final closing = const [')', ']', '}'].contains(value);
+          return '${closing ? '(?:,$gap)?' : ''}${RegExp.escape(value as String)}';
+        })
+        .join(gap);
     final recorded = RegExp(
       '(${pattern((site['condition_tokens'] ?? site['prefix_tokens']) as List<dynamic>)}$gap)'
       '\\{$gap${pattern(site['body_tokens'] as List<dynamic>)}$gap\\}',
     );
-    final matches = recorded.allMatches(member).toList();
+    String compactPrefix(String value) => value
+        .replaceAll(RegExp(r'\s+'), '')
+        .replaceAll(RegExp(r',(?=[)\]}])'), '');
+    final expectedPrefix = compactPrefix(
+      (site['prefix_tokens'] as List<dynamic>).join(' '),
+    );
+    final matches = recorded.allMatches(member).where((match) {
+      return compactPrefix(member.substring(0, match.start) + match[1]!) ==
+          expectedPrefix;
+    }).toList();
     if (matches.length != 1) {
       throw StateError('Recorded formatter site changed: $originalName');
     }
@@ -110,10 +123,13 @@ String iptvSettingsOriginalMember(String originalName) {
   }
   // These are exactly the registered live State callbacks. Builder/dialog
   // contexts remain source text and the verbatim checker checks their scope.
-  member = member.replaceAll('_deps.setState', 'setState');
+  member = member.replaceAll(RegExp(r'\b_deps\s*\.\s*setState\b'), 'setState');
   for (final receiver in ['_deps', 'deps']) {
     for (final name in ['mounted', 'context']) {
-      member = member.replaceAll('$receiver.$name()', name);
+      member = member.replaceAll(
+        RegExp('\\b$receiver\\s*\\.\\s*$name\\s*\\(\\s*\\)'),
+        name,
+      );
     }
   }
   for (final getter in config['live_getter_callbacks'] as List<dynamic>) {

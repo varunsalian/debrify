@@ -67,7 +67,9 @@ def remove_context_exceptions(node, sites, rows, row):
     their approved sites. All original statements still compare to the baseline.
     This never canonicalizes an unregistered guard or a general pair of braces.
     """
-    code = [t for t in node['tokens'] if not t['comment']]
+    formatting_commas = set(node.get('formatCommas', []))
+    code = [t for t in node['tokens']
+            if not t['comment'] and t['offset'] not in formatting_commas]
     values = [t['text'] for t in code]
     acquisitions = [i for i in range(len(code)) if is_context_acquisition(values, i)]
     removed, anchors = set(), []
@@ -94,8 +96,8 @@ def remove_context_exceptions(node, sites, rows, row):
                 if site.get('prefix_tokens') is None:
                     raise ValueError('Repeated formatter if body needs a recorded prefix')
                 matches = [i for i in matches if (
-                    tokens(node, end=code[i]['offset']) if site.get('prefix_mode') == 'raw'
-                    else normalize(tokens(node, end=code[i]['offset']), rows, row)
+                    tokens(without_offsets(node, removed), end=code[i]['offset']) if site.get('prefix_mode') == 'raw'
+                    else normalize(tokens(without_offsets(node, removed), end=code[i]['offset']), rows, row)
                 ) == site['prefix_tokens']]
             if len(matches) != 1:
                 raise ValueError('Recorded formatter if body changed or is not wrapped exactly once')

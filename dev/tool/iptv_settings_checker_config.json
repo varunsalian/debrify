@@ -81,7 +81,11 @@
     "_sections.feedback": "IptvSettingsFeedback",
     "_sections.sourceEdit": "IptvSettingsSourceEdit",
     "r": "IptvSettingsRecordingOwner",
-    "l": "IptvSettingsLayoutOwner"
+    "l": "IptvSettingsLayoutOwner",
+    "_sections.preferencesActions": "IptvSettingsPreferencesActions",
+    "_sections.catalogActions": "IptvSettingsCatalogActions",
+    "_sections.listsActions": "IptvSettingsListsActions",
+    "_sections.recordingActions": "IptvSettingsRecordingActions"
   },
   "receiver_owners": {
     "_focus": "IptvSettingsFocusOwner",
@@ -155,6 +159,22 @@
     {
       "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_source_edit.dart",
       "owner": "IptvSettingsSourceEdit"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_preferences_actions.dart",
+      "owner": "IptvSettingsPreferencesActions"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_catalog_actions.dart",
+      "owner": "IptvSettingsCatalogActions"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_lists_actions.dart",
+      "owner": "IptvSettingsListsActions"
+    },
+    {
+      "file": "lib/features/iptv_settings/presentation/legacy_iptv_settings/iptv_settings_recording_actions.dart",
+      "owner": "IptvSettingsRecordingActions"
     }
   ],
   "callback_identities": [
@@ -565,7 +585,11 @@
     "IptvSettingsSourceRemoval": "$State._sections.sourceRemoval",
     "IptvSettingsSourceRefresh": "$State._sections.sourceRefresh",
     "IptvSettingsFeedback": "$State._sections.feedback",
-    "IptvSettingsSourceEdit": "$State._sections.sourceEdit"
+    "IptvSettingsSourceEdit": "$State._sections.sourceEdit",
+    "IptvSettingsPreferencesActions": "$State._sections.preferencesActions",
+    "IptvSettingsCatalogActions": "$State._sections.catalogActions",
+    "IptvSettingsListsActions": "$State._sections.listsActions",
+    "IptvSettingsRecordingActions": "$State._sections.recordingActions"
   },
   "callback_receiver_aliases": {},
   "co_located_declarations": [
@@ -577,5 +601,5 @@
   "borrowed_resource_aliases": {
     "twoPaneKey": "_IptvSettingsPageState._twoPaneKey"
   },
-  "context_exception_difference": "formatter_if_braces: only the recorded source-edit cancellation return; no guard, ordering or behavior change"
+  "context_exception_difference": "formatter_if_braces: only recorded original if bodies; no guard, ordering or behavior change"
 }

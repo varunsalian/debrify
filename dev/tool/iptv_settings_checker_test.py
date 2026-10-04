@@ -28,25 +28,34 @@ def self_test(package=None):
 
     # An interpolated subtitle precedes a direct callback, just as in the hub.
     # Invoke the identity checker alone so the verbatim checker cannot mask it.
-    interpolated = ['SettingsTile', '(', 'subtitle', ':', "'prefix", '${', 'count', '}', "suffix'", ',', 'onTap', ':', '_pickAutoRefresh', ')']
+    # Keep the standalone parser probes independent of the move stage.
+    probe = ['SettingsTile', '(', 'subtitle', ':', "'prefix", '${', 'count', '}', "suffix'", ',', 'onTap', ':', '_pickAutoRefresh', ')']
     assert arguments(['RadioListTile', '<', 'String', '>', '(', 'onChanged', ':', '_setStartupMode', ')'], 'RadioListTile') == [[['onChanged', ':', '_setStartupMode']]]
-    parsed = arguments(interpolated, 'SettingsTile')
+    parsed = arguments(probe, 'SettingsTile')
     assert len(parsed) == 1
     assert callback_argument(parsed[0], {'named_argument': 'onTap'}) == ['_pickAutoRefresh']
     hub_row = next(r for r in rows if r['original_name'] == '_IptvSettingsPageState._buildPhoneHub')
     hub_key = (hub_row['destination_file'], hub_row['destination_class'], hub_row['new_name'])
     if hub_key not in lookup:
         hub_key = (source, '_IptvSettingsPageState', '_buildPhoneHub')
+    hub_calls = arguments(tokens(lookup[hub_key]), 'SettingsTile')
+    assert len(hub_calls) == 12
+    hub_arg = callback_argument(hub_calls[1], {'named_argument': 'onTap'})
+    interpolated = [*probe[:-2], *hub_arg, ')']
     fixture_config = copy.deepcopy(config)
     fixture_config['callback_identities'] = [{'name': 'interpolated argument callback', 'callback_member': '_IptvSettingsPageState._pickAutoRefresh', 'sites': [{'member': '_IptvSettingsPageState._buildPhoneHub', 'call': 'SettingsTile', 'named_argument': 'onTap'}]}]
     mutated = copy.deepcopy(lookup)
     mutated[hub_key]['tokens'] = [{'text': t, 'offset': i} for i, t in enumerate(interpolated)]
     mutated[hub_key]['formatCommas'] = []
     assert not check_callback_identities(mutated, rows, source, fixture_config)
-    for callback in ['wrongCallback', 'secondInstance._pickAutoRefresh', '() => _pickAutoRefresh()']:
-        poisoned = [callback if t == '_pickAutoRefresh' else t for t in interpolated]
+    for replacement in [
+        [*hub_arg[:-1], 'wrongCallback'],
+        ['secondInstance', '.', hub_arg[-1]],
+        ['(', ')', '=>', *hub_arg, '(', ')'],
+    ]:
+        poisoned = [*probe[:-2], *replacement, ')']
         mutated[hub_key]['tokens'] = [{'text': t, 'offset': i} for i, t in enumerate(poisoned)]
-        assert check_callback_identities(mutated, rows, source, fixture_config), callback
+        assert check_callback_identities(mutated, rows, source, fixture_config), replacement
     print('IPTV settings interpolated-argument positive and identity negatives: PASS')
 
     def located(name):
@@ -100,9 +109,11 @@ def self_test(package=None):
                 call_name = call_row['new_name']
             calls = arguments(values, call_name)
             arg = callback_argument(calls[site.get('occurrence', 0)], site)
+            tail = ['(', ')'] if arg[-2:] == ['(', ')'] else []
+            direct = arg[:-2] if tail else arg
             changes = [
-                ('wrong member', [*arg[:-1], 'wrongCallback']),
-                ('wrong receiver', ['secondInstance', '.', arg[-1]]),
+                ('wrong member', [*direct[:-1], 'wrongCallback', *tail]),
+                ('wrong receiver', ['secondInstance', '.', direct[-1], *tail]),
                 ('wrapping closure', ['(', ')', '=>', *arg, '(', ')']),
                 ('missing argument', []),
             ]
