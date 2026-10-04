@@ -74,6 +74,8 @@ PRIMARY = (
     'lib/screens/addons',
     'lib/features/addon_hub',
     'lib/widgets/home',
+    'lib/features/spotlight_board/presentation/',
+    'lib/features/spotlight_board/presentation/legacy_spotlight_board/',
     'lib/widgets/see_all',
     'lib/widgets/cloud',
 )

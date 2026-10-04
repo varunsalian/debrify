@@ -246,3 +246,25 @@ test/features/detail_showcase/presentation/showcase_guide_update_test.dart
 test/features/detail_showcase/presentation/showcase_hover_focus_test.dart
 test/features/detail_showcase/presentation/showcase_primary_hold_test.dart
 test/features/detail_showcase/presentation/showcase_identity_actions_test.dart
+
+# Spotlight board original-code characterization and unchanged facade importers.
+test/collection_editorial_header_test.dart
+test/collection_native_browser_test.dart
+test/collection_visuals_test.dart
+test/features/home/home_display_preferences_screen_test.dart
+test/features/home/home_episode_artwork_screen_test.dart
+test/features/home/home_hero_preview_policy_screen_test.dart
+test/features/home/home_layout_preference_screen_test.dart
+test/features/home/home_trailer_preferences_screen_test.dart
+test/home_progressive_pagination_test.dart
+test/home_progressive_screen_test.dart
+test/spotlight_board_compact_test.dart
+test/spotlight_board_test.dart
+test/spotlight_catalog_card_cache_test.dart
+test/spotlight_hero_ambient_policy_test.dart
+test/spotlight_large_screen_test.dart
+test/spotlight_metadata_image_error_test.dart
+test/theme/spotlight_spec_test.dart
+test/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_contracts_test.dart
+test/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_goldens_test.dart
+test/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_source_contracts_test.dart

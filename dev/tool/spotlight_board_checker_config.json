@@ -1,0 +1,4857 @@
+{
+  "baseline": "a65ad81aebbbcbe29730fc2de1d78b037a84539c",
+  "source": "lib/widgets/home/spotlight_board.dart",
+  "feature": "lib/features/spotlight_board",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": true,
+  "allowed_edits": [
+    "receiver",
+    "rename",
+    "state_callback",
+    "context_guard",
+    "live_getter_callback",
+    "retained_forwarder",
+    "formatter_if_braces",
+    "production_api_annotation",
+    "layout_body",
+    "formatter_if_braces",
+    "production_api_annotation",
+    "layout_body",
+    "formatter_if_braces",
+    "production_api_annotation",
+    "layout_body",
+    "formatter_if_braces",
+    "production_api_annotation",
+    "layout_body",
+    "formatter_if_braces",
+    "production_api_annotation",
+    "layout_body",
+    "formatter_if_braces"
+  ],
+  "receivers": [
+    "_deps",
+    "deps",
+    "cardState",
+    "view"
+  ],
+  "live_getter_callbacks": [
+    "context",
+    "mounted"
+  ],
+  "live_widget_getters": [
+    "animationStyle",
+    "animationsEnabled",
+    "cardTrailerVolume",
+    "dpad",
+    "expandFocusedCard",
+    "forceCardParallax",
+    "hero",
+    "heroAddon",
+    "heroNode",
+    "largeScreenInteractions",
+    "onAmbient",
+    "onDwell",
+    "onExitTop",
+    "onHeroOpen",
+    "onLoadMoreRow",
+    "onLoadMoreShelves",
+    "onTrailerStop",
+    "paintBackground",
+    "pendingShelves",
+    "sections",
+    "shelvesOnly",
+    "showCardTitlesAndRatings",
+    "trailer",
+    "trailersEnabled"
+  ],
+  "receiver_paths": {
+    "_sections.selection": "SpotlightBoardSelection",
+    "_sections.heroArt": "SpotlightBoardHeroArt",
+    "_sections.heroWarmup": "SpotlightBoardHeroWarmup",
+    "_sections.cadence": "SpotlightBoardCadence",
+    "_sections.ambient": "SpotlightBoardAmbient",
+    "_sections.movement": "SpotlightBoardMovement",
+    "_sections.focus": "SpotlightBoardFocus",
+    "_sections.rootLayout": "SpotlightBoardRootLayout",
+    "_sections.compactHero": "SpotlightBoardCompactHero",
+    "_sections.wideHero": "SpotlightBoardWideHero",
+    "_sections.heroBackdrop": "SpotlightBoardHeroBackdrop",
+    "_sections.heroForeground": "SpotlightBoardHeroForeground",
+    "_sections.heroIdentity": "SpotlightBoardHeroIdentity",
+    "_sections.shelves": "SpotlightBoardShelves",
+    "_owners.selection": "SpotlightBoardSelectionState",
+    "_owners.hero": "SpotlightBoardHeroState",
+    "_owners.navigation": "SpotlightBoardNavigationState",
+    "_owners.scroll": "SpotlightBoardScrollState",
+    "_owners.constants": "SpotlightBoardConstantsState",
+    "cardState": "SpotlightBoardCardState",
+    "_layout": "SpotlightBoardCardLayout",
+    "SpotlightBoardState": "SpotlightBoardState",
+    "SpotlightBoardSelectionState": "SpotlightBoardSelectionState",
+    "SpotlightBoardConstantsState": "SpotlightBoardConstantsState",
+    "SpotlightBoardCardState": "SpotlightBoardCardState",
+    "SpotlightBoardScrollState": "SpotlightBoardScrollState",
+    "SpotlightBoardCardLayout": "SpotlightBoardCardLayout",
+    "SpotlightBoardNavigationState": "SpotlightBoardNavigationState",
+    "SpotlightBoardHeroState": "SpotlightBoardHeroState",
+    "SpotlightBoardHeroArt": "SpotlightBoardHeroArt",
+    "SpotlightBoardHeroWarmup": "SpotlightBoardHeroWarmup",
+    "SpotlightBoardAmbient": "SpotlightBoardAmbient",
+    "SpotlightBoardCadence": "SpotlightBoardCadence",
+    "SpotlightBoardMovement": "SpotlightBoardMovement",
+    "SpotlightBoardSelection": "SpotlightBoardSelection",
+    "SpotlightBoardFocus": "SpotlightBoardFocus",
+    "SpotlightBoardRootLayout": "SpotlightBoardRootLayout",
+    "SpotlightBoardWideHero": "SpotlightBoardWideHero",
+    "SpotlightBoardHeroBackdrop": "SpotlightBoardHeroBackdrop",
+    "SpotlightBoardShelves": "SpotlightBoardShelves",
+    "SpotlightBoardCompactHero": "SpotlightBoardCompactHero",
+    "SpotlightBoardHeroForeground": "SpotlightBoardHeroForeground",
+    "SpotlightBoardHeroIdentity": "SpotlightBoardHeroIdentity"
+  },
+  "receiver_owners": {
+    "_sections.selection": "SpotlightBoardSelection",
+    "_sections.heroArt": "SpotlightBoardHeroArt",
+    "_sections.heroWarmup": "SpotlightBoardHeroWarmup",
+    "_sections.cadence": "SpotlightBoardCadence",
+    "_sections.ambient": "SpotlightBoardAmbient",
+    "_sections.movement": "SpotlightBoardMovement",
+    "_sections.focus": "SpotlightBoardFocus",
+    "_sections.rootLayout": "SpotlightBoardRootLayout",
+    "_sections.compactHero": "SpotlightBoardCompactHero",
+    "_sections.wideHero": "SpotlightBoardWideHero",
+    "_sections.heroBackdrop": "SpotlightBoardHeroBackdrop",
+    "_sections.heroForeground": "SpotlightBoardHeroForeground",
+    "_sections.heroIdentity": "SpotlightBoardHeroIdentity",
+    "_sections.shelves": "SpotlightBoardShelves",
+    "_owners.selection": "SpotlightBoardSelectionState",
+    "_owners.hero": "SpotlightBoardHeroState",
+    "_owners.navigation": "SpotlightBoardNavigationState",
+    "_owners.scroll": "SpotlightBoardScrollState",
+    "_owners.constants": "SpotlightBoardConstantsState",
+    "cardState": "SpotlightBoardCardState",
+    "_layout": "SpotlightBoardCardLayout",
+    "SpotlightBoardState": "SpotlightBoardState",
+    "SpotlightBoardSelectionState": "SpotlightBoardSelectionState",
+    "SpotlightBoardConstantsState": "SpotlightBoardConstantsState",
+    "SpotlightBoardCardState": "SpotlightBoardCardState",
+    "SpotlightBoardScrollState": "SpotlightBoardScrollState",
+    "SpotlightBoardCardLayout": "SpotlightBoardCardLayout",
+    "SpotlightBoardNavigationState": "SpotlightBoardNavigationState",
+    "SpotlightBoardHeroState": "SpotlightBoardHeroState",
+    "SpotlightBoardHeroArt": "SpotlightBoardHeroArt",
+    "SpotlightBoardHeroWarmup": "SpotlightBoardHeroWarmup",
+    "SpotlightBoardAmbient": "SpotlightBoardAmbient",
+    "SpotlightBoardCadence": "SpotlightBoardCadence",
+    "SpotlightBoardMovement": "SpotlightBoardMovement",
+    "SpotlightBoardSelection": "SpotlightBoardSelection",
+    "SpotlightBoardFocus": "SpotlightBoardFocus",
+    "SpotlightBoardRootLayout": "SpotlightBoardRootLayout",
+    "SpotlightBoardWideHero": "SpotlightBoardWideHero",
+    "SpotlightBoardHeroBackdrop": "SpotlightBoardHeroBackdrop",
+    "SpotlightBoardShelves": "SpotlightBoardShelves",
+    "SpotlightBoardCompactHero": "SpotlightBoardCompactHero",
+    "SpotlightBoardHeroForeground": "SpotlightBoardHeroForeground",
+    "SpotlightBoardHeroIdentity": "SpotlightBoardHeroIdentity"
+  },
+  "sidecars": {
+    "scaffolding": "dev/tool/spotlight_board_scaffolding.json",
+    "context_exceptions": "dev/tool/spotlight_board_context_exceptions.json"
+  },
+  "lifecycle": [
+    "SpotlightBoardState.didChangeDependencies",
+    "SpotlightBoardState.didUpdateWidget",
+    "SpotlightBoardState.dispose",
+    "SpotlightBoardState.initState"
+  ],
+  "forwarders": {
+    "SpotlightBoardState.prioritizeMetadata": {
+      "receiver": "_sections.heroArt"
+    },
+    "SpotlightBoardState.originalMetadata": {
+      "receiver": "_sections.heroArt"
+    },
+    "SpotlightBoardState.onMetadataPresentationChanged": {
+      "receiver": "_sections.heroArt"
+    },
+    "SpotlightBoardState.onMetadataPolicyChanged": {
+      "receiver": "_sections.heroArt"
+    },
+    "SpotlightBoardState.heroWarmupProvider": {
+      "receiver": "_sections.heroArt"
+    },
+    "SpotlightBoardState.currentHeroId": {
+      "receiver": "_sections.heroArt"
+    },
+    "SpotlightBoardState.heroAlignmentItemId": {
+      "receiver": "_sections.ambient"
+    },
+    "SpotlightBoardState.focusShelf": {
+      "receiver": "_sections.focus"
+    },
+    "SpotlightBoardState.focusTarget": {
+      "receiver": "_sections.focus"
+    },
+    "SpotlightBoardState.build": {
+      "receiver": "_sections.rootLayout"
+    }
+  },
+  "callback_identities": [
+    {
+      "name": "hero focus registration identity",
+      "callback_member": "SpotlightBoardState._onHeroFocus",
+      "sites": [
+        {
+          "member": "SpotlightBoardState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 2,
+          "occurrence": 0
+        },
+        {
+          "member": "SpotlightBoardState.didUpdateWidget",
+          "call": "removeListener",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "SpotlightBoardState.didUpdateWidget",
+          "call": "addListener",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "SpotlightBoardState.dispose",
+          "call": "removeListener",
+          "argument": 0,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "board scroll registration identity",
+      "callback_member": "SpotlightBoardState._onBoardScrolled",
+      "sites": [
+        {
+          "member": "SpotlightBoardState.initState",
+          "call": "addListener",
+          "argument": 0,
+          "count": 2,
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "name": "cadence timer identity",
+      "callback_member": "SpotlightBoardState._onArtDone",
+      "sites": [
+        {
+          "member": "SpotlightBoardState._restartCadence",
+          "call": "Timer",
+          "argument": 1,
+          "count": 1
+        },
+        {
+          "member": "SpotlightBoardState._onArtDone",
+          "call": "Timer",
+          "argument": 1,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "per-build register",
+      "callback_member": "SpotlightBoardState._registerCard",
+      "sites": [
+        {
+          "member": "SpotlightBoardState._shelf",
+          "call": "_Card",
+          "argument": "register",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "per-build unregister",
+      "callback_member": "SpotlightBoardState._unregisterCard",
+      "sites": [
+        {
+          "member": "SpotlightBoardState._shelf",
+          "call": "_Card",
+          "argument": "unregister",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "per-build onInteraction",
+      "callback_member": "SpotlightBoardState._interactWithCard",
+      "sites": [
+        {
+          "member": "SpotlightBoardState._shelf",
+          "call": "_Card",
+          "argument": "onInteraction",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "per-build onDesktopPreviewActivityChanged",
+      "callback_member": "SpotlightBoardState._onDesktopPreviewActivityChanged",
+      "sites": [
+        {
+          "member": "SpotlightBoardState._shelf",
+          "call": "_Card",
+          "argument": "onDesktopPreviewActivityChanged",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "callback_instances": {
+    "SpotlightBoardSelection": "$State._sections.selection",
+    "SpotlightBoardHeroArt": "$State._sections.heroArt",
+    "SpotlightBoardHeroWarmup": "$State._sections.heroWarmup",
+    "SpotlightBoardCadence": "$State._sections.cadence",
+    "SpotlightBoardAmbient": "$State._sections.ambient",
+    "SpotlightBoardMovement": "$State._sections.movement",
+    "SpotlightBoardFocus": "$State._sections.focus",
+    "SpotlightBoardRootLayout": "$State._sections.rootLayout",
+    "SpotlightBoardCompactHero": "$State._sections.compactHero",
+    "SpotlightBoardWideHero": "$State._sections.wideHero",
+    "SpotlightBoardHeroBackdrop": "$State._sections.heroBackdrop",
+    "SpotlightBoardHeroForeground": "$State._sections.heroForeground",
+    "SpotlightBoardHeroIdentity": "$State._sections.heroIdentity",
+    "SpotlightBoardShelves": "$State._sections.shelves",
+    "SpotlightBoardState": "$State",
+    "SpotlightBoardCardState": "$CardState",
+    "SpotlightBoardCardLayout": "$CardState._layout"
+  },
+  "self_test_module": "spotlight_board_checker_test",
+  "type_renames": {
+    "_CardState": "SpotlightBoardCardState"
+  },
+  "bound_state_receivers": {
+    "_CardState._buildCard": [
+      "cardState"
+    ]
+  },
+  "bound_this": {
+    "_CardState._buildCard": {
+      "receiver": "cardState",
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card_layout.dart",
+      "owner": "SpotlightBoardCardLayout",
+      "state_owner": "SpotlightBoardCardState",
+      "state_members": [
+        "widget",
+        "mounted",
+        "presentedMetadata",
+        "heroPresentation",
+        "metadataPreferences",
+        "metadataArtworkPending"
+      ]
+    }
+  },
+  "class_header_additions": {
+    "SpotlightBoardState": {
+      "tokens": [
+        "implements",
+        "SpotlightBoardWidgetView"
+      ],
+      "activation_file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_bindings.dart"
+    }
+  },
+  "widget_views": {
+    "SpotlightBoardState._visibleCards": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._scrollingSources": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._selectionViewport": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._scrollRowId": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._selectedCard": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._largeCardInteractions": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._selectionQueued": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._selectionFromScroll": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._scrollInterruptedPreview": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._registerCard": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._unregisterCard": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._selectCard": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._interactWithCard": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._pointerOwnsScrollSelection": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._onCardScroll": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._queueScrollSelection": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._lastMetrics": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState.prioritizeMetadata": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState.originalMetadata": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState.onMetadataPresentationChanged": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState.onMetadataPolicyChanged": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._cancelHeroWarmups": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._cancelWarmups": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroDecodeWidth": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroImageFadeIn": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroImageFadeOut": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState.heroWarmupProvider": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._warmHeroImage": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation",
+        "heroWarmupProvider"
+      ]
+    },
+    "SpotlightBoardState._preloadHeroes": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._touchLoadMoreThreshold": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroFraction": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroFractionCompact": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._shelfOverlapFraction": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._scroll": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroBandH": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._lastMaxExtent": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._veilMetricsRevision": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._scrolledAway": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._onBoardScrolled": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroId": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._row": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._col": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._loadingMoreShelves": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._pendingProgressiveDown": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._leftThird": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._hiddenRetry": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._cadence": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._rolling": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._desktopPreviewOwners": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._stopRolling": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._onDesktopPreviewActivityChanged": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._dwelledHeroId": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._restartCadence": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._jumpTo": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._onArtDone": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroPoster": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroArt": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroIndex": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroItem": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._openHero": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation",
+        "originalMetadata"
+      ]
+    },
+    "SpotlightBoardState.currentHeroId": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._onHeroFocus": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._probeGen": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._tints": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._lastAmbient": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._lastAmbientSink": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._emitAmbient": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._probe": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._remember": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._warmNext": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._flipFor": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._flipValue": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState.heroAlignmentItemId": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._flip": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._go": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._page": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._finishProgressiveDown": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._loadShelvesAndFinishDown": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._loadMoreShelvesForTouch": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._down": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._up": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._focusRow": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState.focusShelf": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._liveCol": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._liveRow": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._walk": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._onKey": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState.focusTarget": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState.build": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._board": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._hero": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroCompact": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._identityCompact": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroWide": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroBackdrop": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroBackdropContent": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._veil": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._heroForeground": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._identity": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._dots": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._shelfTitleStyle": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._shelfExtent": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._shelfTitle": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._shelfCardHeight": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._shelfHasCaptions": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    },
+    "SpotlightBoardState._shelf": {
+      "receiver": "view",
+      "properties": [
+        "animationStyle",
+        "animationsEnabled",
+        "cardTrailerVolume",
+        "dpad",
+        "expandFocusedCard",
+        "forceCardParallax",
+        "hero",
+        "heroAddon",
+        "heroNode",
+        "largeScreenInteractions",
+        "onAmbient",
+        "onDwell",
+        "onExitTop",
+        "onHeroOpen",
+        "onLoadMoreRow",
+        "onLoadMoreShelves",
+        "onTrailerStop",
+        "paintBackground",
+        "pendingShelves",
+        "sections",
+        "shelvesOnly",
+        "showCardTitlesAndRatings",
+        "trailer",
+        "trailersEnabled"
+      ],
+      "statics": [
+        "groundOf",
+        "groundLowOf",
+        "leftThirdBusy"
+      ],
+      "state_members": [
+        "metadataArtworkPending",
+        "usesMetadataProvider",
+        "metadataPreferences",
+        "heroPresentation",
+        "preloadMetadata",
+        "refreshMetadataPresentation"
+      ]
+    }
+  },
+  "spotlight_named_record_formatter_commas": {
+    "SpotlightBoardState._loadShelvesAndFinishDown": {
+      "ordinal": 0,
+      "record_count": 1,
+      "record_tokens": [
+        "(",
+        "origin",
+        ":",
+        "origin",
+        ",",
+        "at",
+        ":",
+        "DateTime",
+        ".",
+        "now",
+        "(",
+        ")",
+        ")"
+      ]
+    }
+  },
+  "context_exception_difference": "formatter_if_braces: unchanged original statement; physical prefix frozen",
+  "annotation_exceptions": {
+    "SpotlightBoardState.heroWarmupProvider": {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart",
+      "difference": "production_api_annotation: remove only @visibleForTesting from moved implementation; retain exact annotated facade forwarder"
+    },
+    "SpotlightBoardState.heroAlignmentItemId": {
+      "file": "lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart",
+      "difference": "production_api_annotation: remove only @visibleForTesting from moved implementation; retain exact annotated facade forwarder"
+    }
+  },
+  "spotlight_state_field_bindings": [
+    "_CardState",
+    "SpotlightBoardState"
+  ]
+}

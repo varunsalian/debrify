@@ -7,3 +7,7 @@ test/services/webdav_sync/webdav_sync_hot_merge_test.dart::appearance stays loca
 test/detail_theme_test.dart::no raw colour literals survive in the themed files detail_episode_cells.dart
 test/search_title_suggestions_test.dart::unresolved suggestion submits Catalog title search (error: false)
 test/search_title_suggestions_test.dart::unresolved suggestion submits Catalog title search (error: true)
+# 2026-10-04 spotlight_board step 0: pre-existing, newly exposed by CI coverage; observed in spotlight_board/base
+test/collection_native_browser_test.dart::Spotlight Home folder opens all rows directly: TargetPlatform.android TV false
+test/collection_native_browser_test.dart::Spotlight Home folder opens all rows directly: TargetPlatform.iOS TV false
+test/spotlight_board_compact_test.dart::compact presentation the touch hero asks for a trailer immediately without paging the reel

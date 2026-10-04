@@ -125,7 +125,8 @@ def check_callback_identities(lookup, rows, source_path, config):
         if key in lookup:
             return lookup[key]
         owner, _, name = original.rpartition('.')
-        return lookup[(source_path, owner, name)]
+        retained_owner = config.get('type_renames', {}).get(owner, owner)
+        return lookup[(source_path, retained_owner, name)]
 
     def identity(expr, owner, *, getter=False):
         expr = list(expr)

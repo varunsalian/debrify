@@ -271,6 +271,63 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/addon_hub/presentation/legacy_addon_hub/addon_hub_sections.dart':
       0,
   'lib/screens/addons/addon_hub_screen.dart': 0,
+  // Spotlight board: facade and every destination, preserving three radii.
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_compact_hero.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_backdrop.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_foreground.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_identity.dart':
+      1,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_root_layout.dart':
+      1,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_shelves.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_wide_hero.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_focus.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_movement.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_ambient.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_cadence.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_composition.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_art.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_warmup.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_bindings.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_constants_state.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_hero_state.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_navigation_state.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_owners.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_scroll_state.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_selection_state.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_card_layout.dart':
+      0,
+  'lib/features/spotlight_board/presentation/legacy_spotlight_board/spotlight_board_logo_or_title.dart':
+      0,
+  'lib/features/spotlight_board/presentation/spotlight_hero_open_pill.dart': 1,
+  'lib/features/spotlight_board/presentation/spotlight_shelf_title_link.dart':
+      0,
+  'lib/widgets/home/spotlight_board.dart': 0,
+  'lib/features/spotlight_board/presentation/spotlight_board_metrics.dart': 0,
+  'lib/features/spotlight_board/presentation/spotlight_board_types.dart': 0,
 
   // Playback settings: every remaining destination and the facade, at zero.
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart':

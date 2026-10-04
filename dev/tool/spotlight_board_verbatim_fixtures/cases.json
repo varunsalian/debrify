@@ -1,0 +1,128 @@
+[
+  {
+    "name": "drop _stopRolling trailer stop",
+    "member": "SpotlightBoardState._stopRolling",
+    "mutation": "drop_stop"
+  },
+  {
+    "name": "drop _onDesktopPreviewActivityChanged trailer stop",
+    "member": "SpotlightBoardState._onDesktopPreviewActivityChanged",
+    "mutation": "drop_stop"
+  },
+  {
+    "name": "drop dispose trailer stop",
+    "member": "SpotlightBoardState.dispose",
+    "mutation": "drop_stop"
+  },
+  {
+    "name": "SpotlightBoardState dispose order",
+    "member": "SpotlightBoardState.dispose",
+    "mutation": "dispose_order"
+  },
+  {
+    "name": "_CardState dispose order",
+    "member": "_CardState.dispose",
+    "mutation": "dispose_order"
+  },
+  {
+    "name": "rebind card trailer start",
+    "member": "SpotlightBoardState._shelf",
+    "mutation": "rebound_trailer_start"
+  },
+  {
+    "name": "_heroCompact trailer gated",
+    "member": "SpotlightBoardState._heroCompact",
+    "mutation": "gated_trailer"
+  },
+  {
+    "name": "_heroBackdropContent trailer gated",
+    "member": "SpotlightBoardState._heroBackdropContent",
+    "mutation": "gated_trailer"
+  },
+  {
+    "name": "zero cadence",
+    "member": "SpotlightBoardState._restartCadence",
+    "mutation": "replace",
+    "before": "Duration(seconds: 2)",
+    "after": "Duration(seconds: 0)"
+  },
+  {
+    "name": "zero card dwell",
+    "member": "_CardState._armCardTrailer",
+    "mutation": "replace",
+    "before": "Duration(seconds: 2)",
+    "after": "Duration(seconds: 0)"
+  },
+  {
+    "name": "eager hold",
+    "member": "_CardState._hold",
+    "mutation": "replace",
+    "before": "late final TvHoldOk",
+    "after": "final TvHoldOk"
+  },
+  {
+    "name": "captured pending bool",
+    "member": "SpotlightBoardState._heroArt",
+    "mutation": "replace",
+    "before": "metadataArtworkPending(MetadataCategory.backgrounds)",
+    "after": "capturedPending"
+  },
+  {
+    "name": "super pending receiver",
+    "member": "SpotlightBoardState._heroArt",
+    "mutation": "replace",
+    "before": "metadataArtworkPending(MetadataCategory.backgrounds)",
+    "after": "super.metadataArtworkPending(MetadataCategory.backgrounds)"
+  },
+  {
+    "name": "layout wrong owning State",
+    "member": "_CardState._buildCard",
+    "mutation": "wrong_this"
+  },
+  {
+    "name": "hover wrong owning State",
+    "member": "_CardState._setHover",
+    "mutation": "wrong_this"
+  },
+  {
+    "name": "reword comment",
+    "member": "SpotlightBoardState._restartCadence",
+    "mutation": "replace",
+    "before": "With no trailer to arm",
+    "after": "When no trailer can arm"
+  },
+  {
+    "name": "new const",
+    "member": "SpotlightBoardState.build",
+    "mutation": "replace",
+    "before": "return Focus(",
+    "after": "return const Focus("
+  },
+  {
+    "name": "inserted trailer opacity",
+    "member": "SpotlightBoardState._heroBackdrop",
+    "mutation": "replace",
+    "before": "if (!widget.animationsEnabled) return backdrop;",
+    "after": "if (!widget.animationsEnabled) return Opacity(opacity: 1, child: backdrop);"
+  },
+  {
+    "name": "dropped Card dispose step",
+    "member": "_CardState.dispose",
+    "mutation": "drop_dispose"
+  },
+  {
+    "name": "dropped Board dispose step",
+    "member": "SpotlightBoardState.dispose",
+    "mutation": "drop_dispose"
+  },
+  {
+    "name": "moving field read captures the selection parameter",
+    "member": "_CardState._setWideSelection",
+    "mutation": "capture_moving_read"
+  },
+  {
+    "name": "moving field write captures the selection parameter",
+    "member": "_CardState._setWideSelection",
+    "mutation": "capture_moving_write"
+  }
+]

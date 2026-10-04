@@ -370,8 +370,13 @@ forwarder, the bindings implementation and composition.
   header, lifecycle, forwarders/overrides, bindings, composition, and the
   remaining blank/comment lines — whose sum must equal the `wc -l` total.
 - The target is 400 lines. If the measured total exceeds it, the cap
-  becomes that measured value, **at most 450** (the merged-detail
-  precedent); above 450 is a plan failure to report, not a new exception.
+  becomes that measured value, **at most 460** (amended after step 0b: the
+  complete composition probe measured 451 physical lines with the public
+  State warm-up override preserved through its tear-off; the original
+  450 maximum was the merged-detail precedent, and 451–460 stays inside the
+  AGENTS.md 301–500 band for one responsibility — composition). Above 460
+  is a plan failure to report, not a new exception. The cap is the
+  measured value, not 460: no line may be added to use the headroom.
   `TEMP(spotlight_board)` rejection enforces the cap from step 7.
 - No accessor is planned: the public seams, host callbacks and bindings
   suffice. If step 0 proves one necessary, it is frozen and counted, and
@@ -609,11 +614,11 @@ As in the playlist and merged-detail plans, plus:
 | --- | --- | --- |
 | 0 | Baseline; format commit (a) and `base-fmt`; lint probes; deps report, manifest, config; characterization tests, macOS goldens and checkpoint (b); CI list; inventory; Linux script; step 0b review | Nothing moves |
 | 1 | Guard registration; public types (re-exported); metrics; shape and theme registration begin | Surface |
-| 2 | Title link, logo, open pill; card and card State (owners, trailer and description sections, bound layout owner with its exception) | 1 (`this`), 5–7, 15 |
+| 2 | **Prerequisite: the supplied Linux originals are hash-verified, committed separately and the Linux golden test made strict before this step.** Title link, logo, open pill; card and card State (owners, trailer and description sections, bound layout owner with its exception) | 1 (`this`), 5–7, 15 |
 | 3 | Board owners (32 fields); widget view and injected statics; lifecycle verbatim | 1, 14 |
 | 4 | Hero art and warm-up, cadence and lease, `_onHeroFocus`, ambient, tint, flip, metadata hook bodies. **Full-suite gate 1.** | 2, 4, 6, 13 |
 | 5 | Selection, scroll, movement, progressive DOWN, `focusShelf`/`focusTarget` bodies | 11, 12 |
-| 6 | `build` forwarder, `_board`, hero paint, shelves. Committed Linux originals are a prerequisite. | 3, 7–10 |
+| 6 | `build` forwarder, `_board`, hero paint, shelves (Linux originals already committed and strict since before step 2). | 3, 7–10 |
 | 7 | Composition, facade registration, cap and `TEMP`, guards, CI. **Full-suite gate 2.** | All |
 
 ### Step 0
@@ -778,7 +783,8 @@ push is approved.
 ## Definition of done
 
 1. **Facade.** Formatted and within its measured cap (400, or the recorded
-   value up to 450, counting every physical line), with the breakdown
+   measured value — 451 or lower — within the amended 460 design maximum,
+   counting every physical line), with the breakdown
    recorded. It holds `SpotlightBoard`, the re-export, and the State with
    its mixin, verbatim lifecycle, forwarders, bindings and composition. All
    9 production and 19 test importers compile unchanged.
@@ -815,7 +821,622 @@ decomposition; bug fixes and behaviour changes, including everything below.
 
 ## Progress
 
-(empty)
+### Step 0 — original baseline and characterization preparation
+
+- Execution is confined to this dedicated `refactor/spotlight-board` worktree,
+  starting at `c5978c5fbc491ed7ef0f4ab84ceb025cd62c94e9`. No push or branch
+  switch; no other existing checkout/worktree is opened. `flutter pub get`
+  completed first, with no dependency or lockfile change. Flutter 3.44.8 /
+  Dart 3.12.2 matches the plan. Parser/kernel caches are isolated under this
+  worktree's ignored `.dart_tool/spotlight_board/`; every manifest invocation
+  passes `--parser-package`. Evidence writes use only `spotlight_board/`.
+- Approved application reference **R is the format-only commit `a65ad81a`**,
+  subject `style(spotlight): format the original spotlight board`. No seam
+  checkpoint is needed. Formatted facade: **3,896 physical lines**; the size
+  ratchet was raised by hand from 3,724. Its original responsibilities remain
+  temporarily until steps 1–7, with the planned extraction milestones above.
+  `format-token-proof.json` proves identical tokens/comments except whitespace
+  and AST-owned optional formatter commas, inventoried by declaration. Edited
+  comment, literal and non-optional comma negatives reject; formatting is
+  idempotent. The commit contains only the facade and its size ratchet.
+- Untouched `base` and committed-format `base-fmt` each record **10,984
+  successes / 13 failures / 28 errors / 20 skips**. Identity comparison PASS:
+  no new failures, missing/newly skipped tests or changed outcomes. Whole
+  analyzer differs by exactly the six format-induced curly-brace infos in the
+  plan; all other diagnostic identities/counts are unchanged. SDK, HEAD,
+  tested/end trees and input paths are in their env files. These observed
+  outcomes remain authoritative over historical allowlists.
+- Strict original probe qualifies import URIs only and uses the unchanged
+  destination lint configuration. It observes 15 import-order, ten curly and
+  two deprecation infos; the root additionally observes the inherited
+  `avoid_renaming_method_parameters` info. The rename-only probe adds exactly
+  four constructor-key infos, no private-type API infos, no warnings/errors
+  and no const recommendation. `spotlight_board_analyzer_inventory.json`
+  combines original/probe counts by **maximum**, never sum, and retains the
+  root parameter-name identity. No constructor, key, const or suppression
+  changes are made. Sorted destination imports will remove the 15 ordering
+  infos. Initial unsuccessful rename probes are retained as evidence.
+- Conservative rename decision: `_previewActive` becomes `cardPreviewActive`,
+  because `_buildCard` already has a local `previewActive`. The local remains
+  unchanged. The final rename probe compiles without errors. The separate
+  local widget `card` remains unchanged; the layout binding is `cardState`.
+- The dependency report and LF manifest inventory **157 original leaves**,
+  their dependencies/destinations and per-entry production wiring checklist.
+  Scaffolds are not pinned before their wiring review. The checker extensions
+  are opt-in: bound-this, bound-State lexical-context guard, view/static
+  receivers, registered header addition and split-State type rename.
+  Real-config fixtures reject lifecycle/stop/timing/trailer/receiver/comment/
+  const mutations; callback identity negatives also run independently of
+  verbatim/scaffold checks. The bound layout positive retains both mounted
+  reads; all three lexical-context substitutions fail. Header negatives
+  cover superclass, mixins, interfaces, modifiers and another class.
+- Original fixture owns host focus nodes and recording callbacks, initializes
+  and resets ProfileRuntime, SharedPreferences, platform flags and travel
+  clock, pins theme/locale/size/DPR, and uses MockClient for held metadata.
+  Bounded pumps explicitly schedule the frame after post-frame setup; fake
+  time stays outside `runAsync`, and the progressive-DOWN window uses real
+  wall time. No `pumpAndSettle` or production trailer seam was added.
+- Characterizations cover cadence/gates/retry and each stop path; full ordered
+  trailer ancestors and TV snap; preview stop before mount; card dwell,
+  growth/text-hide timing; exact decode widths by shape/focus/DPR/TV;
+  original live subclass overrides; ignored dpad preview leases; row-snapped TV
+  ground veil independent of scroll glide; horizontal zero board rebuilds plus shelf,
+  card, scrollable and parallax-body identities; vertical and sections-update
+  positive counts; Android TV insertion anchor; held progressive DOWN; and
+  held description responses after profile change/unmount. Interaction owner
+  identity is observed through the selected card's own mounted State and
+  visual, for focus and hover, while the full body guard pins its argument.
+- Characterization preparation exposed two fixture details: ParallaxFocus has
+  its own MouseRegion (exit/hover); the card's outer enter/exit region is the
+  dpad-gated surface tested here. `_ParallaxBody` owns the spring State;
+  ParallaxFocus itself is StatelessWidget. The three-second window belongs to
+  a pending independent shelf arrival after a false load result, not the
+  directly appended-true continuation. Tests exercise these original scopes.
+- Artwork decision: the original HttpOverrides/bundled-PNG cache probe fails
+  on the host's missing path-provider implementation; its failure log is
+  retained. No cache/HTTP seam is added. All six golden scenes use deterministic
+  null-artwork placeholders and the ground hero. MacOS originals are captured
+  and strict rerun PASS. Linux capture resolves the exact characterization
+  checkpoint subject and R subject and requires equal lib/pubspec/lock blobs;
+  it captures only the checkpoint's own tests in an isolated archive inside
+  the clone. Supplied Linux PNGs will be verified and committed separately.
+- CI coverage adds the 19 unchanged facade importers and all new tests.
+  Exactly the five newly covered failure identities observed in `base` are
+  added under the prescribed dated comment; no other failure is accepted.
+  Shape inventory remains three bare radii (999, 2, 21); all destination and
+  facade registrations begin at step 1. Theme inventory is unchanged.
+  Shape/theme/stale guards pass; the profile source guard's failure is already
+  observed in `base`. The initial stale-guard path typo is retained; the
+  corrected actual suite passes all five cases.
+- Facade estimate is measured in ignored formatted probes: 419 fixed lines
+  before forwarders/owners/composition, 473 with conventional separated
+  forwarding getters, 447 with adjacent related forwarding getters. This is
+  an estimate, not final cap evidence. The real step-3 measured breakdown must
+  fit the plan's hard 450 maximum; the composition probe must settle it.
+- Checkpoint freeze, original-copy replay, original mutation proofs,
+  compiling-composition probe and final base3 evidence follow before any move.
+  Device trailer start/stop, decoder handoff, native card trailers, D-pad
+  hold/repeat and entry-lag burst remain pending, as do remote CI and merged
+  integration. Found-not-fixed items above remain unchanged.
+
+### Step 0b — independent review corrections; facade cap blocks extraction
+
+- The characterization checkpoint (b) is
+  `54b4afa559b1341f6aece38c47072e0b2c8164e0`; the approved application
+  reference R remains format-only
+  `a65ad81aebbbcbe29730fc2de1d78b037a84539c`. No production code has moved.
+  Both revisions have lib tree `9c828d5bd303068f3bb2768fdce45c28f78fef80`,
+  pubspec blob `5f983ff8c68a01aef5c7a1ec393e677e7693591f`, and lock blob
+  `e0ff9cca69c00ae69bb4dfe111c18a89547cec98`. The review corrections change
+  tests and tooling only; the same application hashes remain required.
+- **Reviewed reader correction (P1).** The Dart reader now calls the Python
+  checker's AST token normalization with an explicitly isolated parser
+  package. It validates physical lexical/State context before normalization,
+  compares original comment tokens independently, then returns the verified
+  original body. It never reverses names in raw prose, literals or locals.
+  Correct simulated shelf, DOWN, warm-up, hero-open and card-layout moves
+  pass; executable/receiver and ordinary-comment mutations fail. Card bindings
+  cover widget, mounted and all inherited members actually read by layout,
+  including metadataArtworkPending. The warm-up and open sites also retain
+  the State's overridable heroWarmupProvider and originalMetadata dispatch.
+  Registered formatter exception sidecars use the same validator as the
+  checker; no general punctuation or context exception is introduced.
+- **Behavior corrections (P2/P3).** Desktop lease ordering first requires
+  exactly one stop. A-to-B hover transfer retains the original extra stop on
+  acquisition and never produces a hero dwell while B owns the preview;
+  leaving B re-arms the original two-second clock. Android TV behavior now
+  covers groundLowOf, card tween, both image fade durations, ensureVisible
+  snap and ParallaxTravel.note, each with the non-TV control where applicable.
+  The held-description case has a successful publication control; its profile
+  and unmount guards remain. The self-comparing State assertion is removed;
+  the decode test name now describes its measured growth behavior. Existing
+  meaningful assertions, golden tests and golden PNGs are unchanged.
+- **Checker negatives (P2).** Whole-checker fixtures reject the board State's
+  setter tear-off, setter wrapper, per-access section recreation and a
+  section constructed on every build, cached widget-property snapshots and
+  static wrappers. Real-config mutations also reject inserted Opacity and a
+  dropped dispose step in either State, alongside the existing negatives.
+- **Original proofs.** The contained ignored original copy is still on (b)
+  with application files equal R. Its final reviewed characterization run
+  passes all **146** cases: 49 behavior cases, 91 source/reader cases and six
+  strict macOS goldens. Start/end tree and SDK provenance and hashes of the
+  reviewed inputs are in `step0b-original-final.{env.json,jsonl}` and
+  `step0b-original-final-inputs.json`. All **20** application mutants compile
+  and fail the **entire contracts test file**, without name filtering;
+  `step0b-review-full-mutation-proofs.json` records commands, original and
+  mutated hashes, input hashes and individual logs. This supersedes the
+  earlier filtered mutation evidence. The reader's simulated positives and
+  negatives run through the entire source-contract file.
+- **Complete composition probe (P2-4): BLOCKED: facade cap.** A separate
+  ignored copy contains every actual planned owner, section, card and layout,
+  the retained lifecycle, typed live view and the real composition factory.
+  It compiles under the feature's strict configuration with **17 infos, zero
+  warnings/errors and zero added rule/symbol/message identities**. Sixteen
+  receiver-induced formatter wraps are individually pinned in that copy;
+  all ten original curly sites remain. Related getter declarations retain
+  the previously measured adjacent layout. The complete facade is **451
+  physical formatted lines**, exceeding the hard 450 maximum:
+
+  | AST span | Lines |
+  | --- | ---: |
+  | Imports and re-export | 13 |
+  | Widget and its docs | 185 |
+  | State header | 3 |
+  | Lifecycle | 142 |
+  | Forwarders and mixin overrides | 26 |
+  | Live widget/static bindings | 54 |
+  | Owners and cached composition | 11 |
+  | Remaining blank/comment/closing lines | 17 |
+  | **Total** | **451** |
+
+  The nominal 450-line variant bypassed the public State warm-up override.
+  Preserving that call through the owning State's tear-off adds one factory
+  binding line. Exposing that method in the implemented view instead also
+  requires an added override annotation. Neither permits accepting the
+  incomplete variant. No alternative layout, new size exception, deleted
+  comment or compressed formatting is adopted. Actual application facade
+  remains the original **3,896** lines. Sources, hashes, AST line sets, strict
+  inventory and the full probe scripts are retained under the own evidence
+  namespace (`step0b-real-composition-*`). The full probe's real checker also
+  rejects a newly formatted named-record comma in loadShelvesAndFinishDown
+  and its changed context prefix; this is recorded as an unresolved tooling
+  finding, not accepted or hidden by weakening the guard. The earlier original
+  compiling binding/header probe and its real-checker negatives still pass.
+- **Contract 13 choice.** Late ambient tint remains source-guard-only: the
+  original dominant-color/cache path does not provide a deterministic held
+  provider without an added production seam. Generation and mounted guards,
+  ambient dedupe, per-ID flip memo and pending-artwork branch are pinned
+  verbatim; held descriptions have behavioral controls. No ambient seam is
+  added; device behavior remains pending.
+- **Capture script and supplied Linux originals.** Exact-subject lookup now
+  consumes the entire git-log stream under pipefail; SDK first-line selection
+  also drains its input. Dependency setup uses --enforce-lockfile. Syntax,
+  original hash resolution and a long-stream pipefail control pass. The six
+  supplied Linux PNG hashes and provenance verify against (b), R and the
+  calibrated local linux/amd64 capture/strict logs. The user's as-run script
+  is retained in evidence. Golden tests were not changed in 0b; no recapture
+  is required for these review changes. PNGs remain separately untracked;
+  their dedicated commit and strict Linux enforcement are pending before
+  any builder move, per the user's stronger prerequisite.
+- **Xtream flaky-acceptance evidence.** The two stable default-concurrency
+  b-suite attempts reproduce only the unrelated 50k ingest responsiveness
+  timeout. Isolated current and original replays pass all ten cases; a
+  contended original replay reproduces the same timeout. The 75-file project
+  import closure, pubspec/lock and analyzer options hash-equal R/b
+  (`base3-xtream-input-audit.json`). A controlled R full-suite run with four
+  workers has exactly the original baseline identities and outcomes:
+  10,984 success, 13 failure, 28 error, 20 skipped. No Xtream failure is added
+  to any allowlist and no timeout/assertion is changed. Proper base3 will run
+  after this review commit with --no-pub and four workers, with the complete
+  start/end tree provenance; its result is recorded separately before stopping.
+- Local review checks: whole-repo analyzer comparison against base-fmt has
+  zero additions/removals; CI format and scoped analyzer pass (12 existing
+  allowlisted warnings). Architecture, size, storage declarations and
+  storage-reference self-tests pass. Every integrated manifest is rerun with
+  self-tests and the isolated parser package; final results follow in the
+  evidence checkpoint. Steps 1–7 and both full-suite gates remain pending
+  because extraction is blocked by the measured facade cap. The thirteen
+  original found-not-fixed behaviors below remain unchanged; device checks,
+  remote CI and merged integration remain pending.
+
+### Step 0b — frozen base3 and stop checkpoint
+
+- Review correction commit: `97d79c07b260ec039ea1aa4dcdcd4eb9476621f0`
+  (`test(spotlight-board): step 0b close characterization review and measure
+  facade cap`). Format-only R and characterization checkpoint (b) remain
+  reachable and unchanged. This subsequent evidence checkpoint changes only
+  this Progress document; application, tests, dependencies and tooling remain
+  the inputs tested at 97d79c07.
+- Final command: `python3 dev/tool/suite_evidence.py run
+  spotlight_board/base3 --no-pub --concurrency=4`. The committed start and end
+  HEAD are 97d79c07; index/tested/end tree all equal
+  `8457e625239a4d79292465a2c607dd1381391738`, with no worktree snapshot and
+  `tree_changed_during_run: false`. `base3.env.json` records complete end
+  provenance, SDK and unchanged SHA256s of the six untracked, Linux-only
+  supplied PNGs. No application or test input changed during the run.
+- **Comparison PASS** against controlled R `base-fmt-c4`: 11,130 success,
+  13 failure, 28 error, 20 skipped; **146 added passing identities, zero new
+  failures, zero missing tests and zero newly skipped tests**. That controlled
+  R baseline also compares equal to the original default-concurrency baseline.
+  Fresh isolated original and review-commit Xtream replays both pass 10/10;
+  their JSONL/env/commands are `step0b-review-xtream-{original,current}.*`.
+  The prior failing attempts and hashed input-closure evidence remain retained.
+  No known-failure entry or assertion is changed to accept the flaky timeout.
+- All **ten** integrated manifests and their self-tests PASS with the isolated
+  parser package. The latest Spotlight log includes the actual per-build
+  section mutation as well as per-access recreation, both setter negatives,
+  both view negatives, dispose/Opacity mutations and the reader positives and
+  negatives. Final results and tool hashes are in
+  `step0b-review-final-manifest-results.json`. CI format, scoped analyzer
+  allowlist, whole-analyzer identity comparison, architecture, sizes and
+  storage checks PASS as recorded above. All six macOS goldens remain strict;
+  neither golden tests nor PNGs were changed by the review correction.
+- **Stop:** P2-4 is blocked at the measured 451-line complete facade; no
+  application extraction, step 1–7 commit or full-suite gate commit is made.
+  `base3` is the latest Spotlight baseline, not either planned gate. Both
+  gates remain pending against that base. The probe's named-record formatter
+  comma remains an explicit unresolved checker finding; no checker assertion
+  is weakened. The dependency inventory also needs the LogoOrTitle destination
+  under the documented bridge before moving it: its original DebrifyImageCache
+  access means it is not service-free. The probe follows the currently frozen
+  manifest for measurement; no production file uses that destination yet.
+  The supplied Linux originals remain hash-verified and separately untracked;
+  their dedicated commit/strict enforcement waits before any builder move.
+  Device-only trailer/decoder/TV checks, remote CI and merged integration stay
+  pending. No branch switch or push occurred.
+
+
+### Step 0c — reviewed amendment tooling and complete composition
+
+- Resumed from the reviewed amendments `3f812727` and `0c8e795c`. The
+  complete compiling composition remains **451 physical facade lines**:
+  imports/export 13; widget/docs 185; State header 3; lifecycle 142;
+  forwarders/overrides 26; bindings 54; composition 11; remaining 17.
+  The enforced final cap is 451, within the 460 design maximum. No layout,
+  comment deletion or compression was introduced.
+- `spotlight_named_record_formatter_commas` identifies only the named record
+  in `SpotlightBoardState._loadShelvesAndFinishDown`: ordinal 0 of exactly
+  one record, with every original field/value/separator pinned. AST evidence
+  supplies its trailing-comma offset **before** formatter/context-prefix,
+  declaration and reader comparisons. The general named-record comma rule
+  remains unchanged. `step0c-named-record-inventory.json` records its exact
+  physical destination and offset. Full-composition positives with and
+  without that optional comma pass; changed values, another record/comma,
+  an additional token sequence and hoisted context fail the checker/reader.
+- The reader now also uses the existing owned-context ordering check before
+  exposing original text. Its simulated moves deliberately use the original
+  unformatted bodies; the real formatted bodies retain their pinned wraps.
+  Binding/header/mutation fixtures locate actual moved owners and preserve
+  all prior assertions, including valid `super` bypass negatives.
+- `_LogoOrTitle` is registered inside the exact legacy bridge, with its
+  `DebrifyImageCache.manager` dependency and lexical `build` context recorded
+  in the dependency checklist. The complete probe uses that destination.
+- Evidence under `spotlight_board/`: `step0c-real-composition-*` records the
+  compiling probe, all self-tests, **17 infos / zero warnings/errors** and
+  zero per-symbol additions; `step0c-probe-final-characterization.jsonl`
+  records **146 PASS** (49 behavior, 91 source/reader, six strict macOS
+  goldens). `step0c-original-source-frozen.*` records **91 PASS** against
+  original checkpoint (b), with identical current reader/config/AST inputs
+  and complete stable end-tree provenance. The 20 original-code behavioral
+  mutation proofs from 0b remain applicable; no Dart case changed.
+- All ten integrated manifests and their self-tests pass with explicit
+  isolated parser packages (`step0c-final-manifest-*`). The strict diagnostic
+  mapper is now durable as `check_spotlight_board_analyzer.py`, requiring an
+  explicit parser package. LF, Python compilation and diff checks pass.
+- Conservative baseline decision: no tracked `lib`, Dart test, pubspec or
+  lockfile changed (`step0c-inputs.json`); retain the frozen **base3** from
+  `97d79c07`, tested tree `8457e625239a4d79292465a2c607dd1381391738`.
+  The six supplied Linux PNGs remain untracked and untouched for their own
+  provenance/strictness commit before step 2. Device and remote CI checks
+  remain pending.
+
+### Step 1 — public types, numerical metrics and guards
+
+- Step 0c is `b46b514e`. Extracted the three public types with the facade
+  re-export and the numerical metrics/tier with their exact constructors,
+  constants and expressions. Reviewed every step-1 dependency/caller entry.
+  Identifier-token edits preserve all moved comments and string literals.
+- Registered the feature and exact bridge unconditionally, 500-line limits,
+  the single future card-layout exception, both Home/Spotlight import
+  directions, facade back-import, playback and keep-alive bans. The real
+  checker passes and its missing-directory/size/import/ownership negatives
+  reject. Facade completion enforcement remains scheduled for step 7.
+- Registered the facade and both new files in the extracted shape slice
+  (3 + 0 + 0); added explicit patterns for both presentation directories and
+  the light-ink registry. The theme surface remains **118 sites**. Sorted
+  facade imports remove its original directive-order infos.
+- Formatted facade: **3,569 lines**, lowered ratchet. All ten manifest suites
+  and self-tests, architecture (1,213 files), size, storage, shape/theme,
+  CI format and analyzer allowlist checks pass. Strict analysis has **13
+  inventoried infos, no warnings/errors and zero per-symbol additions**.
+  `step1-focused*` compares with base3: **176 PASS / one unchanged profile
+  source-guard failure**, no new failures, missing identities or skips.
+  New sources are staged for the frozen final focused replay, so its tree
+  includes every extracted application input. No characterization assertion
+  or original golden scene changes.
+- The supplied Linux originals remain separate; their provenance/strictness
+  commit is next, before the first builder move.
+
+### Linux originals — separate prerequisite before step 2
+
+- Step 1 is `9d6e90ba`. Verified all six supplied PNG hashes against
+  `linux-original-sha256.txt`, and verified original checkpoint (b)
+  `54b4afa559b1341f6aece38c47072e0b2c8164e0` has the same `lib`, pubspec and
+  lock blobs as approved R. Supplied capture/strict/revision/run evidence is
+  retained unchanged under `spotlight_board/`.
+- Removed the Linux missing-file skip and opt-in flags. Linux now always
+  asserts the original file exists and compares every scene. Scene setup,
+  expectations, fixture, fonts, sizes and PNG bytes are unchanged; no
+  recapture or update acceptance occurred.
+- The calibrated `debrify-flutter:3.44.8` linux/amd64 image
+  `sha256:cc4fea9c2aaefc3b4841105c51564d01059c9576afde4f9a21ffaf02982a263a`
+  passes all **six strict Linux** comparisons on step-1 code before any
+  builder move. `linux-originals-landing-{inputs.json,strict.txt}` records
+  inputs, original provenance and results. The copy, package and build caches
+  are inside this worktree or the disposable container. Six strict macOS
+  comparisons also pass (`linux-originals-macos.*`). This dedicated commit
+  contains only the six originals, strictness enforcement and this record.
+- Latest full-suite base remains original-characterized base3; the six test
+  identities and all macOS behavior are unchanged. Linux enforcement is now
+  stronger. Builder moves may proceed.
+
+### Step 2 — card and small rendering widgets
+
+- Linux prerequisite is `487efa2e`. Moved the title link, open pill, logo,
+  card and card State to their registered destinations. The logo remains
+  inside the bridge with its original image-cache dependency. The card's
+  bound layout owner preserves `cardState`, its own injected setter and
+  physical context sites. No timing, decode, boundary, const or comment
+  changes. Card State is 368 lines; `_buildCard`'s single documented
+  layout-file exception is 585 lines. Facade ratchet: **2,505**.
+- All ten manifests with self-tests, architecture negatives, sizes,
+  storage references, shape (total 3), theme, CI format/analyze and analyzer
+  allowlist pass. Strict symbol comparison: 17 inventoried infos, zero
+  additions, errors or warnings. Six strict Linux goldens match the original
+  bytes. Focused evidence `step2-focused.*` records 176 passing identities
+  and the unchanged profile source-guard failure; comparison with original
+  base3 passes. End-of-run full tree provenance is recorded before this
+  Progress edit. Per-entry wiring checklist reviewed before scaffold pinning.
+
+### Step 3 — board owners and live view
+
+- Previous checkpoint: `aa29343a`.
+- Moved all 32 board fields into the five route-owned records and
+  wired 27 live widget/static getters. Lifecycle bodies retain original
+  order and virtual metadata/mixin dispatch. Per-entry dependencies and
+  wiring were reviewed before production scaffold pinning. For unmoved
+  methods the manifest registers the actual facade declaration, retaining
+  original private names; the immutable planned-destinations ledger retains
+  their final destinations. This keeps context/formatter/source-reader checks
+  active on the real intermediate code without relaxing comparisons.
+- Conservative temporary size decision: the live bindings and pinned
+  receiver-induced wraps add 25 lines at this boundary (2,505 to 2,530).
+  Raised only this intermediate facade ratchet by hand; original bodies
+  still retained exit in steps 4–6. No compression, deleted comments,
+  accessor or alternative layout. Complete measured cap remains 451.
+- Formatted facade: **2530**. Physical AST breakdown: imports export 35, widget docs 185, state header 3, lifecycle 142, forwarders overrides 0, bindings 54, composition 1, retained original bodies 2031, remaining 79 (sum 2530); detailed spans in `step3-cap.json`.
+- All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step3-focused.*` includes full end-of-run tree provenance before this Progress edit.
+
+### Step 4 — hero lifecycle sections; gate 1
+
+- Previous checkpoint: `e1d22c65`.
+- Moved hero art/warm-up, cadence/lease, hero focus, ambient/tint/flip
+  and metadata hooks. Plain sections are constructed once and cached in
+  the State; live context/mounted getters and the exact State setter and
+  virtual warm-up-provider tear-offs are injected. All trailer mount,
+  timing and stop bodies remain verbatim, source-guarded and contract-pinned;
+  ambient trailers remain decoration with device behavior pending.
+- Per-entry wiring reviewed before pinning. Facade ratchet resumes lowering.
+  Full-suite gate 1 runs next on this committed tree against original base3;
+  its completed evidence is recorded with step 5.
+- Formatted facade: **2168**. Physical AST breakdown: imports export 31, widget docs 185, state header 3, lifecycle 142, forwarders overrides 18, bindings 54, composition 11, retained original bodies 1667, remaining 57 (sum 2168); detailed spans in `step4-cap.json`.
+- All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step4-focused.*` includes full end-of-run tree provenance before this Progress edit.
+
+### Step 4b — close the gate-1 field-capture regression
+
+- Step 4 is `8e385c17`. The first full gate (`gate1.*`, retained) rejected
+  `spotlight_large_screen_test::overlapping horizontal rows stay moving until
+  both end`: 11,129 PASS / 13 failure / 29 error / 20 skipped, one new error.
+  Investigation found the step-2 `_moving` → `moving` rename captured the
+  existing `moving` parameter in both the comparison and assignment inside
+  `setWideSelection`. This was a real extraction regression, not accepted
+  as flaky or added to any allowlist.
+- Conservative correction: the exposed field is `cardMoving`; the original
+  parameter, field behavior, method body structure, callbacks, comments and
+  timing are unchanged. Updated the manifest, immutable destination ledger,
+  card references, dependency entry and exact physical context prefixes.
+  Facade stays 2,168; card layout stays 585; complete cap stays 451.
+- Added opt-in Spotlight State-field binding comparison before declaration
+  normalization and before source-reader comparison. It uses AST lexical
+  parameters/block locals, exact registered receivers and read/write roles;
+  comment references are excluded. It covers all 32 board fields and card
+  fields. General token/comma rules and every other feature's behavior are
+  unchanged. Guard-alone positives and parameter/local-capture negatives
+  prevent token normalization from hiding another capture.
+- Full relevant file on ORIGINAL b/R: 21 PASS. Separate original read,
+  write and local-capture mutations produce respectively 19/2, 20/1 and 20/1
+  PASS/error; each is rejected by the binding guard too. Original source is
+  restored and hash-verified. Corrected current full file: 21 PASS with no
+  missing identities or skips. `step4b-original-full-mutation-proofs.json`
+  and `step4b-causal-proof.json` retain inputs/results; full end-of-run tree
+  provenance is captured before restoration and Progress edits.
+- All ten manifests with self-tests, focused characterization comparison,
+  architecture negatives, sizes/storage, shape/theme, CI format/analyze and
+  allowlist PASS again (`step4b-*`). Strict analysis: 17 inventoried infos,
+  zero additions, errors or warnings. No test assertions or goldens changed;
+  original base3 remains authoritative. A fresh committed gate-1 run uses
+  `gate1-final.*`, preserving the rejected first attempt.
+
+### Full-suite gate 1 — accepted committed correction
+
+- Accepted tree is committed step 4b `d0c77a60`; `gate1-final.*` records
+  `--no-pub --concurrency=4`, identical start/end head/tree, no untracked
+  inputs and complete end-of-run tree provenance. Outcome: **11,130 PASS,
+  13 pre-existing failures, 28 pre-existing errors, 20 unchanged skips**.
+  Comparison against original base3: zero new failures, missing identities,
+  additions or new skips. Complete identity-set comparison also passes.
+- The first rejected `gate1.*` and all causal original/current proofs remain
+  retained. No flaky acceptance was used; no baseline/allowlist was changed.
+  Step 5 may proceed.
+
+### Step 5 — selection, scrolling and movement
+
+- Previous checkpoint: `d0c77a60`.
+- Moved selection, scroll, movement, progressive DOWN and public
+  focus bodies. The original mixin/public virtual dispatch and State
+  callback identities remain intact. Shelf extent is temporarily borrowed
+  through the exact retained State tear-off; injection and constructors are
+  pinned. It exits when shelf rendering moves in step 6. Per-entry wiring
+  reviewed before production scaffold pinning.
+- Formatted facade: **1576**. Physical AST breakdown: imports export 30, widget docs 185, state header 3, lifecycle 142, forwarders overrides 24, bindings 54, composition 12, retained original bodies 1090, remaining 36 (sum 1576); detailed spans in `step5-cap.json`.
+- All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step5-focused.*` includes full end-of-run tree provenance before this Progress edit.
+
+### Step 6 — board and hero/shelf rendering
+
+- Previous checkpoint: `c8e5ea46`.
+- Moved root build/board, compact and wide hero painting, backdrop,
+  foreground/identity and shelves. The facade has its original public build
+  forwarder, lifecycle, live bindings and cached composition. Removed the
+  temporary shelf-extent callback as both callers now share the shelf
+  section. No TEMP cross-call remains. Per-entry wiring reviewed before
+  pinning. Repaint boundaries, decode sizes, rebuild boundaries, const and
+  all original comments are unchanged. Six strict Linux goldens pass in the
+  calibrated original image, with source/image/PNG hashes recorded in
+  step6-linux-strict-inputs.json; all six macOS originals pass too.
+- Formatted facade: **451**. Physical AST breakdown: imports export 13, widget docs 185, state header 3, lifecycle 142, forwarders overrides 26, bindings 54, composition 11, retained original bodies 0, remaining 17 (sum 451); detailed spans in `step6-cap.json`.
+- All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step6-focused.*` includes full end-of-run tree provenance before this Progress edit.
+
+### Step 7 — completed guard, facade and CI; gate 2
+
+- Previous checkpoint: `910b8f1d`.
+- Registered the facade in the real architecture checker and
+  composition-root set; enabled completion, the measured facade cap and
+  TEMP rejection. Real-tree negatives cover missing facade, cap + 1,
+  TEMP in facade/feature and the sole card-layout size exception. CI format
+  includes facade/support and analysis includes facade before tee. All
+  completed manifest destinations equal the frozen approved ledger.
+  Whole-repository analyzer comparison also passes: zero outside-slice
+  additions; 1,661 total diagnostics versus 1,657 original, with the four
+  anticipated public-widget key infos covered by the frozen inventory.
+- Full-suite gate 2 runs next on this committed tree against original base3
+  and gate 1. Final documentation records its completed evidence.
+- Formatted facade: **451**. Physical AST breakdown: imports export 13, widget docs 185, state header 3, lifecycle 142, forwarders overrides 26, bindings 54, composition 11, retained original bodies 0, remaining 17 (sum 451); detailed spans in `step7-cap.json`.
+- All ten manifests with isolated-parser self-tests, architecture/size and storage checks, real architecture negatives, shape (3), theme, CI format/analyze and exact analyzer allowlist pass. Strict per-symbol comparison has zero additions, warnings or errors. Focused outcomes {'success': 176, 'failure': 1}; comparison against original base3 passes. `step7-focused.*` includes full end-of-run tree provenance before this Progress edit.
+
+### Full-suite gate 2 and completion
+
+- Gate 2 tested committed step 7 `27f116735348cd36fdac384e31415391be7668a4`,
+  tree `c55f3616868d8e85bb5fac72b4fb15c9746eeebb`, using
+  `suite_evidence.py run spotlight_board/gate2 --no-pub --concurrency=4`.
+  Start/end HEAD and tree match, with no untracked inputs or worktree
+  snapshot. `gate2.env.json` records complete end-of-run tree provenance.
+- Latest authoritative base is original-characterized **base3**, HEAD
+  `97d79c07b260ec039ea1aa4dcdcd4eb9476621f0`, tested tree
+  `8457e625239a4d79292465a2c607dd1381391738`. Accepted gate 1 is
+  `d0c77a6005147e32a9bdac1adc8ff3bd2bb3bcc9`, tested tree
+  `300ee747cc1d1ed590b3d0ef70b5f99b49575bd3`. All three runs have
+  **11,130 PASS / 13 pre-existing failures / 28 pre-existing errors /
+  20 unchanged skips**. Both helper comparisons and the independent
+  complete identity-set comparisons pass: no new failures, missing or
+  added identities, or newly skipped tests. Evidence:
+  `gate2-compare-{base3,gate1-final}.txt`,
+  `gate2-full-identity-comparison.json` and `completion-evidence.json`,
+  all exclusively in the `spotlight_board/` evidence namespace.
+- Final facade: **451 physical lines**, enforced as the measured cap
+  within the approved 460 design maximum. Arithmetic: imports/export 13
+  + widget/docs 185 + State header 3 + lifecycle 142 +
+  forwarders/overrides 26 + live bindings 54 + composition 11 +
+  remaining blank/comment lines 17 = **451**. No retained original
+  rendering bodies or TEMP cross-calls remain. All **29** destination
+  files and the facade are registered; every destination is at most 500
+  lines except the sole `_buildCard` layout file, **585**. The documented
+  exit for that exception remains a separate card decomposition.
+- Final checks: all ten manifests and self-tests with isolated parser
+  packages; real architecture positives/negatives, sizes, storage keys
+  and references, shape (3, facade 0), unchanged theme surface, LF
+  manifests, CI format/analyze and analyzer allowlist pass. Strict
+  rule/symbol/message comparison: **17 inventoried infos, zero additions,
+  errors or warnings**. Whole analyzer: **1,661** diagnostics vs original
+  **1,657**, with zero outside-slice additions and only the four anticipated
+  public-widget key infos covered by the frozen inventory. All per-entry
+  wiring reviews are complete. Six strict macOS and six strict Linux
+  original goldens pass. Golden bytes and characterization assertions were
+  never updated to accept a regression.
+- Progress decisions are preserved above: AST-token source-reader
+  correction; the declaration-scoped named-record formatter comma;
+  logo placement inside the cache-owning bridge; original State setter
+  and virtual warm-up-provider callback identities; the temporary
+  25-line step-3 binding growth; collision-free `cardMoving` with
+  original/current full-file causal and mutation proofs; eager route-owned
+  records and cached plain sections. No alternative layout, compressed
+  formatting, deleted comment, new playback seam or behavior change was
+  introduced. Ambient trailers remain decoration; contract 13 remains
+  source-guard-only, and all timing, mount and stop code stays verbatim.
+- **Found, not fixed:** the 13 original issues listed below, the observed
+  base3 test failures/errors and inventoried diagnostics remain unchanged.
+  The rejected first gate-1 evidence is retained; its extraction regression
+  was corrected before the accepted fresh gate. No baseline or failure
+  allowlist was weakened and no flaky acceptance was used for that defect.
+- **Pending device verification:** hero trailer start/stop on Android TV,
+  tvOS and desktop; desktop single-decoder handoff; card trailers;
+  Android TV D-pad, hold-OK and insertion anchor; unchanged entry-lag burst
+  with no keep-alive. Remote CI remains pending; no push was performed.
+  Claude's semantic union integration and checks on the merged tree remain
+  pending. This final evidence update changes documentation only, so the
+  committed gate-2 application/test/tool inputs remain applicable.
+
+| Checkpoint | Commit |
+| --- | --- |
+| Step 0 format-only approved reference R | `a65ad81a` |
+| Step 0 original characterization (b) | `54b4afa5` |
+| Step 0b review corrections and original proofs | `97d79c07` |
+| Step 0b base3 evidence and measured-cap stop | `63b396dd` |
+| Reviewed amendment documentation | `3f812727`, `0c8e795c` |
+| Step 0c tooling/manifest and complete composition probe | `b46b514e` |
+| Step 1 public types and metrics | `9d6e90ba` |
+| Separate strict Linux originals, before builder moves | `487efa2e` |
+| Step 2 card and rendering widgets | `aa29343a` |
+| Step 3 route-owned state and live view | `e1d22c65` |
+| Step 4 hero lifecycle, first gate rejected | `8e385c17` |
+| Step 4b field binding correction, accepted gate 1 | `d0c77a60` |
+| Step 5 selection, scroll and movement | `c8e5ea46` |
+| Step 6 rendering, strict original goldens | `910b8f1d` |
+| Step 7 completed facade/CI, accepted gate 2 | `27f11673` |
+
+### Amendment after step 0b (design-reviewed before resuming)
+
+1. **Facade cap.** The hard maximum becomes 460 (see the size section); the
+   enforced cap is the measured complete facade (451 from the probe, or the
+   actual step-7 value if it is lower). No compression, deleted comment or
+   alternative layout is introduced to reach any number.
+2. **Named-record formatter comma.** The probe's new trailing comma in the
+   named-record literal inside `loadShelvesAndFinishDown` (and its changed
+   context prefix) is a formatter consequence of the receiver rename, the
+   same class as the sixteen pinned receiver-induced wraps. It is added to
+   the AST-owned optional-formatter-comma inventory by declaration and
+   position, with a negative proving any other added comma or token in that
+   declaration still fails. The checker's general rule is not relaxed.
+   **Wiring (review P2):** an inventory row alone changes nothing —
+   `verbatim_ast.dart.txt` deliberately excludes named-record literal commas
+   and comparisons consume only `formatCommas`. Add a **config-scoped**
+   validator (Spotlight config key only) that identifies exactly this
+   optional trailing comma in the named-record literal of
+   `loadShelvesAndFinishDown` and supplies its offset before the
+   declaration, context-prefix and source-reader comparisons. Required
+   fixtures on the full composition: positive (the real output passes);
+   negatives for an unregistered named-record comma elsewhere, changed
+   record values, and a hoisted context — each must fail.
+3. **`_LogoOrTitle` placement.** Its original reads
+   `DebrifyImageCache.manager` (original 2970), so it is not service-free.
+   Its destination becomes
+   `presentation/legacy_spotlight_board/spotlight_board_logo_or_title.dart`
+   (inside the bridge): update `spotlight_board_manifest.tsv` (row 120),
+   `spotlight-board-deps.md` (127), imports, guard/shape/theme registrations
+   and the probe accordingly, record the cache dependency, and correct its
+   context inventory to the lexical `build` parameter.
+4. **Linux originals** become a prerequisite **before step 2** (the first
+   builder move), not step 6: verify hashes, commit separately, make the
+   Linux test strict, then step 2.
 
 ## Found, not fixed
 

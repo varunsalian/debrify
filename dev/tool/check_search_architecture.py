@@ -10,7 +10,7 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase")
+FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board")
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -30,6 +30,16 @@ TORBOX_COMPLETE = True
 PLAYBACK_SETTINGS_COMPLETE = True
 PLAYBACK_SETTINGS_FACADE = "lib/screens/settings/external_player_settings_page.dart"
 PLAYBACK_SETTINGS_BRIDGE = "lib/features/playback_settings/presentation/legacy_playback_settings/"
+# Completed Spotlight composition facade; cap includes every physical line.
+SPOTLIGHT_BOARD_COMPLETE = True
+SPOTLIGHT_BOARD_FACADE_CAP = 451
+SPOTLIGHT_BOARD_FACADE = "lib/widgets/home/spotlight_board.dart"
+SPOTLIGHT_BOARD_BRIDGE = "lib/features/spotlight_board/presentation/legacy_spotlight_board/"
+# Only the whole original _buildCard method may exceed 500. Measure at creation;
+# exit: a separately reviewed behavior-level card decomposition with goldens.
+SPOTLIGHT_BOARD_SIZE_EXCEPTIONS = {
+    SPOTLIGHT_BOARD_BRIDGE + "spotlight_board_card_layout.dart": 585,
+}
 PLAYLIST_CONTENT_COMPLETE = True
 PLAYLIST_CONTENT_FACADE = "lib/screens/playlist_content_view_screen.dart"
 PLAYLIST_CONTENT_BRIDGE = "lib/features/playlist_content/presentation/legacy_playlist_content/"
@@ -113,6 +123,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
     ADDON_HUB_FACADE,
+    # Spotlight facade wires concrete legacy bridge sections.
+    SPOTLIGHT_BOARD_FACADE,
     FACADE,
     PLAYLIST_CONTENT_FACADE,
     # Pure compatibility export surface; feature files own the widgets.
@@ -351,6 +363,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     PLAYLIST_CONTENT_BRIDGE,
     MERGED_DETAIL_BRIDGE,
     ADDON_HUB_BRIDGE,
+    SPOTLIGHT_BOARD_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -492,6 +505,19 @@ def violations(path: Path) -> list[str]:
             problems.append(f"{lines} lines exceeds the 400-line PikPak facade limit")
         if "TEMP(pikpak)" in source:
             problems.append("temporary PikPak cross-call remains in the facade")
+    if relative.startswith("lib/features/spotlight_board/"):
+        limit = max(500, SPOTLIGHT_BOARD_SIZE_EXCEPTIONS.get(relative, 0))
+        if lines > limit:
+            problems.append(f"{lines} lines exceeds the {limit}-line spotlight board extraction limit")
+        if "TEMP(spotlight_board)" in source and (SPOTLIGHT_BOARD_COMPLETE or not relative.startswith(SPOTLIGHT_BOARD_BRIDGE)):
+            problems.append("spotlight board temporary cross-call outside its bounded bridge")
+        if re.search(r"\b(?:KeepAlive|AutomaticKeepAliveClientMixin|IndexedStack)\b|package:media_kit|hero_trailer_backdrop|video_player_launcher|features/player_launch", source):
+            problems.append("spotlight board adds keep-alive or playback engine ownership")
+    if SPOTLIGHT_BOARD_COMPLETE and relative == SPOTLIGHT_BOARD_FACADE:
+        if lines > SPOTLIGHT_BOARD_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {SPOTLIGHT_BOARD_FACADE_CAP}-line spotlight board facade limit")
+        if "TEMP(spotlight_board)" in source:
+            problems.append("spotlight board temporary cross-call remains in the facade")
     if relative.startswith("lib/features/playlist_content/"):
         if lines > 500:
             problems.append(f"{lines} lines exceeds the 500-line playlist content extraction limit")
@@ -574,6 +600,16 @@ def violations(path: Path) -> list[str]:
                     problems.append("detail showcase imports a playback implementation")
                 if relative.startswith("lib/features/detail_showcase/") and target == DETAIL_SHOWCASE_FACADE:
                     problems.append("detail showcase feature imports its facade")
+            if relative.startswith("lib/features/spotlight_board/"):
+                if target == SPOTLIGHT_BOARD_FACADE:
+                    problems.append("spotlight board feature imports its facade")
+                if not relative.startswith(SPOTLIGHT_BOARD_BRIDGE) and target.startswith("lib/services/"):
+                    problems.append("spotlight board service import outside the exact legacy bridge")
+            if target.startswith("lib/features/") and relative.startswith("lib/features/"):
+                own_feature = relative.split("/")[2]
+                other_feature = target.split("/")[2]
+                if {own_feature, other_feature} == {"spotlight_board", "home"} and not target.startswith(f"lib/features/{other_feature}/models/"):
+                    problems.append("spotlight board/home implementation cross-import")
             if relative.startswith("lib/features/playback_settings/") and not relative.startswith(PLAYBACK_SETTINGS_BRIDGE) and target.startswith("lib/services/"):
                 problems.append("playback settings outside the legacy bridge imports a service")
             if relative.startswith("lib/features/iptv_settings/"):
@@ -692,6 +728,8 @@ def main() -> int:
         paths.add(ROOT / PLAYBACK_SETTINGS_FACADE)
     if IPTV_SETTINGS_COMPLETE:
         paths.add(ROOT / IPTV_SETTINGS_FACADE)
+    if SPOTLIGHT_BOARD_COMPLETE:
+        paths.add(ROOT / SPOTLIGHT_BOARD_FACADE)
     if PLAYLIST_CONTENT_COMPLETE:
         paths.add(ROOT / PLAYLIST_CONTENT_FACADE)
     if DETAIL_SHOWCASE_COMPLETE:
@@ -720,6 +758,8 @@ def main() -> int:
         for root in sorted(COMPOSITION_ROOTS)
         if not (ROOT / root).is_file()
     ]
+    if not (ROOT / "lib/features/spotlight_board").is_dir():
+        problems.append("Registered spotlight board directory is missing")
     if not (ROOT / STORAGE_SOURCE_DIR).is_dir():
         problems.append(f'Registered storage directory is missing: {STORAGE_SOURCE_DIR}')
     if not paths:
