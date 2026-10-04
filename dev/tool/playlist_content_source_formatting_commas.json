@@ -1,4 +1,52 @@
 {
+  "_PlaylistContentViewScreenState.initState": [
+    {
+      "offset": 251,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "d593675725465badfb34ee05af350fc53a7e5a450039525bf1bf3da6d250efa1"
+    }
+  ],
+  "_PlaylistContentViewScreenState.dispose": [
+    {
+      "offset": 112,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "10b7a38b76033205e84424819b4ec17bf2a548dcaf7a4dadd26b3a9b64ae61ba"
+    }
+  ],
+  "_PlaylistContentViewScreenState._loadSavedViewMode": [
+    {
+      "offset": 275,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "0e7b462930950cf021ffe0f6b2738444e3665553c68d97a2ccf2ba15f4ce7547"
+    }
+  ],
+  "_PlaylistContentViewScreenState._loadTorboxContent": [
+    {
+      "offset": 700,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "7eac797abfc3f3b495438d25e8c22e08940ccb94e98207a6c69d34aee9f9c627"
+    }
+  ],
+  "_PlaylistContentViewScreenState._loadPikPakContent": [
+    {
+      "offset": 265,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "25a6a7a0e3a95d306163811417eb14d8514e5bf2fde5bae0b425433ce19e1753"
+    }
+  ],
+  "_PlaylistContentViewScreenState._loadPremiumizeContent": [
+    {
+      "offset": 670,
+      "kind": "remove",
+      "closer": "]",
+      "prefix_sha256": "5972ea72871312a877d95bc3adfe24f9f347d16218bbf54db360bf141f9298da"
+    }
+  ],
   "_PlaylistContentViewScreenState._buildWebDavFileTree": [
     {
       "offset": 859,
@@ -57,6 +105,60 @@
       "kind": "remove",
       "closer": ")",
       "prefix_sha256": "3782899af874e2fd1485a22be6b739236a189adbf824135649f0e6e5547f4c22"
+    }
+  ],
+  "_PlaylistContentViewScreenState._playRealDebridPlaylist": [
+    {
+      "offset": 2128,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "57ded682c2723f9451043feee9d434b1033d077ea94d8956b8599654f885c135"
+    }
+  ],
+  "_PlaylistContentViewScreenState._playAllDebridPlaylist": [
+    {
+      "offset": 1571,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "799fee288e13318bfeffeb7d5da4efc6dc3bef94a87ac330eb025bd5d1db656b"
+    }
+  ],
+  "_PlaylistContentViewScreenState._playTorboxPlaylist": [
+    {
+      "offset": 1919,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "b9a8be293f5fcb77dcdd43a71da60e571f70c48459b2f7efbeac0d44ee9e53aa"
+    }
+  ],
+  "_PlaylistContentViewScreenState._playPikPakPlaylist": [
+    {
+      "offset": 1874,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "5f58702776bdb947f1bf523d6089bf11d9e0e93a28a0a0af890307b608b5d203"
+    }
+  ],
+  "_PlaylistContentViewScreenState._playPremiumizePlaylist": [
+    {
+      "offset": 1695,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "1def7a296aa3c8b8c99d006feed719d2f70f310c7db77b8197b58a45d6426790"
+    },
+    {
+      "offset": 2976,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "580951a07625e26d1637edd3782ffb87550c0702f5bf7f33d7fcfc824dfcc4c8"
+    }
+  ],
+  "_PlaylistContentViewScreenState._playWebDavPlaylist": [
+    {
+      "offset": 1028,
+      "kind": "remove",
+      "closer": ")",
+      "prefix_sha256": "a1fb93e22b0ff1ac1165f013474d838444f33b28eedda98bb85babceaa88e282"
     }
   ]
 }

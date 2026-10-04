@@ -4,21 +4,26 @@ import 'package:debrify/features/playlist_content/application/playlist_content_f
 import 'package:debrify/features/playlist_content/application/playlist_content_sort_policy.dart';
 import 'package:debrify/features/playlist_content/models/playlist_content_search_result.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_catalog_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_cloud_loading.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_content_loading.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_episode_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_focus_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_initialization.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_navigation.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_navigation_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_ott_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_playlist_order.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_scroll_state.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_search_state.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_sections.dart';
 import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_series_state.dart';
-import 'package:debrify/models/playlist_view_mode.dart';
+import 'package:debrify/features/playlist_content/presentation/legacy_playlist_content/playlist_content_view_modes.dart';
 import 'package:debrify/models/rd_file_node.dart';
 import 'package:debrify/models/series_playlist.dart';
 import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/screens/video_player/models/playlist_entry.dart';
 import 'package:debrify/services/alldebrid_service.dart';
 import 'package:debrify/services/analytics_service.dart';
-import 'package:debrify/services/android_native_downloader.dart';
 import 'package:debrify/services/debrid_service.dart';
 import 'package:debrify/services/episode_info_service.dart';
 import 'package:debrify/services/main_page_bridge.dart';
@@ -31,7 +36,6 @@ import 'package:debrify/services/storage/merged_episode_progress_storage.dart';
 import 'package:debrify/services/storage/playlist_artwork_storage.dart';
 import 'package:debrify/services/storage/playlist_metadata_storage.dart';
 import 'package:debrify/services/storage/playlist_poster_storage.dart';
-import 'package:debrify/services/storage/playlist_preferences_storage.dart';
 import 'package:debrify/services/storage/playlist_storage.dart';
 import 'package:debrify/services/storage/premiumize_storage.dart';
 import 'package:debrify/services/storage/real_debrid_storage.dart';
@@ -45,9 +49,7 @@ import 'package:debrify/services/webdav_service.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/file_utils.dart';
 import 'package:debrify/utils/formatters.dart';
-import 'package:debrify/utils/rd_folder_tree_builder.dart';
 import 'package:debrify/utils/series_parser.dart';
-import 'package:debrify/utils/torbox_folder_tree_builder.dart';
 import 'package:debrify/utils/tv_keys.dart';
 import 'package:debrify/widgets/tv_text_field.dart';
 import 'package:debrify/widgets/tvmaze_search_dialog.dart';
@@ -82,54 +84,82 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   final _ott = PlaylistContentOttState();
   final _search = PlaylistContentSearchState();
   final _episode = PlaylistContentEpisodeState();
+  PlaylistContentSections? _sectionCache;
+  PlaylistContentSections get _sections => _sectionCache ??= _createSections();
+  PlaylistContentSections _createSections() {
+    final sections = PlaylistContentSections();
+    sections.initializationSlot = PlaylistContentInitialization((
+      loadSavedViewMode: () => sections.viewModes.loadSavedViewMode(),
+      loadContent: () => sections.contentLoading.loadContent(),
+      catalogState: _catalog,
+      parseSeriesPlaylist: () => _parseSeriesPlaylist(),
+      playlistItem: () => widget.playlistItem,
+      seriesState: _series,
+      setState: setState,
+      navigationState: _navigation,
+      applyViewMode: (FolderViewMode mode) =>
+          sections.viewModes.applyViewMode(mode),
+      mounted: () => mounted,
+      episodeState: _episode,
+    ));
+    sections.navigationSlot = PlaylistContentNavigation((
+      searchState: _search,
+      toggleSearch: () => _toggleSearch(),
+      navigationState: _navigation,
+      setState: setState,
+      applyViewMode: (FolderViewMode mode) =>
+          sections.viewModes.applyViewMode(mode),
+      context: () => context,
+    ));
+    sections.viewModesSlot = PlaylistContentViewModes((
+      playlistItem: () => widget.playlistItem,
+      mounted: () => mounted,
+      setState: setState,
+      navigationState: _navigation,
+      catalogState: _catalog,
+      searchState: _search,
+      seriesState: _series,
+    ));
+    sections.contentLoadingSlot = PlaylistContentContentLoading((
+      setState: setState,
+      catalogState: _catalog,
+      playlistItem: () => widget.playlistItem,
+      loadPikPakContent: () => sections.cloudLoading.loadPikPakContent(),
+      loadWebDavContent: () => sections.cloudLoading.loadWebDavContent(),
+      loadPremiumizeContent: () =>
+          sections.cloudLoading.loadPremiumizeContent(),
+      mounted: () => mounted,
+    ));
+    sections.cloudLoadingSlot = PlaylistContentCloudLoading((
+      playlistItem: () => widget.playlistItem,
+      catalogState: _catalog,
+    ));
+    sections.playlistOrderSlot = PlaylistContentPlaylistOrder((
+      navigationState: _navigation,
+      playlistItem: () => widget.playlistItem,
+    ));
+    return sections;
+  }
 
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('playlist_content');
-    _checkIfAndroidTv();
-    _initializeScreen();
+    _sections.initialization.checkIfAndroidTv();
+    _sections.initialization.initializeScreen();
 
     // Register back navigation handler for folder navigation (pushed route)
-    MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
-  }
-
-  /// Initialize screen by loading saved mode first, then content
-  Future<void> _initializeScreen() async {
-    // Load saved view mode first
-    await _loadSavedViewMode();
-
-    // Then load content
-    await _loadContent();
-
-    // Parse series playlist BEFORE applying view mode
-    // This ensures _seriesPlaylist is available when _applyViewMode() checks it
-    if (_catalog.rootContent != null) {
-      await _parseSeriesPlaylist();
-
-      // Auto-set Series View for detected series (only if no saved preference exists)
-      final savedViewMode =
-          await PlaylistPreferencesStorage.getPlaylistItemViewMode(
-            widget.playlistItem,
-          );
-      if (_series.seriesPlaylist?.isSeries == true && savedViewMode == null) {
-        setState(() {
-          _navigation.currentViewMode = FolderViewMode.seriesArrange;
-        });
-      }
-
-      // THEN apply view mode (can now use _seriesPlaylist.isSeries)
-      _applyViewMode(_navigation.currentViewMode);
-    }
-
-    // Note: Progress is now loaded within _parseSeriesPlaylist()
-    // so we don't need to call _loadProgressData() here anymore
+    MainPageBridge.pushRouteBackHandler(
+      _sections.navigation.handleBackNavigation,
+    );
   }
 
   @override
   void dispose() {
     // Unregister back navigation handler
-    MainPageBridge.popRouteBackHandler(_handleBackNavigation);
+    MainPageBridge.popRouteBackHandler(
+      _sections.navigation.handleBackNavigation,
+    );
 
     _scroll.scrollRetryTimer
         ?.cancel(); // Cancel any pending scroll retry to prevent memory leaks
@@ -145,86 +175,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     _focus.searchButtonFocusNode.dispose();
     _focus.searchClearFocusNode.dispose();
     super.dispose();
-  }
-
-  /// Check if running on Android TV
-  Future<void> _checkIfAndroidTv() async {
-    try {
-      final isTv = await AndroidNativeDownloader.isTelevision();
-      if (mounted) {
-        setState(() {
-          _episode.isAndroidTv = isTv;
-        });
-      }
-    } catch (e) {
-      // Ignore errors, default to false
-    }
-  }
-
-  /// Handle back navigation for folder browsing.
-  /// Returns true if handled (navigated up folder), false if at root (let Navigator.pop handle it).
-  bool _handleBackNavigation() {
-    // Close search first if active
-    if (_search.isSearchActive) {
-      _toggleSearch();
-      return true; // We handled the back press (closed search)
-    }
-    if (_navigation.folderPath.isNotEmpty) {
-      _navigateUp();
-      return true; // We handled the back press (navigated up a folder)
-    }
-    return false; // At root, let the normal pop behavior happen
-  }
-
-  /// Load saved view mode for this playlist item
-  Future<void> _loadSavedViewMode() async {
-    final savedModeString =
-        await PlaylistPreferencesStorage.getPlaylistItemViewMode(
-          widget.playlistItem,
-        );
-    if (savedModeString != null && mounted) {
-      setState(() {
-        _navigation.currentViewMode = _viewModeFromString(savedModeString);
-      });
-    }
-  }
-
-  /// Convert string to FolderViewMode
-  FolderViewMode _viewModeFromString(String mode) {
-    switch (mode) {
-      case 'raw':
-        return FolderViewMode.raw;
-      case 'sortedAZ':
-        return FolderViewMode.sortedAZ;
-      case 'seriesArrange':
-        return FolderViewMode.seriesArrange;
-      default:
-        return FolderViewMode.raw;
-    }
-  }
-
-  /// Convert FolderViewMode to string
-  String _viewModeToString(FolderViewMode mode) {
-    switch (mode) {
-      case FolderViewMode.raw:
-        return 'raw';
-      case FolderViewMode.sortedAZ:
-        return 'sortedAZ';
-      case FolderViewMode.seriesArrange:
-        return 'seriesArrange';
-    }
-  }
-
-  /// Convert FolderViewMode to PlaylistViewMode for video player
-  PlaylistViewMode _convertToPlaylistViewMode(FolderViewMode mode) {
-    switch (mode) {
-      case FolderViewMode.raw:
-        return PlaylistViewMode.raw;
-      case FolderViewMode.sortedAZ:
-        return PlaylistViewMode.sorted;
-      case FolderViewMode.seriesArrange:
-        return PlaylistViewMode.series;
-    }
   }
 
   /// Load progress data for all files
@@ -270,552 +220,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
   }
 
-  /// Load content from provider
-  Future<void> _loadContent() async {
-    setState(() {
-      _catalog.isLoading = true;
-      _catalog.errorMessage = null;
-    });
-
-    try {
-      final provider =
-          (widget.playlistItem['provider'] as String?) ?? 'realdebrid';
-
-      final normalizedProvider = provider.toLowerCase();
-      if (normalizedProvider == 'torbox') {
-        await _loadTorboxContent();
-      } else if (normalizedProvider == 'pikpak') {
-        await _loadPikPakContent();
-      } else if (normalizedProvider == 'webdav') {
-        await _loadWebDavContent();
-      } else if (normalizedProvider == 'premiumize') {
-        await _loadPremiumizeContent();
-      } else if (normalizedProvider == 'alldebrid') {
-        await _loadAllDebridContent();
-      } else {
-        await _loadRealDebridContent();
-      }
-
-      // Note: View mode is now applied in _initializeScreen() after _parseSeriesPlaylist()
-      // This ensures _seriesPlaylist is available for series detection
-    } catch (e) {
-      print('Error loading content: $e');
-      setState(() {
-        _catalog.errorMessage = 'Failed to load content: ${e.toString()}';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _catalog.isLoading = false;
-        });
-      }
-    }
-  }
-
-  /// Load Real-Debrid content
-  Future<void> _loadRealDebridContent() async {
-    final rdTorrentId = widget.playlistItem['rdTorrentId'] as String?;
-    if (rdTorrentId == null) {
-      throw Exception('No Real-Debrid torrent ID found');
-    }
-
-    final apiKey = await RealDebridStorage.getApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('No API key configured');
-    }
-
-    final info = await DebridService.getTorrentInfo(apiKey, rdTorrentId);
-    final allFiles = (info['files'] as List<dynamic>? ?? const []);
-
-    if (allFiles.isEmpty) {
-      throw Exception('No files found in torrent');
-    }
-
-    // Use existing RDFolderTreeBuilder utility
-    _catalog.rootContent = RDFolderTreeBuilder.buildTree(
-      allFiles.cast<Map<String, dynamic>>(),
-    );
-  }
-
-  /// Load AllDebrid content. Re-adds the magnet by infohash (trusting the
-  /// `ready` flag), then builds the tree from its files. The files are kept in
-  /// order so each node's [RDFileNode.linkIndex] maps to its locked link.
-  Future<void> _loadAllDebridContent() async {
-    final torrentHash = widget.playlistItem['torrent_hash'] as String?;
-    if (torrentHash == null || torrentHash.isEmpty) {
-      throw Exception('No AllDebrid magnet info found');
-    }
-    final apiKey = await AllDebridStorage.getAllDebridApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('No AllDebrid API key configured');
-    }
-
-    final result = await AllDebridService.addMagnetAndResolveFiles(
-      apiKey,
-      'magnet:?xt=urn:btih:$torrentHash',
-    );
-    if (result.files.isEmpty) {
-      throw Exception('No files found in magnet');
-    }
-
-    _catalog.allDebridFiles = result.files;
-    // Map AllDebrid files to RD-style file maps; linkIndex is assigned in this
-    // same order by the tree builder, so it indexes back into _allDebridFiles.
-    final fileMaps = <Map<String, dynamic>>[];
-    for (int i = 0; i < _catalog.allDebridFiles.length; i++) {
-      final f = _catalog.allDebridFiles[i];
-      fileMaps.add({
-        'id': i,
-        'path': f.path.startsWith('/') ? f.path : '/${f.path}',
-        'bytes': f.size,
-        'selected': 1,
-      });
-    }
-    _catalog.rootContent = RDFolderTreeBuilder.buildTree(fileMaps);
-  }
-
-  /// Load Torbox content
-  Future<void> _loadTorboxContent() async {
-    final torboxTorrentId = widget.playlistItem['torboxTorrentId'] as int?;
-    if (torboxTorrentId == null) {
-      throw Exception('No Torbox torrent ID found');
-    }
-
-    final String? apiKey = await TorboxStorage.getTorboxApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('Please set your Torbox API key in Settings');
-    }
-
-    final cachedTorrent = await TorboxService.getTorrentById(
-      apiKey,
-      torboxTorrentId,
-    );
-    if (cachedTorrent == null) {
-      throw Exception('Torrent not found');
-    }
-
-    final allFiles = cachedTorrent.files ?? [];
-    if (allFiles.isEmpty) {
-      throw Exception('No files found in torrent');
-    }
-
-    // Use existing TorboxFolderTreeBuilder utility which accepts TorboxFile objects
-    _catalog.rootContent = TorboxFolderTreeBuilder.buildTree(allFiles);
-  }
-
-  /// Load PikPak content
-  Future<void> _loadPikPakContent() async {
-    // Get the folder/file ID
-    final pikpakFileId = widget.playlistItem['pikpakFileId'] as String?;
-
-    if (pikpakFileId != null) {
-      // Preferred: Fetch fresh folder structure from PikPak
-      _catalog.rootContent = await _buildPikPakFolderTree(pikpakFileId);
-    } else {
-      // Fallback: Use cached files (for old playlist items without pikpakFileId)
-      final cachedFiles = widget.playlistItem['pikpakFiles'] as List?;
-      if (cachedFiles != null && cachedFiles.isNotEmpty) {
-        final files = cachedFiles.cast<Map<String, dynamic>>();
-        _catalog.rootContent = buildPikPakFileTree(files);
-      } else {
-        throw Exception(
-          'No PikPak file data found. Please remove and re-add this item to playlist.',
-        );
-      }
-    }
-  }
-
-  /// Build folder tree from PikPak by fetching folder structure
-  /// This properly preserves the folder hierarchy
-  Future<RDFileNode> _buildPikPakFolderTree(
-    String folderId, {
-    int depth = 0,
-    String currentPath = '',
-  }) async {
-    final pikpak = PikPakApiService.instance;
-
-    // Prevent infinite recursion or excessively deep folder structures
-    const int maxDepth = 4;
-    if (depth > maxDepth) {
-      throw Exception(
-        'Folder hierarchy too deep (max $maxDepth levels). Please reorganize your folders.',
-      );
-    }
-
-    // Fetch files in this folder (non-recursive)
-    final result = await pikpak.listFiles(parentId: folderId, limit: 100);
-    final files = result.files;
-
-    final List<RDFileNode> children = [];
-    int fileIndex = 0;
-
-    for (final file in files) {
-      final kind = file['kind'] ?? '';
-      final name = (file['name'] as String?) ?? 'Unknown';
-      final fileId = file['id'] as String?;
-
-      if (kind == 'drive#folder') {
-        // Recursively build subfolder
-        if (fileId != null) {
-          // Build path for subfolder
-          final subPath = currentPath.isEmpty ? name : '$currentPath/$name';
-          final subTree = await _buildPikPakFolderTree(
-            fileId,
-            depth: depth + 1,
-            currentPath: subPath,
-          );
-          children.add(
-            RDFileNode.folder(name: name, children: subTree.children),
-          );
-        }
-      } else {
-        // Add file node
-        final sizeRaw = file['size'];
-        final size = sizeRaw is int
-            ? sizeRaw
-            : (sizeRaw is String ? int.tryParse(sizeRaw) ?? 0 : 0);
-
-        // Store the PikPak file metadata in the node's path field (we'll parse it later)
-        // Format: "pikpak://fileId|fileName"
-        final pikpakUrl = 'pikpak://$fileId|$name';
-
-        // Build relative path for series parsing
-        final relPath = currentPath.isEmpty ? name : '$currentPath/$name';
-
-        children.add(
-          RDFileNode.file(
-            name: name,
-            fileId: fileIndex,
-            path: pikpakUrl, // Store PikPak file ID and name here
-            relativePath: relPath, // Store clean path for series parsing
-            bytes: size,
-            linkIndex: fileIndex,
-          ),
-        );
-        fileIndex++;
-      }
-    }
-
-    return RDFileNode.folder(name: 'Root', children: children);
-  }
-
-  /// Load Premiumize content by re-resolving the torrent's files from its hash.
-  Future<void> _loadPremiumizeContent() async {
-    final infohash = (widget.playlistItem['torrent_hash'] as String?)?.trim();
-    if (infohash == null || infohash.isEmpty) {
-      // Collection saved from the cloud browser: build the tree from stored
-      // file metadata (each node carries its cloud item id for re-resolution).
-      final filesRaw = widget.playlistItem['premiumizeFiles'];
-      if (filesRaw is List && filesRaw.isNotEmpty) {
-        _catalog.rootContent = buildPremiumizeCloudFileTree(filesRaw);
-        return;
-      }
-      // Single cloud item: build a one-node tree from its metadata.
-      final singleFile = widget.playlistItem['premiumizeFile'];
-      if (singleFile is Map) {
-        _catalog.rootContent = buildPremiumizeCloudFileTree([singleFile]);
-        return;
-      }
-      throw Exception('No Premiumize torrent hash found');
-    }
-
-    final apiKey = await PremiumizeStorage.getPremiumizeApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      throw Exception('Please set your Premiumize API key in Settings');
-    }
-
-    final files = await PremiumizeService.resolveFilesByHash(apiKey, infohash);
-    if (files.isEmpty) {
-      throw Exception('No files found in torrent');
-    }
-
-    _catalog.rootContent = buildPremiumizeFileTree(files);
-  }
-
-  /// Load WebDAV content from the file metadata stored in the playlist item.
-  Future<void> _loadWebDavContent() async {
-    final files = <Map<String, dynamic>>[];
-    final singleFile = asStringDynamicMap(widget.playlistItem['webdavFile']);
-    if (singleFile != null) {
-      files.add(singleFile);
-    }
-
-    final cachedFiles = widget.playlistItem['webdavFiles'];
-    if (cachedFiles is List) {
-      for (final rawFile in cachedFiles) {
-        final file = asStringDynamicMap(rawFile);
-        if (file != null) files.add(file);
-      }
-    }
-
-    final fallbackPath = (widget.playlistItem['webdavPath'] ?? '').toString();
-    if (files.isEmpty && fallbackPath.isNotEmpty) {
-      files.add({
-        'name': fileNameFromPath(fallbackPath, fallbackPath),
-        'path': fallbackPath,
-        'sizeBytes': widget.playlistItem['sizeBytes'],
-      });
-    }
-
-    if (files.isEmpty) {
-      throw Exception(
-        'No WebDAV file data found. Please remove and re-add this item to playlist.',
-      );
-    }
-
-    _catalog.rootContent = buildWebDavFileTree(
-      files,
-      rootPath: (widget.playlistItem['webdavFolderPath'] ?? '').toString(),
-    );
-  }
-
-  /// Apply view mode transformation
-  void _applyViewMode(FolderViewMode mode) {
-    if (_catalog.rootContent == null) return;
-
-    setState(() {
-      _navigation.currentViewMode = mode;
-
-      // Close search when switching to Series Arrange mode
-      if (mode == FolderViewMode.seriesArrange && _search.isSearchActive) {
-        _search.isSearchActive = false;
-        _search.searchController.clear();
-        _search.searchResults.clear();
-      }
-
-      // Get current folder's nodes
-      RDFileNode currentFolder = _catalog.rootContent!;
-      for (final segment in _navigation.folderPath) {
-        // Find child folder by name
-        RDFileNode? child;
-        try {
-          child = currentFolder.children.firstWhere(
-            (c) => c.name == segment && c.isFolder,
-          );
-        } catch (e) {
-          // Folder not found - reset to root
-          print(
-            'Warning: Folder "$segment" not found in current view, resetting to root',
-          );
-          _navigation.folderPath.clear();
-          currentFolder = _catalog.rootContent!;
-          break;
-        }
-
-        if (child != null) {
-          currentFolder = child;
-        }
-      }
-
-      // Apply transformation based on mode
-      switch (mode) {
-        case FolderViewMode.raw:
-          _navigation.currentViewNodes = currentFolder.children;
-          break;
-        case FolderViewMode.sortedAZ:
-          _navigation.currentViewNodes = applySortedView(
-            currentFolder.children,
-          );
-          break;
-        case FolderViewMode.seriesArrange:
-          _navigation.currentViewNodes = _applySeriesArrangeView(
-            currentFolder.children,
-          );
-          break;
-      }
-    });
-
-    // Save view mode preference
-    PlaylistPreferencesStorage.savePlaylistItemViewMode(
-      widget.playlistItem,
-      _viewModeToString(mode),
-    );
-  }
-
-  /// Apply Sort A-Z ordering to a list of video files for playback
-  /// This ensures the playlist plays files in the same order as displayed in the UI
-  /// Only applies sorting if _currentViewMode == FolderViewMode.sortedAZ
-  ///
-  /// The sorting logic MUST match _applySortedView to maintain UI/playback consistency:
-  /// 1. Groups files by their folder path
-  /// 2. Sorts files within each folder (numerically aware, then alphabetically)
-  /// 3. Sorts folders by their top-level folder name (numerically aware, then alphabetically)
-  /// 4. Rebuilds the list with sorted folders containing sorted files
-  void _applySortedPlaylistOrder(List<RDFileNode> videoFiles) {
-    if (_navigation.currentViewMode != FolderViewMode.sortedAZ) {
-      return; // Only apply sorting in sortedAZ mode
-    }
-
-    // Group files by their folder path (everything before the filename)
-    final folderGroups = <String, List<RDFileNode>>{};
-    for (final node in videoFiles) {
-      // Extract folder path from relativePath (or use path as fallback)
-      final fullPath = (node.relativePath ?? node.path) ?? '';
-      final lastSlashIndex = fullPath.lastIndexOf('/');
-      final folderPath = lastSlashIndex >= 0
-          ? fullPath.substring(0, lastSlashIndex)
-          : '';
-
-      folderGroups.putIfAbsent(folderPath, () => []);
-      folderGroups[folderPath]!.add(node);
-    }
-
-    // Sort files within each folder group (SAME LOGIC AS UI)
-    for (final group in folderGroups.values) {
-      group.sort((a, b) {
-        final aNum = extractLeadingNumber(a.name);
-        final bNum = extractLeadingNumber(b.name);
-
-        // If both start with numbers, sort numerically
-        if (aNum != null && bNum != null) {
-          return aNum.compareTo(bNum);
-        }
-
-        // If only one starts with a number, numbered files come first
-        if (aNum != null) return -1;
-        if (bNum != null) return 1;
-
-        // Otherwise sort alphabetically (case-insensitive)
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-      });
-    }
-
-    // Sort folder paths using SAME LOGIC AS UI (_applySortedView sorts folders)
-    // Extract the top-level folder name from each path for sorting
-    final provider =
-        ((widget.playlistItem['provider'] as String?) ?? 'realdebrid')
-            .toLowerCase();
-    final folderPathsList = folderGroups.keys.toList();
-    folderPathsList.sort((a, b) {
-      // Extract the top-level folder name from the path
-      // Handle empty paths (root directory) and nested paths correctly
-      String aFolderName;
-      String bFolderName;
-
-      if (a.isEmpty) {
-        aFolderName = 'Root';
-      } else {
-        final aParts = a.split('/');
-        // For Torbox: skip first folder level (torrent name), use second level
-        // For others: use first folder level
-        if (provider == 'torbox' && aParts.length > 1) {
-          aFolderName = aParts[1]; // Second folder (skip torrent name)
-        } else {
-          aFolderName = aParts[0]; // First folder (top-level)
-        }
-      }
-
-      if (b.isEmpty) {
-        bFolderName = 'Root';
-      } else {
-        final bParts = b.split('/');
-        // For Torbox: skip first folder level (torrent name), use second level
-        // For others: use first folder level
-        if (provider == 'torbox' && bParts.length > 1) {
-          bFolderName = bParts[1]; // Second folder (skip torrent name)
-        } else {
-          bFolderName = bParts[0]; // First folder (top-level)
-        }
-      }
-
-      // Use _extractSeasonNumber for numerical awareness (SAME AS UI)
-      final aNum = extractSeasonNumber(aFolderName);
-      final bNum = extractSeasonNumber(bFolderName);
-
-      // If both have numbers, sort numerically
-      if (aNum != null && bNum != null) {
-        return aNum.compareTo(bNum);
-      }
-
-      // If only one has a number, numbered folders come first
-      if (aNum != null) return -1;
-      if (bNum != null) return 1;
-
-      // Otherwise sort alphabetically (case-insensitive)
-      return aFolderName.toLowerCase().compareTo(bFolderName.toLowerCase());
-    });
-
-    // Rebuild videoFiles list with sorted folders and sorted files within
-    videoFiles.clear();
-    for (final folderPath in folderPathsList) {
-      videoFiles.addAll(folderGroups[folderPath]!);
-    }
-  }
-
-  /// Apply series arrange view (creates virtual season folders)
-  List<RDFileNode> _applySeriesArrangeView(List<RDFileNode> nodes) {
-    final videoFiles = nodes
-        .where((n) => !n.isFolder && FileUtils.isVideoFile(n.name))
-        .toList();
-    final otherNodes = nodes
-        .where((n) => n.isFolder || !FileUtils.isVideoFile(n.name))
-        .toList();
-
-    if (videoFiles.length < 3) {
-      // Not enough files for series detection, fallback to sorted
-      return applySortedView(nodes);
-    }
-
-    // Use the already-parsed _seriesPlaylist instead of re-parsing filenames
-    // This is more accurate (considers TVMaze mappings) and faster
-    if (_series.seriesPlaylist == null || !_series.seriesPlaylist!.isSeries) {
-      return applySortedView(nodes);
-    }
-
-    // Parse filenames for season/episode extraction
-    final filenames = videoFiles.map((f) => f.name).toList();
-    final parsed = SeriesParser.parsePlaylist(filenames);
-
-    // Group by season
-    final Map<int, List<RDFileNode>> seasonMap = {};
-    for (int i = 0; i < videoFiles.length; i++) {
-      final info = parsed[i];
-      if (info.isSeries && info.season != null) {
-        seasonMap.putIfAbsent(info.season!, () => []);
-        seasonMap[info.season!]!.add(videoFiles[i]);
-      }
-    }
-
-    // Create virtual season folders
-    final List<RDFileNode> seasonFolders = [];
-    for (final seasonNum in seasonMap.keys.toList()..sort()) {
-      final seasonFiles = seasonMap[seasonNum]!;
-      seasonFolders.add(
-        RDFileNode.folder(
-          name: seasonNum == 0 ? 'Season 0 - Specials' : 'Season $seasonNum',
-          children: seasonFiles,
-        ),
-      );
-    }
-
-    return [...otherNodes, ...seasonFolders];
-  }
-
-  /// Navigate into a folder
-  void _navigateIntoFolder(RDFileNode folder) {
-    if (!folder.isFolder) return;
-
-    setState(() {
-      _navigation.folderPath.add(folder.name);
-    });
-
-    _applyViewMode(_navigation.currentViewMode);
-  }
-
-  /// Navigate up one level
-  void _navigateUp() {
-    if (_navigation.folderPath.isEmpty) {
-      Navigator.of(context).pop();
-      return;
-    }
-
-    setState(() {
-      _navigation.folderPath.removeLast();
-    });
-
-    _applyViewMode(_navigation.currentViewMode);
-  }
-
   /// Play a file with full playlist support
   Future<void> _playFile(RDFileNode file) async {
     if (file.isFolder || _catalog.rootContent == null) return;
@@ -853,7 +257,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // Apply Sort A-Z sorting if in sortedAZ mode
       // Use EXACT same sorting logic as UI view mode (_applySortedView)
-      _applySortedPlaylistOrder(videoFiles);
+      _sections.playlistOrder.applySortedPlaylistOrder(videoFiles);
 
       // Find the selected file index
       int startIndex = 0;
@@ -1227,7 +631,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         leading: IconButton(
           focusNode: _focus.backButtonFocusNode,
           icon: const Icon(Icons.arrow_back),
-          onPressed: _navigateUp,
+          onPressed: _sections.navigation.navigateUp,
         ),
         actions: [
           // Search button (only for Raw and Sort A-Z modes)
@@ -1240,7 +644,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadContent,
+            onPressed: _sections.contentLoading.loadContent,
             tooltip: 'Refresh',
           ),
         ],
@@ -1251,7 +655,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           if (!_catalog.isLoading && _catalog.errorMessage == null)
             ViewModeDropdown(
               currentMode: _navigation.currentViewMode,
-              onModeChanged: _applyViewMode,
+              onModeChanged: _sections.viewModes.applyViewMode,
               focusNode: _focus.viewModeDropdownFocusNode,
             ),
 
@@ -1292,7 +696,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _loadContent,
+                onPressed: _sections.contentLoading.loadContent,
                 child: const Text('Retry'),
               ),
             ],
@@ -1355,7 +759,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         ActivateIntent: CallbackAction<ActivateIntent>(
           onInvoke: (intent) {
             if (isFolder) {
-              _navigateIntoFolder(node);
+              _sections.navigation.navigateIntoFolder(node);
             } else if (isVideo) {
               _playFile(node);
             }
@@ -1369,7 +773,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         child: InkWell(
           onTap: () {
             if (isFolder) {
-              _navigateIntoFolder(node);
+              _sections.navigation.navigateIntoFolder(node);
             } else if (isVideo) {
               _playFile(node);
             }
@@ -1519,7 +923,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       // IMPORTANT: Apply sorting if in sortedAZ mode to match the index used when saving progress
       // When playing in Sort A-Z mode, progress is saved using indices from the sorted list,
       // so we must apply the same sorting here to look up the correct progress key
-      _applySortedPlaylistOrder(videoFiles);
+      _sections.playlistOrder.applySortedPlaylistOrder(videoFiles);
 
       final fileIndex = videoFiles.indexWhere(
         (node) => node.name == file.name && node.path == file.path,
@@ -1555,7 +959,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             _navigation.currentViewMode == FolderViewMode.seriesArrange) {
           setState(() {
             _navigation.currentViewMode = FolderViewMode.sortedAZ;
-            _applyViewMode(FolderViewMode.sortedAZ);
+            _sections.viewModes.applyViewMode(FolderViewMode.sortedAZ);
           });
         }
       });
@@ -3115,7 +2519,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
       // Apply Sort A-Z sorting if in sortedAZ mode
       // Use EXACT same sorting logic as UI view mode (_applySortedView)
-      _applySortedPlaylistOrder(videoFiles);
+      _sections.playlistOrder.applySortedPlaylistOrder(videoFiles);
 
       // Find the selected episode index
       // The approach differs based on view mode:
@@ -3293,7 +2697,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         rdTorrentId: rdTorrentId,
         disableAutoResume: true,
-        viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
+        viewMode: _sections.viewModes.convertToPlaylistViewMode(
+          _navigation.currentViewMode,
+        ),
         // Pass catalog metadata for optimized TVMaze lookup
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
@@ -3303,7 +2709,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   }
 
   /// Play AllDebrid playlist. Each node's linkIndex maps to its locked link in
-  /// [PlaylistContentCatalogState.allDebridFiles] (populated by [_loadAllDebridContent]); the start file is
+  /// [PlaylistContentCatalogState.allDebridFiles] (populated by [PlaylistContentContentLoading.loadAllDebridContent]); the start file is
   /// unlocked, the rest carry their locked link for lazy unlock by the player.
   Future<void> _playAllDebridPlaylist(
     List<RDFileNode> videoFiles,
@@ -3366,7 +2772,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
-        viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
+        viewMode: _sections.viewModes.convertToPlaylistViewMode(
+          _navigation.currentViewMode,
+        ),
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
         suppressTraktAutoSync: true,
@@ -3469,7 +2877,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         torboxTorrentId: torboxTorrentId.toString(),
         disableAutoResume: true,
-        viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
+        viewMode: _sections.viewModes.convertToPlaylistViewMode(
+          _navigation.currentViewMode,
+        ),
         // Pass catalog metadata for optimized TVMaze lookup
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
@@ -3574,7 +2984,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         startIndex: startIndex,
         pikpakCollectionId: widget.playlistItem['pikpakFileId'] as String?,
         disableAutoResume: true,
-        viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
+        viewMode: _sections.viewModes.convertToPlaylistViewMode(
+          _navigation.currentViewMode,
+        ),
         // Pass catalog metadata for optimized TVMaze lookup
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
@@ -3639,7 +3051,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           playlist: cloudEntries,
           startIndex: startIndex,
           disableAutoResume: true,
-          viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
+          viewMode: _sections.viewModes.convertToPlaylistViewMode(
+            _navigation.currentViewMode,
+          ),
           contentImdbId: widget.playlistItem['imdbId'] as String?,
           contentType: widget.playlistItem['contentType'] as String?,
           suppressTraktAutoSync: true,
@@ -3700,7 +3114,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         playlist: entries,
         startIndex: startIndex,
         disableAutoResume: true,
-        viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
+        viewMode: _sections.viewModes.convertToPlaylistViewMode(
+          _navigation.currentViewMode,
+        ),
         contentImdbId: widget.playlistItem['imdbId'] as String?,
         contentType: widget.playlistItem['contentType'] as String?,
         suppressTraktAutoSync: true,
@@ -3757,7 +3173,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       playlist: entries,
       startIndex: startIndex,
       disableAutoResume: true,
-      viewMode: _convertToPlaylistViewMode(_navigation.currentViewMode),
+      viewMode: _sections.viewModes.convertToPlaylistViewMode(
+        _navigation.currentViewMode,
+      ),
       httpHeaders: WebDavService.authHeaders(config),
       disableExternalPlayer: hasWebDavCredentials(config),
       webDavServerId: (widget.playlistItem['webdavServerId'] ?? config.id)
@@ -3832,32 +3250,34 @@ Map<String, Object?> playlistContentTestAccess(
     'lastEpisodeLongPressTime': s._episode.lastEpisodeLongPressTime,
     'episodeKeyDownReceived': s._episode.episodeKeyDownReceived,
     'isAndroidTv': s._episode.isAndroidTv,
-    'initializeScreen': s._initializeScreen,
-    'checkIfAndroidTv': s._checkIfAndroidTv,
-    'handleBackNavigation': s._handleBackNavigation,
-    'loadSavedViewMode': s._loadSavedViewMode,
-    'viewModeFromString': s._viewModeFromString,
-    'viewModeToString': s._viewModeToString,
-    'convertToPlaylistViewMode': s._convertToPlaylistViewMode,
-    'loadContent': s._loadContent,
-    'loadRealDebridContent': s._loadRealDebridContent,
-    'loadAllDebridContent': s._loadAllDebridContent,
-    'loadTorboxContent': s._loadTorboxContent,
-    'loadPikPakContent': s._loadPikPakContent,
-    'loadPremiumizeContent': s._loadPremiumizeContent,
-    'loadWebDavContent': s._loadWebDavContent,
+    'initializeScreen': s._sections.initialization.initializeScreen,
+    'checkIfAndroidTv': s._sections.initialization.checkIfAndroidTv,
+    'handleBackNavigation': s._sections.navigation.handleBackNavigation,
+    'loadSavedViewMode': s._sections.viewModes.loadSavedViewMode,
+    'viewModeFromString': s._sections.viewModes.viewModeFromString,
+    'viewModeToString': s._sections.viewModes.viewModeToString,
+    'convertToPlaylistViewMode':
+        s._sections.viewModes.convertToPlaylistViewMode,
+    'loadContent': s._sections.contentLoading.loadContent,
+    'loadRealDebridContent': s._sections.contentLoading.loadRealDebridContent,
+    'loadAllDebridContent': s._sections.contentLoading.loadAllDebridContent,
+    'loadTorboxContent': s._sections.contentLoading.loadTorboxContent,
+    'loadPikPakContent': s._sections.cloudLoading.loadPikPakContent,
+    'loadPremiumizeContent': s._sections.cloudLoading.loadPremiumizeContent,
+    'loadWebDavContent': s._sections.cloudLoading.loadWebDavContent,
     'relativeWebDavPath': relativeWebDavPath,
     'fileNameFromPath': fileNameFromPath,
     'asStringDynamicMap': asStringDynamicMap,
     'asInt': asInt,
-    'applyViewMode': s._applyViewMode,
+    'applyViewMode': s._sections.viewModes.applyViewMode,
     'applySortedView': applySortedView,
     'extractSeasonNumber': extractSeasonNumber,
     'extractLeadingNumber': extractLeadingNumber,
-    'applySortedPlaylistOrder': s._applySortedPlaylistOrder,
-    'applySeriesArrangeView': s._applySeriesArrangeView,
-    'navigateIntoFolder': s._navigateIntoFolder,
-    'navigateUp': s._navigateUp,
+    'applySortedPlaylistOrder':
+        s._sections.playlistOrder.applySortedPlaylistOrder,
+    'applySeriesArrangeView': s._sections.viewModes.applySeriesArrangeView,
+    'navigateIntoFolder': s._sections.navigation.navigateIntoFolder,
+    'navigateUp': s._sections.navigation.navigateUp,
     'playFile': s._playFile,
     'toggleSearch': s._toggleSearch,
     'performSearch': s._performSearch,
@@ -3883,7 +3303,7 @@ Map<String, Object?> playlistContentTestAccess(
     'resolveWebDavConfig': s._resolveWebDavConfig,
     'hasWebDavCredentials': hasWebDavCredentials,
     'cleanTorboxPath': cleanTorboxPath,
-    'buildPikPakFolderTree': s._buildPikPakFolderTree,
+    'buildPikPakFolderTree': s._sections.cloudLoading.buildPikPakFolderTree,
     'buildPikPakFileTree': buildPikPakFileTree,
     'buildPremiumizeCloudFileTree': buildPremiumizeCloudFileTree,
     'buildPremiumizeFileTree': buildPremiumizeFileTree,

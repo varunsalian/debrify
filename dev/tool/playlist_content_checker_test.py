@@ -63,8 +63,15 @@ def self_test(package=None):
         elif case['mutation'] == 'duplicate_owner':
             changed['fixture_duplicate.dart'] = 'class PlaylistContentDuplicate { ' + text + ' }'
         else:
-            assert case['before'] in text, case
-            text = text.replace(case['before'], case['after'], 1)
+            before = case['before']
+            if before == '_initializeScreen();' and before not in text:
+                init_key, init_node = located('_PlaylistContentViewScreenState._initializeScreen')
+                assert init_key[0] != source
+                section = init_node['owner'].removeprefix('PlaylistContent')
+                section = section[0].lower() + section[1:]
+                before = '_sections.' + section + '.' + init_node['name'] + '();'
+            assert before in text, case
+            text = text.replace(before, case['after'], 1)
         if case['mutation'] not in ('move_lifecycle', 'duplicate_owner'):
             changed[key[0]] = changed[key[0]][:node['start']] + text + changed[key[0]][node['end']:]
         errors = check(original, changed, rows, source, package, context_guard=True, config=config)

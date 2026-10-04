@@ -721,6 +721,21 @@ identities against the observed branch baselines and approved additions.
   Initial failed source/lint evidence is preserved under `step2-attempt1-*`.
 
 
+- Step 3: six dependency-record sections now own initialization, navigation,
+  saved/view modes, debrid loading, cloud loading and playlist ordering.
+  All per-entry production bindings were reviewed before scaffold pinning;
+  lifecycle registration/removal keeps the same Navigation instance, and
+  item/context/mounted getters remain live. The facade is 3,316 lines.
+  Evidence `step3-*` passes against `base4`: 172 focused/source/shape tests,
+  all six manifests with self-tests, analyzer comparison with no additions,
+  CI format/allowlist, all 17 warnings, architecture/size and storage checks.
+  The initializer-removal checker fixture now locates its moved receiver
+  through the manifest and still rejects the mutation; its initial lookup
+  failure is retained as `step3-attempt1-*`. Only that affected self-test was
+  repeated; the other five manifests and unchanged application checks retain
+  their recorded passing inputs. Gate 1 follows on the committed tree.
+
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

@@ -83,13 +83,19 @@
   "self_test_module": "playlist_content_checker_test",
   "receivers": [
     "PlaylistContentCatalogState",
+    "PlaylistContentCloudLoading",
+    "PlaylistContentContentLoading",
     "PlaylistContentEpisodeState",
     "PlaylistContentFocusState",
+    "PlaylistContentInitialization",
+    "PlaylistContentNavigation",
     "PlaylistContentNavigationState",
     "PlaylistContentOttState",
+    "PlaylistContentPlaylistOrder",
     "PlaylistContentScrollState",
     "PlaylistContentSearchState",
     "PlaylistContentSeriesState",
+    "PlaylistContentViewModes",
     "_deps",
     "deps"
   ],
@@ -109,7 +115,13 @@
     "_search": "PlaylistContentSearchState",
     "_deps.searchState": "PlaylistContentSearchState",
     "_episode": "PlaylistContentEpisodeState",
-    "_deps.episodeState": "PlaylistContentEpisodeState"
+    "_deps.episodeState": "PlaylistContentEpisodeState",
+    "_sections.initialization": "PlaylistContentInitialization",
+    "_sections.navigation": "PlaylistContentNavigation",
+    "_sections.viewModes": "PlaylistContentViewModes",
+    "_sections.contentLoading": "PlaylistContentContentLoading",
+    "_sections.cloudLoading": "PlaylistContentCloudLoading",
+    "_sections.playlistOrder": "PlaylistContentPlaylistOrder"
   },
   "receiver_owners": {
     "_PlaylistContentViewScreenState": "_PlaylistContentViewScreenState",
@@ -128,7 +140,13 @@
     "_search": "PlaylistContentSearchState",
     "_deps.searchState": "PlaylistContentSearchState",
     "_episode": "PlaylistContentEpisodeState",
-    "_deps.episodeState": "PlaylistContentEpisodeState"
+    "_deps.episodeState": "PlaylistContentEpisodeState",
+    "_sections.initialization": "PlaylistContentInitialization",
+    "_sections.navigation": "PlaylistContentNavigation",
+    "_sections.viewModes": "PlaylistContentViewModes",
+    "_sections.contentLoading": "PlaylistContentContentLoading",
+    "_sections.cloudLoading": "PlaylistContentCloudLoading",
+    "_sections.playlistOrder": "PlaylistContentPlaylistOrder"
   },
   "plain_sections": [],
   "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in playlist_content_context_exceptions.json; original guards and statement order unchanged",
@@ -234,7 +252,13 @@
     }
   ],
   "callback_instances": {
-    "_PlaylistContentViewScreenState": "$State"
+    "_PlaylistContentViewScreenState": "$State",
+    "PlaylistContentInitialization": "$State._sections.initialization",
+    "PlaylistContentNavigation": "$State._sections.navigation",
+    "PlaylistContentViewModes": "$State._sections.viewModes",
+    "PlaylistContentContentLoading": "$State._sections.contentLoading",
+    "PlaylistContentCloudLoading": "$State._sections.cloudLoading",
+    "PlaylistContentPlaylistOrder": "$State._sections.playlistOrder"
   },
   "callback_receiver_aliases": {
     "_catalog": "$State._catalog",
@@ -252,7 +276,11 @@
     "_search": "$State._search",
     "_deps.searchState": "$State._search",
     "_episode": "$State._episode",
-    "_deps.episodeState": "$State._episode"
+    "_deps.episodeState": "$State._episode",
+    "_deps.handleBackNavigation": "$State._sections.navigation.handleBackNavigation",
+    "_deps.navigateUp": "$State._sections.navigation.navigateUp",
+    "_deps.loadContent": "$State._sections.contentLoading.loadContent",
+    "_deps.applyViewMode": "$State._sections.viewModes.applyViewMode"
   },
   "source_validator_module": "playlist_content_live_bindings"
 }
