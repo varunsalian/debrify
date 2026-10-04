@@ -3,7 +3,14 @@ import 'package:debrify/features/episodes_panel/application/episodes_panel_polic
 import 'package:debrify/features/episodes_panel/models/episodes_panel_view.dart';
 import 'package:debrify/features/episodes_panel/presentation/episodes_panel_season_step.dart';
 import 'package:debrify/features/episodes_panel/presentation/episodes_panel_source_button.dart';
+import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart';
+import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart';
+import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_parts.dart';
+import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart';
+import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_resources.dart';
+import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart';
+import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
 import 'package:debrify/models/custom_series_identity.dart';
 import 'package:debrify/models/media_identity.dart';
@@ -14,18 +21,15 @@ import 'package:debrify/services/local_series_completion_service.dart';
 import 'package:debrify/services/mdblist/mdblist_continue_watching_service.dart';
 import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
 import 'package:debrify/services/mdblist/mdblist_models.dart';
-import 'package:debrify/services/mdblist/mdblist_service.dart';
 import 'package:debrify/services/metadata_episode_service.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:debrify/services/native_series_metadata_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/season_watched_service.dart';
-import 'package:debrify/services/simkl/simkl_service.dart';
 import 'package:debrify/services/storage/episode_resume_storage.dart';
 import 'package:debrify/services/stremio_service.dart';
 import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
-import 'package:debrify/services/trakt/trakt_service.dart';
 import 'package:debrify/services/tvmaze_service.dart';
 import 'package:debrify/services/watched_action_coordinator.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
@@ -182,123 +186,75 @@ class EpisodesPanel extends StatefulWidget {
 /// detail page plays on top of itself) can reach [refreshWatchProgress] via a
 /// GlobalKey when the player pops back.
 class EpisodesPanelState extends State<EpisodesPanel> {
-  final StremioService _stremioService = StremioService.instance;
+  late final EpisodesPanelDeps _deps;
+  late final EpisodesPanelParts _parts;
+  EpisodesPanelState() {
+    final services = EpisodesPanelServices();
+    final viewState = EpisodesPanelViewState();
+    _deps = EpisodesPanelDeps(
+      context: () => context,
+      mounted: () => mounted,
+      setState: setState,
+      refreshWatchProgress: refreshWatchProgress,
+      show: () => widget.show,
+      initialSeason: () => widget.initialSeason,
+      initialEpisode: () => widget.initialEpisode,
+      addon: () => widget.addon,
+      isTelevision: () => widget.isTelevision,
+      showQuickPlay: () => widget.showQuickPlay,
+      isTraktSource: () => widget.isTraktSource,
+      isMdblistSource: () => widget.isMdblistSource,
+      onItemSelected: () => widget.onItemSelected,
+      onQuickPlay: () => widget.onQuickPlay,
+      boundSourceCount: () => widget.boundSourceCount,
+      onSelectSource: () => widget.onSelectSource,
+      onBack: () => widget.onBack,
+      onBeforeTerminalDispatch: () => widget.onBeforeTerminalDispatch,
+      showChrome: () => widget.showChrome,
+      compact: () => widget.compact,
+      onFocusLeftEdge: () => widget.onFocusLeftEdge,
+      seasonsLoader: () => widget.seasonsLoader,
+      onPlayEpisode: () => widget.onPlayEpisode,
+      watchProgressLoader: () => widget.watchProgressLoader,
+      onNextEpisodeChanged: () => widget.onNextEpisodeChanged,
+      onSeriesCompletedChanged: () => widget.onSeriesCompletedChanged,
+      contentBuilder: () => widget.contentBuilder,
+    );
+    final progress = EpisodesPanelProgress();
+    final auth = EpisodesPanelAuth();
+    final resources = EpisodesPanelResources();
+    _parts = EpisodesPanelParts(
+      _deps,
+      services: services,
+      viewState: viewState,
+      progress: progress,
+      auth: auth,
+      resources: resources,
+    );
+    _deps.parts = _parts;
+  }
 
-  final TraktService _traktService = TraktService.instance;
-
-  final SimklService _simklService = SimklService.instance;
-
-  final MdblistService _mdblistService = MdblistService.instance;
-
-  // Episode drill-down state
-  int _episodeModeGeneration = 0;
-
-  StremioMeta? _selectedShow;
-
-  List<TraktSeason> _episodeSeasons = [];
-
-  int _selectedSeasonNumber = 1;
-
-  bool _isLoadingEpisodes = false;
-
-  /// True when a season fetch yielded no episodes. Instead of auto-diverting to
-  /// a whole-series torrent search (which a transient network blip could
-  /// trigger, yanking the user out of the drill-down), we show an inline
-  /// error+Retry panel — matching old home — with an explicit "Search for
-  /// sources" action that preserves the catalog pack-search path on demand.
-  bool _episodesUnavailable = false;
-
-  Map<String, double> _episodeWatchProgress = {};
-
-  TrackingSourcePolicy _trackingPolicy = const TrackingSourcePolicy(
-    scrobbleTargets: <TrackingSource>{
-      TrackingSource.local,
-      TrackingSource.trakt,
-      TrackingSource.simkl,
-      TrackingSource.mdblist,
-    },
-    progressSource: WatchProgressSource.smart,
-    homeTickSources: <TrackingSource>{
-      TrackingSource.local,
-      TrackingSource.trakt,
-      TrackingSource.simkl,
-      TrackingSource.mdblist,
-    },
-  );
-
-  Map<String, int> _episodeMdblistRatings = {};
-
-  /// Bumped when resolved episodes are PUBLISHED and on every season swap —
-  /// see [EpisodesPanelView.generation] for why this is not the load
-  /// generation. Only read by custom arrangements.
-  int _viewGeneration = 0;
-
-  TraktEpisode? _landing;
-
-  EpisodeFocusIntent _focusIntent = EpisodeFocusIntent.none;
+  EpisodesPanelViewState get _s => _parts.viewState;
+  EpisodesPanelProgress get _p => _parts.progress;
+  EpisodesPanelAuth get _a => _parts.auth;
+  EpisodesPanelResources get _r => _parts.resources;
+  EpisodesPanelServices get _sv => _parts.services;
 
   /// True when a custom arrangement is driving. Gates every engine side effect
   /// that targets a widget only the classic tree contains.
   bool get _custom => widget.contentBuilder != null;
 
-  /// The next episode to watch for the current show. Trakt supplies the initial
-  /// hint; merged local/Trakt/Simkl/MDBList progress reconciles the final badge.
-  ({int season, int episode})? _nextEpisode;
-
-  /// The TRACKER's own next-unwatched coordinate, untouched by merges. The
-  /// merge's output must never feed back in as the frontier: picking a
-  /// partial ahead and completing it would ratchet the fed-back "frontier"
-  /// past the tracker's true next, suppressing a genuine session there.
-  ({int season, int episode})? _trackerNextRaw;
-
-  /// Whether a Trakt account is connected. This screen is reachable from
-  /// Discover/catalog without Trakt, so the Trakt-only episode menu (mark
-  /// watched/unwatched, rate) is only offered when this is true.
-  bool _traktAuthenticated = false;
-
   bool get _isTraktAuthenticated =>
-      _traktAuthenticated &&
-      !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
-
-  /// Whether Simkl is connected, for watched-action destinations and options.
-  bool _simklAuthenticated = false;
-
-  bool _mdblistAuthenticated = false;
+      _a.traktAuthenticated &&
+      !CustomSeriesIdentity.isCustom((_s.selectedShow ?? widget.show).imdbId);
 
   bool get _isSimklAuthenticated =>
-      _simklAuthenticated &&
-      !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
+      _a.simklAuthenticated &&
+      !CustomSeriesIdentity.isCustom((_s.selectedShow ?? widget.show).imdbId);
 
   bool get _isMdblistAuthenticated =>
-      _mdblistAuthenticated &&
-      !CustomSeriesIdentity.isCustom((_selectedShow ?? widget.show).imdbId);
-
-  // MDBList can acknowledge a completed scrobble just before the player route
-  // finishes popping, and its watched snapshot can trail that acknowledgement
-  // briefly. Keep only the newest mutation refresh, wait until this panel's
-  // route is visible, then perform one consistency retry. Without this, the
-  // pre-stop refresh could leave a completed episode showing its old local
-  // progress until the detail page was reopened.
-  int _mdblistRefreshToken = 0;
-
-  final List<FocusNode> _episodeFocusNodes = [];
-
-  final ScrollController _episodeScrollController = ScrollController();
-
-  final FocusNode _episodeBackButtonFocusNode = FocusNode(
-    debugLabel: 'catalog-ep-back',
-  );
-
-  final FocusNode _episodeSeasonDropdownFocusNode = FocusNode(
-    debugLabel: 'catalog-ep-season',
-  );
-
-  // Retry button in the "couldn't load episodes" panel, so the back button can
-  // hand focus to it (the season dropdown / episode list aren't in the tree
-  // in that state).
-  final FocusNode _episodeRetryFocusNode = FocusNode(
-    debugLabel: 'catalog-ep-retry',
-  );
+      _a.mdblistAuthenticated &&
+      !CustomSeriesIdentity.isCustom((_s.selectedShow ?? widget.show).imdbId);
 
   @override
   void initState() {
@@ -310,13 +266,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // (merged page), leave it to default directional focus so Up escapes to the
     // host's hero instead of dead-ending.
     if (widget.showChrome) {
-      _episodeSeasonDropdownFocusNode.onKeyEvent =
+      _r.episodeSeasonDropdownFocusNode.onKeyEvent =
           _handleEpisodeSeasonDropdownKeyEvent;
     }
     _resolveTraktAuth();
     _resolveSimklAuth();
     _resolveMdblistAuth();
-    _mdblistService.playbackRevision.addListener(_onMdblistPlaybackRevision);
+    _sv.mdblistService.playbackRevision.addListener(_onMdblistPlaybackRevision);
     _enterEpisodeMode(
       widget.show,
       initialSeason: widget.initialSeason,
@@ -328,13 +284,15 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   void dispose() {
     MetadataPreferencesService.revision.removeListener(_episodePolicyChanged);
     ProfileRuntime.scope.removeListener(_episodePolicyChanged);
-    _mdblistRefreshToken++;
-    _mdblistService.playbackRevision.removeListener(_onMdblistPlaybackRevision);
-    _episodeScrollController.dispose();
-    _episodeBackButtonFocusNode.dispose();
-    _episodeSeasonDropdownFocusNode.dispose();
-    _episodeRetryFocusNode.dispose();
-    for (final node in _episodeFocusNodes) {
+    _a.mdblistRefreshToken++;
+    _sv.mdblistService.playbackRevision.removeListener(
+      _onMdblistPlaybackRevision,
+    );
+    _r.episodeScrollController.dispose();
+    _r.episodeBackButtonFocusNode.dispose();
+    _r.episodeSeasonDropdownFocusNode.dispose();
+    _r.episodeRetryFocusNode.dispose();
+    for (final node in _r.episodeFocusNodes) {
       node.dispose();
     }
     super.dispose();
@@ -354,8 +312,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final policy = (await TrackingSourcePolicy.load()).forContent(
       show.progressId,
     );
-    if (!mounted || generation != _episodeModeGeneration) return;
-    _trackingPolicy = policy;
+    if (!mounted || generation != _s.episodeModeGeneration) return;
+    _p.trackingPolicy = policy;
     // Direct-source mode: the host owns progress (URL-keyed player positions
     // mapped to S-E), and none of the IMDb-keyed sources below can know these
     // episodes.
@@ -363,13 +321,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (progressLoader != null) {
       try {
         final map = await progressLoader();
-        if (!mounted || generation != _episodeModeGeneration) return;
+        if (!mounted || generation != _s.episodeModeGeneration) return;
         _logEpisodeProgress(
           map,
           {'direct_local': map},
           {'direct_local': 'loaded'},
         );
-        setState(() => _episodeWatchProgress = map);
+        setState(() => _p.episodeWatchProgress = map);
       } catch (e) {
         debugPrint('EpisodesPanel: direct progress fetch failed: $e');
       }
@@ -386,7 +344,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       if (policy.progressFrom(TrackingSource.local))
         ...await EpisodeResumeStorage.getEpisodeWatchProgressByImdbId(imdbId),
     };
-    if (!mounted || generation != _episodeModeGeneration) return;
+    if (!mounted || generation != _s.episodeModeGeneration) return;
 
     final inputs = <String, Map<String, double>>{'local': Map.of(merged)};
     final statuses = <String, String>{
@@ -405,15 +363,15 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // refresh — indistinguishable from a real API failure, which sent a whole
     // debugging session chasing a phantom credential after a disconnect.
     if (policy.progressFrom(TrackingSource.trakt) &&
-        await _traktService.isAuthenticated()) {
-      if (!mounted || generation != _episodeModeGeneration) return;
+        await _sv.traktService.isAuthenticated()) {
+      if (!mounted || generation != _s.episodeModeGeneration) return;
       try {
-        final watched = await _traktService.fetchWatchedShowEpisodes(imdbId);
-        if (!mounted || generation != _episodeModeGeneration) return;
-        final playback = await _traktService.fetchEpisodePlaybackProgress(
+        final watched = await _sv.traktService.fetchWatchedShowEpisodes(imdbId);
+        if (!mounted || generation != _s.episodeModeGeneration) return;
+        final playback = await _sv.traktService.fetchEpisodePlaybackProgress(
           imdbId,
         );
-        if (!mounted || generation != _episodeModeGeneration) return;
+        if (!mounted || generation != _s.episodeModeGeneration) return;
 
         // Fully-watched episodes win outright.
         inputs['trakt'] = {...playback, for (final key in watched) key: 100.0};
@@ -452,14 +410,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // intent without racing anybody; the field keeps gating the episode MENU
     // rows, where by open-time it has long settled.
     if (policy.progressFrom(TrackingSource.simkl) &&
-        await _simklService.isAuthenticated()) {
+        await _sv.simklService.isAuthenticated()) {
       try {
-        final watched = await _simklService.fetchWatchedShowEpisodes(imdbId);
-        if (!mounted || generation != _episodeModeGeneration) return;
-        final playback = await _simklService.fetchEpisodePlaybackProgress(
+        final watched = await _sv.simklService.fetchWatchedShowEpisodes(imdbId);
+        if (!mounted || generation != _s.episodeModeGeneration) return;
+        final playback = await _sv.simklService.fetchEpisodePlaybackProgress(
           imdbId,
         );
-        if (!mounted || generation != _episodeModeGeneration) return;
+        if (!mounted || generation != _s.episodeModeGeneration) return;
 
         inputs['simkl'] = {...playback, for (final key in watched) key: 100.0};
         statuses['simkl'] = 'loaded';
@@ -480,11 +438,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     }
 
     if ((MediaIdentity.isImdb(imdbId) || MediaIdentity.isNative(imdbId)) &&
-        await _mdblistService.isAuthenticated()) {
+        await _sv.mdblistService.isAuthenticated()) {
       if (policy.progressFrom(TrackingSource.mdblist)) {
         try {
-          final result = await _mdblistService.fetchShowEpisodeProgress(imdbId);
-          if (!mounted || generation != _episodeModeGeneration) return;
+          final result = await _sv.mdblistService.fetchShowEpisodeProgress(
+            imdbId,
+          );
+          if (!mounted || generation != _s.episodeModeGeneration) return;
           if (result.isUsable) {
             inputs['mdblist'] = Map.of(result.data!);
             statuses['mdblist'] = 'loaded';
@@ -505,22 +465,22 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         }
       }
       try {
-        final result = await _mdblistService.fetchShowEpisodeRatings(imdbId);
-        if (!mounted || generation != _episodeModeGeneration) return;
+        final result = await _sv.mdblistService.fetchShowEpisodeRatings(imdbId);
+        if (!mounted || generation != _s.episodeModeGeneration) return;
         if (result.isUsable) {
-          _episodeMdblistRatings = result.data!;
+          _p.episodeMdblistRatings = result.data!;
         }
       } catch (e) {
         debugPrint('EpisodesPanel: MDBList episode ratings fetch failed: $e');
       }
     }
 
-    if (mounted && generation == _episodeModeGeneration) {
-      final next = _mergedUpNext(merged, _trackerNextRaw);
+    if (mounted && generation == _s.episodeModeGeneration) {
+      final next = _mergedUpNext(merged, _s.trackerNextRaw);
       _logEpisodeProgress(merged, inputs, statuses, next: next);
       setState(() {
-        _episodeWatchProgress = merged;
-        _nextEpisode = next;
+        _p.episodeWatchProgress = merged;
+        _s.nextEpisode = next;
       });
       if (next != null) _publishNextEpisode(next);
       _publishSeriesCompletion();
@@ -537,7 +497,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final keys = <String>{
       ...merged.keys,
       for (final input in inputs.values) ...input.keys,
-      for (final season in _episodeSeasons)
+      for (final season in _s.episodeSeasons)
         for (final episode in season.episodes)
           '${episode.season}-${episode.number}',
     };
@@ -592,7 +552,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     ({int season, int episode})? trackerNext,
   ) => mergedEpisodeUpNext(
     episodes: [
-      for (final season in _episodeSeasons)
+      for (final season in _s.episodeSeasons)
         for (final episode in season.episodes)
           (season: episode.season, episode: episode.number),
     ],
@@ -602,7 +562,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   void _publishNextEpisode(EpisodeCoordinate next, {bool mutation = false}) {
     widget.onNextEpisodeChanged?.call(
-      episodeResumeTarget(next: next, progress: _episodeWatchProgress),
+      episodeResumeTarget(next: next, progress: _p.episodeWatchProgress),
       mutation: mutation,
     );
   }
@@ -611,16 +571,16 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     widget.onSeriesCompletedChanged?.call(
       !_isDirectSource &&
           isSeriesFullyWatched({
-            for (final s in _episodeSeasons)
+            for (final s in _s.episodeSeasons)
               s.number: s.episodes.map((e) => e.number),
-          }, _episodeWatchProgress),
+          }, _p.episodeWatchProgress),
     );
   }
 
   void _onMdblistPlaybackRevision() {
     if (!mounted || _isDirectSource) return;
     MdblistContinueWatchingService.instance.invalidate();
-    final token = ++_mdblistRefreshToken;
+    final token = ++_a.mdblistRefreshToken;
     unawaited(_refreshAfterMdblistMutation(token));
   }
 
@@ -628,11 +588,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // A successful stop is reported while the player route may still cover the
     // detail page. Do not discard that notification; wait for the pop instead.
     for (var attempt = 0; attempt < 20; attempt++) {
-      if (!mounted || token != _mdblistRefreshToken) return;
+      if (!mounted || token != _a.mdblistRefreshToken) return;
       if (ModalRoute.of(context)?.isCurrent ?? true) break;
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    if (!mounted || token != _mdblistRefreshToken) return;
+    if (!mounted || token != _a.mdblistRefreshToken) return;
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
 
     // MDBList's /scrobble/stop response can precede /sync/watched becoming
@@ -641,7 +601,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // refresh immediately AND again after the delay; the first pass only ever
     // showed data the second pass replaced, at double the tracker requests.)
     await Future<void>.delayed(const Duration(milliseconds: 750));
-    if (!mounted || token != _mdblistRefreshToken) return;
+    if (!mounted || token != _a.mdblistRefreshToken) return;
     if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
     await refreshWatchProgress();
   }
@@ -650,9 +610,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// merged detail host when the player pops back onto it, so the just-watched
   /// episode's tick/progress bar updates without leaving the list.
   Future<void> refreshWatchProgress() async {
-    final show = _selectedShow;
+    final show = _s.selectedShow;
     if (show == null) return;
-    await _loadEpisodeWatchProgress(show, _episodeModeGeneration);
+    await _loadEpisodeWatchProgress(show, _s.episodeModeGeneration);
   }
 
   /// Direct-source mode (see [EpisodesPanel.seasonsLoader]) — episodes are
@@ -662,26 +622,26 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Resolve whether a Trakt account is connected (gates the episode menu).
   Future<void> _resolveTraktAuth() async {
     if (_isDirectSource) return; // no IMDb id — the Trakt menu can't act
-    final authed = await _traktService.isAuthenticated();
+    final authed = await _sv.traktService.isAuthenticated();
     if (mounted && authed != _isTraktAuthenticated) {
-      setState(() => _traktAuthenticated = authed);
+      setState(() => _a.traktAuthenticated = authed);
     }
   }
 
   /// Resolve whether a Simkl account is connected — mirrors [_resolveTraktAuth].
   Future<void> _resolveSimklAuth() async {
     if (_isDirectSource) return; // mirrors _resolveTraktAuth
-    final authed = await _simklService.isAuthenticated();
+    final authed = await _sv.simklService.isAuthenticated();
     if (mounted && authed != _isSimklAuthenticated) {
-      setState(() => _simklAuthenticated = authed);
+      setState(() => _a.simklAuthenticated = authed);
     }
   }
 
   Future<void> _resolveMdblistAuth() async {
     if (_isDirectSource) return;
-    final authed = await _mdblistService.isAuthenticated();
+    final authed = await _sv.mdblistService.isAuthenticated();
     if (mounted && authed != _isMdblistAuthenticated) {
-      setState(() => _mdblistAuthenticated = authed);
+      setState(() => _a.mdblistAuthenticated = authed);
     }
   }
 
@@ -691,18 +651,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// when it is the sole store available. Shared by the action itself and the
   /// menu row's subtitle, so what the row promises IS what the action does.
   List<String> _watchedSyncTargets({required bool watched}) {
-    final show = _selectedShow;
+    final show = _s.selectedShow;
     final imdb = show == null ? '' : (show.progressId ?? show.id);
     final targets = <String>[
       if (_isTraktAuthenticated &&
-          _trackingPolicy.scrobbles(TrackingSource.trakt))
+          _p.trackingPolicy.scrobbles(TrackingSource.trakt))
         'Trakt',
       if (_isSimklAuthenticated &&
-          _trackingPolicy.scrobbles(TrackingSource.simkl))
+          _p.trackingPolicy.scrobbles(TrackingSource.simkl))
         'Simkl',
       if (_isMdblistAuthenticated &&
           (MediaIdentity.isImdb(imdb) || MediaIdentity.isNative(imdb)) &&
-          _trackingPolicy.scrobbles(TrackingSource.mdblist))
+          _p.trackingPolicy.scrobbles(TrackingSource.mdblist))
         'MDBList',
       'this device',
     ];
@@ -720,7 +680,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     TraktEpisode episode, {
     required bool watched,
   }) async {
-    final show = _selectedShow;
+    final show = _s.selectedShow;
     if (show == null) return;
     final showImdbId = show.progressId ?? show.id;
     final key = '${episode.season}-${episode.number}';
@@ -744,25 +704,28 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // sticks when this action reached a source the guide actually renders —
     // otherwise the next re-merge would silently revert it.
     final rendersHere =
-        _trackingPolicy.isSmart ||
-        (_trackingPolicy.progressFrom(TrackingSource.local) &&
+        _p.trackingPolicy.isSmart ||
+        (_p.trackingPolicy.progressFrom(TrackingSource.local) &&
             done.contains('this device')) ||
-        (_trackingPolicy.progressFrom(TrackingSource.trakt) &&
+        (_p.trackingPolicy.progressFrom(TrackingSource.trakt) &&
             done.contains('Trakt')) ||
-        (_trackingPolicy.progressFrom(TrackingSource.simkl) &&
+        (_p.trackingPolicy.progressFrom(TrackingSource.simkl) &&
             done.contains('Simkl')) ||
-        (_trackingPolicy.progressFrom(TrackingSource.mdblist) &&
+        (_p.trackingPolicy.progressFrom(TrackingSource.mdblist) &&
             done.contains('MDBList'));
     if (done.isNotEmpty && rendersHere) {
       setState(() {
         if (watched) {
-          _episodeWatchProgress[key] = 100.0;
+          _p.episodeWatchProgress[key] = 100.0;
         } else {
-          _episodeWatchProgress.remove(key);
+          _p.episodeWatchProgress.remove(key);
         }
-        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
+        _s.nextEpisode = _mergedUpNext(
+          _p.episodeWatchProgress,
+          _s.trackerNextRaw,
+        );
       });
-      final next = _nextEpisode;
+      final next = _s.nextEpisode;
       if (next != null) _publishNextEpisode(next, mutation: true);
       _publishSeriesCompletion();
     }
@@ -789,7 +752,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     TraktEpisode episode,
     TraktEpisodeMenuAction action,
   ) async {
-    final show = _selectedShow;
+    final show = _s.selectedShow;
     if (show == null) return;
     final showImdbId = show.progressId ?? show.id;
     bool success = false;
@@ -805,7 +768,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         final rating = await showTraktRatingDialog(context);
         if (rating == null) return;
         actionLabel = 'Rated $rating/10';
-        success = await _traktService.rateEpisode(
+        success = await _sv.traktService.rateEpisode(
           showImdbId,
           episode.season,
           episode.number,
@@ -829,7 +792,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     TraktEpisode episode,
     MdblistEpisodeMenuAction action,
   ) async {
-    final show = _selectedShow;
+    final show = _s.selectedShow;
     if (show == null) return;
     final imdb = show.progressId ?? show.id;
     if (!MediaIdentity.isImdb(imdb) && !MediaIdentity.isNative(imdb)) return;
@@ -846,7 +809,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         if (!mounted) return;
         final rating = await showMdblistRatingDialog(context);
         if (rating == null) return;
-        success = await _mdblistService.rateTitle(
+        success = await _sv.mdblistService.rateTitle(
           ids,
           'episode',
           rating,
@@ -855,10 +818,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         );
         label = 'Rated $rating/10 on MDBList';
         if (success && mounted) {
-          setState(() => _episodeMdblistRatings[key] = rating);
+          setState(() => _p.episodeMdblistRatings[key] = rating);
         }
       case MdblistEpisodeMenuAction.removeRating:
-        success = await _mdblistService.removeRating(
+        success = await _sv.mdblistService.removeRating(
           ids,
           'episode',
           season: episode.season,
@@ -866,7 +829,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         );
         label = 'Removed rating from MDBList';
         if (success && mounted) {
-          setState(() => _episodeMdblistRatings.remove(key));
+          setState(() => _p.episodeMdblistRatings.remove(key));
         }
     }
     if (!mounted) return;
@@ -919,7 +882,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         widget.addon.baseUrl.isNotEmpty ||
         widget.addon.manifestUrl.isNotEmpty) {
       try {
-        final videos = await _stremioService.fetchSeriesMeta(
+        final videos = await _sv.stremioService.fetchSeriesMeta(
           widget.addon,
           show.id,
         );
@@ -938,7 +901,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final traktId = show.progressId ?? show.id;
     if (MediaIdentity.isImdb(traktId)) {
       try {
-        final raw = await _traktService.fetchShowSeasons(traktId);
+        final raw = await _sv.traktService.fetchShowSeasons(traktId);
         // Dedupe by season number: a malformed response can yield >1 season
         // that both default to number 0, which would give the season dropdown
         // two items with the same value and trip its assertion. seen.add()
@@ -1031,11 +994,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     int? initialSeason,
     int? initialEpisode,
   }) async {
-    final generation = ++_episodeModeGeneration;
+    final generation = ++_s.episodeModeGeneration;
     try {
-      show = await _stremioService.scopeSeriesProgress(show, widget.addon);
+      show = await _sv.stremioService.scopeSeriesProgress(show, widget.addon);
     } on StateError {
-      if (mounted && generation == _episodeModeGeneration) {
+      if (mounted && generation == _s.episodeModeGeneration) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Could not verify series episodes. Please retry.'),
@@ -1047,18 +1010,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final trackingPolicy = (await TrackingSourcePolicy.load()).forContent(
       show.progressId,
     );
-    if (!mounted || generation != _episodeModeGeneration) return;
-    _trackingPolicy = trackingPolicy;
+    if (!mounted || generation != _s.episodeModeGeneration) return;
+    _p.trackingPolicy = trackingPolicy;
 
     setState(() {
-      _selectedShow = show;
-      _isLoadingEpisodes = true;
-      _episodesUnavailable = false;
-      _episodeSeasons = [];
-      _episodeMdblistRatings = {};
-      _selectedSeasonNumber = initialSeason ?? 1;
-      _nextEpisode = null;
-      _trackerNextRaw = null;
+      _s.selectedShow = show;
+      _s.isLoadingEpisodes = true;
+      _s.episodesUnavailable = false;
+      _s.episodeSeasons = [];
+      _p.episodeMdblistRatings = {};
+      _s.selectedSeasonNumber = initialSeason ?? 1;
+      _s.nextEpisode = null;
+      _s.trackerNextRaw = null;
     });
 
     // Load watch progress (non-blocking; generation-guarded). The "up next"
@@ -1067,10 +1030,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // only resume signal (there is no Trakt next-episode for these shows).
     final progressFuture = _loadEpisodeWatchProgress(show, generation);
 
-    for (final node in _episodeFocusNodes) {
+    for (final node in _r.episodeFocusNodes) {
       node.dispose();
     }
-    _episodeFocusNodes.clear();
+    _r.episodeFocusNodes.clear();
 
     try {
       // The seasons fetch, Trakt's "next episode" lookup, and (on the Trakt
@@ -1088,7 +1051,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       final nextEpisodeFuture =
           _isDirectSource || !trackingPolicy.progressFrom(TrackingSource.trakt)
           ? Future<({int season, int episode})?>.value(null)
-          : _traktService
+          : _sv.traktService
                 .fetchNextEpisode(show.progressId ?? show.id)
                 .catchError((Object e) {
                   debugPrint('EpisodesPanel: next-episode fetch failed: $e');
@@ -1108,12 +1071,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           : _fetchTvmazeThumbMap(show.effectiveImdbId);
 
       final seasons = await seasonsFuture;
-      if (!mounted || generation != _episodeModeGeneration) return;
+      if (!mounted || generation != _s.episodeModeGeneration) return;
 
       if (seasons.isEmpty) {
         setState(() {
-          _isLoadingEpisodes = false;
-          _episodesUnavailable = true;
+          _s.isLoadingEpisodes = false;
+          _s.episodesUnavailable = true;
         });
         return;
       }
@@ -1144,12 +1107,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       //    seasons fetch above); errors resolve to null there, so this await
       //    can never bubble to the outer catch and drop us to torrent search.
       final nextEpisode = await nextEpisodeFuture;
-      if (!mounted || generation != _episodeModeGeneration) return;
+      if (!mounted || generation != _s.episodeModeGeneration) return;
       // Keep the raw value for the up-next highlight (it self-limits to a
       // displayed tile). Only adopt it as the landing target when its season is
       // actually present, so we never scroll to the wrong episode in season 1.
-      _nextEpisode = nextEpisode;
-      _trackerNextRaw = nextEpisode;
+      _s.nextEpisode = nextEpisode;
+      _s.trackerNextRaw = nextEpisode;
       if (effectiveSeason == null &&
           effectiveEpisode == null &&
           nextEpisode != null &&
@@ -1165,7 +1128,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           effectiveSeason == null &&
           effectiveEpisode == null) {
         await progressFuture;
-        if (!mounted || generation != _episodeModeGeneration) return;
+        if (!mounted || generation != _s.episodeModeGeneration) return;
         final target = _directLandingTarget(seasons);
         if (target != null) {
           effectiveSeason = target.season;
@@ -1182,7 +1145,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         if (imdbId != null) {
           final lastPlayed =
               await EpisodeResumeStorage.getLastPlayedEpisodeByImdbId(imdbId);
-          if (!mounted || generation != _episodeModeGeneration) return;
+          if (!mounted || generation != _s.episodeModeGeneration) return;
           if (lastPlayed != null) {
             effectiveSeason = lastPlayed['season'] as int?;
             effectiveEpisode = lastPlayed['episode'] as int?;
@@ -1195,7 +1158,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           final byTitle = await EpisodeResumeStorage.getLastPlayedEpisode(
             seriesTitle: show.name,
           );
-          if (!mounted || generation != _episodeModeGeneration) return;
+          if (!mounted || generation != _s.episodeModeGeneration) return;
           if (byTitle != null) {
             effectiveSeason = byTitle['season'] as int?;
             effectiveEpisode = byTitle['episode'] as int?;
@@ -1212,7 +1175,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
       // Build focus nodes for target season
       for (int i = 0; i < targetSeason.episodes.length; i++) {
-        _episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
+        _r.episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
       }
 
       // The stored/next-up episode number is only meaningful inside the season
@@ -1228,19 +1191,22 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           : null;
 
       setState(() {
-        _episodeSeasons = seasons;
-        _nextEpisode = _mergedUpNext(_episodeWatchProgress, _trackerNextRaw);
-        _selectedSeasonNumber = targetSeason.number;
-        _isLoadingEpisodes = false;
-        _landing = landingEpisode ?? targetSeason.episodes.firstOrNull;
-        _focusIntent = EpisodeFocusIntent.landing;
-        _viewGeneration++;
+        _s.episodeSeasons = seasons;
+        _s.nextEpisode = _mergedUpNext(
+          _p.episodeWatchProgress,
+          _s.trackerNextRaw,
+        );
+        _s.selectedSeasonNumber = targetSeason.number;
+        _s.isLoadingEpisodes = false;
+        _s.landing = landingEpisode ?? targetSeason.episodes.firstOrNull;
+        _s.focusIntent = EpisodeFocusIntent.landing;
+        _s.viewGeneration++;
       });
       _episodeMetadataBaselines
         ..clear()
         ..addEntries(seasons.map((season) => MapEntry(season.number, season)));
       unawaited(_loadSelectedEpisodeMetadata());
-      final mergedNext = _nextEpisode;
+      final mergedNext = _s.nextEpisode;
       _publishSeriesCompletion();
       if (mergedNext != null) {
         _publishNextEpisode(mergedNext);
@@ -1283,11 +1249,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         );
       }
     } catch (e) {
-      if (!mounted || generation != _episodeModeGeneration) return;
+      if (!mounted || generation != _s.episodeModeGeneration) return;
       debugPrint('EpisodesPanel: Episode fetch failed: $e');
       setState(() {
-        _isLoadingEpisodes = false;
-        _episodesUnavailable = true;
+        _s.isLoadingEpisodes = false;
+        _s.episodesUnavailable = true;
       });
     }
   }
@@ -1301,12 +1267,12 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     int lastStarted = -1;
     for (var i = 0; i < flat.length; i++) {
       final p =
-          _episodeWatchProgress['${flat[i].season}-${flat[i].number}'] ?? 0;
+          _p.episodeWatchProgress['${flat[i].season}-${flat[i].number}'] ?? 0;
       if (p > 0) lastStarted = i;
     }
     if (lastStarted < 0) return null;
     final p =
-        _episodeWatchProgress['${flat[lastStarted].season}-${flat[lastStarted].number}'] ??
+        _p.episodeWatchProgress['${flat[lastStarted].season}-${flat[lastStarted].number}'] ??
         0;
     final target = (p >= 95 && lastStarted + 1 < flat.length)
         ? flat[lastStarted + 1]
@@ -1335,8 +1301,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (!MediaIdentity.isImdb(imdbId)) return;
 
     try {
-      final raw = await _traktService.fetchShowSeasons(imdbId);
-      if (!mounted || generation != _episodeModeGeneration) return;
+      final raw = await _sv.traktService.fetchShowSeasons(imdbId);
+      if (!mounted || generation != _s.episodeModeGeneration) return;
 
       // Build lookup: "S-E" → rating (only real, >0 ratings).
       final ratingMap = <String, double>{};
@@ -1360,7 +1326,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         }
       }
 
-      if (changed && mounted && generation == _episodeModeGeneration) {
+      if (changed && mounted && generation == _s.episodeModeGeneration) {
         setState(() {});
         unawaited(_loadSelectedEpisodeMetadata());
       }
@@ -1425,7 +1391,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final imageMap =
         await (prefetched ?? _fetchTvmazeThumbMap(show.effectiveImdbId));
     if (imageMap == null) return;
-    if (!mounted || generation != _episodeModeGeneration) return;
+    if (!mounted || generation != _s.episodeModeGeneration) return;
 
     var changed = false;
     for (final season in seasons) {
@@ -1461,9 +1427,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   void _scrollFocusEpisode(int epIndex, int episodeCount, int generation) {
     const int maxAttempts = 16;
     void attempt(int n) {
-      if (!mounted || generation != _episodeModeGeneration) return;
-      if (epIndex < 0 || epIndex >= _episodeFocusNodes.length) return;
-      final node = _episodeFocusNodes[epIndex];
+      if (!mounted || generation != _s.episodeModeGeneration) return;
+      if (epIndex < 0 || epIndex >= _r.episodeFocusNodes.length) return;
+      final node = _r.episodeFocusNodes[epIndex];
       // Once a tile has been built and scrolled back out, the node keeps a
       // stale context; treating that as "present" would stop converging and
       // focus/scroll a defunct element.
@@ -1481,18 +1447,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         }
         return;
       }
-      if (n >= maxAttempts || !_episodeScrollController.hasClients) {
+      if (n >= maxAttempts || !_r.episodeScrollController.hasClients) {
         if (widget.isTelevision) node.requestFocus(); // best effort, then stop
         return;
       }
-      final pos = _episodeScrollController.position;
+      final pos = _r.episodeScrollController.position;
       final ratio = episodeCount > 1 ? epIndex / (episodeCount - 1) : 0.0;
       final target = (pos.maxScrollExtent * ratio).clamp(
         0.0,
         pos.maxScrollExtent,
       );
       if ((target - pos.pixels).abs() > 1.0) {
-        _episodeScrollController.jumpTo(target);
+        _r.episodeScrollController.jumpTo(target);
       }
       WidgetsBinding.instance.addPostFrameCallback((_) => attempt(n + 1));
     }
@@ -1508,8 +1474,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     _episodeMetadataGeneration++;
     if (!mounted) return;
     setState(() {
-      _episodeSeasons = [
-        for (final season in _episodeSeasons)
+      _s.episodeSeasons = [
+        for (final season in _s.episodeSeasons)
           _episodeMetadataBaselines[season.number] ?? season,
       ];
       _refreshMetadataLanding();
@@ -1519,25 +1485,25 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   void _refreshMetadataLanding() {
-    final landing = _landing;
+    final landing = _s.landing;
     if (landing == null) return;
-    final season = _episodeSeasons
+    final season = _s.episodeSeasons
         .where((s) => s.number == landing.season)
         .firstOrNull;
-    _landing = season?.episodes
+    _s.landing = season?.episodes
         .where((e) => e.number == landing.number)
         .firstOrNull;
   }
 
   Future<void> _loadSelectedEpisodeMetadata() async {
-    if (_isDirectSource || _episodeSeasons.isEmpty) return;
-    final generation = _episodeModeGeneration;
-    final selected = _selectedSeasonNumber;
-    final index = _episodeSeasons.indexWhere((s) => s.number == selected);
+    if (_isDirectSource || _s.episodeSeasons.isEmpty) return;
+    final generation = _s.episodeModeGeneration;
+    final selected = _s.selectedSeasonNumber;
+    final index = _s.episodeSeasons.indexWhere((s) => s.number == selected);
     if (index < 0) return;
     final original = _episodeMetadataBaselines.putIfAbsent(
       selected,
-      () => _episodeSeasons[index],
+      () => _s.episodeSeasons[index],
     );
     final metadataGeneration = ++_episodeMetadataGeneration;
     final scope = ProfileRuntime.scope.value;
@@ -1547,16 +1513,16 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         original,
       );
       if (!mounted ||
-          generation != _episodeModeGeneration ||
-          selected != _selectedSeasonNumber ||
+          generation != _s.episodeModeGeneration ||
+          selected != _s.selectedSeasonNumber ||
           scope != ProfileRuntime.scope.value ||
           metadataGeneration != _episodeMetadataGeneration ||
-          identical(result, _episodeSeasons[index])) {
+          identical(result, _s.episodeSeasons[index])) {
         return;
       }
       setState(() {
-        _episodeSeasons = [
-          for (final s in _episodeSeasons) s.number == selected ? result : s,
+        _s.episodeSeasons = [
+          for (final s in _s.episodeSeasons) s.number == selected ? result : s,
         ];
         _refreshMetadataLanding();
         // Presentation changes preserve the season view and its focus/scroll.
@@ -1565,32 +1531,32 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   void _onSeasonChanged(int? seasonNumber) {
-    if (seasonNumber == null || seasonNumber == _selectedSeasonNumber) return;
+    if (seasonNumber == null || seasonNumber == _s.selectedSeasonNumber) return;
 
-    for (final node in _episodeFocusNodes) {
+    for (final node in _r.episodeFocusNodes) {
       node.dispose();
     }
-    _episodeFocusNodes.clear();
+    _r.episodeFocusNodes.clear();
 
-    final season = _episodeSeasons.firstWhere(
+    final season = _s.episodeSeasons.firstWhere(
       (s) => s.number == seasonNumber,
-      orElse: () => _episodeSeasons.first,
+      orElse: () => _s.episodeSeasons.first,
     );
     for (int i = 0; i < season.episodes.length; i++) {
-      _episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
+      _r.episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
     }
 
-    if (!_custom && _episodeScrollController.hasClients) {
-      _episodeScrollController.jumpTo(0);
+    if (!_custom && _r.episodeScrollController.hasClients) {
+      _r.episodeScrollController.jumpTo(0);
     }
 
     setState(() {
-      _selectedSeasonNumber = seasonNumber;
-      _landing = season.episodes.firstOrNull;
+      _s.selectedSeasonNumber = seasonNumber;
+      _s.landing = season.episodes.firstOrNull;
       // The user is on the stepper — keep them there, as Classic does by
       // re-requesting the season dropdown.
-      _focusIntent = EpisodeFocusIntent.seasonControl;
-      _viewGeneration++;
+      _s.focusIntent = EpisodeFocusIntent.seasonControl;
+      _s.viewGeneration++;
     });
     unawaited(_loadSelectedEpisodeMetadata());
   }
@@ -1602,7 +1568,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       widget.onPlayEpisode!(episode);
       return;
     }
-    final show = _selectedShow;
+    final show = _s.selectedShow;
     if (show == null || widget.onItemSelected == null) return;
 
     var selection = AdvancedSearchSelection(
@@ -1618,11 +1584,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       // position so playback syncs to Trakt like the old home view.
       traktSource: widget.isTraktSource,
       traktProgressPercent: widget.isTraktSource
-          ? _episodeWatchProgress['${episode.season}-${episode.number}']
+          ? _p.episodeWatchProgress['${episode.season}-${episode.number}']
           : null,
       mdblistSource: widget.isMdblistSource,
       mdblistProgressPercent: widget.isMdblistSource
-          ? _episodeWatchProgress['${episode.season}-${episode.number}']
+          ? _p.episodeWatchProgress['${episode.season}-${episode.number}']
           : null,
       // Lets the host send the user back to this episode list (not the
       // catalog grid) when they back out of the torrent results.
@@ -1653,7 +1619,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       widget.onPlayEpisode!(episode);
       return;
     }
-    final show = _selectedShow;
+    final show = _s.selectedShow;
     if (show == null) return;
 
     var selection = AdvancedSearchSelection(
@@ -1667,11 +1633,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       posterUrl: show.poster,
       traktSource: widget.isTraktSource,
       traktProgressPercent: widget.isTraktSource
-          ? _episodeWatchProgress['${episode.season}-${episode.number}']
+          ? _p.episodeWatchProgress['${episode.season}-${episode.number}']
           : null,
       mdblistSource: widget.isMdblistSource,
       mdblistProgressPercent: widget.isMdblistSource
-          ? _episodeWatchProgress['${episode.season}-${episode.number}']
+          ? _p.episodeWatchProgress['${episode.season}-${episode.number}']
           : null,
       fromCatalogEpisodeDrillDown: true,
     );
@@ -1719,7 +1685,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           children: [
             // Back button — Focus-wrapped with blue accent border like Trakt
             Focus(
-              focusNode: _episodeBackButtonFocusNode,
+              focusNode: _r.episodeBackButtonFocusNode,
               onFocusChange: (focused) => setState(() {}),
               onKeyEvent: (node, event) {
                 if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -1729,18 +1695,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                   return KeyEventResult.handled;
                 }
                 if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                  if (_episodesUnavailable) {
-                    _episodeRetryFocusNode.requestFocus();
+                  if (_s.episodesUnavailable) {
+                    _r.episodeRetryFocusNode.requestFocus();
                   } else {
-                    _episodeSeasonDropdownFocusNode.requestFocus();
+                    _r.episodeSeasonDropdownFocusNode.requestFocus();
                   }
                   return KeyEventResult.handled;
                 }
                 if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                  if (_episodesUnavailable) {
-                    _episodeRetryFocusNode.requestFocus();
-                  } else if (_episodeFocusNodes.isNotEmpty) {
-                    _episodeFocusNodes.first.requestFocus();
+                  if (_s.episodesUnavailable) {
+                    _r.episodeRetryFocusNode.requestFocus();
+                  } else if (_r.episodeFocusNodes.isNotEmpty) {
+                    _r.episodeFocusNodes.first.requestFocus();
                   }
                   return KeyEventResult.handled;
                 }
@@ -1757,14 +1723,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                 height: 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: _episodeBackButtonFocusNode.hasFocus
+                  color: _r.episodeBackButtonFocusNode.hasFocus
                       ? Colors.white.withValues(alpha: 0.16)
                       : Colors.white.withValues(alpha: 0.06),
                   border: Border.all(
-                    color: _episodeBackButtonFocusNode.hasFocus
+                    color: _r.episodeBackButtonFocusNode.hasFocus
                         ? t.focus
                         : Colors.white.withValues(alpha: 0.14),
-                    width: _episodeBackButtonFocusNode.hasFocus ? 2 : 1,
+                    width: _r.episodeBackButtonFocusNode.hasFocus ? 2 : 1,
                   ),
                 ),
                 child: IconButton(
@@ -1782,7 +1748,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             // Show title
             Expanded(
               child: Text(
-                _selectedShow?.name ?? '',
+                _s.selectedShow?.name ?? '',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -1793,32 +1759,32 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             ),
 
             // Season dropdown — Trakt-style with blue accent border
-            if (_episodeSeasons.isNotEmpty) ...[
+            if (_s.episodeSeasons.isNotEmpty) ...[
               const SizedBox(width: 8),
               _buildEpisodeSeasonDropdown(),
             ],
 
             // Select Source button
-            if (_selectedShow != null && widget.onSelectSource != null) ...[
+            if (_s.selectedShow != null && widget.onSelectSource != null) ...[
               const SizedBox(width: 8),
               Builder(
                 builder: (context) {
                   final sourceCount =
-                      widget.boundSourceCount?.call(_selectedShow!) ?? 0;
+                      widget.boundSourceCount?.call(_s.selectedShow!) ?? 0;
                   return EpisodesPanelSourceButton(
                     hasBoundSource: sourceCount > 0,
                     sourceCount: sourceCount,
                     // Await the picker so the bound-source count updates in
                     // place when it closes (no need to leave and re-enter).
                     onTap: () async {
-                      await widget.onSelectSource!(_selectedShow!);
+                      await widget.onSelectSource!(_s.selectedShow!);
                       if (mounted) setState(() {});
                     },
-                    onLeftFocus: _episodeSeasons.isNotEmpty
-                        ? _episodeSeasonDropdownFocusNode
-                        : _episodeBackButtonFocusNode,
-                    onDownArrow: _episodeFocusNodes.isNotEmpty
-                        ? () => _episodeFocusNodes.first.requestFocus()
+                    onLeftFocus: _s.episodeSeasons.isNotEmpty
+                        ? _r.episodeSeasonDropdownFocusNode
+                        : _r.episodeBackButtonFocusNode,
+                    onDownArrow: _r.episodeFocusNodes.isNotEmpty
+                        ? () => _r.episodeFocusNodes.first.requestFocus()
                         : null,
                     // Top row of a standalone route — swallow Up (a non-null
                     // no-op makes the button report the key handled).
@@ -1843,13 +1809,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_episodeFocusNodes.isNotEmpty) {
-        _episodeFocusNodes.first.requestFocus();
+      if (_r.episodeFocusNodes.isNotEmpty) {
+        _r.episodeFocusNodes.first.requestFocus();
       }
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      _episodeBackButtonFocusNode.requestFocus();
+      _r.episodeBackButtonFocusNode.requestFocus();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
@@ -1869,7 +1835,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     return SeasonActionRegion(
       onOptions: _isDirectSource
           ? null
-          : () => _showSeasonOptions(_selectedSeasonNumber),
+          : () => _showSeasonOptions(_s.selectedSeasonNumber),
       onTap: () async {
         final number = await showModalBottomSheet<int>(
           context: context,
@@ -1878,7 +1844,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
               child: ListView(
                 shrinkWrap: true,
                 children: [
-                  for (final season in _episodeSeasons)
+                  for (final season in _s.episodeSeasons)
                     ListTile(
                       title: Text('Season ${season.number}'),
                       onTap: () => Navigator.pop(ctx, season.number),
@@ -1891,9 +1857,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         if (mounted && number != null) _onSeasonChanged(number);
       },
       child: ListenableBuilder(
-        listenable: _episodeSeasonDropdownFocusNode,
+        listenable: _r.episodeSeasonDropdownFocusNode,
         builder: (context, _) {
-          final hasFocus = _episodeSeasonDropdownFocusNode.hasFocus;
+          final hasFocus = _r.episodeSeasonDropdownFocusNode.hasFocus;
           return AnimatedContainer(
             // TV: snap the focus ring and skip the blurred glow — the animated
             // blur shadow re-rasters every frame of the fade on the weak GPU.
@@ -1922,9 +1888,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<int>(
-                focusNode: _episodeSeasonDropdownFocusNode,
+                focusNode: _r.episodeSeasonDropdownFocusNode,
                 focusColor: Colors.transparent,
-                value: _selectedSeasonNumber,
+                value: _s.selectedSeasonNumber,
                 isDense: true,
                 borderRadius: BorderRadius.circular(12),
                 dropdownColor: const Color(0xFF14141C),
@@ -1935,7 +1901,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                       ? Colors.white
                       : Colors.white.withValues(alpha: 0.7),
                 ),
-                items: _episodeSeasons.map((s) {
+                items: _s.episodeSeasons.map((s) {
                   return DropdownMenuItem(
                     value: s.number,
                     child: Text(
@@ -1963,7 +1929,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// failure without leaving the drill-down) and an explicit "Search for
   /// sources" action (the old auto-fallback, now opt-in).
   Widget _buildEpisodesUnavailable() {
-    final show = _selectedShow ?? widget.show;
+    final show = _s.selectedShow ?? widget.show;
     // Hoisted: the WidgetStateProperty resolvers below are closures the button
     // re-evaluates on every state change, not build-time code.
     final t = DetailThemeScope.maybeOf(context);
@@ -1996,7 +1962,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
               alignment: WrapAlignment.center,
               children: [
                 ElevatedButton.icon(
-                  focusNode: _episodeRetryFocusNode,
+                  focusNode: _r.episodeRetryFocusNode,
                   autofocus: widget.isTelevision,
                   // Default focus overlay is faint on dark — gold ring on focus
                   // like every other DPAD target in the drill-down.
@@ -2039,17 +2005,17 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   Widget _buildEpisodeContent() {
-    if (_isLoadingEpisodes) {
+    if (_s.isLoadingEpisodes) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_episodesUnavailable || _episodeSeasons.isEmpty) {
+    if (_s.episodesUnavailable || _s.episodeSeasons.isEmpty) {
       return _buildEpisodesUnavailable();
     }
 
-    final currentSeason = _episodeSeasons.firstWhere(
-      (s) => s.number == _selectedSeasonNumber,
-      orElse: () => _episodeSeasons.first,
+    final currentSeason = _s.episodeSeasons.firstWhere(
+      (s) => s.number == _s.selectedSeasonNumber,
+      orElse: () => _s.episodeSeasons.first,
     );
 
     final w = MediaQuery.of(context).size.width;
@@ -2057,7 +2023,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
     return TvFocusScrollWrapper(
       child: ListView.builder(
-        controller: _episodeScrollController,
+        controller: _r.episodeScrollController,
         padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 28),
         itemCount: currentSeason.episodes.length,
         itemBuilder: (context, index) {
@@ -2066,18 +2032,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             padding: const EdgeInsets.only(bottom: 14),
             child: EpisodeTile(
               episode: episode,
-              showImageUrl: _selectedShow?.poster,
+              showImageUrl: _s.selectedShow?.poster,
               isTelevision: widget.isTelevision,
               showQuickPlay: widget.showQuickPlay,
-              focusNode: index < _episodeFocusNodes.length
-                  ? _episodeFocusNodes[index]
+              focusNode: index < _r.episodeFocusNodes.length
+                  ? _r.episodeFocusNodes[index]
                   : null,
-              watchProgress:
-                  _episodeWatchProgress['${episode.season}-${episode.number}'],
+              watchProgress: _p
+                  .episodeWatchProgress['${episode.season}-${episode.number}'],
               isNext:
-                  _nextEpisode != null &&
-                  _nextEpisode!.season == episode.season &&
-                  _nextEpisode!.episode == episode.number,
+                  _s.nextEpisode != null &&
+                  _s.nextEpisode!.season == episode.season &&
+                  _s.nextEpisode!.episode == episode.number,
               onPlay: () => _onEpisodeQuickPlay(episode),
               onSources: () => _onEpisodeTap(episode),
               onMenuAction: _isTraktAuthenticated
@@ -2113,9 +2079,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     if (widget.compact) {
       return Column(
         children: [
-          if (!_isLoadingEpisodes &&
-              !_episodesUnavailable &&
-              _episodeSeasons.isNotEmpty)
+          if (!_s.isLoadingEpisodes &&
+              !_s.episodesUnavailable &&
+              _s.episodeSeasons.isNotEmpty)
             _buildCompactSeasonHeader(),
           Expanded(child: _buildCompactContent()),
         ],
@@ -2125,7 +2091,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       children: [
         if (widget.showChrome)
           _buildEpisodeFiltersBar()
-        else if (_episodeSeasons.length > 1)
+        else if (_s.episodeSeasons.length > 1)
           _buildSlimSeasonRow(),
         Expanded(child: _buildEpisodeContent()),
       ],
@@ -2135,27 +2101,27 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Snapshot handed to a custom arrangement. Cheap — it closes over state
   /// rather than copying it, and is rebuilt with the panel.
   EpisodesPanelView _buildView() {
-    final season = _episodeSeasons
-        .where((s) => s.number == _selectedSeasonNumber)
+    final season = _s.episodeSeasons
+        .where((s) => s.number == _s.selectedSeasonNumber)
         .firstOrNull;
     final episodes =
-        season?.episodes ?? _episodeSeasons.firstOrNull?.episodes ?? const [];
-    final show = _selectedShow ?? widget.show;
+        season?.episodes ?? _s.episodeSeasons.firstOrNull?.episodes ?? const [];
+    final show = _s.selectedShow ?? widget.show;
     return EpisodesPanelView(
-      seasons: _episodeSeasons,
-      selectedSeasonNumber: _selectedSeasonNumber,
+      seasons: _s.episodeSeasons,
+      selectedSeasonNumber: _s.selectedSeasonNumber,
       episodes: episodes,
-      loading: _isLoadingEpisodes,
-      unavailable: _episodesUnavailable,
+      loading: _s.isLoadingEpisodes,
+      unavailable: _s.episodesUnavailable,
       showImageUrl: show.poster,
-      generation: _viewGeneration,
-      landing: _landing,
-      focusIntent: _focusIntent,
-      progressOf: (e) => _episodeWatchProgress['${e.season}-${e.number}'],
+      generation: _s.viewGeneration,
+      landing: _s.landing,
+      focusIntent: _s.focusIntent,
+      progressOf: (e) => _p.episodeWatchProgress['${e.season}-${e.number}'],
       isNext: (e) =>
-          _nextEpisode != null &&
-          _nextEpisode!.season == e.season &&
-          _nextEpisode!.episode == e.number,
+          _s.nextEpisode != null &&
+          _s.nextEpisode!.season == e.season &&
+          _s.nextEpisode!.episode == e.number,
       play: _onEpisodeQuickPlay,
       options: _showEpisodeOptions,
       stepSeason: _stepSeason,
@@ -2178,13 +2144,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// Layouts call this after acting on [EpisodeFocusIntent], so a rebuild that
   /// isn't a data change doesn't yank the cursor a second time.
   void consumeFocusIntent() {
-    if (_focusIntent == EpisodeFocusIntent.none) return;
-    _focusIntent = EpisodeFocusIntent.none;
+    if (_s.focusIntent == EpisodeFocusIntent.none) return;
+    _s.focusIntent = EpisodeFocusIntent.none;
   }
 
   // ── Compact (Stremio) rendering ──────────────────────────────────────────
   int get _currentSeasonIndex =>
-      _episodeSeasons.indexWhere((s) => s.number == _selectedSeasonNumber);
+      _s.episodeSeasons.indexWhere((s) => s.number == _s.selectedSeasonNumber);
 
   bool _seasonActionBusy = false;
 
@@ -2192,16 +2158,16 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   Future<void> _showSeasonOptions(int number) async {
     if (_isDirectSource || _seasonActionBusy) return;
-    final show = _selectedShow;
+    final show = _s.selectedShow;
     if (show == null) return;
     _seasonActionBusy = true;
     try {
       final connected = [
         true,
         ...await Future.wait([
-          _traktService.isAuthenticated(),
-          _simklService.isAuthenticated(),
-          _mdblistService.isAuthenticated(),
+          _sv.traktService.isAuthenticated(),
+          _sv.simklService.isAuthenticated(),
+          _sv.mdblistService.isAuthenticated(),
         ]),
       ];
       if (CustomSeriesIdentity.isCustom(show.imdbId)) {
@@ -2219,7 +2185,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         TrackingSource.mdblist,
       ];
       final names = ['locally', 'on Trakt', 'on Simkl', 'on MDBList'];
-      var season = _episodeSeasons.where((s) => s.number == number).firstOrNull;
+      var season = _s.episodeSeasons
+          .where((s) => s.number == number)
+          .firstOrNull;
       if (season == null || season.episodes.isEmpty) {
         final seasons = await _fetchSeasons(show);
         season = seasons.where((s) => s.number == number).firstOrNull;
@@ -2341,11 +2309,11 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   void _stepSeason(int delta) {
-    if (_episodeSeasons.isEmpty) return;
+    if (_s.episodeSeasons.isEmpty) return;
     final i = _currentSeasonIndex;
     final ni = (i < 0 ? 0 : i) + delta;
-    if (ni < 0 || ni >= _episodeSeasons.length) return;
-    _onSeasonChanged(_episodeSeasons[ni].number);
+    if (ni < 0 || ni >= _s.episodeSeasons.length) return;
+    _onSeasonChanged(_s.episodeSeasons[ni].number);
     // Stepping into the first/last season disables the chevron we're on, which
     // would drop primary focus into the void. Park focus on the always-present
     // season dropdown so the remote stays live.
@@ -2353,7 +2321,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // has no such node, and its own season control keeps focus already.
     if (_custom) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _episodeSeasonDropdownFocusNode.requestFocus();
+      if (mounted) _r.episodeSeasonDropdownFocusNode.requestFocus();
     });
   }
 
@@ -2361,8 +2329,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// (this is what "the season dropdown isn't reachable" was about).
   Widget _buildCompactSeasonHeader() {
     final i = _currentSeasonIndex;
-    final many = _episodeSeasons.length > 1;
-    final current = (i >= 0) ? _episodeSeasons[i] : _episodeSeasons.first;
+    final many = _s.episodeSeasons.length > 1;
+    final current = (i >= 0) ? _s.episodeSeasons[i] : _s.episodeSeasons.first;
     final count = current.episodes.length;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -2395,7 +2363,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           if (many)
             EpisodesPanelSeasonStep(
               icon: Icons.chevron_right_rounded,
-              enabled: i < _episodeSeasons.length - 1,
+              enabled: i < _s.episodeSeasons.length - 1,
               onTap: () => _stepSeason(1),
             ),
           const SizedBox(width: 8),
@@ -2424,21 +2392,21 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   Widget _buildCompactContent() {
-    if (_isLoadingEpisodes) {
+    if (_s.isLoadingEpisodes) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_episodesUnavailable || _episodeSeasons.isEmpty) {
+    if (_s.episodesUnavailable || _s.episodeSeasons.isEmpty) {
       return _buildEpisodesUnavailable();
     }
-    final currentSeason = _episodeSeasons.firstWhere(
-      (s) => s.number == _selectedSeasonNumber,
-      orElse: () => _episodeSeasons.first,
+    final currentSeason = _s.episodeSeasons.firstWhere(
+      (s) => s.number == _s.selectedSeasonNumber,
+      orElse: () => _s.episodeSeasons.first,
     );
     // The row centres itself on focus (`_CompactEpisodeRow.onFocusChange`), so
     // no TvFocusScrollWrapper is needed here (it would resolve no ancestor
     // scrollable and no-op anyway).
     return ListView.builder(
-      controller: _episodeScrollController,
+      controller: _r.episodeScrollController,
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       itemCount: currentSeason.episodes.length,
       itemBuilder: (context, index) {
@@ -2447,16 +2415,16 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           padding: const EdgeInsets.only(bottom: 8),
           child: EpisodesPanelCompactRow(
             episode: episode,
-            showImageUrl: _selectedShow?.poster,
+            showImageUrl: _s.selectedShow?.poster,
             isTelevision: widget.isTelevision,
             watchProgress:
-                _episodeWatchProgress['${episode.season}-${episode.number}'],
+                _p.episodeWatchProgress['${episode.season}-${episode.number}'],
             isNext:
-                _nextEpisode != null &&
-                _nextEpisode!.season == episode.season &&
-                _nextEpisode!.episode == episode.number,
-            focusNode: index < _episodeFocusNodes.length
-                ? _episodeFocusNodes[index]
+                _s.nextEpisode != null &&
+                _s.nextEpisode!.season == episode.season &&
+                _s.nextEpisode!.episode == episode.number,
+            focusNode: index < _r.episodeFocusNodes.length
+                ? _r.episodeFocusNodes[index]
                 : null,
             onPlay: () => _onEpisodeQuickPlay(episode),
             onOptions: () => _showEpisodeOptions(episode),
@@ -2473,7 +2441,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// title-only, so its episode menu deliberately has no rating action.
   void _showEpisodeOptions(TraktEpisode episode) {
     final key = '${episode.season}-${episode.number}';
-    final watched = (_episodeWatchProgress[key] ?? 0) >= 100;
+    final watched = (_p.episodeWatchProgress[key] ?? 0) >= 100;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppThemeScope.of(context).sheetSurface,
@@ -2570,7 +2538,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
               () => _onEpisodeMenuAction(episode, TraktEpisodeMenuAction.rate),
             ),
           if (_isMdblistAuthenticated) ...[
-            if (_episodeMdblistRatings[key] == null)
+            if (_p.episodeMdblistRatings[key] == null)
               tile(
                 Icons.star_rounded,
                 'Rate on MDBList',
@@ -2579,10 +2547,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                   MdblistEpisodeMenuAction.rate,
                 ),
               ),
-            if (_episodeMdblistRatings[key] != null)
+            if (_p.episodeMdblistRatings[key] != null)
               tile(
                 Icons.star_outline_rounded,
-                'Remove MDBList rating (${_episodeMdblistRatings[key]}/10)',
+                'Remove MDBList rating (${_p.episodeMdblistRatings[key]}/10)',
                 () => _onEpisodeMdblistMenuAction(
                   episode,
                   MdblistEpisodeMenuAction.removeRating,

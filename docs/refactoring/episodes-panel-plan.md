@@ -946,6 +946,42 @@ including everything below.
   Final current run passes all 85 cases; whole-repo analysis has zero added
   or removed diagnostics (`step0b2-analyzer-comparison-final.txt`: PASS).
 
+### Step 3 — owners, live dependencies and composition
+
+- Step 0b2 closure: `af5a65a7`. Leading service, view, progress, auth and
+  resource declarations move with their initializers/comments. State creates
+  each owner once before init; the resource record preserves list/controller/
+  back/season/retry creation order and State retains the original disposal
+  protocol. Metadata and season-option mid-class fields stay with their
+  original methods until their owning steps. No initialization hook is added.
+- The typed deps record has all 23 live widget getter callbacks, live State
+  context/mounted/setState, and the direct bound public refresh tear-off.
+  The real factory passes and rejects caching each property, a missing factory,
+  refresh wrappers and same-class receiver swaps. The new shared lookup is
+  four opt-in lines for exact composition sites; other configs are unchanged.
+- Conservative lint decision: long qualifications made formerly single-line
+  unbraced statements wrap and introduced curly infos. Private typed borrowed
+  record accessors shorten only those receiver paths. They return the exact
+  once-owned record, store/copy nothing, evaluate at original sites, and their
+  complete bodies are pinned. Same-class accessor-target swaps are rejected.
+  Final strict evidence has only the original curly info, zero additions or
+  warnings; no braces, suppressions or moved comments change in application code.
+- Facade: 2,605 physical lines. Breakdown (`step3-facade-breakdown.json`):
+  imports/export/spacing 50; unchanged widget 134; composition 52;
+  lifecycle/public methods 79; State header/spacing 64; remaining original
+  members 2,226. The ratchet decreases; all 13 actual source locations,
+  including the facade and zero-count files, are registered. Shape stays 7;
+  explicit theme patterns stay 238. All destinations remain below 500.
+- All 93 own leaves, real-config fixtures and every other manifest/self-test
+  PASS with isolated packages/kernels and each original/config (merged at
+  `21320ff9`). Architecture/tree-copy negatives, sizes, storage references,
+  CI format, allowlist and whole analyzer relocation PASS with zero new
+  diagnostics; the same 12 existing CI warnings remain. Per-entry wiring
+  is reviewed before scaffold pinning. Scoped behavior versus `base5` PASS:
+  1,270 successes, the same original profile raw-preferences source-guard
+  failure, zero missing/newly skipped identities; all 22 importers compile.
+  Its env records no untracked inputs or tree changes.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

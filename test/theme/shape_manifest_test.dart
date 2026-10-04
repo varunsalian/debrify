@@ -222,8 +222,22 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/episodes_panel/presentation/episodes_panel_season_step.dart': 0,
   'lib/features/episodes_panel/presentation/episodes_panel_source_button.dart':
       1,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart':
+      0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart':
       3,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_parts.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_resources.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart':
+      0,
   // Playback settings: every remaining destination and the facade, at zero.
   'lib/features/playback_settings/presentation/legacy_playback_settings/playback_audio_section.dart':
       0,

@@ -120,6 +120,10 @@ def check_callback_identities(lookup, rows, source_path, config):
     errors = []
 
     def node_for(original):
+        scaffold = config.get('callback_scaffold_members', {}).get(original)
+        if scaffold:
+            # Exact opt-in composition sites borrow a manifest-owned callback.
+            return lookup[(scaffold['file'], scaffold['owner'], scaffold['name'])]
         if original not in by_original and config.get('callback_whole_class_members', False):
             owner, _, name = original.rpartition('.')
             row = by_original[owner]

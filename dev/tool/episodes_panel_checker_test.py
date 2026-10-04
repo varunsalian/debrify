@@ -27,6 +27,10 @@ def self_test(package=None):
     print('Episodes panel real configuration positive: PASS')
 
     def located(original_name):
+        scaffold = config.get('callback_scaffold_members', {}).get(original_name)
+        if scaffold:
+            key = (scaffold['file'], scaffold['owner'], scaffold['name'])
+            return key, lookup[key]
         row = next((r for r in rows if r['original_name'] == original_name), None)
         owner, _, member = original_name.rpartition('.')
         if row is None:
@@ -90,13 +94,27 @@ def self_test(package=None):
             changed[path] = sources[path][:node['start']] + replacement + sources[path][node['end']:]
             assert checked(changed), 'Accepted changed constructor export target'
             print('Episodes exact constructor export target:', name, 'rejected')
+    if config['completed_step'] >= 3:
+        for name, part in [('_s', 'viewState'), ('_r', 'resources')]:
+            key = (source, 'EpisodesPanelState', name)
+            node = lookup[key]
+            changed = dict(sources)
+            swapped = node['text'].replace('_parts.' + part, 'secondParts.' + part)
+            assert swapped != node['text']
+            changed[source] = sources[source][:node['start']] + swapped + sources[source][node['end']:]
+            assert checked(changed), 'Accepted borrowed record accessor swap'
+            print('Episodes borrowed accessor same-class record swap:', name, 'rejected')
     deps_path = 'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart'
-    if deps_path in sources:
+    if config['completed_step'] >= 3:
+        key, node = located('EpisodesPanelState.EpisodesPanelState')
         changed = dict(sources)
-        assert 'show()' in changed[deps_path]
-        changed[deps_path] = changed[deps_path].replace('show()', 'initialShow', 1)
+        cached = node['text'].replace('() => widget.show,', '() => initialShow,', 1)
+        assert cached != node['text']
+        changed[key[0]] = sources[key[0]][:node['start']] + cached + sources[key[0]][node['end']:]
         assert checked(changed), 'Accepted cached widget getter'
-        print('Episodes real cached widget property: rejected')
+        from check_settings_moves import check_live_widget_factory
+        assert check_live_widget_factory(all_nodes(parse(changed, package)), config)
+        print('Episodes actual factory cached widget property: rejected independently')
     # The actual config's factory is exercised even before composition lands.
     from check_settings_moves import check_live_widget_factory
     fixture_config = {**config, 'completed_step': 3}
