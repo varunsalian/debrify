@@ -2,6 +2,9 @@
 
 Written 2026-10-04 on `refactor/codebase` at `10ceef60`. Follow
 [AGENTS.md](../../AGENTS.md).
+Revised 2026-10-04 at `8a527a4e` after Codex design review round 1 (format
+proof driver, models DTO allowance, watched/rating fixtures, identity
+evidence, full-suite gates, goldens, declaration count and live reads).
 
 Read first: `docs/refactoring/merged-detail-plan.md` (its host-callback and
 `EpisodesPanel` forwarding contracts, its contract 8 on
@@ -28,11 +31,12 @@ features' manifests. Analyzer runs use `flutter analyze --no-pub`, serially.
 
 ## Goal
 
-`lib/widgets/episodes_panel.dart` is 3,112 lines: 40 imports (unordered), 7
-top-level declarations (`EpisodeFocusIntent`, `EpisodesPanelView`,
-`EpisodesPanel`, `EpisodesPanelState`, `_CatalogSelectSourceButton`(+State),
-`_SeasonStepButton`, `_CompactEpisodeRow`(+State)), no functions, typedefs or
-`part`s. It is the episode drill-down engine and UI: season fetch and
+`lib/widgets/episodes_panel.dart` is 3,112 lines: 40 imports (unordered), 9
+top-level declarations, 1 enum and 8 classes counting both private States
+(`EpisodeFocusIntent`, `EpisodesPanelView`, `EpisodesPanel`,
+`EpisodesPanelState`, `_CatalogSelectSourceButton`,
+`_CatalogSelectSourceButtonState`, `_SeasonStepButton`, `_CompactEpisodeRow`,
+`_CompactEpisodeRowState`), no functions, typedefs or `part`s. It is the episode drill-down engine and UI: season fetch and
 grouping, landing, the four-source watch-progress merge, enrichment,
 metadata re-presentation, watched fan-out, tracker menus, season options,
 the Classic chrome, the compact (merged-page) layout and the
@@ -101,8 +105,10 @@ not merged-detail).
   show EpisodeFocusIntent, EpisodesPanelView;`. The models layer may import
   `package:flutter/foundation.dart` (`VoidCallback`) and
   `lib/services/trakt/trakt_episode_model.dart` (`TraktSeason`,
-  `TraktEpisode`), and nothing UI. The contiguous `///` block 44–53 (the
-  panel's class doc that is today the enum's dartdoc, FNF 1) moves **with
+  `TraktEpisode`; an import-free DTO file), and nothing UI. That one
+  service-path import is an explicit, file-scoped guard allowance (see
+  Guard rules), not a layer-wide exemption. The contiguous `///` block
+  44–53 (the panel's class doc that is today the enum's dartdoc, FNF 1) moves **with
   the enum**, unchanged; the manifest records it as the enum's fragment.
 - Callers and all 10 importing tests compile unchanged; Progress proves it
   with a compile-only check at steps 1 and 7.
@@ -169,7 +175,13 @@ State: 31 instance fields (0 `late`, 0 static), 2 static methods, 6 getters.
      section is constructed once per State, so its two tear-offs compare
      equal at add and remove.
    - **No `didUpdateWidget`** (and none of the other hooks) exists, and none
-     is added.
+     is added. Widget replacement therefore does not restart initialization,
+     while builds read the current `showChrome`/`contentBuilder` and an
+     explicit refresh or Retry reads the current loaders (FNF 9). Both
+     halves are preserved: the deps getters stay live reads of the current
+     `widget` (never snapshots taken at construction or init), and the
+     dropdown `onKeyEvent` assignment stays inside `initState`, decided once
+     by the init-time `showChrome`.
    - Resources keep their creation time (State construction), instances and
      debug labels: `'catalog-ep-back'`, **`'catalog-ep-season'`** (found by
      `merged_detail_focus_test.dart:62`), `'catalog-ep-retry'`,
@@ -209,7 +221,19 @@ State: 31 instance fields (0 `late`, 0 static), 2 static methods, 6 getters.
    `_episodeMdblistRatings` are mutated in place; the direct loader's map is
    stored by reference; `TraktEpisode.rating`/`thumbnailUrl` are mutated;
    `_episodeSeasons` starts growable `[]`; `_seasonRetries` is one
-   `SeasonWatchedRetryState` per State.
+   `SeasonWatchedRetryState` per State. `EpisodesPanelView` exposes neither
+   map (only `progressOf`/`isNext` closures), so the evidence is split:
+   **checker-evidenced** (owner field declarations, initializers, every
+   assignment and in-place mutation site, compared verbatim with receiver
+   path) for the map instances, `_episodeMdblistRatings = result.data!`
+   (584), `_episodeSeasons` and `_seasonRetries`; **executable** for what a
+   test can observe without a seam: the direct loader's returned map, held
+   by the test, is mutated by the panel's own optimistic tick (watched
+   action, 816–820) and a test-side mutation of it shows up through
+   `progressOf` after the next rebuild; a rating's effect shows in the
+   reopened options sheet. No accessor is added; if step 0 review requires
+   direct identity assertions, a read-only accessor is frozen as a named
+   seam checkpoint before (b) with its measured facade line cost recorded.
 8. **Season options.** Hold-OK/long-press via `SeasonActionRegion`
    (`TvHoldOk`), short OK opens the season list; fresh auth per tracker;
    custom ids disable all trackers, **native ids disable Trakt and MDBList**
@@ -280,7 +304,18 @@ actual imports (any file naming `TraktSeason`/`TraktEpisode` imports
   `EPISODES_PANEL_COMPLETE = False`; the bridge in `LEGACY_PLAYBACK_BRIDGES`
   (still no `http`, `shared_preferences`, `sqflite`); no file under
   `lib/features/episodes_panel/` imports the facade; no service/storage
-  import outside the bridge (and none in `application/`); bans in both
+  import outside the bridge (and none in `application/`), **except exactly
+  one config-scoped allowance**: `lib/features/episodes_panel/models/episodes_panel_view.dart`
+  may import `lib/services/trakt/trakt_episode_model.dart` (an
+  `EPISODES_PANEL_MODEL_IMPORTS` map keyed by that importer and that
+  target, in the style of `PRESENTATION_BRIDGE_IMPORTS`, not a layer or
+  prefix rule; the generic models rules, no UI and no Riverpod, still apply),
+  and every other `episodes_panel` file outside the bridge, including other
+  `models/` files, keeps the ban; checker fixtures: **positive** (that model
+  file with that import passes) and **negatives** (that model file importing
+  a real service, e.g. `lib/services/trakt/trakt_service.dart`; a second
+  `models/` file importing `trakt_episode_model.dart`; the DTO import from
+  `application/`) each rejected; bans in both
   directions between `episodes_panel` and `merged_detail`, `catalog_detail`
   and `detail_showcase` except `<other>/models/` (written by name so they
   apply whenever those features land); a ban on any `lib/features/episodes_panel/`
@@ -300,15 +335,33 @@ As in the merged-detail and spotlight plans, plus:
 1. **Two step 0 originals.**
    - **(a) Format-only commit** (`style(episodes-panel): format the original
      episodes panel`): `dart format` on this file only, **3,112 → 3,232**
-     lines in 34 `diff -U0` hunks. The proof (reusing
-     `merged_detail_format_proof.py` with explicit `--original`,
-     `--formatted`, `--parser-package`, `--output`) compares whole-file
-     scanner tokens after removing only AST-identified optional trailing
-     commas: exactly **37 inserted and 3 removed** (collapsed collections),
-     each listed by AST node and owner; every comment and literal identical;
-     negatives (an edited comment or literal, a non-optional comma, a
-     required singleton-record comma) fail; `--set-exit-if-changed`
-     idempotence. No format-induced diagnostic is predicted; the step 0
+     lines in 34 `diff -U0` hunks. **The proof is a panel-specific driver,
+     `dev/tool/episodes_panel_format_proof.py`**:
+     `merged_detail_format_proof.py` cannot verify this file (it hardcodes
+     `lib/screens/merged_series_detail_screen.dart`, merged's comment and
+     `0xFF0B0B0E` negatives, insertion-only opcodes and exactly 25 commas,
+     and derives its adapter from its own filename). The new driver reuses
+     the existing AST adapter `dev/tool/merged_detail_format_proof.dart.txt`
+     **by explicit path** (compiled to
+     `<parser-package dir>/episodes_panel_format_proof.dill`), unchanged;
+     merged's driver and its invocation are not edited. (Alternative only if
+     review prefers it: a parameterized shared driver, provided merged's
+     existing command line and output stay byte-identical, proven by
+     rerunning it.) Arguments: `--original` (revision; source path fixed to
+     `lib/widgets/episodes_panel.dart`), `--formatted`, `--parser-package`,
+     `--output`. It compares whole-file scanner tokens after removing
+     AST-identified optional trailing commas from **each side's own** site
+     set and walks the opcodes allowing only `insert [',']` (each at a
+     formatted-side site) and `delete [',']` (each at an original-side
+     site, the collapsed collections); any `replace` or other token fails.
+     Expectations: exactly **37 inserted and 3 removed**, each listed by line,
+     AST node and owner. Negatives with this file's own text (each must
+     occur exactly once, asserted before replacing): the dartdoc comment
+     `The episode drill-down engine + UI` edited; a trailing comment
+     appended; the literal `'catalog-ep-season'` edited; a non-optional
+     comma; the required singleton-record comma pair; plus a synthetic
+     deleted non-comma token. The output records the negative results and
+     both counts; `dart format --set-exit-if-changed` idempotence. No format-induced diagnostic is predicted; the step 0
      analyzer comparison must show the formatted run equal to the original
      by rule, symbol and message (the curly info moves from 2306 to
      formatted ≈2419 inside `_showSeasonOptions`). Any new info stops the
@@ -340,7 +393,10 @@ As in the merged-detail and spotlight plans, plus:
    deps getters, `context`/`mounted`/`setState` through registered live
    callbacks (`live_widget_getters`), evaluated at the original sites.
    `ModalRoute.of(context)` in async code stays where it is (FNF 21). Every
-   `mounted` and generation guard stays in position.
+   `mounted` and generation guard stays in position. A getter that returned
+   the init-time value would still pass first-mount tests, so the same-key
+   replacement case (coverage 4) is the executable guard on the typed
+   getter wiring.
 4. **Verbatim comments.** The checker compares comments: no rewording,
    including the misleading ones in contract 5; each comment fragment's
    owner is in the manifest, and the mid-class field fragments keep their
@@ -372,11 +428,21 @@ As in the merged-detail and spotlight plans, plus:
 ### Step 0
 
 1. **Baselines.** `episodes_panel/base` on the untouched branch head
-   (`suite_evidence.py run`, whole-repo analyzer, tree and SDK provenance,
-   Flutter 3.44.8 / Dart 3.12.2, `--no-pub`); `base-fmt` after (a), equal by
-   identity.
+   (`suite_evidence.py run` with **no suite paths**, whole-repo analyzer,
+   tree and SDK provenance, Flutter 3.44.8 / Dart 3.12.2, `--no-pub`);
+   `base-fmt` after (a), equal by identity. Since `8a527a4e`,
+   `suite_evidence.py` records runner flags under `flags` and only real
+   paths under `paths`, and `compare` treats a run as scoped only when it
+   has real paths; Progress shows each base's and gate's env file with
+   `"paths": []` and `"flags": ["--no-pub"]`. **Negative (step 0, recorded):**
+   a synthetic copy of `base`'s `.jsonl` with one original suite's events
+   removed, paired with a full-run env (`paths: []`), must **FAIL**
+   `compare --against` `base` (missing tests), and the same copy with an
+   env listing a real path must be reported as scoped; both outputs are
+   kept under `refactor-evidence/episodes_panel/`.
 2. **Dependency report** (`docs/refactoring/episodes-panel-deps.md`): every
-   leaf (31 fields, 6 getters, methods, 7 declarations, comment fragments)
+   leaf (31 fields, 6 getters, methods, 9 top-level declarations (1 enum +
+   8 classes, both private States counted), comment fragments)
    with destination; reads of `widget` (by property), `context`, `mounted`,
    `setState`, `this`; tear-offs; resource owners; the wiring checklist,
    reviewed before any scaffold is pinned.
@@ -396,14 +462,28 @@ As in the merged-detail and spotlight plans, plus:
 4. **Harness** (`test/support/episodes_panel_fixture.dart`):
    `SharedPreferences.setMockInitialValues`; `SecretVault.debugReset(deviceIdOverride:)`;
    root `flutter_test_config.dart` `ProfileRuntime` init and reset;
-   `SimklService.instance.resetProfileScope`; tracker tokens via
-   `TraktStorage`/`SimklStorage`/MDBList storage;
+   **all three trackers reset in setup and again in teardown**
+   (`TraktService`, `SimklService` and `MdblistService`
+   `.instance.resetProfileScope()`, exactly as
+   `merged_detail_fixture.dart:370–386` does, teardown in `finally`);
+   tracker tokens via `TraktStorage`/`SimklStorage`/MDBList storage;
    `TrackingSourceStorage.setTrackingScrobbleTargets`; `http.runWithClient`
-   + a recording `MockClient` (method, host, path, query, exact JSON body;
-   TVMaze → 404); `MaterialApp` + `AppThemeScope(AppThemes.legacy)` +
+   + a recording `MockClient` (method, host, path, query, exact JSON body);
+   `MaterialApp` + `AppThemeScope(AppThemes.legacy)` +
    `Scaffold`; `PlatformUtil.debugSetAndroidTvCached` reset in teardown;
    **unique addon ids per case** (`StremioService._seriesMetaCache` is
-   process-wide, 15 min TTL, no reset); recording host callbacks. Fake time
+   process-wide, 15 min TTL, no reset); **unique IMDb/native identities per
+   case** wherever a process-wide identity or lookup cache has no reset API
+   (services are not touched to add one): `TVMazeService._cache` /
+   `_seriesIdCache` (static, no clear) and any IMDb/native-id resolution
+   cache the step 0 deps report finds; the report lists each cache with
+   either the reset used or the uniqueness rule. **TVMaze routing:**
+   `GET /shows/1` → 200 (the availability probe; a blanket 404 would set the
+   static `_isAvailable = false` for 5 minutes and skip the lookup), then
+   `GET /lookup/shows?imdb=<unique id>` → 404; every case or scene that
+   promises the 404 path asserts that lookup request in the log, so a
+   cached or "unavailable" short-circuit fails instead of passing silently.
+   Recording host callbacks. Fake time
    mounted outside `runAsync`, IO inside; bounded pumps, no `pumpAndSettle`;
    schedule a frame after post-frame callbacks. Prove one fixture on (a)
    first. `test/support/merged_detail_fixture.dart` covers the compact host.
@@ -417,22 +497,42 @@ As in the merged-detail and spotlight plans, plus:
    | 1 Surface | Source guard on the verbatim widget, view, enum, State header and both public methods; the re-export resolves both types. |
    | 2 Handoffs | Recording callbacks with exact order and selection fields: tap and quick-play with and without `onPlayEpisode`/`onQuickPlay`; a non-canonical video id; fallback search from the unavailable panel; `onSelectSource` awaited; `onNextEpisodeChanged(mutation:)` and `onSeriesCompletedChanged` emissions. Existing: `episode_simkl_menu`, `merged_detail_playback`. |
    | 3 Inbound | `refreshWatchProgress` through a `GlobalKey<EpisodesPanelState>` re-reads progress; the MDBList revision waits while a route covers the panel, then 750 ms, one refresh; a newer bump supersedes (fake time); after unmount, no publication. Source guard on the State method's signature. |
-   | 4 Lifecycle | Policy and scope notifications before unmount re-present once, after unmount publish nothing (behaviour only, since the callback bumps its generation before `mounted`); detachment is checker-evidenced (contract 4 negatives). Source guards on `initState`, the 10-step `dispose` and the absence of `didUpdateWidget`; all five debug labels; existing `merged_detail_focus` (`'catalog-ep-season'`). |
-   | 5 Watched | Exact requests per case (host + path + body): Trakt `POST https://api.trakt.tv/sync/history` / `/sync/history/remove`; Simkl `POST https://api.simkl.com/sync/history` / `/sync/history/remove`, plus on a successful watch `GET /sync/playback/episodes` and, with a paused fixture, `DELETE /sync/playback/{id}`; MDBList `POST https://api.mdblist.com/sync/watched` / `/sync/watched/remove`. Cases: all selected and signed in (watch and unwatch); none selected (local only, both directions, zero tracker writes); selected but signed out after mount (cached-vs-fresh mismatch: no request, snackbar still names it, FNF 3); Simkl failure ("— failed on Simkl", local stands, tick per `rendersHere`); a policy whose rendered source wasn't written (no tick); native id (MDBList written); custom id (local only). Local completion asserted in storage for watch **and** unwatch. **Profiles:** A with tokens, B without: B's action writes only B's local store and sends no request; A's store and B's are disjoint; a same-session scope republish re-presents metadata but does not re-resolve auth. Existing: `merged_detail_episode_watched`, `custom_series_progress`. |
+   | 4 Lifecycle | Policy and scope notifications before unmount re-present once, after unmount publish nothing (behaviour only, since the callback bumps its generation before `mounted`); detachment is checker-evidenced (contract 4 negatives). Source guards on `initState`, the 10-step `dispose` and the absence of `didUpdateWidget`; all five debug labels; existing `merged_detail_focus` (`'catalog-ep-season'`). **Same-key replacement** (FNF 9): mount with `showChrome: false`, then pump replacements under the same `GlobalKey<EpisodesPanelState>`: (i) `showChrome: true`, a different `show` and a new `watchProgressLoader`; (ii) additionally a recording `contentBuilder`. Assert the same State instance throughout; no re-initialization (no new season/meta request for the new `show`, no auth re-resolve); after (i) the Classic filters bar renders (current `showChrome`) but the season dropdown has **no** custom `onKeyEvent` (Up is not trapped, decided at init); `refreshWatchProgress()` calls the **new** loader and not the old one; after (ii) the recording builder receives the view (current `contentBuilder`). |
+   | 5 Watched | Exact requests per case (method + host + path + query + **complete JSON body**, every key compared, never a subset): Trakt `POST https://api.trakt.tv/sync/history` / `/sync/history/remove`; Simkl `POST https://api.simkl.com/sync/history` / `/sync/history/remove`, plus on a successful watch `GET /sync/playback/episodes` and, with a paused fixture, `DELETE /sync/playback/{id}`; MDBList `POST https://api.mdblist.com/sync/watched` / `/sync/watched/remove`. Time-valued fields are validated, not ignored: MDBList's `watched_at` (`DateTime.now().toUtc().toIso8601String()`, `mdblist_service.dart:1161`, `timestampField: 'watched_at'` at 1298) must parse as UTC (`Z`) and lie within `[before, after]` captured around the action; the body is then compared exactly with that one value substituted. **Simkl playback GET:** the cache is account-wide with a 30 s real-clock TTL (`simkl_service.dart:87–104`) and the mount's progress load may warm it, so each case asserting the GET first establishes a cold cache (preferred: the log shows no `/sync/playback/episodes` before the action under the case's policy; otherwise `SimklService.instance.resetProfileScope()` after mount, recording that the case's auth outcome is unchanged) and asserts exactly one GET after the action. Cases: all selected and signed in (watch and unwatch); none selected (local only, both directions, zero tracker writes); selected but signed out after mount (cached-vs-fresh mismatch: no request, snackbar still names it, FNF 3); Simkl failure ("— failed on Simkl", local stands, tick per `rendersHere`); a policy whose rendered source wasn't written (no tick); native id (MDBList written; a unique native id per case, since native-id resolution may be cached); custom id (local only). Local completion asserted in storage for watch **and** unwatch. **Profiles:** A with tokens, B without: B's action writes only B's local store and sends no request; A's store and B's are disjoint; a same-session scope republish re-presents metadata but does not re-resolve auth. Existing: `merged_detail_episode_watched`, `custom_series_progress`. |
+   | 5b MDBList rating | Original-code characterization of `_onEpisodeMdblistMenuAction` (888–940) through the options sheet (2540–2558): **rate cancelled** (dialog dismissed → `rating == null`, 906–907: no request, no snackbar, reopened sheet still offers "Rate on MDBList"); **rate succeeds** (`POST https://api.mdblist.com/sync/ratings`, complete body with `rating` and UTC `rated_at` validated in the action window as above; snackbar "Rated N/10 on MDBList", success colour; reopened sheet offers "Remove MDBList rating (N/10)", 917); **rate fails** (non-2xx: "Failed: Rated N/10 on MDBList", failure colour, reopened sheet still offers "Rate on MDBList"); **remove succeeds** (`POST /sync/ratings/remove`, complete body; "Removed rating from MDBList"; reopened sheet offers "Rate on MDBList", 928) and **remove fails** ("Failed: Removed rating from MDBList"; reopened sheet still offers removal). Unique identities per case. |
    | 6 Loads | Landing tiers 1–4 and pair validation; direct-source landing (>= 95 → next); progress policy matrix (smart/local/trakt/simkl/mdblist) with the floors; MDBList ratings; unavailable panel (Retry, Search for sources, absent for direct source); StateError snackbar; a stale retry rejected by generation; `_groupVideosIntoSeasons`, `_downsizeMetahubThumb`; metadata re-present with a mid-present scope change rejected (existing `metadata_episode_focus`). |
-   | 7 Identity | In-place progress/rating maps keep their instance across a watched action; the direct loader's map is the same object. |
+   | 7 Identity | Executable: with a direct `watchProgressLoader` returning a test-held map, a watched action's optimistic tick appears **in that map** (stored by reference, mutated in place), and a test-side mutation of it is visible through `progressOf` after the next rebuild; ratings are observed only through 5b's reopened sheet. Checker-evidenced (not a test claim): the map instances, `result.data!` adoption, `_episodeSeasons` growable `[]`, one `_seasonRetries` per State, `rating`/`thumbnailUrl` mutation sites. |
    | 8 Season options | Hold-OK vs short-OK; custom and native provider disabling; retry state; mark → refresh; busy reentrancy. |
    | 9 D-pad | **New Classic `EpisodesScreen` widget test** (no test drives it today): back-button keys, dropdown keys, select-source button keys, Retry autofocus on TV, `EpisodeTile` list, Trakt `onMenuAction` rate gate and `onTrackerOptions` gate, terminal dispatch popping to the host before `onItemSelected`. Compact row keys including a null `onLeft`; `_stepSeason` refocus; sheet autofocus. |
    | 10 Rendering | Goldens below; existing `detail_layouts_dpad`, `detail_showcase`, `detail_showcase_compact`, `detail_theme_layout` (view-only). |
 
-6. **Goldens** (none exist). Deterministic scenes from (b): Classic
-   `EpisodesScreen` phone 390×844; Classic TV 1920×1080 with focus on the
-   first episode; compact panel at 900 wide; the unavailable panel; the
-   episode options sheet on TV. All: addon meta served by `MockClient`, no
-   network art (null thumbnails or 404), TVMaze 404, DPR 1.0,
-   `AppThemes.legacy`, `en-US`, text scale 1.0, named initial focus, bounded
-   pumps past the first-frame unavailable state (FNF 10). macOS captured in
-   (b) by execution; **Linux captured by Claude** in the calibrated
+6. **Goldens** (none exist). Deterministic scenes from (b), each with
+   both dimensions, an exact focus target and a capture-readiness predicate
+   recorded in the test and in Progress:
+
+   | Scene | Size (logical, DPR 1.0) | Focus target at capture | Ready when |
+   | --- | --- | --- | --- |
+   | Classic `EpisodesScreen`, phone | 390×844 | none: asserted that no `catalog-ep-*` / `catalog-select-source-btn` node has primary focus | first episode title found; request log equals the scene's expected set |
+   | Classic, TV | 1920×1080 | `'catalog-ep-0'` (landing = first episode, no progress) | as above, plus `primaryFocus.debugLabel == 'catalog-ep-0'` |
+   | Compact panel (merged host width) | 900×1200 | none (non-TV), asserted as for phone | season header and first compact row found; request log as expected |
+   | Unavailable panel, TV | 1920×1080 | `'catalog-ep-retry'` (TV autofocus) | "Couldn't load episodes" found **after** the failed load (the fixture's addon meta returns an error and the log shows it), not the first-frame placeholder (FNF 10) |
+   | Episode options sheet, TV | 1920×1080 | the sheet's "Play" tile (`autofocus: widget.isTelevision`, 2501); asserted as `primaryFocus`'s widget containing the "Play" text | sheet route present and its autofocus settled; request log as expected |
+
+   All: addon meta served by `MockClient`; **no network art at all**:
+   episode `thumbnail` and show `poster`/`background` null in the meta, so
+   neither the thumbnail nor the `showImageUrl` poster fallback (2820,
+   `show.poster` at 2105/2186/2418) yields a URL; the readiness check
+   asserts no `CachedNetworkImage` in the tree has a non-null `imageUrl` and
+   no image host appears in the log. TVMaze as in the harness (`/shows/1`
+   200, `/lookup/shows?imdb=<unique id per scene>` 404, the lookup asserted
+   in the log; `TVMazeService._cache` has no reset, so identities are never
+   shared between scenes or with other tests). `AppThemes.legacy`, `en-US`,
+   text scale 1.0, a fixed bounded pump count per scene (recorded). **Repeatability
+   before extraction:** each scene is captured twice from (b) in separate
+   `flutter test` processes and in reversed scene order; the two captures
+   must be byte-identical (macOS by execution in (b); Linux in the image),
+   and Progress records the hashes. macOS captured in (b) by execution;
+   **Linux captured by Claude** in the calibrated
    `debrify-flutter:3.44.8` linux/amd64 image, committed separately; the
    Linux test is non-strict through step 5 and strict from step 6.
 7. **CI list.** Add `test/episode_simkl_menu_test.dart`,
@@ -481,7 +581,8 @@ each be rejected: `onBeforeTerminalDispatch` after dispatch; `onQuickPlay`
 ignored; a missing local unwatch write path (coordinator call dropped); the
 optimistic tick unconditional; the MDBList 750 ms wait removed; the route
 wait removed; a removed `playbackRevision` removal; a changed season debug
-label; native ids allowed in season options; Right on a compact row
+label; a successful MDBList rating not recorded (917 dropped, so the
+reopened sheet still offers "Rate on MDBList"); native ids allowed in season options; Right on a compact row
 playing. Record `base3` after tests at (b); each comparison passes with
 only added, passing identities.
 
@@ -496,7 +597,10 @@ references; shape (7) and theme (238); CI format and scoped analyze; LF
 manifests; staged diff; compile-only check of the 22 importers. Evidence
 snapshots (`git stash create`) are serialized. Gates run on committed trees
 with no untracked inputs against the latest `episodes_panel/` base; gate 2
-also against gate 1. Known flaky identities (Xtream 50k timeout under CPU
+also against gate 1. **Gate runs are full runs**: `suite_evidence.py run
+<name> --no-pub` with no suite paths (a gate whose env records any path is
+invalid and is rerun, never compared as scoped), and the comparison must
+show every suite of the base present. Known flaky identities (Xtream 50k timeout under CPU
 load; PIN-recovery fixed wait) are rerun with no other Flutter work before
 attribution. Never `--record` a regression.
 
@@ -511,8 +615,9 @@ Union and dedupe registrations, CI paths, failure identities, theme
 patterns and shape entries; keep every `*_COMPLETE`; take the lowest
 verified size ceiling; keep every `checks.yml` path before `| tee`. Then on
 the merged committed tree rerun every manifest with self-tests,
-architecture, size, shape, theme, CI format/analyze and a full-suite
-comparison against each branch's bases.
+architecture, size, shape, theme, CI format/analyze and a **full-suite**
+run on the merged tree (no suite paths; env `paths: []`), compared against
+each branch's bases.
 
 ## Definition of done
 
@@ -568,8 +673,14 @@ All pre-existing; the extraction keeps each exactly.
 6. Overlapping `refreshWatchProgress` calls are last-writer-wins.
 7. `consumeFocusIntent()` has zero callers; `_focusIntent` is never reset.
 8. `_buildSlimSeasonRow` is dormant; the Classic chrome path had no widget test.
-9. No `didUpdateWidget`: changes to `show`, `addon`, loaders or `showChrome`
-   are ignored; the dropdown key handler is fixed at init.
+9. No `didUpdateWidget`: replacing the widget (same State) does not
+   restart initialization (no `_enterEpisodeMode` re-entry, no auth
+   re-resolve, no listener change), so a new `show`, `addon` or initial
+   season/episode is not loaded by itself. But reads stay live: every
+   `build` reads the current `showChrome` (2162) and `contentBuilder` (2147,
+   and `_custom`, 327), and an explicit `refreshWatchProgress()` or Retry
+   reads the current `watchProgressLoader`/`seasonsLoader` (437, 714, 966;
+   Retry also the current `initialSeason`/`initialEpisode`, 2201–2205). Only the dropdown `onKeyEvent` handler is fixed at init (389–391).
 10. The first frame renders the "Couldn't load episodes" panel (Retry
     autofocuses on TV) until the first load `setState`.
 11. `_enterEpisodeMode` is `void async`; progress and `_resolve*Auth` futures
