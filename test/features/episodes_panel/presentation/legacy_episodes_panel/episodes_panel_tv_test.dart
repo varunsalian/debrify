@@ -378,6 +378,7 @@ void main() {
           );
           await t.pump(const Duration(milliseconds: 400));
           expect(find.text('Mark season as watched locally'), findsOneWidget);
+          expect(find.byType(BottomSheet, skipOffstage: false), findsOneWidget);
           expect(find.textContaining('on Trakt'), findsNothing);
           expect(find.textContaining('on MDBList'), findsNothing);
           expect(

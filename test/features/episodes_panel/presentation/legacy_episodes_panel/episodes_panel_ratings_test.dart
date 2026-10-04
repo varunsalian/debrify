@@ -57,6 +57,7 @@ void main() {
             await t.pump(const Duration(milliseconds: 400));
           }
           if (scenario == 'cancel') {
+            await f.finish(t);
             expect(f.requests, isEmpty);
             expect(find.byType(SnackBar), findsNothing);
           } else {

@@ -779,6 +779,20 @@ including everything below.
   exact checkpoint and committed separately when delivered.
 
 
+### Step 0b — strengthen original-only mutation coverage
+
+- During ORIGINAL-only proofing, the cancel-rating mutation survived because
+  the assertion ran before pending HTTP continuations drained. The cancellation
+  case now uses the existing bounded fixture settling before checking zero
+  requests, zero snackbar and the reopened sheet. Season busy reentrancy also
+  asserts exactly one `BottomSheet`, including offstage routes, so a hidden
+  duplicate cannot pass a visible-text count. No assertion is removed or weakened.
+- `step0b-strengthened-original`: all 17 rating/TV cases pass against R's
+  unchanged application. `lib`, `pubspec.yaml`, `pubspec.lock` still equal R.
+  This supplemental original checkpoint retains (b)'s exact-subject Linux
+  capture reference and five unchanged golden scenes. Detached checkpoint
+  proofs and a fresh full-suite base follow before extraction.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
