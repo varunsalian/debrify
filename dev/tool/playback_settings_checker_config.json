@@ -401,6 +401,10 @@
       "owner": "PlaybackSections"
     },
     {
+      "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_settings_layout.dart",
+      "owner": "PlaybackSettingsLayout"
+    },
+    {
       "file": "lib/features/playback_settings/presentation/legacy_playback_settings/playback_settings_load.dart",
       "owner": "PlaybackSettingsLoad"
     },
@@ -453,7 +457,11 @@
       "owner": "PlaybackWindowsState"
     }
   ],
-  "forwarders": {},
+  "forwarders": {
+    "_ExternalPlayerSettingsPageState.build": {
+      "receiver": "_sections.layout"
+    }
+  },
   "named_exceptions": {
     "root_build_forwarder": [
       "_ExternalPlayerSettingsPageState.build",

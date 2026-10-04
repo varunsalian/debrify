@@ -20,6 +20,7 @@ import 'package:debrify/features/playback_settings/presentation/legacy_playback_
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_player_setters.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_player_tiles.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_rows_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_settings_layout.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_settings_load.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_rows_state.dart';
 import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_section.dart';
@@ -72,6 +73,7 @@ class PlaybackSections {
   final PlaybackWindowsSection windowsSection;
   final PlaybackExternalSection externalSection;
   final PlaybackPlayerSection playerSection;
+  final PlaybackSettingsLayout layout;
   PlaybackSections({
     required this.core,
     required this.mac,
@@ -108,6 +110,7 @@ class PlaybackSections {
     required this.windowsSection,
     required this.externalSection,
     required this.playerSection,
+    required this.layout,
   });
 }
 
@@ -126,6 +129,7 @@ PlaybackSections createPlaybackSections({
   required bool Function() mounted,
   required BuildContext Function() context,
   required PlaybackSettingsSection Function() section,
+  required Future<void> Function() openPlayerSettings,
 }) {
   final defaultsCard = PlaybackDefaultsCard((context: context));
   final fontActions = PlaybackFontActions((
@@ -332,6 +336,15 @@ PlaybackSections createPlaybackSections({
     subRows: subRows,
     values: values,
   ));
+  final layout = PlaybackSettingsLayout((
+    audioSettings: audioSection.audioSettings,
+    core: core,
+    openPlayerSettings: openPlayerSettings,
+    playerSettings: playerSection.playerSettings,
+    section: section,
+    subtitleSettings: subtitleSection.subtitleSettings,
+    videoSettings: videoSection.videoSettings,
+  ));
   return PlaybackSections(
     core: core,
     mac: mac,
@@ -368,5 +381,6 @@ PlaybackSections createPlaybackSections({
     windowsSection: windowsSection,
     externalSection: externalSection,
     playerSection: playerSection,
+    layout: layout,
   );
 }

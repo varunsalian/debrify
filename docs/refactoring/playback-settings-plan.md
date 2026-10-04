@@ -1091,6 +1091,29 @@ As in the PikPak plan, with these specifics:
   image ID, hashes and logs are in `linux-strict-prerequisite.json` and related
   evidence. This separate commit closes the prerequisite before step 6.
 
+### Step 6 — layout and exact facade dispatch
+
+- `build` moved whole into plain `PlaybackSettingsLayout`; facade retains its
+  exact annotated signature and argument dispatch. State's self-push stays whole
+  and its real `_openPlayerSettings` tear-off is borrowed under the public record
+  field `openPlayerSettings`. Live `widget.section`, lexical build context and
+  original core/section owner instances are preserved. Wiring reviewed before
+  pinning (`step6-wiring-review.json`). Facade 579 lines, composition 386; all
+  feature files below 500.
+- Four new checker negatives cover missing forwarder/annotation, wrong receiver
+  and wrong argument. Missing forwarder initially exposed an enforcement gap;
+  strengthen the frozen build row with the already-supported `retained_forwarder`
+  flag (same 214 entries, no widened token permission). The affected playback
+  self-test rerun passes all negatives; five unchanged shared configs pass.
+- Focused replay rerun after the stronger manifest: 146 successes and the same
+  original guard failure; PASS against `base4`. Local CI, whole analyzer/max and
+  strict symbol comparisons PASS, zero additions/scaffold diagnostics. All
+  frozen inputs unchanged except the exact planned Linux strict-default delta.
+  Twenty radii/four token calls, floor 488, original helper/PNG hashes retained.
+- Calibrated Linux image strictly compares the moved layout against all five
+  original PNGs: 5/5 PASS, no update flags (`linux-step6-strict.json` and log).
+  The later manifest-only enforcement flag does not alter tested app/golden code.
+
 ## Found, not fixed
 
 All of these are pre-existing, and the extraction keeps each one exactly.

@@ -61,6 +61,20 @@ def self_test(package=None):
     reject('listener order changed', state+'.initState', lambda text: text[:a]+text[c:d]+text[b:c]+text[a:b]+text[d:])
     reject('self-push moved into feature', state+'._openPlayerSettings', lambda text: text+'\n', move=True)
 
+    build_forwarder = lookup.get((source, state, 'build'))
+    if (rows[-1]['destination_file'], rows[-1]['destination_class'], 'build') in lookup:
+        assert build_forwarder is not None
+        for label, replacement in [
+            ('build forwarder missing', ''),
+            ('build forwarder annotation missing', build_forwarder['text'].replace('@override', '', 1)),
+            ('build forwarder wrong receiver', build_forwarder['text'].replace('_sections.layout', '_sections.wrongLayout', 1)),
+            ('build forwarder wrong argument', build_forwarder['text'].replace('.build(context)', '.build(otherContext)', 1)),
+        ]:
+            changed = dict(sources)
+            changed[source] = changed[source][:build_forwarder['start']] + replacement + changed[source][build_forwarder['end']:]
+            assert check(original, changed, rows, source, package, partition=True, context_guard=True, config=config), label
+            print('Playback real fixture '+label+': rejected')
+
     # Every named callback site is tested directly, so a scaffold mismatch
     # cannot conceal an identity-resolver regression.
     for spec in config['callback_identities']:
