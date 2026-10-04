@@ -246,10 +246,15 @@ only public symbol. These callers must compile unchanged:
    picker entry runs `_openPicker`, which pops every route above the
    gate's own route by identity (`popUntil(identical(route, own))`,
    `profile_gate.dart:360`) **before** it locks, clears session state and
-   shows the picker. The page is therefore disposed by that pop; a write
-   still in flight finishes in the scope `ProfilePreferences.instance()`
-   captured when it started. The extraction keeps this contract and adds
-   nothing to it.
+   shows the picker. The page is therefore disposed by that pop, but the
+   pop doesn't cancel asynchronous work. `ProfilePreferences.instance()`
+   captures its scope only **after** awaiting `SharedPreferences`
+   (`profile_preferences.dart:275`), so a write already issued can finish
+   after the pop, a later write can hit a stale-session rejection, and a
+   pending picker result can resume its three separately scoped storage
+   calls (page 788) after the switch. These are retained legacy hazards
+   (see "Found, not fixed"); the extraction keeps them exactly and adds
+   nothing.
 9. **Fonts.**
    - **Import:** `pickFiles(type: FileType.any, allowMultiple: false)`; the
      extension rule (`.ttf`, `.otf` or none); the null-path message;
@@ -625,7 +630,7 @@ The facade cap and `TEMP(playback_settings)` rejection turn on at step 7.
    | 5 Detection | tvOS (`debugSetTvOS`): the exact `canOpen` calls in `iOSExternalPlayer.values` order (the tvOS catalog, custom skipped), made only on Player; on a macOS host the simulated-tvOS run also performs the real macOS detection first, because desktop detection stays true alongside tvOS. macOS and Linux run real `which`: host-tolerant tile assertions, plus source guards on sites, arguments and order. iOS-mobile, Windows and Android `isTelevision`: source guards, with device verification **pending**. |
    | 6 Actions | macOS host: select (exact key and value); browse with the fake picker (exact arguments, three writes in order; cancel writes nothing); custom command (invalid → error and no write; valid → write); clear (keys removed, preferred reset, controller cleared, no dialog). tvOS select and scheme likewise; Linux in Docker; Windows by source guard. Snackbar texts. |
    | 7 Setters | **Every** setter, through the accessor's real tear-offs: exact keys, exact values, in order, and `setState` before the first write (observed while the write is held). The renderer setter's expected map includes both `android_video_renderer_mode` and `android_video_renderer_gpu_migration_v1` = `true`, in that order. The aspect setter's `player_default_aspect_index` path is asserted on desktop; its `player_default_aspect_index_tv` branch is unreachable there (`_isAndroidTv` is false and the tear-off cannot supply it), so it is a source guard with device verification **pending**. Host-reachable rows are also driven through the UI. |
-   | 8 Scope | With two committed profiles, a setter writes only the active profile's key, and an imported font list is visible from both. **Route handoff, original-proved:** with a pushed playback page (via `pushSettingsPage`) over the gate, a profile switch through the picker entry pops the page by identity (it is disposed, not remounted), the incoming profile's open writes and reads only its own keys, and the outgoing profile receives no write after the pop. |
+   | 8 Scope | With two committed profiles, a setter writes only the active profile's key, and an imported font list is visible from both. **Route handoff, original-proved:** with a pushed playback page (via `pushSettingsPage`) over the gate, a profile switch through the picker entry pops the page by identity (it is disposed, not remounted). **Idle route** (loads and actions settled first): the incoming profile's open writes and reads only its own keys, and the outgoing profile receives no write after the pop. **Held boundaries**, characterized separately against the original: a write held before and after `ProfilePreferences` acquisition, and a pending font-picker result resuming after the switch, each recording where the write lands or the error it raises. |
    | 9 Fonts | Import: a wrong extension is rejected with no copy; no extension is accepted; the null-path message; success puts the file in the temp `subtitle_fonts`, refreshes the list and shows the message. Remove: no dialog; the file is deleted; removing the selected font resets the selection; the message. |
    | 10 Navigation | Each host-reachable appearance tile pushes its page: `PlayerDockPage` on desktop, hidden under `debugSetTvOS(true)` (`!PlatformUtil.isTelevision`); `PlayerGuideStylePage`; `PlayLoaderStylePage`; `SubtitlePriorityPage`. The `_isAndroidTv` destinations — `TvPlayerControlsStylePage` and the `DebrifyTvPlayerStylePage` tile — are unreachable on desktop: source guards on their predicates and targets, with device verification **pending**. No new seam is added to reach them. "Choose player" pushes Player and reloads on return (existing test 5). A source guard keeps the self-push in the facade. |
    | 11 D-pad | Arrow keys through dropdown and checkbox rows, not wrapping at either end. Mode rows are single stops. The macOS `TvTextField` arrows. Existing test 6. Night-mode activation: accessor, source guard, and a pending device check. |
@@ -800,3 +805,7 @@ All of these are pre-existing, and the extraction keeps each one exactly.
 - **Unverified:** the `cloud` `**` glob in `theme_surface_manifest.txt`
   looks non-recursive in both consumers, so it may miss `legacy_pikpak/`.
   That file isn't touched by this plan.
+- **Late writes after a profile pop.** Popping the page doesn't cancel
+  in-flight work: an issued write can land after the switch, a later one can
+  be rejected as stale, and a pending picker result can resume its storage
+  calls in the new session.
