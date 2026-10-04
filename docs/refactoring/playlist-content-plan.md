@@ -568,11 +568,82 @@ identities against the observed branch baselines and approved additions.
 
 ## Progress
 
-(empty)
+- Execution is confined to the dedicated `refactor/playlist-content` worktree
+  at `67b32702`; no branch switch or push. `flutter pub get` completed first
+  with Flutter 3.44.8 / Dart 3.12.2 and no dependency changes. The
+  invocation-specific suite checker prerequisite is present at `4f3ee3b3`.
+- Step 0: the original 4,140-line implementation is byte-identical, followed
+  by the frozen 99-line accessor (4,239-line temporary seam-only ratchet;
+  exits step 1). The 107-leaf manifest, dependency/wiring checklist,
+  real-config checker fixtures, named-argument callback checks and negative
+  wrappers/receiver swaps are installed. No implementation has moved.
+- Observed baselines: `playlist_content/base` and accessor-only `base2`
+  both have 10,577 successes, 13 failures, 28 errors and 20 skips; identity
+  comparison passes with no missing/new failures or changed skips. Whole
+  analyzer evidence is `base-analyze.txt` with tree/SDK provenance; the
+  first pub-enabled attempt hit concurrent Flutter iOS package housekeeping,
+  so the authoritative comparison uses `flutter analyze --no-pub`.
+  Existing vendor test-package errors are retained, not accepted as new.
+- Original characterization: `playlist_content/characterization-original`
+  passes all 151 identities before extraction. Every test uses the unchanged
+  original plus frozen accessor; the original-code proof runs here, not in a
+  second worktree, to obey the user's worktree confinement. After the
+  checkpoint, a clean-tree original replay will pin the checkpoint and
+  complete fixture/tests. `base3` is the full original-plus-tests baseline: 10,728 successes,
+  the same 13 failures / 28 errors / 20 skips; comparison to base/base2
+  passes, with exactly the 151 approved characterization additions.
+- The strict-lint original proof is inside this worktree's ignored
+  `.dart_tool/playlist_content_original_strict/`, with relative imports
+  qualified only. It records 12 `directives_ordering` infos and zero
+  `prefer_const_constructors`. Original warnings are pinned by rule,
+  member and message in `playlist_content_original_warnings.json`.
+  **Plan arithmetic correction:** the listed warning groups total 17, and
+  both original analyzer runs observe exactly 17 (1 unused + 2 dead-null +
+  2 null comparisons + 11 invalid-null-aware + 1 non-null assertion).
+  Preserve every observed occurrence; do not invent an eighteenth warning.
+- Metadata fixtures isolate TVMaze and EpisodeInfo caches, drain owned
+  timers, and use deterministic bundled fonts/artwork. Fake-time fixtures
+  advance frames while real IO runs through `runAsync`. The D-pad's 300 ms
+  check uses `DateTime.now`, so its fixture also advances real wall time.
+  Raw mode is mounted before completed-metadata mobile goldens to avoid
+  masking the original missing-thumbnail overflow. Original macOS captures
+  and strict comparisons cover raw, search, OTT mobile/desktop and error.
+- Profile evidence uses real file-backed tombstones reopened after writes,
+  disjoint A/B lists, and held decode continuations through Dart's existing
+  Zone boundary (no production hook). It preserves A-read/B-save data
+  replacement and displaced B tombstones for both detected-poster and
+  TorBox writes, stale captured-instance rejection, late metadata after
+  unmount/handoff, watched actions, and the real gate picker disposing the
+  route/timer/back handler. Ordinary IMDb progress remains title-keyed in
+  the current storage; the title/identity mismatch test uses a custom-series
+  identity, which is the current exact-key branch.
+- The launch probe proves rejection only at all seven sites and both caller
+  forms. No successful launcher fixture is claimed. Successful in-app
+  cleanup/playlist arguments, native TV, external/DeoVR completion, real
+  provider accounts and Android TV physical remote behavior remain device
+  checks. Remote CI and merged-tree integration remain pending.
+- Step 0 checks: all six configured manifests pass with self-tests using
+  the isolated playlist-content parser (107 / settings 316 / IPTV 22 /
+  TorBox 195 / Real-Debrid 173 / PikPak 128 leaves; IPTV count is recorded
+  in its checker output). Whole analyzer matches the original exactly;
+  scoped allowlist, per-member warnings, clean test analyzer, format,
+  architecture, size ratchet, storage keys/references, shape/source guards,
+  LF manifests and staged diff checks pass. Evidence is under
+  `playlist_content/`; no known-failure list changed.
+- Linux handoff script resolves the exact step-0 subject and uses only its
+  checkpoint-owned tests. Linux absence is permitted through step 5 only;
+  verified PNG hashes/provenance and a separate golden commit are required
+  before any builder moves in step 6.
+
 
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
+- **Mobile missing-thumbnail placeholder:** the original 500-pixel layout
+  can overflow vertically by 5 pixels under the real app theme. Preserved;
+  completed-metadata goldens use deterministic thumbnails.
+- **Live IMDb during Fix Metadata:** a supplied in-memory IMDb identity can
+  retain precedence over the new mapping; no identity policy is changed.
 - **Dispatch mismatch:** `'rd'`, `'torbox_webdl'`, `'real_debrid'` and
   unknown providers load through RD but play nothing, silently (1175–1191,
   3458–3474); `'rd'` items show the whole torrent.

@@ -31,6 +31,16 @@ def arguments(values, method):
     return found
 
 
+def callback_argument(call, argument):
+    """Select one positional argument or one exact named argument value."""
+    if isinstance(argument, int):
+        return call[argument]
+    matches = [expr[2:] for expr in call if expr[:2] == [argument, ':']]
+    if len(matches) != 1:
+        raise ValueError(f'expected one named argument {argument}, got {len(matches)}')
+    return matches[0]
+
+
 def check_callback_identities(lookup, rows, source_path, config):
     from check_settings_moves import tokens
     specs = config.get('callback_identities', [])
@@ -77,7 +87,7 @@ def check_callback_identities(lookup, rows, source_path, config):
                 if len(calls) != site.get('count', 1):
                     raise ValueError(f"expected {site.get('count', 1)} {site['call']} calls, got {len(calls)}")
                 for call in ([calls[site['occurrence']]] if 'occurrence' in site else calls):
-                    resolved.append(identity(call[site['argument']], node['owner']))
+                    resolved.append(identity(callback_argument(call, site['argument']), node['owner']))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
         if 'callback_member' in spec:

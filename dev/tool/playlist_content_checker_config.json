@@ -1,0 +1,199 @@
+{
+  "allowed_edits": [
+    "receiver",
+    "rename",
+    "state_callback",
+    "context_guard",
+    "unchanged",
+    "live_getter_callback",
+    "root_build_forwarder",
+    "retained_forwarder",
+    "formatter_if_braces",
+    "context_confirmation"
+  ],
+  "baseline": "67b32702",
+  "source": "lib/screens/playlist_content_view_screen.dart",
+  "feature": "lib/features/playlist_content",
+  "engine": "sections",
+  "partition": false,
+  "context_guard": true,
+  "sidecars": {
+    "scaffolding": "dev/tool/playlist_content_scaffolding.json",
+    "context_exceptions": "dev/tool/playlist_content_context_exceptions.json"
+  },
+  "named_exceptions": {
+    "root_build_forwarder": [
+      "_PlaylistContentViewScreenState.build",
+      "lib/features/playlist_content/presentation/legacy_playlist_content/playlist_content_root_layout.dart",
+      "root_build_forwarder: plan-approved plain PlaylistContentRootLayout; move build verbatim except deps/receivers and removal of its @override; retain exact annotated State single-expression forwarder"
+    ]
+  },
+  "annotation_exceptions": {},
+  "live_getter_callbacks": [],
+  "live_widget_getters": [
+    "playlistItem",
+    "onPlaybackStarted"
+  ],
+  "token_rules": [
+    {
+      "original_name": "_PlaylistContentViewScreenState.build",
+      "allowed_edit": "root_build_forwarder",
+      "difference_prefix": "root_build_forwarder:",
+      "before": [
+        "@",
+        "override"
+      ],
+      "after": []
+    }
+  ],
+  "additional_owners": [],
+  "required_nodes": [],
+  "forwarders": {},
+  "lifecycle": [
+    "_PlaylistContentViewScreenState.initState",
+    "_PlaylistContentViewScreenState.dispose"
+  ],
+  "test_accessors": [
+    {
+      "name": "playlistContentTestAccess",
+      "tokens_file": "dev/tool/playlist_content_test_accessor.json",
+      "required": true,
+      "unbound_tearoffs": {
+        "receiver": "s",
+        "members": [
+          "_PlaylistContentViewScreenState._buildPikPakFileTree",
+          "_PlaylistContentViewScreenState._buildPremiumizeCloudFileTree",
+          "_PlaylistContentViewScreenState._buildPremiumizeFileTree",
+          "_PlaylistContentViewScreenState._buildWebDavFileTree",
+          "_PlaylistContentViewScreenState._relativeWebDavPath",
+          "_PlaylistContentViewScreenState._fileNameFromPath",
+          "_PlaylistContentViewScreenState._asStringDynamicMap",
+          "_PlaylistContentViewScreenState._asInt",
+          "_PlaylistContentViewScreenState._applySortedView",
+          "_PlaylistContentViewScreenState._extractSeasonNumber",
+          "_PlaylistContentViewScreenState._extractLeadingNumber",
+          "_PlaylistContentViewScreenState._formatAirDate",
+          "_PlaylistContentViewScreenState._cleanTorboxPath",
+          "_PlaylistContentViewScreenState._hasWebDavCredentials"
+        ]
+      }
+    }
+  ],
+  "seams": [],
+  "self_test_module": "playlist_content_checker_test",
+  "receivers": [
+    "_deps",
+    "deps"
+  ],
+  "receiver_paths": {},
+  "receiver_owners": {
+    "_PlaylistContentViewScreenState": "_PlaylistContentViewScreenState"
+  },
+  "plain_sections": [],
+  "context_exception_difference": "context/formatter exceptions: only exact sites and raw prefixes recorded in playlist_content_context_exceptions.json; original guards and statement order unchanged",
+  "callback_identities": [
+    {
+      "name": "route back push/pop",
+      "callback_member": "_PlaylistContentViewScreenState._handleBackNavigation",
+      "sites": [
+        {
+          "member": "_PlaylistContentViewScreenState.initState",
+          "call": "pushRouteBackHandler",
+          "argument": 0,
+          "count": 1
+        },
+        {
+          "member": "_PlaylistContentViewScreenState.dispose",
+          "call": "popRouteBackHandler",
+          "argument": 0,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "AppBar back direct tear-off",
+      "callback_member": "_PlaylistContentViewScreenState._navigateUp",
+      "sites": [
+        {
+          "member": "_PlaylistContentViewScreenState.build",
+          "call": "IconButton",
+          "argument": "onPressed",
+          "count": 3,
+          "occurrence": 0
+        }
+      ]
+    },
+    {
+      "name": "AppBar search direct tear-off",
+      "callback_member": "_PlaylistContentViewScreenState._toggleSearch",
+      "sites": [
+        {
+          "member": "_PlaylistContentViewScreenState.build",
+          "call": "IconButton",
+          "argument": "onPressed",
+          "count": 3,
+          "occurrence": 1
+        }
+      ]
+    },
+    {
+      "name": "Refresh and Retry direct tear-offs",
+      "callback_member": "_PlaylistContentViewScreenState._loadContent",
+      "sites": [
+        {
+          "member": "_PlaylistContentViewScreenState.build",
+          "call": "IconButton",
+          "argument": "onPressed",
+          "count": 3,
+          "occurrence": 2
+        },
+        {
+          "member": "_PlaylistContentViewScreenState._buildContent",
+          "call": "ElevatedButton",
+          "argument": "onPressed",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "mode direct tear-off",
+      "callback_member": "_PlaylistContentViewScreenState._applyViewMode",
+      "sites": [
+        {
+          "member": "_PlaylistContentViewScreenState.build",
+          "call": "ViewModeDropdown",
+          "argument": "onModeChanged",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "search onChanged direct tear-off",
+      "callback_member": "_PlaylistContentViewScreenState._performSearch",
+      "sites": [
+        {
+          "member": "_PlaylistContentViewScreenState._buildSearchBar",
+          "call": "TvTextField",
+          "argument": "onChanged",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Fix Metadata direct tear-off",
+      "callback_member": "_PlaylistContentViewScreenState._showFixMetadataDialog",
+      "sites": [
+        {
+          "member": "_PlaylistContentViewScreenState._buildSeasonSelector",
+          "call": "InkWell",
+          "argument": "onTap",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "callback_instances": {
+    "_PlaylistContentViewScreenState": "$State"
+  },
+  "callback_receiver_aliases": {}
+}
