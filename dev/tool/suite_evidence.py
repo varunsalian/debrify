@@ -28,9 +28,11 @@ checkout root, so runs from different worktrees compare by the same
 repository-relative identities.
 """
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -290,7 +292,12 @@ def cmd_check(known_file, paths):
     paths = expand(paths)
     known = {line.strip() for line in Path(known_file).read_text().splitlines()
              if line.strip() and not line.startswith('#')}
-    out = Path('/tmp' if Path('/tmp').is_dir() else '.') / 'suite_evidence_check.jsonl'
+    # A per-run file: parallel worktrees running `check` at the same time
+    # must not overwrite each other's results.
+    fd, name = tempfile.mkstemp(prefix='suite_evidence_check-', suffix='.jsonl',
+                                dir='/tmp' if Path('/tmp').is_dir() else '.')
+    os.close(fd)
+    out = Path(name)
     flutter_test_json(paths, out)
     results, _ = outcomes(out)
     failing = {k for k, v in results.items() if v not in ('success', 'skipped')}
