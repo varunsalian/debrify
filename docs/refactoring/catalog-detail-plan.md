@@ -1,6 +1,9 @@
 # Catalog detail screen refactor — plan
 
 Written 2026-10-04 on `refactor/codebase` at `10ceef60`. Follow [AGENTS.md](../../AGENTS.md).
+Revised 2026-10-04 after Codex design review round 1 (no P1s): evidence classes per
+characterization case, metadata HTTP transport, per-manifest baselines, cache and
+golden readiness, playback-return guard contracts, interleaved fields and listener sites.
 Primary template: [merged-detail-plan.md](merged-detail-plan.md) (sibling detail
 screen), including its Progress and completion review notes; also read the Progress
 of [playlist-content](playlist-content-plan.md), [iptv-settings](iptv-settings-plan.md)
@@ -101,7 +104,7 @@ symbol.
 | 1–42 | 40 imports | Unordered (`dart:async` at 13; four `package:debrify/` storage imports first). |
 | 44–148 | `CatalogItemDetailScreen` | Stays in the facade. |
 | 150–1877 | `_CatalogItemDetailScreenState with SingleTickerProviderStateMixin, RouteAware, MetadataPresentationMixin<CatalogItemDetailScreen>` | 1,728 lines; 28 instance fields (0 static), 2 `late`, 10 getters. |
-| 155–232 | Fields; `_openMetadataRecommendation` (168–171) between `_recommendations`' doc (166–167) and the field (173) | Four more fields sit between methods (334, 400–401, 543, 661). |
+| 155–232 | Fields; `_openMetadataRecommendation` (168–171) between `_recommendations`' doc (166–167) and the field (173) | Five more fields sit between methods at four locations: `_movieCompletionGeneration` (334), `_rewatchPending`/`_rewatchBusy` (400–401), `_detailsMetadataGeneration` (543), `_artworkAccent` (661). |
 | 234–271, 427–455, 638–651 | `initState`, `didChangeDependencies`, `didPopNext`, `_onPlaybackReturned`, `dispose` | **Stay verbatim in the State.** |
 | 273–425 | Watchlist load/toggle, Simkl status, local movie finished, policy change, `_loadResumeInfo`, labels, `_playPrimary` (Rewatch) | `_simklStatus` (224) is write-only. |
 | 457–678 | Bound state, enriched meta, loader art, `onMetadataPolicyChanged`, IMDb, parents guide, recommendations, accent | |
@@ -129,9 +132,16 @@ No member exceeds 500 lines (largest `_PrimaryButtonState.build`, 136). No style
      `_loadResumeInfo`, `_loadSimklStatus`, `_loadLocalMovieFinished`,
      `_loadMyWatchlistState`).
    - `didChangeDependencies` subscribes **the State itself** to
-     `appRouteObserver` for a `PageRoute`; `didPopNext` and `_onPlaybackReturned`
-     (gated on `mounted` and `ModalRoute.of(context)?.isCurrent`) run
-     `_refreshBoundState`, `_loadResumeInfo`, `_loadLocalMovieFinished`.
+     `appRouteObserver` for a `PageRoute`. `didPopNext` and `_onPlaybackReturned`
+     both run `_refreshBoundState`, `_loadResumeInfo`, `_loadLocalMovieFinished`,
+     under **different guard contracts**: `didPopNext` dispatches directly (no
+     `mounted` or `isCurrent` check; the observer only calls it on the subscribed,
+     newly uncovered route), while only `_onPlaybackReturned` returns early unless
+     `mounted` and `ModalRoute.of(context)?.isCurrent`. The playback-return listener
+     receives both `MainPageBridge.notifyPlaybackReturned()` (which then also calls
+     `notifyContentPlaybackStopped()`) and `notifyPlaybackDataChanged()`
+     (`main_page_bridge.dart:529`, listeners only, no playback-stopped signal); the
+     screen cannot tell them apart and reacts identically.
    - `dispose`, **11 steps**: three listener removals in add order;
      `appRouteObserver.unsubscribe(this)`; `removePlaybackReturnListener`;
      `_revealCtrl.dispose()` (must precede `super`, STPSM asserts); the three
@@ -247,7 +257,10 @@ As in the merged plan, with these points:
    optional trailing commas**; no radius gains one). Merged's format proof hardcodes
    its path and 25 commas, so add `dev/tool/catalog_detail_format_proof.py` (same
    arguments; merged's stays untouched). The format-only commit is the
-   **ORIGINAL**: every checker `--baseline` and the analyzer baseline.
+   **ORIGINAL** for the catalog checks only: the catalog checker's `--baseline`
+   and the catalog analyzer baseline. Every other integrated manifest keeps its own
+   config and original baseline (for example merged_detail stays at `21320ff9`,
+   `dev/tool/merged_detail_checker_config.json:13`).
 2. **Format-induced info: accepted** (merged precedent, user decision). Exactly
    one: `info | curly_braces_in_flow_control_structures |
    _CatalogItemDetailScreenState._openMetadataRecommendation | Statements in an if
@@ -274,12 +287,17 @@ As in the merged plan, with these points:
    inert owners once per State and reads no widget, context, lazy field or service.
 6. **Verbatim comments.** The checker compares comments; never reword, move or drop
    one. The `_recommendations` doc (166–167), `_openMetadataRecommendation` and the
-   field keep their exact text and order in one owner; the four between-method
-   fields stay beside their neighbours; comment-only references (`[_QuickAction]`
+   field keep their exact text and order in one owner; the five between-method
+   fields (four locations, 400–401 holding two) stay beside their neighbours; comment-only references (`[_QuickAction]`
    2478, `_QuickAction's` 2518, `[_QuickActions]` 2981) stay verbatim.
 7. **Callback identity** (receiver path plus member, wrapper and same-class
-   receiver-swap negatives) for the four listener sites, the playback-return pair,
-   `this` for the route observer, and every tear-off and host callback in contract 3.
+   receiver-swap negatives) for the **six screen listener operation sites** (adds
+   237–239, removals 640–642: the tracking-source registration/removal of
+   `_onMovieProgressPolicyChanged` at 237/640 plus the **four completion-listener
+   sites** 238/239/641/642), the playback-return pair (241/644), `this` for the
+   route observer, and every tear-off and host callback in contract 3. The
+   mixin's own listeners (`metadata_presentation_mixin.dart:105–106, 281–282`)
+   are not moved and not counted here.
 8. **Shape:** 29 bare radii, 0 `app.shape.` tokens; the original is not listed.
    From step 1 register **the facade and every destination** in
    `kExtractedShapeResidue` (never `kShapeResidue`, whose swept test needs a token),
@@ -339,9 +357,14 @@ As in the merged plan, with these points:
    tear-off, original evaluation site), reviewed before any scaffold is pinned.
 4. **Checker:** `dev/tool/catalog_detail_manifest.tsv` (LF only; check the staged
    diff), `catalog_detail_checker_config.json`, `catalog_detail_checker_test.py`
-   with **real-config** fixtures. Negatives: wrapped or receiver-swapped tear-off at
-   each listener site, the playback-return pair and every contract-3 tear-off; each
-   removal deleted individually (three listeners, playback return, `unsubscribe`);
+   with **real-config** fixtures. Negatives, per site: at **each of the six screen
+   listener operation sites** a wrapped tear-off, a notifier (receiver) swap and a
+   callback swap (`_onMovieProgressPolicyChanged` ↔ `_loadLocalMovieFinished`; at
+   the four completion sites the notifier swap is the meaningful one since they
+   share a member); the same at the playback-return pair and for every contract-3
+   tear-off; each add deleted individually (three listeners, playback return) and
+   each removal deleted individually (three listeners including the tracking-source
+   removal at 640, playback return, `unsubscribe`);
    a route subscriber that isn't the State; a lost or reordered mixin; a `late`
    turned eager or moved; lifecycle reordered (first two and last two disposals
    swapped; `_revealCtrl.dispose()` after `super`); a post-frame loader reordered;
@@ -349,7 +372,24 @@ As in the merged plan, with these points:
    `_item`; `_boundKey` switched to `_item`; a dropped or reworded comment.
 5. **Harness** (`test/support/catalog_detail_fixture.dart`, after merged's): mock
    preferences, `ProfileRuntime` legacy init/reset, `SecretVault` and tracker scope
-   resets; `http.runWithClient` + `MockClient` (IMDb, parents guide, metadata);
+   resets; `http.runWithClient` + `MockClient` for the `package:http` top-level
+   calls (IMDb enrichment `imdb_enrichment_service.dart:277`, parents guide
+   `imdb_parents_guide_service.dart:64`). **Metadata HTTP:** `TmdbMetadataRepository`
+   builds `TmdbHttpClient` (an `IOClient`) directly
+   (`tmdb_metadata_repository.dart:33`), so `runWithClient` cannot intercept it, and
+   the unconfigured `TmdbMetadataRepository.instance` (empty
+   `TMDB_READ_ACCESS_TOKEN`) rejects requests before any transport. Add a
+   catalog-owned `test/support/catalog_detail_http_transport.dart`, equivalent to
+   merged's `test/support/merged_detail_http_transport.dart` (not imported or
+   edited), installed with `HttpOverrides.runZoned(createHttpClient:)` to route
+   `dart:io` requests into the fixture's recording `MockClient`. Construct the
+   adapter, and any client it caches (its inner `http.Client()`), **inside** the
+   `runWithClient` fixture zone so it resolves to the recording client. Cases that
+   need TMDB success (credits, TMDB recommendations) run in a **configured child
+   test**, as merged's `merged_detail_trailer_test.dart` does
+   (`flutter test --dart-define=TMDB_READ_ACCESS_TOKEN=<fixture>` on a
+   `dev/tool/catalog_detail_*_fixture.dart.txt` child); in-process cases assert the
+   unconfigured path (no TMDB request reaches the transport);
    `MaterialApp(navigatorObservers: [appRouteObserver], builder: AppThemeScope(theme:
    AppThemes.legacy, …))`; `MainPageBridge.notifyPlaybackReturned`; recording fakes
    for every host callback and loader; deterministic artwork (null URLs or a bundled
@@ -357,6 +397,13 @@ As in the merged plan, with these points:
    true`; phone/wide use bounded pumps (Ken Burns and `Shimmer` repeat: **no
    `pumpAndSettle`**). Schedule a frame after the post-frame loaders; teardown pumps
    ≥ 13 s for the resume timeout.
+   **Cache isolation:** `ImdbEnrichmentService` and `ImdbParentsGuideService` keep
+   process-wide static `_cache` maps keyed by IMDb id (no reset hook), and
+   `TmdbMetadataRepository.instance` keeps its own response cache. Each case uses a
+   distinct IMDb id / TMDB identity (fixture-allocated, never reused across cases in
+   one process) or runs in an isolated child process; no production reset seam is
+   added. Cases state whether they expect a **cached** answer (no request, immediate
+   republication) or an **uncached** one (a recorded request, optionally held).
 6. **Characterization through real entry points**, recorded against the ORIGINAL,
    under `test/features/catalog_detail/presentation/legacy_catalog_detail/`. **No
    production accessor:** observe rendered widgets, labels, focus, recording
@@ -364,15 +411,26 @@ As in the merged plan, with these points:
    the ORIGINAL; if a seam proves unavoidable, stop and ask). Re-read state after
    acting; exact call lists; sentinel callbacks.
 
+   **Evidence classes.** Without a seam the harness proves less than "every path
+   reloads once", so each case names which of three classes it relies on:
+   **(R) rendered** behaviour (labels, sections, accent, focus); **(O) observable
+   reads** (recording host loaders and `MockClient` requests, which do have counts;
+   storage and cached-service reads do not); **(S) checker/source-guard** evidence
+   for what neither shows (private counters such as `++_movieCompletionGeneration`,
+   early returns that read nothing, transient resets hidden by republication).
+   Behavioural negatives ("does not publish", "stale rejected") use **uncached,
+   held** responses released after the triggering change; a negative built on a
+   cached or immediately-completing read proves nothing and is not accepted.
+
    | Contract | Coverage |
    | --- | --- |
    | 1 Surface | Existing Home field-read tests; byte guard on lines 44–148 against the surface file. |
-   | 2 Lifecycle | Each of the five notifiers (three screen, two mixin) and the playback-return list fired before unmount reloads once, after unmount publishes nothing (distinguish "no read" from "no publication"); `didPopNext` via a pushed and popped route; playback return only when current (negative: a route on top); post-frame order through recording loaders (resume, Simkl, recommendations, enricher, loader art) with the rest pinned by an `initState` source guard; source guards on `initState`, `didChangeDependencies`, the 11-step `dispose`, both `late` declarations and the mixin clause. Detachment is checker-evidenced unless an existing probe proves it. |
+   | 2 Lifecycle | **Screen notifiers:** tracking-source revision on a movie whose stored completion was changed first → finished state and label flip (R; `_onMovieProgressPolicyChanged`'s `false` reset then reload); movie-finished and MDBList revisions likewise (R). `_loadLocalMovieFinished` returns without reading for series or a missing IMDb id, and `MovieCompletionService.load` exposes no count, so "reloads once" and the generation bump are (S); series/no-id cases assert only that nothing rendered changes (R). **Mixin notifiers** (`MetadataPreferencesService.revision`, `ProfileRuntime.scope`): with an **uncached, held** IMDb response, IMDb-derived rows disappear while held and return on release (R + O: one new request); recommendations reload through the recording loader (O, exact count); with a cached IMDb answer the transient `_imdbExtra = null` is republished at once, so that reset is (S). **Playback-return listener**, via `notifyPlaybackReturned` and separately via `notifyPlaybackDataChanged`: when current → one `resumeInfoLoader` call (O) and bound state re-read (R); with a route on top → zero loader calls (O); the data-changed case also asserts that an `addContentPlaybackStopListener` probe, armed by `notifyPlayerLaunching()`, is **not** called (only `notifyPlaybackReturned` signals stop). **`didPopNext`** via a pushed and popped route → one loader call (O); its lack of a `mounted`/`isCurrent` gate is (S). **After unmount:** firing each notifier and both bridge signals → zero recording-loader calls (O, "no read"); a held response released after unmount publishes nothing and throws nothing (R, "no publication"); completion-listener detachment is (S). Post-frame order through recording loaders (resume, Simkl, recommendations, enricher, loader art) (O), the rest pinned by an `initState` source guard (S); source guards on `initState`, `didChangeDependencies`, the 11-step `dispose`, both `late` declarations and the mixin clause. Detachment is checker-evidenced unless an existing probe proves it. |
    | 3, 8 Host callbacks, primary sources | Play → `onPlay` once; Rewatch → `onRewatch` and never `onPlay`; movie Sources/hold → `onBrowse`; series hold with packs off → episode sources; packs on → sheet → `searchPacks` or episode; Stremio TV shape (`enablePrimarySourcesHold: false`) does not hold-browse; quick-action rows dispatch the host's exact enum to each host callback; FAB receives the raw `onRecommendationTap`; rail taps map presented → original by identity; `onLoaderArt` emission points. |
-   | 4 Resume | Spinner while pending, each label in the matrix, failed loader, 12 s timeout (fake time, mounted outside `runAsync`), refresh after pop and playback return. |
+   | 4 Resume | Spinner while pending, each label in the matrix, failed loader, 12 s timeout (fake time, mounted outside `runAsync`), refresh after pop, playback return and playback data changed (R+O). |
    | 5 Rewatch | Confirm and cancel with call order (reset before `onRewatch`); busy re-entrancy; `Rewatch` → `Play` without `onRewatch`; the post-confirm failed reset leaves "Rewatch" (Found 2, characterized as-is). |
-   | 6 Metadata/profile | Profile scope and policy change reset and reload IMDb extra and recommendations only; a stale recommendation batch rejected by generation; enricher skipped when rich; parents guide not reloaded. |
-   | 7 Watchlist/sources | Toggle on/off with persisted row, rollback and error snackbar on a throwing store; bound state refreshed on pop and playback return keyed by `widget.item`. |
+   | 6 Metadata/profile | Profile scope and policy change reload IMDb extra and recommendations only (O: one new uncached IMDb request, one recording-loader call; zero parents-guide requests for a fresh id); the `_imdbExtra`/`_recommendations = []` reset is (R) only with held uncached responses, else (S); a stale recommendation batch and a stale IMDb answer, each **held and uncached** and released after a policy change, are not published (R); enricher skipped when rich (O). |
+   | 7 Watchlist/sources | Toggle on/off with persisted row, rollback and error snackbar on a throwing store (R + store re-read); bound state refreshed on pop, playback return and playback data changed, keyed by `widget.item` (R; store reads uncounted). |
    | 9 D-pad | TV autofocus Play versus Sources (`showQuickPlay: false`); UP scroll-to-top; hold-OK on Play; Read-more toggle by Select; quick-action focus traversal. Existing `catalog_detail_play_hold_test`. |
    | 10 Layouts | Narrow phone, wide desktop (≥ 900 landscape) and TV movie/series; tight height; reveal completes (opacity 1) before capture. |
 
@@ -382,6 +440,16 @@ As in the merged plan, with these points:
    scale 1.0, a named initial focus (or none) per golden, fixed metadata and
    artwork, bounded fixed-duration pumps covering the reveal (and a fixed Ken
    Burns phase), all loaders completed so no shimmer, **no wall-clock text**.
+   **Readiness:** `_Backdrop` uses `Image.network` with a 650 ms `AnimatedOpacity`
+   fade on non-TV (`wasSync` false). Establish the image decode first (inside
+   `tester.runAsync`, which does not advance the fake clock, then one frame), so the
+   fade starts at a known frame; then advance one **fixed** fake-clock capture
+   timeline whose total covers the reveal and the full 650 ms fade. The timeline is
+   identical in every run and every golden of a layout, so the 22 s Ken Burns
+   controller (started in `_BackdropState.initState`) is captured at the same phase;
+   decode waiting never adds fake-clock time. IMDb/parents-guide caches follow the
+   cache-isolation rule (each golden its own ids, or uncached responses completed
+   before the timeline starts).
    - **Mutation proofs:** every new case first passes in the detached ORIGINAL;
      `original-mutations.json` records named mutations of original code, each
      rejected by an assertion (not a compile error), covering every new identity.
@@ -431,7 +499,9 @@ As in the merged plan, with these points:
    `refactor-evidence/catalog_detail/`.
 10. **Step 0 checks:** every integrated manifest (vpl, settings, iptv, torbox,
     debrid, pikpak, playback_settings, iptv_settings, playlist_content,
-    merged_detail) plus this one with self-tests; architecture, sizes, storage,
+    merged_detail) with self-tests, each with **its own config and original
+    baseline** (unchanged; merged_detail at `21320ff9`), plus this one against the
+    catalog format commit; architecture, sizes, storage,
     shape, theme, light-ink, CI format, scoped analyzer with allowlist, strict
     comparison, staged diff. Commit the checkpoint with the exact subject above.
 
@@ -447,9 +517,12 @@ moved code. This is a blocking prerequisite for step 2.
 
 ### Per step and gates
 
-As in the merged plan, with `--baseline <format commit>` and `--relocate
-lib/screens/catalog_item_detail_screen.dart=lib/features/catalog_detail/`. Each
-step: per-entry wiring review before pinning; all manifests with self-tests
+As in the merged plan; the catalog checks (catalog manifest, format proof,
+catalog analyzer comparison) use `--baseline <catalog format commit>` and
+`--relocate lib/screens/catalog_item_detail_screen.dart=lib/features/catalog_detail/`.
+These apply **only** to the catalog checks: every other integrated manifest runs
+with its own config and original baseline, never the catalog SHA or relocation.
+Each step: per-entry wiring review before pinning; all manifests with self-tests
 (isolated parser); architecture, sizes, storage, shape (reconciles to 29), theme
 (238 sites), light-ink, CI format, scoped analyzer with allowlist, per-symbol
 strict comparison (zero additions), staged diff; all focused and characterization
@@ -521,7 +594,8 @@ All pre-existing; the extraction keeps each exactly.
 16. Five duplicated focus/hover boilerplates; the two quick-action rows duplicate
     each other deliberately.
 17. All user-facing strings are hardcoded English.
-18. Interleaved `_recommendations` doc; four fields declared between methods.
+18. Interleaved `_recommendations` doc; five fields declared between methods at
+    four locations (334, 400–401, 543, 661).
 19. The class doc (44–48) is stale.
 20. `_artworkAccent` is never recomputed after enrichment changes the poster.
 21. Only Home supplies `onRewatch`; elsewhere Rewatch shows as Play (by design).
