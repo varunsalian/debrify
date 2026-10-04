@@ -632,6 +632,113 @@ the behaviour suite compared against the latest recorded base.
   eventual semantic integration remain pending; no migration parity is
   claimed.
 
+
+### Step 0 — resumed; user-authorized analyzer baseline decision
+
+- The user explicitly accepts the four format-induced infos; the previous
+  stop remains historical evidence and is resolved. Do not add braces or
+  suppress these infos. Every subsequent analyzer comparison uses formatted
+  ORIGINAL `21320ff9264fb7b1072b7682665058982a763dec`, not the unformatted
+  execution base. Strict baseline is the formatted original under destination
+  lints (42 infos), combined by per-identity maximum with the unformatted
+  original only for identities present there. All other additions still fail.
+  Relocations must correspond by rule, original symbol and message.
+- Exact accepted identities, all severity `info`, all classified
+  **format-induced**, all in
+  `lib/screens/merged_series_detail_screen.dart`, all with rule
+  `curly_braces_in_flow_control_structures` and message
+  `Statements in an if should be enclosed in a block. Try wrapping the statement in a block`:
+  `_MergedDetailScreenState._openMetadataRecommendation`,
+  `_MergedDetailScreenState._showQuickActionsMenu`,
+  `_MergedDetailScreenState._showSimklQuickActionsMenu`, and
+  `_MergedDetailScreenState._showMdblistQuickActionsMenu`.
+  `merged_detail/format-induced-diagnostics.json` records each complete
+  rule/file/symbol/message identity and the authorization. No warning
+  allowlist entry is added; the CI warning checker already ignores infos.
+
+
+### Step 0 — characterization checkpoint preparation
+
+- Nothing has moved. The only production seam is the frozen, test-only
+  `mergedDetailTestAccess` accessor (29 lines); the facade is 5,659 lines.
+  Its original methods, fields, comments and public widget remain unchanged.
+- The dependency report and 235-leaf LF manifest inventory every original
+  responsibility and its live reads, receivers, evaluation sites and tear-offs.
+  The real-config checker covers 52 callback contracts at 56 sites, including
+  named arguments and interpolation. Each site independently rejects closure
+  wrapping and a same-class receiver swap. Individual listener removals,
+  route subscription, lifecycle order, lazy declarations, mixins, adjacent
+  rewatch/browse, panel arguments, launcher flag and comment negatives pass.
+- 106 characterization identities in 11 files first passed on formatted
+  ORIGINAL `21320ff9`, with only the frozen accessor, fixtures and tests
+  overlaid in the owned detached original-proof directory. Evidence is
+  `original-characterization-final4` (104 successes) and
+  `original-metadata-retention2` (22 successes; two additions, 20 overlaps).
+  `original-mutations.json` records 40 rejected production mutations covering
+  all 106 original-positive identities, with per-run trees, SDK, execution
+  base, source hashes and JSON outcomes. Production original files were
+  restored after each mutation. No regression was accepted with record/update.
+- Real-entry fixtures exercise all 11 styles, forced Classic and Xtream's
+  whole route/handoff, resume arbitration, lifecycle reads/publication,
+  callback order, watchlist persistence/rollback, source reloads, tracker
+  sheets, episode watched fan-out, retained metadata, D-pad and object identity.
+  Equal-but-distinct metadata keys distinguish `Map.identity()` from a normal
+  map. Configured trailer candidates/cancel and stale returns run in an
+  isolated real-TMDB-config child process with a mocked main-isolate transport.
+  Device-only promotion, stream isolation and trailer playback remain pending.
+- Five macOS pixel originals were initially captured on original code and
+  subsequently checked strictly, with bounded pumping and completed reveal
+  controllers. Linux capture uses the checkpoint-owned tests and resolves
+  the exact commit subject `test(merged): step 0 original-code characterization checkpoint`.
+  The script checks Flutter 3.44.8 on Linux, captures once, then verifies
+  strictly and writes hashes/revision evidence. Linux remains non-strict
+  through Step 5 and is a blocking prerequisite before Step 6.
+- `base2` preserved a 30-second Xtream large-dataset timeout while original
+  proof work competed for CPU. The identical source rerun `base2-repeat`,
+  without that load, has 10,577 successes / 13 failures / 28 errors / 20 skips
+  and exactly matches `base-fmt`; the failed run remains evidence. Whole
+  analyzer fixture declarations were corrected before freeze; no additional
+  fixture infos are accepted. The strict identity comparison records the
+  42-info formatted-original baseline, with a new-info negative rejected.
+- CI lists all 21 existing related paths plus 11 new paths. Only the three
+  newly exposed failure identities actually observed in `base` are added
+  under the dated Step 0 comment. Source-text consumers, shape (26 bare
+  radii, zero token calls), theme patterns, light-ink inventory, size ceiling,
+  architecture and final CI lists are inventoried for their prescribed steps.
+- Conservative move decisions: preserve private widget/State declarations
+  and expose exact public type aliases at cross-file boundaries. This avoids
+  adding constructor keys, changing runtime type names or introducing new
+  key-constructor diagnostics; lint and alias mutation probes are recorded.
+  `_CastTile` imports an image-cache service, so its whole class moves into
+  the bridge at Step 3. The mid-field recommendation method shares the
+  metadata-state owner; the interleaved bound-source field/method and model
+  factory share one owner, preserving original comment order and adjacency.
+  These ownership decisions are pinned in the manifest and dependency report.
+
+
+- **Step 0 local verification PASS:** all seven integrated manifests
+  (`vpl`, `settings`, `iptv`, `torbox`, `debrid`, `pikpak`, `merged_detail`)
+  with self-tests; architecture, sizes, storage keys/references (self-tests),
+  theme/light-ink inventory, full CI format scope plus facade/all new helpers,
+  and staged diff checks. Evidence is `step0-*-verbatim`, `step0-architecture`,
+  `step0-sizes`, `step0-storage-*`, `step0-theme`, `step0-light-ink`,
+  `step0-format`, and `step0-diff`. Shape and the unaffected profile/stale
+  runtime/theme source guards are also exercised by the full suite.
+- `base3` is PASS against `base2-repeat`: **10,683 successes / 13 failures /
+  28 errors / 20 skips**, exactly 106 added identities, all successful,
+  no missing tests, new failures, fixes or new skips. The staged source tree
+  was stable throughout; its env records the actual tested tree and SDK.
+  The checkpoint's subsequent changes are Progress documentation only.
+  This is the latest merged-detail base for Gate 1.
+- Whole analyzer `step0-analyze` has exactly the formatted original's 1,639
+  identities/multiplicities, with no additions or removals. Scoped analysis
+  and `step0-allowlist` pass with the existing warning entries only; no
+  merged-detail warning is added. `step0-strict-comparison.json` traces all
+  42 strict infos to their original symbols, with zero additions. A new
+  fixture-only curly info was corrected before freeze, retaining every
+  assertion; `original-metadata-frozen` re-proves its four cases on original
+  production code. The four accepted production infos remain unmodified.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
@@ -667,3 +774,11 @@ All pre-existing; the extraction keeps each exactly.
     and `_setEpisodeWatchedEverywhere` comments describe a conditional local
     write on watch that `WatchedActionCoordinator.setEpisodeWatched` doesn't
     make (it always writes local completion).
+
+21. A failed SharedPreferences watchlist write updates the in-memory plugin
+    cache before the backend rejects it. The original UI rolls back, while
+    that cache can retain a ghost row; rollback tests verify the actual store
+    backend and UI. Storage behavior remains untouched.
+22. `_CastTile` can overflow its 92-pixel rail by two pixels for a two-line
+    cast name (56-pixel image, 6-pixel gap, two text lines). Original fixtures
+    use short cast names; the 12-member cap is still asserted. No layout fix.

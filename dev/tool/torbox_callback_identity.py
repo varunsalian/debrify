@@ -7,31 +7,47 @@ opt-in through the TorBox config; other manifest configurations are unchanged.
 import re
 
 
-def arguments(values, method):
+def argument_ranges(values, method):
+    """Return exact token spans for each argument of each matching call."""
     found = []
     for i, value in enumerate(values[:-1]):
         if value != method or values[i + 1] != '(':
             continue
-        depth, current, args = 0, [], []
-        for token in values[i + 2:]:
+        depth, start, args = 0, i + 2, []
+        for j in range(i + 2, len(values)):
+            token = values[j]
             if token == ')' and depth == 0:
-                if current:
-                    args.append(current)
+                if j > start:
+                    args.append((start, j))
                 found.append(args)
                 break
             if token == ',' and depth == 0:
-                args.append(current)
-                current = []
+                args.append((start, j))
+                start = j + 1
                 continue
-            # '${' opens a string interpolation whose '}' is counted as a
-            # closer; without it the depth never returns to 0 and the call
-            # is silently dropped.
+            # Interpolation opens a brace pair within a string argument.
             if token in ('(', '[', '{', '${'):
                 depth += 1
             elif token in (')', ']', '}'):
                 depth -= 1
-            current.append(token)
     return found
+
+
+def arguments(values, method):
+    return [[values[start:end] for start, end in call]
+            for call in argument_ranges(values, method)]
+
+
+def argument_expression(call, selector):
+    """Select a positional argument or one exact named argument's expression."""
+    call = [[token for token in arg if not token.startswith(('//', '/*'))]
+            for arg in call]
+    if isinstance(selector, int):
+        return call[selector]
+    matches = [arg[2:] for arg in call if arg[:2] == [selector, ':']]
+    if len(matches) != 1:
+        raise ValueError(f'expected one named argument {selector}, got {len(matches)}')
+    return matches[0]
 
 
 def check_callback_identities(lookup, rows, source_path, config):
@@ -64,7 +80,7 @@ def check_callback_identities(lookup, rows, source_path, config):
         if '.' not in path:
             path = instances.get(owner, '$State') + '.' + path
         for alias in sorted(aliases, key=len, reverse=True):
-            if path.startswith(alias + '.'):
+            if path == alias or path.startswith(alias + '.'):
                 path = aliases[alias] + path[len(alias):]
                 break
         if path.startswith(('_owners.', '_sections.')):
@@ -80,7 +96,25 @@ def check_callback_identities(lookup, rows, source_path, config):
                 if len(calls) != site.get('count', 1):
                     raise ValueError(f"expected {site.get('count', 1)} {site['call']} calls, got {len(calls)}")
                 for call in ([calls[site['occurrence']]] if 'occurrence' in site else calls):
-                    resolved.append(identity(call[site['argument']], node['owner']))
+                    expr = argument_expression(call, site['argument'])
+                    if 'conditional_member' in site:
+                        # Check a direct branch tear-off in an otherwise
+                        # verbatim conditional argument. Its surrounding
+                        # conditions remain covered by the whole-leaf check.
+                        target = node_for(site['conditional_member'])['name']
+                        positions = [i for i, value in enumerate(expr) if value == target]
+                        occurrence = site.get('branch_occurrence', 0)
+                        if len(positions) != site.get('branch_count', 1):
+                            raise ValueError('conditional tear-off occurrence count changed: ' + target)
+                        end = positions[occurrence] + 1
+                        start = end - 1
+                        while start >= 2 and expr[start - 1] == '.':
+                            start -= 2
+                        if (expr[start - 1:start] not in (['?'], [':'])
+                                or expr[end:end + 1] not in ([], [':'], [')'])):
+                            raise ValueError('conditional branch must be a direct tear-off: ' + target)
+                        expr = expr[start:end]
+                    resolved.append(identity(expr, node['owner']))
             except (KeyError, ValueError, IndexError) as error:
                 errors.append(f"Callback identity {spec['name']}: {error}")
         if 'callback_member' in spec:

@@ -6,7 +6,7 @@
 6919 lib/services/profiles/profile_registry.dart
 6478 android/app/src/main/java/com/debrify/app/tv/TorboxTvPlayerActivity.java
 397 lib/screens/debrid_downloads_screen.dart
-5630 lib/screens/merged_series_detail_screen.dart
+5659 lib/screens/merged_series_detail_screen.dart
 5475 lib/services/remote_control/remote_command_router.dart
 4700 lib/services/webdav_sync/webdav_sync_engine.dart
 4685 lib/services/download_service.dart

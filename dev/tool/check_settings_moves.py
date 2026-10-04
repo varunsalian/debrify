@@ -206,6 +206,12 @@ def names(rows, owner=None):
                          if r['original_name'] == owner + '.' + old}
                 if len(local) == 1:
                     candidates[old] = local
+    # A frozen public type alias exposes a constructor while its original
+    # private widget declaration (including keyless constructor) stays exact.
+    for alias in CONFIG.get('type_aliases', []):
+        matching = [r for r in rows if r['original_name'] == alias['original_name']]
+        if len(matching) == 1:
+            candidates[alias['original_name']] = {alias['alias']}
     return {old: next(iter(news)) for old, news in candidates.items()
             if len(news) == 1 and old != next(iter(news))}
 
@@ -738,6 +744,25 @@ def check_scaffolds(lookup, scaffolds):
     return errors
 
 
+def check_type_aliases(lookup, rows, config):
+    """Accept only one exact typedef to its manifest-owned private class."""
+    errors = []
+    for alias in config.get('type_aliases', []):
+        matching = [r for r in rows if r['original_name'] == alias['original_name']]
+        if (len(matching) != 1 or matching[0]['destination_class']
+                or matching[0]['new_name'] != alias['original_name']
+                or not alias['original_name'].startswith('_')
+                or alias['alias'].startswith('_')):
+            errors.append('Invalid private widget alias registration: ' + str(alias))
+            continue
+        row = matching[0]
+        node = lookup.get((row['destination_file'], '', alias['alias']))
+        expected = ['typedef', alias['alias'], '=', alias['original_name'], ';']
+        if node is None or tokens(node) != expected:
+            errors.append('Private widget constructor alias changed: ' + str(alias))
+    return errors
+
+
 def check_plain_sections(lookup):
     """Pin named sections to plain classes, with no widget inheritance/mixins."""
     errors = []
@@ -850,6 +875,7 @@ def _check(original_source, sources, rows, source_path, package=None,
         return ['Settings manifest coverage differs: ' + str(sorted(set(original) ^ known))]
     lookup = all_nodes(parsed)
     errors.extend(check_plain_sections(lookup))
+    errors.extend(check_type_aliases(lookup, rows, CONFIG))
     from torbox_callback_identity import check_callback_identities
     errors.extend(check_callback_identities(lookup, rows, source_path, CONFIG))
     partitions = sidecar('partitions', 'partitions', {})

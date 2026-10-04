@@ -1,0 +1,741 @@
+[
+  {
+    "label": "complete-source-guards",
+    "tests": [
+      "merged_detail_source_contract_test"
+    ],
+    "must_fail": [
+      "merged_detail_source_contract_test.dart::"
+    ],
+    "edits": [],
+    "source_guards": true
+  },
+  {
+    "label": "single-launch-guard",
+    "tests": [
+      "merged_detail_playback_test"
+    ],
+    "must_fail": [
+      "held primary"
+    ],
+    "edits": [
+      {
+        "member": "_guardPlay",
+        "before": "if (_playLaunching || !mounted) return;",
+        "after": "if (!mounted) return;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "xtream-style",
+    "tests": [
+      "merged_detail_playback_test"
+    ],
+    "must_fail": [
+      "Xtream injected"
+    ],
+    "edits": [
+      {
+        "member": "_style",
+        "before": "? 'classic'",
+        "after": "? 'console'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "episode-promise",
+    "tests": [
+      "merged_detail_resume_test",
+      "merged_detail_playback_test",
+      "merged_detail_actions_test"
+    ],
+    "must_fail": [
+      "in-flight engine",
+      "mutation writes through",
+      "Xtream injected",
+      "packs disabled",
+      "chooser routes Episode"
+    ],
+    "edits": [
+      {
+        "member": "_primaryEpisodePromise",
+        "before": "season: season, episode: episode",
+        "after": "season: episode, episode: season",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "stash-settlement",
+    "tests": [
+      "merged_detail_resume_test"
+    ],
+    "must_fail": [
+      "in-flight engine",
+      "failed loader",
+      "12-second timeout"
+    ],
+    "edits": [
+      {
+        "member": "_onNextEpisodeChanged",
+        "before": "_pendingEngineTarget = next;",
+        "after": "_pendingEngineTarget = null;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "loader-precedence",
+    "tests": [
+      "merged_detail_resume_test"
+    ],
+    "must_fail": [
+      "started loader discards"
+    ],
+    "edits": [
+      {
+        "member": "_onNextEpisodeChanged",
+        "before": "widget.resumeInfoLoader != null",
+        "after": "widget.resumeInfoLoader == null",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "mutation-write-through",
+    "tests": [
+      "merged_detail_resume_test"
+    ],
+    "must_fail": [
+      "mutation writes through"
+    ],
+    "edits": [
+      {
+        "member": "_onNextEpisodeChanged",
+        "before": "&& !mutation)",
+        "after": ")",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "timeout-duration",
+    "tests": [
+      "merged_detail_resume_test"
+    ],
+    "must_fail": [
+      "12-second timeout"
+    ],
+    "edits": [
+      {
+        "member": "_loadResumeInfo",
+        "before": "Duration(seconds: 12)",
+        "after": "Duration(seconds: 24)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "unstarted-label",
+    "tests": [
+      "merged_detail_resume_test"
+    ],
+    "must_fail": [
+      "unstarted coordinate",
+      "started engine upgrades"
+    ],
+    "edits": [
+      {
+        "member": "_resolvedPrimaryLabel",
+        "before": "'Start Watching'",
+        "after": "'Play'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "movie-null-promise",
+    "tests": [
+      "merged_detail_resume_test",
+      "merged_detail_playback_test"
+    ],
+    "must_fail": [
+      "movie ignores"
+    ],
+    "edits": [
+      {
+        "member": "_playPrimary",
+        "before": "widget.onResume(promised)",
+        "after": "widget.onResume(promised ?? (started: true, season: 3, episode: 4))",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "quick-and-direct-dispatch",
+    "tests": [
+      "merged_detail_playback_test"
+    ],
+    "must_fail": [
+      "quick episode",
+      "Xtream injected"
+    ],
+    "edits": [
+      {
+        "member": "_quickPlayEpisode",
+        "before": "unawaited(_guardPlay(() => play(selection)));",
+        "after": "return;",
+        "count": 1
+      },
+      {
+        "member": "_playDirectEpisode",
+        "before": "unawaited(_guardPlay(() => play(episode)));",
+        "after": "return;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "movie-browse",
+    "tests": [
+      "merged_detail_playback_test"
+    ],
+    "must_fail": [
+      "movie browse"
+    ],
+    "edits": [
+      {
+        "member": "_browsePrimarySourcesAsync",
+        "before": "widget.onBrowse?.call();",
+        "after": "return;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "route-pop-before-selection",
+    "tests": [
+      "merged_detail_playback_test"
+    ],
+    "must_fail": [
+      "selection pops two"
+    ],
+    "edits": [
+      {
+        "member": "_popToHost",
+        "before": "Navigator.of(",
+        "after": "if (false) Navigator.of(",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "refresh-reload-order",
+    "tests": [
+      "merged_detail_lifecycle_test",
+      "merged_detail_actions_test",
+      "merged_detail_tracker_test"
+    ],
+    "must_fail": [
+      "opening and playback",
+      "covered route",
+      "clear-progress action"
+    ],
+    "edits": [
+      {
+        "member": "_refreshAfterPlayback",
+        "before": "_loadTraktStatus();\n    _loadSimklStatus();",
+        "after": "_loadSimklStatus();\n    _loadTraktStatus();",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "covered-route-current",
+    "tests": [
+      "merged_detail_lifecycle_test"
+    ],
+    "must_fail": [
+      "covered route"
+    ],
+    "edits": [
+      {
+        "member": "_onPlaybackReturned",
+        "before": "if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;",
+        "after": "if (false) return;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "registration-tracking-source",
+    "tests": [
+      "merged_detail_lifecycle_test"
+    ],
+    "must_fail": [
+      "tracking source mutation"
+    ],
+    "edits": [
+      {
+        "member": "initState",
+        "before": "TrackingSourceStorage.trackingSourceRevision.addListener(\n      _onMovieProgressPolicyChanged,\n    );",
+        "after": "",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "registration-movie-finished",
+    "tests": [
+      "merged_detail_lifecycle_test"
+    ],
+    "must_fail": [
+      "movie finished mutation"
+    ],
+    "edits": [
+      {
+        "member": "initState",
+        "before": "MovieProgressStorage.movieFinishedRevision.addListener(\n      _loadLocalMovieFinished,\n    );",
+        "after": "",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "registration-mdblist-watched",
+    "tests": [
+      "merged_detail_lifecycle_test"
+    ],
+    "must_fail": [
+      "MDBList watched mutation"
+    ],
+    "edits": [
+      {
+        "member": "initState",
+        "before": "MdblistService.instance.watchedRevision.addListener(\n      _loadLocalMovieFinished,\n    );",
+        "after": "",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "metadata-reset",
+    "tests": [
+      "merged_detail_lifecycle_test",
+      "merged_detail_metadata_test"
+    ],
+    "must_fail": [
+      "metadata preference",
+      "profile scope"
+    ],
+    "edits": [
+      {
+        "member": "onMetadataPolicyChanged",
+        "before": "_detailsMetadataGeneration++;",
+        "after": "_detailsMetadataGeneration += 0;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "watchlist-persist-and-rollback",
+    "tests": [
+      "merged_detail_actions_test"
+    ],
+    "must_fail": [
+      "watchlist toggles"
+    ],
+    "edits": [
+      {
+        "member": "_toggleMyWatchlist",
+        "before": "final next = !_inMyWatchlist;",
+        "after": "final next = _inMyWatchlist;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "rewatch-confirmation",
+    "tests": [
+      "merged_detail_actions_test"
+    ],
+    "must_fail": [
+      "rewatch confirm",
+      "rewatch cancel"
+    ],
+    "edits": [
+      {
+        "member": "_rewatchTitle",
+        "before": "final cleared = await resetProgressForRewatch(",
+        "after": "await restart();\n    final cleared = await resetProgressForRewatch(",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "packs-choices",
+    "tests": [
+      "merged_detail_actions_test"
+    ],
+    "must_fail": [
+      "chooser routes Season",
+      "chooser routes Episode"
+    ],
+    "edits": [
+      {
+        "member": "_browsePrimarySourcesAsync",
+        "before": "TraktItemMenuAction.searchPacks",
+        "after": "TraktItemMenuAction.rate",
+        "count": 2
+      },
+      {
+        "member": "_browsePrimarySourcesAsync",
+        "before": "await openEpisode(_primaryEpisodePromise);",
+        "after": "await openEpisode(null);",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "label": "tracker-sheets",
+    "tests": [
+      "merged_detail_tracker_test"
+    ],
+    "must_fail": [
+      "clear-progress action",
+      "rating without",
+      "active status",
+      "paused-session"
+    ],
+    "edits": [
+      {
+        "member": "_showAppActionsMenu",
+        "before": "showModalBottomSheet<void>(",
+        "after": "if (false) showModalBottomSheet<void>(",
+        "count": 1
+      },
+      {
+        "member": "_showQuickActionsMenu",
+        "before": "showModalBottomSheet<void>(",
+        "after": "if (false) showModalBottomSheet<void>(",
+        "count": 1
+      },
+      {
+        "member": "_showSimklQuickActionsMenu",
+        "before": "showModalBottomSheet<void>(",
+        "after": "if (false) showModalBottomSheet<void>(",
+        "count": 1
+      },
+      {
+        "member": "_showMdblistQuickActionsMenu",
+        "before": "showModalBottomSheet<void>(",
+        "after": "if (false) showModalBottomSheet<void>(",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "tracker-pill-labels",
+    "tests": [
+      "merged_detail_tracker_test"
+    ],
+    "must_fail": [
+      "pills distinguish"
+    ],
+    "edits": [
+      {
+        "member": "_traktPillLabel",
+        "before": "'Checking\u2026'",
+        "after": "'Not tracked'",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "pane-and-action-keys",
+    "tests": [
+      "merged_detail_focus_test"
+    ],
+    "must_fail": [
+      "two-pane keys",
+      "action row LEFT"
+    ],
+    "edits": [
+      {
+        "member": "_handleInfoPaneKey",
+        "before": "final key = event.logicalKey;",
+        "after": "return KeyEventResult.ignored;\n    final key = event.logicalKey;",
+        "count": 1
+      },
+      {
+        "member": "_handleEpisodesPaneKey",
+        "before": "final key = event.logicalKey;",
+        "after": "return KeyEventResult.ignored;\n    final key = event.logicalKey;",
+        "count": 1
+      },
+      {
+        "member": "_handleActionRowKey",
+        "before": "final key = event.logicalKey;",
+        "after": "return KeyEventResult.ignored;\n    final key = event.logicalKey;",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "rail-cap-and-edges",
+    "tests": [
+      "merged_detail_focus_test"
+    ],
+    "must_fail": [
+      "recommendation rail caps"
+    ],
+    "edits": [
+      {
+        "member": "_sideRailSections",
+        "before": "take(10)",
+        "after": "take(11)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "panel-left-edge",
+    "tests": [
+      "merged_detail_focus_test"
+    ],
+    "must_fail": [
+      "panel left-edge"
+    ],
+    "edits": [
+      {
+        "member": "_buildEpisodesPanel",
+        "before": "(widget.showQuickPlay || widget.onSelectSource != null)",
+        "after": "(false)",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "style-dispatch",
+    "tests": [
+      "merged_detail_views_test"
+    ],
+    "must_fail": [
+      "production style branch"
+    ],
+    "edits": [
+      {
+        "member": "_buildBody",
+        "before": "switch (_style) {",
+        "after": "return const SizedBox.shrink();\n    switch (_style) {",
+        "count": 1
+      }
+    ],
+    "plain_name": "production style branch"
+  },
+  {
+    "label": "golden-pixels",
+    "tests": [
+      "merged_detail_views_test"
+    ],
+    "must_fail": [
+      "reachable pixel golden"
+    ],
+    "edits": [
+      {
+        "member": "_bg",
+        "before": "0xFF0B0B0E",
+        "after": "0xFF431145",
+        "count": 1
+      }
+    ],
+    "plain_name": "reachable pixel golden"
+  },
+  {
+    "label": "identity-map",
+    "tests": [
+      "merged_detail_views_test"
+    ],
+    "must_fail": [
+      "resource and identity"
+    ],
+    "edits": [
+      {
+        "member": "_recommendationOriginals",
+        "before": "Map<StremioMeta, StremioMeta>.identity()",
+        "after": "<StremioMeta, StremioMeta>{}",
+        "count": 1
+      }
+    ],
+    "plain_name": "resource and identity"
+  },
+  {
+    "label": "watched-target-fanout",
+    "tests": [
+      "merged_detail_episode_watched_test"
+    ],
+    "must_fail": [
+      "hosted episode watch"
+    ],
+    "edits": [
+      {
+        "file": "lib/services/watched_action_coordinator.dart",
+        "before": "if (_writes(policy, forceTargets, TrackingSource.simkl) &&\n        await SimklService.instance.isAuthenticated())",
+        "after": "if (false && _writes(policy, forceTargets, TrackingSource.simkl) &&\n        await SimklService.instance.isAuthenticated())"
+      }
+    ]
+  },
+  {
+    "label": "trailer-candidate-generation",
+    "tests": [
+      "merged_detail_trailer_test"
+    ],
+    "must_fail": [
+      "two-candidate trailer"
+    ],
+    "edits": [
+      {
+        "member": "_loadTrailer",
+        "before": "_trailerCandidates = candidates;",
+        "after": "_trailerCandidates = [];",
+        "count": 1
+      },
+      {
+        "member": "_loadTrailer",
+        "before": "generation == _trailerGeneration",
+        "after": "true",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "label": "watchlist-rollback",
+    "tests": [
+      "merged_detail_actions_test"
+    ],
+    "must_fail": [
+      "throwing watchlist"
+    ],
+    "edits": [
+      {
+        "member": "_toggleMyWatchlist",
+        "before": "setState(() => _inMyWatchlist = !next);",
+        "after": "setState(() => _inMyWatchlist = next);"
+      }
+    ]
+  },
+  {
+    "label": "trailer-stale-return",
+    "tests": [
+      "merged_detail_trailer_test"
+    ],
+    "must_fail": [
+      "stale trailer-candidate"
+    ],
+    "edits": [
+      {
+        "member": "_loadTrailer",
+        "before": "generation == _trailerGeneration &&\n        scope == ProfileRuntime.scope.value &&\n        policyRevision == MetadataPreferencesService.revision.value",
+        "after": "true"
+      }
+    ]
+  },
+  {
+    "label": "recommendation-stale-batch",
+    "tests": [
+      "merged_detail_metadata_test"
+    ],
+    "must_fail": [
+      "change rejects stale"
+    ],
+    "edits": [
+      {
+        "member": "_loadRecommendations",
+        "before": "mounted &&\n        generation == _detailsMetadataGeneration &&\n        scope == ProfileRuntime.scope.value &&\n        revision == MetadataPreferencesService.revision.value",
+        "after": "mounted"
+      }
+    ]
+  },
+  {
+    "label": "recommendation-positional-identity",
+    "tests": [
+      "merged_detail_metadata_test"
+    ],
+    "must_fail": [
+      "change rejects stale"
+    ],
+    "edits": [
+      {
+        "member": "_loadRecommendations",
+        "before": "_recommendationOriginals[batch[index]] = recs[index];",
+        "after": "_recommendationOriginals[batch[index]] = recs[0];"
+      }
+    ]
+  },
+  {
+    "label": "no-restart-label",
+    "tests": [
+      "merged_detail_actions_test"
+    ],
+    "must_fail": [
+      "without restart capability"
+    ],
+    "edits": [
+      {
+        "member": "_primaryLabel",
+        "before": "widget.onRewatch == null && _resolvedPrimaryLabel == 'Rewatch'",
+        "after": "false && _resolvedPrimaryLabel == 'Rewatch'"
+      }
+    ]
+  },
+  {
+    "label": "metadata-retained-parents",
+    "tests": [
+      "merged_detail_metadata_test"
+    ],
+    "must_fail": [
+      "refresh retains parents"
+    ],
+    "edits": [
+      {
+        "member": "onMetadataPolicyChanged",
+        "before": "_imdbExtra = null;",
+        "after": "_imdbExtra = null;\n      _parentsGuide = null;"
+      }
+    ]
+  },
+  {
+    "label": "cast-cap",
+    "tests": [
+      "merged_detail_metadata_test"
+    ],
+    "must_fail": [
+      "refresh retains parents"
+    ],
+    "edits": [
+      {
+        "member": "_sideRailSections",
+        "before": ".take(12)",
+        "after": ".take(13)"
+      }
+    ]
+  },
+  {
+    "label": "bound-source-loading",
+    "tests": [
+      "merged_detail_actions_test"
+    ],
+    "must_fail": [
+      "bound sources reload"
+    ],
+    "edits": [
+      {
+        "member": "_loadBoundSources",
+        "before": "_boundSources = list",
+        "after": "_boundSources = []"
+      }
+    ]
+  }
+]

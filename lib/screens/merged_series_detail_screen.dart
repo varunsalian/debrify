@@ -5628,3 +5628,32 @@ class _AmbientStill extends StatelessWidget {
     );
   }
 }
+
+/// Frozen original-code characterization seam; callbacks remain direct tear-offs.
+@visibleForTesting
+Map<String, Object?> mergedDetailTestAccess(State<MergedDetailScreen> state) {
+  final s = state as _MergedDetailScreenState;
+  return {
+    'model': s._buildDetailModel,
+    'nextEpisode': s._onNextEpisodeChanged,
+    'loadResume': s._loadResumeInfo,
+    'rewatch': s._rewatchTitle,
+    'refresh': s._refreshAfterPlayback,
+    'loadBoundSources': s._loadBoundSources,
+    'loadTrailer': s._loadTrailer,
+    'recommendations': s._recommendations,
+    'recommendationOriginals': s._recommendationOriginals,
+    'backdropKey': s._backdropKey,
+    'episodesPanelKey': s._episodesPanelKey,
+    'infoScroll': s._infoScroll,
+    'castRailScroll': s._castRailScroll,
+    'recommendationRailScroll': s._recommendationRailScroll,
+    'leftEntry': s._leftEntryFocusNode,
+    'infoPane': s._infoPaneScope,
+    'episodesPane': s._episodesPaneScope,
+    'backButton': s._backButtonFocusNode,
+    'movieGeneration': s._movieCompletionGeneration,
+    'trailerGeneration': s._trailerGeneration,
+    'metadataGeneration': s._detailsMetadataGeneration,
+  };
+}
