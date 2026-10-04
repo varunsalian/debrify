@@ -286,6 +286,13 @@
         ")",
         "=>",
         "_custom",
+        ",",
+        "currentSeasonIndex",
+        ":",
+        "(",
+        ")",
+        "=>",
+        "_currentSeasonIndex",
         ")",
         ";",
         "final",
@@ -419,6 +426,21 @@
         "_parts",
         ".",
         "services",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/widgets/episodes_panel.dart",
+      "owner": "EpisodesPanelState",
+      "name": "_n",
+      "tokens": [
+        "EpisodesPanelNavigation",
+        "get",
+        "_n",
+        "=>",
+        "_parts",
+        ".",
+        "navigation",
         ";"
       ]
     },
@@ -858,6 +880,14 @@
         ")",
         "custom",
         ";",
+        "// TEMP(episodes_panel): compact getter stays in the facade until step 6.",
+        "final",
+        "int",
+        "Function",
+        "(",
+        ")",
+        "currentSeasonIndex",
+        ";",
         "EpisodesPanelDeps",
         "(",
         "{",
@@ -1000,6 +1030,11 @@
         "this",
         ".",
         "custom",
+        ",",
+        "required",
+        "this",
+        ".",
+        "currentSeasonIndex",
         "}",
         ")",
         ";",
@@ -1096,6 +1131,82 @@
         "mounted",
         "(",
         ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_episode_options.dart",
+      "owner": "EpisodesPanelEpisodeOptions",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "EpisodesPanelDeps",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_episode_options.dart",
+      "owner": "EpisodesPanelEpisodeOptions",
+      "name": "EpisodesPanelEpisodeOptions",
+      "tokens": [
+        "EpisodesPanelEpisodeOptions",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_episode_options.dart",
+      "owner": "EpisodesPanelEpisodeOptions",
+      "name": "_p",
+      "tokens": [
+        "EpisodesPanelProgress",
+        "get",
+        "_p",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "progress",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_episode_options.dart",
+      "owner": "EpisodesPanelEpisodeOptions",
+      "name": "_a",
+      "tokens": [
+        "EpisodesPanelAuth",
+        "get",
+        "_a",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "auth",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_episode_options.dart",
+      "owner": "EpisodesPanelEpisodeOptions",
+      "name": "_n",
+      "tokens": [
+        "EpisodesPanelNavigation",
+        "get",
+        "_n",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "navigation",
         ";"
       ]
     },
@@ -1303,6 +1414,99 @@
       ]
     },
     {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_navigation.dart",
+      "owner": "EpisodesPanelNavigation",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "EpisodesPanelDeps",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_navigation.dart",
+      "owner": "EpisodesPanelNavigation",
+      "name": "EpisodesPanelNavigation",
+      "tokens": [
+        "EpisodesPanelNavigation",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_navigation.dart",
+      "owner": "EpisodesPanelNavigation",
+      "name": "_s",
+      "tokens": [
+        "EpisodesPanelViewState",
+        "get",
+        "_s",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "viewState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_navigation.dart",
+      "owner": "EpisodesPanelNavigation",
+      "name": "_p",
+      "tokens": [
+        "EpisodesPanelProgress",
+        "get",
+        "_p",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "progress",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_navigation.dart",
+      "owner": "EpisodesPanelNavigation",
+      "name": "_r",
+      "tokens": [
+        "EpisodesPanelResources",
+        "get",
+        "_r",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "resources",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_navigation.dart",
+      "owner": "EpisodesPanelNavigation",
+      "name": "mounted",
+      "tokens": [
+        "bool",
+        "get",
+        "mounted",
+        "=>",
+        "_deps",
+        ".",
+        "mounted",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
       "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_parts.dart",
       "owner": "",
       "name": "EpisodesPanelParts",
@@ -1319,6 +1523,10 @@
         "enrichment",
         ";",
         "final",
+        "EpisodesPanelEpisodeOptions",
+        "episodeOptions",
+        ";",
+        "final",
         "EpisodesPanelMetadata",
         "metadata",
         ";",
@@ -1327,12 +1535,20 @@
         "mode",
         ";",
         "final",
+        "EpisodesPanelNavigation",
+        "navigation",
+        ";",
+        "final",
         "EpisodesPanelProgress",
         "progress",
         ";",
         "final",
         "EpisodesPanelResources",
         "resources",
+        ";",
+        "final",
+        "EpisodesPanelSeasonOptions",
+        "seasonOptions",
         ";",
         "final",
         "EpisodesPanelSeasons",
@@ -1390,6 +1606,13 @@
         "deps",
         ")",
         ",",
+        "episodeOptions",
+        "=",
+        "EpisodesPanelEpisodeOptions",
+        "(",
+        "deps",
+        ")",
+        ",",
         "metadata",
         "=",
         "EpisodesPanelMetadata",
@@ -1400,6 +1623,20 @@
         "mode",
         "=",
         "EpisodesPanelMode",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "navigation",
+        "=",
+        "EpisodesPanelNavigation",
+        "(",
+        "deps",
+        ")",
+        ",",
+        "seasonOptions",
+        "=",
+        "EpisodesPanelSeasonOptions",
         "(",
         "deps",
         ")",
@@ -1500,6 +1737,99 @@
     {
       "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart",
       "owner": "EpisodesPanelProgress",
+      "name": "mounted",
+      "tokens": [
+        "bool",
+        "get",
+        "mounted",
+        "=>",
+        "_deps",
+        ".",
+        "mounted",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_season_options.dart",
+      "owner": "EpisodesPanelSeasonOptions",
+      "name": "_deps",
+      "tokens": [
+        "final",
+        "EpisodesPanelDeps",
+        "_deps",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_season_options.dart",
+      "owner": "EpisodesPanelSeasonOptions",
+      "name": "EpisodesPanelSeasonOptions",
+      "tokens": [
+        "EpisodesPanelSeasonOptions",
+        "(",
+        "this",
+        ".",
+        "_deps",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_season_options.dart",
+      "owner": "EpisodesPanelSeasonOptions",
+      "name": "_s",
+      "tokens": [
+        "EpisodesPanelViewState",
+        "get",
+        "_s",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "viewState",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_season_options.dart",
+      "owner": "EpisodesPanelSeasonOptions",
+      "name": "_a",
+      "tokens": [
+        "EpisodesPanelAuth",
+        "get",
+        "_a",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "auth",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_season_options.dart",
+      "owner": "EpisodesPanelSeasonOptions",
+      "name": "_sv",
+      "tokens": [
+        "EpisodesPanelServices",
+        "get",
+        "_sv",
+        "=>",
+        "_deps",
+        ".",
+        "parts",
+        ".",
+        "services",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_season_options.dart",
+      "owner": "EpisodesPanelSeasonOptions",
       "name": "mounted",
       "tokens": [
         "bool",

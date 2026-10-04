@@ -230,15 +230,21 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_enrichment.dart':
       0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_episode_options.dart':
+      0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_metadata.dart':
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_mode.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_navigation.dart':
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_parts.dart':
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart':
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_resources.dart':
+      0,
+  'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_season_options.dart':
       0,
   'lib/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_seasons.dart':
       0,

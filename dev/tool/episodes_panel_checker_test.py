@@ -95,7 +95,7 @@ def self_test(package=None):
             assert checked(changed), 'Accepted changed constructor export target'
             print('Episodes exact constructor export target:', name, 'rejected')
     if config['completed_step'] >= 3:
-        for name, part in [('_s', 'viewState'), ('_r', 'resources')]:
+        for name, part in [('_s', 'viewState'), ('_r', 'resources')] + ([('_n', 'navigation')] if config['completed_step'] >= 5 else []):
             key = (source, 'EpisodesPanelState', name)
             node = lookup[key]
             changed = dict(sources)
@@ -129,11 +129,13 @@ def self_test(package=None):
         expired['completed_step'] = 6
         failures = check(original, sources, rows, source, package, context_guard=True, config=expired)
         assert any('Live getter alias must name one retained facade getter' in error for error in failures)
-        missing = dict(sources)
-        key, node = located('EpisodesPanelState._custom')
-        missing[key[0]] = sources[key[0]][:node['start']] + sources[key[0]][node['end']:]
-        assert any('Live getter alias must name one retained facade getter' in error for error in checked(missing))
-        print('Episodes staged live getter expired step and missing original facade getter: rejected')
+        for alias, retained in config['live_getter_aliases'].items():
+            missing = dict(sources)
+            key, node = located(retained)
+            missing[key[0]] = sources[key[0]][:node['start']] + sources[key[0]][node['end']:]
+            assert any('Live getter alias must name one retained facade getter: ' + alias in error for error in checked(missing))
+            print('Episodes staged live getter missing original facade getter:', alias, 'rejected')
+        print('Episodes staged live getter expired step: rejected')
     # The actual config's factory is exercised even before composition lands.
     from check_settings_moves import check_live_widget_factory
     fixture_config = {**config, 'completed_step': 3}

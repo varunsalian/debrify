@@ -150,7 +150,11 @@ String episodesOriginalNames(String member, {String? owner}) {
       }
     }
     for (final getter in config['live_getter_callbacks'] as List<dynamic>) {
-      code = code.replaceAll('_deps.$getter()', '$getter');
+      final aliases =
+          config['live_getter_aliases'] as Map<String, dynamic>? ?? const {};
+      final original =
+          (aliases[getter] as String?)?.split('.').last ?? '$getter';
+      code = code.replaceAll('_deps.$getter()', original);
     }
     for (final getter in config['live_widget_getters'] as List<dynamic>) {
       code = code.replaceAll('_deps.$getter()', 'widget.$getter');

@@ -1,35 +1,27 @@
 import 'dart:async';
-import 'package:debrify/features/episodes_panel/application/episodes_panel_policies.dart';
 import 'package:debrify/features/episodes_panel/models/episodes_panel_view.dart';
 import 'package:debrify/features/episodes_panel/presentation/episodes_panel_season_step.dart';
 import 'package:debrify/features/episodes_panel/presentation/episodes_panel_source_button.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_auth.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_compact_row.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_deps.dart';
+import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_navigation.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_parts.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_progress.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_resources.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_services.dart';
 import 'package:debrify/features/episodes_panel/presentation/legacy_episodes_panel/episodes_panel_view_state.dart';
 import 'package:debrify/models/advanced_search_selection.dart';
-import 'package:debrify/models/custom_series_identity.dart';
-import 'package:debrify/models/media_identity.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
-import 'package:debrify/services/mdblist/mdblist_menu_helpers.dart';
 import 'package:debrify/services/metadata_preferences_service.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
-import 'package:debrify/services/season_watched_service.dart';
-import 'package:debrify/services/stremio_service.dart';
-import 'package:debrify/services/tracking_source_policy.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
-import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/utils/episode_progress_merge.dart';
 import 'package:debrify/utils/tv_keys.dart';
 import 'package:debrify/widgets/detail/theme/detail_theme.dart';
 import 'package:debrify/widgets/episode_tile.dart';
 import 'package:debrify/widgets/season_action_region.dart';
-import 'package:debrify/widgets/trakt/trakt_menu_helpers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -209,6 +201,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       onSeriesCompletedChanged: () => widget.onSeriesCompletedChanged,
       contentBuilder: () => widget.contentBuilder,
       custom: () => _custom,
+      currentSeasonIndex: () => _currentSeasonIndex,
     );
     final progress = EpisodesPanelProgress(_deps);
     final auth = EpisodesPanelAuth(_deps);
@@ -229,6 +222,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   EpisodesPanelAuth get _a => _parts.auth;
   EpisodesPanelResources get _r => _parts.resources;
   EpisodesPanelServices get _sv => _parts.services;
+  EpisodesPanelNavigation get _n => _parts.navigation;
 
   /// True when a custom arrangement is driving. Gates every engine side effect
   /// that targets a widget only the classic tree contains.
@@ -289,159 +283,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final show = _s.selectedShow;
     if (show == null) return;
     await _p.loadEpisodeWatchProgress(show, _s.episodeModeGeneration);
-  }
-
-  // ── Episode drill-down ──────────────────────────────────────────────────
-  /// Fallback: dispatch series directly to torrent search (bypasses episode mode).
-  void _fallbackToDirectSearch(StremioMeta show) {
-    if (!mounted) return;
-    widget.onBeforeTerminalDispatch?.call();
-    final selection = AdvancedSearchSelection(
-      imdbId: show.progressId ?? show.id,
-      isSeries: true,
-      title: show.name,
-      year: show.year,
-      contentType: show.type,
-      posterUrl: show.poster,
-    );
-    widget.onItemSelected?.call(selection);
-  }
-
-  void _onSeasonChanged(int? seasonNumber) {
-    if (seasonNumber == null || seasonNumber == _s.selectedSeasonNumber) return;
-
-    for (final node in _r.episodeFocusNodes) {
-      node.dispose();
-    }
-    _r.episodeFocusNodes.clear();
-
-    final season = _s.episodeSeasons.firstWhere(
-      (s) => s.number == seasonNumber,
-      orElse: () => _s.episodeSeasons.first,
-    );
-    for (int i = 0; i < season.episodes.length; i++) {
-      _r.episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
-    }
-
-    if (!_custom && _r.episodeScrollController.hasClients) {
-      _r.episodeScrollController.jumpTo(0);
-    }
-
-    setState(() {
-      _s.selectedSeasonNumber = seasonNumber;
-      _s.landing = season.episodes.firstOrNull;
-      // The user is on the stepper — keep them there, as Classic does by
-      // re-requesting the season dropdown.
-      _s.focusIntent = EpisodeFocusIntent.seasonControl;
-      _s.viewGeneration++;
-    });
-    unawaited(_parts.metadata.loadSelectedEpisodeMetadata());
-  }
-
-  void _onEpisodeTap(TraktEpisode episode) {
-    // Direct-source mode: no sources flow exists — a tap plays outright, on
-    // top of the page (no terminal dispatch/pop, like quick-play).
-    if (widget.onPlayEpisode != null) {
-      widget.onPlayEpisode!(episode);
-      return;
-    }
-    final show = _s.selectedShow;
-    if (show == null || widget.onItemSelected == null) return;
-
-    var selection = AdvancedSearchSelection(
-      imdbId: show.progressId ?? show.id,
-      isSeries: true,
-      title: show.name,
-      year: show.year,
-      season: episode.season,
-      episode: episode.number,
-      contentType: show.type,
-      posterUrl: show.poster,
-      // For Trakt-sourced items, carry the Trakt scrobble flag + resume
-      // position so playback syncs to Trakt like the old home view.
-      traktSource: widget.isTraktSource,
-      traktProgressPercent: widget.isTraktSource
-          ? _p.episodeWatchProgress['${episode.season}-${episode.number}']
-          : null,
-      mdblistSource: widget.isMdblistSource,
-      mdblistProgressPercent: widget.isMdblistSource
-          ? _p.episodeWatchProgress['${episode.season}-${episode.number}']
-          : null,
-      // Lets the host send the user back to this episode list (not the
-      // catalog grid) when they back out of the torrent results.
-      fromCatalogEpisodeDrillDown: true,
-    );
-    final videoId = episode.stremioVideoId?.trim();
-    if (videoId != null &&
-        videoId.isNotEmpty &&
-        !StremioService.isCanonicalEpisodeId(
-          selection.imdbId,
-          videoId,
-          episode.season,
-          episode.number,
-        )) {
-      selection = selection.withStremioEpisodeIdentity(
-        addonId: widget.addon.id,
-        addonKey: widget.addon.sourceBindingKey,
-        catalogId: show.id,
-        videoId: videoId,
-      );
-    }
-    widget.onBeforeTerminalDispatch?.call();
-    widget.onItemSelected!(selection);
-  }
-
-  void _onEpisodeQuickPlay(TraktEpisode episode) {
-    if (widget.onPlayEpisode != null) {
-      widget.onPlayEpisode!(episode);
-      return;
-    }
-    final show = _s.selectedShow;
-    if (show == null) return;
-
-    var selection = AdvancedSearchSelection(
-      imdbId: show.progressId ?? show.id,
-      isSeries: true,
-      title: show.name,
-      year: show.year,
-      season: episode.season,
-      episode: episode.number,
-      contentType: show.type,
-      posterUrl: show.poster,
-      traktSource: widget.isTraktSource,
-      traktProgressPercent: widget.isTraktSource
-          ? _p.episodeWatchProgress['${episode.season}-${episode.number}']
-          : null,
-      mdblistSource: widget.isMdblistSource,
-      mdblistProgressPercent: widget.isMdblistSource
-          ? _p.episodeWatchProgress['${episode.season}-${episode.number}']
-          : null,
-      fromCatalogEpisodeDrillDown: true,
-    );
-
-    final videoId = episode.stremioVideoId?.trim();
-    if (videoId != null &&
-        videoId.isNotEmpty &&
-        !StremioService.isCanonicalEpisodeId(
-          selection.imdbId,
-          videoId,
-          episode.season,
-          episode.number,
-        )) {
-      selection = selection.withStremioEpisodeIdentity(
-        addonId: widget.addon.id,
-        addonKey: widget.addon.sourceBindingKey,
-        catalogId: show.id,
-        videoId: videoId,
-      );
-    }
-
-    widget.onBeforeTerminalDispatch?.call();
-    if (widget.onQuickPlay != null) {
-      widget.onQuickPlay!(selection);
-    } else if (widget.onItemSelected != null) {
-      widget.onItemSelected!(selection);
-    }
   }
 
   Widget _buildEpisodeFiltersBar() {
@@ -612,7 +453,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     return SeasonActionRegion(
       onOptions: _a.isDirectSource
           ? null
-          : () => _showSeasonOptions(_s.selectedSeasonNumber),
+          : () =>
+                _parts.seasonOptions.showSeasonOptions(_s.selectedSeasonNumber),
       onTap: () async {
         final number = await showModalBottomSheet<int>(
           context: context,
@@ -631,7 +473,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             ),
           ),
         );
-        if (mounted && number != null) _onSeasonChanged(number);
+        if (mounted && number != null) _n.onSeasonChanged(number);
       },
       child: ListenableBuilder(
         listenable: _r.episodeSeasonDropdownFocusNode,
@@ -693,7 +535,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                     ),
                   );
                 }).toList(),
-                onChanged: _onSeasonChanged,
+                onChanged: _n.onSeasonChanged,
               ),
             ),
           );
@@ -769,7 +611,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                             : const BorderSide(color: Colors.white24),
                       ),
                     ),
-                    onPressed: () => _fallbackToDirectSearch(show),
+                    onPressed: () => _n.fallbackToDirectSearch(show),
                     icon: const Icon(Icons.search_rounded),
                     label: const Text('Search for sources'),
                   ),
@@ -821,8 +663,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                   _s.nextEpisode != null &&
                   _s.nextEpisode!.season == episode.season &&
                   _s.nextEpisode!.episode == episode.number,
-              onPlay: () => _onEpisodeQuickPlay(episode),
-              onSources: () => _onEpisodeTap(episode),
+              onPlay: () => _n.onEpisodeQuickPlay(episode),
+              onSources: () => _n.onEpisodeTap(episode),
               onMenuAction: _a.isTraktAuthenticated
                   ? (action) => _parts.watchedActions.onEpisodeMenuAction(
                       episode,
@@ -831,7 +673,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                   : null,
               onTrackerOptions:
                   _a.isSimklAuthenticated || _a.isMdblistAuthenticated
-                  ? () => _showEpisodeOptions(episode)
+                  ? () => _parts.episodeOptions.showEpisodeOptions(episode)
                   : null,
             ),
           );
@@ -903,11 +745,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           _s.nextEpisode != null &&
           _s.nextEpisode!.season == e.season &&
           _s.nextEpisode!.episode == e.number,
-      play: _onEpisodeQuickPlay,
-      options: _showEpisodeOptions,
-      stepSeason: _stepSeason,
-      selectSeason: (n) => _onSeasonChanged(n),
-      seasonOptions: _a.isDirectSource ? null : _showSeasonOptions,
+      play: _n.onEpisodeQuickPlay,
+      options: _parts.episodeOptions.showEpisodeOptions,
+      stepSeason: _n.stepSeason,
+      selectSeason: (n) => _n.onSeasonChanged(n),
+      seasonOptions: _a.isDirectSource
+          ? null
+          : _parts.seasonOptions.showSeasonOptions,
       onLeftEdge: widget.onFocusLeftEdge,
       onRetry: () => _parts.mode.enterEpisodeMode(
         show,
@@ -917,7 +761,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       // Mirrors the classic failure UI: no torrent-search fallback exists for
       // direct-source shows, so the offer is withheld rather than dead.
       onSearchForSources: widget.onItemSelected != null
-          ? () => _fallbackToDirectSearch(show)
+          ? () => _n.fallbackToDirectSearch(show)
           : null,
     );
   }
@@ -932,179 +776,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   // ── Compact (Stremio) rendering ──────────────────────────────────────────
   int get _currentSeasonIndex =>
       _s.episodeSeasons.indexWhere((s) => s.number == _s.selectedSeasonNumber);
-
-  bool _seasonActionBusy = false;
-
-  final _seasonRetries = SeasonWatchedRetryState();
-
-  Future<void> _showSeasonOptions(int number) async {
-    if (_a.isDirectSource || _seasonActionBusy) return;
-    final show = _s.selectedShow;
-    if (show == null) return;
-    _seasonActionBusy = true;
-    try {
-      final connected = [
-        true,
-        ...await Future.wait([
-          _sv.traktService.isAuthenticated(),
-          _sv.simklService.isAuthenticated(),
-          _sv.mdblistService.isAuthenticated(),
-        ]),
-      ];
-      if (CustomSeriesIdentity.isCustom(show.imdbId)) {
-        connected.fillRange(1, connected.length, false);
-      }
-      if (MediaIdentity.isNative(show.progressId)) {
-        connected[1] = false;
-        connected[3] = false;
-      }
-      if (!mounted) return;
-      final providers = [
-        TrackingSource.local,
-        TrackingSource.trakt,
-        TrackingSource.simkl,
-        TrackingSource.mdblist,
-      ];
-      final names = ['locally', 'on Trakt', 'on Simkl', 'on MDBList'];
-      var season = _s.episodeSeasons
-          .where((s) => s.number == number)
-          .firstOrNull;
-      if (season == null || season.episodes.isEmpty) {
-        final seasons = await _parts.seasons.fetchSeasons(show);
-        season = seasons.where((s) => s.number == number).firstOrNull;
-      }
-      if (!mounted) return;
-      if (season == null || season.episodes.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not load season episodes. Please retry.'),
-          ),
-        );
-        return;
-      }
-      final episodeNumbers = season.episodes.map((e) => e.number).toList();
-      final statuses = await Future.wait([
-        for (var i = 0; i < providers.length; i++)
-          connected[i]
-              ? SeasonWatchedService.isWatched(
-                  show.progressId ?? show.id,
-                  show.name,
-                  number,
-                  episodeNumbers,
-                  providers[i],
-                )
-              : Future<bool?>.value(null),
-      ]);
-      if (!mounted) return;
-      final id = show.progressId ?? show.id;
-      final retryTargets = [
-        for (final provider in providers)
-          _seasonRetries.pending(id, number, provider),
-      ];
-      final targets = [
-        for (var i = 0; i < providers.length; i++)
-          retryTargets[i] ?? (statuses[i] == null ? null : !statuses[i]!),
-      ];
-      final choice = await showModalBottomSheet<TrackingSource>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (ctx) => TvHeldKeyGuard(
-          child: SafeArea(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(ctx).height * 0.7,
-              ),
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  ListTile(title: Text('Season $number')),
-                  for (var i = 0; i < providers.length; i++)
-                    if (connected[i])
-                      ListTile(
-                        leading: const Icon(Icons.done_all_rounded),
-                        autofocus:
-                            widget.isTelevision &&
-                            !connected.take(i).any((value) => value),
-                        enabled: targets[i] != null,
-                        title: Text(
-                          targets[i] == null
-                              ? 'Watch status unavailable ${names[i]}'
-                              : '${retryTargets[i] != null ? 'Retry: mark' : 'Mark'} season as ${targets[i]! ? 'watched' : 'unwatched'} ${names[i]}',
-                        ),
-                        subtitle: targets[i] == null
-                            ? const Text('Close and reopen to retry.')
-                            : null,
-                        onTap: () => Navigator.pop(ctx, providers[i]),
-                      ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-      if (choice == null || !mounted) return;
-      final name = names[providers.indexOf(choice)];
-      final watched = targets[providers.indexOf(choice)]!;
-      final action = watched ? 'watched' : 'unwatched';
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(
-        SnackBar(content: Text('Marking Season $number $action $name…')),
-      );
-      // Retain intent through partial failure or an exception. A fresh status
-      // may now be partial, but must not reverse the user's pending operation.
-      _seasonRetries.begin(id, number, choice, watched);
-      final failures = await SeasonWatchedService.mark(
-        id,
-        number,
-        episodeNumbers,
-        choice,
-        seriesTitle: show.name,
-        watched: watched,
-      );
-      if (failures == 0) _seasonRetries.complete(id, number, choice);
-      if (!mounted) return;
-      refreshWatchProgress();
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            failures == 0
-                ? 'Season $number marked $action $name.'
-                : 'Could not mark $failures episodes $action $name. Reopen the season menu to retry.',
-          ),
-        ),
-      );
-    } catch (_) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not update season watch status. Please retry.',
-            ),
-          ),
-        );
-    } finally {
-      _seasonActionBusy = false;
-    }
-  }
-
-  void _stepSeason(int delta) {
-    if (_s.episodeSeasons.isEmpty) return;
-    final i = _currentSeasonIndex;
-    final ni = (i < 0 ? 0 : i) + delta;
-    if (ni < 0 || ni >= _s.episodeSeasons.length) return;
-    _onSeasonChanged(_s.episodeSeasons[ni].number);
-    // Stepping into the first/last season disables the chevron we're on, which
-    // would drop primary focus into the void. Park focus on the always-present
-    // season dropdown so the remote stays live.
-    // Classic parks focus on its always-present dropdown; a custom arrangement
-    // has no such node, and its own season control keeps focus already.
-    if (_custom) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _r.episodeSeasonDropdownFocusNode.requestFocus();
-    });
-  }
 
   /// Pinned "‹ Prev · Season ▾ · Next ›" header — always visible above the list
   /// (this is what "the season dropdown isn't reachable" was about).
@@ -1126,7 +797,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             EpisodesPanelSeasonStep(
               icon: Icons.chevron_left_rounded,
               enabled: i > 0,
-              onTap: () => _stepSeason(-1),
+              onTap: () => _n.stepSeason(-1),
             ),
           Expanded(
             child: Center(
@@ -1145,7 +816,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             EpisodesPanelSeasonStep(
               icon: Icons.chevron_right_rounded,
               enabled: i < _s.episodeSeasons.length - 1,
-              onTap: () => _stepSeason(1),
+              onTap: () => _n.stepSeason(1),
             ),
           const SizedBox(width: 8),
           Text(
@@ -1207,194 +878,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             focusNode: index < _r.episodeFocusNodes.length
                 ? _r.episodeFocusNodes[index]
                 : null,
-            onPlay: () => _onEpisodeQuickPlay(episode),
-            onOptions: () => _showEpisodeOptions(episode),
+            onPlay: () => _n.onEpisodeQuickPlay(episode),
+            onOptions: () => _parts.episodeOptions.showEpisodeOptions(episode),
             onLeft: widget.onFocusLeftEdge,
-          ),
-        );
-      },
-    );
-  }
-
-  /// Per-episode options menu (opened with Right / the ⋮ button): Play, Sources,
-  /// a single Mark Watched/Unwatched that acts on local storage plus every
-  /// connected tracker, and supported per-tracker Rate rows. Simkl ratings are
-  /// title-only, so its episode menu deliberately has no rating action.
-  void _showEpisodeOptions(TraktEpisode episode) {
-    final key = '${episode.season}-${episode.number}';
-    final watched = (_p.episodeWatchProgress[key] ?? 0) >= 100;
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppThemeScope.of(context).sheetSurface,
-      showDragHandle: true,
-      // With multiple trackers connected the menu can grow taller than
-      // the default sheet cap (9/16 of screen height) on portrait phones, and
-      // on TV the clipped rows stayed DPAD-focusable while invisible. Let the
-      // sheet grow and scroll instead (same pattern as the merged-screen
-      // quick-actions sheets).
-      isScrollControlled: true,
-      builder: (sheetCtx) {
-        Widget tile(
-          IconData icon,
-          String label,
-          VoidCallback onTap, {
-          Color? color,
-          bool autofocus = false,
-          String? subtitle,
-        }) {
-          return ListTile(
-            autofocus: autofocus,
-            // Default focus overlay is invisible on the dark sheet — make the
-            // DPAD cursor obvious.
-            focusColor: Colors.white.withValues(alpha: 0.12),
-            leading: Icon(icon, color: color ?? Colors.white),
-            title: Text(
-              label,
-              style: TextStyle(
-                color: color ?? Theme.of(sheetCtx).colorScheme.onSurface,
-              ),
-            ),
-            subtitle: subtitle == null
-                ? null
-                : Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Theme.of(
-                        sheetCtx,
-                      ).colorScheme.onSurface.withValues(alpha: 0.55),
-                      fontSize: 12.5,
-                      height: 1.3,
-                    ),
-                  ),
-            onTap: () {
-              Navigator.of(sheetCtx).pop();
-              onTap();
-            },
-          );
-        }
-
-        final tiles = <Widget>[
-          // Autofocus Play on TV so the sheet opens with a live target.
-          tile(
-            Icons.play_arrow_rounded,
-            'Play',
-            () => _onEpisodeQuickPlay(episode),
-            autofocus: widget.isTelevision,
-          ),
-          // Direct-source episodes ARE the source — no torrent list to open.
-          if (widget.onPlayEpisode == null)
-            tile(Icons.layers_rounded, 'Sources', () => _onEpisodeTap(episode)),
-          // ONE watched toggle, not one per tracker: the tick is an OR-union
-          // of local + every tracker, so a per-provider action leaves the
-          // others watched and the tick resurrects on the next re-merge.
-          // [_setEpisodeWatchedEverywhere] fans out to all of them (and to
-          // local playback storage), so it is offered even with no tracker
-          // connected — a locally-finished episode needs it too. The subtitle
-          // names every destination up front, so the fan-out is the row's
-          // stated contract rather than a surprise.
-          if (!watched && !_a.isDirectSource)
-            tile(
-              Icons.check_circle_rounded,
-              'Mark as Watched',
-              () => _parts.watchedActions.setEpisodeWatchedEverywhere(
-                episode,
-                watched: true,
-              ),
-              subtitle:
-                  _parts.watchedActions
-                          .watchedSyncTargets(watched: true)
-                          .length >
-                      1
-                  ? 'On ${EpisodesPanelPolicies.joinNames(_parts.watchedActions.watchedSyncTargets(watched: true))}'
-                  : null,
-            ),
-          if (watched && !_a.isDirectSource)
-            tile(
-              Icons.visibility_off_rounded,
-              'Mark as Unwatched',
-              () => _parts.watchedActions.setEpisodeWatchedEverywhere(
-                episode,
-                watched: false,
-              ),
-              subtitle:
-                  _parts.watchedActions
-                          .watchedSyncTargets(watched: false)
-                          .length >
-                      1
-                  ? 'Clears it on '
-                        '${EpisodesPanelPolicies.joinNames(_parts.watchedActions.watchedSyncTargets(watched: false))} — '
-                        'all at once, so the tick can\'t come back'
-                  : null,
-            ),
-          if (_a.isTraktAuthenticated)
-            tile(
-              Icons.star_rounded,
-              'Rate on Trakt',
-              () => _parts.watchedActions.onEpisodeMenuAction(
-                episode,
-                TraktEpisodeMenuAction.rate,
-              ),
-            ),
-          if (_a.isMdblistAuthenticated) ...[
-            if (_p.episodeMdblistRatings[key] == null)
-              tile(
-                Icons.star_rounded,
-                'Rate on MDBList',
-                () => _parts.watchedActions.onEpisodeMdblistMenuAction(
-                  episode,
-                  MdblistEpisodeMenuAction.rate,
-                ),
-              ),
-            if (_p.episodeMdblistRatings[key] != null)
-              tile(
-                Icons.star_outline_rounded,
-                'Remove MDBList rating (${_p.episodeMdblistRatings[key]}/10)',
-                () => _parts.watchedActions.onEpisodeMdblistMenuAction(
-                  episode,
-                  MdblistEpisodeMenuAction.removeRating,
-                ),
-              ),
-          ],
-        ];
-
-        // Opened by a HELD OK, and it autofocuses Play below — so it
-        // arrives under a key that is still repeating. Without this the
-        // next repeat activates Play and the sheet closes on the very
-        // press that opened it.
-        return TvHeldKeyGuard(
-          child: SafeArea(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(sheetCtx).size.height * 0.8,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'S${episode.season} · E${episode.number}  ${episode.title}',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  Flexible(
-                    child: ListView(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.only(bottom: 8),
-                      children: tiles,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         );
       },

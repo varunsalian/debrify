@@ -97,13 +97,17 @@ def main():
         facade = copy / checker.EPISODES_PANEL_FACADE
         facade.write_text('class EpisodesPanel {}\n')
         deps = copy / (base + 'presentation/legacy_episodes_panel/episodes_panel_deps.dart')
-        temporary = '// TEMP(episodes_panel): root getter stays in the facade until step 6.\n'
-        if deps.exists() and temporary in deps.read_text():
-            code, output = run()
-            assert code != 0 and 'episodes panel temporary cross-call' in output
-            # Only the synthetic completion copy removes this staged marker.
-            deps.write_text(deps.read_text().replace(temporary, ''))
-            print('Episodes actual staged marker rejects premature completion')
+        temporaries = (
+            '// TEMP(episodes_panel): root getter stays in the facade until step 6.\n',
+            '// TEMP(episodes_panel): compact getter stays in the facade until step 6.\n',
+        )
+        for temporary in temporaries:
+            if deps.exists() and temporary in deps.read_text():
+                code, output = run()
+                assert code != 0 and 'episodes panel temporary cross-call' in output
+                # Only the synthetic completion copy removes this staged marker.
+                deps.write_text(deps.read_text().replace(temporary, ''))
+                print('Episodes actual staged marker rejects premature completion')
         assert run()[0] == 0, run()[1]
         facade.unlink()
         assert run()[0] != 0 and 'missing' in run()[1]

@@ -1016,6 +1016,56 @@ including everything below.
   and 22 importers pass. No untracked inputs/tree changes. Full-suite gate 1
   follows on this clean committed checkpoint, with no scoped suite paths.
 
+
+### Gate 1 — full-suite comparison
+
+- Step 4 gate commit: `c846cfe1`, tested tree
+  `38df09733a63402344ee54c45ce7a34c6f917f5a`. `gate1` versus latest ORIGINAL
+  `base5` PASS: 11,178 successes, the same 13 failures, 28 errors and 20 skips;
+  zero new failures, missing tests, missing suites, newly skipped or added
+  identities. Env has `paths: []`, only `--no-pub`, no untracked inputs or
+  dirty snapshot, matching SDK and no changes during execution.
+- Conservative evidence decision: retain both failed full attempts rather than
+  replace their records. `gate1-first` had three unrelated service-test errors;
+  all 117 identities in those two unchanged suites passed in isolation.
+  `gate1-second` hit only the plan-documented Xtream 50k and PIN-recovery
+  timing failures; all 15 identities passed in isolation. The tests/service
+  files equal R. `gate1-flake-attribution.txt` records both checks. The third
+  full run passes the unqualified comparison; no assertions, timing code or
+  baselines were weakened, and no scoped retry was treated as a gate.
+
+
+### Step 5 — navigation handoffs and option sheets
+
+- Gate 1 accepted on `c846cfe1`. Navigation dispatch/tap/quick-play/season
+  switching and both option sheets move to their manifest owners. Season
+  busy/retry fields remain immediately before the options method; the same
+  retry instance survives each sheet opening. All callback and guard sites
+  retain their original order and live values.
+- Conservative staged-wiring decision: `_stepSeason` (step 5) reads
+  `_currentSeasonIndex` (step 6). A typed live callback retains that exact
+  facade getter until step 6, using the existing config-scoped alias/expiry
+  checks. Missing each staged getter and premature expiry are rejected.
+  The source reader reverses each alias to its exact original private name.
+  No getter moves early or value is cached. Both temporary callbacks exit
+  in step 6. A pinned private navigation accessor borrows the actual owned
+  section so the formerly one-line unbraced call stays one line; its
+  same-class owner swap is rejected, without braces or lint suppression.
+- Facade: 889 lines; unchanged widget 134, composition 55, remaining original
+  members 561, lifecycle/public 85, State header/spacing 23 and
+  imports/export/spacing 31. Ratchet lowered to 889. All 21 actual locations
+  and the facade are registered, shape totals 7, explicit theme paths 238.
+  Wiring reviewed before pinning; destinations remain below 500.
+
+- Step 5 verification: all 93 leaves, real-config fixtures and every other
+  manifest/self-test PASS with isolated packages/kernels and own originals.
+  Architecture positives/negatives, sizes, storage, shape/theme/rendered sets,
+  CI format/allowlist and strict/whole analyzer comparisons PASS: one original
+  curly info, zero new diagnostics/warnings/suppressions, same 12 CI warnings.
+  Affected suite versus `base5` PASS: 1,270 successes and the same original
+  profile source-guard failure; all 85 cases and 22 importers pass. Env has no
+  untracked inputs or tree changes. LF and staged/unstaged diff checks PASS.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
