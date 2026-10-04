@@ -749,6 +749,25 @@ def accessor_receiver_tokens(values, spec, rows):
     return result
 
 
+def normalized_accessor_tokens(values, spec, rows):
+    values = normalize(accessor_receiver_tokens(values, spec, rows), rows)
+    receiver = spec.get('borrowed_receiver')
+    if not receiver:
+        return values
+    # Only this frozen accessor's local borrowed State/composition receiver.
+    # Qualified paths were already validated against exact configured owners.
+    members = {r['new_name'] for r in rows}
+    result = []
+    i = 0
+    while i < len(values):
+        if (values[i:i + 2] == [receiver, '.']
+                and i + 2 < len(values) and values[i + 2] in members):
+            i += 2
+        result.append(values[i])
+        i += 1
+    return result
+
+
 def check_scaffolds(lookup, scaffolds):
     errors = []
     for scaffold in scaffolds:
@@ -1061,8 +1080,8 @@ def _check(original_source, sources, rows, source_path, package=None,
                 errors.append('Missing registered test accessor: ' + spec['name'])
             continue
         expected = json.loads((ROOT / spec['tokens_file']).read_text())
-        if (normalize(accessor_receiver_tokens(tokens(accessor), spec, rows), rows)
-                != normalize(accessor_receiver_tokens(expected, spec, rows), rows)):
+        if (normalized_accessor_tokens(tokens(accessor), spec, rows)
+                != normalized_accessor_tokens(expected, spec, rows)):
             errors.append('Test accessor changed outside its registered receiver edits')
     return errors
 

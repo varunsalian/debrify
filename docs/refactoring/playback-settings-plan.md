@@ -914,6 +914,32 @@ As in the PikPak plan, with these specifics:
   namespace. Linux default stays non-strict through step 5 as planned, then
   becomes strict before moving the layout. macOS cannot validate Linux pixels.
 
+### Step 2 — frozen field owners and whole State lifecycle
+
+- Step 1 source checkpoint: `acd2f2ba`; separate Linux artifact checkpoint:
+  `a69da7c8`. Move all 133 fields into the ten frozen owners (largest: 28).
+  Initializers stay at declarations; all 12 implicit-null fields retain no
+  initializer. Actual State handles bind one owner each, with no constructor
+  actions; all reads, writes and accessor snapshots use those same owners.
+  Review every field entry against the dependency report before pinning handles.
+- Keep initState/dispose whole in State, including original analytics, the
+  initial load, all 36 listener closures and the 42 ordered disposals followed
+  by super. Exact comment multiset proof: 196 original/current comments.
+  Trailing field comments move with their own fields, including orphan groups.
+- Conservative checker decision: the frozen accessor needs an opt-in borrowed
+  receiver rule after fields move. Normalize only its exact registered paths
+  and frozen members; wrong-owner/same-class receiver negatives run directly,
+  independently of scaffold failures. Other configurations have no such rule.
+- `step2` focused comparison against latest `base3`: 145 successes and the same
+  observed original profile guard failure; no identity changes. Whole analyzer
+  comparison PASS; strict per-symbol proof has zero additions and zero scaffold
+  diagnostics (12 current vs 29 original strict). Local CI checks pass with the
+  unchanged allowlists; all six manifests/self-tests pass. Root analyzer exit 1
+  remains original vendor errors, with unchanged identities, not a new failure.
+- Facade ratchet: 4,120 lines. Exact shape counts remain 20 radii/four token calls
+  and floor 488; original characterization/fixture/helper/macOS hashes match.
+  No new const, lifetime owner, storage operation or listener is introduced.
+
 ## Found, not fixed
 
 All of these are pre-existing, and the extraction keeps each one exactly.

@@ -1,1 +1,144 @@
-{"scaffolds": []}
+{
+  "scaffolds": [
+    {
+      "file": "lib/screens/settings/external_player_settings_page.dart",
+      "owner": "_ExternalPlayerSettingsPageState",
+      "name": "_core",
+      "tokens": [
+        "final",
+        "_core",
+        "=",
+        "PlaybackCoreState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/settings/external_player_settings_page.dart",
+      "owner": "_ExternalPlayerSettingsPageState",
+      "name": "_mac",
+      "tokens": [
+        "final",
+        "_mac",
+        "=",
+        "PlaybackMacState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/settings/external_player_settings_page.dart",
+      "owner": "_ExternalPlayerSettingsPageState",
+      "name": "_ios",
+      "tokens": [
+        "final",
+        "_ios",
+        "=",
+        "PlaybackIosState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/settings/external_player_settings_page.dart",
+      "owner": "_ExternalPlayerSettingsPageState",
+      "name": "_linux",
+      "tokens": [
+        "final",
+        "_linux",
+        "=",
+        "PlaybackLinuxState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/settings/external_player_settings_page.dart",
+      "owner": "_ExternalPlayerSettingsPageState",
+      "name": "_win",
+      "tokens": [
+        "final",
+        "_win",
+        "=",
+        "PlaybackWindowsState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/settings/external_player_settings_page.dart",
+      "owner": "_ExternalPlayerSettingsPageState",
+      "name": "_vr",
+      "tokens": [
+        "final",
+        "_vr",
+        "=",
+        "PlaybackVrState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/settings/external_player_settings_page.dart",
+      "owner": "_ExternalPlayerSettingsPageState",
+      "name": "_values",
+      "tokens": [
+        "final",
+        "_values",
+        "=",
+        "PlaybackValuesState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/settings/external_player_settings_page.dart",
+      "owner": "_ExternalPlayerSettingsPageState",
+      "name": "_sub",
+      "tokens": [
+        "final",
+        "_sub",
+        "=",
+        "PlaybackSubtitleState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/settings/external_player_settings_page.dart",
+      "owner": "_ExternalPlayerSettingsPageState",
+      "name": "_rows",
+      "tokens": [
+        "final",
+        "_rows",
+        "=",
+        "PlaybackRowsState",
+        "(",
+        ")",
+        ";"
+      ]
+    },
+    {
+      "file": "lib/screens/settings/external_player_settings_page.dart",
+      "owner": "_ExternalPlayerSettingsPageState",
+      "name": "_subRows",
+      "tokens": [
+        "final",
+        "_subRows",
+        "=",
+        "PlaybackSubtitleRowsState",
+        "(",
+        ")",
+        ";"
+      ]
+    }
+  ]
+}

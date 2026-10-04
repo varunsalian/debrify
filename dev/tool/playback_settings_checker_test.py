@@ -7,7 +7,7 @@ import subprocess
 
 
 def self_test(package=None):
-    from check_settings_moves import ROOT, check, all_nodes, configured, tokens, normalize, declaration_tokens
+    from check_settings_moves import ROOT, check, all_nodes, configured, tokens, normalize, declaration_tokens, normalized_accessor_tokens
     from check_verbatim_moves import parse
     from torbox_callback_identity import arguments, callback_argument, check_callback_identities
     from playback_settings_partition import check_partition, virtual
@@ -106,8 +106,9 @@ def self_test(package=None):
     dest,node = located(site['member'])
     changed = copy.deepcopy(lookup)
     vals = tokens(node)
-    index = next(i for i in range(len(vals)) if vals[i:i+3]==['onTap',':','_openPlayerSettings'])+2
-    vals[index:index+1] = ['_deps','.','openPlayerSettings']
+    argument = callback_argument(arguments(vals, site['call'])[site.get('occurrence', 0)], site)
+    index = next(i for i in range(len(vals)) if vals[i:i+2+len(argument)]==['onTap',':',*argument])+2
+    vals[index:index+len(argument)] = ['_deps','.','openPlayerSettings']
     changed[dest]['tokens'] = [{'text':v,'offset':i,'comment':False} for i,v in enumerate(vals)]
     changed[dest]['formatCommas'] = []
     assert not check_callback_identities(changed,rows,source,config)
@@ -116,6 +117,20 @@ def self_test(package=None):
         assert normalize(['otherSameClass','.','openPlayerSettings'],rows)!=['_openPlayerSettings']
         assert normalize(['(',')','=>','_deps','.','openPlayerSettings','(',')'],rows)!=['_openPlayerSettings']
     print('Playback exact retained-State borrowed alias: PASS; receiver/closure negatives rejected')
+
+    accessor_spec = config['test_accessors'][0]
+    expected = json.loads((ROOT/accessor_spec['tokens_file']).read_text())
+    current_accessor = lookup[(source, '', accessor_spec['name'])]
+    with configured(config):
+        canonical = normalized_accessor_tokens(expected, accessor_spec, rows)
+        if 'composition' not in accessor_spec:
+            assert normalized_accessor_tokens(tokens(current_accessor), accessor_spec, rows) == canonical
+        # Exercise the receiver normalization directly, independently of scaffold
+        # rejection: only the exact frozen owner may supply a snapshot member.
+        assert normalized_accessor_tokens(['s', '.', '_defaultAspectIndex'], accessor_spec, rows) == normalized_accessor_tokens(['s', '.', '_values', '.', 'defaultAspectIndex'], accessor_spec, rows)
+        assert normalized_accessor_tokens(['otherSameClass', '.', '_values', '.', 'defaultAspectIndex'], accessor_spec, rows) != normalized_accessor_tokens(['s', '.', '_defaultAspectIndex'], accessor_spec, rows)
+        assert normalized_accessor_tokens(['s', '.', 'wrongOwner', '.', 'defaultAspectIndex'], accessor_spec, rows) != normalized_accessor_tokens(['s', '.', '_defaultAspectIndex'], accessor_spec, rows)
+    print('Playback frozen accessor receiver: PASS; exact-owner negatives rejected')
 
     # Build the planned join from the REAL formatted original and REAL ranges.
     # Directly exercise its rule, including reconstruction, before it exists.

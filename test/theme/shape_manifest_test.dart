@@ -35,6 +35,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/screens/settings/external_player_settings_page.dart': 16,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_torrent_bulk_delete.dart':
       0,
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_selected_delete.dart':
@@ -136,7 +137,6 @@ const Map<String, int> kShapeResidue = {
   // Raised 2026-10-03 to the counts found at refactor/codebase 17db33f2: these
   // radii arrived with feature work after the sweep (see the settings plan's
   // "Found, not fixed"). The guard stays armed against further growth.
-  'lib/screens/settings/external_player_settings_page.dart': 16,
   'lib/screens/settings/filter_settings_page.dart': 2,
   'lib/screens/settings/iptv_hidden_categories_page.dart': 1,
   'lib/screens/settings/iptv_settings_page.dart': 2,
@@ -199,11 +199,11 @@ const Map<String, int> kShapeResidue = {
 // residue guarded without counting them as swept. The keyword field retains its
 // old literal; all Sources shape-token calls now live in registered widgets.
 const Map<String, int> kExtractedShapeResidue = {
-  'lib/features/playback_settings/presentation/playback_checkbox_tile.dart': 2,
-  'lib/features/playback_settings/presentation/playback_dropdown_setting.dart':
-      1,
   'lib/features/playback_settings/presentation/playback_setting_dropdown.dart':
       1,
+  'lib/features/playback_settings/presentation/playback_dropdown_setting.dart':
+      1,
+  'lib/features/playback_settings/presentation/playback_checkbox_tile.dart': 2,
 
   'lib/features/debrid_downloads/presentation/legacy_debrid/debrid_file_workflows_composition.dart':
       0,

@@ -1,5 +1,15 @@
 import 'dart:io';
 
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_core_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_ios_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_linux_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_mac_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_rows_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_rows_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_subtitle_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_values_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_vr_state.dart';
+import 'package:debrify/features/playback_settings/presentation/legacy_playback_settings/playback_windows_state.dart';
 import 'package:debrify/features/playback_settings/presentation/playback_checkbox_tile.dart';
 import 'package:debrify/features/playback_settings/presentation/playback_dropdown_setting.dart';
 import 'package:debrify/features/playback_settings/presentation/playback_setting_dropdown.dart';
@@ -53,452 +63,309 @@ class ExternalPlayerSettingsPage extends StatefulWidget {
 
 class _ExternalPlayerSettingsPageState
     extends State<ExternalPlayerSettingsPage> {
-  bool _loading = true;
-  final _contentFocusNode = FocusNode(
-    debugLabel: 'playback-settings-content',
-    canRequestFocus: false,
-    skipTraversal: true,
-  );
-
-  // Default player mode: 'debrify', 'external', 'deovr'
-  String _defaultPlayerMode = 'debrify';
-
-  // macOS external player settings
-  ExternalPlayer _selectedPlayer = ExternalPlayer.systemDefault;
-  Map<ExternalPlayer, bool> _installedPlayers = {};
-  String? _customAppPath;
-  String? _customAppName;
-  String? _customCommand;
-  final TextEditingController _commandController = TextEditingController();
-  final FocusNode _commandFocusNode = FocusNode();
-  bool _commandFocused = false;
-  String? _commandError;
-
-  // iOS external player settings
-  iOSExternalPlayer _selectedIOSPlayer = iOSExternalPlayer.vlc;
-  Map<iOSExternalPlayer, bool> _installedIOSPlayers = {};
-  String? _iosCustomScheme;
-  final TextEditingController _iosSchemeController = TextEditingController();
-  final FocusNode _iosSchemeFocusNode = FocusNode();
-  bool _iosSchemeFocused = false;
-  String? _iosSchemeError;
-
-  // Linux external player settings
-  LinuxExternalPlayer _selectedLinuxPlayer = LinuxExternalPlayer.systemDefault;
-  Map<LinuxExternalPlayer, bool> _installedLinuxPlayers = {};
-  String? _linuxCustomCommand;
-  final TextEditingController _linuxCommandController = TextEditingController();
-  final FocusNode _linuxCommandFocusNode = FocusNode();
-  bool _linuxCommandFocused = false;
-  String? _linuxCommandError;
-
-  // Windows external player settings
-  WindowsExternalPlayer _selectedWindowsPlayer =
-      WindowsExternalPlayer.systemDefault;
-  Map<WindowsExternalPlayer, bool> _installedWindowsPlayers = {};
-  String? _windowsCustomCommand;
-  final TextEditingController _windowsCommandController =
-      TextEditingController();
-  final FocusNode _windowsCommandFocusNode = FocusNode();
-  bool _windowsCommandFocused = false;
-  String? _windowsCommandError;
-
-  // DeoVR settings (Android)
-  String _vrDefaultScreenType = 'dome';
-  String _vrDefaultStereoMode = 'sbs';
-  bool _vrAutoDetectFormat = true;
-  bool _vrShowDialog = true;
-
-  // Debrify Player default settings
-  bool _isAndroidTv = false;
-  int _defaultAspectIndex = 2; // Fit Width (mobile) / Fill (TV)
-  int _nightModeIndex = 0; // Off
-  bool _systemAudioEffects = false; // Android only, opt-in
-  bool _tvosForceSoftwareDecode = false; // Apple TV only, opt-in
-  bool _audioPassthrough = false; // Android only, opt-in
-  bool _appleMultichannel = false; // tvOS/iOS only, opt-in
-  bool _tvosForceStereo = false; // tvOS diagnostics
-  bool _tvosLegacyAudioOutput = false; // tvOS diagnostics
-  AndroidVideoRendererMode _androidVideoRendererMode =
-      AndroidVideoRendererMode.automatic;
-  ContentDisplayMatchMode _contentDisplayMatchMode =
-      ContentDisplayMatchMode.systemDefault;
-  bool _startPortrait = false; // Phone only, opt-in
-  bool _subtitleOnlyForeignAudio = false;
-  bool _subtitleForcedOnly = false;
-  bool _subtitleAutoSync = false; // Native players only, experimental opt-in
-  int _movieCompletionThreshold =
-      LocalCompletionStorage.defaultLocalCompletionThreshold;
-  int _episodeCompletionThreshold =
-      LocalCompletionStorage.defaultLocalCompletionThreshold;
-  bool _skipSegmentsEnabled = true;
-  String _skipSegmentProvider = SkipSegmentProviders.auto;
-  String _netPatience = NetworkTuning.standard;
-  String _netBuffer = NetworkTuning.standard;
-  String?
-  _defaultSubtitleLanguage; // null = no preference, 'off' = disabled, 'en'/'es'/etc = language
-  String?
-  _defaultAudioLanguage; // null = no preference, 'en'/'es'/etc = language
-  int _subtitleSizeIndex = 2; // Medium
-  int _subtitleStyleIndex = 1; // Outline
-  int _subtitleColorIndex = 0; // White
-  int _subtitleBgIndex = 0; // None
-  int _subtitleFontIndex = 0; // Default
-  bool _subtitleBold = false; // normal weight
-  List<SubtitleFont> _allFonts =
-      SubtitleFont.builtInOptions; // Built-in + custom fonts
-
-  // First interactive row ("Debrify Player" mode option) — receives entry
-  // focus on TV so DPAD users are never stranded on nothing.
-  final FocusNode _firstModeFocusNode = FocusNode();
-
-  // Debrify Player FocusNodes for DPAD navigation
-  final FocusNode _aspectFocusNode = FocusNode();
-  final FocusNode _defaultAudioLangFocusNode = FocusNode();
-  final FocusNode _defaultSubtitleLangFocusNode = FocusNode();
-  final FocusNode _systemAudioEffectsFocusNode = FocusNode();
-  final FocusNode _tvosForceSwDecodeFocusNode = FocusNode();
-  final FocusNode _audioPassthroughFocusNode = FocusNode();
-  final FocusNode _appleMultichannelFocusNode = FocusNode();
-  final FocusNode _tvosForceStereoFocusNode = FocusNode();
-  final FocusNode _tvosLegacyAudioFocusNode = FocusNode();
-  final FocusNode _androidVideoRendererFocusNode = FocusNode();
-  final FocusNode _contentDisplayMatchFocusNode = FocusNode();
-  final FocusNode _iptvDecoderFocusNode = FocusNode();
-  final FocusNode _startPortraitFocusNode = FocusNode();
-  final FocusNode _subtitleOnlyForeignAudioFocusNode = FocusNode();
-  final FocusNode _subtitleForcedOnlyFocusNode = FocusNode();
-  final FocusNode _subtitleAutoSyncFocusNode = FocusNode();
-  final FocusNode _movieCompletionThresholdFocusNode = FocusNode();
-  final FocusNode _episodeCompletionThresholdFocusNode = FocusNode();
-  final FocusNode _skipSegmentsEnabledFocusNode = FocusNode();
-  final FocusNode _skipSegmentProviderFocusNode = FocusNode();
-  final FocusNode _subtitleSizeFocusNode = FocusNode();
-  final FocusNode _subtitleStyleFocusNode = FocusNode();
-  final FocusNode _subtitleColorFocusNode = FocusNode();
-  final FocusNode _subtitleBgFocusNode = FocusNode();
-  final FocusNode _subtitleFontFocusNode = FocusNode();
-  final FocusNode _subtitleBoldFocusNode = FocusNode();
-  final FocusNode _netPatienceFocusNode = FocusNode();
-  final FocusNode _netBufferFocusNode = FocusNode();
-  bool _aspectFocused = false;
-  bool _defaultAudioLangFocused = false;
-  bool _defaultSubtitleLangFocused = false;
-  bool _systemAudioEffectsFocused = false;
-  bool _tvosForceSwDecodeFocused = false;
-  bool _audioPassthroughFocused = false;
-  bool _appleMultichannelFocused = false;
-  bool _tvosForceStereoFocused = false;
-  bool _tvosLegacyAudioFocused = false;
-  bool _androidVideoRendererFocused = false;
-  bool _contentDisplayMatchFocused = false;
-  bool _iptvDecoderFocused = false;
-  String _iptvDecoderMode = 'auto';
-  bool _startPortraitFocused = false;
-  bool _subtitleOnlyForeignAudioFocused = false;
-  bool _subtitleForcedOnlyFocused = false;
-  bool _subtitleAutoSyncFocused = false;
-  bool _movieCompletionThresholdFocused = false;
-  bool _episodeCompletionThresholdFocused = false;
-  bool _skipSegmentsEnabledFocused = false;
-  bool _skipSegmentProviderFocused = false;
-  bool _subtitleSizeFocused = false;
-  bool _subtitleStyleFocused = false;
-  bool _subtitleColorFocused = false;
-  bool _subtitleBgFocused = false;
-  bool _subtitleFontFocused = false;
-  bool _subtitleBoldFocused = false;
-  bool _netPatienceFocused = false;
-  bool _netBufferFocused = false;
-
-  // DeoVR FocusNodes for DPAD navigation
-  final FocusNode _screenTypeFocusNode = FocusNode();
-  final FocusNode _stereoModeFocusNode = FocusNode();
-  final FocusNode _autoDetectFocusNode = FocusNode();
-  final FocusNode _showDialogFocusNode = FocusNode();
-  bool _screenTypeFocused = false;
-  bool _stereoModeFocused = false;
-  bool _autoDetectFocused = false;
-  bool _showDialogFocused = false;
+  final _core = PlaybackCoreState();
+  final _mac = PlaybackMacState();
+  final _ios = PlaybackIosState();
+  final _linux = PlaybackLinuxState();
+  final _win = PlaybackWindowsState();
+  final _vr = PlaybackVrState();
+  final _values = PlaybackValuesState();
+  final _sub = PlaybackSubtitleState();
+  final _rows = PlaybackRowsState();
+  final _subRows = PlaybackSubtitleRowsState();
 
   @override
   void initState() {
     super.initState();
     AnalyticsService.screenView('playback_${widget.section.name}_settings');
     _loadSettings();
-    _commandFocusNode.addListener(() {
+    _mac.commandFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _commandFocused = _commandFocusNode.hasFocus;
+        _mac.commandFocused = _mac.commandFocusNode.hasFocus;
       });
     });
-    _iosSchemeFocusNode.addListener(() {
+    _ios.iosSchemeFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _iosSchemeFocused = _iosSchemeFocusNode.hasFocus;
+        _ios.iosSchemeFocused = _ios.iosSchemeFocusNode.hasFocus;
       });
     });
-    _linuxCommandFocusNode.addListener(() {
+    _linux.linuxCommandFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _linuxCommandFocused = _linuxCommandFocusNode.hasFocus;
+        _linux.linuxCommandFocused = _linux.linuxCommandFocusNode.hasFocus;
       });
     });
-    _windowsCommandFocusNode.addListener(() {
+    _win.windowsCommandFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _windowsCommandFocused = _windowsCommandFocusNode.hasFocus;
+        _win.windowsCommandFocused = _win.windowsCommandFocusNode.hasFocus;
       });
     });
-    _screenTypeFocusNode.addListener(() {
+    _vr.screenTypeFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _screenTypeFocused = _screenTypeFocusNode.hasFocus;
+        _vr.screenTypeFocused = _vr.screenTypeFocusNode.hasFocus;
       });
     });
-    _stereoModeFocusNode.addListener(() {
+    _vr.stereoModeFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _stereoModeFocused = _stereoModeFocusNode.hasFocus;
+        _vr.stereoModeFocused = _vr.stereoModeFocusNode.hasFocus;
       });
     });
-    _autoDetectFocusNode.addListener(() {
+    _vr.autoDetectFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _autoDetectFocused = _autoDetectFocusNode.hasFocus;
+        _vr.autoDetectFocused = _vr.autoDetectFocusNode.hasFocus;
       });
     });
-    _showDialogFocusNode.addListener(() {
+    _vr.showDialogFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _showDialogFocused = _showDialogFocusNode.hasFocus;
+        _vr.showDialogFocused = _vr.showDialogFocusNode.hasFocus;
       });
     });
     // Debrify Player focus listeners
-    _aspectFocusNode.addListener(() {
+    _rows.aspectFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _aspectFocused = _aspectFocusNode.hasFocus;
+        _rows.aspectFocused = _rows.aspectFocusNode.hasFocus;
       });
     });
-    _defaultAudioLangFocusNode.addListener(() {
+    _rows.defaultAudioLangFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _defaultAudioLangFocused = _defaultAudioLangFocusNode.hasFocus;
+        _rows.defaultAudioLangFocused =
+            _rows.defaultAudioLangFocusNode.hasFocus;
       });
     });
-    _defaultSubtitleLangFocusNode.addListener(() {
+    _subRows.defaultSubtitleLangFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _defaultSubtitleLangFocused = _defaultSubtitleLangFocusNode.hasFocus;
+        _subRows.defaultSubtitleLangFocused =
+            _subRows.defaultSubtitleLangFocusNode.hasFocus;
       });
     });
-    _systemAudioEffectsFocusNode.addListener(() {
+    _rows.systemAudioEffectsFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _systemAudioEffectsFocused = _systemAudioEffectsFocusNode.hasFocus;
+        _rows.systemAudioEffectsFocused =
+            _rows.systemAudioEffectsFocusNode.hasFocus;
       });
     });
-    _tvosForceSwDecodeFocusNode.addListener(() {
+    _rows.tvosForceSwDecodeFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _tvosForceSwDecodeFocused = _tvosForceSwDecodeFocusNode.hasFocus;
+        _rows.tvosForceSwDecodeFocused =
+            _rows.tvosForceSwDecodeFocusNode.hasFocus;
       });
     });
-    _audioPassthroughFocusNode.addListener(() {
+    _rows.audioPassthroughFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _audioPassthroughFocused = _audioPassthroughFocusNode.hasFocus;
+        _rows.audioPassthroughFocused =
+            _rows.audioPassthroughFocusNode.hasFocus;
       });
     });
-    _appleMultichannelFocusNode.addListener(() {
+    _rows.appleMultichannelFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _appleMultichannelFocused = _appleMultichannelFocusNode.hasFocus;
+        _rows.appleMultichannelFocused =
+            _rows.appleMultichannelFocusNode.hasFocus;
       });
     });
-    _tvosForceStereoFocusNode.addListener(() {
+    _rows.tvosForceStereoFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _tvosForceStereoFocused = _tvosForceStereoFocusNode.hasFocus;
+        _rows.tvosForceStereoFocused = _rows.tvosForceStereoFocusNode.hasFocus;
       });
     });
-    _tvosLegacyAudioFocusNode.addListener(() {
+    _rows.tvosLegacyAudioFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _tvosLegacyAudioFocused = _tvosLegacyAudioFocusNode.hasFocus;
+        _rows.tvosLegacyAudioFocused = _rows.tvosLegacyAudioFocusNode.hasFocus;
       });
     });
-    _androidVideoRendererFocusNode.addListener(() {
+    _rows.androidVideoRendererFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _androidVideoRendererFocused = _androidVideoRendererFocusNode.hasFocus;
+        _rows.androidVideoRendererFocused =
+            _rows.androidVideoRendererFocusNode.hasFocus;
       });
     });
-    _contentDisplayMatchFocusNode.addListener(() {
+    _rows.contentDisplayMatchFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _contentDisplayMatchFocused = _contentDisplayMatchFocusNode.hasFocus;
+        _rows.contentDisplayMatchFocused =
+            _rows.contentDisplayMatchFocusNode.hasFocus;
       });
     });
-    _iptvDecoderFocusNode.addListener(() {
+    _rows.iptvDecoderFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _iptvDecoderFocused = _iptvDecoderFocusNode.hasFocus;
+        _rows.iptvDecoderFocused = _rows.iptvDecoderFocusNode.hasFocus;
       });
     });
-    _startPortraitFocusNode.addListener(() {
+    _rows.startPortraitFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _startPortraitFocused = _startPortraitFocusNode.hasFocus;
+        _rows.startPortraitFocused = _rows.startPortraitFocusNode.hasFocus;
       });
     });
-    _subtitleOnlyForeignAudioFocusNode.addListener(() {
+    _subRows.subtitleOnlyForeignAudioFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _subtitleOnlyForeignAudioFocused =
-            _subtitleOnlyForeignAudioFocusNode.hasFocus;
+        _subRows.subtitleOnlyForeignAudioFocused =
+            _subRows.subtitleOnlyForeignAudioFocusNode.hasFocus;
       });
     });
-    _subtitleForcedOnlyFocusNode.addListener(() {
+    _subRows.subtitleForcedOnlyFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _subtitleForcedOnlyFocused = _subtitleForcedOnlyFocusNode.hasFocus;
+        _subRows.subtitleForcedOnlyFocused =
+            _subRows.subtitleForcedOnlyFocusNode.hasFocus;
       });
     });
-    _subtitleAutoSyncFocusNode.addListener(() {
+    _subRows.subtitleAutoSyncFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _subtitleAutoSyncFocused = _subtitleAutoSyncFocusNode.hasFocus;
+        _subRows.subtitleAutoSyncFocused =
+            _subRows.subtitleAutoSyncFocusNode.hasFocus;
       });
     });
-    _movieCompletionThresholdFocusNode.addListener(() {
+    _subRows.movieCompletionThresholdFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _movieCompletionThresholdFocused =
-            _movieCompletionThresholdFocusNode.hasFocus;
+        _subRows.movieCompletionThresholdFocused =
+            _subRows.movieCompletionThresholdFocusNode.hasFocus;
       });
     });
-    _episodeCompletionThresholdFocusNode.addListener(() {
+    _subRows.episodeCompletionThresholdFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _episodeCompletionThresholdFocused =
-            _episodeCompletionThresholdFocusNode.hasFocus;
+        _subRows.episodeCompletionThresholdFocused =
+            _subRows.episodeCompletionThresholdFocusNode.hasFocus;
       });
     });
-    _skipSegmentsEnabledFocusNode.addListener(() {
+    _subRows.skipSegmentsEnabledFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _skipSegmentsEnabledFocused = _skipSegmentsEnabledFocusNode.hasFocus;
+        _subRows.skipSegmentsEnabledFocused =
+            _subRows.skipSegmentsEnabledFocusNode.hasFocus;
       });
     });
-    _skipSegmentProviderFocusNode.addListener(() {
+    _subRows.skipSegmentProviderFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _skipSegmentProviderFocused = _skipSegmentProviderFocusNode.hasFocus;
+        _subRows.skipSegmentProviderFocused =
+            _subRows.skipSegmentProviderFocusNode.hasFocus;
       });
     });
-    _subtitleSizeFocusNode.addListener(() {
+    _subRows.subtitleSizeFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _subtitleSizeFocused = _subtitleSizeFocusNode.hasFocus;
+        _subRows.subtitleSizeFocused = _subRows.subtitleSizeFocusNode.hasFocus;
       });
     });
-    _subtitleStyleFocusNode.addListener(() {
+    _subRows.subtitleStyleFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _subtitleStyleFocused = _subtitleStyleFocusNode.hasFocus;
+        _subRows.subtitleStyleFocused =
+            _subRows.subtitleStyleFocusNode.hasFocus;
       });
     });
-    _subtitleColorFocusNode.addListener(() {
+    _subRows.subtitleColorFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _subtitleColorFocused = _subtitleColorFocusNode.hasFocus;
+        _subRows.subtitleColorFocused =
+            _subRows.subtitleColorFocusNode.hasFocus;
       });
     });
-    _subtitleBgFocusNode.addListener(() {
+    _subRows.subtitleBgFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _subtitleBgFocused = _subtitleBgFocusNode.hasFocus;
+        _subRows.subtitleBgFocused = _subRows.subtitleBgFocusNode.hasFocus;
       });
     });
-    _subtitleFontFocusNode.addListener(() {
+    _subRows.subtitleFontFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _subtitleFontFocused = _subtitleFontFocusNode.hasFocus;
+        _subRows.subtitleFontFocused = _subRows.subtitleFontFocusNode.hasFocus;
       });
     });
-    _subtitleBoldFocusNode.addListener(() {
+    _subRows.subtitleBoldFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _subtitleBoldFocused = _subtitleBoldFocusNode.hasFocus;
+        _subRows.subtitleBoldFocused = _subRows.subtitleBoldFocusNode.hasFocus;
       });
     });
-    _netPatienceFocusNode.addListener(() {
+    _rows.netPatienceFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _netPatienceFocused = _netPatienceFocusNode.hasFocus;
+        _rows.netPatienceFocused = _rows.netPatienceFocusNode.hasFocus;
       });
     });
-    _netBufferFocusNode.addListener(() {
+    _rows.netBufferFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
-        _netBufferFocused = _netBufferFocusNode.hasFocus;
+        _rows.netBufferFocused = _rows.netBufferFocusNode.hasFocus;
       });
     });
   }
 
   @override
   void dispose() {
-    _commandController.dispose();
-    _commandFocusNode.dispose();
-    _iosSchemeController.dispose();
-    _iosSchemeFocusNode.dispose();
-    _linuxCommandController.dispose();
-    _linuxCommandFocusNode.dispose();
-    _windowsCommandController.dispose();
-    _windowsCommandFocusNode.dispose();
-    _firstModeFocusNode.dispose();
-    _contentFocusNode.dispose();
-    _screenTypeFocusNode.dispose();
-    _stereoModeFocusNode.dispose();
-    _autoDetectFocusNode.dispose();
-    _showDialogFocusNode.dispose();
+    _mac.commandController.dispose();
+    _mac.commandFocusNode.dispose();
+    _ios.iosSchemeController.dispose();
+    _ios.iosSchemeFocusNode.dispose();
+    _linux.linuxCommandController.dispose();
+    _linux.linuxCommandFocusNode.dispose();
+    _win.windowsCommandController.dispose();
+    _win.windowsCommandFocusNode.dispose();
+    _core.firstModeFocusNode.dispose();
+    _core.contentFocusNode.dispose();
+    _vr.screenTypeFocusNode.dispose();
+    _vr.stereoModeFocusNode.dispose();
+    _vr.autoDetectFocusNode.dispose();
+    _vr.showDialogFocusNode.dispose();
     // Debrify Player focus nodes
-    _aspectFocusNode.dispose();
-    _defaultAudioLangFocusNode.dispose();
-    _defaultSubtitleLangFocusNode.dispose();
-    _systemAudioEffectsFocusNode.dispose();
-    _tvosForceSwDecodeFocusNode.dispose();
-    _audioPassthroughFocusNode.dispose();
-    _appleMultichannelFocusNode.dispose();
-    _tvosForceStereoFocusNode.dispose();
-    _tvosLegacyAudioFocusNode.dispose();
-    _androidVideoRendererFocusNode.dispose();
-    _contentDisplayMatchFocusNode.dispose();
-    _iptvDecoderFocusNode.dispose();
-    _startPortraitFocusNode.dispose();
-    _subtitleOnlyForeignAudioFocusNode.dispose();
-    _subtitleForcedOnlyFocusNode.dispose();
-    _subtitleAutoSyncFocusNode.dispose();
-    _movieCompletionThresholdFocusNode.dispose();
-    _episodeCompletionThresholdFocusNode.dispose();
-    _skipSegmentsEnabledFocusNode.dispose();
-    _skipSegmentProviderFocusNode.dispose();
-    _subtitleSizeFocusNode.dispose();
-    _subtitleStyleFocusNode.dispose();
-    _subtitleColorFocusNode.dispose();
-    _subtitleBgFocusNode.dispose();
-    _subtitleFontFocusNode.dispose();
-    _subtitleBoldFocusNode.dispose();
-    _netPatienceFocusNode.dispose();
-    _netBufferFocusNode.dispose();
+    _rows.aspectFocusNode.dispose();
+    _rows.defaultAudioLangFocusNode.dispose();
+    _subRows.defaultSubtitleLangFocusNode.dispose();
+    _rows.systemAudioEffectsFocusNode.dispose();
+    _rows.tvosForceSwDecodeFocusNode.dispose();
+    _rows.audioPassthroughFocusNode.dispose();
+    _rows.appleMultichannelFocusNode.dispose();
+    _rows.tvosForceStereoFocusNode.dispose();
+    _rows.tvosLegacyAudioFocusNode.dispose();
+    _rows.androidVideoRendererFocusNode.dispose();
+    _rows.contentDisplayMatchFocusNode.dispose();
+    _rows.iptvDecoderFocusNode.dispose();
+    _rows.startPortraitFocusNode.dispose();
+    _subRows.subtitleOnlyForeignAudioFocusNode.dispose();
+    _subRows.subtitleForcedOnlyFocusNode.dispose();
+    _subRows.subtitleAutoSyncFocusNode.dispose();
+    _subRows.movieCompletionThresholdFocusNode.dispose();
+    _subRows.episodeCompletionThresholdFocusNode.dispose();
+    _subRows.skipSegmentsEnabledFocusNode.dispose();
+    _subRows.skipSegmentProviderFocusNode.dispose();
+    _subRows.subtitleSizeFocusNode.dispose();
+    _subRows.subtitleStyleFocusNode.dispose();
+    _subRows.subtitleColorFocusNode.dispose();
+    _subRows.subtitleBgFocusNode.dispose();
+    _subRows.subtitleFontFocusNode.dispose();
+    _subRows.subtitleBoldFocusNode.dispose();
+    _rows.netPatienceFocusNode.dispose();
+    _rows.netBufferFocusNode.dispose();
     super.dispose();
   }
 
   Future<void> _loadSettings() async {
     setState(() {
-      _loading = true;
+      _core.loading = true;
     });
 
     try {
@@ -527,7 +394,7 @@ class _ExternalPlayerSettingsPageState
         customCommand =
             await ExternalPlayerStorage.getCustomExternalPlayerCommand();
         if (!mounted) return;
-        _commandController.text = customCommand ?? '';
+        _mac.commandController.text = customCommand ?? '';
       }
 
       // Load iOS-specific settings
@@ -543,7 +410,7 @@ class _ExternalPlayerSettingsPageState
         iosCustomScheme =
             await ExternalPlayerStorage.getIOSCustomSchemeTemplate();
         if (!mounted) return;
-        _iosSchemeController.text = iosCustomScheme ?? '';
+        _ios.iosSchemeController.text = iosCustomScheme ?? '';
       }
 
       // Load Linux-specific settings
@@ -559,7 +426,7 @@ class _ExternalPlayerSettingsPageState
         linuxCustomCommand =
             await ExternalPlayerStorage.getLinuxCustomCommand();
         if (!mounted) return;
-        _linuxCommandController.text = linuxCustomCommand ?? '';
+        _linux.linuxCommandController.text = linuxCustomCommand ?? '';
       }
 
       // Load Windows-specific settings
@@ -575,7 +442,7 @@ class _ExternalPlayerSettingsPageState
         windowsCustomCommand =
             await ExternalPlayerStorage.getWindowsCustomCommand();
         if (!mounted) return;
-        _windowsCommandController.text = windowsCustomCommand ?? '';
+        _win.windowsCommandController.text = windowsCustomCommand ?? '';
       }
 
       // Load DeoVR settings (Android)
@@ -663,72 +530,73 @@ class _ExternalPlayerSettingsPageState
 
       if (!mounted) return;
       setState(() {
-        _defaultPlayerMode = mode;
-        _installedPlayers = installed;
-        _selectedPlayer = ExternalPlayerExtension.fromStorageKey(preferredKey);
-        _customAppPath = customAppPath;
-        _customAppName = customAppName;
-        _customCommand = customCommand;
+        _core.defaultPlayerMode = mode;
+        _mac.installedPlayers = installed;
+        _mac.selectedPlayer = ExternalPlayerExtension.fromStorageKey(
+          preferredKey,
+        );
+        _mac.customAppPath = customAppPath;
+        _mac.customAppName = customAppName;
+        _mac.customCommand = customCommand;
         // iOS settings
-        _installedIOSPlayers = installedIOS;
-        _selectedIOSPlayer = iOSExternalPlayerExtension.fromStorageKey(
+        _ios.installedIOSPlayers = installedIOS;
+        _ios.selectedIOSPlayer = iOSExternalPlayerExtension.fromStorageKey(
           iosPreferredKey,
         );
-        _iosCustomScheme = iosCustomScheme;
+        _ios.iosCustomScheme = iosCustomScheme;
         // Linux settings
-        _installedLinuxPlayers = installedLinux;
-        _selectedLinuxPlayer = LinuxExternalPlayerExtension.fromStorageKey(
-          linuxPreferredKey,
-        );
-        _linuxCustomCommand = linuxCustomCommand;
+        _linux.installedLinuxPlayers = installedLinux;
+        _linux.selectedLinuxPlayer =
+            LinuxExternalPlayerExtension.fromStorageKey(linuxPreferredKey);
+        _linux.linuxCustomCommand = linuxCustomCommand;
         // Windows settings
-        _installedWindowsPlayers = installedWindows;
-        _selectedWindowsPlayer = WindowsExternalPlayerExtension.fromStorageKey(
-          windowsPreferredKey,
-        );
-        _windowsCustomCommand = windowsCustomCommand;
+        _win.installedWindowsPlayers = installedWindows;
+        _win.selectedWindowsPlayer =
+            WindowsExternalPlayerExtension.fromStorageKey(windowsPreferredKey);
+        _win.windowsCustomCommand = windowsCustomCommand;
         // Other settings
-        _vrDefaultScreenType = vrScreenType;
-        _vrDefaultStereoMode = vrStereoMode;
-        _vrAutoDetectFormat = vrAutoDetect;
-        _vrShowDialog = vrShowDialog;
-        _isAndroidTv = isAndroidTv;
-        _defaultAspectIndex = defaultAspectIndex;
-        _nightModeIndex = nightModeIndex;
-        _systemAudioEffects = systemAudioEffects;
-        _tvosForceSoftwareDecode = tvosForceSoftwareDecode;
-        _audioPassthrough = audioPassthrough;
-        _appleMultichannel = appleMultichannel;
-        _tvosForceStereo = tvosForceStereo;
-        _tvosLegacyAudioOutput = tvosLegacyAudioOutput;
-        _androidVideoRendererMode = androidVideoRendererMode;
-        _contentDisplayMatchMode = contentDisplayMatchMode;
-        _iptvDecoderMode = iptvDecoderMode;
-        _startPortrait = startPortrait;
-        _subtitleOnlyForeignAudio = subtitleOnlyForeignAudio;
-        _subtitleForcedOnly = subtitleForcedOnly;
-        _subtitleAutoSync = subtitleAutoSync;
-        _movieCompletionThreshold = movieCompletionThreshold;
-        _episodeCompletionThreshold = episodeCompletionThreshold;
-        _skipSegmentsEnabled = skipSegmentsEnabled;
-        _skipSegmentProvider = skipSegmentProvider;
+        _vr.vrDefaultScreenType = vrScreenType;
+        _vr.vrDefaultStereoMode = vrStereoMode;
+        _vr.vrAutoDetectFormat = vrAutoDetect;
+        _vr.vrShowDialog = vrShowDialog;
+        _values.isAndroidTv = isAndroidTv;
+        _values.defaultAspectIndex = defaultAspectIndex;
+        _values.nightModeIndex = nightModeIndex;
+        _values.systemAudioEffects = systemAudioEffects;
+        _values.tvosForceSoftwareDecode = tvosForceSoftwareDecode;
+        _values.audioPassthrough = audioPassthrough;
+        _values.appleMultichannel = appleMultichannel;
+        _values.tvosForceStereo = tvosForceStereo;
+        _values.tvosLegacyAudioOutput = tvosLegacyAudioOutput;
+        _values.androidVideoRendererMode = androidVideoRendererMode;
+        _values.contentDisplayMatchMode = contentDisplayMatchMode;
+        _values.iptvDecoderMode = iptvDecoderMode;
+        _values.startPortrait = startPortrait;
+        _sub.subtitleOnlyForeignAudio = subtitleOnlyForeignAudio;
+        _sub.subtitleForcedOnly = subtitleForcedOnly;
+        _sub.subtitleAutoSync = subtitleAutoSync;
+        _values.movieCompletionThreshold = movieCompletionThreshold;
+        _values.episodeCompletionThreshold = episodeCompletionThreshold;
+        _values.skipSegmentsEnabled = skipSegmentsEnabled;
+        _values.skipSegmentProvider = skipSegmentProvider;
         // Unknown stored value (a downgrade across versions) falls back to
         // Standard rather than crashing the dropdown.
-        _netPatience = NetworkTuning.patienceOptions.containsKey(netPatience)
+        _values.netPatience =
+            NetworkTuning.patienceOptions.containsKey(netPatience)
             ? netPatience
             : NetworkTuning.standard;
-        _netBuffer = NetworkTuning.bufferOptions.containsKey(netBuffer)
+        _values.netBuffer = NetworkTuning.bufferOptions.containsKey(netBuffer)
             ? netBuffer
             : NetworkTuning.standard;
-        _defaultSubtitleLanguage = defaultSubtitleLanguage;
-        _defaultAudioLanguage = defaultAudioLanguage;
-        _subtitleSizeIndex = subtitleSettings.sizeIndex;
-        _subtitleStyleIndex = subtitleSettings.styleIndex;
-        _subtitleColorIndex = subtitleSettings.colorIndex;
-        _subtitleBgIndex = subtitleSettings.bgIndex;
-        _subtitleFontIndex = subtitleSettings.fontIndex;
-        _subtitleBold = subtitleSettings.bold;
-        _loading = false;
+        _sub.defaultSubtitleLanguage = defaultSubtitleLanguage;
+        _sub.defaultAudioLanguage = defaultAudioLanguage;
+        _sub.subtitleSizeIndex = subtitleSettings.sizeIndex;
+        _sub.subtitleStyleIndex = subtitleSettings.styleIndex;
+        _sub.subtitleColorIndex = subtitleSettings.colorIndex;
+        _sub.subtitleBgIndex = subtitleSettings.bgIndex;
+        _sub.subtitleFontIndex = subtitleSettings.fontIndex;
+        _sub.subtitleBold = subtitleSettings.bold;
+        _core.loading = false;
       });
       // Load fonts (built-in + custom) separately (async)
       _loadFonts();
@@ -740,13 +608,14 @@ class _ExternalPlayerSettingsPageState
           // FocusScopeNode as primary focus means DPAD is stranded.
           final primary = FocusManager.instance.primaryFocus;
           if (primary != null && primary is! FocusScopeNode) return;
-          _contentFocusNode.traversalDescendants.firstOrNull?.requestFocus();
+          _core.contentFocusNode.traversalDescendants.firstOrNull
+              ?.requestFocus();
         });
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
+        _core.loading = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(
@@ -760,7 +629,7 @@ class _ExternalPlayerSettingsPageState
     try {
       await ExternalPlayerStorage.setDefaultPlayerMode(mode);
       setState(() {
-        _defaultPlayerMode = mode;
+        _core.defaultPlayerMode = mode;
       });
     } catch (e) {
       if (mounted) {
@@ -775,7 +644,7 @@ class _ExternalPlayerSettingsPageState
     try {
       await ExternalPlayerStorage.setPreferredExternalPlayer(player.storageKey);
       setState(() {
-        _selectedPlayer = player;
+        _mac.selectedPlayer = player;
       });
     } catch (e) {
       if (mounted) {
@@ -804,9 +673,9 @@ class _ExternalPlayerSettingsPageState
           await ExternalPlayerStorage.setPreferredExternalPlayer('custom_app');
 
           setState(() {
-            _customAppPath = path;
-            _customAppName = appName;
-            _selectedPlayer = ExternalPlayer.customApp;
+            _mac.customAppPath = path;
+            _mac.customAppName = appName;
+            _mac.selectedPlayer = ExternalPlayer.customApp;
           });
         }
       }
@@ -824,18 +693,18 @@ class _ExternalPlayerSettingsPageState
       await ExternalPlayerStorage.setCustomExternalPlayerPath(null);
       await ExternalPlayerStorage.setCustomExternalPlayerName(null);
 
-      if (_selectedPlayer == ExternalPlayer.customApp) {
+      if (_mac.selectedPlayer == ExternalPlayer.customApp) {
         await ExternalPlayerStorage.setPreferredExternalPlayer(
           'system_default',
         );
         setState(() {
-          _selectedPlayer = ExternalPlayer.systemDefault;
+          _mac.selectedPlayer = ExternalPlayer.systemDefault;
         });
       }
 
       setState(() {
-        _customAppPath = null;
-        _customAppName = null;
+        _mac.customAppPath = null;
+        _mac.customAppName = null;
       });
     } catch (e) {
       if (mounted) {
@@ -847,12 +716,12 @@ class _ExternalPlayerSettingsPageState
   }
 
   Future<void> _saveCustomCommand() async {
-    final command = _commandController.text.trim();
+    final command = _mac.commandController.text.trim();
 
     final validation = ExternalPlayerService.validateCustomCommand(command);
     if (!validation.isValid) {
       setState(() {
-        _commandError = validation.errorMessage;
+        _mac.commandError = validation.errorMessage;
       });
       return;
     }
@@ -862,9 +731,9 @@ class _ExternalPlayerSettingsPageState
       await ExternalPlayerStorage.setPreferredExternalPlayer('custom_command');
 
       setState(() {
-        _customCommand = command;
-        _commandError = null;
-        _selectedPlayer = ExternalPlayer.customCommand;
+        _mac.customCommand = command;
+        _mac.commandError = null;
+        _mac.selectedPlayer = ExternalPlayer.customCommand;
       });
 
       if (mounted) {
@@ -885,19 +754,19 @@ class _ExternalPlayerSettingsPageState
     try {
       await ExternalPlayerStorage.setCustomExternalPlayerCommand(null);
 
-      if (_selectedPlayer == ExternalPlayer.customCommand) {
+      if (_mac.selectedPlayer == ExternalPlayer.customCommand) {
         await ExternalPlayerStorage.setPreferredExternalPlayer(
           'system_default',
         );
         setState(() {
-          _selectedPlayer = ExternalPlayer.systemDefault;
+          _mac.selectedPlayer = ExternalPlayer.systemDefault;
         });
       }
 
-      _commandController.clear();
+      _mac.commandController.clear();
       setState(() {
-        _customCommand = null;
-        _commandError = null;
+        _mac.customCommand = null;
+        _mac.commandError = null;
       });
     } catch (e) {
       if (mounted) {
@@ -915,7 +784,7 @@ class _ExternalPlayerSettingsPageState
         player.storageKey,
       );
       setState(() {
-        _selectedIOSPlayer = player;
+        _ios.selectedIOSPlayer = player;
       });
     } catch (e) {
       if (mounted) {
@@ -927,12 +796,12 @@ class _ExternalPlayerSettingsPageState
   }
 
   Future<void> _saveIOSCustomScheme() async {
-    final scheme = _iosSchemeController.text.trim();
+    final scheme = _ios.iosSchemeController.text.trim();
 
     final validation = validateCustomScheme(scheme);
     if (!validation.isValid) {
       setState(() {
-        _iosSchemeError = validation.errorMessage;
+        _ios.iosSchemeError = validation.errorMessage;
       });
       return;
     }
@@ -944,9 +813,9 @@ class _ExternalPlayerSettingsPageState
       );
 
       setState(() {
-        _iosCustomScheme = scheme;
-        _iosSchemeError = null;
-        _selectedIOSPlayer = iOSExternalPlayer.customScheme;
+        _ios.iosCustomScheme = scheme;
+        _ios.iosSchemeError = null;
+        _ios.selectedIOSPlayer = iOSExternalPlayer.customScheme;
       });
 
       if (mounted) {
@@ -967,17 +836,17 @@ class _ExternalPlayerSettingsPageState
     try {
       await ExternalPlayerStorage.setIOSCustomSchemeTemplate(null);
 
-      if (_selectedIOSPlayer == iOSExternalPlayer.customScheme) {
+      if (_ios.selectedIOSPlayer == iOSExternalPlayer.customScheme) {
         await ExternalPlayerStorage.setPreferredIOSExternalPlayer('vlc');
         setState(() {
-          _selectedIOSPlayer = iOSExternalPlayer.vlc;
+          _ios.selectedIOSPlayer = iOSExternalPlayer.vlc;
         });
       }
 
-      _iosSchemeController.clear();
+      _ios.iosSchemeController.clear();
       setState(() {
-        _iosCustomScheme = null;
-        _iosSchemeError = null;
+        _ios.iosCustomScheme = null;
+        _ios.iosSchemeError = null;
       });
     } catch (e) {
       if (mounted) {
@@ -995,7 +864,7 @@ class _ExternalPlayerSettingsPageState
         player.storageKey,
       );
       setState(() {
-        _selectedLinuxPlayer = player;
+        _linux.selectedLinuxPlayer = player;
       });
     } catch (e) {
       if (mounted) {
@@ -1007,12 +876,12 @@ class _ExternalPlayerSettingsPageState
   }
 
   Future<void> _saveLinuxCustomCommand() async {
-    final command = _linuxCommandController.text.trim();
+    final command = _linux.linuxCommandController.text.trim();
 
     final validation = validateLinuxCustomCommand(command);
     if (!validation.isValid) {
       setState(() {
-        _linuxCommandError = validation.errorMessage;
+        _linux.linuxCommandError = validation.errorMessage;
       });
       return;
     }
@@ -1024,9 +893,9 @@ class _ExternalPlayerSettingsPageState
       );
 
       setState(() {
-        _linuxCustomCommand = command;
-        _linuxCommandError = null;
-        _selectedLinuxPlayer = LinuxExternalPlayer.customCommand;
+        _linux.linuxCustomCommand = command;
+        _linux.linuxCommandError = null;
+        _linux.selectedLinuxPlayer = LinuxExternalPlayer.customCommand;
       });
 
       if (mounted) {
@@ -1047,19 +916,19 @@ class _ExternalPlayerSettingsPageState
     try {
       await ExternalPlayerStorage.setLinuxCustomCommand(null);
 
-      if (_selectedLinuxPlayer == LinuxExternalPlayer.customCommand) {
+      if (_linux.selectedLinuxPlayer == LinuxExternalPlayer.customCommand) {
         await ExternalPlayerStorage.setPreferredLinuxExternalPlayer(
           'system_default',
         );
         setState(() {
-          _selectedLinuxPlayer = LinuxExternalPlayer.systemDefault;
+          _linux.selectedLinuxPlayer = LinuxExternalPlayer.systemDefault;
         });
       }
 
-      _linuxCommandController.clear();
+      _linux.linuxCommandController.clear();
       setState(() {
-        _linuxCustomCommand = null;
-        _linuxCommandError = null;
+        _linux.linuxCustomCommand = null;
+        _linux.linuxCommandError = null;
       });
     } catch (e) {
       if (mounted) {
@@ -1077,7 +946,7 @@ class _ExternalPlayerSettingsPageState
         player.storageKey,
       );
       setState(() {
-        _selectedWindowsPlayer = player;
+        _win.selectedWindowsPlayer = player;
       });
     } catch (e) {
       if (mounted) {
@@ -1089,12 +958,12 @@ class _ExternalPlayerSettingsPageState
   }
 
   Future<void> _saveWindowsCustomCommand() async {
-    final command = _windowsCommandController.text.trim();
+    final command = _win.windowsCommandController.text.trim();
 
     final validation = validateWindowsCustomCommand(command);
     if (!validation.isValid) {
       setState(() {
-        _windowsCommandError = validation.errorMessage;
+        _win.windowsCommandError = validation.errorMessage;
       });
       return;
     }
@@ -1106,9 +975,9 @@ class _ExternalPlayerSettingsPageState
       );
 
       setState(() {
-        _windowsCustomCommand = command;
-        _windowsCommandError = null;
-        _selectedWindowsPlayer = WindowsExternalPlayer.customCommand;
+        _win.windowsCustomCommand = command;
+        _win.windowsCommandError = null;
+        _win.selectedWindowsPlayer = WindowsExternalPlayer.customCommand;
       });
 
       if (mounted) {
@@ -1129,19 +998,19 @@ class _ExternalPlayerSettingsPageState
     try {
       await ExternalPlayerStorage.setWindowsCustomCommand(null);
 
-      if (_selectedWindowsPlayer == WindowsExternalPlayer.customCommand) {
+      if (_win.selectedWindowsPlayer == WindowsExternalPlayer.customCommand) {
         await ExternalPlayerStorage.setPreferredWindowsExternalPlayer(
           'system_default',
         );
         setState(() {
-          _selectedWindowsPlayer = WindowsExternalPlayer.systemDefault;
+          _win.selectedWindowsPlayer = WindowsExternalPlayer.systemDefault;
         });
       }
 
-      _windowsCommandController.clear();
+      _win.windowsCommandController.clear();
       setState(() {
-        _windowsCustomCommand = null;
-        _windowsCommandError = null;
+        _win.windowsCustomCommand = null;
+        _win.windowsCommandError = null;
       });
     } catch (e) {
       if (mounted) {
@@ -1154,30 +1023,30 @@ class _ExternalPlayerSettingsPageState
 
   // DeoVR settings setters
   Future<void> _setVrDefaultScreenType(String screenType) async {
-    setState(() => _vrDefaultScreenType = screenType);
+    setState(() => _vr.vrDefaultScreenType = screenType);
     await QuickPlayStorage.setQuickPlayVrDefaultScreenType(screenType);
   }
 
   Future<void> _setVrDefaultStereoMode(String stereoMode) async {
-    setState(() => _vrDefaultStereoMode = stereoMode);
+    setState(() => _vr.vrDefaultStereoMode = stereoMode);
     await QuickPlayStorage.setQuickPlayVrDefaultStereoMode(stereoMode);
   }
 
   Future<void> _setVrAutoDetectFormat(bool autoDetect) async {
-    setState(() => _vrAutoDetectFormat = autoDetect);
+    setState(() => _vr.vrAutoDetectFormat = autoDetect);
     await QuickPlayStorage.setQuickPlayVrAutoDetectFormat(autoDetect);
   }
 
   Future<void> _setVrShowDialog(bool showDialog) async {
-    setState(() => _vrShowDialog = showDialog);
+    setState(() => _vr.vrShowDialog = showDialog);
     await QuickPlayStorage.setQuickPlayVrShowDialog(showDialog);
   }
 
   // Debrify Player settings setters
   Future<void> _setDefaultAspectIndex(int index) async {
-    setState(() => _defaultAspectIndex = index);
+    setState(() => _values.defaultAspectIndex = index);
     // Use platform-specific storage key
-    if (_isAndroidTv) {
+    if (_values.isAndroidTv) {
       await PlayerSettingsStorage.setPlayerDefaultAspectIndexTv(index);
     } else {
       await PlayerSettingsStorage.setPlayerDefaultAspectIndex(index);
@@ -1185,74 +1054,74 @@ class _ExternalPlayerSettingsPageState
   }
 
   Future<void> _setNightModeIndex(int index) async {
-    setState(() => _nightModeIndex = index);
+    setState(() => _values.nightModeIndex = index);
     await PlayerSettingsStorage.setPlayerNightModeIndex(index);
   }
 
   Future<void> _setSystemAudioEffects(bool enabled) async {
-    setState(() => _systemAudioEffects = enabled);
+    setState(() => _values.systemAudioEffects = enabled);
     await PlayerSettingsStorage.setPlayerSystemAudioEffects(enabled);
   }
 
   Future<void> _setTvosForceSoftwareDecode(bool enabled) async {
-    setState(() => _tvosForceSoftwareDecode = enabled);
+    setState(() => _values.tvosForceSoftwareDecode = enabled);
     await PlayerSettingsStorage.setTvosForceSoftwareDecode(enabled);
   }
 
   Future<void> _setTvosForceStereo(bool enabled) async {
-    setState(() => _tvosForceStereo = enabled);
+    setState(() => _values.tvosForceStereo = enabled);
     await PlayerSettingsStorage.setTvosForceStereoAudio(enabled);
   }
 
   Future<void> _setTvosLegacyAudioOutput(bool enabled) async {
-    setState(() => _tvosLegacyAudioOutput = enabled);
+    setState(() => _values.tvosLegacyAudioOutput = enabled);
     await PlayerSettingsStorage.setTvosLegacyAudioOutput(enabled);
   }
 
   Future<void> _setAudioPassthrough(bool enabled) async {
-    setState(() => _audioPassthrough = enabled);
+    setState(() => _values.audioPassthrough = enabled);
     await PlayerSettingsStorage.setAudioPassthroughEnabled(enabled);
   }
 
   Future<void> _setAppleMultichannel(bool enabled) async {
-    setState(() => _appleMultichannel = enabled);
+    setState(() => _values.appleMultichannel = enabled);
     await PlayerSettingsStorage.setAppleMultichannelAudio(enabled);
   }
 
   Future<void> _setAndroidVideoRendererMode(String storageKey) async {
     final mode = AndroidVideoRendererMode.fromStorage(storageKey);
-    setState(() => _androidVideoRendererMode = mode);
+    setState(() => _values.androidVideoRendererMode = mode);
     await PlayerSettingsStorage.setAndroidVideoRendererMode(mode);
   }
 
   Future<void> _setContentDisplayMatchMode(String storageKey) async {
     final mode = ContentDisplayMatchMode.fromStorage(storageKey);
-    setState(() => _contentDisplayMatchMode = mode);
+    setState(() => _values.contentDisplayMatchMode = mode);
     await PlayerNetworkStorage.setContentDisplayMatchMode(mode);
   }
 
   Future<void> _setIptvDecoderMode(String value) async {
-    setState(() => _iptvDecoderMode = value);
+    setState(() => _values.iptvDecoderMode = value);
     await PlayerNetworkStorage.setIptvDecoderMode(value);
   }
 
   Future<void> _setStartPortrait(bool enabled) async {
-    setState(() => _startPortrait = enabled);
+    setState(() => _values.startPortrait = enabled);
     await PlayerSettingsStorage.setPlayerStartPortrait(enabled);
   }
 
   Future<void> _setSubtitleOnlyForeignAudio(bool enabled) async {
-    setState(() => _subtitleOnlyForeignAudio = enabled);
+    setState(() => _sub.subtitleOnlyForeignAudio = enabled);
     await SubtitleSettingsStorage.setSubtitleOnlyForeignAudio(enabled);
   }
 
   Future<void> _setSubtitleForcedOnly(bool enabled) async {
-    setState(() => _subtitleForcedOnly = enabled);
+    setState(() => _sub.subtitleForcedOnly = enabled);
     await SubtitleSettingsStorage.setSubtitleForcedOnly(enabled);
   }
 
   Future<void> _setSubtitleAutoSync(bool enabled) async {
-    setState(() => _subtitleAutoSync = enabled);
+    setState(() => _sub.subtitleAutoSync = enabled);
     await SubtitleSettingsStorage.setSubtitleAutoSyncEnabled(enabled);
   }
 
@@ -1270,73 +1139,73 @@ class _ExternalPlayerSettingsPageState
 
   Future<void> _setMovieCompletionThresholdIndex(int index) async {
     final value = _completionThresholdOptions[index];
-    setState(() => _movieCompletionThreshold = value);
+    setState(() => _values.movieCompletionThreshold = value);
     await LocalCompletionStorage.setMovieCompletionThreshold(value);
   }
 
   Future<void> _setEpisodeCompletionThresholdIndex(int index) async {
     final value = _completionThresholdOptions[index];
-    setState(() => _episodeCompletionThreshold = value);
+    setState(() => _values.episodeCompletionThreshold = value);
     await LocalCompletionStorage.setEpisodeCompletionThreshold(value);
   }
 
   Future<void> _setSkipSegmentsEnabled(bool enabled) async {
-    setState(() => _skipSegmentsEnabled = enabled);
+    setState(() => _values.skipSegmentsEnabled = enabled);
     await SkipSegmentsStorage.setSkipSegmentsEnabled(enabled);
   }
 
   Future<void> _setSkipSegmentProvider(String provider) async {
-    setState(() => _skipSegmentProvider = provider);
+    setState(() => _values.skipSegmentProvider = provider);
     await SkipSegmentsStorage.setSkipSegmentProvider(provider);
   }
 
   Future<void> _setNetPatience(String value) async {
-    setState(() => _netPatience = value);
+    setState(() => _values.netPatience = value);
     await PlayerNetworkStorage.setNetworkConnectPatience(value);
   }
 
   Future<void> _setNetBuffer(String value) async {
-    setState(() => _netBuffer = value);
+    setState(() => _values.netBuffer = value);
     await PlayerNetworkStorage.setNetworkBufferSize(value);
   }
 
   Future<void> _setDefaultSubtitleLanguage(String? languageCode) async {
-    setState(() => _defaultSubtitleLanguage = languageCode);
+    setState(() => _sub.defaultSubtitleLanguage = languageCode);
     await SubtitleSettingsStorage.setDefaultSubtitleLanguage(languageCode);
   }
 
   Future<void> _setDefaultAudioLanguage(String? languageCode) async {
-    setState(() => _defaultAudioLanguage = languageCode);
+    setState(() => _sub.defaultAudioLanguage = languageCode);
     await SubtitleSettingsStorage.setDefaultAudioLanguage(languageCode);
   }
 
   Future<void> _setSubtitleSizeIndex(int index) async {
-    setState(() => _subtitleSizeIndex = index);
+    setState(() => _sub.subtitleSizeIndex = index);
     await SubtitleSettingsService.instance.setSizeIndex(index);
   }
 
   Future<void> _setSubtitleStyleIndex(int index) async {
-    setState(() => _subtitleStyleIndex = index);
+    setState(() => _sub.subtitleStyleIndex = index);
     await SubtitleSettingsService.instance.setStyleIndex(index);
   }
 
   Future<void> _setSubtitleColorIndex(int index) async {
-    setState(() => _subtitleColorIndex = index);
+    setState(() => _sub.subtitleColorIndex = index);
     await SubtitleSettingsService.instance.setColorIndex(index);
   }
 
   Future<void> _setSubtitleBgIndex(int index) async {
-    setState(() => _subtitleBgIndex = index);
+    setState(() => _sub.subtitleBgIndex = index);
     await SubtitleSettingsService.instance.setBgIndex(index);
   }
 
   Future<void> _setSubtitleFontIndex(int index) async {
-    setState(() => _subtitleFontIndex = index);
+    setState(() => _sub.subtitleFontIndex = index);
     await SubtitleFontService.instance.setFontIndex(index);
   }
 
   Future<void> _setSubtitleBold(bool value) async {
-    setState(() => _subtitleBold = value);
+    setState(() => _sub.subtitleBold = value);
     await SubtitleSettingsService.instance.setBold(value);
   }
 
@@ -1346,8 +1215,8 @@ class _ExternalPlayerSettingsPageState
         .getSelectedFontIndex();
     if (mounted) {
       setState(() {
-        _allFonts = allFonts;
-        _subtitleFontIndex = selectedIndex;
+        _sub.allFonts = allFonts;
+        _sub.subtitleFontIndex = selectedIndex;
       });
     }
   }
@@ -1432,7 +1301,7 @@ class _ExternalPlayerSettingsPageState
   }
 
   // Aspect labels
-  List<String> get _aspectLabels => _isAndroidTv
+  List<String> get _aspectLabels => _values.isAndroidTv
       ? ['Fit', 'Fill', 'Zoom', 'Cinema Zoom']
       : [
           'Contain',
@@ -1516,7 +1385,7 @@ class _ExternalPlayerSettingsPageState
 
   int get _subtitleLanguageIndex {
     final idx = _subtitleLanguageOptions.indexWhere(
-      (opt) => opt.$1 == _defaultSubtitleLanguage,
+      (opt) => opt.$1 == _sub.defaultSubtitleLanguage,
     );
     return idx >= 0 ? idx : 0;
   }
@@ -1548,7 +1417,7 @@ class _ExternalPlayerSettingsPageState
 
   int get _audioLanguageIndex {
     final idx = _audioLanguageOptions.indexWhere(
-      (opt) => opt.$1 == _defaultAudioLanguage,
+      (opt) => opt.$1 == _sub.defaultAudioLanguage,
     );
     return idx >= 0 ? idx : 0;
   }
@@ -1556,7 +1425,7 @@ class _ExternalPlayerSettingsPageState
   Widget _buildPlayerTile(ExternalPlayer player) {
     final app = AppThemeScope.of(context);
     final t = app.settings;
-    final isInstalled = _installedPlayers[player] ?? false;
+    final isInstalled = _mac.installedPlayers[player] ?? false;
     final isCustomApp = player == ExternalPlayer.customApp;
     final isCustomCommand = player == ExternalPlayer.customCommand;
     final isSystemDefault = player == ExternalPlayer.systemDefault;
@@ -1565,9 +1434,9 @@ class _ExternalPlayerSettingsPageState
     if (isSystemDefault) {
       canSelect = true;
     } else if (isCustomApp) {
-      canSelect = _customAppPath != null;
+      canSelect = _mac.customAppPath != null;
     } else if (isCustomCommand) {
-      canSelect = _customCommand != null && _customCommand!.isNotEmpty;
+      canSelect = _mac.customCommand != null && _mac.customCommand!.isNotEmpty;
     } else {
       canSelect = isInstalled;
     }
@@ -1578,17 +1447,17 @@ class _ExternalPlayerSettingsPageState
     if (isSystemDefault) {
       subtitle = 'Uses system default video player';
     } else if (isCustomApp) {
-      if (_customAppPath != null) {
-        subtitle = _customAppName ?? _customAppPath!;
+      if (_mac.customAppPath != null) {
+        subtitle = _mac.customAppName ?? _mac.customAppPath!;
       } else {
         subtitle = 'No application selected';
         subtitleColor = t.dim;
       }
     } else if (isCustomCommand) {
-      if (_customCommand != null && _customCommand!.isNotEmpty) {
-        final displayCmd = _customCommand!.length > 40
-            ? '${_customCommand!.substring(0, 40)}...'
-            : _customCommand!;
+      if (_mac.customCommand != null && _mac.customCommand!.isNotEmpty) {
+        final displayCmd = _mac.customCommand!.length > 40
+            ? '${_mac.customCommand!.substring(0, 40)}...'
+            : _mac.customCommand!;
         subtitle = displayCmd;
       } else {
         subtitle = 'No command configured';
@@ -1604,7 +1473,7 @@ class _ExternalPlayerSettingsPageState
 
     return RadioListTile<ExternalPlayer>(
       value: player,
-      groupValue: canSelect ? _selectedPlayer : null,
+      groupValue: canSelect ? _mac.selectedPlayer : null,
       onChanged: canSelect
           ? (value) {
               if (value != null) {
@@ -1639,17 +1508,17 @@ class _ExternalPlayerSettingsPageState
   Widget _buildIOSPlayerTile(iOSExternalPlayer player) {
     final app = AppThemeScope.of(context);
     final t = app.settings;
-    final isInstalled = _installedIOSPlayers[player] ?? false;
+    final isInstalled = _ios.installedIOSPlayers[player] ?? false;
     final isCustom = player == iOSExternalPlayer.customScheme;
 
     String subtitle;
     Color? subtitleColor;
 
     if (isCustom) {
-      if (_iosCustomScheme != null && _iosCustomScheme!.isNotEmpty) {
-        final displayScheme = _iosCustomScheme!.length > 40
-            ? '${_iosCustomScheme!.substring(0, 40)}...'
-            : _iosCustomScheme!;
+      if (_ios.iosCustomScheme != null && _ios.iosCustomScheme!.isNotEmpty) {
+        final displayScheme = _ios.iosCustomScheme!.length > 40
+            ? '${_ios.iosCustomScheme!.substring(0, 40)}...'
+            : _ios.iosCustomScheme!;
         subtitle = displayScheme;
       } else {
         subtitle = 'No URL scheme configured';
@@ -1665,7 +1534,7 @@ class _ExternalPlayerSettingsPageState
 
     return RadioListTile<iOSExternalPlayer>(
       value: player,
-      groupValue: _selectedIOSPlayer,
+      groupValue: _ios.selectedIOSPlayer,
       onChanged: (value) {
         if (value != null) {
           _selectIOSPlayer(value);
@@ -1695,17 +1564,18 @@ class _ExternalPlayerSettingsPageState
   Widget _buildLinuxPlayerTile(LinuxExternalPlayer player) {
     final app = AppThemeScope.of(context);
     final t = app.settings;
-    final isInstalled = _installedLinuxPlayers[player] ?? false;
+    final isInstalled = _linux.installedLinuxPlayers[player] ?? false;
     final isCustom = player == LinuxExternalPlayer.customCommand;
 
     String subtitle;
     Color? subtitleColor;
 
     if (isCustom) {
-      if (_linuxCustomCommand != null && _linuxCustomCommand!.isNotEmpty) {
-        final displayCommand = _linuxCustomCommand!.length > 40
-            ? '${_linuxCustomCommand!.substring(0, 40)}...'
-            : _linuxCustomCommand!;
+      if (_linux.linuxCustomCommand != null &&
+          _linux.linuxCustomCommand!.isNotEmpty) {
+        final displayCommand = _linux.linuxCustomCommand!.length > 40
+            ? '${_linux.linuxCustomCommand!.substring(0, 40)}...'
+            : _linux.linuxCustomCommand!;
         subtitle = displayCommand;
       } else {
         subtitle = 'No command configured';
@@ -1721,7 +1591,7 @@ class _ExternalPlayerSettingsPageState
 
     return RadioListTile<LinuxExternalPlayer>(
       value: player,
-      groupValue: _selectedLinuxPlayer,
+      groupValue: _linux.selectedLinuxPlayer,
       onChanged: (value) {
         if (value != null) {
           _selectLinuxPlayer(value);
@@ -1751,17 +1621,18 @@ class _ExternalPlayerSettingsPageState
   Widget _buildWindowsPlayerTile(WindowsExternalPlayer player) {
     final app = AppThemeScope.of(context);
     final t = app.settings;
-    final isInstalled = _installedWindowsPlayers[player] ?? false;
+    final isInstalled = _win.installedWindowsPlayers[player] ?? false;
     final isCustom = player == WindowsExternalPlayer.customCommand;
 
     String subtitle;
     Color? subtitleColor;
 
     if (isCustom) {
-      if (_windowsCustomCommand != null && _windowsCustomCommand!.isNotEmpty) {
-        final displayCommand = _windowsCustomCommand!.length > 40
-            ? '${_windowsCustomCommand!.substring(0, 40)}...'
-            : _windowsCustomCommand!;
+      if (_win.windowsCustomCommand != null &&
+          _win.windowsCustomCommand!.isNotEmpty) {
+        final displayCommand = _win.windowsCustomCommand!.length > 40
+            ? '${_win.windowsCustomCommand!.substring(0, 40)}...'
+            : _win.windowsCustomCommand!;
         subtitle = displayCommand;
       } else {
         subtitle = 'No command configured';
@@ -1777,7 +1648,7 @@ class _ExternalPlayerSettingsPageState
 
     return RadioListTile<WindowsExternalPlayer>(
       value: player,
-      groupValue: _selectedWindowsPlayer,
+      groupValue: _win.selectedWindowsPlayer,
       onChanged: (value) {
         if (value != null) {
           _selectWindowsPlayer(value);
@@ -1816,7 +1687,7 @@ class _ExternalPlayerSettingsPageState
   }) {
     final t = AppThemeScope.of(context).settings;
     final theme = Theme.of(context);
-    final isSelected = _defaultPlayerMode == value;
+    final isSelected = _core.defaultPlayerMode == value;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -1865,7 +1736,7 @@ class _ExternalPlayerSettingsPageState
                     ExcludeFocus(
                       child: Radio<String>(
                         value: value,
-                        groupValue: _defaultPlayerMode,
+                        groupValue: _core.defaultPlayerMode,
                         onChanged: disabled
                             ? null
                             : (v) => _setDefaultPlayerMode(v!),
@@ -1978,20 +1849,22 @@ class _ExternalPlayerSettingsPageState
     blurb: 'The same player styles available in Appearance settings.',
     children: [
       // Match Appearance: Apple TV uses TV controls, not the player dock.
-      if (_isAndroidTv || !PlatformUtil.isTelevision)
+      if (_values.isAndroidTv || !PlatformUtil.isTelevision)
         SettingsTile.spec(
           SettingsRows.playerDock,
-          subtitle: _isAndroidTv ? 'Control style' : 'Style, colour and size',
+          subtitle: _values.isAndroidTv
+              ? 'Control style'
+              : 'Style, colour and size',
           onTap: () async {
             await pushSettingsPage(
               context,
-              _isAndroidTv
+              _values.isAndroidTv
                   ? const TvPlayerControlsStylePage()
                   : const PlayerDockPage(),
             );
           },
         ),
-      if (_isAndroidTv)
+      if (_values.isAndroidTv)
         SettingsTile.spec(
           SettingsRows.debrifyTvPlayer,
           subtitle: 'Debrify TV playback-screen style',
@@ -2045,7 +1918,7 @@ class _ExternalPlayerSettingsPageState
                 subtitle: 'Use the built-in video player',
                 icon: Icons.play_circle_filled_rounded,
                 recommended: true,
-                focusNode: _firstModeFocusNode,
+                focusNode: _core.firstModeFocusNode,
               ),
               _buildPlayerModeOption(
                 context,
@@ -2069,7 +1942,7 @@ class _ExternalPlayerSettingsPageState
         ),
       ),
 
-      if (_defaultPlayerMode == 'debrify') ...[
+      if (_core.defaultPlayerMode == 'debrify') ...[
         const SizedBox(height: 16),
         if (PlatformUtil.isPhone) ...[
           _defaultsCard(
@@ -2091,10 +1964,10 @@ class _ExternalPlayerSettingsPageState
                       'Start videos upright instead of turning the '
                       'phone landscape. The player\'s rotate button '
                       'switches to landscape whenever you want it.',
-                  value: _startPortrait,
+                  value: _values.startPortrait,
                   onChanged: _setStartPortrait,
-                  focusNode: _startPortraitFocusNode,
-                  isFocused: _startPortraitFocused,
+                  focusNode: _rows.startPortraitFocusNode,
+                  isFocused: _rows.startPortraitFocused,
                 ),
               ],
             ],
@@ -2124,25 +1997,29 @@ class _ExternalPlayerSettingsPageState
                 buildSettingDropdown(
                   context,
                   label: 'Mark movies watched at',
-                  value: _completionThresholdIndex(_movieCompletionThreshold),
+                  value: _completionThresholdIndex(
+                    _values.movieCompletionThreshold,
+                  ),
                   items: _completionThresholdOptions
                       .map((value) => '$value%')
                       .toList(),
                   onChanged: _setMovieCompletionThresholdIndex,
-                  focusNode: _movieCompletionThresholdFocusNode,
-                  isFocused: _movieCompletionThresholdFocused,
+                  focusNode: _subRows.movieCompletionThresholdFocusNode,
+                  isFocused: _subRows.movieCompletionThresholdFocused,
                 ),
                 const SizedBox(height: 12),
                 buildSettingDropdown(
                   context,
                   label: 'Mark episodes watched at',
-                  value: _completionThresholdIndex(_episodeCompletionThreshold),
+                  value: _completionThresholdIndex(
+                    _values.episodeCompletionThreshold,
+                  ),
                   items: _completionThresholdOptions
                       .map((value) => '$value%')
                       .toList(),
                   onChanged: _setEpisodeCompletionThresholdIndex,
-                  focusNode: _episodeCompletionThresholdFocusNode,
-                  isFocused: _episodeCompletionThresholdFocused,
+                  focusNode: _subRows.episodeCompletionThresholdFocusNode,
+                  isFocused: _subRows.episodeCompletionThresholdFocused,
                 ),
               ],
             ),
@@ -2177,25 +2054,25 @@ class _ExternalPlayerSettingsPageState
                   title: 'Skip intros & credits',
                   subtitle:
                       'Show a button during supported intros and outros. Playback is never skipped automatically.',
-                  value: _skipSegmentsEnabled,
+                  value: _values.skipSegmentsEnabled,
                   onChanged: _setSkipSegmentsEnabled,
-                  focusNode: _skipSegmentsEnabledFocusNode,
-                  isFocused: _skipSegmentsEnabledFocused,
+                  focusNode: _subRows.skipSegmentsEnabledFocusNode,
+                  isFocused: _subRows.skipSegmentsEnabledFocused,
                 ),
                 const SizedBox(height: 12),
                 buildDropdownSetting(
                   context,
                   label: 'Timestamp provider',
-                  value: _skipSegmentProvider,
+                  value: _values.skipSegmentProvider,
                   items: SkipSegmentProviders.availableLabels,
                   onChanged: _setSkipSegmentProvider,
-                  focusNode: _skipSegmentProviderFocusNode,
-                  isFocused: _skipSegmentProviderFocused,
-                  enabled: _skipSegmentsEnabled,
+                  focusNode: _subRows.skipSegmentProviderFocusNode,
+                  isFocused: _subRows.skipSegmentProviderFocused,
+                  enabled: _values.skipSegmentsEnabled,
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  _skipSegmentProvider == SkipSegmentProviders.auto
+                  _values.skipSegmentProvider == SkipSegmentProviders.auto
                       ? 'Checks every available source and prefers SkipDB, then TheIntroDB, then IntroDB.'
                       : 'Coverage varies by series, episode, and video release.',
                   style: theme.textTheme.bodySmall?.copyWith(color: t.dim2),
@@ -2235,21 +2112,21 @@ class _ExternalPlayerSettingsPageState
                 buildDropdownSetting(
                   context,
                   label: 'Connection patience',
-                  value: _netPatience,
+                  value: _values.netPatience,
                   items: NetworkTuning.patienceOptions,
                   onChanged: _setNetPatience,
-                  focusNode: _netPatienceFocusNode,
-                  isFocused: _netPatienceFocused,
+                  focusNode: _rows.netPatienceFocusNode,
+                  isFocused: _rows.netPatienceFocused,
                 ),
                 const SizedBox(height: 12),
                 buildDropdownSetting(
                   context,
                   label: 'Stream buffer',
-                  value: _netBuffer,
+                  value: _values.netBuffer,
                   items: NetworkTuning.bufferOptions,
                   onChanged: _setNetBuffer,
-                  focusNode: _netBufferFocusNode,
-                  isFocused: _netBufferFocused,
+                  focusNode: _rows.netBufferFocusNode,
+                  isFocused: _rows.netBufferFocused,
                 ),
                 const SizedBox(height: 10),
                 Text(
@@ -2281,30 +2158,30 @@ class _ExternalPlayerSettingsPageState
         buildSettingDropdown(
           context,
           label: 'Default Aspect',
-          value: _defaultAspectIndex,
+          value: _values.defaultAspectIndex,
           items: _aspectLabels,
           onChanged: (index) => _setDefaultAspectIndex(index),
-          focusNode: _aspectFocusNode,
-          isFocused: _aspectFocused,
+          focusNode: _rows.aspectFocusNode,
+          isFocused: _rows.aspectFocused,
         ),
         const SizedBox(height: 12),
 
-        if (_isAndroidTv || PlatformUtil.isTvOS) ...[
+        if (_values.isAndroidTv || PlatformUtil.isTvOS) ...[
           buildDropdownSetting(
             context,
             label: 'Match content display',
-            value: _contentDisplayMatchMode.storageKey,
+            value: _values.contentDisplayMatchMode.storageKey,
             items: {
               for (final mode in ContentDisplayMatchMode.values)
                 mode.storageKey: mode.label,
             },
             onChanged: _setContentDisplayMatchMode,
-            focusNode: _contentDisplayMatchFocusNode,
-            isFocused: _contentDisplayMatchFocused,
+            focusNode: _rows.contentDisplayMatchFocusNode,
+            isFocused: _rows.contentDisplayMatchFocused,
           ),
           const SizedBox(height: 6),
           Text(
-            switch (_contentDisplayMatchMode) {
+            switch (_values.contentDisplayMatchMode) {
               ContentDisplayMatchMode.systemDefault =>
                 'Keeps the player’s existing platform behavior. Choose a matching mode to request content-specific output.',
               ContentDisplayMatchMode.off =>
@@ -2320,7 +2197,7 @@ class _ExternalPlayerSettingsPageState
             },
             style: theme.textTheme.bodySmall?.copyWith(
               color:
-                  _contentDisplayMatchMode ==
+                  _values.contentDisplayMatchMode ==
                       ContentDisplayMatchMode.systemDefault
                   ? t.dim
                   : t.warning,
@@ -2334,24 +2211,24 @@ class _ExternalPlayerSettingsPageState
         // hardware decoder choking on the stream — a device
         // defect, which is why every IPTV player ships this
         // switch rather than trying to auto-detect it.
-        if (Platform.isAndroid && _isAndroidTv) ...[
+        if (Platform.isAndroid && _values.isAndroidTv) ...[
           const SizedBox(height: 12),
           buildDropdownSetting(
             context,
             label: 'IPTV decoder',
-            value: _iptvDecoderMode,
+            value: _values.iptvDecoderMode,
             items: const {
               'auto': 'Automatic',
               'hardware': 'Hardware',
               'software': 'Software',
             },
             onChanged: _setIptvDecoderMode,
-            focusNode: _iptvDecoderFocusNode,
-            isFocused: _iptvDecoderFocused,
+            focusNode: _rows.iptvDecoderFocusNode,
+            isFocused: _rows.iptvDecoderFocused,
           ),
           const SizedBox(height: 6),
           Text(
-            _iptvDecoderMode == 'software'
+            _values.iptvDecoderMode == 'software'
                 ? 'Software decoding fixes channels that freeze '
                       'while audio keeps playing, at the cost of '
                       'more CPU. Re-open the channel to apply.'
@@ -2359,7 +2236,7 @@ class _ExternalPlayerSettingsPageState
                       'audio keeps playing. Re-open the channel '
                       'to apply.',
             style: theme.textTheme.bodySmall?.copyWith(
-              color: _iptvDecoderMode == 'auto' ? t.dim : t.warning,
+              color: _values.iptvDecoderMode == 'auto' ? t.dim : t.warning,
             ),
           ),
         ],
@@ -2367,29 +2244,29 @@ class _ExternalPlayerSettingsPageState
         // Android phone/tablet only. Android TV already uses
         // native Media3 + SurfaceView; Apple and desktop
         // platforms have different decoder APIs entirely.
-        if (Platform.isAndroid && !_isAndroidTv) ...[
+        if (Platform.isAndroid && !_values.isAndroidTv) ...[
           const SizedBox(height: 12),
           buildDropdownSetting(
             context,
             label: 'Video renderer',
-            value: _androidVideoRendererMode.storageKey,
+            value: _values.androidVideoRendererMode.storageKey,
             items: {
               for (final mode in AndroidVideoRendererMode.values)
                 mode.storageKey: mode.label,
             },
             onChanged: _setAndroidVideoRendererMode,
-            focusNode: _androidVideoRendererFocusNode,
-            isFocused: _androidVideoRendererFocused,
+            focusNode: _rows.androidVideoRendererFocusNode,
+            isFocused: _rows.androidVideoRendererFocused,
           ),
           const SizedBox(height: 6),
           Text(
-            '${_androidVideoRendererMode.description} '
+            '${_values.androidVideoRendererMode.description} '
             'Restart playback to apply. Use Automatic if a '
             'video is black, has incorrect colors, or loses '
             'a feature.',
             style: theme.textTheme.bodySmall?.copyWith(
               color:
-                  _androidVideoRendererMode ==
+                  _values.androidVideoRendererMode ==
                       AndroidVideoRendererMode.automatic
                   ? t.dim
                   : t.warning,
@@ -2412,10 +2289,10 @@ class _ExternalPlayerSettingsPageState
                 'wrong colors or a blank picture. Slower — '
                 '4K may stutter. Applies from the next '
                 'playback.',
-            value: _tvosForceSoftwareDecode,
+            value: _values.tvosForceSoftwareDecode,
             onChanged: _setTvosForceSoftwareDecode,
-            focusNode: _tvosForceSwDecodeFocusNode,
-            isFocused: _tvosForceSwDecodeFocused,
+            focusNode: _rows.tvosForceSwDecodeFocusNode,
+            isFocused: _rows.tvosForceSwDecodeFocused,
           ),
         ],
       ]),
@@ -2436,8 +2313,8 @@ class _ExternalPlayerSettingsPageState
             items: _audioLanguageOptions.map((opt) => opt.$2).toList(),
             onChanged: (index) =>
                 _setDefaultAudioLanguage(_audioLanguageOptions[index].$1),
-            focusNode: _defaultAudioLangFocusNode,
-            isFocused: _defaultAudioLangFocused,
+            focusNode: _rows.defaultAudioLangFocusNode,
+            isFocused: _rows.defaultAudioLangFocused,
           ),
           const SizedBox(height: 12),
 
@@ -2453,10 +2330,10 @@ class _ExternalPlayerSettingsPageState
               subtitle:
                   'Let equalizer apps (Wavelet, Dolby, etc.) process playback. '
                   'Changes the audio output — restart playback to apply.',
-              value: _systemAudioEffects,
+              value: _values.systemAudioEffects,
               onChanged: _setSystemAudioEffects,
-              focusNode: _systemAudioEffectsFocusNode,
-              isFocused: _systemAudioEffectsFocused,
+              focusNode: _rows.systemAudioEffectsFocusNode,
+              isFocused: _rows.systemAudioEffectsFocused,
             ),
             // Bitstream passthrough (AUDIO_FIDELITY_PLAN.md).
             // Opt-in: a route that misreports support plays
@@ -2470,10 +2347,10 @@ class _ExternalPlayerSettingsPageState
                   'instead of decoding. Requires an HDMI chain '
                   'that supports it — if you hear silence, turn '
                   'this off. Restart playback to apply.',
-              value: _audioPassthrough,
+              value: _values.audioPassthrough,
               onChanged: _setAudioPassthrough,
-              focusNode: _audioPassthroughFocusNode,
-              isFocused: _audioPassthroughFocused,
+              focusNode: _rows.audioPassthroughFocusNode,
+              isFocused: _rows.audioPassthroughFocused,
             ),
           ],
 
@@ -2488,10 +2365,10 @@ class _ExternalPlayerSettingsPageState
                   'Output surround tracks as 5.1/7.1 PCM when '
                   'the connected receiver supports it, instead '
                   'of stereo. Restart playback to apply.',
-              value: _appleMultichannel,
+              value: _values.appleMultichannel,
               onChanged: _setAppleMultichannel,
-              focusNode: _appleMultichannelFocusNode,
-              isFocused: _appleMultichannelFocused,
+              focusNode: _rows.appleMultichannelFocusNode,
+              isFocused: _rows.appleMultichannelFocused,
             ),
           ],
 
@@ -2509,10 +2386,10 @@ class _ExternalPlayerSettingsPageState
                   'TV or receiver reports. Try this if '
                   'surround sound is noisy or distorted. '
                   'Restart playback to apply.',
-              value: _tvosForceStereo,
+              value: _values.tvosForceStereo,
               onChanged: _setTvosForceStereo,
-              focusNode: _tvosForceStereoFocusNode,
-              isFocused: _tvosForceStereoFocused,
+              focusNode: _rows.tvosForceStereoFocusNode,
+              isFocused: _rows.tvosForceStereoFocused,
             ),
             const SizedBox(height: 4),
             buildCheckboxTile(
@@ -2524,10 +2401,10 @@ class _ExternalPlayerSettingsPageState
                   'Dolby Atmos is enabled, so only use it if '
                   'the current one misbehaves. Restart '
                   'playback to apply.',
-              value: _tvosLegacyAudioOutput,
+              value: _values.tvosLegacyAudioOutput,
               onChanged: _setTvosLegacyAudioOutput,
-              focusNode: _tvosLegacyAudioFocusNode,
-              isFocused: _tvosLegacyAudioFocused,
+              focusNode: _rows.tvosLegacyAudioFocusNode,
+              isFocused: _rows.tvosLegacyAudioFocused,
             ),
           ],
         ],
@@ -2541,7 +2418,7 @@ class _ExternalPlayerSettingsPageState
     final t = AppThemeScope.of(context).settings;
     return [
       // Night Mode (Android TV only)
-      if (_isAndroidTv) ...[
+      if (_values.isAndroidTv) ...[
         const SizedBox(height: 16),
         Card(
           child: Padding(
@@ -2568,7 +2445,7 @@ class _ExternalPlayerSettingsPageState
                 ),
                 const SizedBox(height: 16),
                 ...List.generate(_nightModeLabels.length, (index) {
-                  final isSelected = _nightModeIndex == index;
+                  final isSelected = _values.nightModeIndex == index;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Focus(
@@ -2631,7 +2508,7 @@ class _ExternalPlayerSettingsPageState
                                   ExcludeFocus(
                                     child: Radio<int>(
                                       value: index,
-                                      groupValue: _nightModeIndex,
+                                      groupValue: _values.nightModeIndex,
                                       onChanged: (v) => _setNightModeIndex(v!),
                                       materialTapTargetSize:
                                           MaterialTapTargetSize.shrinkWrap,
@@ -2716,8 +2593,8 @@ class _ExternalPlayerSettingsPageState
             items: _subtitleLanguageOptions.map((opt) => opt.$2).toList(),
             onChanged: (index) =>
                 _setDefaultSubtitleLanguage(_subtitleLanguageOptions[index].$1),
-            focusNode: _defaultSubtitleLangFocusNode,
-            isFocused: _defaultSubtitleLangFocused,
+            focusNode: _subRows.defaultSubtitleLangFocusNode,
+            isFocused: _subRows.defaultSubtitleLangFocused,
           ),
 
           const SizedBox(height: 4),
@@ -2728,10 +2605,10 @@ class _ExternalPlayerSettingsPageState
                 'Choose a Default Audio language in Playback → Audio. '
                 'Subtitles stay off for matching or unknown audio; '
                 'manual subtitle choices take priority.',
-            value: _subtitleOnlyForeignAudio,
+            value: _sub.subtitleOnlyForeignAudio,
             onChanged: _setSubtitleOnlyForeignAudio,
-            focusNode: _subtitleOnlyForeignAudioFocusNode,
-            isFocused: _subtitleOnlyForeignAudioFocused,
+            focusNode: _subRows.subtitleOnlyForeignAudioFocusNode,
+            isFocused: _subRows.subtitleOnlyForeignAudioFocused,
           ),
 
           const SizedBox(height: 4),
@@ -2742,10 +2619,10 @@ class _ExternalPlayerSettingsPageState
                 'Automatically use embedded tracks marked forced in your Default Subtitle language '
                 '(English if unset). No match means off; Default Subtitle Off disables it. '
                 'Overrides Subtitles when audio differs; manual choices take priority.',
-            value: _subtitleForcedOnly,
+            value: _sub.subtitleForcedOnly,
             onChanged: _setSubtitleForcedOnly,
-            focusNode: _subtitleForcedOnlyFocusNode,
-            isFocused: _subtitleForcedOnlyFocused,
+            focusNode: _subRows.subtitleForcedOnlyFocusNode,
+            isFocused: _subRows.subtitleForcedOnlyFocused,
           ),
 
           // Only platforms whose bundled native player is
@@ -2760,10 +2637,10 @@ class _ExternalPlayerSettingsPageState
                   'Quietly align downloaded subtitles to the audio '
                   'as you watch. Applies only on a confident match; '
                   'manual timing always wins.',
-              value: _subtitleAutoSync,
+              value: _sub.subtitleAutoSync,
               onChanged: _setSubtitleAutoSync,
-              focusNode: _subtitleAutoSyncFocusNode,
-              isFocused: _subtitleAutoSyncFocused,
+              focusNode: _subRows.subtitleAutoSyncFocusNode,
+              isFocused: _subRows.subtitleAutoSyncFocused,
             ),
           ],
         ],
@@ -2793,11 +2670,11 @@ class _ExternalPlayerSettingsPageState
               buildSettingDropdown(
                 context,
                 label: 'Size',
-                value: _subtitleSizeIndex,
+                value: _sub.subtitleSizeIndex,
                 items: SubtitleSize.options.map((o) => o.label).toList(),
                 onChanged: (index) => _setSubtitleSizeIndex(index),
-                focusNode: _subtitleSizeFocusNode,
-                isFocused: _subtitleSizeFocused,
+                focusNode: _subRows.subtitleSizeFocusNode,
+                isFocused: _subRows.subtitleSizeFocused,
               ),
               const SizedBox(height: 12),
 
@@ -2805,11 +2682,11 @@ class _ExternalPlayerSettingsPageState
               buildSettingDropdown(
                 context,
                 label: 'Style',
-                value: _subtitleStyleIndex,
+                value: _sub.subtitleStyleIndex,
                 items: SubtitleStyle.options.map((o) => o.label).toList(),
                 onChanged: (index) => _setSubtitleStyleIndex(index),
-                focusNode: _subtitleStyleFocusNode,
-                isFocused: _subtitleStyleFocused,
+                focusNode: _subRows.subtitleStyleFocusNode,
+                isFocused: _subRows.subtitleStyleFocused,
               ),
               const SizedBox(height: 12),
 
@@ -2817,11 +2694,11 @@ class _ExternalPlayerSettingsPageState
               buildSettingDropdown(
                 context,
                 label: 'Color',
-                value: _subtitleColorIndex,
+                value: _sub.subtitleColorIndex,
                 items: SubtitleColor.options.map((o) => o.label).toList(),
                 onChanged: (index) => _setSubtitleColorIndex(index),
-                focusNode: _subtitleColorFocusNode,
-                isFocused: _subtitleColorFocused,
+                focusNode: _subRows.subtitleColorFocusNode,
+                isFocused: _subRows.subtitleColorFocused,
               ),
               const SizedBox(height: 12),
 
@@ -2829,11 +2706,11 @@ class _ExternalPlayerSettingsPageState
               buildSettingDropdown(
                 context,
                 label: 'Background',
-                value: _subtitleBgIndex,
+                value: _sub.subtitleBgIndex,
                 items: SubtitleBackground.options.map((o) => o.label).toList(),
                 onChanged: (index) => _setSubtitleBgIndex(index),
-                focusNode: _subtitleBgFocusNode,
-                isFocused: _subtitleBgFocused,
+                focusNode: _subRows.subtitleBgFocusNode,
+                isFocused: _subRows.subtitleBgFocused,
               ),
               const SizedBox(height: 12),
 
@@ -2841,13 +2718,13 @@ class _ExternalPlayerSettingsPageState
               buildSettingDropdown(
                 context,
                 label: 'Font',
-                value: _subtitleFontIndex,
-                items: _allFonts
+                value: _sub.subtitleFontIndex,
+                items: _sub.allFonts
                     .map((f) => f.isCustom ? '${f.label} (Custom)' : f.label)
                     .toList(),
                 onChanged: (index) => _setSubtitleFontIndex(index),
-                focusNode: _subtitleFontFocusNode,
-                isFocused: _subtitleFontFocused,
+                focusNode: _subRows.subtitleFontFocusNode,
+                isFocused: _subRows.subtitleFontFocused,
               ),
               const SizedBox(height: 12),
 
@@ -2855,11 +2732,11 @@ class _ExternalPlayerSettingsPageState
               buildSettingDropdown(
                 context,
                 label: 'Bold',
-                value: _subtitleBold ? 1 : 0,
+                value: _sub.subtitleBold ? 1 : 0,
                 items: const ['Off', 'On'],
                 onChanged: (index) => _setSubtitleBold(index == 1),
-                focusNode: _subtitleBoldFocusNode,
-                isFocused: _subtitleBoldFocused,
+                focusNode: _subRows.subtitleBoldFocusNode,
+                isFocused: _subRows.subtitleBoldFocused,
               ),
 
               // Import custom font button (always visible)
@@ -2886,7 +2763,7 @@ class _ExternalPlayerSettingsPageState
               ),
 
               // List of custom fonts with delete buttons
-              if (_allFonts.any((f) => f.isCustom)) ...[
+              if (_sub.allFonts.any((f) => f.isCustom)) ...[
                 const SizedBox(height: 12),
                 Text(
                   'Custom Fonts',
@@ -2896,7 +2773,7 @@ class _ExternalPlayerSettingsPageState
                   ),
                 ),
                 const SizedBox(height: 4),
-                ..._allFonts
+                ..._sub.allFonts
                     .where((f) => f.isCustom)
                     .map(
                       (font) => Padding(
@@ -2910,12 +2787,16 @@ class _ExternalPlayerSettingsPageState
                                 font.label,
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color:
-                                      _allFonts[_subtitleFontIndex].id ==
+                                      _sub
+                                              .allFonts[_sub.subtitleFontIndex]
+                                              .id ==
                                           font.id
                                       ? t.accent
                                       : t.dim,
                                   fontWeight:
-                                      _allFonts[_subtitleFontIndex].id ==
+                                      _sub
+                                              .allFonts[_sub.subtitleFontIndex]
+                                              .id ==
                                           font.id
                                       ? FontWeight.w600
                                       : FontWeight.normal,
@@ -2967,16 +2848,18 @@ class _ExternalPlayerSettingsPageState
                   child: Builder(
                     builder: (context) {
                       final previewSize =
-                          SubtitleSize.options[_subtitleSizeIndex].sizePx * 0.4;
+                          SubtitleSize.options[_sub.subtitleSizeIndex].sizePx *
+                          0.4;
                       final data = SubtitleSettingsData(
-                        sizeIndex: _subtitleSizeIndex,
-                        styleIndex: _subtitleStyleIndex,
-                        colorIndex: _subtitleColorIndex,
-                        bgIndex: _subtitleBgIndex,
-                        bold: _subtitleBold,
-                        fontIndex: _subtitleFontIndex,
-                        fontFamily: _subtitleFontIndex < _allFonts.length
-                            ? _allFonts[_subtitleFontIndex].fontFamily
+                        sizeIndex: _sub.subtitleSizeIndex,
+                        styleIndex: _sub.subtitleStyleIndex,
+                        colorIndex: _sub.subtitleColorIndex,
+                        bgIndex: _sub.subtitleBgIndex,
+                        bold: _sub.subtitleBold,
+                        fontIndex: _sub.subtitleFontIndex,
+                        fontFamily:
+                            _sub.subtitleFontIndex < _sub.allFonts.length
+                            ? _sub.allFonts[_sub.subtitleFontIndex].fontFamily
                             : null,
                       );
                       return Text(
@@ -3003,7 +2886,7 @@ class _ExternalPlayerSettingsPageState
     final t = AppThemeScope.of(context).settings;
     return [
       // Android External Player info
-      if (Platform.isAndroid && _defaultPlayerMode == 'external') ...[
+      if (Platform.isAndroid && _core.defaultPlayerMode == 'external') ...[
         const SizedBox(height: 16),
         SettingsInfoBanner(
           text:
@@ -3014,7 +2897,7 @@ class _ExternalPlayerSettingsPageState
       // iOS + Apple TV player selection (same catalog; tvOS shows
       // only the players that ship an Apple TV app)
       if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
-          _defaultPlayerMode == 'external') ...[
+          _core.defaultPlayerMode == 'external') ...[
         const SizedBox(height: 16),
         Card(
           child: Column(
@@ -3056,8 +2939,8 @@ class _ExternalPlayerSettingsPageState
 
       // iOS Custom URL Scheme configuration
       if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
-          _defaultPlayerMode == 'external' &&
-          _selectedIOSPlayer == iOSExternalPlayer.customScheme) ...[
+          _core.defaultPlayerMode == 'external' &&
+          _ios.selectedIOSPlayer == iOSExternalPlayer.customScheme) ...[
         const SizedBox(height: 16),
         Card(
           child: Padding(
@@ -3086,7 +2969,7 @@ class _ExternalPlayerSettingsPageState
                 Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    boxShadow: _iosSchemeFocused
+                    boxShadow: _ios.iosSchemeFocused
                         ? [
                             BoxShadow(
                               color: t.accent.withValues(alpha: 0.25),
@@ -3097,23 +2980,23 @@ class _ExternalPlayerSettingsPageState
                         : null,
                   ),
                   child: TvTextField(
-                    controller: _iosSchemeController,
+                    controller: _ios.iosSchemeController,
                     // The surrounding Container draws this field's focus ring;
                     // skip the shell's fallback ring so they don't double up.
                     shellRing: false,
-                    focusNode: _iosSchemeFocusNode,
+                    focusNode: _ios.iosSchemeFocusNode,
                     decoration: InputDecoration(
                       labelText: 'URL Scheme Template',
                       hintText: 'myplayer://play?url={url}',
                       helperText: 'Use {url} for the video URL',
                       helperMaxLines: 2,
-                      errorText: _iosSchemeError,
+                      errorText: _ios.iosSchemeError,
                       prefixIcon: const Icon(Icons.link_rounded),
                     ),
                     onChanged: (_) {
-                      if (_iosSchemeError != null) {
+                      if (_ios.iosSchemeError != null) {
                         setState(() {
-                          _iosSchemeError = null;
+                          _ios.iosSchemeError = null;
                         });
                       }
                     },
@@ -3129,8 +3012,8 @@ class _ExternalPlayerSettingsPageState
                         label: const Text('Save'),
                       ),
                     ),
-                    if (_iosCustomScheme != null &&
-                        _iosCustomScheme!.isNotEmpty) ...[
+                    if (_ios.iosCustomScheme != null &&
+                        _ios.iosCustomScheme!.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       OutlinedButton(
                         onPressed: _clearIOSCustomScheme,
@@ -3190,7 +3073,7 @@ class _ExternalPlayerSettingsPageState
 
       // iOS external player info
       if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
-          _defaultPlayerMode == 'external') ...[
+          _core.defaultPlayerMode == 'external') ...[
         const SizedBox(height: 16),
         SettingsInfoBanner(
           text:
@@ -3199,7 +3082,7 @@ class _ExternalPlayerSettingsPageState
       ],
 
       // Linux-specific player selection
-      if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
+      if (Platform.isLinux && _core.defaultPlayerMode == 'external') ...[
         const SizedBox(height: 16),
         Card(
           child: Column(
@@ -3241,8 +3124,8 @@ class _ExternalPlayerSettingsPageState
 
       // Linux Custom Command configuration
       if (Platform.isLinux &&
-          _defaultPlayerMode == 'external' &&
-          _selectedLinuxPlayer == LinuxExternalPlayer.customCommand) ...[
+          _core.defaultPlayerMode == 'external' &&
+          _linux.selectedLinuxPlayer == LinuxExternalPlayer.customCommand) ...[
         const SizedBox(height: 16),
         Card(
           child: Padding(
@@ -3271,7 +3154,7 @@ class _ExternalPlayerSettingsPageState
                 Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    boxShadow: _linuxCommandFocused
+                    boxShadow: _linux.linuxCommandFocused
                         ? [
                             BoxShadow(
                               color: t.accent.withValues(alpha: 0.25),
@@ -3282,23 +3165,23 @@ class _ExternalPlayerSettingsPageState
                         : null,
                   ),
                   child: TvTextField(
-                    controller: _linuxCommandController,
+                    controller: _linux.linuxCommandController,
                     // The surrounding Container draws this field's focus ring;
                     // skip the shell's fallback ring so they don't double up.
                     shellRing: false,
-                    focusNode: _linuxCommandFocusNode,
+                    focusNode: _linux.linuxCommandFocusNode,
                     decoration: InputDecoration(
                       labelText: 'Command Template',
                       hintText: 'vlc --fullscreen {url}',
                       helperText: 'Use {url} for video URL, {title} for title',
                       helperMaxLines: 2,
-                      errorText: _linuxCommandError,
+                      errorText: _linux.linuxCommandError,
                       prefixIcon: const Icon(Icons.code_rounded),
                     ),
                     onChanged: (_) {
-                      if (_linuxCommandError != null) {
+                      if (_linux.linuxCommandError != null) {
                         setState(() {
-                          _linuxCommandError = null;
+                          _linux.linuxCommandError = null;
                         });
                       }
                     },
@@ -3314,8 +3197,8 @@ class _ExternalPlayerSettingsPageState
                         label: const Text('Save'),
                       ),
                     ),
-                    if (_linuxCustomCommand != null &&
-                        _linuxCustomCommand!.isNotEmpty) ...[
+                    if (_linux.linuxCustomCommand != null &&
+                        _linux.linuxCustomCommand!.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       OutlinedButton(
                         onPressed: _clearLinuxCustomCommand,
@@ -3374,7 +3257,7 @@ class _ExternalPlayerSettingsPageState
       ],
 
       // Linux external player info
-      if (Platform.isLinux && _defaultPlayerMode == 'external') ...[
+      if (Platform.isLinux && _core.defaultPlayerMode == 'external') ...[
         const SizedBox(height: 16),
         SettingsInfoBanner(
           text:
@@ -3383,7 +3266,7 @@ class _ExternalPlayerSettingsPageState
       ],
 
       // Windows-specific player selection
-      if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
+      if (Platform.isWindows && _core.defaultPlayerMode == 'external') ...[
         const SizedBox(height: 16),
         Card(
           child: Column(
@@ -3425,8 +3308,9 @@ class _ExternalPlayerSettingsPageState
 
       // Windows Custom Command configuration
       if (Platform.isWindows &&
-          _defaultPlayerMode == 'external' &&
-          _selectedWindowsPlayer == WindowsExternalPlayer.customCommand) ...[
+          _core.defaultPlayerMode == 'external' &&
+          _win.selectedWindowsPlayer ==
+              WindowsExternalPlayer.customCommand) ...[
         const SizedBox(height: 16),
         Card(
           child: Padding(
@@ -3455,7 +3339,7 @@ class _ExternalPlayerSettingsPageState
                 Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    boxShadow: _windowsCommandFocused
+                    boxShadow: _win.windowsCommandFocused
                         ? [
                             BoxShadow(
                               color: t.accent.withValues(alpha: 0.25),
@@ -3466,23 +3350,23 @@ class _ExternalPlayerSettingsPageState
                         : null,
                   ),
                   child: TvTextField(
-                    controller: _windowsCommandController,
+                    controller: _win.windowsCommandController,
                     // The surrounding Container draws this field's focus ring;
                     // skip the shell's fallback ring so they don't double up.
                     shellRing: false,
-                    focusNode: _windowsCommandFocusNode,
+                    focusNode: _win.windowsCommandFocusNode,
                     decoration: InputDecoration(
                       labelText: 'Command Template',
                       hintText: 'vlc --fullscreen {url}',
                       helperText: 'Use {url} for video URL, {title} for title',
                       helperMaxLines: 2,
-                      errorText: _windowsCommandError,
+                      errorText: _win.windowsCommandError,
                       prefixIcon: const Icon(Icons.code_rounded),
                     ),
                     onChanged: (_) {
-                      if (_windowsCommandError != null) {
+                      if (_win.windowsCommandError != null) {
                         setState(() {
-                          _windowsCommandError = null;
+                          _win.windowsCommandError = null;
                         });
                       }
                     },
@@ -3498,8 +3382,8 @@ class _ExternalPlayerSettingsPageState
                         label: const Text('Save'),
                       ),
                     ),
-                    if (_windowsCustomCommand != null &&
-                        _windowsCustomCommand!.isNotEmpty) ...[
+                    if (_win.windowsCustomCommand != null &&
+                        _win.windowsCustomCommand!.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       OutlinedButton(
                         onPressed: _clearWindowsCustomCommand,
@@ -3558,7 +3442,7 @@ class _ExternalPlayerSettingsPageState
       ],
 
       // Windows external player info
-      if (Platform.isWindows && _defaultPlayerMode == 'external') ...[
+      if (Platform.isWindows && _core.defaultPlayerMode == 'external') ...[
         const SizedBox(height: 16),
         SettingsInfoBanner(
           text:
@@ -3567,7 +3451,7 @@ class _ExternalPlayerSettingsPageState
       ],
 
       // macOS-specific player selection
-      if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
+      if (Platform.isMacOS && _core.defaultPlayerMode == 'external') ...[
         const SizedBox(height: 16),
         Card(
           child: Column(
@@ -3605,8 +3489,8 @@ class _ExternalPlayerSettingsPageState
 
       // Custom App configuration (macOS only, when selected)
       if (Platform.isMacOS &&
-          _defaultPlayerMode == 'external' &&
-          _selectedPlayer == ExternalPlayer.customApp) ...[
+          _core.defaultPlayerMode == 'external' &&
+          _mac.selectedPlayer == ExternalPlayer.customApp) ...[
         const SizedBox(height: 16),
         Card(
           child: Padding(
@@ -3632,7 +3516,7 @@ class _ExternalPlayerSettingsPageState
                   style: theme.textTheme.bodyMedium?.copyWith(color: t.dim),
                 ),
                 const SizedBox(height: 16),
-                if (_customAppPath != null) ...[
+                if (_mac.customAppPath != null) ...[
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -3648,13 +3532,13 @@ class _ExternalPlayerSettingsPageState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _customAppName ?? 'Custom App',
+                                _mac.customAppName ?? 'Custom App',
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                               Text(
-                                _customAppPath!,
+                                _mac.customAppPath!,
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: t.dim,
                                 ),
@@ -3676,11 +3560,11 @@ class _ExternalPlayerSettingsPageState
                         onPressed: _browseForCustomApp,
                         icon: const Icon(Icons.folder_open_rounded),
                         label: Text(
-                          _customAppPath == null ? 'Browse' : 'Change',
+                          _mac.customAppPath == null ? 'Browse' : 'Change',
                         ),
                       ),
                     ),
-                    if (_customAppPath != null) ...[
+                    if (_mac.customAppPath != null) ...[
                       const SizedBox(width: 8),
                       OutlinedButton(
                         onPressed: _clearCustomApp,
@@ -3697,8 +3581,8 @@ class _ExternalPlayerSettingsPageState
 
       // Custom Command configuration (macOS only, when selected)
       if (Platform.isMacOS &&
-          _defaultPlayerMode == 'external' &&
-          _selectedPlayer == ExternalPlayer.customCommand) ...[
+          _core.defaultPlayerMode == 'external' &&
+          _mac.selectedPlayer == ExternalPlayer.customCommand) ...[
         const SizedBox(height: 16),
         Card(
           child: Padding(
@@ -3727,10 +3611,10 @@ class _ExternalPlayerSettingsPageState
                 Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    border: _commandFocused
+                    border: _mac.commandFocused
                         ? Border.all(color: t.accent, width: 1.8)
                         : null,
-                    boxShadow: _commandFocused
+                    boxShadow: _mac.commandFocused
                         ? [
                             BoxShadow(
                               color: t.accent.withValues(alpha: 0.25),
@@ -3741,11 +3625,11 @@ class _ExternalPlayerSettingsPageState
                         : null,
                   ),
                   child: TvTextField(
-                    controller: _commandController,
+                    controller: _mac.commandController,
                     // The surrounding Container draws this field's focus ring;
                     // skip the shell's fallback ring so they don't double up.
                     shellRing: false,
-                    focusNode: _commandFocusNode,
+                    focusNode: _mac.commandFocusNode,
                     // Directional (non-wrapping): DOWN on the last
                     // row must not jump back to the top of the page.
                     onDownArrow: () => FocusScope.of(
@@ -3759,13 +3643,13 @@ class _ExternalPlayerSettingsPageState
                       hintText: 'vlc --fullscreen {url}',
                       helperText: 'Use {url} for video URL, {title} for title',
                       helperMaxLines: 2,
-                      errorText: _commandError,
+                      errorText: _mac.commandError,
                       prefixIcon: const Icon(Icons.terminal_rounded),
                     ),
                     onChanged: (_) {
-                      if (_commandError != null) {
+                      if (_mac.commandError != null) {
                         setState(() {
-                          _commandError = null;
+                          _mac.commandError = null;
                         });
                       }
                     },
@@ -3781,8 +3665,8 @@ class _ExternalPlayerSettingsPageState
                         label: const Text('Save Command'),
                       ),
                     ),
-                    if (_customCommand != null &&
-                        _customCommand!.isNotEmpty) ...[
+                    if (_mac.customCommand != null &&
+                        _mac.customCommand!.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       OutlinedButton(
                         onPressed: _clearCustomCommand,
@@ -3841,7 +3725,7 @@ class _ExternalPlayerSettingsPageState
       ],
 
       // macOS external player info
-      if (Platform.isMacOS && _defaultPlayerMode == 'external') ...[
+      if (Platform.isMacOS && _core.defaultPlayerMode == 'external') ...[
         const SizedBox(height: 16),
         SettingsInfoBanner(
           text:
@@ -3850,7 +3734,7 @@ class _ExternalPlayerSettingsPageState
       ],
 
       // DeoVR settings (Android only, when selected)
-      if (Platform.isAndroid && _defaultPlayerMode == 'deovr') ...[
+      if (Platform.isAndroid && _core.defaultPlayerMode == 'deovr') ...[
         const SizedBox(height: 16),
         Card(
           child: Column(
@@ -3896,11 +3780,11 @@ class _ExternalPlayerSettingsPageState
                     buildDropdownSetting(
                       context,
                       label: 'Screen Type',
-                      value: _vrDefaultScreenType,
+                      value: _vr.vrDefaultScreenType,
                       items: deovr.screenTypeLabels,
                       onChanged: _setVrDefaultScreenType,
-                      focusNode: _screenTypeFocusNode,
-                      isFocused: _screenTypeFocused,
+                      focusNode: _vr.screenTypeFocusNode,
+                      isFocused: _vr.screenTypeFocused,
                     ),
                     const SizedBox(height: 12),
 
@@ -3908,11 +3792,11 @@ class _ExternalPlayerSettingsPageState
                     buildDropdownSetting(
                       context,
                       label: 'Stereo Mode',
-                      value: _vrDefaultStereoMode,
+                      value: _vr.vrDefaultStereoMode,
                       items: deovr.stereoModeLabels,
                       onChanged: _setVrDefaultStereoMode,
-                      focusNode: _stereoModeFocusNode,
-                      isFocused: _stereoModeFocused,
+                      focusNode: _vr.stereoModeFocusNode,
+                      isFocused: _vr.stereoModeFocused,
                     ),
                   ],
                 ),
@@ -3923,19 +3807,19 @@ class _ExternalPlayerSettingsPageState
                 context,
                 title: 'Auto-detect format from filename',
                 subtitle: 'Parse filename for VR markers (180, 360, SBS, etc.)',
-                value: _vrAutoDetectFormat,
+                value: _vr.vrAutoDetectFormat,
                 onChanged: _setVrAutoDetectFormat,
-                focusNode: _autoDetectFocusNode,
-                isFocused: _autoDetectFocused,
+                focusNode: _vr.autoDetectFocusNode,
+                isFocused: _vr.autoDetectFocused,
               ),
               buildCheckboxTile(
                 context,
                 title: 'Show format selection dialog',
                 subtitle: 'Confirm VR format before launching DeoVR',
-                value: _vrShowDialog,
+                value: _vr.vrShowDialog,
                 onChanged: _setVrShowDialog,
-                focusNode: _showDialogFocusNode,
-                isFocused: _showDialogFocused,
+                focusNode: _vr.showDialogFocusNode,
+                isFocused: _vr.showDialogFocused,
               ),
             ],
           ),
@@ -3968,7 +3852,7 @@ class _ExternalPlayerSettingsPageState
         ),
       );
     }
-    if (_loading) {
+    if (_core.loading) {
       return SettingsPageScaffold(
         title: section.label,
         body: const Center(child: CircularProgressIndicator()),
@@ -3976,7 +3860,7 @@ class _ExternalPlayerSettingsPageState
     }
     final managedExternally =
         section != PlaybackSettingsSection.player &&
-        _defaultPlayerMode != 'debrify';
+        _core.defaultPlayerMode != 'debrify';
     return SettingsPageScaffold(
       title: section.label,
       body: SingleChildScrollView(
@@ -3985,7 +3869,7 @@ class _ExternalPlayerSettingsPageState
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
             child: Focus(
-              focusNode: _contentFocusNode,
+              focusNode: _core.contentFocusNode,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -3998,7 +3882,7 @@ class _ExternalPlayerSettingsPageState
                   if (managedExternally) ...[
                     SettingsInfoBanner(
                       text:
-                          '${_defaultPlayerMode == 'deovr' ? 'DeoVR' : 'Your external player'} manages these settings. Choose Debrify Player to configure its defaults.',
+                          '${_core.defaultPlayerMode == 'deovr' ? 'DeoVR' : 'Your external player'} manages these settings. Choose Debrify Player to configure its defaults.',
                     ),
                     const SizedBox(height: 16),
                     SettingsSection(
@@ -4035,140 +3919,145 @@ Map<String, Object?> playbackSettingsTestAccess(
 ) {
   final s = state as _ExternalPlayerSettingsPageState;
   return {
-    'loading': s._loading,
-    'contentFocusNode': s._contentFocusNode,
-    'defaultPlayerMode': s._defaultPlayerMode,
-    'selectedPlayer': s._selectedPlayer,
-    'installedPlayers': Map.unmodifiable(s._installedPlayers),
-    'customAppPath': s._customAppPath,
-    'customAppName': s._customAppName,
-    'customCommand': s._customCommand,
-    'commandController': s._commandController,
-    'commandFocusNode': s._commandFocusNode,
-    'commandFocused': s._commandFocused,
-    'commandError': s._commandError,
-    'selectedIOSPlayer': s._selectedIOSPlayer,
-    'installedIOSPlayers': Map.unmodifiable(s._installedIOSPlayers),
-    'iosCustomScheme': s._iosCustomScheme,
-    'iosSchemeController': s._iosSchemeController,
-    'iosSchemeFocusNode': s._iosSchemeFocusNode,
-    'iosSchemeFocused': s._iosSchemeFocused,
-    'iosSchemeError': s._iosSchemeError,
-    'selectedLinuxPlayer': s._selectedLinuxPlayer,
-    'installedLinuxPlayers': Map.unmodifiable(s._installedLinuxPlayers),
-    'linuxCustomCommand': s._linuxCustomCommand,
-    'linuxCommandController': s._linuxCommandController,
-    'linuxCommandFocusNode': s._linuxCommandFocusNode,
-    'linuxCommandFocused': s._linuxCommandFocused,
-    'linuxCommandError': s._linuxCommandError,
-    'selectedWindowsPlayer': s._selectedWindowsPlayer,
-    'installedWindowsPlayers': Map.unmodifiable(s._installedWindowsPlayers),
-    'windowsCustomCommand': s._windowsCustomCommand,
-    'windowsCommandController': s._windowsCommandController,
-    'windowsCommandFocusNode': s._windowsCommandFocusNode,
-    'windowsCommandFocused': s._windowsCommandFocused,
-    'windowsCommandError': s._windowsCommandError,
-    'vrDefaultScreenType': s._vrDefaultScreenType,
-    'vrDefaultStereoMode': s._vrDefaultStereoMode,
-    'vrAutoDetectFormat': s._vrAutoDetectFormat,
-    'vrShowDialog': s._vrShowDialog,
-    'isAndroidTv': s._isAndroidTv,
-    'defaultAspectIndex': s._defaultAspectIndex,
-    'nightModeIndex': s._nightModeIndex,
-    'systemAudioEffects': s._systemAudioEffects,
-    'tvosForceSoftwareDecode': s._tvosForceSoftwareDecode,
-    'audioPassthrough': s._audioPassthrough,
-    'appleMultichannel': s._appleMultichannel,
-    'tvosForceStereo': s._tvosForceStereo,
-    'tvosLegacyAudioOutput': s._tvosLegacyAudioOutput,
-    'androidVideoRendererMode': s._androidVideoRendererMode,
-    'contentDisplayMatchMode': s._contentDisplayMatchMode,
-    'startPortrait': s._startPortrait,
-    'subtitleOnlyForeignAudio': s._subtitleOnlyForeignAudio,
-    'subtitleForcedOnly': s._subtitleForcedOnly,
-    'subtitleAutoSync': s._subtitleAutoSync,
-    'movieCompletionThreshold': s._movieCompletionThreshold,
-    'episodeCompletionThreshold': s._episodeCompletionThreshold,
-    'skipSegmentsEnabled': s._skipSegmentsEnabled,
-    'skipSegmentProvider': s._skipSegmentProvider,
-    'netPatience': s._netPatience,
-    'netBuffer': s._netBuffer,
-    'defaultSubtitleLanguage': s._defaultSubtitleLanguage,
-    'defaultAudioLanguage': s._defaultAudioLanguage,
-    'subtitleSizeIndex': s._subtitleSizeIndex,
-    'subtitleStyleIndex': s._subtitleStyleIndex,
-    'subtitleColorIndex': s._subtitleColorIndex,
-    'subtitleBgIndex': s._subtitleBgIndex,
-    'subtitleFontIndex': s._subtitleFontIndex,
-    'subtitleBold': s._subtitleBold,
-    'allFonts': List<SubtitleFont>.unmodifiable(s._allFonts),
-    'firstModeFocusNode': s._firstModeFocusNode,
-    'aspectFocusNode': s._aspectFocusNode,
-    'defaultAudioLangFocusNode': s._defaultAudioLangFocusNode,
-    'defaultSubtitleLangFocusNode': s._defaultSubtitleLangFocusNode,
-    'systemAudioEffectsFocusNode': s._systemAudioEffectsFocusNode,
-    'tvosForceSwDecodeFocusNode': s._tvosForceSwDecodeFocusNode,
-    'audioPassthroughFocusNode': s._audioPassthroughFocusNode,
-    'appleMultichannelFocusNode': s._appleMultichannelFocusNode,
-    'tvosForceStereoFocusNode': s._tvosForceStereoFocusNode,
-    'tvosLegacyAudioFocusNode': s._tvosLegacyAudioFocusNode,
-    'androidVideoRendererFocusNode': s._androidVideoRendererFocusNode,
-    'contentDisplayMatchFocusNode': s._contentDisplayMatchFocusNode,
-    'iptvDecoderFocusNode': s._iptvDecoderFocusNode,
-    'startPortraitFocusNode': s._startPortraitFocusNode,
-    'subtitleOnlyForeignAudioFocusNode': s._subtitleOnlyForeignAudioFocusNode,
-    'subtitleForcedOnlyFocusNode': s._subtitleForcedOnlyFocusNode,
-    'subtitleAutoSyncFocusNode': s._subtitleAutoSyncFocusNode,
-    'movieCompletionThresholdFocusNode': s._movieCompletionThresholdFocusNode,
+    'loading': s._core.loading,
+    'contentFocusNode': s._core.contentFocusNode,
+    'defaultPlayerMode': s._core.defaultPlayerMode,
+    'selectedPlayer': s._mac.selectedPlayer,
+    'installedPlayers': Map.unmodifiable(s._mac.installedPlayers),
+    'customAppPath': s._mac.customAppPath,
+    'customAppName': s._mac.customAppName,
+    'customCommand': s._mac.customCommand,
+    'commandController': s._mac.commandController,
+    'commandFocusNode': s._mac.commandFocusNode,
+    'commandFocused': s._mac.commandFocused,
+    'commandError': s._mac.commandError,
+    'selectedIOSPlayer': s._ios.selectedIOSPlayer,
+    'installedIOSPlayers': Map.unmodifiable(s._ios.installedIOSPlayers),
+    'iosCustomScheme': s._ios.iosCustomScheme,
+    'iosSchemeController': s._ios.iosSchemeController,
+    'iosSchemeFocusNode': s._ios.iosSchemeFocusNode,
+    'iosSchemeFocused': s._ios.iosSchemeFocused,
+    'iosSchemeError': s._ios.iosSchemeError,
+    'selectedLinuxPlayer': s._linux.selectedLinuxPlayer,
+    'installedLinuxPlayers': Map.unmodifiable(s._linux.installedLinuxPlayers),
+    'linuxCustomCommand': s._linux.linuxCustomCommand,
+    'linuxCommandController': s._linux.linuxCommandController,
+    'linuxCommandFocusNode': s._linux.linuxCommandFocusNode,
+    'linuxCommandFocused': s._linux.linuxCommandFocused,
+    'linuxCommandError': s._linux.linuxCommandError,
+    'selectedWindowsPlayer': s._win.selectedWindowsPlayer,
+    'installedWindowsPlayers': Map.unmodifiable(s._win.installedWindowsPlayers),
+    'windowsCustomCommand': s._win.windowsCustomCommand,
+    'windowsCommandController': s._win.windowsCommandController,
+    'windowsCommandFocusNode': s._win.windowsCommandFocusNode,
+    'windowsCommandFocused': s._win.windowsCommandFocused,
+    'windowsCommandError': s._win.windowsCommandError,
+    'vrDefaultScreenType': s._vr.vrDefaultScreenType,
+    'vrDefaultStereoMode': s._vr.vrDefaultStereoMode,
+    'vrAutoDetectFormat': s._vr.vrAutoDetectFormat,
+    'vrShowDialog': s._vr.vrShowDialog,
+    'isAndroidTv': s._values.isAndroidTv,
+    'defaultAspectIndex': s._values.defaultAspectIndex,
+    'nightModeIndex': s._values.nightModeIndex,
+    'systemAudioEffects': s._values.systemAudioEffects,
+    'tvosForceSoftwareDecode': s._values.tvosForceSoftwareDecode,
+    'audioPassthrough': s._values.audioPassthrough,
+    'appleMultichannel': s._values.appleMultichannel,
+    'tvosForceStereo': s._values.tvosForceStereo,
+    'tvosLegacyAudioOutput': s._values.tvosLegacyAudioOutput,
+    'androidVideoRendererMode': s._values.androidVideoRendererMode,
+    'contentDisplayMatchMode': s._values.contentDisplayMatchMode,
+    'startPortrait': s._values.startPortrait,
+    'subtitleOnlyForeignAudio': s._sub.subtitleOnlyForeignAudio,
+    'subtitleForcedOnly': s._sub.subtitleForcedOnly,
+    'subtitleAutoSync': s._sub.subtitleAutoSync,
+    'movieCompletionThreshold': s._values.movieCompletionThreshold,
+    'episodeCompletionThreshold': s._values.episodeCompletionThreshold,
+    'skipSegmentsEnabled': s._values.skipSegmentsEnabled,
+    'skipSegmentProvider': s._values.skipSegmentProvider,
+    'netPatience': s._values.netPatience,
+    'netBuffer': s._values.netBuffer,
+    'defaultSubtitleLanguage': s._sub.defaultSubtitleLanguage,
+    'defaultAudioLanguage': s._sub.defaultAudioLanguage,
+    'subtitleSizeIndex': s._sub.subtitleSizeIndex,
+    'subtitleStyleIndex': s._sub.subtitleStyleIndex,
+    'subtitleColorIndex': s._sub.subtitleColorIndex,
+    'subtitleBgIndex': s._sub.subtitleBgIndex,
+    'subtitleFontIndex': s._sub.subtitleFontIndex,
+    'subtitleBold': s._sub.subtitleBold,
+    'allFonts': List<SubtitleFont>.unmodifiable(s._sub.allFonts),
+    'firstModeFocusNode': s._core.firstModeFocusNode,
+    'aspectFocusNode': s._rows.aspectFocusNode,
+    'defaultAudioLangFocusNode': s._rows.defaultAudioLangFocusNode,
+    'defaultSubtitleLangFocusNode': s._subRows.defaultSubtitleLangFocusNode,
+    'systemAudioEffectsFocusNode': s._rows.systemAudioEffectsFocusNode,
+    'tvosForceSwDecodeFocusNode': s._rows.tvosForceSwDecodeFocusNode,
+    'audioPassthroughFocusNode': s._rows.audioPassthroughFocusNode,
+    'appleMultichannelFocusNode': s._rows.appleMultichannelFocusNode,
+    'tvosForceStereoFocusNode': s._rows.tvosForceStereoFocusNode,
+    'tvosLegacyAudioFocusNode': s._rows.tvosLegacyAudioFocusNode,
+    'androidVideoRendererFocusNode': s._rows.androidVideoRendererFocusNode,
+    'contentDisplayMatchFocusNode': s._rows.contentDisplayMatchFocusNode,
+    'iptvDecoderFocusNode': s._rows.iptvDecoderFocusNode,
+    'startPortraitFocusNode': s._rows.startPortraitFocusNode,
+    'subtitleOnlyForeignAudioFocusNode':
+        s._subRows.subtitleOnlyForeignAudioFocusNode,
+    'subtitleForcedOnlyFocusNode': s._subRows.subtitleForcedOnlyFocusNode,
+    'subtitleAutoSyncFocusNode': s._subRows.subtitleAutoSyncFocusNode,
+    'movieCompletionThresholdFocusNode':
+        s._subRows.movieCompletionThresholdFocusNode,
     'episodeCompletionThresholdFocusNode':
-        s._episodeCompletionThresholdFocusNode,
-    'skipSegmentsEnabledFocusNode': s._skipSegmentsEnabledFocusNode,
-    'skipSegmentProviderFocusNode': s._skipSegmentProviderFocusNode,
-    'subtitleSizeFocusNode': s._subtitleSizeFocusNode,
-    'subtitleStyleFocusNode': s._subtitleStyleFocusNode,
-    'subtitleColorFocusNode': s._subtitleColorFocusNode,
-    'subtitleBgFocusNode': s._subtitleBgFocusNode,
-    'subtitleFontFocusNode': s._subtitleFontFocusNode,
-    'subtitleBoldFocusNode': s._subtitleBoldFocusNode,
-    'netPatienceFocusNode': s._netPatienceFocusNode,
-    'netBufferFocusNode': s._netBufferFocusNode,
-    'aspectFocused': s._aspectFocused,
-    'defaultAudioLangFocused': s._defaultAudioLangFocused,
-    'defaultSubtitleLangFocused': s._defaultSubtitleLangFocused,
-    'systemAudioEffectsFocused': s._systemAudioEffectsFocused,
-    'tvosForceSwDecodeFocused': s._tvosForceSwDecodeFocused,
-    'audioPassthroughFocused': s._audioPassthroughFocused,
-    'appleMultichannelFocused': s._appleMultichannelFocused,
-    'tvosForceStereoFocused': s._tvosForceStereoFocused,
-    'tvosLegacyAudioFocused': s._tvosLegacyAudioFocused,
-    'androidVideoRendererFocused': s._androidVideoRendererFocused,
-    'contentDisplayMatchFocused': s._contentDisplayMatchFocused,
-    'iptvDecoderFocused': s._iptvDecoderFocused,
-    'iptvDecoderMode': s._iptvDecoderMode,
-    'startPortraitFocused': s._startPortraitFocused,
-    'subtitleOnlyForeignAudioFocused': s._subtitleOnlyForeignAudioFocused,
-    'subtitleForcedOnlyFocused': s._subtitleForcedOnlyFocused,
-    'subtitleAutoSyncFocused': s._subtitleAutoSyncFocused,
-    'movieCompletionThresholdFocused': s._movieCompletionThresholdFocused,
-    'episodeCompletionThresholdFocused': s._episodeCompletionThresholdFocused,
-    'skipSegmentsEnabledFocused': s._skipSegmentsEnabledFocused,
-    'skipSegmentProviderFocused': s._skipSegmentProviderFocused,
-    'subtitleSizeFocused': s._subtitleSizeFocused,
-    'subtitleStyleFocused': s._subtitleStyleFocused,
-    'subtitleColorFocused': s._subtitleColorFocused,
-    'subtitleBgFocused': s._subtitleBgFocused,
-    'subtitleFontFocused': s._subtitleFontFocused,
-    'subtitleBoldFocused': s._subtitleBoldFocused,
-    'netPatienceFocused': s._netPatienceFocused,
-    'netBufferFocused': s._netBufferFocused,
-    'screenTypeFocusNode': s._screenTypeFocusNode,
-    'stereoModeFocusNode': s._stereoModeFocusNode,
-    'autoDetectFocusNode': s._autoDetectFocusNode,
-    'showDialogFocusNode': s._showDialogFocusNode,
-    'screenTypeFocused': s._screenTypeFocused,
-    'stereoModeFocused': s._stereoModeFocused,
-    'autoDetectFocused': s._autoDetectFocused,
-    'showDialogFocused': s._showDialogFocused,
+        s._subRows.episodeCompletionThresholdFocusNode,
+    'skipSegmentsEnabledFocusNode': s._subRows.skipSegmentsEnabledFocusNode,
+    'skipSegmentProviderFocusNode': s._subRows.skipSegmentProviderFocusNode,
+    'subtitleSizeFocusNode': s._subRows.subtitleSizeFocusNode,
+    'subtitleStyleFocusNode': s._subRows.subtitleStyleFocusNode,
+    'subtitleColorFocusNode': s._subRows.subtitleColorFocusNode,
+    'subtitleBgFocusNode': s._subRows.subtitleBgFocusNode,
+    'subtitleFontFocusNode': s._subRows.subtitleFontFocusNode,
+    'subtitleBoldFocusNode': s._subRows.subtitleBoldFocusNode,
+    'netPatienceFocusNode': s._rows.netPatienceFocusNode,
+    'netBufferFocusNode': s._rows.netBufferFocusNode,
+    'aspectFocused': s._rows.aspectFocused,
+    'defaultAudioLangFocused': s._rows.defaultAudioLangFocused,
+    'defaultSubtitleLangFocused': s._subRows.defaultSubtitleLangFocused,
+    'systemAudioEffectsFocused': s._rows.systemAudioEffectsFocused,
+    'tvosForceSwDecodeFocused': s._rows.tvosForceSwDecodeFocused,
+    'audioPassthroughFocused': s._rows.audioPassthroughFocused,
+    'appleMultichannelFocused': s._rows.appleMultichannelFocused,
+    'tvosForceStereoFocused': s._rows.tvosForceStereoFocused,
+    'tvosLegacyAudioFocused': s._rows.tvosLegacyAudioFocused,
+    'androidVideoRendererFocused': s._rows.androidVideoRendererFocused,
+    'contentDisplayMatchFocused': s._rows.contentDisplayMatchFocused,
+    'iptvDecoderFocused': s._rows.iptvDecoderFocused,
+    'iptvDecoderMode': s._values.iptvDecoderMode,
+    'startPortraitFocused': s._rows.startPortraitFocused,
+    'subtitleOnlyForeignAudioFocused':
+        s._subRows.subtitleOnlyForeignAudioFocused,
+    'subtitleForcedOnlyFocused': s._subRows.subtitleForcedOnlyFocused,
+    'subtitleAutoSyncFocused': s._subRows.subtitleAutoSyncFocused,
+    'movieCompletionThresholdFocused':
+        s._subRows.movieCompletionThresholdFocused,
+    'episodeCompletionThresholdFocused':
+        s._subRows.episodeCompletionThresholdFocused,
+    'skipSegmentsEnabledFocused': s._subRows.skipSegmentsEnabledFocused,
+    'skipSegmentProviderFocused': s._subRows.skipSegmentProviderFocused,
+    'subtitleSizeFocused': s._subRows.subtitleSizeFocused,
+    'subtitleStyleFocused': s._subRows.subtitleStyleFocused,
+    'subtitleColorFocused': s._subRows.subtitleColorFocused,
+    'subtitleBgFocused': s._subRows.subtitleBgFocused,
+    'subtitleFontFocused': s._subRows.subtitleFontFocused,
+    'subtitleBoldFocused': s._subRows.subtitleBoldFocused,
+    'netPatienceFocused': s._rows.netPatienceFocused,
+    'netBufferFocused': s._rows.netBufferFocused,
+    'screenTypeFocusNode': s._vr.screenTypeFocusNode,
+    'stereoModeFocusNode': s._vr.stereoModeFocusNode,
+    'autoDetectFocusNode': s._vr.autoDetectFocusNode,
+    'showDialogFocusNode': s._vr.showDialogFocusNode,
+    'screenTypeFocused': s._vr.screenTypeFocused,
+    'stereoModeFocused': s._vr.stereoModeFocused,
+    'autoDetectFocused': s._vr.autoDetectFocused,
+    'showDialogFocused': s._vr.showDialogFocused,
     'loadSettings': s._loadSettings,
     'setDefaultPlayerMode': s._setDefaultPlayerMode,
     'selectPlayer': s._selectPlayer,
