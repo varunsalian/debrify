@@ -550,6 +550,31 @@ each parallel branch's additions, before claiming parity.
   Whole analyzer remains 1,635, zero added/removed; per-symbol strict evidence
   PASS. All 109 characterization assertions and four PNGs remain unchanged.
 
+- Step 2 complete: seven pure private widgets become manifest-named public
+  widgets; their private State classes, constructor keys/const capability,
+  lifecycle, focus and handlers stay verbatim. The shared-delete dialog and
+  State moved together; the facade re-exports its unchanged public name. The
+  shared button style has one presentation owner. Sixteen whole declarations
+  moved to nine files (14–371 lines); the facade ratchet is 3,284 lines.
+  Pure widgets import no services. Import-only cleanup removed unused and
+  redundant directives; the two unlinked prose class references stay verbatim
+  to satisfy the existing comment-preservation check. All five shape-token
+  calls now live in registered presentation files, with both bare radii
+  transferred and the token-free facade moved to the extracted residue map;
+  the 488 floor and all assertions remain unchanged.
+  `step2-final`: 131 successes / the unchanged source-guard failure, PASS
+  versus base3; all 109 characterizations/four strict macOS PNGs unchanged.
+  Stable staged tested tree `ab887dbecd3d028a0f76acc25e9cb2228333ac9c`; no untracked
+  inputs or change during run. All seven manifests/self-tests and corrected
+  real-config positives/callback negatives PASS. Exact CI format, scoped
+  analyzer/five-warning allowlist, architecture/negatives, sizes, storage and
+  diff PASS. Whole analyzer 1,642: seven observed constructor-key infos from
+  the original rename-only probe; zero additions against the 1,655-diagnostic
+  maximum-combined strict-original inventory, and per-symbol check PASS (11
+  current page/destination identities). Preliminary registration failures are
+  retained as failed evidence, followed by corrected runs; nothing was
+  accepted with a record/update regression command.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

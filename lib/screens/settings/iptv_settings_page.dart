@@ -1,3 +1,14 @@
+export 'package:debrify/features/iptv_settings/presentation/iptv_shared_source_delete_dialog.dart'
+    show IptvSharedSourceDeleteDialog;
+import 'package:debrify/features/iptv_settings/presentation/iptv_settings_tv_button.dart';
+import 'package:debrify/features/iptv_settings/presentation/iptv_settings_tv_tab_bar.dart';
+import 'package:debrify/features/iptv_settings/presentation/iptv_settings_playlist_tile.dart';
+import 'package:debrify/features/iptv_settings/presentation/iptv_shared_source_delete_dialog.dart';
+import 'package:debrify/features/iptv_settings/presentation/iptv_settings_icon_button.dart';
+import 'package:debrify/features/iptv_settings/presentation/iptv_settings_back_button.dart';
+import 'package:debrify/features/iptv_settings/presentation/iptv_settings_playlist_name_dialog.dart';
+import 'package:debrify/features/iptv_settings/presentation/iptv_settings_dialog_button_style.dart';
+import 'package:debrify/features/iptv_settings/presentation/iptv_settings_focusable_tile.dart';
 import 'package:debrify/features/iptv_settings/models/iptv_settings_phone_section.dart';
 import 'package:debrify/features/iptv_settings/models/iptv_settings_playlist_edit.dart';
 import 'package:debrify/features/iptv_settings/application/normalize_xtream_server_url.dart';
@@ -24,7 +35,6 @@ import '../../services/xtream_codes_service.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/m3u_parser.dart';
 import '../../utils/platform_util.dart';
-import '../../utils/tv_keys.dart';
 import '../../utils/tv_reveal.dart';
 import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
@@ -914,7 +924,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         barrierDismissible: false,
         builder: (context) => Theme(
           data: settingsPageTheme(context),
-          child: _PlaylistNameDialog(
+          child: IptvSettingsPlaylistNameDialog(
             defaultName: defaultName,
             channelCount: parseResult.channels.length,
             existingNames: _playlists.map((p) => p.name).toSet(),
@@ -1609,7 +1619,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       items.add(
         FocusTraversalOrder(
           order: NumericFocusOrder(5.0 + i),
-          child: _FocusablePlaylistTile(
+          child: IptvSettingsPlaylistTile(
             playlist: playlist,
             isDefault: isDefault,
             isRefreshing: _refreshingIds.contains(playlist.id),
@@ -1837,7 +1847,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           order: const NumericFocusOrder(4.5),
           child: Align(
             alignment: Alignment.centerRight,
-            child: _TvFocusableButton(
+            child: IptvSettingsTvButton(
               focusNode: _addButtonFocusNode,
               icon: _isAdding ? Icons.hourglass_empty : Icons.add,
               label: _isAdding ? 'Adding...' : 'Add Playlist',
@@ -1875,7 +1885,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         const SizedBox(height: 20),
         FocusTraversalOrder(
           order: const NumericFocusOrder(2),
-          child: _TvFocusableButton(
+          child: IptvSettingsTvButton(
             focusNode: _importFileButtonFocusNode,
             icon: Icons.file_open,
             label: 'Browse Files',
@@ -1976,7 +1986,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           order: const NumericFocusOrder(4),
           child: Align(
             alignment: Alignment.centerRight,
-            child: _TvFocusableButton(
+            child: IptvSettingsTvButton(
               focusNode: _xcLoginButtonFocusNode,
               icon: _isXcAdding ? Icons.hourglass_empty : Icons.login,
               label: _isXcAdding ? 'Logging in...' : 'Login & Add',
@@ -2026,7 +2036,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           IptvSettingsPhoneSection.continueWatching => 'Continue Watching',
           IptvSettingsPhoneSection.recording => 'Recording',
         },
-        leading: _TvFocusableBackButton(
+        leading: IptvSettingsBackButton(
           focusNode: _backButtonFocusNode,
           // Two-pane hands DOWN to the rail; the single column lands on the
           // currently-selected tab, not always the first one — but only the
@@ -2362,7 +2372,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         const SizedBox(height: 6),
 
         // Tab bar
-        _TvFocusableTabBar(
+        IptvSettingsTvTabBar(
           tabController: _tabController,
           urlTabFocusNode: _urlTabFocusNode,
           fileTabFocusNode: _fileTabFocusNode,
@@ -2465,7 +2475,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           child: Column(
             children: [
               ..._buildListsSection(),
-              _FocusableSettingsTile(
+              IptvSettingsFocusableTile(
                 focusNode: _createListFocusNode,
                 icon: Icons.add_rounded,
                 label: 'Create list',
@@ -2585,7 +2595,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   onChanged: _setStartupMode,
                 ),
                 if (_startupMode == StartupIptvStorage.startupIptvModePinned)
-                  _FocusableSettingsTile(
+                  IptvSettingsFocusableTile(
                     focusNode: _startupChannelFocusNode,
                     icon: Icons.live_tv_rounded,
                     label: _startupChannel == null
@@ -2680,7 +2690,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                 ),
               if (!_engineToggleVisible || _recordingEngineOn) ...[
                 if (_engineToggleVisible) const Divider(height: 1),
-                _FocusableSettingsTile(
+                IptvSettingsFocusableTile(
                   focusNode: _maxConcurrentFocusNode,
                   icon: Icons.filter_none_rounded,
                   label: 'Simultaneous recordings ($_maxConcurrent)',
@@ -2688,7 +2698,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                 ),
                 if (_batteryExempt != null) ...[
                   const Divider(height: 1),
-                  _FocusableSettingsTile(
+                  IptvSettingsFocusableTile(
                     focusNode: _batteryFocusNode,
                     icon: Icons.battery_alert_rounded,
                     label: _batteryExempt == true
@@ -2698,7 +2708,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   ),
                 ],
                 const Divider(height: 1),
-                _FocusableSettingsTile(
+                IptvSettingsFocusableTile(
                   focusNode: _scheduledRecordingsFocusNode,
                   icon: Icons.fiber_manual_record_rounded,
                   label: _scheduledCount == 0
@@ -2749,827 +2759,6 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         ? (await DesktopScheduleService.instance.list()).length
         : (await LiveRecordingService.listSchedules()).length;
     if (mounted) setState(() => _scheduledCount = count);
-  }
-}
-
-/// TV-focusable button with icon and label
-class _TvFocusableButton extends StatefulWidget {
-  const _TvFocusableButton({
-    required this.focusNode,
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    this.onUpArrow,
-    this.onDownArrow,
-  });
-
-  final FocusNode focusNode;
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  final VoidCallback? onUpArrow;
-  final VoidCallback? onDownArrow;
-
-  @override
-  State<_TvFocusableButton> createState() => _TvFocusableButtonState();
-}
-
-class _TvFocusableButtonState extends State<_TvFocusableButton> {
-  /// Live, never cached — Flutter can skip the falling edge of a focus
-  /// notification, and a remembered flag then survives the change it
-  /// missed. See the note on `_SettingsTileState._focused` in
-  /// `widgets/settings_widgets.dart`.
-  bool get _isFocused => widget.focusNode.hasFocus;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_onFocusChange);
-  }
-
-  @override
-  void didUpdateWidget(covariant _TvFocusableButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.focusNode != widget.focusNode) {
-      oldWidget.focusNode.removeListener(_onFocusChange);
-      widget.focusNode.addListener(_onFocusChange);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_onFocusChange);
-    super.dispose();
-  }
-
-  void _onFocusChange() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    return Focus(
-      focusNode: widget.focusNode,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-        if (isActivateKey(event.logicalKey)) {
-          widget.onPressed();
-          return KeyEventResult.handled;
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
-            widget.onUpArrow != null) {
-          widget.onUpArrow!();
-          return KeyEventResult.handled;
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-            widget.onDownArrow != null) {
-          widget.onDownArrow!();
-          return KeyEventResult.handled;
-        }
-
-        return KeyEventResult.ignored;
-      },
-      // Snap, don't tween — animated focus decorations jank weak TV GPUs.
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: _isFocused ? Border.all(color: t.accent2, width: 2) : null,
-          boxShadow: _isFocused
-              ? [
-                  BoxShadow(
-                    color: t.accent.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
-        ),
-        // One DPAD stop per control: the outer Focus owns DPAD (OK is handled
-        // above). Without this the inner Material button is a SECOND,
-        // invisible traversal stop — an arrow press moves focus "into" the
-        // button and the custom ring vanishes for a beat.
-        child: ExcludeFocus(
-          child: FilledButton.icon(
-            onPressed: widget.onPressed,
-            icon: Icon(widget.icon),
-            label: Text(widget.label),
-            style: FilledButton.styleFrom(
-              backgroundColor: _isFocused ? t.accent2 : null,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// TV-focusable tab bar with DPAD navigation
-class _TvFocusableTabBar extends StatefulWidget {
-  const _TvFocusableTabBar({
-    required this.tabController,
-    required this.urlTabFocusNode,
-    required this.fileTabFocusNode,
-    this.xcTabFocusNode,
-    this.onUpArrow,
-    this.onDownArrowFromUrlTab,
-    this.onDownArrowFromFileTab,
-    this.onDownArrowFromXcTab,
-  });
-
-  final TabController tabController;
-  final FocusNode urlTabFocusNode;
-  final FocusNode fileTabFocusNode;
-  final FocusNode? xcTabFocusNode;
-  final VoidCallback? onUpArrow;
-  final VoidCallback? onDownArrowFromUrlTab;
-  final VoidCallback? onDownArrowFromFileTab;
-  final VoidCallback? onDownArrowFromXcTab;
-
-  @override
-  State<_TvFocusableTabBar> createState() => _TvFocusableTabBarState();
-}
-
-class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
-  bool _urlTabFocused = false;
-  bool _fileTabFocused = false;
-  bool _xcTabFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.urlTabFocusNode.addListener(_onUrlTabFocusChange);
-    widget.fileTabFocusNode.addListener(_onFileTabFocusChange);
-    widget.xcTabFocusNode?.addListener(_onXcTabFocusChange);
-  }
-
-  @override
-  void dispose() {
-    widget.urlTabFocusNode.removeListener(_onUrlTabFocusChange);
-    widget.fileTabFocusNode.removeListener(_onFileTabFocusChange);
-    widget.xcTabFocusNode?.removeListener(_onXcTabFocusChange);
-    super.dispose();
-  }
-
-  void _onUrlTabFocusChange() {
-    if (mounted) {
-      setState(() => _urlTabFocused = widget.urlTabFocusNode.hasFocus);
-    }
-  }
-
-  void _onFileTabFocusChange() {
-    if (mounted) {
-      setState(() => _fileTabFocused = widget.fileTabFocusNode.hasFocus);
-    }
-  }
-
-  void _onXcTabFocusChange() {
-    if (mounted) {
-      setState(() => _xcTabFocused = widget.xcTabFocusNode?.hasFocus ?? false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final t = app.settings;
-    final theme = Theme.of(context);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: t.panel,
-        borderRadius: app.shape.br(12),
-        border: Border.all(color: t.line),
-      ),
-      padding: const EdgeInsets.all(4),
-      child: Row(
-        children: [
-          // URL Tab
-          Expanded(
-            child: FocusTraversalOrder(
-              order: const NumericFocusOrder(1),
-              child: Focus(
-                focusNode: widget.urlTabFocusNode,
-                onKeyEvent: (node, event) {
-                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-                  if (isActivateKey(event.logicalKey)) {
-                    // OK selects the tab AND enters its form — after OK the
-                    // user's next instinct is to continue downward.
-                    widget.tabController.animateTo(0);
-                    widget.onDownArrowFromUrlTab?.call();
-                    return KeyEventResult.handled;
-                  }
-
-                  if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                    widget.fileTabFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-
-                  if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
-                      widget.onUpArrow != null) {
-                    widget.onUpArrow!();
-                    return KeyEventResult.handled;
-                  }
-
-                  if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-                      widget.onDownArrowFromUrlTab != null) {
-                    widget.tabController.animateTo(0);
-                    widget.onDownArrowFromUrlTab!();
-                    return KeyEventResult.handled;
-                  }
-
-                  return KeyEventResult.ignored;
-                },
-                child: GestureDetector(
-                  onTap: () => widget.tabController.animateTo(0),
-                  child: AnimatedBuilder(
-                    animation: widget.tabController,
-                    builder: (context, child) {
-                      final isSelected = widget.tabController.index == 0;
-                      // Snap, don't tween — TV GPU rule.
-                      return Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? t.accent.withValues(alpha: 0.22)
-                              : Colors.transparent,
-                          borderRadius: app.shape.br(8),
-                          border: _urlTabFocused
-                              ? Border.all(color: t.accent, width: 2)
-                              : null,
-                          boxShadow: _urlTabFocused
-                              ? [
-                                  BoxShadow(
-                                    color: t.accent.withValues(alpha: 0.3),
-                                    blurRadius: 4,
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.link,
-                              size: 18,
-                              color: isSelected ? t.accent2 : t.dim,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'From URL',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: isSelected ? app.core.tx : t.dim,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          // File Tab
-          Expanded(
-            child: FocusTraversalOrder(
-              order: const NumericFocusOrder(1.5),
-              child: Focus(
-                focusNode: widget.fileTabFocusNode,
-                onKeyEvent: (node, event) {
-                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-                  if (isActivateKey(event.logicalKey)) {
-                    // OK = select + enter the form (see the URL tab).
-                    widget.tabController.animateTo(1);
-                    widget.onDownArrowFromFileTab?.call();
-                    return KeyEventResult.handled;
-                  }
-
-                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                    widget.urlTabFocusNode.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-
-                  if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
-                      widget.xcTabFocusNode != null) {
-                    widget.xcTabFocusNode!.requestFocus();
-                    return KeyEventResult.handled;
-                  }
-
-                  if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
-                      widget.onUpArrow != null) {
-                    widget.onUpArrow!();
-                    return KeyEventResult.handled;
-                  }
-
-                  if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-                      widget.onDownArrowFromFileTab != null) {
-                    widget.tabController.animateTo(1);
-                    widget.onDownArrowFromFileTab!();
-                    return KeyEventResult.handled;
-                  }
-
-                  return KeyEventResult.ignored;
-                },
-                child: GestureDetector(
-                  onTap: () => widget.tabController.animateTo(1),
-                  child: AnimatedBuilder(
-                    animation: widget.tabController,
-                    builder: (context, child) {
-                      final isSelected = widget.tabController.index == 1;
-                      // Snap, don't tween — TV GPU rule.
-                      return Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? t.accent.withValues(alpha: 0.22)
-                              : Colors.transparent,
-                          borderRadius: app.shape.br(8),
-                          border: _fileTabFocused
-                              ? Border.all(color: t.accent, width: 2)
-                              : null,
-                          boxShadow: _fileTabFocused
-                              ? [
-                                  BoxShadow(
-                                    color: t.accent.withValues(alpha: 0.3),
-                                    blurRadius: 4,
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.folder_open,
-                              size: 18,
-                              color: isSelected ? t.accent2 : t.dim,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'From File',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: isSelected ? app.core.tx : t.dim,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Xtream Codes Tab
-          if (widget.xcTabFocusNode != null) ...[
-            const SizedBox(width: 4),
-            Expanded(
-              child: FocusTraversalOrder(
-                order: const NumericFocusOrder(1.75),
-                child: Focus(
-                  focusNode: widget.xcTabFocusNode,
-                  onKeyEvent: (node, event) {
-                    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-                    if (isActivateKey(event.logicalKey)) {
-                      // OK = select + enter the form (see the URL tab).
-                      widget.tabController.animateTo(2);
-                      widget.onDownArrowFromXcTab?.call();
-                      return KeyEventResult.handled;
-                    }
-
-                    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                      widget.fileTabFocusNode.requestFocus();
-                      return KeyEventResult.handled;
-                    }
-
-                    if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
-                        widget.onUpArrow != null) {
-                      widget.onUpArrow!();
-                      return KeyEventResult.handled;
-                    }
-
-                    if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-                        widget.onDownArrowFromXcTab != null) {
-                      widget.tabController.animateTo(2);
-                      widget.onDownArrowFromXcTab!();
-                      return KeyEventResult.handled;
-                    }
-
-                    return KeyEventResult.ignored;
-                  },
-                  child: GestureDetector(
-                    onTap: () => widget.tabController.animateTo(2),
-                    child: AnimatedBuilder(
-                      animation: widget.tabController,
-                      builder: (context, child) {
-                        final isSelected = widget.tabController.index == 2;
-                        // Snap, don't tween — TV GPU rule.
-                        return Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? t.accent.withValues(alpha: 0.22)
-                                : Colors.transparent,
-                            borderRadius: app.shape.br(8),
-                            border: _xcTabFocused
-                                ? Border.all(color: t.accent, width: 2)
-                                : null,
-                            boxShadow: _xcTabFocused
-                                ? [
-                                    BoxShadow(
-                                      color: t.accent.withValues(alpha: 0.3),
-                                      blurRadius: 4,
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.login,
-                                size: 18,
-                                color: isSelected ? t.accent2 : t.dim,
-                              ),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  'Xtream Login',
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: isSelected ? app.core.tx : t.dim,
-                                    fontWeight: isSelected
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Focusable playlist tile with star and delete buttons
-class _FocusablePlaylistTile extends StatefulWidget {
-  const _FocusablePlaylistTile({
-    required this.playlist,
-    required this.isDefault,
-    this.isRefreshing = false,
-    this.starFocusNode,
-    this.refreshFocusNode,
-    this.editFocusNode,
-    this.deleteFocusNode,
-    required this.onSetDefault,
-    this.onRefresh,
-    this.onEdit,
-    this.onDelete,
-  });
-
-  final IptvPlaylist playlist;
-  final bool isDefault;
-  final bool isRefreshing;
-  final FocusNode? starFocusNode;
-  final FocusNode? refreshFocusNode;
-  final FocusNode? editFocusNode;
-  final FocusNode? deleteFocusNode;
-  final VoidCallback onSetDefault;
-  // Null when the playlist cannot be refreshed (local-file playlists).
-  final VoidCallback? onRefresh;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
-
-  @override
-  State<_FocusablePlaylistTile> createState() => _FocusablePlaylistTileState();
-}
-
-class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
-  bool _starFocused = false;
-  bool _refreshFocused = false;
-  bool _editFocused = false;
-  bool _deleteFocused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.starFocusNode?.addListener(_onStarFocusChange);
-    widget.refreshFocusNode?.addListener(_onRefreshFocusChange);
-    widget.editFocusNode?.addListener(_onEditFocusChange);
-    widget.deleteFocusNode?.addListener(_onDeleteFocusChange);
-  }
-
-  @override
-  void didUpdateWidget(covariant _FocusablePlaylistTile oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.starFocusNode != widget.starFocusNode) {
-      oldWidget.starFocusNode?.removeListener(_onStarFocusChange);
-      widget.starFocusNode?.addListener(_onStarFocusChange);
-    }
-    if (oldWidget.refreshFocusNode != widget.refreshFocusNode) {
-      oldWidget.refreshFocusNode?.removeListener(_onRefreshFocusChange);
-      widget.refreshFocusNode?.addListener(_onRefreshFocusChange);
-    }
-    if (oldWidget.editFocusNode != widget.editFocusNode) {
-      oldWidget.editFocusNode?.removeListener(_onEditFocusChange);
-      widget.editFocusNode?.addListener(_onEditFocusChange);
-    }
-    if (oldWidget.deleteFocusNode != widget.deleteFocusNode) {
-      oldWidget.deleteFocusNode?.removeListener(_onDeleteFocusChange);
-      widget.deleteFocusNode?.addListener(_onDeleteFocusChange);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.starFocusNode?.removeListener(_onStarFocusChange);
-    widget.refreshFocusNode?.removeListener(_onRefreshFocusChange);
-    widget.editFocusNode?.removeListener(_onEditFocusChange);
-    widget.deleteFocusNode?.removeListener(_onDeleteFocusChange);
-    super.dispose();
-  }
-
-  void _onStarFocusChange() {
-    if (mounted) {
-      final hasFocus = widget.starFocusNode?.hasFocus ?? false;
-      setState(() => _starFocused = hasFocus);
-      if (hasFocus) _ensureVisible();
-    }
-  }
-
-  void _onRefreshFocusChange() {
-    if (mounted) {
-      final hasFocus = widget.refreshFocusNode?.hasFocus ?? false;
-      setState(() => _refreshFocused = hasFocus);
-      if (hasFocus) _ensureVisible();
-    }
-  }
-
-  void _onEditFocusChange() {
-    if (mounted) {
-      final hasFocus = widget.editFocusNode?.hasFocus ?? false;
-      setState(() => _editFocused = hasFocus);
-      if (hasFocus) _ensureVisible();
-    }
-  }
-
-  void _onDeleteFocusChange() {
-    if (mounted) {
-      final hasFocus = widget.deleteFocusNode?.hasFocus ?? false;
-      setState(() => _deleteFocused = hasFocus);
-      if (hasFocus) _ensureVisible();
-    }
-  }
-
-  void _ensureVisible() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && context.mounted) {
-        // Minimal, not centering: alignment 0.5 re-scrolled the page on
-        // EVERY tile-button focus even when the tile was fully visible.
-        tvRevealMinimal(context, duration: const Duration(milliseconds: 200));
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    final isAnyFocused =
-        _starFocused || _refreshFocused || _editFocused || _deleteFocused;
-    final canRefresh = widget.onRefresh != null;
-
-    // Snap, don't tween — TV GPU rule.
-    return Container(
-      decoration: BoxDecoration(
-        color: isAnyFocused ? t.panel2 : null,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: ListTile(
-        leading: Icon(
-          widget.isDefault
-              ? Icons.star
-              : widget.playlist.isXtreamCodes
-              ? Icons.login
-              : (widget.playlist.isLocalFile
-                    ? Icons.folder
-                    : Icons.playlist_play),
-          color: widget.isDefault ? t.warning : null,
-        ),
-        title: Text(widget.playlist.name),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                if (widget.playlist.credentialsRedacted) ...[
-                  Icon(Icons.lock_outline, size: 12, color: t.dim),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Shared connection • credentials hidden',
-                      style: TextStyle(fontSize: 12, color: t.dim),
-                    ),
-                  ),
-                ] else if (widget.playlist.isXtreamCodes) ...[
-                  Icon(Icons.login, size: 12, color: t.dim),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Xtream Codes - ${widget.playlist.serverUrl}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: t.dim),
-                    ),
-                  ),
-                ] else if (widget.playlist.isLocalFile) ...[
-                  Icon(Icons.sd_card, size: 12, color: t.dim),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Local file',
-                    style: TextStyle(fontSize: 12, color: t.dim),
-                  ),
-                ] else
-                  Expanded(
-                    child: Text(
-                      widget.playlist.url,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: t.dim),
-                    ),
-                  ),
-              ],
-            ),
-            if ((widget.playlist.epgUrl ?? '').isNotEmpty)
-              Text(
-                'Custom EPG URL set',
-                style: TextStyle(color: t.dim, fontSize: 12),
-              ),
-            if (widget.isDefault)
-              Text(
-                'Default playlist',
-                style: TextStyle(color: t.warning, fontSize: 12),
-              ),
-          ],
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _FocusableIconButton(
-              focusNode: widget.starFocusNode,
-              icon: widget.isDefault ? Icons.star : Icons.star_border,
-              color: widget.isDefault ? t.warning : null,
-              tooltip: widget.isDefault ? 'Remove default' : 'Set as default',
-              onPressed: widget.onSetDefault,
-              onRightArrow: () =>
-                  (canRefresh ? widget.refreshFocusNode : widget.editFocusNode)
-                      ?.requestFocus(),
-            ),
-            if (canRefresh)
-              _FocusableIconButton(
-                focusNode: widget.refreshFocusNode,
-                icon: Icons.refresh,
-                tooltip: 'Refresh playlist',
-                isBusy: widget.isRefreshing,
-                onPressed: widget.onRefresh!,
-                onLeftArrow: () => widget.starFocusNode?.requestFocus(),
-                onRightArrow: () => widget.editFocusNode?.requestFocus(),
-              ),
-            if (widget.onEdit != null)
-              _FocusableIconButton(
-                focusNode: widget.editFocusNode,
-                icon: Icons.edit_outlined,
-                tooltip: 'Edit playlist',
-                onPressed: widget.onEdit,
-                onLeftArrow: () =>
-                    (canRefresh
-                            ? widget.refreshFocusNode
-                            : widget.starFocusNode)
-                        ?.requestFocus(),
-                onRightArrow: () => widget.deleteFocusNode?.requestFocus(),
-              ),
-            if (widget.onDelete != null)
-              _FocusableIconButton(
-                focusNode: widget.deleteFocusNode,
-                icon: Icons.delete_outline,
-                tooltip: 'Remove playlist',
-                onPressed: widget.onDelete,
-                onLeftArrow: () => widget.editFocusNode?.requestFocus(),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Confirmation used when an Admin removes a source granted to other profiles.
-/// Public so its remote-key contract can be covered without bootstrapping the
-/// entire profile-backed settings page in a widget test.
-class IptvSharedSourceDeleteDialog extends StatefulWidget {
-  const IptvSharedSourceDeleteDialog({
-    super.key,
-    required this.playlistName,
-    required this.borrowerCount,
-  });
-
-  final String playlistName;
-  final int borrowerCount;
-
-  @override
-  State<IptvSharedSourceDeleteDialog> createState() =>
-      _SharedIptvSourceDeleteDialogState();
-}
-
-class _SharedIptvSourceDeleteDialogState
-    extends State<IptvSharedSourceDeleteDialog> {
-  final FocusNode _cancelFocusNode = FocusNode(
-    debugLabel: 'shared-iptv-delete-cancel',
-  );
-  final FocusNode _okFocusNode = FocusNode(debugLabel: 'shared-iptv-delete-ok');
-
-  @override
-  void dispose() {
-    _cancelFocusNode.dispose();
-    _okFocusNode.dispose();
-    super.dispose();
-  }
-
-  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is KeyRepeatEvent && isActivateOrSpaceKey(event.logicalKey)) {
-      return KeyEventResult.handled;
-    }
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    switch (event.logicalKey) {
-      case LogicalKeyboardKey.arrowLeft:
-        _cancelFocusNode.requestFocus();
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.arrowRight:
-        _okFocusNode.requestFocus();
-        return KeyEventResult.handled;
-    }
-    if (!isActivateOrSpaceKey(event.logicalKey)) {
-      return KeyEventResult.ignored;
-    }
-    Navigator.of(context).pop(_okFocusNode.hasFocus);
-    return KeyEventResult.handled;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final profiles = widget.borrowerCount == 1
-        ? '1 other profile'
-        : '${widget.borrowerCount} other profiles';
-    return Focus(
-      canRequestFocus: false,
-      onKeyEvent: _onKeyEvent,
-      child: AlertDialog(
-        title: const Text('Remove shared source?'),
-        content: Text(
-          '"${widget.playlistName}" is shared with $profiles. Removing it '
-          'will also remove access to this source from those profiles.',
-        ),
-        actions: [
-          TextButton(
-            focusNode: _cancelFocusNode,
-            autofocus: true,
-            style: _dialogButtonFocusStyle,
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            focusNode: _okFocusNode,
-            style: _dialogButtonFocusStyle,
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -3874,7 +3063,7 @@ class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
       ),
       actions: [
         TextButton(
-          style: _dialogButtonFocusStyle,
+          style: iptvSettingsDialogButtonFocusStyle,
           // TV: seed DPAD focus on Cancel only when Save opens disabled, so
           // focus is never stranded on the dialog scope.
           autofocus: PlatformUtil.isTelevision && !_canSave,
@@ -3882,7 +3071,7 @@ class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          style: _dialogButtonFocusStyle,
+          style: iptvSettingsDialogButtonFocusStyle,
           autofocus: PlatformUtil.isTelevision && _canSave,
           onPressed: _canSave ? _submit : null,
           child: const Text('Save'),
@@ -3891,406 +3080,6 @@ class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
     );
   }
 }
-
-/// Focusable icon button for TV navigation
-class _FocusableIconButton extends StatefulWidget {
-  const _FocusableIconButton({
-    this.focusNode,
-    required this.icon,
-    this.color,
-    this.tooltip,
-    this.isBusy = false,
-    required this.onPressed,
-    this.onLeftArrow,
-    this.onRightArrow,
-  });
-
-  final FocusNode? focusNode;
-  final IconData icon;
-  final Color? color;
-  final String? tooltip;
-  final bool isBusy;
-  final VoidCallback? onPressed;
-  final VoidCallback? onLeftArrow;
-  final VoidCallback? onRightArrow;
-
-  @override
-  State<_FocusableIconButton> createState() => _FocusableIconButtonState();
-}
-
-class _FocusableIconButtonState extends State<_FocusableIconButton> {
-  /// Live, never cached — Flutter can skip the falling edge of a focus
-  /// notification, and a remembered flag then survives the change it
-  /// missed. See the note on `_SettingsTileState._focused` in
-  /// `widgets/settings_widgets.dart`.
-  bool get _isFocused => widget.focusNode?.hasFocus ?? false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode?.addListener(_onFocusChange);
-  }
-
-  @override
-  void didUpdateWidget(covariant _FocusableIconButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.focusNode != widget.focusNode) {
-      oldWidget.focusNode?.removeListener(_onFocusChange);
-      widget.focusNode?.addListener(_onFocusChange);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode?.removeListener(_onFocusChange);
-    super.dispose();
-  }
-
-  void _onFocusChange() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    return Focus(
-      focusNode: widget.focusNode,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-        if (isActivateKey(event.logicalKey)) {
-          if (!widget.isBusy) widget.onPressed?.call();
-          return KeyEventResult.handled;
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
-            widget.onLeftArrow != null) {
-          widget.onLeftArrow!();
-          return KeyEventResult.handled;
-        }
-
-        if (event.logicalKey == LogicalKeyboardKey.arrowRight &&
-            widget.onRightArrow != null) {
-          widget.onRightArrow!();
-          return KeyEventResult.handled;
-        }
-
-        return KeyEventResult.ignored;
-      },
-      // Snap, don't tween — TV GPU rule.
-      child: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: _isFocused ? Border.all(color: t.accent, width: 2) : null,
-          boxShadow: _isFocused
-              ? [
-                  BoxShadow(
-                    color: t.accent.withValues(alpha: 0.3),
-                    blurRadius: 6,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
-        ),
-        // One DPAD stop per control — see _TvFocusableButton's ExcludeFocus.
-        child: ExcludeFocus(
-          child: IconButton(
-            icon: widget.isBusy
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: _isFocused ? t.accent2 : widget.color,
-                    ),
-                  )
-                : Icon(
-                    widget.icon,
-                    color: _isFocused ? t.accent2 : widget.color,
-                  ),
-            tooltip: widget.tooltip,
-            onPressed: widget.isBusy ? null : widget.onPressed,
-            style: IconButton.styleFrom(
-              backgroundColor: _isFocused
-                  ? t.accent.withValues(alpha: 0.16)
-                  : null,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// TV-focusable back button for AppBar
-class _TvFocusableBackButton extends StatefulWidget {
-  const _TvFocusableBackButton({required this.focusNode, this.onDownArrow});
-
-  final FocusNode focusNode;
-  final VoidCallback? onDownArrow;
-
-  @override
-  State<_TvFocusableBackButton> createState() => _TvFocusableBackButtonState();
-}
-
-class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
-  /// Live, never cached — Flutter can skip the falling edge of a focus
-  /// notification, and a remembered flag then survives the change it
-  /// missed. See the note on `_SettingsTileState._focused` in
-  /// `widgets/settings_widgets.dart`.
-  bool get _isFocused => widget.focusNode.hasFocus;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_onFocusChange);
-  }
-
-  @override
-  void didUpdateWidget(covariant _TvFocusableBackButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.focusNode != widget.focusNode) {
-      oldWidget.focusNode.removeListener(_onFocusChange);
-      widget.focusNode.addListener(_onFocusChange);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_onFocusChange);
-    super.dispose();
-  }
-
-  void _onFocusChange() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  void _goBack() {
-    if (mounted) {
-      // maybePop, not pop: the page's PopScope turns a sub-view back press
-      // into "return to the hub" — a direct pop would bypass it and close
-      // the whole page from anywhere.
-      Navigator.of(context).maybePop();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    return Focus(
-      focusNode: widget.focusNode,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-        // Select/Enter to go back
-        if (isActivateKey(event.logicalKey)) {
-          _goBack();
-          return KeyEventResult.handled;
-        }
-
-        // Back button to go back
-        if (event.logicalKey == LogicalKeyboardKey.goBack ||
-            event.logicalKey == LogicalKeyboardKey.browserBack ||
-            event.logicalKey == LogicalKeyboardKey.escape) {
-          _goBack();
-          return KeyEventResult.handled;
-        }
-
-        // Down arrow to go to name field
-        if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
-            widget.onDownArrow != null) {
-          widget.onDownArrow!();
-          return KeyEventResult.handled;
-        }
-
-        return KeyEventResult.ignored;
-      },
-      // Snap, don't tween — TV GPU rule.
-      child: Container(
-        margin: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: _isFocused ? Border.all(color: t.accent, width: 2) : null,
-          boxShadow: _isFocused
-              ? [
-                  BoxShadow(
-                    color: t.accent.withValues(alpha: 0.3),
-                    blurRadius: 6,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : null,
-        ),
-        // One DPAD stop per control — see _TvFocusableButton's ExcludeFocus.
-        child: ExcludeFocus(
-          child: IconButton(
-            icon: Icon(Icons.arrow_back, color: _isFocused ? t.accent2 : null),
-            tooltip: 'Go back',
-            onPressed: _goBack,
-            style: IconButton.styleFrom(
-              backgroundColor: _isFocused
-                  ? t.accent.withValues(alpha: 0.16)
-                  : null,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Dialog for entering playlist name when importing from file
-class _PlaylistNameDialog extends StatefulWidget {
-  const _PlaylistNameDialog({
-    required this.defaultName,
-    required this.channelCount,
-    required this.existingNames,
-  });
-
-  final String defaultName;
-  final int channelCount;
-  final Set<String> existingNames;
-
-  @override
-  State<_PlaylistNameDialog> createState() => _PlaylistNameDialogState();
-}
-
-class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
-  late final TextEditingController _controller;
-  final FocusNode _fieldFocusNode = FocusNode(
-    debugLabel: 'iptv-import-name-field',
-  );
-  String? _errorText;
-  // Whether the default name was valid on open — decides which action button
-  // gets the TV autofocus (autofocus only counts on the first frame).
-  late final bool _initialNameValid;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.defaultName);
-    _controller.addListener(_validateName);
-    // Validate synchronously so the Import button's enabled state is right
-    // before the first frame — a post-frame validate could disable an
-    // already-autofocused Import, leaving nothing focused on TV.
-    _errorText = _errorFor(_controller.text);
-    _initialNameValid = _errorText == null;
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _fieldFocusNode.dispose();
-    super.dispose();
-  }
-
-  String? _errorFor(String raw) {
-    final name = raw.trim();
-    if (name.isEmpty) return 'Please enter a name';
-    if (widget.existingNames.contains(name)) {
-      return 'A playlist with this name already exists';
-    }
-    return null;
-  }
-
-  void _validateName() {
-    setState(() => _errorText = _errorFor(_controller.text));
-  }
-
-  void _submit() {
-    final name = _controller.text.trim();
-    if (name.isEmpty || widget.existingNames.contains(name)) {
-      _validateName();
-      // IME "done" just unfocused the field; put DPAD back on it so TV
-      // users aren't stranded on the dialog scope with an error showing.
-      _fieldFocusNode.requestFocus();
-      return;
-    }
-    Navigator.of(context).pop(name);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppThemeScope.of(context);
-    final t = app.settings;
-    return AlertDialog(
-      title: const Text('Name Your Playlist'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: t.success.withValues(alpha: 0.08),
-              borderRadius: app.shape.br(8),
-              border: Border.all(color: t.success.withValues(alpha: 0.22)),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.check_circle, color: t.success, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  '${widget.channelCount} channels found',
-                  style: TextStyle(fontSize: 14, color: app.core.tx),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Shared TV field idiom: on TV this is a non-editing shell (DPAD
-          // landing never pops the keyboard; OK starts editing). Off-TV it
-          // autofocuses with the keyboard ready, as before.
-          TvTextField(
-            controller: _controller,
-            focusNode: _fieldFocusNode,
-            labelText: 'Playlist Name',
-            hintText: 'Enter a name for this playlist',
-            errorText: _errorText,
-            prefixIcon: const Icon(Icons.label_outline),
-            // Off-TV only: on TV the dialog's action buttons seed DPAD focus
-            // (below), matching the old clone which never autofocused on TV.
-            autofocus: !PlatformUtil.isTelevision,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _submit(),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          style: _dialogButtonFocusStyle,
-          // TV: when the default name is invalid Import opens disabled, so
-          // seed DPAD focus here instead.
-          autofocus: PlatformUtil.isTelevision && !_initialNameValid,
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          style: _dialogButtonFocusStyle,
-          autofocus: PlatformUtil.isTelevision && _initialNameValid,
-          onPressed: _errorText == null ? _submit : null,
-          child: const Text('Import'),
-        ),
-      ],
-    );
-  }
-}
-
-/// Snap accent border on DPAD focus for the dialog's action buttons — the
-/// stock Material focus overlay is too faint to spot on TV.
-/// TOP-LEVEL final, so it cannot read a BuildContext: this one keeps the
-/// `kSettingsAccent` constant until it becomes a function of context.
-final ButtonStyle _dialogButtonFocusStyle = ButtonStyle(
-  side: WidgetStateProperty.resolveWith(
-    (states) => states.contains(WidgetState.focused)
-        ? const BorderSide(color: kSettingsAccent, width: 2)
-        : null,
-  ),
-);
 
 /// One custom list in the Settings "Your Lists" section: name, count, and the
 /// four actions. Each action carries its own focus node so DPAD walks them in
@@ -4355,7 +3144,7 @@ class _IptvListSettingsRow extends StatelessWidget {
               ],
             ),
           ),
-          _FocusableIconButton(
+          IptvSettingsIconButton(
             focusNode: renameFocusNode,
             icon: Icons.edit_outlined,
             tooltip: 'Rename',
@@ -4363,21 +3152,21 @@ class _IptvListSettingsRow extends StatelessWidget {
           ),
           // The ends of the list keep their arrows for a stable focus order,
           // but a no-op move would just be a dead keypress — skip it.
-          _FocusableIconButton(
+          IptvSettingsIconButton(
             focusNode: upFocusNode,
             icon: Icons.keyboard_arrow_up_rounded,
             color: isFirst ? t.dim2 : null,
             tooltip: 'Move up',
             onPressed: isFirst ? () {} : onMoveUp,
           ),
-          _FocusableIconButton(
+          IptvSettingsIconButton(
             focusNode: downFocusNode,
             icon: Icons.keyboard_arrow_down_rounded,
             color: isLast ? t.dim2 : null,
             tooltip: 'Move down',
             onPressed: isLast ? () {} : onMoveDown,
           ),
-          _FocusableIconButton(
+          IptvSettingsIconButton(
             focusNode: deleteFocusNode,
             icon: Icons.delete_outline_rounded,
             tooltip: 'Delete',
@@ -4385,35 +3174,6 @@ class _IptvListSettingsRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Plain focusable action row for the Lists section header actions.
-class _FocusableSettingsTile extends StatelessWidget {
-  final FocusNode focusNode;
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _FocusableSettingsTile({
-    required this.focusNode,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
-    return ListTile(
-      focusNode: focusNode,
-      leading: Icon(icon, color: t.accent),
-      title: Text(
-        label,
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-      ),
-      onTap: onTap,
     );
   }
 }

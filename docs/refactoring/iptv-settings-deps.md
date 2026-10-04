@@ -587,3 +587,9 @@ Step 1 review: the three plain declarations import no services/UI and retain
 all enum values, value fields, constructor defaults and URI normalization.
 Their production reads and the accessor are wired; manifest/behavior checks
 pass against the original checkpoint.
+
+Step 2 review: the 16 whole widget/style declarations use their actual
+production constructors and retain every default, key/const capability and
+private lifecycle. Shared delete and its State are co-located, and its facade
+re-export preserves callers. Explicit imports and shape registrations follow
+the transferred token/bare sites; all original behavior and pixels pass.
