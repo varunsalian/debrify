@@ -12,30 +12,30 @@ Original application reference R: `1165b624` (format-only). Every row is a whole
 | `_ink` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
 | `_slotFill` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
 | `_plateFill` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
-| `_ambientBed` | `showcase_grounds.dart` | none | none | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_ambientBed` | `showcase_grounds.dart` | none | none | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
 | `_t` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
 | `_activate` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
 | `_keepVisible` | `showcase_style.dart` | none | context | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
 | `_Hover` | `showcase_style.dart` | none | none | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
 | `_HoverState` | `showcase_style.dart` | none | widget, context | Wired step 1; production via unchanged facade, owner-local spelling, same callback objects |
-| `ShowcaseAmbient` | `showcase_grounds.dart` | none | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `ShowcaseBackdropScrim` | `showcase_grounds.dart` | none | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `ShowcaseStickyLogo` | `showcase_grounds.dart` | _t → st | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `ShowcaseIdentity` | `showcase_identity.dart` | _t → st; _LogoOrTitle → SLogoOrTitle; _ExpandableSynopsis → SExpandableSynopsis; _Chip → SChip; _MetaLine → SMetaLine; _HonorsLine → SHonorsLine; _TechLine → STechLine; _Primary → SPrimary; _Circle → SCircle | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_LogoOrTitle` | `showcase_identity_readouts.dart` | _ink → sInk | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_ExpandableSynopsis` | `showcase_identity_readouts.dart` | none | none | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_ExpandableSynopsisState` | `showcase_identity_readouts.dart` | _t → st | widget, context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_Chip` | `showcase_identity_readouts.dart` | _t → st | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_MetaLine` | `showcase_identity_readouts.dart` | _t → st | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_TrackerMark` | `showcase_identity_readouts.dart` | _ink → sInk | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_RatingBox` | `showcase_identity_readouts.dart` | _ink → sInk; _t → st | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_hasHonors` | `showcase_identity.dart` | none | none | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_HonorsLine` | `showcase_identity_readouts.dart` | _ink → sInk; _t → st | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_TechLine` | `showcase_identity_readouts.dart` | _t → st | context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_Primary` | `showcase_identity_actions.dart` | none | none | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_PrimaryState` | `showcase_identity_actions.dart` | _ink → sInk; _activate → sActivate | widget, context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_Circle` | `showcase_identity_actions.dart` | none | none | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
-| `_CircleState` | `showcase_identity_actions.dart` | _ink → sInk; _activate → sActivate; _keepVisible → sKeepVisible | widget, context | Pending step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseAmbient` | `showcase_grounds.dart` | none | context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseBackdropScrim` | `showcase_grounds.dart` | none | context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseStickyLogo` | `showcase_grounds.dart` | _t → st | context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `ShowcaseIdentity` | `showcase_identity.dart` | _t → st; _LogoOrTitle → SLogoOrTitle; _ExpandableSynopsis → SExpandableSynopsis; _Chip → SChip; _MetaLine → SMetaLine; _HonorsLine → SHonorsLine; _TechLine → STechLine; _Primary → SPrimary; _Circle → SCircle | context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_LogoOrTitle` | `showcase_identity_readouts.dart` | _ink → sInk | context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_ExpandableSynopsis` | `showcase_identity_readouts.dart` | none | none | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_ExpandableSynopsisState` | `showcase_identity_readouts.dart` | _t → st | widget, context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_Chip` | `showcase_identity_readouts.dart` | _t → st | context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_MetaLine` | `showcase_identity_readouts.dart` | _t → st | context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_TrackerMark` | `showcase_identity_readouts.dart` | _ink → sInk | context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_RatingBox` | `showcase_identity_readouts.dart` | _ink → sInk; _t → st | context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_hasHonors` | `showcase_identity.dart` | none | none | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_HonorsLine` | `showcase_identity_readouts.dart` | _ink → sInk; _t → st | context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_TechLine` | `showcase_identity_readouts.dart` | _t → st | context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_Primary` | `showcase_identity_actions.dart` | none | none | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_PrimaryState` | `showcase_identity_actions.dart` | _ink → sInk; _activate → sActivate | widget, context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_Circle` | `showcase_identity_actions.dart` | none | none | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
+| `_CircleState` | `showcase_identity_actions.dart` | _ink → sInk; _activate → sActivate; _keepVisible → sKeepVisible | widget, context | Wired step 2; production via unchanged facade, owner-local spelling, same callback objects |
 | `ShowcaseSeasons` | `showcase_seasons.dart` | none | context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
 | `_SeasonDropdown` | `showcase_seasons.dart` | none | none | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |
 | `_SeasonDropdownState` | `showcase_seasons.dart` | _ink → sInk; _t → st; _activate → sActivate | widget, context | Pending step 3; production via unchanged facade, owner-local spelling, same callback objects |

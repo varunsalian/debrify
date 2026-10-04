@@ -196,6 +196,14 @@ EXTRACTED_ELSEWHERE: tuple[str, ...] = (
 # Context-dependent legacy actions are allowed only through these named bridges.
 # Phase 4C owns binding preparation; phase 7 retains playback lifecycle review.
 PRESENTATION_BRIDGE_IMPORTS = {
+    # Detail showcase exact type/cache imports. No service logic.
+    'lib/features/detail_showcase/presentation/showcase_grounds.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+    },
+    'lib/features/detail_showcase/presentation/showcase_identity_readouts.dart': {
+        'lib/services/debrify_image_cache.dart': {'DebrifyImageCache'},
+    },
+    # End detail showcase imports.
     # Immutable session identity declaration only; no static state or I/O.
     "lib/features/discover/presentation/discover_session_lifecycle.dart": {
         "lib/services/profiles/profile_session_memory.dart": {"ProfileSessionOwner"},

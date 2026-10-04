@@ -1020,6 +1020,31 @@ change below.
   every declaration's original ordering. No assertion, constructor, callback,
   lifecycle or moved comment changes. Lazy hold/dispose ordering remain S class.
 
+### Step 2 — extraction checkpoint
+
+- Previous step commit `86f72054`. Whole declarations, comments, constructor
+  signatures, constness, private runtime names, callback expressions and State
+  lifecycle remain verbatim after registered code-only alias reversal.
+- Measured sizes: showcase_grounds.dart 205; showcase_identity.dart 293; showcase_identity_actions.dart 263; showcase_identity_readouts.dart 374; showcase_metrics.dart 122; showcase_style.dart 200. Remaining facade: 2050 lines;
+  size ratchet lowered/removed at this checkpoint. Every created destination
+  and the facade are registered in the shape manifest; exact slice total 18.
+  Theme sites remain 750; light-ink candidates 5, PRIMARY 0.
+- All 15 aliases are active, with the original private spelling inside each owner and pinned typedef/function/constructor targets. Registered the two exact cache-manager show imports at creation. Facade retains only the bands pending steps 3/4; callback object identity and all eight button actions are preserved.
+- Evidence `detail_showcase/step2/`: every integrated manifest (11) and
+  self-test passed using each config/original baseline, including merged_detail
+  `21320ff9`, with one dedicated parser-package/kernel per overlapping run.
+  Whole-analyzer relocation has zero additions against ORIGINAL identities;
+  strict per-symbol comparison retains one original warning and four infos,
+  and removes the two qualification-induced ordering infos (max, never sum).
+  Architecture, sizes, CI format, complete scoped analyzer/allowlist (13 warnings),
+  LF detail manifest, unchanged other manifests and staged diff passed.
+  Frozen characterizations plus existing related tests: 118 passes; four strict
+  macOS originals unchanged. Theme/shape guards 128 success / 1 original failure;
+  profile guards 17 success / 1 original failure, exact base7 identities.
+- Decision: no incidental behavior fixes or lint suppressions. The original
+  base7 (`5753dee2`, full-suite paths `[]`, flags `["--no-pub"]`) remains the
+  gate comparison reference; S-class hold/dispose guards remain source guards.
+
 ## Found, not fixed
 
 All pre-existing; the move keeps each exactly.

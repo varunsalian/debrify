@@ -20,6 +20,46 @@
       "original_name": "_Band",
       "alias": "SBand",
       "file": "lib/features/detail_showcase/presentation/showcase_style.dart"
+    },
+    {
+      "original_name": "_LogoOrTitle",
+      "alias": "SLogoOrTitle",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart"
+    },
+    {
+      "original_name": "_ExpandableSynopsis",
+      "alias": "SExpandableSynopsis",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart"
+    },
+    {
+      "original_name": "_Chip",
+      "alias": "SChip",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart"
+    },
+    {
+      "original_name": "_MetaLine",
+      "alias": "SMetaLine",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart"
+    },
+    {
+      "original_name": "_HonorsLine",
+      "alias": "SHonorsLine",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart"
+    },
+    {
+      "original_name": "_TechLine",
+      "alias": "STechLine",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart"
+    },
+    {
+      "original_name": "_Primary",
+      "alias": "SPrimary",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_actions.dart"
+    },
+    {
+      "original_name": "_Circle",
+      "alias": "SCircle",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_actions.dart"
     }
   ],
   "file_aliases": [
@@ -81,6 +121,106 @@
           "target": "new"
         }
       ]
+    },
+    {
+      "original_name": "_LogoOrTitle",
+      "alias": "SLogoOrTitle",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart",
+      "kind": "widget",
+      "constructors": [
+        {
+          "name": "showcaseLogoOrTitleConstructor",
+          "target": "new"
+        }
+      ]
+    },
+    {
+      "original_name": "_ExpandableSynopsis",
+      "alias": "SExpandableSynopsis",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart",
+      "kind": "widget",
+      "constructors": [
+        {
+          "name": "showcaseExpandableSynopsisConstructor",
+          "target": "new"
+        }
+      ]
+    },
+    {
+      "original_name": "_Chip",
+      "alias": "SChip",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart",
+      "kind": "widget",
+      "constructors": [
+        {
+          "name": "showcaseChipConstructor",
+          "target": "new"
+        }
+      ]
+    },
+    {
+      "original_name": "_MetaLine",
+      "alias": "SMetaLine",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart",
+      "kind": "widget",
+      "constructors": [
+        {
+          "name": "showcaseMetaLineConstructor",
+          "target": "new"
+        }
+      ]
+    },
+    {
+      "original_name": "_HonorsLine",
+      "alias": "SHonorsLine",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart",
+      "kind": "widget",
+      "constructors": [
+        {
+          "name": "showcaseHonorsLineConstructor",
+          "target": "new"
+        }
+      ]
+    },
+    {
+      "original_name": "_TechLine",
+      "alias": "STechLine",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart",
+      "kind": "widget",
+      "constructors": [
+        {
+          "name": "showcaseTechLineConstructor",
+          "target": "new"
+        }
+      ]
+    },
+    {
+      "original_name": "_Primary",
+      "alias": "SPrimary",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_actions.dart",
+      "kind": "widget",
+      "constructors": [
+        {
+          "name": "showcasePrimaryConstructor",
+          "target": "new"
+        }
+      ]
+    },
+    {
+      "original_name": "_Circle",
+      "alias": "SCircle",
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_actions.dart",
+      "kind": "widget",
+      "constructors": [
+        {
+          "name": "showcaseCircleConstructor",
+          "target": "new"
+        },
+        {
+          "name": "showcaseCircleMarkConstructor",
+          "target": "mark"
+        }
+      ]
     }
   ],
   "additional_owners": [
@@ -98,11 +238,48 @@
         "SBand",
         "showcaseBandConstructor"
       ]
+    },
+    {
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_readouts.dart",
+      "owner": "",
+      "names": [
+        "SLogoOrTitle",
+        "showcaseLogoOrTitleConstructor",
+        "SExpandableSynopsis",
+        "showcaseExpandableSynopsisConstructor",
+        "SChip",
+        "showcaseChipConstructor",
+        "SMetaLine",
+        "showcaseMetaLineConstructor",
+        "SHonorsLine",
+        "showcaseHonorsLineConstructor",
+        "STechLine",
+        "showcaseTechLineConstructor"
+      ]
+    },
+    {
+      "file": "lib/features/detail_showcase/presentation/showcase_identity_actions.dart",
+      "owner": "",
+      "names": [
+        "SPrimary",
+        "showcasePrimaryConstructor",
+        "SCircle",
+        "showcaseCircleConstructor",
+        "showcaseCircleMarkConstructor"
+      ]
     }
   ],
   "callback_call_aliases": {
     "_Hover": "SHover",
-    "_Band": "SBand"
+    "_Band": "SBand",
+    "_LogoOrTitle": "SLogoOrTitle",
+    "_ExpandableSynopsis": "SExpandableSynopsis",
+    "_Chip": "SChip",
+    "_MetaLine": "SMetaLine",
+    "_HonorsLine": "SHonorsLine",
+    "_TechLine": "STechLine",
+    "_Primary": "SPrimary",
+    "_Circle": "SCircle"
   },
   "callback_identities": [
     {
