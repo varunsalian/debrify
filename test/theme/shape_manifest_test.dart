@@ -246,6 +246,16 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/debrify_tv/models/debrify_tv_kinds.dart': 0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart':
       0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_all_debrid.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_pikpak.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_premiumize.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_real_debrid.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_torbox.dart':
+      0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_actions.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_editor.dart':
@@ -258,7 +268,11 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_save.dart':
       0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_switch.dart':
+      0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_watch.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cloud_resolvers.dart':
       0,
@@ -289,6 +303,16 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch_state.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_progress_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_alldebrid.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_pikpak.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_premiumize.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_torbox.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_sections.dart':
       0,

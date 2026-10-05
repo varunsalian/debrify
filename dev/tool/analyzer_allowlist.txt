@@ -39,3 +39,7 @@ warning | unused_element | lib/features/debrify_tv/application/debrify_tv_random
 # 2026-10-05 debrify_tv step 5: relocated ORIGINAL 991029f6 warnings.
 # _DebrifyTVScreenState._playNextFromQueue
 warning | unused_element | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart | The declaration '_playNextFromQueue' isn't referenced. Try removing the declaration of '_playNextFromQueue'
+
+# 2026-10-05 debrify_tv step 6: relocated ORIGINAL 991029f6 warnings.
+# _DebrifyTVScreenState._watchTorboxWithCachedTorrents
+warning | unnecessary_cast | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_torbox.dart | Unnecessary cast. Try removing the cast

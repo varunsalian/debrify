@@ -1760,6 +1760,31 @@ the facade are shape-registered. All Found-not-fixed behaviors remain; no
 protected player/launcher/bridge/native code, dependency upgrade, push or
 branch switch. Device-only playback, remote CI and integration remain pending.
 
+### Step 6 — extract playback flows, 2026-10-05
+
+Previous checkpoint: `ff65f0847c494b1567e0654fec4a518a5760fb9a`. Size exceptions at creation: debrify_tv_quick_play.dart 946 formatted physical lines and debrify_tv_channel_switch.dart 524; guards reject growth and the quick-play baseline is added by hand. Exit: separately characterized quick-play twin Real-Debrid requestMagicNext closures and channel-switch per-provider arms, each with independent goldens and review. Preserve all 12 Flutter constructor sites, 11 helper invocations and three native bridge calls, option mismatches, provider conditions and callback identities. The single-method size exceptions are measured and locked at creation; their exits remain later behavior-level decompositions with independent characterization. Gate 1 runs next on this committed tree, serialized and without AST jobs.
+
+All 16 manifests pass their existing self-tests with explicit isolated parser
+packages and stale copied kernels deleted; TV checks cover all 265 declarations,
+occurrence/lexical bindings, comments, ownership and 236 callback negatives.
+Profile/source and legacy-pin checks match base2 (**45 success**, the same
+**one known direct-SharedPreferences failure**). Architecture, sizes, storage,
+shape/source guards, theme (**228 sites**), CI
+format and scoped analyzer/allowlist pass. Strict symbol inventory observes
+**53 diagnostics, zero additions** against R/probe maxima.
+The **92** whole-file characterization identities match latest **base2**;
+strict macOS and calibrated Linux goldens pass **6/6 each**. All **490 original
+comments**, **16 shape tokens**, zero bare radii and the **488 global floor
+with zero slack** remain. LF and diff checks pass. Evidence is
+`step6-*` under `refactor-evidence/debrify_tv/`, including wiring review,
+measurement/source hashes, diagnostic identities, manifests and comparisons.
+
+Formatted facade: **1857** lines. AST breakdown: widget 6, state header and close 2, owners composition 13, lifecycle 63, retained original bodies 1699, build 14, imports 26, remaining blank comment lines 34
+(sum 1857). Every actual destination and
+the facade are shape-registered. All Found-not-fixed behaviors remain; no
+protected player/launcher/bridge/native code, dependency upgrade, push or
+branch switch. Device-only playback, remote CI and integration remain pending.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

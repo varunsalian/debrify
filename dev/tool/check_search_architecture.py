@@ -17,11 +17,12 @@ DEBRIFY_TV_COMPLETE = False
 DEBRIFY_TV_FACADE = "lib/screens/magic_tv_screen.dart"
 DEBRIFY_TV_BRIDGE = "lib/features/debrify_tv/presentation/legacy_debrify_tv/"
 DEBRIFY_TV_FACADE_CAP = 300
-# Zero until measured in each creation commit. Exit: separately reviewed
-# behavior-level decomposition of the whole quick-play/channel-switch method.
+# Move-only size exception: a move cannot split one original method body.
+# Exit: separately characterized decompositions of quick-play twin RD closures
+# and channel-switch per-provider arms, with independent goldens and review.
 DEBRIFY_TV_SIZE_EXCEPTIONS = {
-    DEBRIFY_TV_BRIDGE + "debrify_tv_quick_play.dart": 0,
-    DEBRIFY_TV_BRIDGE + "debrify_tv_channel_switch.dart": 0,
+    DEBRIFY_TV_BRIDGE + "debrify_tv_quick_play.dart": 946,
+    DEBRIFY_TV_BRIDGE + "debrify_tv_channel_switch.dart": 524,
 }
 # Approved D1 exact import pair. Exit: a channel-download data contract.
 DEBRIFY_TV_URL_IMPORT_HTTP_IMPORT = (

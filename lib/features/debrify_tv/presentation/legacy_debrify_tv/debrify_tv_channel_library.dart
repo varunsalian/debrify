@@ -81,7 +81,7 @@ class DebrifyTvChannelLibrary {
       (c) => c.id == channelId,
     );
     if (channel != null) {
-      _sections.legacy.watchChannel(channel);
+      _sections.channelWatch.watchChannel(channel);
     } else {
       debugPrint('DebrifyTVScreen: Channel with ID $channelId not found');
     }

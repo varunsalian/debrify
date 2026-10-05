@@ -37,14 +37,14 @@ class DebrifyTvSpotlightStage {
       onExport: _sections.channelExport.handleExportChannels,
       onDeleteAll: _sections.actions.handleDeleteAllChannels,
       onSettings: _sections.legacy.showGlobalSettingsDialog,
-      onWatch: _sections.legacy.watchChannel,
+      onWatch: _sections.channelWatch.watchChannel,
       onEdit: _sections.actions.handleEditChannel,
       onShare: _sections.share.handleShareChannelAsMagnet,
       onDelete: _sections.actions.handleDeleteChannel,
       onToggleFavorite: _sections.library.toggleChannelFavorite,
       onChannelFocused: _sections.stage._onSpotlightChannelFocused,
       onWatchOne: (channel, torrent) =>
-          _sections.legacy.watchChannel(channel, leadWith: torrent),
+          _sections.channelWatch.watchChannel(channel, leadWith: torrent),
     );
   }
 

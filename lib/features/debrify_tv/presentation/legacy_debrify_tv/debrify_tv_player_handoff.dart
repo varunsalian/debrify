@@ -49,10 +49,10 @@ class DebrifyTvPlayerHandoff {
         magnets: magnets,
         requestNext: requestNext,
         requestChannelSwitch: _owners.library.channels.length > 1
-            ? _sections.legacy.requestNextChannel
+            ? _sections.channelWatch.requestNextChannel
             : null,
         requestChannelById: _owners.library.channels.length > 1
-            ? _sections.legacy.requestChannelById
+            ? _sections.channelWatch.requestChannelById
             : null,
         onFinished: () async {
           AndroidTvPlayerBridge.clearTorboxProvider();
@@ -144,10 +144,10 @@ class DebrifyTvPlayerHandoff {
         channelName: channelName,
         requestNext: requestNext,
         requestChannelSwitch: canSwitchChannels
-            ? _sections.legacy.requestNextChannel
+            ? _sections.channelWatch.requestNextChannel
             : null,
         requestChannelById: canSwitchChannels
-            ? _sections.legacy.requestChannelById
+            ? _sections.channelWatch.requestChannelById
             : null,
         onFinished: () async {
           debugPrint('DebrifyTV: Android TV playback finished callback');
@@ -237,10 +237,10 @@ class DebrifyTvPlayerHandoff {
         magnets: const [],
         requestNext: requestNext,
         requestChannelSwitch: _owners.library.channels.length > 1
-            ? _sections.legacy.requestNextChannel
+            ? _sections.channelWatch.requestNextChannel
             : null,
         requestChannelById: _owners.library.channels.length > 1
-            ? _sections.legacy.requestChannelById
+            ? _sections.channelWatch.requestChannelById
             : null,
         onFinished: () async {
           AndroidTvPlayerBridge.clearTorboxProvider();

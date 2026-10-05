@@ -4,7 +4,7 @@
   "feature": "lib/features/debrify_tv",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 5,
+  "completed_step": 6,
   "receivers": [
     "_deps",
     "_owners",
@@ -1175,9 +1175,6 @@
     "_sections.cards": "$State._sections.cards"
   },
   "callback_member_aliases": {
-    "_sections.legacy.watchChannel": "_DebrifyTVScreenState._watchChannel",
-    "_sections.legacy.requestNextChannel": "_DebrifyTVScreenState._requestNextChannel",
-    "_sections.legacy.requestChannelById": "_DebrifyTVScreenState._requestChannelById",
     "_sections.legacy.buildTvGridLayout": "_DebrifyTVScreenState._buildTvGridLayout",
     "_sections.legacy.showQuickPlayDialog": "_DebrifyTVScreenState._showQuickPlayDialog",
     "_sections.legacy.showGlobalSettingsDialog": "_DebrifyTVScreenState._showGlobalSettingsDialog"
@@ -1523,17 +1520,6 @@
       "handleChannelSearchBarBack",
       "tvFilterChips",
       "providerChoiceChips",
-      "watchChannel",
-      "watch",
-      "watchWithTorbox",
-      "watchWithPikPak",
-      "watchWithCachedTorrents",
-      "watchAllDebridWithCachedTorrents",
-      "requestNextChannel",
-      "requestChannelById",
-      "switchToChannel",
-      "watchTorboxWithCachedTorrents",
-      "watchPikPakWithCachedTorrents",
       "_toggleChannelSearchBar",
       "clearChannelSearchAndRefocus",
       "focusBelowChannelSearch",
@@ -1550,10 +1536,7 @@
       "buildTvAddChannelCard",
       "buildSettingsCard",
       "showQuickPlayDialog",
-      "showGlobalSettingsDialog",
-      "watchPremiumizeWithCachedTorrents",
-      "watchWithPremiumize",
-      "watchWithAllDebrid"
+      "showGlobalSettingsDialog"
     ]
   },
   "conditional_scaffolds": true,
@@ -1633,6 +1616,54 @@
     {
       "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_persistence.dart",
       "owner": "DebrifyTvImportPersistence"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play.dart",
+      "owner": "DebrifyTvQuickPlay"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_torbox.dart",
+      "owner": "DebrifyTvQuickPlayTorbox"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_pikpak.dart",
+      "owner": "DebrifyTvQuickPlayPikPak"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_premiumize.dart",
+      "owner": "DebrifyTvQuickPlayPremiumize"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_quick_play_alldebrid.dart",
+      "owner": "DebrifyTvQuickPlayAllDebrid"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_watch.dart",
+      "owner": "DebrifyTvChannelWatch"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_switch.dart",
+      "owner": "DebrifyTvChannelSwitch"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_real_debrid.dart",
+      "owner": "DebrifyTvCachedRealDebrid"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_all_debrid.dart",
+      "owner": "DebrifyTvCachedAllDebrid"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_torbox.dart",
+      "owner": "DebrifyTvCachedTorbox"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_pikpak.dart",
+      "owner": "DebrifyTvCachedPikPak"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cached_premiumize.dart",
+      "owner": "DebrifyTvCachedPremiumize"
     },
     {
       "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_player_handoff.dart",
