@@ -97,8 +97,7 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
   Simkl: `services/simkl/*` (incl. `simkl_menu_helpers.dart` remove/On-Hold, `simkl_continue_watching_service.dart`).
   MDBList: `services/mdblist/*`. **Trackers share no abstraction — fully parallel by design.**
 - Settings: `screens/settings/{trakt,simkl}_settings_page.dart`. Home rows + scrobble wiring live in
-  `search_screen.dart` + both players. Discover source dropdown: `widgets/search_source_dropdown.dart`,
-  `widgets/trakt/trakt_results_view.dart`.
+  `search_screen.dart` + both players.
 
 ## Detail screens & trailers
 - `screens/merged_series_detail_screen.dart` (default-on), legacy `screens/catalog_item_detail_screen.dart`
@@ -107,8 +106,9 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
   `widgets/trailer_engine.dart`.
 
 ## Other video sources
-- YouTube: `services/youtube_service.dart`, `widgets/youtube/*`. Reddit: `services/reddit_service.dart`,
-  `widgets/reddit/*`. Lemmy: `services/lemmy_service.dart`, `widgets/lemmy/*`.
+- YouTube: `services/youtube_service.dart`, `widgets/youtube/*`. The Reddit and Lemmy sources were
+  retired with the old Home and their code deleted; Reddit credentials are still quarantined by
+  `services/profiles/profile_migration_service.dart`.
 
 ## Settings · storage · misc infra
 - Settings: `screens/settings/*` (+ `home_sections_filter_page.dart` = show/hide home rows,
@@ -125,7 +125,7 @@ right code instead of re-discovering it. Flutter app; code under `lib/{screens,s
   deletions), `services/collection_catalog_pager.dart` (raw cursor and retry state),
   `services/collection_folder_loader.dart` (merged multi-catalog paging),
   `services/home_collection_rows.dart` (`HomeCollectionSection`), browser
-  `screens/collections/collection_folder_screen.dart` (+ `widgets/collections/rail_see_all_pill.dart`),
+  `screens/collections/collection_folder_screen.dart`,
   settings `screens/settings/collections_settings_page.dart` (+ `widgets/text_prompt_dialog.dart`).
   Board wiring lives in `search_screen.dart` (`_buildCollectionSections`, `_openCollectionFolder`,
   `_openCollectionScreen`). Docs: `docs/collections.md`.

@@ -222,6 +222,27 @@ def read_map():
     return rows
 
 
+RETIRED = ROOT / 'dev/tool/storage_retired.tsv'
+
+
+def retired_members():
+    """Original StorageService members deliberately deleted later as dead code.
+
+    Each entry must name a mapped member whose destination file no longer
+    exists, so retirement can't hide a live declaration or a typo.
+    """
+    with RETIRED.open() as f:
+        entries = list(csv.DictReader(f, delimiter='\t'))
+    mapped = {r['member']: r for r in read_map()}
+    for e in entries:
+        row = mapped.get(e['member'])
+        assert row is not None, ('retired member not in map', e['member'])
+        assert row['file'] == e['file'], ('retired file mismatch', e['member'])
+        assert not (ROOT / e['file']).exists(), ('retired file still exists', e['file'])
+        assert e['reason'].strip(), ('retired member needs a reason', e['member'])
+    return {e['member'] for e in entries}
+
+
 def tracked_dart():
     return subprocess.run(['git', 'ls-files', '*.dart'], cwd=ROOT,
                           capture_output=True, text=True, check=True).stdout.splitlines()

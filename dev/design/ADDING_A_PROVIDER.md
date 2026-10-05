@@ -786,7 +786,6 @@ RadioListTile<String>(
 Any hardcoded provider list in UI strings must include the new provider:
 
 - **`lib/main.dart`** snackbar: `'Connect Real Debrid, Torbox, Premiumize, PikPak, or WebDAV in Settings to unlock more tabs.'`
-- **`lib/widgets/provider_status_cards.dart`** empty-state text: `'Add Real-Debrid, Torbox, Premiumize, or PikPak in Settings'`
 
 ### Deferred gaps
 

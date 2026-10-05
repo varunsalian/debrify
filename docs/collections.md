@@ -304,7 +304,6 @@ list and TV focus returns to content when it becomes available.
 | Merged multi-catalog paging | `lib/services/collection_folder_loader.dart` |
 | Home row section (`HomeCollectionSection`) | `lib/services/home_collection_rows.dart` |
 | Folder browser screen | `lib/screens/collections/collection_folder_screen.dart` |
-| Rail "See all" pill (TV focus rung) | `lib/widgets/collections/rail_see_all_pill.dart` |
 | Settings page | `lib/screens/settings/collections_settings_page.dart` |
 | Single-field prompt dialog (link / paste import) | `lib/widgets/text_prompt_dialog.dart` |
 | Board wiring | `lib/screens/search_screen.dart` — `_buildCollectionSections`, `_openCollectionFolder`, `_openCollectionScreen` |

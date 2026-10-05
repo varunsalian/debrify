@@ -1,13 +1,10 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:debrify/models/home_collection.dart';
 import 'package:debrify/screens/collections/collection_editor_screen.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
-import 'package:debrify/widgets/collections/collection_focus_art.dart';
-import 'package:debrify/widgets/collections/folder_hero_band.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 import 'package:flutter/material.dart';
@@ -151,46 +148,4 @@ void main() {
     expect(tester.takeException(), isNull);
     await capture(tester, 'collection-editor');
   });
-
-  testWidgets(
-    'folder hero uses collection backdrop and accepts background video',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData.dark().copyWith(
-            textTheme: ThemeData.dark().textTheme.apply(fontFamily: 'Inter'),
-          ),
-          home: MediaQuery(
-            data: MediaQueryData(size: Size(800, 600), disableAnimations: true),
-            child: Scaffold(
-              body: FolderHeroBand(
-                collectionBackdropUrl: 'https://example.invalid/collection.jpg',
-                folder: HomeCollectionFolder(
-                  id: 'f',
-                  title: 'Movies',
-                  coverImageUrl: 'https://example.invalid/cover.jpg',
-                  heroVideoUrl: 'https://example.invalid/hero.mp4',
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-      expect(
-        tester
-            .widget<CachedNetworkImage>(find.byType(CachedNetworkImage))
-            .imageUrl,
-        'https://example.invalid/collection.jpg',
-      );
-      expect(
-        tester
-            .widget<CollectionFocusArt>(find.byType(CollectionFocusArt))
-            .videoUrl,
-        'https://example.invalid/hero.mp4',
-      );
-      expect(find.text('Movies'), findsOneWidget);
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
 }

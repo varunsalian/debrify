@@ -17,7 +17,6 @@
 3858 lib/services/stremio_service.dart
 3667 lib/screens/video_player/widgets/iptv_channel_sheet.dart
 269 lib/screens/pikpak/pikpak_files_screen.dart
-3076 lib/widgets/trakt/trakt_results_view.dart
 3035 android/app/src/main/kotlin/com/debrify/app/MainActivity.kt
 2875 lib/services/playlist_player_service.dart
 2852 lib/screens/stremio_tv/widgets/stremio_tv_local_catalogs_dialog.dart
@@ -39,9 +38,7 @@
 2197 lib/screens/video_player/widgets/tracks_sheet.dart
 2187 lib/theme/app_theme.dart
 2153 lib/services/android_tv_player_bridge.dart
-2140 lib/widgets/catalog_browser.dart
 2129 lib/screens/settings/recordings_page.dart
-2117 lib/widgets/deprecated/home_trakt_continue_watching_section.dart
 2038 lib/services/debrify_tv_database.dart
 1996 lib/screens/alldebrid/alldebrid_files_screen.dart
 1991 lib/screens/trakt_calendar_screen.dart
@@ -63,14 +60,10 @@
 1602 lib/widgets/iptv/iptv_channel_row.dart
 1599 lib/widgets/remote/remote_config_export.dart
 1582 lib/screens/settings/home_sections_filter_page.dart
-1573 lib/widgets/aggregated_search_results.dart
-1572 lib/widgets/deprecated/home_continue_watching_section.dart
 1571 lib/widgets/remote/remote_transfer_all.dart
 1536 lib/widgets/tv_text_field.dart
-1524 lib/widgets/reddit/reddit_filters.dart
 1522 lib/widgets/detail/detail_layout_showcase.dart
 1504 lib/screens/stremio_tv/stremio_tv_filter_page.dart
-1489 lib/widgets/lemmy/lemmy_filters.dart
 1479 lib/screens/see_all/mdblist_see_all_screen.dart
 1465 lib/screens/settings/sync_and_migrate_page.dart
 1461 lib/widgets/iptv/iptv_filters.dart
@@ -81,7 +74,6 @@
 1394 lib/services/webdav_sync/webdav_sync_engine_state.dart
 1376 lib/widgets/iptv/iptv_epg_panel.dart
 1347 lib/screens/video_player/widgets/stremio_tv_guide_sheet.dart
-1344 lib/widgets/deprecated/home_favorites_section.dart
 1325 lib/screens/profiles/profile_setup_flow.dart
 1313 lib/screens/video_player/widgets/source_sheet.dart
 1307 lib/services/external_player_service.dart
@@ -91,7 +83,6 @@
 1263 lib/widgets/hero_trailer_backdrop.dart
 1259 lib/models/stremio_addon.dart
 1225 lib/services/remote_control/remote_session.dart
-1212 lib/widgets/deprecated/home_playlist_section.dart
 1212 lib/widgets/onboarding/onboarding_flow.dart
 1196 lib/services/profiles/portable_profile_package.dart
 1175 lib/services/iptv_source_search.dart
@@ -112,7 +103,6 @@
 1071 lib/screens/settings/pikpak_settings_page.dart
 1059 lib/services/webdav_sync/webdav_sync_transport.dart
 1053 lib/services/torrent_service.dart
-1046 lib/widgets/provider_status_cards.dart
 1044 lib/services/torrent_bulk_add_service.dart
 1044 lib/widgets/mobile_floating_nav.dart
 1032 lib/screens/profiles/profile_pin_screen.dart
@@ -132,7 +122,6 @@
 990 lib/services/profiles/profile_migration_service.dart
 976 lib/widgets/remote/remote_control_screen.dart
 973 lib/screens/video_player/widgets/styled_dock.dart
-973 lib/widgets/deprecated/home_stremio_tv_favorites_section.dart
 958 lib/widgets/playlist_grid_card.dart
 953 lib/screens/settings/quick_play_settings_page.dart
 942 lib/widgets/metadata_explore_spotlight.dart
@@ -150,10 +139,8 @@
 883 lib/screens/playlist_screen.dart
 879 lib/widgets/detail/detail_episode_cells.dart
 876 lib/services/webdav_sync/webdav_sync_codec.dart
-876 lib/widgets/playlist_landscape_card.dart
 875 lib/widgets/tv_keyboard.dart
 873 lib/screens/settings/premiumize_settings_page.dart
-873 lib/services/reddit_service.dart
 871 lib/screens/video_player/widgets/tv_controls.dart
 846 lib/services/profiles/local_backup/local_backup_zip.dart
 838 lib/screens/settings/theme_tokens_page.dart
@@ -166,5 +153,4 @@
 828 lib/services/webdav_sync/webdav_sync_circle_merge.dart
 823 lib/screens/media_server_library_panel.dart
 823 lib/screens/see_all/trakt_see_all_screen.dart
-812 lib/widgets/deprecated/home_debrify_tv_favorites_section.dart
 804 lib/services/webdav_sync/webdav_sync_models.dart

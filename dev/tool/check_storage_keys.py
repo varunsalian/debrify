@@ -10,7 +10,7 @@ from collections import defaultdict
 import json
 import re
 import sys
-from storage_dart import (LEGACY, ROOT, code_tokens, members, read_map,
+from storage_dart import (LEGACY, ROOT, code_tokens, members, read_map, retired_members,
                           source_paths, replacements, normalized)
 
 INVENTORY = ROOT / 'dev/tool/storage_key_inventory.json'
@@ -97,14 +97,17 @@ def check(generate=False):
         inventory = [{'name': k, 'expression': v, 'resolved_expression': resolved(v, values),
                       'occurrences': len(found[k])} for k,v in sorted(values.items())]
         INVENTORY.write_text(json.dumps(inventory, indent=2)+'\n')
-    expected = {r['name']:r for r in json.loads(INVENTORY.read_text())}
+    retired = retired_members()
+    inventory = {r['name']:r for r in json.loads(INVENTORY.read_text())}
+    assert not (set(found) & retired), ('retired keys declared again', set(found) & retired)
+    expected = {k:v for k,v in inventory.items() if k not in retired}
     assert set(found) == set(expected), ('lost', set(expected)-set(found), 'added', set(found)-set(expected))
     for name, expressions in found.items():
         e = expected[name]
         assert len(expressions) == e['occurrences'] == 1, (name, 'duplicated')
         assert normalized(expressions[0]) == normalized(e['expression']), (name,'expression changed')
         assert normalized(resolved(expressions[0], values)) == normalized(e['resolved_expression']), (name,'resolved value changed')
-    print('Storage constants: all 314 name/value pairs declared exactly once; resolved references unchanged.')
+    print(f'Storage constants: all {len(expected)} name/value pairs declared exactly once ({len(retired & set(inventory))} retired); resolved references unchanged.')
 
 
 if __name__ == '__main__':

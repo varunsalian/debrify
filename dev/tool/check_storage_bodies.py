@@ -9,7 +9,7 @@ fixtures without modifying production files.
 from collections import Counter, defaultdict
 import sys
 from storage_dart import (LEGACY, RESET, ROOT, code_tokens, members, normalized,
-                          original, read_map, replacements, source_paths,
+                          original, read_map, replacements, retired_members, source_paths,
                           tokens, type_declaration)
 
 
@@ -75,9 +75,15 @@ def check():
                     matched = True
             if not matched:
                 errors.append(f'{path}: unmapped static declaration {m.name}')
+    retired = retired_members()
     for r in rows:
         name = r['member']
         if r['kind'] == 'reset_entry':
+            continue
+        if name in retired:
+            # Deleted dead code: it must stay gone, not reappear unmapped.
+            if found[name]:
+                errors.append(f'{name}: retired member is declared again')
             continue
         if r['ref_kind'] == 'type':
             owners = [p for p in ((ROOT / LEGACY), ROOT / r['file'])
@@ -112,7 +118,8 @@ def check():
     if Counter(map(freeze, baseline)) != Counter(map(freeze, observed)):
         errors.append('Reset partition lost, duplicated or changed a statement')
     assert not errors, '\n'.join(errors)
-    print('Storage bodies: 1,080 verbatim declarations; reset partition exact and ordered.')
+    checked = sum(1 for r in rows if r['kind'] != 'reset_entry' and r['member'] not in retired)
+    print(f'Storage bodies: {checked:,} verbatim declarations ({len(retired)} retired); reset partition exact and ordered.')
 
 
 def self_test():
