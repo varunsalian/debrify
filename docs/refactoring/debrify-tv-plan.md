@@ -1823,6 +1823,31 @@ the facade are shape-registered. All Found-not-fixed behaviors remain; no
 protected player/launcher/bridge/native code, dependency upgrade, push or
 branch switch. Device-only playback, remote CI and integration remain pending.
 
+### Step 8 — enforce completion and CI scopes, 2026-10-05
+
+Previous checkpoint: `0b8c85baf25d4b977d88de096fefa95d60b090db`. The step7-source-reader-complete proof accounts for 55 declaration files plus the three explicit scaffold files (58 actual files) and returns the exact ORIGINAL source after ownership and token validation; the step 8 application-source hashes are identical to step 7. Register the facade as a composition root, enforce its measured cap and completion/TEMP rules, verify real checker negatives, and keep all CI format/analyzer paths inside their commands. Gate 2 runs next on this committed tree, against base2 and gate1.
+
+All 16 manifests pass their existing self-tests with explicit isolated parser
+packages and stale copied kernels deleted; TV checks cover all 265 declarations,
+occurrence/lexical bindings, comments, ownership and 236 callback negatives.
+Profile/source and legacy-pin checks match base2 (**45 success**, the same
+**one known direct-SharedPreferences failure**). Architecture, sizes, storage,
+shape/source guards, theme (**228 sites**), CI
+format and scoped analyzer/allowlist pass. Strict symbol inventory observes
+**53 diagnostics, zero additions** against R/probe maxima.
+The **92** whole-file characterization identities match latest **base2**;
+strict macOS and calibrated Linux goldens pass **6/6 each**. All **490 original
+comments**, **16 shape tokens**, zero bare radii and the **488 global floor
+with zero slack** remain. LF and diff checks pass. Evidence is
+`step8-*` under `refactor-evidence/debrify_tv/`, including wiring review,
+measurement/source hashes, diagnostic identities, manifests and comparisons.
+
+Formatted facade: **109** lines. AST breakdown: widget 6, state header and close 2, owners composition 10, lifecycle 63, build 14, imports 8, remaining blank comment lines 6
+(sum 109). Every actual destination and
+the facade are shape-registered. All Found-not-fixed behaviors remain; no
+protected player/launcher/bridge/native code, dependency upgrade, push or
+branch switch. Device-only playback, remote CI and integration remain pending.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

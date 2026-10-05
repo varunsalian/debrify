@@ -13,10 +13,10 @@ ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail")
 FEATURES += ("debrify_tv",)
 # Completion alone activates the facade cap; feature scans are unconditional.
-DEBRIFY_TV_COMPLETE = False
+DEBRIFY_TV_COMPLETE = True
 DEBRIFY_TV_FACADE = "lib/screens/magic_tv_screen.dart"
 DEBRIFY_TV_BRIDGE = "lib/features/debrify_tv/presentation/legacy_debrify_tv/"
-DEBRIFY_TV_FACADE_CAP = 300
+DEBRIFY_TV_FACADE_CAP = 109
 # Move-only size exception: a move cannot split one original method body.
 # Exit: separately characterized decompositions of quick-play twin RD closures
 # and channel-switch per-provider arms, with independent goldens and review.
@@ -153,6 +153,8 @@ TORRENT_PLAYBACK_PIPELINES = {
 # are not import-checked. Every other file in COMPOSITION is presentation and
 # keeps the presentation import rules.
 COMPOSITION_ROOTS = {
+    # Debrify TV facade wires concrete legacy bridge sections and live State.
+    DEBRIFY_TV_FACADE,
     ADDON_HUB_FACADE,
     # Spotlight facade wires concrete legacy bridge sections.
     SPOTLIGHT_BOARD_FACADE,

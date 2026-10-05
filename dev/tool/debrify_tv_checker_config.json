@@ -4,7 +4,7 @@
   "feature": "lib/features/debrify_tv",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 7,
+  "completed_step": 8,
   "receivers": [
     "_deps",
     "_owners",

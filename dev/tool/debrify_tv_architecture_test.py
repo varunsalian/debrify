@@ -103,6 +103,10 @@ def self_test(package=None):
         facade = copy / checker.DEBRIFY_TV_FACADE
         facade.write_text('class DebrifyTVScreen {}\n')
         assert run()[0] == 0, run()[1]
+        for path in created:
+            cap = checker.DEBRIFY_TV_SIZE_EXCEPTIONS[path]
+            probe(path, '\n' * cap)
+            probe(path, '\n' * cap + '// extra\n', str(cap) + '-line Debrify TV extraction limit')
         probe(base + 'models/debrify_tv_kinds.dart', '\n' * 801, '800-line ceiling')
         probe('lib/features/catalog_detail/presentation/legacy_catalog_detail/debrify_tv_size_probe.dart', '\n' * 801, '800-line ceiling')
         probe(bridge + 'temporary.dart', '// TEMP(debrify_tv)\n', 'temporary cross-call outside its exact legacy bridge')
