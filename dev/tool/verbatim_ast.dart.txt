@@ -218,6 +218,134 @@ class References extends RecursiveAstVisitor<void> {
   }
 }
 
+// Opt-in occurrence evidence. Two passes collect declarations before references,
+// preserving lexical binding and selected-member qualifiers before normalization.
+class _BindingScope {
+  final AstNode node;
+  final String path;
+  final _BindingScope? parent;
+  final Map<String, List<(int, String)>> declarations = {};
+  final Map<String, int> children = {};
+  _BindingScope(this.node, this.path, this.parent);
+  void declare(String name, int offset) {
+    final entries = declarations.putIfAbsent(name, () => []);
+    entries.add((offset, 'decl:$path#$name#${entries.length}'));
+  }
+}
+
+class OccurrenceBindings {
+  final AstNode root;
+  final Map<AstNode, _BindingScope> scopes = {};
+  final Map<AstNode, _BindingScope> enclosing = {};
+  final List<Map<String, Object?>> values = [];
+  final Map<int, int> tokenIndices;
+  final int Function(int) position;
+  OccurrenceBindings(this.root, this.tokenIndices, this.position) {
+    final scope = _BindingScope(root, 'member', null);
+    scopes[root] = scope;
+    _collect(root, scope);
+    _references(root);
+    values.sort((a, b) => (a['tokenIndex'] as int).compareTo(b['tokenIndex'] as int));
+  }
+  String? _scopeKind(AstNode node) => switch (node) {
+    MethodDeclaration() || ConstructorDeclaration() => 'method',
+    FunctionDeclaration() => 'function',
+    FunctionExpression() => 'closure',
+    Block() => 'block',
+    ForStatement() || ForElement() => 'for',
+    CatchClause() => 'catch',
+    IfStatement() || IfElement() => 'if',
+    SwitchCase() || SwitchPatternCase() || SwitchExpressionCase() => 'pattern',
+    _ => null,
+  };
+  void _collect(AstNode node, _BindingScope scope) {
+    // A local function's name belongs to the surrounding scope.
+    if (node is FunctionDeclaration && node != root && node.parent is FunctionDeclarationStatement) {
+      scope.declare(node.name.lexeme, node.name.offset);
+    }
+    final kind = node == root ? null : _scopeKind(node);
+    if (kind != null) {
+      final ordinal = scope.children.update(kind, (n) => n + 1, ifAbsent: () => 0);
+      scope = _BindingScope(node, '${scope.path}/$kind$ordinal', scope);
+      scopes[node] = scope;
+    }
+    enclosing[node] = scope;
+    if (node is FormalParameter && node.name != null) {
+      scope.declare(node.name!.lexeme, node.name!.offset);
+    } else if (node is VariableDeclaration && node.parent?.parent is! FieldDeclaration && node.parent?.parent is! TopLevelVariableDeclaration) {
+      scope.declare(node.name.lexeme, node.name.offset);
+    } else if (node is DeclaredIdentifier) {
+      scope.declare(node.name.lexeme, node.name.offset);
+    } else if (node is DeclaredVariablePattern) {
+      scope.declare(node.name.lexeme, node.name.offset);
+    } else if (node is CatchClauseParameter) {
+      scope.declare(node.name.lexeme, node.name.offset);
+    }
+    for (final child in node.childEntities.whereType<AstNode>()) {
+      _collect(child, scope);
+    }
+  }
+  String _binding(SimpleIdentifier node, _BindingScope scope) {
+    var delayed = false;
+    for (_BindingScope? current = scope; current != null; current = current.parent) {
+      final entries = current.declarations[node.name];
+      if (entries != null) {
+        final (offset, identity) = entries.first;
+        return node.offset < offset && !delayed ? 'early:$identity' : identity;
+      }
+      if (current.node is FunctionExpression || current.node is FunctionDeclaration) {
+        delayed = true;
+      }
+    }
+    return 'unbound';
+  }
+  List<String> _qualifierTokens(Expression target) {
+    final result = <String>[];
+    var token = target.beginToken;
+    while (true) {
+      result.add(token.lexeme);
+      if (token == target.endToken || token.next == null) break;
+      token = token.next!;
+    }
+    return result;
+  }
+  void _references(AstNode node) {
+    if (node is Comment || node is CommentReference) return;
+    if (node is SimpleIdentifier && !node.inDeclarationContext() && node.parent is! Label) {
+      final parent = node.parent;
+      Expression? target;
+      if (parent is PropertyAccess && parent.propertyName == node) target = parent.realTarget;
+      if (parent is PrefixedIdentifier && parent.identifier == node) target = parent.prefix;
+      if (parent is MethodInvocation && parent.methodName == node) target = parent.realTarget;
+      final selected = target != null;
+      final bindingNode = selected && (parent is PropertyAccess || parent is PrefixedIdentifier) ? parent! : node;
+      final bindingParent = bindingNode.parent;
+      final role = parent is MethodInvocation && parent.methodName == node ? 'invocation'
+          : bindingParent is AssignmentExpression && bindingParent.leftHandSide == bindingNode
+              ? (bindingParent.operator.lexeme == '=' ? 'write' : 'read-write')
+          : bindingParent is PostfixExpression || bindingParent is PrefixExpression &&
+              (bindingParent.operator.lexeme == '++' || bindingParent.operator.lexeme == '--')
+              ? 'read-write' : 'read';
+      final scope = enclosing[node]!;
+      values.add({
+        'name': node.name,
+        'tokenIndex': tokenIndices[position(node.offset)],
+        'offset': position(node.offset),
+        'end': position(node.end),
+        'scope': scope.path,
+        'kind': selected ? 'selector' : 'lexical',
+        'qualifier': target?.toSource(),
+        'qualifierTokens': target == null ? null : _qualifierTokens(target),
+        'binding': selected ? null : _binding(node, scope),
+        'role': role,
+      });
+    }
+    for (final child in node.childEntities.whereType<AstNode>()) {
+      _references(child);
+    }
+  }
+}
+
 Map<String, Object?> listEvidence(
   ListLiteral list,
   String source,
@@ -309,6 +437,7 @@ Map<String, Object?> describe(
   AstNode node,
   String source, {
   String owner = '',
+  bool occurrenceBindings = false,
   required List<int> positions,
 }) {
   int pos(int offset) => positions[offset];
@@ -385,7 +514,7 @@ Map<String, Object?> describe(
     ],
     'members': [
       for (final m in members)
-        describe(m, source, owner: nameOf(node), positions: positions),
+        describe(m, source, owner: nameOf(node), positions: positions, occurrenceBindings: occurrenceBindings),
     ],
     'endTokenText': node.endToken.lexeme,
     'parameters': parameters?.toSource(),
@@ -482,12 +611,15 @@ Map<String, Object?> describe(
       for (final c in refs.callbacks)
         {...c, 'offset': pos(c['offset'] as int), 'end': pos(c['end'] as int)},
     ],
+    if (occurrenceBindings) 'occurrences': OccurrenceBindings(node, {for (var i = 0; i < tokens.length; i++) tokens[i]['offset'] as int: i}, pos).values,
     'returnedList': returnedList(body, source, positions),
   };
 }
 
 void main() {
-  final input = jsonDecode(stdin.readLineSync()!) as Map<String, dynamic>;
+  final envelope = jsonDecode(stdin.readLineSync()!) as Map<String, dynamic>;
+  final occurrenceBindings = envelope[r'$occurrence_field_bindings'] == true;
+  final input = occurrenceBindings ? envelope['sources'] as Map<String, dynamic> : envelope;
   final output = <String, Object>{};
   for (final entry in input.entries) {
     final source = entry.value as String;
@@ -504,7 +636,7 @@ void main() {
     output[entry.key] = {
       'declarations': [
         for (final d in parsed.unit.declarations)
-          describe(d, source, positions: positions),
+          describe(d, source, positions: positions, occurrenceBindings: occurrenceBindings),
       ],
       'directives': [for (final d in parsed.unit.directives) d.toSource()],
     };

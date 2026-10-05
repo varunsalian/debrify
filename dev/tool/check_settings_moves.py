@@ -1043,7 +1043,9 @@ def lifecycle_tokens(node, rows):
 def _check(original_source, sources, rows, source_path, package=None,
            partition=False, context_guard=False):
     from check_verbatim_moves import parse, original_leaves, split_names, missing_line_comments, ROOT
-    parsed = parse({'<original>': original_source, **sources}, package)
+    parsed = parse({'<original>': original_source, **sources}, package,
+                   occurrence_bindings=bool(CONFIG.get('occurrence_field_bindings')
+                                            or CONFIG.get('lexical_state_setters')))
     original = original_leaves(parsed['<original>']['declarations'], split_names(rows))
     errors = missing_line_comments(original_source, sources, rows)
     if CONFIG.get('source_validator_module'):
@@ -1053,6 +1055,14 @@ def _check(original_source, sources, rows, source_path, package=None,
     if CONFIG.get('spotlight_state_field_bindings'):
         from spotlight_board_field_bindings import failures as field_binding_failures
         errors.extend(field_binding_failures(original, all_nodes(parsed), rows,
+                                             source_path, CONFIG))
+    if CONFIG.get('occurrence_field_bindings'):
+        from occurrence_field_bindings import failures as occurrence_failures
+        errors.extend(occurrence_failures(original, all_nodes(parsed), rows,
+                                           source_path, CONFIG))
+    if CONFIG.get('lexical_state_setters'):
+        from occurrence_field_bindings import lexical_setter_failures
+        errors.extend(lexical_setter_failures(original, all_nodes(parsed), rows,
                                              source_path, CONFIG))
     errors.extend(check_named_exceptions(rows))
     errors.extend(check_lint_comments(original_source, sources))
@@ -1120,8 +1130,13 @@ def _check(original_source, sources, rows, source_path, package=None,
         errors.extend(check_file_aliases(lookup, rows, source_path, CONFIG))
     from torbox_callback_identity import check_callback_identities
     errors.extend(check_callback_identities(lookup, rows, source_path, CONFIG))
+    if CONFIG.get('debrify_tv_contracts'):
+        from debrify_tv_contracts import check_contracts
+        errors.extend(check_contracts(lookup, rows, source_path, CONFIG))
     partitions = sidecar('partitions', 'partitions', {})
     scaffolds = sidecar('scaffolding', 'scaffolds', []) if source_path == CONFIG['source'] else []
+    if CONFIG.get('conditional_scaffolds'):
+        scaffolds = [s for s in scaffolds if not s.get('when_file_present') or s['file'] in sources]
     errors.extend(check_scaffolds(lookup, scaffolds))
     errors.extend(check_live_widget_factory(lookup, CONFIG))
     active_partitions = [partitions[r['original_name']] for r in rows
@@ -1244,6 +1259,10 @@ def _check(original_source, sources, rows, source_path, package=None,
         destination = lookup.get((row['destination_file'], row['destination_class'], row['new_name']))
         actual = destination or in_place
         before = original[key]
+        if CONFIG.get('verbatim_comment_bytes') and actual is not None:
+            comments = lambda node: [re.sub(r'(?m)^[ \t]+', '', t['text']) for t in node['tokens'] if t['comment']]
+            if comments(before) != comments(actual):
+                errors.append('Verbatim comment text changed: ' + key)
         bound = CONFIG.get('bound_this', {}).get(key)
         if bound and destination is not None and 'this' in tokens(destination):
             errors.append('Bound this substitution missing at its registered site: ' + key)

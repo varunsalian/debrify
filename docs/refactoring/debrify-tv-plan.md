@@ -1353,7 +1353,150 @@ decompositions; adding stale-result or profile guards; everything below.
 
 ## Progress
 
-(Empty — execution records step 0 here.)
+### Step 0 — ORIGINAL characterization checkpoint (b), 2026-10-05
+
+Execution base **R = `991029f64a6e4ce27b68626ac4537bf9f38f483c`** on
+`refactor/debrify-tv`, exclusively in the dedicated Debrify TV worktree.
+`flutter pub get` ran here first; Flutter **3.44.8**, Dart **3.12.2**, lockfile
+unchanged. All three Round review resolutions and the four series precedents
+were read. Format idempotence is **11,271 lines, zero changes**; no format-only
+checkpoint or production seam was needed. The checkpoint is resolved by its
+exact subject, `test(debrify-tv): step 0 original-code characterization checkpoint`;
+its SHA and object-equality proof are recorded in `step0-checkpoint-provenance.json`.
+`lib`, `pubspec.yaml`, and `pubspec.lock` equal R's objects respectively:
+`c9e3c1c3dbdce72dc3205fe04ae1444d0e920e49`,
+`5f983ff8c68a01aef5c7a1ec393e677e7693591f`,
+`e0ff9cca69c00ae69bb4dfe111c18a89547cec98`. No application, player, bridge,
+launcher, Android, iOS, or legacy TV source was changed.
+
+Evidence lives only in the common Git directory's
+`refactor-evidence/debrify_tv/`. `base.env.json` records a committed, clean R
+input tree, paths `[]`, flags `--no-pub --concurrency=4`, and SDK identity.
+The serialized full original suite completed: **11,562 success, 13 failure,
+28 error, 20 skipped**. Exact identities are in `step0-test-identities.json`;
+this observed baseline, rather than a historical allowlist, governs later
+comparisons. An incomplete run during capacity contention was preserved as
+`base-incomplete-capacity*` and explicitly rejected; only the completed rerun
+is accepted. Whole-repository ORIGINAL analysis recorded **1,686 diagnostics**
+in `base-analyze.txt`. Both planned full-suite extraction gates remain pending.
+
+The [dependency report](debrify-tv-deps.md) reviews **265 leaves**: 21 top-level
+declarations (19 outside widget/State), 244 main-State members (78 fields,
+15 statics, one getter, 150 methods including lifecycle/build), and the two
+choice-chip-State members. Every leaf records its destination, raw occurrence
+roles/scopes, field reads/writes, lexical hazards, callbacks, comments and
+wiring checklist; resources, hooks, delays and diagnostic ownership are also
+inventoried. The frozen map contains seven owner records and 39 sections;
+both channel callbacks remain on `channelWatch`, with only switching on
+`channelSwitch`. Three optional scaffold templates and two optional private
+widget typedefs were pinned after that review; none is installed in the app.
+All moved comment text, including banners and lint comments, is preserved.
+
+The optional two-pass AST binder collects block declarations before resolving
+references, distinguishes selectors from lexical names, and rejects early
+references and lost field qualification before normalization. Default adapter
+outputs for all **15 existing configurations are byte-identical**
+(`adapter-default-output-proof.json`). The reader proves each declaration's
+single current owner and returns raw R source; completion rejects any retained
+leaf. ORIGINAL, partial, mixed, scaffold-only, and simulated-complete positives
+and missing/duplicate/extra ownership negatives are covered. Both checker and
+reader reject ordinary and balanced capture, ZIP parameter capture, changed
+selectors, lexical State-setter replacement, and bare references in all seven
+records and a section. Physical native-failure indentation, typed catches,
+rethrows, and callback targets remain guarded. Receiver-path indexing was
+proved equivalent over all raw ORIGINAL and simulated nodes; fixture-only
+memoization reuses exact normalizer/canonical-name input/output in one process
+and never caches AST scopes, binding or checker decisions. Parser packages/kernels are owned under
+this worktree's `.dart_tool/debrify_tv_parser/`; each CLI run passes an explicit
+isolated package, and copied packages have stale `.dill` files removed.
+
+**Characterization:** eight new files, **68 passing R/O identities**, with
+fixture search engines installed through production local-engine storage and
+served by a recording MockClient. All 11 live Flutter handoffs, including
+PikPak P4/P8 and the separate RD P1 early/P2 fallback flows, are observable;
+the player-route interceptor removes routes before mounting the player.
+Constructor fields/defaults, directory maps, close-before-push ordering,
+held cancellation, running-prefetch disposal, five-second switching,
+external decline/failure, hooks, settings/prefs, availability, child policy,
+filters, favourites/deletion, imports/export/share, editor/pruning/full warm-up,
+250 ms memo cancellation, and D-pad/KeyRepeat/focus are exercised. P5's live
+channel setting and P3's stacked settings while the TorBox cache check is held
+make channel and quick options differ, preserving the requested **O** option
+swap proofs. No `pumpAndSettle`, production registry seam, or mutation acceptance
+flag was used. **60 frozen ORIGINAL proxy definitions cover all 68 identities**
+in `debrify_tv_original_mutations.json`; compilation and named assertion-failure
+proofs are deliberately deferred to step 0b. Checker/reader mutations are S
+proofs and are not counted as those behavioral proofs.
+
+**Goldens:** six macOS ORIGINAL PNGs were captured in independent first/reverse
+processes, with identical SHA-256 lists and a passing strict comparison
+(`macos-original-*`). Fonts include JetBrainsMono, DPR/locale/text scale/theme
+and focus are pinned, Spotlight uses one cached torrent and `fetchedAt: 0`,
+and readiness is asserted before every image. Visual inspection retained the
+original test rendering: unspecified font families use Flutter's test fallback
+while explicit font families are loaded. Original SwitchRow decoration
+diagnostics are recorded with their specific identity; the phone add-card's
+exact **37-pixel** overflow is asserted in both search layouts. These host
+rendering findings are preserved, not suppressed broadly or fixed. The Linux
+capture script is committed, shell-syntax checked, and restricted to calibrated
+Linux x86_64 / Flutter 3.44.8 / Dart 3.12.2 with application-object equality.
+It uses checkpoint-owned tests in an owned detached checkout, separate
+first/reverse processes and hash lists, strict verification, and copies six
+PNGs plus evidence. Missing Linux files are tolerated only before their ORIGINAL
+capture/step L; capture/require defines or step 1 make comparison strict.
+
+**Checks:** all 15 integrated manifests with their own baselines/configurations
+and isolated self-tests passed; the TV manifest and its real-config self-tests
+cover lifecycle order, all 15 launch notifications, provider conditions,
+P1/P2/P12 prefetch/close order, channel/quick swaps, cancellation, cooldown,
+debounce/memo order, export authorization, compute entrypoints, live NSFW,
+scaffold construction, comments, const, context, fields, and callback identity.
+Architecture, size ratchets, storage keys/references, shape, theme, light-ink,
+CI format and scoped analyzer/allowlist checks pass. Shape is **16 tokens,
+zero bare radii, global floor 488 with zero slack**; theme remains **19 files,
+18,002 lines, 228 sites**. Existing source/theme/profile guards: **83 success**,
+with the one `direct SharedPreferences opens` failure also observed in `base`.
+CI format: **1,886 files, zero changes**; scoped analyzer: **270 pre-existing
+issues**, allowlist **14 warnings, nothing new**. New test/support analysis is
+clean. The TV feature scan is unconditional before completion; exact D1 HTTP
+permission and both size growth negatives are proven with the real architecture
+checker. Actual exception caps remain zero until each file's creation commit
+measures it; synthetic fixture caps are not production permissions.
+
+**Strict diagnostics:** detached ORIGINAL root **50** (17 warnings/33 infos),
+strict features **72**, compiling rename/receiver-only probe **53**, with
+**zero added identities**. Six `unused_field` and thirteen
+`use_build_context_synchronously` occurrences disappear; these are diagnostic
+removals caused by relocation/receiver representation, not fixes. Private
+widget typedefs add zero private-type diagnostics. Inventories combine by
+maximum per identity, never sum (`strict-comparison.json`); destination warning
+allowlist entries are added only when those production files are created.
+
+**Checkpoint provenance:** the complete staged checkpoint tree was made into a
+candidate commit object and replayed detached with its own frozen tests against
+its unchanged application objects, before publishing that identical object on
+the current branch. `original-b-characterization*` records all eight whole files
+and strict macOS images. A fresh depth-1 clone of that checkpoint fails the
+reader with the missing R object; after `git fetch --unshallow`, the same reader
+and existing native/theme source checks pass (`step0-shallow-*`). The behavior
+job's checkout now has `fetch-depth: 0`. Test, tool and application input hashes
+and exact commit/tree provenance are recorded alongside those logs; no branch
+switch or push was performed.
+
+**Decisions and pending:** retain all 19 Found-not-fixed behaviors, especially
+cached RD's player launch after Cancel, Premiumize's null switch result, and
+P3/P11 channel-option binding. Use the existing tvOS host override to exercise
+TV controls and the original false native bridge result; native payloads and
+completion callbacks remain S/device evidence. Hold provider responses until
+the original progress dialog is ready when asserting close-before-push, using
+the existing UI boundary. Keep guards/source-reader changes narrow and retain
+all existing assertions and known-failure lists. The original facade remains
+**11,271 lines**; facade composition breakdown and measured extraction size
+exceptions belong to the step-0b compiling probe and creation steps. **STOP
+POINT 1:** step 0b, base2, step L, all production moves (steps 1–8), both gates,
+Debrify TV device playback checks, remote CI and integration are pending
+Claude's Linux capture and independent step-0 review. No step-0b mutation,
+composition probe, or new baseline has begun.
 
 ## Found, not fixed
 

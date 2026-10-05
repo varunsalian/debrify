@@ -1,0 +1,3530 @@
+{
+  "reference": "991029f64a6e4ce27b68626ac4537bf9f38f483c",
+  "source": "lib/screens/magic_tv_screen.dart",
+  "constructor_defaults": {
+    "key": null,
+    "videoUrl": null,
+    "audioUrl": null,
+    "title": null,
+    "subtitle": null,
+    "playlist": null,
+    "startIndex": null,
+    "rdTorrentId": null,
+    "torboxTorrentId": null,
+    "pikpakCollectionId": null,
+    "requestMagicNext": null,
+    "requestNextChannel": null,
+    "requestChannelById": null,
+    "channelDirectory": null,
+    "initialContinuousShuffle": "false",
+    "startFromRandom": "false",
+    "randomStartMaxPercent": "40",
+    "startAtPercent": null,
+    "hideSeekbar": "false",
+    "showChannelName": "false",
+    "channelName": null,
+    "channelNumber": null,
+    "showVideoTitle": "true",
+    "hideOptions": "false",
+    "hideBackButton": "false",
+    "httpHeaders": null,
+    "disableAutoResume": "false",
+    "viewMode": null,
+    "contentImdbId": null,
+    "contentType": null,
+    "contentSeason": null,
+    "contentEpisode": null,
+    "contentTitle": null,
+    "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+    "iptvChannels": null,
+    "iptvStartIndex": null,
+    "iptvCategories": null,
+    "iptvSourceId": null,
+    "iptvSourceName": null,
+    "iptvSelectedCategory": null,
+    "iptvContentType": null,
+    "iptvSources": null,
+    "iptvBrowseProvider": null,
+    "stremioSources": null,
+    "stremioCurrentSourceIndex": null,
+    "resolveStremioSource": null,
+    "resolveSourceToPlaylist": null,
+    "startupFailoverEnabled": "false",
+    "startupResolverProvider": null,
+    "onStremioSourceCommitted": null,
+    "onStartupSourcesExhausted": null,
+    "seriesSourceFetcher": null,
+    "stremioTvChannels": null,
+    "stremioTvCurrentChannelId": null,
+    "stremioTvGuideDataProvider": null,
+    "stremioTvChannelSwitchProvider": null,
+    "stremioTvNextProvider": null,
+    "traktScrobble": "false",
+    "traktProgressPercent": null,
+    "simklScrobble": "false",
+    "simklProgressPercent": null,
+    "mdblistScrobble": "false",
+    "mdblistProgressPercent": null,
+    "initialSubtitles": null
+  },
+  "sites": [
+    {
+      "site": "P1",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._watch",
+      "call": "VideoPlayerScreen",
+      "occurrence": 0,
+      "line": 4841,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "firstUrl",
+          "tokens": [
+            "firstUrl"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "firstTitleResolved",
+          "tokens": [
+            "firstTitleResolved"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_quickStartRandom",
+          "tokens": [
+            "_quickStartRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_quickRandomStartPercent",
+          "tokens": [
+            "_quickRandomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_quickHideSeekbar",
+          "tokens": [
+            "_quickHideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_quickShowChannelName",
+          "tokens": [
+            "_quickShowChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_quickShowVideoTitle",
+          "tokens": [
+            "_quickShowVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_quickHideOptions",
+          "tokens": [
+            "_quickHideOptions"
+          ]
+        },
+        {
+          "name": "requestMagicNext",
+          "expression": "requestMagicNext",
+          "tokens": [
+            "requestMagicNext"
+          ]
+        },
+        {
+          "name": "requestNextChannel",
+          "expression": "_channels.length > 1 &&\n                                (_quickProvider == _providerRealDebrid ||\n                                    _quickProvider == _providerTorbox ||\n                                    _quickProvider == _providerPikPak ||\n                                    _quickProvider == _providerPremiumize)\n                            ? _requestNextChannel\n                            : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "&&",
+            "(",
+            "_quickProvider",
+            "==",
+            "_providerRealDebrid",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerTorbox",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerPikPak",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerPremiumize",
+            ")",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "activeChannelDirectory",
+          "tokens": [
+            "activeChannelDirectory"
+          ]
+        },
+        {
+          "name": "requestChannelById",
+          "expression": "_channels.length > 1\n                            ? _requestChannelById\n                            : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "?",
+            "_requestChannelById",
+            ":",
+            "null"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "P2",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._watch",
+      "call": "VideoPlayerScreen",
+      "occurrence": 1,
+      "line": 5190,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "firstUrl",
+          "tokens": [
+            "firstUrl"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "firstTitle",
+          "tokens": [
+            "firstTitle"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_quickStartRandom",
+          "tokens": [
+            "_quickStartRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_quickRandomStartPercent",
+          "tokens": [
+            "_quickRandomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_quickHideSeekbar",
+          "tokens": [
+            "_quickHideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_quickShowChannelName",
+          "tokens": [
+            "_quickShowChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_quickShowVideoTitle",
+          "tokens": [
+            "_quickShowVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_quickHideOptions",
+          "tokens": [
+            "_quickHideOptions"
+          ]
+        },
+        {
+          "name": "requestMagicNext",
+          "expression": "requestMagicNext",
+          "tokens": [
+            "requestMagicNext"
+          ]
+        },
+        {
+          "name": "requestNextChannel",
+          "expression": "_channels.length > 1 &&\n                    (_quickProvider == _providerRealDebrid ||\n                        _quickProvider == _providerTorbox ||\n                        _quickProvider == _providerPikPak)\n                ? _requestNextChannel\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "&&",
+            "(",
+            "_quickProvider",
+            "==",
+            "_providerRealDebrid",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerTorbox",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerPikPak",
+            ")",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "quickChannelDirectory",
+          "tokens": [
+            "quickChannelDirectory"
+          ]
+        },
+        {
+          "name": "requestChannelById",
+          "expression": "_channels.length > 1\n                ? _requestChannelById\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "?",
+            "_requestChannelById",
+            ":",
+            "null"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "N1",
+      "kind": "native_helper",
+      "original_member": "_DebrifyTVScreenState._watch",
+      "call": "_launchRealDebridOnAndroidTv",
+      "occurrence": 0,
+      "line": 4817,
+      "arguments": [
+        {
+          "name": "firstStream",
+          "expression": "first",
+          "tokens": [
+            "first"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestMagicNext",
+          "tokens": [
+            "requestMagicNext"
+          ]
+        },
+        {
+          "name": "showChannelNameOverride",
+          "expression": "_quickShowChannelName",
+          "tokens": [
+            "_quickShowChannelName"
+          ]
+        },
+        {
+          "name": "channelId",
+          "expression": "activeChannelId",
+          "tokens": [
+            "activeChannelId"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "activeChannelNumber",
+          "tokens": [
+            "activeChannelNumber"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "activeChannelDirectory",
+          "tokens": [
+            "activeChannelDirectory"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "N2",
+      "kind": "native_helper",
+      "original_member": "_DebrifyTVScreenState._watch",
+      "call": "_launchRealDebridOnAndroidTv",
+      "occurrence": 1,
+      "line": 5168,
+      "arguments": [
+        {
+          "name": "firstStream",
+          "expression": "first",
+          "tokens": [
+            "first"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestMagicNext",
+          "tokens": [
+            "requestMagicNext"
+          ]
+        },
+        {
+          "name": "showChannelNameOverride",
+          "expression": "_quickShowChannelName",
+          "tokens": [
+            "_quickShowChannelName"
+          ]
+        },
+        {
+          "name": "channelId",
+          "expression": "activeChannelId",
+          "tokens": [
+            "activeChannelId"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "activeChannelNumber",
+          "tokens": [
+            "activeChannelNumber"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "quickChannelDirectory",
+          "tokens": [
+            "quickChannelDirectory"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "P3",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._watchWithTorbox",
+      "call": "VideoPlayerScreen",
+      "occurrence": 0,
+      "line": 5581,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "first['url'] ?? ''",
+          "tokens": [
+            "first",
+            "[",
+            "'url'",
+            "]",
+            "??",
+            "''"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "first['title'] ?? 'Debrify TV'",
+          "tokens": [
+            "first",
+            "[",
+            "'title'",
+            "]",
+            "??",
+            "'Debrify TV'"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_startRandom",
+          "tokens": [
+            "_startRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_randomStartPercent",
+          "tokens": [
+            "_randomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_hideSeekbar",
+          "tokens": [
+            "_hideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_showChannelName",
+          "tokens": [
+            "_showChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_showVideoTitle",
+          "tokens": [
+            "_showVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_hideOptions",
+          "tokens": [
+            "_hideOptions"
+          ]
+        },
+        {
+          "name": "requestMagicNext",
+          "expression": "requestTorboxNext",
+          "tokens": [
+            "requestTorboxNext"
+          ]
+        },
+        {
+          "name": "requestNextChannel",
+          "expression": "_channels.length > 1 &&\n                      (_quickProvider == _providerRealDebrid ||\n                          _quickProvider == _providerTorbox ||\n                          _quickProvider == _providerPikPak)\n                  ? _requestNextChannel\n                  : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "&&",
+            "(",
+            "_quickProvider",
+            "==",
+            "_providerRealDebrid",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerTorbox",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerPikPak",
+            ")",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "requestChannelById": null,
+        "channelDirectory": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "N3",
+      "kind": "native_helper",
+      "original_member": "_DebrifyTVScreenState._watchWithTorbox",
+      "call": "_launchTorboxOnAndroidTv",
+      "occurrence": 0,
+      "line": 5559,
+      "arguments": [
+        {
+          "name": "firstStream",
+          "expression": "first",
+          "tokens": [
+            "first"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestTorboxNext",
+          "tokens": [
+            "requestTorboxNext"
+          ]
+        },
+        {
+          "name": "showChannelNameOverride",
+          "expression": "_quickShowChannelName",
+          "tokens": [
+            "_quickShowChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelId",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "P4",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._watchWithPikPak",
+      "call": "VideoPlayerScreen",
+      "occurrence": 0,
+      "line": 5863,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "first['url'] ?? ''",
+          "tokens": [
+            "first",
+            "[",
+            "'url'",
+            "]",
+            "??",
+            "''"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "first['title'] ?? 'Debrify TV'",
+          "tokens": [
+            "first",
+            "[",
+            "'title'",
+            "]",
+            "??",
+            "'Debrify TV'"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_quickStartRandom",
+          "tokens": [
+            "_quickStartRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_quickRandomStartPercent",
+          "tokens": [
+            "_quickRandomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_quickHideSeekbar",
+          "tokens": [
+            "_quickHideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_quickShowChannelName",
+          "tokens": [
+            "_quickShowChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_quickShowVideoTitle",
+          "tokens": [
+            "_quickShowVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_quickHideOptions",
+          "tokens": [
+            "_quickHideOptions"
+          ]
+        },
+        {
+          "name": "requestMagicNext",
+          "expression": "requestPikPakNext",
+          "tokens": [
+            "requestPikPakNext"
+          ]
+        },
+        {
+          "name": "requestNextChannel",
+          "expression": "_channels.length > 1 &&\n                      (_quickProvider == _providerRealDebrid ||\n                          _quickProvider == _providerTorbox ||\n                          _quickProvider == _providerPikPak)\n                  ? _requestNextChannel\n                  : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "&&",
+            "(",
+            "_quickProvider",
+            "==",
+            "_providerRealDebrid",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerTorbox",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerPikPak",
+            ")",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "requestChannelById": null,
+        "channelDirectory": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "N4",
+      "kind": "native_helper",
+      "original_member": "_DebrifyTVScreenState._watchWithPikPak",
+      "call": "_launchPikPakOnAndroidTv",
+      "occurrence": 0,
+      "line": 5841,
+      "arguments": [
+        {
+          "name": "firstStream",
+          "expression": "first",
+          "tokens": [
+            "first"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestPikPakNext",
+          "tokens": [
+            "requestPikPakNext"
+          ]
+        },
+        {
+          "name": "showChannelNameOverride",
+          "expression": "_quickShowChannelName",
+          "tokens": [
+            "_quickShowChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelId",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "P5",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._watchWithCachedTorrents",
+      "call": "VideoPlayerScreen",
+      "occurrence": 0,
+      "line": 6165,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "firstUrl",
+          "tokens": [
+            "firstUrl"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "firstTitle",
+          "tokens": [
+            "firstTitle"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_startRandom",
+          "tokens": [
+            "_startRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_randomStartPercent",
+          "tokens": [
+            "_randomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_hideSeekbar",
+          "tokens": [
+            "_hideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_showChannelName",
+          "tokens": [
+            "_showChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_showVideoTitle",
+          "tokens": [
+            "_showVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_hideOptions",
+          "tokens": [
+            "_hideOptions"
+          ]
+        },
+        {
+          "name": "requestMagicNext",
+          "expression": "requestMagicNext",
+          "tokens": [
+            "requestMagicNext"
+          ]
+        },
+        {
+          "name": "requestNextChannel",
+          "expression": "_channels.length > 1 &&\n                    (_provider == _providerRealDebrid ||\n                        _provider == _providerTorbox ||\n                        _provider == _providerPikPak ||\n                        _provider == _providerPremiumize)\n                ? _requestNextChannel\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "&&",
+            "(",
+            "_provider",
+            "==",
+            "_providerRealDebrid",
+            "||",
+            "_provider",
+            "==",
+            "_providerTorbox",
+            "||",
+            "_provider",
+            "==",
+            "_providerPikPak",
+            "||",
+            "_provider",
+            "==",
+            "_providerPremiumize",
+            ")",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        },
+        {
+          "name": "requestChannelById",
+          "expression": "_channels.length > 1\n                ? _requestChannelById\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "?",
+            "_requestChannelById",
+            ":",
+            "null"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "N5",
+      "kind": "native_helper",
+      "original_member": "_DebrifyTVScreenState._watchWithCachedTorrents",
+      "call": "_launchRealDebridOnAndroidTv",
+      "occurrence": 0,
+      "line": 6141,
+      "arguments": [
+        {
+          "name": "firstStream",
+          "expression": "first",
+          "tokens": [
+            "first"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestMagicNext",
+          "tokens": [
+            "requestMagicNext"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channelId",
+          "expression": "channelId",
+          "tokens": [
+            "channelId"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "P6",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._watchAllDebridWithCachedTorrents",
+      "call": "VideoPlayerScreen",
+      "occurrence": 0,
+      "line": 6417,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "firstUrl",
+          "tokens": [
+            "firstUrl"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "firstTitle",
+          "tokens": [
+            "firstTitle"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_startRandom",
+          "tokens": [
+            "_startRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_randomStartPercent",
+          "tokens": [
+            "_randomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_hideSeekbar",
+          "tokens": [
+            "_hideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_showChannelName",
+          "tokens": [
+            "_showChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_showVideoTitle",
+          "tokens": [
+            "_showVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_hideOptions",
+          "tokens": [
+            "_hideOptions"
+          ]
+        },
+        {
+          "name": "requestMagicNext",
+          "expression": "requestMagicNext",
+          "tokens": [
+            "requestMagicNext"
+          ]
+        },
+        {
+          "name": "requestNextChannel",
+          "expression": "_channels.length > 1 &&\n                    (_provider == _providerRealDebrid ||\n                        _provider == _providerTorbox ||\n                        _provider == _providerPikPak ||\n                        _provider == _providerPremiumize ||\n                        _provider == _providerAllDebrid)\n                ? _requestNextChannel\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "&&",
+            "(",
+            "_provider",
+            "==",
+            "_providerRealDebrid",
+            "||",
+            "_provider",
+            "==",
+            "_providerTorbox",
+            "||",
+            "_provider",
+            "==",
+            "_providerPikPak",
+            "||",
+            "_provider",
+            "==",
+            "_providerPremiumize",
+            "||",
+            "_provider",
+            "==",
+            "_providerAllDebrid",
+            ")",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        },
+        {
+          "name": "requestChannelById",
+          "expression": "_channels.length > 1\n                ? _requestChannelById\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "?",
+            "_requestChannelById",
+            ":",
+            "null"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "N6",
+      "kind": "native_helper",
+      "original_member": "_DebrifyTVScreenState._watchAllDebridWithCachedTorrents",
+      "call": "_launchRealDebridOnAndroidTv",
+      "occurrence": 0,
+      "line": 6395,
+      "arguments": [
+        {
+          "name": "firstStream",
+          "expression": "first",
+          "tokens": [
+            "first"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestMagicNext",
+          "tokens": [
+            "requestMagicNext"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channelId",
+          "expression": "channelId",
+          "tokens": [
+            "channelId"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "B1",
+      "kind": "bridge",
+      "original_member": "_DebrifyTVScreenState._launchTorboxOnAndroidTv",
+      "call": "launchTorboxPlayback",
+      "occurrence": 0,
+      "line": 6491,
+      "arguments": [
+        {
+          "name": "initialUrl",
+          "expression": "initialUrl",
+          "tokens": [
+            "initialUrl"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "title.isEmpty ? 'Debrify TV' : title",
+          "tokens": [
+            "title",
+            ".",
+            "isEmpty",
+            "?",
+            "'Debrify TV'",
+            ":",
+            "title"
+          ]
+        },
+        {
+          "name": "magnets",
+          "expression": "magnets",
+          "tokens": [
+            "magnets"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestNext",
+          "tokens": [
+            "requestNext"
+          ]
+        },
+        {
+          "name": "requestChannelSwitch",
+          "expression": "_channels.length > 1 ? _requestNextChannel : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "requestChannelById",
+          "expression": "_channels.length > 1 ? _requestChannelById : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "?",
+            "_requestChannelById",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "onFinished",
+          "expression": "() async {\n          AndroidTvPlayerBridge.clearTorboxProvider();\n          if (!mounted) {\n            return;\n          }\n          setState(() {\n            _status = _queue.isEmpty\n                ? ''\n                : 'Queue has ${_queue.length} remaining';\n          });\n        }",
+          "tokens": [
+            "(",
+            ")",
+            "async",
+            "{",
+            "AndroidTvPlayerBridge",
+            ".",
+            "clearTorboxProvider",
+            "(",
+            ")",
+            ";",
+            "if",
+            "(",
+            "!",
+            "mounted",
+            ")",
+            "{",
+            "return",
+            ";",
+            "}",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "_status",
+            "=",
+            "_queue",
+            ".",
+            "isEmpty",
+            "?",
+            "''",
+            ":",
+            "'Queue has ",
+            "${",
+            "_queue",
+            ".",
+            "length",
+            "}",
+            " remaining'",
+            ";",
+            "}",
+            ")",
+            ";",
+            "}"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_startRandom",
+          "tokens": [
+            "_startRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_randomStartPercent",
+          "tokens": [
+            "_randomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_hideSeekbar",
+          "tokens": [
+            "_hideSeekbar"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_hideOptions",
+          "tokens": [
+            "_hideOptions"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_showVideoTitle",
+          "tokens": [
+            "_showVideoTitle"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "showChannelNameOverride ?? _showChannelName",
+          "tokens": [
+            "showChannelNameOverride",
+            "??",
+            "_showChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channels",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        },
+        {
+          "name": "currentChannelId",
+          "expression": "channelId ?? _currentWatchingChannelId",
+          "tokens": [
+            "channelId",
+            "??",
+            "_currentWatchingChannelId"
+          ]
+        },
+        {
+          "name": "currentChannelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "B2",
+      "kind": "bridge",
+      "original_member": "_DebrifyTVScreenState._launchRealDebridOnAndroidTv",
+      "call": "launchRealDebridPlayback",
+      "occurrence": 0,
+      "line": 7164,
+      "arguments": [
+        {
+          "name": "initialUrl",
+          "expression": "initialUrl",
+          "tokens": [
+            "initialUrl"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "title.isEmpty ? 'Debrify TV' : title",
+          "tokens": [
+            "title",
+            ".",
+            "isEmpty",
+            "?",
+            "'Debrify TV'",
+            ":",
+            "title"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestNext",
+          "tokens": [
+            "requestNext"
+          ]
+        },
+        {
+          "name": "requestChannelSwitch",
+          "expression": "canSwitchChannels ? _requestNextChannel : null",
+          "tokens": [
+            "canSwitchChannels",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "requestChannelById",
+          "expression": "canSwitchChannels ? _requestChannelById : null",
+          "tokens": [
+            "canSwitchChannels",
+            "?",
+            "_requestChannelById",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "onFinished",
+          "expression": "() async {\n          debugPrint('DebrifyTV: Android TV playback finished callback');\n\n          // Stop prefetcher when exiting player\n          await _stopPrefetch();\n          debugPrint('DebrifyTV: Stopped prefetcher on player exit');\n\n          AndroidTvPlayerBridge.clearStreamProvider();\n          _currentWatchingChannelId = null; // Clear channel tracking\n          if (!mounted) return;\n          setState(() {\n            _status = _queue.isEmpty\n                ? ''\n                : 'Queue has ${_queue.length} remaining';\n          });\n        }",
+          "tokens": [
+            "(",
+            ")",
+            "async",
+            "{",
+            "debugPrint",
+            "(",
+            "'DebrifyTV: Android TV playback finished callback'",
+            ")",
+            ";",
+            "await",
+            "_stopPrefetch",
+            "(",
+            ")",
+            ";",
+            "debugPrint",
+            "(",
+            "'DebrifyTV: Stopped prefetcher on player exit'",
+            ")",
+            ";",
+            "AndroidTvPlayerBridge",
+            ".",
+            "clearStreamProvider",
+            "(",
+            ")",
+            ";",
+            "_currentWatchingChannelId",
+            "=",
+            "null",
+            ";",
+            "if",
+            "(",
+            "!",
+            "mounted",
+            ")",
+            "return",
+            ";",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "_status",
+            "=",
+            "_queue",
+            ".",
+            "isEmpty",
+            "?",
+            "''",
+            ":",
+            "'Queue has ",
+            "${",
+            "_queue",
+            ".",
+            "length",
+            "}",
+            " remaining'",
+            ";",
+            "}",
+            ")",
+            ";",
+            "}"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_startRandom",
+          "tokens": [
+            "_startRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_randomStartPercent",
+          "tokens": [
+            "_randomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_hideSeekbar",
+          "tokens": [
+            "_hideSeekbar"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_hideOptions",
+          "tokens": [
+            "_hideOptions"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_showVideoTitle",
+          "tokens": [
+            "_showVideoTitle"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "showChannelNameOverride ?? _showChannelName",
+          "tokens": [
+            "showChannelNameOverride",
+            "??",
+            "_showChannelName"
+          ]
+        },
+        {
+          "name": "channels",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        },
+        {
+          "name": "currentChannelId",
+          "expression": "channelId ?? _currentWatchingChannelId",
+          "tokens": [
+            "channelId",
+            "??",
+            "_currentWatchingChannelId"
+          ]
+        },
+        {
+          "name": "currentChannelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "P7",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._watchTorboxWithCachedTorrents",
+      "call": "VideoPlayerScreen",
+      "occurrence": 0,
+      "line": 7459,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "first['url'] ?? ''",
+          "tokens": [
+            "first",
+            "[",
+            "'url'",
+            "]",
+            "??",
+            "''"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "first['title'] ?? 'Debrify TV'",
+          "tokens": [
+            "first",
+            "[",
+            "'title'",
+            "]",
+            "??",
+            "'Debrify TV'"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_startRandom",
+          "tokens": [
+            "_startRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_randomStartPercent",
+          "tokens": [
+            "_randomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_hideSeekbar",
+          "tokens": [
+            "_hideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_showChannelName",
+          "tokens": [
+            "_showChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_showVideoTitle",
+          "tokens": [
+            "_showVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_hideOptions",
+          "tokens": [
+            "_hideOptions"
+          ]
+        },
+        {
+          "name": "requestMagicNext",
+          "expression": "requestTorboxNext",
+          "tokens": [
+            "requestTorboxNext"
+          ]
+        },
+        {
+          "name": "requestNextChannel",
+          "expression": "_channels.length > 1 &&\n                    (_provider == _providerRealDebrid ||\n                        _provider == _providerTorbox ||\n                        _provider == _providerPikPak ||\n                        _provider == _providerPremiumize)\n                ? _requestNextChannel\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "&&",
+            "(",
+            "_provider",
+            "==",
+            "_providerRealDebrid",
+            "||",
+            "_provider",
+            "==",
+            "_providerTorbox",
+            "||",
+            "_provider",
+            "==",
+            "_providerPikPak",
+            "||",
+            "_provider",
+            "==",
+            "_providerPremiumize",
+            ")",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        },
+        {
+          "name": "requestChannelById",
+          "expression": "_channels.length > 1\n                ? _requestChannelById\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "?",
+            "_requestChannelById",
+            ":",
+            "null"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "N7",
+      "kind": "native_helper",
+      "original_member": "_DebrifyTVScreenState._watchTorboxWithCachedTorrents",
+      "call": "_launchTorboxOnAndroidTv",
+      "occurrence": 0,
+      "line": 7442,
+      "arguments": [
+        {
+          "name": "firstStream",
+          "expression": "first",
+          "tokens": [
+            "first"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestTorboxNext",
+          "tokens": [
+            "requestTorboxNext"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channelId",
+          "expression": "channelId",
+          "tokens": [
+            "channelId"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "P8",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._watchPikPakWithCachedTorrents",
+      "call": "VideoPlayerScreen",
+      "occurrence": 0,
+      "line": 7630,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "first['url'] ?? ''",
+          "tokens": [
+            "first",
+            "[",
+            "'url'",
+            "]",
+            "??",
+            "''"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "first['title'] ?? 'Debrify TV'",
+          "tokens": [
+            "first",
+            "[",
+            "'title'",
+            "]",
+            "??",
+            "'Debrify TV'"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_startRandom",
+          "tokens": [
+            "_startRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_randomStartPercent",
+          "tokens": [
+            "_randomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_hideSeekbar",
+          "tokens": [
+            "_hideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_showChannelName",
+          "tokens": [
+            "_showChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_showVideoTitle",
+          "tokens": [
+            "_showVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_hideOptions",
+          "tokens": [
+            "_hideOptions"
+          ]
+        },
+        {
+          "name": "requestMagicNext",
+          "expression": "requestPikPakNext",
+          "tokens": [
+            "requestPikPakNext"
+          ]
+        },
+        {
+          "name": "requestNextChannel",
+          "expression": "_channels.length > 1 &&\n                    (_provider == _providerRealDebrid ||\n                        _provider == _providerTorbox ||\n                        _provider == _providerPikPak ||\n                        _provider == _providerPremiumize)\n                ? _requestNextChannel\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "&&",
+            "(",
+            "_provider",
+            "==",
+            "_providerRealDebrid",
+            "||",
+            "_provider",
+            "==",
+            "_providerTorbox",
+            "||",
+            "_provider",
+            "==",
+            "_providerPikPak",
+            "||",
+            "_provider",
+            "==",
+            "_providerPremiumize",
+            ")",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        },
+        {
+          "name": "requestChannelById",
+          "expression": "_channels.length > 1\n                ? _requestChannelById\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "?",
+            "_requestChannelById",
+            ":",
+            "null"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "N8",
+      "kind": "native_helper",
+      "original_member": "_DebrifyTVScreenState._watchPikPakWithCachedTorrents",
+      "call": "_launchPikPakOnAndroidTv",
+      "occurrence": 0,
+      "line": 7613,
+      "arguments": [
+        {
+          "name": "firstStream",
+          "expression": "first",
+          "tokens": [
+            "first"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestPikPakNext",
+          "tokens": [
+            "requestPikPakNext"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channelId",
+          "expression": "channelId",
+          "tokens": [
+            "channelId"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "B3",
+      "kind": "bridge",
+      "original_member": "_DebrifyTVScreenState._launchPikPakOnAndroidTv",
+      "call": "launchTorboxPlayback",
+      "occurrence": 0,
+      "line": 7698,
+      "arguments": [
+        {
+          "name": "initialUrl",
+          "expression": "initialUrl",
+          "tokens": [
+            "initialUrl"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "title.isEmpty ? 'Debrify TV' : title",
+          "tokens": [
+            "title",
+            ".",
+            "isEmpty",
+            "?",
+            "'Debrify TV'",
+            ":",
+            "title"
+          ]
+        },
+        {
+          "name": "magnets",
+          "expression": "const []",
+          "tokens": [
+            "const",
+            "[",
+            "]"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestNext",
+          "tokens": [
+            "requestNext"
+          ]
+        },
+        {
+          "name": "requestChannelSwitch",
+          "expression": "_channels.length > 1 ? _requestNextChannel : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "requestChannelById",
+          "expression": "_channels.length > 1 ? _requestChannelById : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "?",
+            "_requestChannelById",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "onFinished",
+          "expression": "() async {\n          AndroidTvPlayerBridge.clearTorboxProvider();\n          if (!mounted) {\n            return;\n          }\n          setState(() {\n            _status = _queue.isEmpty\n                ? ''\n                : 'Queue has ${_queue.length} remaining';\n          });\n        }",
+          "tokens": [
+            "(",
+            ")",
+            "async",
+            "{",
+            "AndroidTvPlayerBridge",
+            ".",
+            "clearTorboxProvider",
+            "(",
+            ")",
+            ";",
+            "if",
+            "(",
+            "!",
+            "mounted",
+            ")",
+            "{",
+            "return",
+            ";",
+            "}",
+            "setState",
+            "(",
+            "(",
+            ")",
+            "{",
+            "_status",
+            "=",
+            "_queue",
+            ".",
+            "isEmpty",
+            "?",
+            "''",
+            ":",
+            "'Queue has ",
+            "${",
+            "_queue",
+            ".",
+            "length",
+            "}",
+            " remaining'",
+            ";",
+            "}",
+            ")",
+            ";",
+            "}"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_startRandom",
+          "tokens": [
+            "_startRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_randomStartPercent",
+          "tokens": [
+            "_randomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_hideSeekbar",
+          "tokens": [
+            "_hideSeekbar"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_hideOptions",
+          "tokens": [
+            "_hideOptions"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_showVideoTitle",
+          "tokens": [
+            "_showVideoTitle"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "showChannelNameOverride ?? _showChannelName",
+          "tokens": [
+            "showChannelNameOverride",
+            "??",
+            "_showChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channels",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        },
+        {
+          "name": "currentChannelId",
+          "expression": "channelId ?? _currentWatchingChannelId",
+          "tokens": [
+            "channelId",
+            "??",
+            "_currentWatchingChannelId"
+          ]
+        },
+        {
+          "name": "currentChannelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "P9",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._playNextFromQueue",
+      "call": "VideoPlayerScreen",
+      "occurrence": 0,
+      "line": 7887,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "videoUrl",
+          "tokens": [
+            "videoUrl"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "next.name",
+          "tokens": [
+            "next",
+            ".",
+            "name"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_quickStartRandom",
+          "tokens": [
+            "_quickStartRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_quickRandomStartPercent",
+          "tokens": [
+            "_quickRandomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_quickHideSeekbar",
+          "tokens": [
+            "_quickHideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_quickShowChannelName",
+          "tokens": [
+            "_quickShowChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_quickShowVideoTitle",
+          "tokens": [
+            "_quickShowVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_quickHideOptions",
+          "tokens": [
+            "_quickHideOptions"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "requestMagicNext": null,
+        "requestNextChannel": null,
+        "requestChannelById": null,
+        "channelDirectory": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "P10",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._watchPremiumizeWithCachedTorrents",
+      "call": "VideoPlayerScreen",
+      "occurrence": 0,
+      "line": 10166,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "first['url'] ?? ''",
+          "tokens": [
+            "first",
+            "[",
+            "'url'",
+            "]",
+            "??",
+            "''"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "first['title'] ?? 'Debrify TV'",
+          "tokens": [
+            "first",
+            "[",
+            "'title'",
+            "]",
+            "??",
+            "'Debrify TV'"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_startRandom",
+          "tokens": [
+            "_startRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_randomStartPercent",
+          "tokens": [
+            "_randomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_hideSeekbar",
+          "tokens": [
+            "_hideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_showChannelName",
+          "tokens": [
+            "_showChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_showVideoTitle",
+          "tokens": [
+            "_showVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_hideOptions",
+          "tokens": [
+            "_hideOptions"
+          ]
+        },
+        {
+          "name": "requestMagicNext",
+          "expression": "requestPremiumizeNext",
+          "tokens": [
+            "requestPremiumizeNext"
+          ]
+        },
+        {
+          "name": "requestNextChannel",
+          "expression": "_channels.length > 1 &&\n                    (_provider == _providerRealDebrid ||\n                        _provider == _providerTorbox ||\n                        _provider == _providerPikPak ||\n                        _provider == _providerPremiumize)\n                ? _requestNextChannel\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "&&",
+            "(",
+            "_provider",
+            "==",
+            "_providerRealDebrid",
+            "||",
+            "_provider",
+            "==",
+            "_providerTorbox",
+            "||",
+            "_provider",
+            "==",
+            "_providerPikPak",
+            "||",
+            "_provider",
+            "==",
+            "_providerPremiumize",
+            ")",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        },
+        {
+          "name": "requestChannelById",
+          "expression": "_channels.length > 1\n                ? _requestChannelById\n                : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "?",
+            "_requestChannelById",
+            ":",
+            "null"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "N9",
+      "kind": "native_helper",
+      "original_member": "_DebrifyTVScreenState._watchPremiumizeWithCachedTorrents",
+      "call": "_launchPikPakOnAndroidTv",
+      "occurrence": 0,
+      "line": 10152,
+      "arguments": [
+        {
+          "name": "firstStream",
+          "expression": "first",
+          "tokens": [
+            "first"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestPremiumizeNext",
+          "tokens": [
+            "requestPremiumizeNext"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "channelName",
+          "tokens": [
+            "channelName"
+          ]
+        },
+        {
+          "name": "channelId",
+          "expression": "channelId",
+          "tokens": [
+            "channelId"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "channelNumber",
+          "tokens": [
+            "channelNumber"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "channelDirectory",
+          "tokens": [
+            "channelDirectory"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "P11",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._watchWithPremiumize",
+      "call": "VideoPlayerScreen",
+      "occurrence": 0,
+      "line": 10461,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "first['url'] ?? ''",
+          "tokens": [
+            "first",
+            "[",
+            "'url'",
+            "]",
+            "??",
+            "''"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "first['title'] ?? 'Debrify TV'",
+          "tokens": [
+            "first",
+            "[",
+            "'title'",
+            "]",
+            "??",
+            "'Debrify TV'"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_startRandom",
+          "tokens": [
+            "_startRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_randomStartPercent",
+          "tokens": [
+            "_randomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_hideSeekbar",
+          "tokens": [
+            "_hideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_showChannelName",
+          "tokens": [
+            "_showChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_showVideoTitle",
+          "tokens": [
+            "_showVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_hideOptions",
+          "tokens": [
+            "_hideOptions"
+          ]
+        },
+        {
+          "name": "requestMagicNext",
+          "expression": "requestPremiumizeNext",
+          "tokens": [
+            "requestPremiumizeNext"
+          ]
+        },
+        {
+          "name": "requestNextChannel",
+          "expression": "_channels.length > 1 &&\n                      (_quickProvider == _providerRealDebrid ||\n                          _quickProvider == _providerTorbox ||\n                          _quickProvider == _providerPikPak ||\n                          _quickProvider == _providerPremiumize)\n                  ? _requestNextChannel\n                  : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "&&",
+            "(",
+            "_quickProvider",
+            "==",
+            "_providerRealDebrid",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerTorbox",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerPikPak",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerPremiumize",
+            ")",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "requestChannelById": null,
+        "channelDirectory": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "N10",
+      "kind": "native_helper",
+      "original_member": "_DebrifyTVScreenState._watchWithPremiumize",
+      "call": "_launchPikPakOnAndroidTv",
+      "occurrence": 0,
+      "line": 10445,
+      "arguments": [
+        {
+          "name": "firstStream",
+          "expression": "first",
+          "tokens": [
+            "first"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestPremiumizeNext",
+          "tokens": [
+            "requestPremiumizeNext"
+          ]
+        },
+        {
+          "name": "showChannelNameOverride",
+          "expression": "_quickShowChannelName",
+          "tokens": [
+            "_quickShowChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelId",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    },
+    {
+      "site": "P12",
+      "kind": "player",
+      "original_member": "_DebrifyTVScreenState._watchWithAllDebrid",
+      "call": "VideoPlayerScreen",
+      "occurrence": 0,
+      "line": 10734,
+      "arguments": [
+        {
+          "name": "videoUrl",
+          "expression": "first['url'] ?? ''",
+          "tokens": [
+            "first",
+            "[",
+            "'url'",
+            "]",
+            "??",
+            "''"
+          ]
+        },
+        {
+          "name": "title",
+          "expression": "firstTitle",
+          "tokens": [
+            "firstTitle"
+          ]
+        },
+        {
+          "name": "startFromRandom",
+          "expression": "_quickStartRandom",
+          "tokens": [
+            "_quickStartRandom"
+          ]
+        },
+        {
+          "name": "randomStartMaxPercent",
+          "expression": "_quickRandomStartPercent",
+          "tokens": [
+            "_quickRandomStartPercent"
+          ]
+        },
+        {
+          "name": "hideSeekbar",
+          "expression": "_quickHideSeekbar",
+          "tokens": [
+            "_quickHideSeekbar"
+          ]
+        },
+        {
+          "name": "showChannelName",
+          "expression": "_quickShowChannelName",
+          "tokens": [
+            "_quickShowChannelName"
+          ]
+        },
+        {
+          "name": "channelName",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "showVideoTitle",
+          "expression": "_quickShowVideoTitle",
+          "tokens": [
+            "_quickShowVideoTitle"
+          ]
+        },
+        {
+          "name": "hideOptions",
+          "expression": "_quickHideOptions",
+          "tokens": [
+            "_quickHideOptions"
+          ]
+        },
+        {
+          "name": "requestMagicNext",
+          "expression": "requestMagicNext",
+          "tokens": [
+            "requestMagicNext"
+          ]
+        },
+        {
+          "name": "requestNextChannel",
+          "expression": "_channels.length > 1 &&\n                      (_quickProvider == _providerRealDebrid ||\n                          _quickProvider == _providerTorbox ||\n                          _quickProvider == _providerPikPak ||\n                          _quickProvider == _providerPremiumize ||\n                          _quickProvider == _providerAllDebrid)\n                  ? _requestNextChannel\n                  : null",
+          "tokens": [
+            "_channels",
+            ".",
+            "length",
+            ">",
+            "1",
+            "&&",
+            "(",
+            "_quickProvider",
+            "==",
+            "_providerRealDebrid",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerTorbox",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerPikPak",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerPremiumize",
+            "||",
+            "_quickProvider",
+            "==",
+            "_providerAllDebrid",
+            ")",
+            "?",
+            "_requestNextChannel",
+            ":",
+            "null"
+          ]
+        }
+      ],
+      "unpassed": {
+        "key": null,
+        "audioUrl": null,
+        "subtitle": null,
+        "playlist": null,
+        "startIndex": null,
+        "rdTorrentId": null,
+        "torboxTorrentId": null,
+        "pikpakCollectionId": null,
+        "requestChannelById": null,
+        "channelDirectory": null,
+        "initialContinuousShuffle": "false",
+        "startAtPercent": null,
+        "hideBackButton": "false",
+        "httpHeaders": null,
+        "disableAutoResume": "false",
+        "viewMode": null,
+        "contentImdbId": null,
+        "contentType": null,
+        "contentSeason": null,
+        "contentEpisode": null,
+        "contentTitle": null,
+        "resumePolicy": "PlaybackResumePolicy.sourceSpecific",
+        "iptvChannels": null,
+        "iptvStartIndex": null,
+        "iptvCategories": null,
+        "iptvSourceId": null,
+        "iptvSourceName": null,
+        "iptvSelectedCategory": null,
+        "iptvContentType": null,
+        "iptvSources": null,
+        "iptvBrowseProvider": null,
+        "stremioSources": null,
+        "stremioCurrentSourceIndex": null,
+        "resolveStremioSource": null,
+        "resolveSourceToPlaylist": null,
+        "startupFailoverEnabled": "false",
+        "startupResolverProvider": null,
+        "onStremioSourceCommitted": null,
+        "onStartupSourcesExhausted": null,
+        "seriesSourceFetcher": null,
+        "stremioTvChannels": null,
+        "stremioTvCurrentChannelId": null,
+        "stremioTvGuideDataProvider": null,
+        "stremioTvChannelSwitchProvider": null,
+        "stremioTvNextProvider": null,
+        "traktScrobble": "false",
+        "traktProgressPercent": null,
+        "simklScrobble": "false",
+        "simklProgressPercent": null,
+        "mdblistScrobble": "false",
+        "mdblistProgressPercent": null,
+        "initialSubtitles": null
+      }
+    },
+    {
+      "site": "N11",
+      "kind": "native_helper",
+      "original_member": "_DebrifyTVScreenState._watchWithAllDebrid",
+      "call": "_launchRealDebridOnAndroidTv",
+      "occurrence": 0,
+      "line": 10719,
+      "arguments": [
+        {
+          "name": "firstStream",
+          "expression": "first",
+          "tokens": [
+            "first"
+          ]
+        },
+        {
+          "name": "requestNext",
+          "expression": "requestMagicNext",
+          "tokens": [
+            "requestMagicNext"
+          ]
+        },
+        {
+          "name": "showChannelNameOverride",
+          "expression": "_quickShowChannelName",
+          "tokens": [
+            "_quickShowChannelName"
+          ]
+        },
+        {
+          "name": "channelId",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelNumber",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        },
+        {
+          "name": "channelDirectory",
+          "expression": "null",
+          "tokens": [
+            "null"
+          ]
+        }
+      ],
+      "unpassed": "Every other parameter is not passed; original helper/API default applies."
+    }
+  ]
+}

@@ -11,6 +11,22 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 FEATURES = ("search", "home", "discover", "sources", "stremio_tv", "player_launch", "settings", "iptv", "torbox_downloads", "debrid_downloads", "pikpak_files", "playback_settings", "iptv_settings", "playlist_content", "merged_detail", "addon_hub", "detail_showcase", "spotlight_board", "episodes_panel", "catalog_detail")
+FEATURES += ("debrify_tv",)
+# Completion alone activates the facade cap; feature scans are unconditional.
+DEBRIFY_TV_COMPLETE = False
+DEBRIFY_TV_FACADE = "lib/screens/magic_tv_screen.dart"
+DEBRIFY_TV_BRIDGE = "lib/features/debrify_tv/presentation/legacy_debrify_tv/"
+DEBRIFY_TV_FACADE_CAP = 300
+# Zero until measured in each creation commit. Exit: separately reviewed
+# behavior-level decomposition of the whole quick-play/channel-switch method.
+DEBRIFY_TV_SIZE_EXCEPTIONS = {
+    DEBRIFY_TV_BRIDGE + "debrify_tv_quick_play.dart": 0,
+    DEBRIFY_TV_BRIDGE + "debrify_tv_channel_switch.dart": 0,
+}
+# Approved D1 exact import pair. Exit: a channel-download data contract.
+DEBRIFY_TV_URL_IMPORT_HTTP_IMPORT = (
+    DEBRIFY_TV_BRIDGE + "debrify_tv_url_import.dart", "package:http/http.dart",
+)
 # Screen-level wiring that composes several features (the composition
 # boundary). Measured for size; features must not import it.
 COMPOSITION = "lib/screens/search_screen"
@@ -382,6 +398,7 @@ LEGACY_PLAYBACK_BRIDGES = (
     SPOTLIGHT_BOARD_BRIDGE,
     EPISODES_PANEL_BRIDGE,
     CATALOG_DETAIL_BRIDGE,
+    DEBRIFY_TV_BRIDGE,
 )
 # Each pending cap is zero until measured in the file's creation commit.
 # No further player-launch size exception is authorized by this plan.
@@ -396,7 +413,8 @@ PLAYER_LAUNCH_SIZE_EXCEPTIONS = {
     "lib/features/player_launch/presentation/legacy_launch/launch_router.dart": 592,
 }
 # User-approved verbatim DeoVR upload/UI bridge; exit: extract upload into a
-# data contract in a later control-flow change. No other HTTP bridge is allowed.
+# data contract in a later control-flow change. The only other approved HTTP
+# import pair is DEBRIFY_TV_URL_IMPORT_HTTP_IMPORT (D1).
 PLAYER_LAUNCH_DEOVR_HTTP_IMPORT = (
     "lib/features/player_launch/presentation/legacy_launch/deovr_launch.dart",
     "package:http/http.dart",
@@ -411,6 +429,17 @@ def violations(path: Path) -> list[str]:
     relative = path.relative_to(ROOT).as_posix()
     problems = []
     lines = len(source.splitlines())
+    if relative.startswith("lib/features/debrify_tv/"):
+        limit = max(500, DEBRIFY_TV_SIZE_EXCEPTIONS.get(relative, 0))
+        if lines > limit:
+            problems.append(f"{lines} lines exceeds the {limit}-line Debrify TV extraction limit")
+        if "TEMP(debrify_tv)" in source and (DEBRIFY_TV_COMPLETE or not relative.startswith(DEBRIFY_TV_BRIDGE)):
+            problems.append("Debrify TV temporary cross-call outside its exact legacy bridge")
+    if DEBRIFY_TV_COMPLETE and relative == DEBRIFY_TV_FACADE:
+        if lines > DEBRIFY_TV_FACADE_CAP:
+            problems.append(f"{lines} lines exceeds the {DEBRIFY_TV_FACADE_CAP}-line Debrify TV facade limit")
+        if "TEMP(debrify_tv)" in source:
+            problems.append("Debrify TV temporary cross-call remains in the facade")
     if relative == FACADE and lines > 300:
         problems.append(f"{lines} lines exceeds the 300-line facade limit")
     if relative == PLAYER_LAUNCH_FACADE and lines > 300:
@@ -598,7 +627,7 @@ def violations(path: Path) -> list[str]:
         if layer_hint := next((x for x in ("data", "models") if x in path.parts), None):
             if re.search(r"\bBuildContext\b", source):
                 problems.append(f"{layer_hint} references BuildContext")
-    if lines > max(800, PLAYER_LAUNCH_SIZE_EXCEPTIONS.get(relative, 0)):
+    if lines > max(800, PLAYER_LAUNCH_SIZE_EXCEPTIONS.get(relative, 0), DEBRIFY_TV_SIZE_EXCEPTIONS.get(relative, 0)):
         problems.append(f"{lines} lines exceeds the 800-line ceiling")
     if re.search(r"^\s*part\s+of\b", source, re.MULTILINE):
         problems.append("handwritten part of a shared library")
@@ -645,6 +674,11 @@ def violations(path: Path) -> list[str]:
                     problems.append("spotlight board feature imports its facade")
                 if not relative.startswith(SPOTLIGHT_BOARD_BRIDGE) and target.startswith("lib/services/"):
                     problems.append("spotlight board service import outside the exact legacy bridge")
+            if relative.startswith("lib/features/debrify_tv/"):
+                if target == DEBRIFY_TV_FACADE:
+                    problems.append("Debrify TV feature imports its facade")
+                if not relative.startswith(DEBRIFY_TV_BRIDGE) and target.startswith("lib/services/"):
+                    problems.append("Debrify TV service import outside its exact legacy bridge")
             if target.startswith("lib/features/") and relative.startswith("lib/features/"):
                 own_feature = relative.split("/")[2]
                 other_feature = target.split("/")[2]
@@ -712,7 +746,7 @@ def violations(path: Path) -> list[str]:
                              and target.startswith("lib/services/"))
             if layer == "presentation" and target.startswith((
                     "lib/services/", "package:http/", "package:shared_preferences/",
-                    "package:sqflite")) and not legacy_bridge and (relative, target) != PLAYER_LAUNCH_DEOVR_HTTP_IMPORT and target not in (
+                    "package:sqflite")) and not legacy_bridge and (relative, target) not in (PLAYER_LAUNCH_DEOVR_HTTP_IMPORT, DEBRIFY_TV_URL_IMPORT_HTTP_IMPORT) and target not in (
                         PRESENTATION_BRIDGE_IMPORTS.get(relative, set())):
                 problems.append(f"view directly imports data/platform API: {uri}")
             if target.startswith("package:provider/"):
@@ -803,6 +837,8 @@ def main() -> int:
         paths.add(ROOT / MERGED_DETAIL_FACADE)
     if ADDON_HUB_COMPLETE:
         paths.add(ROOT / ADDON_HUB_FACADE)
+    if DEBRIFY_TV_COMPLETE:
+        paths.add(ROOT / DEBRIFY_TV_FACADE)
     if PIKPAK_COMPLETE:
         paths.add(ROOT / PIKPAK_FACADE)
     if DEBRID_COMPLETE:
