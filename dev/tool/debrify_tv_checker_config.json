@@ -4,7 +4,7 @@
   "feature": "lib/features/debrify_tv",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 2,
+  "completed_step": 3,
   "receivers": [
     "_deps",
     "_owners",
@@ -1063,7 +1063,18 @@
     "handoff": "dev/tool/debrify_tv_handoff_ledger.json",
     "callbacks": "dev/tool/debrify_tv_callback_sites.json"
   },
-  "type_aliases": [],
+  "type_aliases": [
+    {
+      "original_name": "_SpotlightMetaPill",
+      "alias": "DebrifyTvMetaPill",
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart"
+    },
+    {
+      "original_name": "_SpotlightChoiceChip",
+      "alias": "DebrifyTvChoiceChip",
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart"
+    }
+  ],
   "verbatim_comment_bytes": true,
   "callback_closure_binding": true,
   "callback_instances": {
@@ -1164,14 +1175,17 @@
     "_sections.cards": "$State._sections.cards"
   },
   "callback_member_aliases": {
-    "_sections.legacy.loadSettings": "_DebrifyTVScreenState._loadSettings",
-    "_sections.legacy.loadChannels": "_DebrifyTVScreenState._loadChannels",
-    "_sections.legacy.handleSyncedDebrifyTvLibraryChanged": "_DebrifyTVScreenState._handleSyncedDebrifyTvLibraryChanged",
-    "_sections.legacy.loadFavoriteChannels": "_DebrifyTVScreenState._loadFavoriteChannels",
-    "_sections.legacy.watchChannelById": "_DebrifyTVScreenState._watchChannelById",
-    "_sections.legacy.checkPendingAutoPlay": "_DebrifyTVScreenState._checkPendingAutoPlay",
-    "_sections.legacy.buildSpotlightView": "_DebrifyTVScreenState._buildSpotlightView",
+    "_sections.legacy.handleImportChannels": "_DebrifyTVScreenState._handleImportChannels",
+    "_sections.legacy.handleExportChannels": "_DebrifyTVScreenState._handleExportChannels",
+    "_sections.legacy.handleAddChannel": "_DebrifyTVScreenState._handleAddChannel",
+    "_sections.legacy.handleEditChannel": "_DebrifyTVScreenState._handleEditChannel",
+    "_sections.legacy.handleDeleteChannel": "_DebrifyTVScreenState._handleDeleteChannel",
+    "_sections.legacy.handleShareChannelAsMagnet": "_DebrifyTVScreenState._handleShareChannelAsMagnet",
+    "_sections.legacy.handleDeleteAllChannels": "_DebrifyTVScreenState._handleDeleteAllChannels",
+    "_sections.legacy.watchChannel": "_DebrifyTVScreenState._watchChannel",
     "_sections.legacy.buildTvGridLayout": "_DebrifyTVScreenState._buildTvGridLayout",
+    "_sections.legacy.showQuickPlayDialog": "_DebrifyTVScreenState._showQuickPlayDialog",
+    "_sections.legacy.showGlobalSettingsDialog": "_DebrifyTVScreenState._showGlobalSettingsDialog",
     "_sections.legacy.stopPrefetch": "_DebrifyTVScreenState._stopPrefetch"
   },
   "debrify_tv_contracts": true,
@@ -1513,44 +1527,13 @@
     ],
     "_DebrifyTVScreenState": [
       "handleChannelSearchBarBack",
-      "closeProgressDialog",
-      "updateProgress",
-      "cancelActiveWatch",
-      "determineDefaultProvider",
-      "isProviderSelectable",
-      "loadSettings",
       "_accumulateCachedTorrent",
-      "enabledTvKeywordEngines",
-      "tvChannelMaxResultsForEngine",
-      "estimatePagesPulledForEngine",
-      "_estimatePageRequestsForEngine",
-      "quickPlayMaxResultsOverrides",
-      "tvEngineSearchStates",
       "_sortedCachedTorrents",
-      "loadChannels",
-      "handleSyncedDebrifyTvLibraryChanged",
-      "loadFavoriteChannels",
-      "toggleChannelFavorite",
-      "watchChannelById",
-      "checkPendingAutoPlay",
       "computeChannelCacheEntry",
       "_warmKeyword",
-      "deleteChannel",
-      "syncProviderAvailability",
-      "parseKeywords",
-      "normalizedKeywords",
-      "ensureCacheEntry",
-      "getChannelKeywords",
       "fetchTorboxCacheWindow",
-      "estimatedWarmDurationSeconds",
       "_filterCachedTorrentsForKeywords",
       "_filterKeywordStats",
-      "_applyQualityFilterToCached",
-      "applyQualityFilterToTorrents",
-      "notifyQualityFallback",
-      "rdLinkPassesSizeRules",
-      "selectTorrentsForPlayback",
-      "providerDisplay",
       "tvFilterChips",
       "providerChoiceChips",
       "_addKeywordsToList",
@@ -1579,7 +1562,6 @@
       "_promptImportUrl",
       "persistImportedZipChannels",
       "showZipImportSummary",
-      "resolveUniqueChannelName",
       "handleEditChannel",
       "_showDebrifyTvConfirmation",
       "handleDeleteChannel",
@@ -1594,26 +1576,15 @@
       "watchWithPikPak",
       "watchWithCachedTorrents",
       "watchAllDebridWithCachedTorrents",
-      "showNativeSettingsFailure",
       "launchTorboxOnAndroidTv",
       "requestNextChannel",
       "requestChannelById",
       "switchToChannel",
-      "resolveChannelNumber",
-      "androidTvChannelMetadata",
       "launchRealDebridOnAndroidTv",
       "watchTorboxWithCachedTorrents",
       "watchPikPakWithCachedTorrents",
       "launchPikPakOnAndroidTv",
-      "showChannelCreationDialog",
-      "showCachedPlaybackDialog",
       "_playNextFromQueue",
-      "buildSpotlightView",
-      "loadSpotlightRailHealth",
-      "_onSpotlightChannelFocused",
-      "invalidateSpotlightStats",
-      "refreshSpotlightStatsIfFocused",
-      "_computeSpotlightStats",
       "_toggleChannelSearchBar",
       "clearChannelSearchAndRefocus",
       "focusBelowChannelSearch",
@@ -1645,8 +1616,6 @@
       "formatTorboxSeriesTitle",
       "_torboxFileLooksLikeVideo",
       "_torboxDisplayName",
-      "normalizeInfohash",
-      "showSnack",
       "_asIntMapValue",
       "formatTorboxError",
       "formatImportError",
@@ -1662,7 +1631,14 @@
     ]
   },
   "conditional_scaffolds": true,
-  "constructor_forwarders": [],
+  "constructor_forwarders": [
+    {
+      "original_name": "_SpotlightChoiceChip",
+      "alias": "DebrifyTvChoiceChip",
+      "call": "debrifyTvChoiceChip",
+      "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart"
+    }
+  ],
   "planned_constructor_forwarders": [
     {
       "original_name": "_SpotlightChoiceChip",
@@ -1671,5 +1647,30 @@
       "file": "lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart"
     }
   ],
-  "plain_sections": []
+  "plain_sections": [
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_feedback.dart",
+      "owner": "DebrifyTvFeedback"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_loader.dart",
+      "owner": "DebrifyTvSettingsLoader"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_engine_limits.dart",
+      "owner": "DebrifyTvEngineLimits"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_filters.dart",
+      "owner": "DebrifyTvPlaybackFilters"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_library.dart",
+      "owner": "DebrifyTvChannelLibrary"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_spotlight_stage.dart",
+      "owner": "DebrifyTvSpotlightStage"
+    }
+  ]
 }

@@ -35,6 +35,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// The residue shrinks as `const` sites are opened up or `app` is threaded
 /// further. Update the entry when you do. RAISING one needs a reason.
 const Map<String, int> kShapeResidue = {
+  'lib/features/debrify_tv/presentation/debrify_tv_choice_chip.dart': 0,
+  'lib/features/debrify_tv/presentation/debrify_tv_meta_pill.dart': 0,
   'lib/screens/magic_tv_screen.dart': 0,
 
   // Addon hub: every destination and the facade, including zero budgets.
@@ -242,6 +244,12 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/debrify_tv/models/debrify_tv_kinds.dart': 0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_bindings.dart':
       0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_library.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_engine_limits.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_feedback.dart':
+      0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_focus_state.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_parsing.dart':
@@ -249,6 +257,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_library_state.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_owners.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_filters.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch_state.dart':
       0,
@@ -258,7 +268,11 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_session_state.dart':
       0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_loader.dart':
+      0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_settings_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_spotlight_stage.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_stage_state.dart':
       0,

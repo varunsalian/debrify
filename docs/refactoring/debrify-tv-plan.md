@@ -1685,6 +1685,31 @@ the facade are shape-registered. All Found-not-fixed behaviors remain; no
 protected player/launcher/bridge/native code, dependency upgrade, push or
 branch switch. Device-only playback, remote CI and integration remain pending.
 
+### Step 3 — extract feedback, settings, library and Spotlight stage, 2026-10-05
+
+Previous checkpoint: `708f8160657e7a4e9ee046291e92d343879714e3`. Private widget runtime classes and keyless constructors stay intact behind their exact typedefs. Only choice-chip callers use the frozen 13-line constructor forwarder. No widget node, callback wrapper, new const, key, default, suppression or control change. Live context/mounted/setState sites and shadowed lexical setters stay at their original sites.
+
+All 16 manifests pass their existing self-tests with explicit isolated parser
+packages and stale copied kernels deleted; TV checks cover all 265 declarations,
+occurrence/lexical bindings, comments, ownership and 236 callback negatives.
+Profile/source and legacy-pin checks match base2 (**45 success**, the same
+**one known direct-SharedPreferences failure**). Architecture, sizes, storage,
+shape/source guards, theme (**228 sites**), CI
+format and scoped analyzer/allowlist pass. Strict symbol inventory observes
+**63 diagnostics, zero additions** against R/probe maxima.
+The **92** whole-file characterization identities match latest **base2**;
+strict macOS and calibrated Linux goldens pass **6/6 each**. All **490 original
+comments**, **16 shape tokens**, zero bare radii and the **488 global floor
+with zero slack** remain. LF and diff checks pass. Evidence is
+`step3-*` under `refactor-evidence/debrify_tv/`, including wiring review,
+measurement/source hashes, diagnostic identities, manifests and comparisons.
+
+Formatted facade: **10142** lines. AST breakdown: retained original top levels 13, widget 6, state header and close 2, owners composition 22, lifecycle 63, retained original bodies 9817, build 14, imports 82, remaining blank comment lines 123
+(sum 10142). Every actual destination and
+the facade are shape-registered. All Found-not-fixed behaviors remain; no
+protected player/launcher/bridge/native code, dependency upgrade, push or
+branch switch. Device-only playback, remote CI and integration remain pending.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
