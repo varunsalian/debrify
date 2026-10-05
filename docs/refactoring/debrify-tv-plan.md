@@ -761,35 +761,73 @@ As in the Spotlight and catalog plans, plus:
      string text (identifiers inside `${…}` interpolations are included) with:
      the token index; the scope path (member → each enclosing
      `FunctionExpression`, local `FunctionDeclaration`, block, `for`, `catch`
-     and pattern scope); the **binding**, resolved syntactically by
-     innermost-scope lookup — `decl:<scope path>#<name>#<ordinal>` for a
-     parameter, local variable, local function, loop/catch/pattern variable,
-     or `unbound` when no enclosing lexical declaration exists; the
-     **qualifier chain** when the identifier is the property of a
-     `PrefixedIdentifier`/`PropertyAccess`/method target (for example
-     `_owners`, `settings`); and the role (read, write, read-write,
-     invocation, tear-off). Declarations later in a block do not bind earlier
-     uses (Dart scoping), and named-argument labels are excluded.
+     and pattern scope); a **kind** — `lexical` for a bare reference (an
+     identifier that is not the selected member of a qualified expression) or
+     `selector` for the member selected by a `PrefixedIdentifier`,
+     `PropertyAccess`, `MethodInvocation` target or cascade, with its full
+     **qualifier chain** (for example `_owners.settings` for
+     `_owners.settings.startRandom`, `cacheEntry` for `cacheEntry.status`,
+     `parsed` for `parsed.channels`); for `lexical` occurrences only, the
+     **binding** — `decl:<scope path>#<name>#<ordinal>` for a parameter, local
+     variable, local function, loop/catch/pattern variable, or `unbound` when
+     no lexical declaration in any enclosing scope declares the name; for
+     `selector` occurrences no lexical lookup is done (a selector never binds
+     a local); and the role (read, write, read-write, invocation, tear-off).
+     Named-argument labels are excluded. **Scoping follows Dart:** the binder
+     first collects every declaration of each lexical scope (block, function
+     body, `for`/`catch`/pattern scope, including local functions), and only
+     then binds references, so a local declared anywhere in a block shadows
+     outer names for the **whole** block. A reference that precedes its
+     scope's same-named declaration is recorded as `early:<decl>` (the
+     analyzer's `referenced_before_declaration`); it is never resolved to an
+     outer local or a field, and any `early:` occurrence in a destination is
+     rejected (original code has none; step 0 records that).
    - **Alignment.** Destination occurrences are aligned with original ones
-     after removing **only registered receiver scaffolding**: the qualifier
+     after removing **only registered receiver scaffolding**, and the
+     kind/binding classification is computed on the raw ASTs **before** that
+     removal, so stripping a qualifier never turns a selector into a lexical
+     reference or the reverse. Registered scaffolding is the qualifier
      chains listed in `receiver_paths`/`receiver_owners`
      (`_owners.<record>.`, `_sections.<key>.`) and the live-getter forms
      `_deps.context()`, `_deps.mounted()`, `_deps.setState`, plus the
      registered renames. Any other inserted, removed or reordered identifier
      fails alignment. This runs on the raw destination AST **before** the
      destructive token normalization in `check_settings_moves.py`.
-   - **Binding rules per aligned pair.** An original `unbound` occurrence whose
-     name is a State field (from the original class member set) must align
-     with a destination occurrence qualified by exactly its registered record
-     path and new name (`_owners.settings.startRandom`), same role and same
-     scope path. An original `decl:` occurrence must align with a destination
-     `decl:` occurrence of the **same** scope path, name and ordinal (so a
-     same-named local stays that local). A destination occurrence that is
-     `unbound` and whose name is a record member is a **bare field reference**
-     and is rejected in every Debrify TV file (sections and records; records
-     hold only declarations and initializers, and their one getter,
-     `viewerForcesNsfw`, reads no field). A bare identifier that binds a
-     legitimate local or parameter of the same name is allowed.
+   - **Binding rules per aligned pair.**
+     - An original `lexical` + `unbound` occurrence whose name is a State
+       field (from the original class member set) must align with a
+       destination `selector` whose qualifier chain is exactly its registered
+       record path and whose name is the registered new name
+       (`_owners.settings.startRandom`), same role and same scope path.
+     - An original `lexical` + `decl:` occurrence must align with a
+       destination `lexical` occurrence bound to the **same** declaration
+       (scope path, name, ordinal): an original local stays a bare reference
+       to that local. Replacing it with a qualified field
+       (`_owners.settings.startRandom` where the original read the local
+       `startRandom`) is rejected.
+     - An original `selector` must align with a destination `selector` with
+       the same name and the same qualifier chain after registered renames of
+       the chain's leading identifier (so `cacheEntry.status`,
+       `parsed.channels`, `channel.name` stay untouched even though `status`
+       and `channels` are also record member names).
+     - A destination `lexical` + `unbound` occurrence whose name is a record
+       member is a **bare field reference** and is rejected in every Debrify
+       TV file (sections and records; records hold only declarations and
+       initializers, and their one getter, `viewerForcesNsfw`, reads no
+       field). A `lexical` occurrence bound to a legitimate local or parameter
+       of the same name is allowed, and `selector` occurrences are never bare
+       references.
+   - **Binder fixtures** (adapter self-tests plus real-config checker cases):
+     positives — a qualified field beside a same-named local
+     (`_owners.settings.startRandom = startRandom` in `_loadSettings`'s
+     `setState`), unchanged `cacheEntry.status` (4244) and `parsed.channels`
+     (3006, 3010, 3042), a local function declared after its first use in a
+     closure body; negatives — a local replaced by a qualified field, a field
+     selector replaced by a bare local, an `early:` reference (a moved body
+     where a later `final startRandom` in the same block hides the earlier
+     use), a later **local function** declaration hiding an outer name, and a
+     selector whose qualifier chain changed (`cacheEntry.status` →
+     `_owners.session.status`).
    - **Wiring.** `check_settings_moves.py` calls the binder check (opt-in key)
      before normalization; the Debrify TV reader calls the same check before
      returning ORIGINAL text, so a source-text test can never pass over a
@@ -989,7 +1027,25 @@ As in the Spotlight and catalog plans, plus:
      original and each rejected by an **assertion** (never a compile error),
      with original/mutated hashes and logs; every new behavioural identity is
      covered by at least one. Required: an option-set swap at P5 (channel →
-     quick) and at P3 (channel → quick); `requestNextChannel` always null at
+     quick) and at P3 (channel → quick), each run on a fixture that makes the
+     two sets **differ** through existing live controls, because
+     `_loadSettings` initialises both sets equally and Play now copies channel
+     → quick (9490–9500):
+     - **P5:** after mount, toggle start-random in the global settings dialog
+       (channel scope, `setStartRandom`) so `_startRandom != _quickStartRandom`,
+       then tune a channel; the named assertion "P5 passes the channel
+       `startFromRandom`" fails under the swap.
+     - **P3:** in the Spotlight style, start quick play (Play now copies
+       channel → quick), hold the TorBox cache-check response, then invoke the
+       still-live `DebrifyTvView.onSettings` callback read from the mounted
+       `SpotlightLayout` (the existing `_showGlobalSettingsDialog`, no seam),
+       toggle start-random and close the dialog, then release; the named
+       assertion "P3 passes the channel `startFromRandom`" fails under the
+       swap. Step 0 proves this boundary on ORIGINAL; if the stacked dialog
+       cannot be driven, the P3 channel→quick expression swap is reclassified
+       **S** (checker/ledger negative) and the behavioural coverage for P3 is
+       a wrong-value mutation instead (`startFromRandom: !_startRandom` at
+       5584), which the same named assertion rejects on the ordinary fixture; `requestNextChannel` always null at
      P5; the P5 prefetch start moved after the push; `_closeProgressDialog()`
      removed before the P5 push; **every** `_watchCancelled` check in quick
      TorBox removed together — all **17** occurrences in `_watchWithTorbox`
@@ -1466,3 +1522,29 @@ against the source.
    outside the retained widget and State); the Linux script captures first and
    reverse passes with separate logs and SHA-256 lists and fails unless they
    match.
+
+## Round 3 review resolution
+
+Codex design review round 3 (reviewed at `177d240c`): "No P1s — executable".
+The three P2s, re-checked against the source:
+
+1. **Qualified selectors vs bare references.** Technique 4's binder now
+   classifies each occurrence as `lexical` (bound to a declaration or
+   `unbound`) or `selector` (with its qualifier chain), computes this on the
+   raw ASTs before any receiver scaffolding is stripped, keeps an original
+   local a bare reference to the same declaration, and leaves selectors such as
+   `cacheEntry.status` (4244) and `parsed.channels` (3006, 3010, 3042)
+   untouched. Fixtures: qualified field beside a same-named local, those
+   selectors unchanged (positives); local replaced by a qualified field,
+   selector chain changed (negatives).
+2. **Declaration order.** The binder collects each lexical scope's
+   declarations before binding, so a local shadows outer names for its whole
+   block; references before their declaration are recorded as `early:` and
+   rejected, never resolved to a field. Fixtures cover later local and local
+   function declarations hiding outer names.
+3. **Option-swap proofs.** P5 diverges the sets through the live start-random
+   switch before tuning; P3 diverges them after the Play-now copy (9490–9500)
+   by invoking the mounted Spotlight layout's `onSettings` while the TorBox
+   cache check is held. If step 0 cannot drive that boundary, the P3 swap
+   becomes S and a wrong-value mutation (`!_startRandom` at 5584) provides the
+   behavioural coverage. Each proxy must fail its named assertion.
