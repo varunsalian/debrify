@@ -90,7 +90,7 @@ class DebrifyTvFeedback {
     debugPrint(
       '[MagicTV] _cancelActiveWatch: Set _watchCancelled=true, stopping prefetch',
     );
-    unawaited(_sections.legacy.stopPrefetch());
+    unawaited(_sections.prefetch.stopPrefetch());
     if (clearQueue) {
       debugPrint(
         '[MagicTV] _cancelActiveWatch: Clearing queue (had ${_owners.session.queue.length} items)',
@@ -125,7 +125,7 @@ class DebrifyTvFeedback {
   }
 
   void showNativeSettingsFailure(NativePlayerSettingsUnavailable error) {
-    unawaited(_sections.legacy.stopPrefetch());
+    unawaited(_sections.prefetch.stopPrefetch());
     MainPageBridge.notifyAutoLaunchFailed(error.message.toString());
     if (_deps.mounted())
       _sections.feedback.showSnack(

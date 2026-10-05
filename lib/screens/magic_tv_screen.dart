@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:debrify/features/debrify_tv/application/debrify_tv_random_start.dart';
-import 'package:debrify/features/debrify_tv/models/debrify_tv_alldebrid_prepared.dart';
 import 'package:debrify/features/debrify_tv/models/debrify_tv_constants.dart';
 import 'package:debrify/features/debrify_tv/models/debrify_tv_kinds.dart';
 import 'package:debrify/features/debrify_tv/presentation/debrify_tv_choice_chip.dart';
@@ -19,11 +18,7 @@ import 'package:flutter/services.dart';
 
 import '../models/debrify_tv/cache_results.dart';
 import '../models/debrify_tv/channel.dart';
-import '../models/debrify_tv/prepared_torrents.dart';
 import '../models/debrify_tv_cache.dart';
-import '../models/premiumize_file.dart';
-import '../models/torbox_file.dart';
-import '../models/torbox_torrent.dart';
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
 import '../services/alldebrid_service.dart';
@@ -31,22 +26,15 @@ import '../services/analytics_service.dart';
 import '../services/android_tv_player_bridge.dart';
 import '../services/debrid_service.dart';
 import '../services/main_page_bridge.dart';
-import '../services/pikpak_api_service.dart';
 import '../services/pikpak_tv_service.dart';
-import '../services/premiumize_service.dart';
-import '../services/torbox_service.dart';
 import '../services/torrent_service.dart';
-import '../services/video_player_launcher.dart';
 import '../theme/app_theme_scope.dart';
 import '../utils/debrify_tv_filters.dart';
-import '../utils/file_utils.dart';
 import '../utils/nsfw_filter.dart';
 import '../utils/rd_blocked_filter.dart';
-import '../utils/series_parser.dart';
 import '../utils/tv_keys.dart';
 import '../widgets/tv_text_field.dart';
 import 'debrify_tv/dialogs/cached_loading_dialog.dart';
-import 'debrify_tv/dialogs/external_player_notice_dialog.dart';
 import 'debrify_tv/dialogs/spotlight_dialog.dart';
 import 'debrify_tv/layouts/spotlight_layout.dart';
 import 'debrify_tv/widgets/random_start_slider.dart';
@@ -73,10 +61,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       mounted: () => mounted,
       setState: setState,
       watchChannel: watchChannel,
+      requestNextChannel: requestNextChannel,
+      requestChannelById: requestChannelById,
       buildTvGridLayout: buildTvGridLayout,
       showQuickPlayDialog: showQuickPlayDialog,
       showGlobalSettingsDialog: showGlobalSettingsDialog,
-      stopPrefetch: stopPrefetch,
     ),
   );
 
@@ -129,7 +118,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
     // Ensure prefetch loop is stopped if this screen is disposed mid-run
     _owners.prefetch.prefetchStopRequested = true;
-    _sections.legacy.stopPrefetch();
+    _sections.prefetch.stopPrefetch();
     // Clean up dialog state to avoid dangling context references
     _owners.progress.progressSheetContext = null;
     _owners.progress.progressOpen = false;
@@ -173,67 +162,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
     }
     return KeyEventResult.ignored;
-  }
-
-  Future<TorboxCacheWindowResult> fetchTorboxCacheWindow({
-    required List<Torrent> candidates,
-    required int startIndex,
-    required String apiKey,
-  }) async {
-    const int chunkSize = 90;
-    const int maxCalls = 2;
-
-    int cursor = startIndex;
-    int calls = 0;
-    final List<Torrent> hits = <Torrent>[];
-
-    while (cursor < candidates.length && calls < maxCalls && hits.isEmpty) {
-      final int end = min(cursor + chunkSize, candidates.length);
-      final List<Torrent> chunk = candidates.sublist(cursor, end);
-      cursor = end;
-
-      final List<String> hashes = chunk
-          .map(
-            (torrent) => _sections.filters.normalizeInfohash(torrent.infohash),
-          )
-          .where((hash) => hash.isNotEmpty)
-          .toList();
-
-      if (hashes.isEmpty) {
-        continue;
-      }
-
-      calls += 1;
-      final Set<String> cachedHashes = await TorboxService.checkCachedTorrents(
-        apiKey: apiKey,
-        infoHashes: hashes,
-        listFiles: false,
-      );
-
-      if (cachedHashes.isEmpty) {
-        continue;
-      }
-
-      final Set<String> normalized = cachedHashes
-          .map((hash) => hash.trim().toLowerCase())
-          .where((hash) => hash.isNotEmpty)
-          .toSet();
-
-      hits.addAll(
-        chunk.where(
-          (torrent) => normalized.contains(
-            _sections.filters.normalizeInfohash(torrent.infohash),
-          ),
-        ),
-      );
-    }
-
-    final bool exhausted = cursor >= candidates.length;
-    return TorboxCacheWindowResult(
-      cachedTorrents: hits,
-      nextCursor: cursor,
-      exhausted: exhausted,
-    );
   }
 
   /// Quality + size pickers for Debrify TV playback. One shared setting for
@@ -612,7 +540,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   Future<void> watch() async {
     _owners.session.launchedPlayer = false;
-    await stopPrefetch();
+    await _sections.prefetch.stopPrefetch();
     _owners.prefetch.prefetchStopRequested = false;
     _owners.session.watchCancelled = false;
     _owners.session.qualityFallbackNotified = false;
@@ -1051,7 +979,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   _owners.prefetch.activeApiKey = apiKeyEarly;
                   _owners.prefetch.activeProvider =
                       DebrifyTvConstants.providerRealDebrid;
-                  unawaited(startPrefetch());
+                  unawaited(_sections.prefetch.startPrefetch());
 
                   final String? activeChannelId =
                       _owners.library.currentWatchingChannelId;
@@ -1081,7 +1009,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
                   // External player set as the default: hand this one title
                   // over and stop the search — nothing rotates past it.
-                  if (await handOffToExternalPlayer(
+                  if (await _sections.handoff.handOffToExternalPlayer(
                     firstUrl,
                     firstTitleResolved,
                   )) {
@@ -1089,15 +1017,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   }
 
                   // Try to launch on Android TV first (early launch path)
-                  final launchedOnTv = await launchRealDebridOnAndroidTv(
-                    firstStream: first,
-                    requestNext: requestMagicNext,
-                    showChannelNameOverride:
-                        _owners.settings.quickShowChannelName,
-                    channelId: activeChannelId,
-                    channelNumber: activeChannelNumber,
-                    channelDirectory: activeChannelDirectory,
-                  );
+                  final launchedOnTv = await _sections.handoff
+                      .launchRealDebridOnAndroidTv(
+                        firstStream: first,
+                        requestNext: requestMagicNext,
+                        showChannelNameOverride:
+                            _owners.settings.quickShowChannelName,
+                        channelId: activeChannelId,
+                        channelNumber: activeChannelNumber,
+                        channelDirectory: activeChannelDirectory,
+                      );
 
                   if (launchedOnTv) {
                     // Successfully launched on Android TV
@@ -1148,7 +1077,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   );
 
                   // Stop prefetch when player exits
-                  await stopPrefetch();
+                  await _sections.prefetch.stopPrefetch();
                 }
               }
             }
@@ -1424,7 +1353,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       // Start background prefetch while player is active
       _owners.prefetch.activeApiKey = apiKey;
       _owners.prefetch.activeProvider = DebrifyTvConstants.providerRealDebrid;
-      unawaited(startPrefetch());
+      unawaited(_sections.prefetch.startPrefetch());
 
       if (_owners.progress.progressOpen &&
           _owners.progress.progressSheetContext != null) {
@@ -1455,12 +1384,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             )
           : null;
 
-      if (await handOffToExternalPlayer(firstUrl, firstTitle)) {
+      if (await _sections.handoff.handOffToExternalPlayer(
+        firstUrl,
+        firstTitle,
+      )) {
         return;
       }
 
       // Try to launch on Android TV first
-      final launchedOnTv = await launchRealDebridOnAndroidTv(
+      final launchedOnTv = await _sections.handoff.launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
         showChannelNameOverride: _owners.settings.quickShowChannelName,
@@ -1512,7 +1444,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         ),
       );
       // Stop prefetch when player exits
-      await stopPrefetch();
+      await _sections.prefetch.stopPrefetch();
     } on NativePlayerSettingsUnavailable catch (error) {
       _sections.feedback.showNativeSettingsFailure(error);
     } finally {
@@ -1679,11 +1611,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (candidateCursor >= combinedList.length) {
             return false;
           }
-          final TorboxCacheWindowResult window = await fetchTorboxCacheWindow(
-            candidates: combinedList,
-            startIndex: candidateCursor,
-            apiKey: apiKey,
-          );
+          final TorboxCacheWindowResult window = await _sections.torbox
+              .fetchTorboxCacheWindow(
+                candidates: combinedList,
+                startIndex: candidateCursor,
+                apiKey: apiKey,
+              );
           candidateCursor = window.nextCursor;
           if (window.cachedTorrents.isEmpty) {
             if (window.exhausted) {
@@ -1721,7 +1654,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             _owners.session.status = 'Torbox cache check failed. Try again.';
           });
           _sections.feedback.showSnack(
-            'Torbox cache check failed: ${formatTorboxError(e)}',
+            'Torbox cache check failed: ${_sections.torbox.formatTorboxError(e)}',
             color: Colors.red,
           );
         }
@@ -1761,7 +1694,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       'Torbox cache check failed. Try again.';
                 });
                 _sections.feedback.showSnack(
-                  'Torbox cache check failed: ${formatTorboxError(e)}',
+                  'Torbox cache check failed: ${_sections.torbox.formatTorboxError(e)}',
                   color: Colors.red,
                 );
               }
@@ -1780,7 +1713,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
           if (item is Map &&
               item['type'] == DebrifyTvConstants.torboxFileEntryType) {
-            final resolved = await resolveTorboxQueuedFile(
+            final resolved = await _sections.torbox.resolveTorboxQueuedFile(
               entry: item as Map<String, dynamic>,
               apiKey: apiKey,
               log: log,
@@ -1805,7 +1738,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           if (item is Torrent) {
-            final result = await prepareTorboxTorrent(
+            final result = await _sections.torbox.prepareTorboxTorrent(
               candidate: item,
               apiKey: apiKey,
               log: log,
@@ -1861,14 +1794,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _sections.feedback.closeProgressDialog();
       if (!mounted) return;
 
-      if (await handOffToExternalPlayer(
+      if (await _sections.handoff.handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
         return;
       }
 
-      final launchedOnTv = await launchTorboxOnAndroidTv(
+      final launchedOnTv = await _sections.handoff.launchTorboxOnAndroidTv(
         firstStream: first,
         requestNext: requestTorboxNext,
         showChannelNameOverride: _owners.settings.quickShowChannelName,
@@ -2085,7 +2018,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           log('Trying torrent: ${item.name}');
-          final prepared = await preparePikPakTorrent(
+          final prepared = await _sections.cloud.preparePikPakTorrent(
             candidate: item,
             log: (msg) => debugPrint('DebrifyTV/PikPak: $msg'),
           );
@@ -2153,7 +2086,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _sections.feedback.closeProgressDialog();
       if (!mounted) return;
 
-      if (await handOffToExternalPlayer(
+      if (await _sections.handoff.handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
@@ -2161,7 +2094,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       // Try Android TV native player first
-      final launchedOnTv = await launchPikPakOnAndroidTv(
+      final launchedOnTv = await _sections.handoff.launchPikPakOnAndroidTv(
         firstStream: first,
         requestNext: requestPikPakNext,
         showChannelNameOverride: _owners.settings.quickShowChannelName,
@@ -2254,7 +2187,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         : null;
 
     _owners.session.launchedPlayer = false;
-    await stopPrefetch();
+    await _sections.prefetch.stopPrefetch();
     _owners.prefetch.prefetchStopRequested = false;
     _owners.session.originalMaxCap = null;
     _owners.session.seenRestrictedLinks.clear();
@@ -2463,15 +2396,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted) return;
       _owners.prefetch.activeApiKey = apiKey;
       _owners.prefetch.activeProvider = DebrifyTvConstants.providerRealDebrid;
-      unawaited(startPrefetch());
+      unawaited(_sections.prefetch.startPrefetch());
       _sections.feedback.closeProgressDialog();
 
-      if (await handOffToExternalPlayer(firstUrl, firstTitle)) {
+      if (await _sections.handoff.handOffToExternalPlayer(
+        firstUrl,
+        firstTitle,
+      )) {
         return;
       }
 
       // Try to launch on Android TV first (for cached flow)
-      final launchedOnTv = await launchRealDebridOnAndroidTv(
+      final launchedOnTv = await _sections.handoff.launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
         channelName: channelName,
@@ -2526,7 +2462,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           ),
         ),
       );
-      await stopPrefetch();
+      await _sections.prefetch.stopPrefetch();
     } on NativePlayerSettingsUnavailable catch (error) {
       _sections.feedback.showNativeSettingsFailure(error);
     } finally {
@@ -2569,7 +2505,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         : null;
 
     _owners.session.launchedPlayer = false;
-    await stopPrefetch();
+    await _sections.prefetch.stopPrefetch();
     _owners.prefetch.prefetchStopRequested = false;
     _owners.session.originalMaxCap = null;
     _owners.session.seenRestrictedLinks.clear();
@@ -2654,7 +2590,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           debugPrint(
             'DebrifyTV/AD: Cached trying torrent name="${item.name}" hash=${item.infohash}',
           );
-          final prepared = await resolveAllDebridLinks(item, apiKey);
+          final prepared = await _sections.prefetch.resolveAllDebridLinks(
+            item,
+            apiKey,
+          );
           if (prepared == null || prepared.lockedLinks.isEmpty) {
             continue;
           }
@@ -2724,16 +2663,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted) return;
       _owners.prefetch.activeApiKey = apiKey;
       _owners.prefetch.activeProvider = DebrifyTvConstants.providerAllDebrid;
-      unawaited(startPrefetch());
+      unawaited(_sections.prefetch.startPrefetch());
       _sections.feedback.closeProgressDialog();
 
-      if (await handOffToExternalPlayer(firstUrl, firstTitle)) {
+      if (await _sections.handoff.handOffToExternalPlayer(
+        firstUrl,
+        firstTitle,
+      )) {
         return;
       }
 
       // Try to launch on Android TV first (reuses the generic direct-URL
       // launcher; AllDebrid streams are ready URLs just like Real-Debrid's).
-      final launchedOnTv = await launchRealDebridOnAndroidTv(
+      final launchedOnTv = await _sections.handoff.launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
         channelName: channelName,
@@ -2788,7 +2730,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           ),
         ),
       );
-      await stopPrefetch();
+      await _sections.prefetch.stopPrefetch();
     } on NativePlayerSettingsUnavailable catch (error) {
       _sections.feedback.showNativeSettingsFailure(error);
     } finally {
@@ -2800,83 +2742,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       });
       debugPrint('DebrifyTV: AllDebrid cached watch flow finished.');
     }
-  }
-
-  Future<bool> launchTorboxOnAndroidTv({
-    required Map<String, String> firstStream,
-    required Future<Map<String, String>?> Function() requestNext,
-    String? channelName,
-    bool? showChannelNameOverride,
-    String? channelId,
-    int? channelNumber,
-    List<Map<String, dynamic>>? channelDirectory,
-  }) async {
-    if (!_owners.settings.isAndroidTv) {
-      return false;
-    }
-    final initialUrl = firstStream['url'] ?? '';
-    if (initialUrl.isEmpty) {
-      return false;
-    }
-    // Torbox native player already receives a prepared stream URL, so skip sending magnet
-    // bundles—the binder payload stays small and launch succeeds.
-    const List<Map<String, dynamic>> magnets = [];
-
-    final title = (firstStream['title'] ?? '').trim();
-
-    try {
-      // Hide auto-launch overlay before launching player
-      MainPageBridge.notifyPlayerLaunching();
-
-      final launched = await AndroidTvPlayerBridge.launchTorboxPlayback(
-        initialUrl: initialUrl,
-        title: title.isEmpty ? 'Debrify TV' : title,
-        magnets: magnets,
-        requestNext: requestNext,
-        requestChannelSwitch: _owners.library.channels.length > 1
-            ? requestNextChannel
-            : null,
-        requestChannelById: _owners.library.channels.length > 1
-            ? requestChannelById
-            : null,
-        onFinished: () async {
-          AndroidTvPlayerBridge.clearTorboxProvider();
-          if (!mounted) {
-            return;
-          }
-          setState(() {
-            _owners.session.status = _owners.session.queue.isEmpty
-                ? ''
-                : 'Queue has ${_owners.session.queue.length} remaining';
-          });
-        },
-        startFromRandom: _owners.settings.startRandom,
-        randomStartMaxPercent: _owners.settings.randomStartPercent,
-        hideSeekbar: _owners.settings.hideSeekbar,
-        hideOptions: _owners.settings.hideOptions,
-        showVideoTitle: _owners.settings.showVideoTitle,
-        showChannelName:
-            showChannelNameOverride ?? _owners.settings.showChannelName,
-        channelName: channelName,
-        channels: channelDirectory,
-        currentChannelId: channelId ?? _owners.library.currentWatchingChannelId,
-        currentChannelNumber: channelNumber,
-      );
-      if (launched) {
-        if (mounted) {
-          setState(() {
-            _owners.session.status = 'Playing via Android TV';
-          });
-        }
-        return true;
-      }
-    } catch (e) {
-      debugPrint('DebrifyTV: Android TV bridge failed: $e');
-      if (e is NativePlayerSettingsUnavailable) rethrow;
-    }
-
-    AndroidTvPlayerBridge.clearTorboxProvider();
-    return false;
   }
 
   /// Handle channel switching on Android TV - cycles to next channel with looping
@@ -2989,7 +2854,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
 
     debugPrint('DebrifyTV: Stopping old channel prefetcher...');
-    await stopPrefetch();
+    await _sections.prefetch.stopPrefetch();
     debugPrint('DebrifyTV: Prefetcher stopped. Waiting for RD cooldown...');
     await Future.delayed(const Duration(seconds: 5));
     debugPrint('DebrifyTV: Cooldown complete. Proceeding with channel switch.');
@@ -3018,7 +2883,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugPrint('DebrifyTV: Channel "${targetChannel.name}" has no keywords');
       if (_owners.settings.provider == DebrifyTvConstants.providerRealDebrid ||
           _owners.settings.provider == DebrifyTvConstants.providerAllDebrid) {
-        unawaited(startPrefetch());
+        unawaited(_sections.prefetch.startPrefetch());
       }
       return null;
     }
@@ -3033,7 +2898,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugPrint('DebrifyTV: No torrents matched in selected channel');
       if (_owners.settings.provider == DebrifyTvConstants.providerRealDebrid ||
           _owners.settings.provider == DebrifyTvConstants.providerAllDebrid) {
-        unawaited(startPrefetch());
+        unawaited(_sections.prefetch.startPrefetch());
       }
       return null;
     }
@@ -3045,7 +2910,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugPrint('DebrifyTV: No playable torrents resolved for channel');
       if (_owners.settings.provider == DebrifyTvConstants.providerRealDebrid ||
           _owners.settings.provider == DebrifyTvConstants.providerAllDebrid) {
-        unawaited(startPrefetch());
+        unawaited(_sections.prefetch.startPrefetch());
       }
       return null;
     }
@@ -3068,11 +2933,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       try {
         while (candidateCursor < torboxCandidates.length &&
             cachedCandidates.isEmpty) {
-          final TorboxCacheWindowResult window = await fetchTorboxCacheWindow(
-            candidates: torboxCandidates,
-            startIndex: candidateCursor,
-            apiKey: apiKey,
-          );
+          final TorboxCacheWindowResult window = await _sections.torbox
+              .fetchTorboxCacheWindow(
+                candidates: torboxCandidates,
+                startIndex: candidateCursor,
+                apiKey: apiKey,
+              );
           candidateCursor = window.nextCursor;
           if (window.cachedTorrents.isNotEmpty) {
             cachedCandidates = window.cachedTorrents;
@@ -3217,7 +3083,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _owners.prefetch.activeApiKey = apiKey;
           _owners.prefetch.activeProvider =
               DebrifyTvConstants.providerRealDebrid;
-          unawaited(startPrefetch());
+          unawaited(_sections.prefetch.startPrefetch());
           debugPrint(
             'DebrifyTV: Started Real-Debrid prefetcher for new channel',
           );
@@ -3247,7 +3113,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         for (var index = 0; index < filteredTorrents.length; index++) {
           final candidate = filteredTorrents[index];
 
-          final prepared = await resolveAllDebridLinks(candidate, apiKey);
+          final prepared = await _sections.prefetch.resolveAllDebridLinks(
+            candidate,
+            apiKey,
+          );
           if (prepared == null || prepared.lockedLinks.isEmpty) {
             // Not cached/ready or no usable video; try the next candidate.
             continue;
@@ -3304,7 +3173,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _owners.prefetch.activeApiKey = apiKey;
           _owners.prefetch.activeProvider =
               DebrifyTvConstants.providerAllDebrid;
-          unawaited(startPrefetch());
+          unawaited(_sections.prefetch.startPrefetch());
           debugPrint('DebrifyTV: Started AllDebrid prefetcher for new channel');
           debugPrint('DebrifyTV: Successfully got stream from channel: $title');
 
@@ -3331,7 +3200,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         for (var index = 0; index < filteredTorrents.length; index++) {
           final candidate = filteredTorrents[index];
 
-          final prepared = await prepareTorboxTorrent(
+          final prepared = await _sections.torbox.prepareTorboxTorrent(
             candidate: candidate,
             apiKey: apiKey,
             log: (message) => debugPrint(message),
@@ -3384,7 +3253,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         for (var index = 0; index < filteredTorrents.length; index++) {
           final candidate = filteredTorrents[index];
 
-          final prepared = await preparePikPakTorrent(
+          final prepared = await _sections.cloud.preparePikPakTorrent(
             candidate: candidate,
             log: (message) => debugPrint('DebrifyTV/PikPak: $message'),
           );
@@ -3438,120 +3307,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     debugPrint('DebrifyTV: Channel switch failed');
     if (_owners.settings.provider == DebrifyTvConstants.providerRealDebrid ||
         _owners.settings.provider == DebrifyTvConstants.providerAllDebrid) {
-      unawaited(startPrefetch());
+      unawaited(_sections.prefetch.startPrefetch());
       debugPrint('DebrifyTV: Restarted prefetcher for current channel');
     }
     return null;
-  }
-
-  Future<bool> launchRealDebridOnAndroidTv({
-    required Map<String, String> firstStream,
-    required Future<Map<String, String>?> Function() requestNext,
-    String? channelName,
-    bool? showChannelNameOverride,
-    String? channelId,
-    int? channelNumber,
-    List<Map<String, dynamic>>? channelDirectory,
-  }) async {
-    debugPrint('DebrifyTV: _launchRealDebridOnAndroidTv() called');
-    debugPrint('DebrifyTV: _isAndroidTv=${_owners.settings.isAndroidTv}');
-
-    if (!_owners.settings.isAndroidTv) {
-      debugPrint('DebrifyTV: Not Android TV, skipping native launch');
-      return false;
-    }
-
-    final initialUrl = firstStream['url'] ?? '';
-    debugPrint(
-      'DebrifyTV: initialUrl=${initialUrl.substring(0, initialUrl.length > 50 ? 50 : initialUrl.length)}...',
-    );
-
-    if (initialUrl.isEmpty) {
-      debugPrint('DebrifyTV: Initial URL is empty, cannot launch');
-      return false;
-    }
-
-    final title = (firstStream['title'] ?? '').trim();
-    debugPrint('DebrifyTV: title="$title"');
-    debugPrint(
-      'DebrifyTV: Calling AndroidTvPlayerBridge.launchRealDebridPlayback()...',
-    );
-
-    try {
-      final bool canSwitchChannels =
-          _owners.library.currentWatchingChannelId != null &&
-          _owners.library.channels.length > 1 &&
-          (_owners.settings.provider == DebrifyTvConstants.providerRealDebrid ||
-              _owners.settings.provider ==
-                  DebrifyTvConstants.providerAllDebrid);
-
-      // Hide auto-launch overlay before launching player
-      MainPageBridge.notifyPlayerLaunching();
-
-      final launched = await AndroidTvPlayerBridge.launchRealDebridPlayback(
-        initialUrl: initialUrl,
-        title: title.isEmpty ? 'Debrify TV' : title,
-        channelName: channelName,
-        requestNext: requestNext,
-        requestChannelSwitch: canSwitchChannels ? requestNextChannel : null,
-        requestChannelById: canSwitchChannels ? requestChannelById : null,
-        onFinished: () async {
-          debugPrint('DebrifyTV: Android TV playback finished callback');
-
-          // Stop prefetcher when exiting player
-          await stopPrefetch();
-          debugPrint('DebrifyTV: Stopped prefetcher on player exit');
-
-          AndroidTvPlayerBridge.clearStreamProvider();
-          _owners.library.currentWatchingChannelId =
-              null; // Clear channel tracking
-          if (!mounted) return;
-          setState(() {
-            _owners.session.status = _owners.session.queue.isEmpty
-                ? ''
-                : 'Queue has ${_owners.session.queue.length} remaining';
-          });
-        },
-        startFromRandom: _owners.settings.startRandom,
-        randomStartMaxPercent: _owners.settings.randomStartPercent,
-        hideSeekbar: _owners.settings.hideSeekbar,
-        hideOptions: _owners.settings.hideOptions,
-        showVideoTitle: _owners.settings.showVideoTitle,
-        showChannelName:
-            showChannelNameOverride ?? _owners.settings.showChannelName,
-        channels: channelDirectory,
-        currentChannelId: channelId ?? _owners.library.currentWatchingChannelId,
-        currentChannelNumber: channelNumber,
-      );
-
-      debugPrint(
-        'DebrifyTV: AndroidTvPlayerBridge.launchRealDebridPlayback() returned: $launched',
-      );
-
-      if (launched) {
-        if (mounted) {
-          setState(() {
-            _owners.session.status = 'Playing via Android TV';
-          });
-        }
-        debugPrint(
-          'DebrifyTV: ✅ Successfully launched Real-Debrid on Android TV',
-        );
-        return true;
-      } else {
-        debugPrint(
-          'DebrifyTV: ❌ AndroidTvPlayerBridge returned false - launch failed',
-        );
-      }
-    } catch (e, stackTrace) {
-      debugPrint('DebrifyTV: ❌ Exception during Android TV launch: $e');
-      debugPrint('DebrifyTV: Stack trace: $stackTrace');
-      if (e is NativePlayerSettingsUnavailable) rethrow;
-    }
-
-    AndroidTvPlayerBridge.clearStreamProvider();
-    debugPrint('DebrifyTV: Falling back to Flutter player');
-    return false;
   }
 
   Future<void> watchTorboxWithCachedTorrents(
@@ -3620,11 +3379,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         if (candidateCursor >= candidatePool.length) {
           return false;
         }
-        final TorboxCacheWindowResult window = await fetchTorboxCacheWindow(
-          candidates: candidatePool,
-          startIndex: candidateCursor,
-          apiKey: apiKey,
-        );
+        final TorboxCacheWindowResult window = await _sections.torbox
+            .fetchTorboxCacheWindow(
+              candidates: candidatePool,
+              startIndex: candidateCursor,
+              apiKey: apiKey,
+            );
         candidateCursor = window.nextCursor;
         if (window.cachedTorrents.isEmpty) {
           if (window.exhausted) {
@@ -3657,7 +3417,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     } catch (e) {
       _sections.feedback.closeProgressDialog();
       _sections.feedback.showSnack(
-        'Torbox cache check failed: ${formatTorboxError(e)}',
+        'Torbox cache check failed: ${_sections.torbox.formatTorboxError(e)}',
         color: Colors.orange,
       );
       if (mounted) {
@@ -3691,7 +3451,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           } catch (e) {
             _sections.feedback.closeProgressDialog();
             _sections.feedback.showSnack(
-              'Torbox cache check failed: ${formatTorboxError(e)}',
+              'Torbox cache check failed: ${_sections.torbox.formatTorboxError(e)}',
               color: Colors.orange,
             );
             if (mounted) {
@@ -3712,7 +3472,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         final next = _owners.session.queue.removeAt(0);
         if (next is Map &&
             next['type'] == DebrifyTvConstants.torboxFileEntryType) {
-          final resolved = await resolveTorboxQueuedFile(
+          final resolved = await _sections.torbox.resolveTorboxQueuedFile(
             entry: Map<String, dynamic>.from(next as Map),
             apiKey: apiKey,
             log: log,
@@ -3727,7 +3487,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           continue;
         }
 
-        final prepared = await prepareTorboxTorrent(
+        final prepared = await _sections.torbox.prepareTorboxTorrent(
           candidate: next,
           apiKey: apiKey,
           log: log,
@@ -3767,14 +3527,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted) return;
       _sections.feedback.closeProgressDialog();
 
-      if (await handOffToExternalPlayer(
+      if (await _sections.handoff.handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
         return;
       }
 
-      final launchedOnTv = await launchTorboxOnAndroidTv(
+      final launchedOnTv = await _sections.handoff.launchTorboxOnAndroidTv(
         firstStream: first,
         requestNext: requestTorboxNext,
         channelName: channelName,
@@ -3903,7 +3663,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           continue;
         }
 
-        final prepared = await preparePikPakTorrent(candidate: next, log: log);
+        final prepared = await _sections.cloud.preparePikPakTorrent(
+          candidate: next,
+          log: log,
+        );
 
         if (_owners.session.watchCancelled) return null;
 
@@ -3945,7 +3708,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted) return;
       _sections.feedback.closeProgressDialog();
 
-      if (await handOffToExternalPlayer(
+      if (await _sections.handoff.handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
@@ -3953,7 +3716,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       }
 
       // Try Android TV native player first
-      final launchedOnTv = await launchPikPakOnAndroidTv(
+      final launchedOnTv = await _sections.handoff.launchPikPakOnAndroidTv(
         firstStream: first,
         requestNext: requestPikPakNext,
         channelName: channelName,
@@ -4013,186 +3776,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     } finally {
       _sections.feedback.closeProgressDialog();
       if (!mounted) return;
-      setState(() {
-        _owners.session.isBusy = false;
-      });
-    }
-  }
-
-  Future<bool> launchPikPakOnAndroidTv({
-    required Map<String, String> firstStream,
-    required Future<Map<String, String>?> Function() requestNext,
-    String? channelName,
-    bool? showChannelNameOverride,
-    String? channelId,
-    int? channelNumber,
-    List<Map<String, dynamic>>? channelDirectory,
-  }) async {
-    if (!_owners.settings.isAndroidTv) {
-      return false;
-    }
-    final initialUrl = firstStream['url'] ?? '';
-    if (initialUrl.isEmpty) {
-      return false;
-    }
-
-    final title = (firstStream['title'] ?? '').trim();
-
-    try {
-      MainPageBridge.notifyPlayerLaunching();
-
-      // Reuse Torbox bridge method - it works for any stream URL
-      final launched = await AndroidTvPlayerBridge.launchTorboxPlayback(
-        initialUrl: initialUrl,
-        title: title.isEmpty ? 'Debrify TV' : title,
-        magnets: const [],
-        requestNext: requestNext,
-        requestChannelSwitch: _owners.library.channels.length > 1
-            ? requestNextChannel
-            : null,
-        requestChannelById: _owners.library.channels.length > 1
-            ? requestChannelById
-            : null,
-        onFinished: () async {
-          AndroidTvPlayerBridge.clearTorboxProvider();
-          if (!mounted) {
-            return;
-          }
-          setState(() {
-            _owners.session.status = _owners.session.queue.isEmpty
-                ? ''
-                : 'Queue has ${_owners.session.queue.length} remaining';
-          });
-        },
-        startFromRandom: _owners.settings.startRandom,
-        randomStartMaxPercent: _owners.settings.randomStartPercent,
-        hideSeekbar: _owners.settings.hideSeekbar,
-        hideOptions: _owners.settings.hideOptions,
-        showVideoTitle: _owners.settings.showVideoTitle,
-        showChannelName:
-            showChannelNameOverride ?? _owners.settings.showChannelName,
-        channelName: channelName,
-        channels: channelDirectory,
-        currentChannelId: channelId ?? _owners.library.currentWatchingChannelId,
-        currentChannelNumber: channelNumber,
-      );
-      if (launched) {
-        if (mounted) {
-          setState(() {
-            _owners.session.status = 'Playing via Android TV';
-          });
-        }
-        return true;
-      }
-    } catch (e) {
-      debugPrint('DebrifyTV: Android TV bridge failed for PikPak: $e');
-      if (e is NativePlayerSettingsUnavailable) rethrow;
-    }
-
-    AndroidTvPlayerBridge.clearTorboxProvider();
-    return false;
-  }
-
-  Future<void> _playNextFromQueue() async {
-    if (_owners.session.isBusy) return;
-    final apiKey = await RealDebridStorage.getApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please add your Real Debrid API key in Settings first!',
-          ),
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _owners.session.isBusy = true;
-      _owners.session.status = 'Finding a playable stream...';
-    });
-
-    try {
-      while (_owners.session.queue.isNotEmpty) {
-        final next = _owners.session.queue.removeAt(0);
-        final magnetLink = 'magnet:?xt=urn:btih:${next.infohash}';
-        try {
-          final result = await DebridService.addTorrentToDebridPreferVideos(
-            apiKey,
-            magnetLink,
-          );
-          final videoUrl = result['downloadLink'] as String?;
-          if (videoUrl != null && videoUrl.isNotEmpty) {
-            if (!mounted) return;
-            setState(() {
-              _owners.session.status = 'Playing: ${next.name}';
-            });
-
-            if (await handOffToExternalPlayer(videoUrl, next.name)) {
-              break;
-            }
-
-            // Hide auto-launch overlay before launching player
-            MainPageBridge.notifyPlayerLaunching();
-
-            await Navigator.of(context).push(
-              videoPlayerRoute(
-                builder: (_) => VideoPlayerScreen(
-                  videoUrl: videoUrl,
-                  title: next.name,
-                  startFromRandom: _owners.settings.quickStartRandom,
-                  randomStartMaxPercent:
-                      _owners.settings.quickRandomStartPercent,
-                  hideSeekbar: _owners.settings.quickHideSeekbar,
-                  showChannelName: _owners.settings.quickShowChannelName,
-                  channelName: null,
-                  channelNumber: null,
-                  showVideoTitle: _owners.settings.quickShowVideoTitle,
-                  hideOptions: _owners.settings.quickHideOptions,
-                ),
-              ),
-            );
-            break;
-          }
-        } catch (_) {
-          // Skip not readily available / failed items and continue
-          continue;
-        }
-      }
-
-      if (_owners.session.queue.isEmpty) {
-        // Close popup and show user-friendly message
-        if (_owners.progress.progressOpen &&
-            _owners.progress.progressSheetContext != null) {
-          Navigator.of(_owners.progress.progressSheetContext!).pop();
-          _owners.progress.progressOpen = false;
-          _owners.progress.progressSheetContext = null;
-        }
-
-        if (mounted) {
-          setState(() {
-            _owners.session.isBusy = false;
-            _owners.session.status =
-                'No playable torrents found. Try different keywords.';
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'All torrents failed to process. Try different keywords or check your internet connection.',
-              ),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
-      } else {
-        setState(() {
-          _owners.session.status =
-              'Queue has ${_owners.session.queue.length} remaining';
-        });
-      }
-    } finally {
       setState(() {
         _owners.session.isBusy = false;
       });
@@ -5717,438 +5300,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
   }
 
-  Future<Map<String, String>?> resolveTorboxQueuedFile({
-    required Map<String, dynamic> entry,
-    required String apiKey,
-    required void Function(String message) log,
-  }) async {
-    final torrentId = entry['torrentId'] as int?;
-    final TorboxFile? file = entry['file'] as TorboxFile?;
-    final String? title = entry['title'] as String?;
-    if (torrentId == null || file == null) {
-      return null;
-    }
-    try {
-      final streamUrl = await TorboxService.requestFileDownloadLink(
-        apiKey: apiKey,
-        torrentId: torrentId,
-        fileId: file.id,
-      );
-      final resolvedTitle = title ?? _torboxDisplayName(file);
-      log('➡️ Torbox: streaming $resolvedTitle');
-      return {'url': streamUrl, 'title': resolvedTitle};
-    } catch (e) {
-      log('❌ Torbox stream failed: $e');
-      return null;
-    }
-  }
-
-  Future<TorboxPreparedTorrent?> prepareTorboxTorrent({
-    required Torrent candidate,
-    required String apiKey,
-    required void Function(String message) log,
-  }) async {
-    final infohash = _sections.filters.normalizeInfohash(candidate.infohash);
-    if (infohash.isEmpty) {
-      return null;
-    }
-
-    log('⏳ Torbox: preparing ${candidate.name}');
-
-    final magnetLink = 'magnet:?xt=urn:btih:${candidate.infohash}';
-    Map<String, dynamic> response;
-    try {
-      response = await TorboxService.createTorrent(
-        apiKey: apiKey,
-        magnet: magnetLink,
-        seed: true,
-        allowZip: false,
-        addOnlyIfCached: true,
-      );
-    } catch (e) {
-      log('❌ Torbox createtorrent failed: $e');
-      return null;
-    }
-
-    final success = response['success'] as bool? ?? false;
-    if (!success) {
-      final error = (response['error'] ?? '').toString();
-      log('⚠️ Torbox createtorrent error: $error');
-      return null;
-    }
-
-    final data = response['data'];
-    final torrentId = _asIntMapValue(data, 'torrent_id');
-    if (torrentId == null) {
-      log('⚠️ Torbox createtorrent missing torrent_id');
-      return null;
-    }
-
-    TorboxTorrent? torboxTorrent;
-    for (int attempt = 0; attempt < 6; attempt++) {
-      torboxTorrent = await TorboxService.getTorrentById(
-        apiKey,
-        torrentId,
-        attempts: 1,
-      );
-      if (torboxTorrent != null && torboxTorrent.files.isNotEmpty) {
-        break;
-      }
-      await Future.delayed(const Duration(milliseconds: 400));
-    }
-
-    if (torboxTorrent == null || torboxTorrent.files.isEmpty) {
-      log('⚠️ Torbox torrent details not ready for ${candidate.name}');
-      return null;
-    }
-
-    final currentTorrent = torboxTorrent;
-
-    final playableEntries = _buildTorboxPlayableEntries(
-      currentTorrent,
-      candidate.name,
-    );
-    if (playableEntries.isEmpty) {
-      log('⚠️ Torbox torrent has no playable files ${candidate.name}');
-      return null;
-    }
-
-    final random = Random();
-    final filteredEntries = playableEntries
-        .where(
-          (entry) => !_owners.session.seenLinkWithTorrentId.contains(
-            '${currentTorrent.id}|${entry.file.id}',
-          ),
-        )
-        .toList();
-    if (filteredEntries.isEmpty) {
-      log('⚠️ Torbox torrent has no unseen playable files ${candidate.name}');
-      return null;
-    }
-
-    filteredEntries.shuffle(random);
-    final next = filteredEntries.removeAt(0);
-    try {
-      final streamUrl = await TorboxService.requestFileDownloadLink(
-        apiKey: apiKey,
-        torrentId: currentTorrent.id,
-        fileId: next.file.id,
-      );
-      log('🎬 Torbox: streaming ${next.title}');
-      _owners.session.seenLinkWithTorrentId.add(
-        '${currentTorrent.id}|${next.file.id}',
-      );
-      return TorboxPreparedTorrent(
-        streamUrl: streamUrl,
-        title: next.title,
-        hasMore: filteredEntries.isNotEmpty,
-      );
-    } catch (e) {
-      log('❌ Torbox requestdl failed: $e');
-      return null;
-    }
-  }
-
-  Future<PikPakPreparedTorrent?> preparePikPakTorrent({
-    required Torrent candidate,
-    required void Function(String message) log,
-  }) async {
-    final infohash = _sections.filters.normalizeInfohash(candidate.infohash);
-    if (infohash.isEmpty) {
-      return null;
-    }
-
-    log('⏳ PikPak: preparing ${candidate.name}');
-
-    final prepared = await PikPakTvService.instance.prepareTorrent(
-      infohash: infohash,
-      torrentName: candidate.name,
-      onLog: log,
-    );
-
-    if (prepared == null) {
-      log('⚠️ PikPak torrent not ready ${candidate.name}');
-      return null;
-    }
-
-    // Check if this is a multi-file torrent
-    final allVideoFiles = prepared['allVideoFiles'] as List<dynamic>?;
-
-    if (allVideoFiles == null || allVideoFiles.isEmpty) {
-      // Single file torrent - return directly
-      log('🎬 PikPak: streaming ${prepared['title']}');
-      return PikPakPreparedTorrent(
-        streamUrl: prepared['url'] as String,
-        title: prepared['title'] as String,
-        hasMore: false,
-      );
-    }
-
-    // Multi-file torrent - filter out seen files
-    final pikpakFolderId = prepared['pikpakFolderId'] as String?;
-    if (pikpakFolderId == null) {
-      log('⚠️ PikPak multi-file torrent missing folder ID');
-      return null;
-    }
-
-    // Filter unseen files. PikPak reports a per-file `size`, so the same
-    // per-FILE size rules the other providers use apply here — including the
-    // 50MB floor that keeps trailers and samples out of the rotation.
-    List<dynamic> filterUnseen({required bool applySizeFilter}) {
-      return allVideoFiles.where((file) {
-        final fileId = file['id'] as String?;
-        if (fileId == null || fileId.isEmpty) return false;
-        final trackingKey = '$infohash|$fileId';
-        if (_owners.session.seenLinkWithTorrentId.contains(trackingKey))
-          return false;
-        final size = (file['size'] as num?)?.toInt() ?? 0;
-        if (size > 0 && size < DebrifyTvConstants.torboxMinVideoSizeBytes)
-          return false;
-        if (applySizeFilter &&
-            !_owners.settings.tvFilters.sizeMatchesBytes(size))
-          return false;
-        return true;
-      }).toList();
-    }
-
-    var unseenFiles = filterUnseen(applySizeFilter: true);
-    if (unseenFiles.isEmpty && _owners.settings.tvFilters.hasSize) {
-      // Nothing in this torrent matched — take it unfiltered rather than
-      // discarding the torrent (see the Torbox builder).
-      log('⚠️ PikPak: no file matched the size filter — using unfiltered');
-      unseenFiles = filterUnseen(applySizeFilter: false);
-    }
-
-    if (unseenFiles.isEmpty) {
-      log('⚠️ PikPak torrent has no unseen files ${candidate.name}');
-      return null;
-    }
-
-    // Shuffle and select next file
-    final random = Random();
-    unseenFiles.shuffle(random);
-    final selectedFile = unseenFiles.removeAt(0);
-    final selectedFileId = selectedFile['id'] as String?;
-    final selectedFileName = selectedFile['name'] as String?;
-
-    if (selectedFileId == null ||
-        selectedFileId.isEmpty ||
-        selectedFileName == null ||
-        selectedFileName.isEmpty) {
-      log('⚠️ Selected file has invalid ID or name');
-      return null;
-    }
-
-    log(
-      '🎬 PikPak: selected $selectedFileName (${unseenFiles.length} unseen files)',
-    );
-
-    // Get streaming URL for selected file
-    String streamUrl;
-    try {
-      final api = PikPakApiService.instance;
-      final fullFileData = await api.getFileDetails(selectedFileId);
-      final url = api.getStreamingUrl(fullFileData);
-      if (url == null || url.isEmpty) {
-        log('⚠️ No streaming URL for selected file');
-        return null;
-      }
-      streamUrl = url;
-    } catch (e) {
-      log('❌ Failed to get streaming URL: $e');
-      return null;
-    }
-
-    // Mark as seen
-    _owners.session.seenLinkWithTorrentId.add('$infohash|$selectedFileId');
-
-    return PikPakPreparedTorrent(
-      streamUrl: streamUrl,
-      title: selectedFileName,
-      hasMore: unseenFiles.isNotEmpty,
-    );
-  }
-
-  // ── Premiumize helpers ──────────────────────────────────────────────────────
-
-  Future<TorboxCacheWindowResult> fetchPremiumizeCacheWindow({
-    required List<Torrent> candidates,
-    required int startIndex,
-    required String apiKey,
-  }) async {
-    const int chunkSize = 100;
-    const int maxCalls = 2;
-
-    int cursor = startIndex;
-    int calls = 0;
-    final List<Torrent> hits = [];
-
-    while (cursor < candidates.length && calls < maxCalls && hits.isEmpty) {
-      final int end = min(cursor + chunkSize, candidates.length);
-      final List<Torrent> chunk = candidates.sublist(cursor, end);
-      cursor = end;
-
-      final List<Torrent> validChunk = chunk
-          .where(
-            (t) => _sections.filters.normalizeInfohash(t.infohash).isNotEmpty,
-          )
-          .toList();
-      final List<String> hashes = validChunk
-          .map((t) => _sections.filters.normalizeInfohash(t.infohash))
-          .toList();
-
-      if (hashes.isEmpty) continue;
-
-      calls++;
-      final List<bool> cached = await PremiumizeService.checkCache(
-        apiKey,
-        hashes,
-      );
-
-      for (int i = 0; i < validChunk.length; i++) {
-        if (i < cached.length && cached[i]) {
-          hits.add(validChunk[i]);
-        }
-      }
-    }
-
-    return TorboxCacheWindowResult(
-      cachedTorrents: hits,
-      nextCursor: cursor,
-      exhausted: cursor >= candidates.length,
-    );
-  }
-
-  Future<PremiumizePreparedTorrent?> preparePremiumizeTorrent({
-    required Torrent candidate,
-    required String apiKey,
-    required void Function(String message) log,
-  }) async {
-    final infohash = _sections.filters.normalizeInfohash(candidate.infohash);
-    if (infohash.isEmpty) return null;
-
-    log('⏳ Premiumize: preparing ${candidate.name}');
-
-    final magnet = 'magnet:?xt=urn:btih:${candidate.infohash}';
-    List<PremiumizeFile> files;
-    try {
-      files = await PremiumizeService.directDownload(apiKey, magnet);
-    } catch (e) {
-      log('❌ Premiumize directdl failed: $e');
-      return null;
-    }
-
-    if (files.isEmpty) {
-      log('⚠️ Premiumize: no files for ${candidate.name}');
-      return null;
-    }
-
-    final playableEntries = _buildPremiumizePlayableEntries(
-      files,
-      candidate.name,
-    );
-    if (playableEntries.isEmpty) {
-      log('⚠️ Premiumize: no playable files for ${candidate.name}');
-      return null;
-    }
-
-    final filteredEntries = playableEntries
-        .where(
-          (e) => !_owners.session.seenLinkWithTorrentId.contains(
-            '$infohash|${e.file.path}',
-          ),
-        )
-        .toList();
-    if (filteredEntries.isEmpty) {
-      log('⚠️ Premiumize: no unseen playable files for ${candidate.name}');
-      return null;
-    }
-
-    filteredEntries.shuffle(Random());
-    final next = filteredEntries.removeAt(0);
-    final streamUrl = next.file.streamLink ?? next.file.link;
-    _owners.session.seenLinkWithTorrentId.add('$infohash|${next.file.path}');
-    log('🎬 Premiumize: streaming ${next.title}');
-    return PremiumizePreparedTorrent(
-      streamUrl: streamUrl,
-      title: next.title,
-      hasMore: filteredEntries.isNotEmpty,
-    );
-  }
-
-  List<PremiumizePlayableEntry> _buildPremiumizePlayableEntries(
-    List<PremiumizeFile> files,
-    String fallbackTitle, {
-    bool applySizeFilter = true,
-  }) {
-    final seriesCandidates = <PremiumizePlayableEntry>[];
-    final otherCandidates = <PremiumizePlayableEntry>[];
-
-    for (final file in files) {
-      if (!_premiumizeFileLooksLikeVideo(file)) continue;
-      if (file.size < DebrifyTvConstants.torboxMinVideoSizeBytes) continue;
-      // Per-FILE size filter (see the Torbox builder for the rationale).
-      if (applySizeFilter &&
-          !_owners.settings.tvFilters.sizeMatchesBytes(file.size))
-        continue;
-
-      final displayName = file.fileName.isNotEmpty
-          ? file.fileName
-          : fallbackTitle;
-      final info = SeriesParser.parseFilenameConservative(displayName);
-      final title = info.isSeries
-          ? formatTorboxSeriesTitle(info, fallbackTitle)
-          : (displayName.isNotEmpty ? displayName : fallbackTitle);
-      final entry = PremiumizePlayableEntry(
-        file: file,
-        title: title,
-        info: info,
-      );
-
-      if (info.isSeries && info.season != null && info.episode != null) {
-        seriesCandidates.add(entry);
-      } else {
-        otherCandidates.add(entry);
-      }
-    }
-
-    seriesCandidates.sort((a, b) {
-      final seasonCompare = (a.info.season ?? 0).compareTo(b.info.season ?? 0);
-      if (seasonCompare != 0) return seasonCompare;
-      return (a.info.episode ?? 0).compareTo(b.info.episode ?? 0);
-    });
-
-    otherCandidates.sort(
-      (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
-    );
-
-    final entries = <PremiumizePlayableEntry>[
-      ...seriesCandidates,
-      ...otherCandidates,
-    ];
-    entries.shuffle(Random());
-    if (entries.isEmpty &&
-        applySizeFilter &&
-        _owners.settings.tvFilters.hasSize) {
-      debugPrint(
-        'DebrifyTV/Premiumize: no file matched the size filter in '
-        '"$fallbackTitle" — using it unfiltered.',
-      );
-      return _buildPremiumizePlayableEntries(
-        files,
-        fallbackTitle,
-        applySizeFilter: false,
-      );
-    }
-    return entries;
-  }
-
-  bool _premiumizeFileLooksLikeVideo(PremiumizeFile file) {
-    final name = file.fileName;
-    if (name.isEmpty) return false;
-    return FileUtils.isVideoFile(name);
-  }
-
   Future<void> watchPremiumizeWithCachedTorrents(
     List<Torrent> cachedTorrents, {
     String? channelName,
@@ -6211,11 +5362,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     Future<bool> populateQueue() async {
       while (true) {
         if (candidateCursor >= candidatePool.length) return false;
-        final TorboxCacheWindowResult window = await fetchPremiumizeCacheWindow(
-          candidates: candidatePool,
-          startIndex: candidateCursor,
-          apiKey: apiKey,
-        );
+        final TorboxCacheWindowResult window = await _sections.cloud
+            .fetchPremiumizeCacheWindow(
+              candidates: candidatePool,
+              startIndex: candidateCursor,
+              apiKey: apiKey,
+            );
         candidateCursor = window.nextCursor;
         if (window.cachedTorrents.isEmpty) {
           if (window.exhausted) return false;
@@ -6285,7 +5437,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         final next = _owners.session.queue.removeAt(0);
         if (next is! Torrent) continue;
 
-        final prepared = await preparePremiumizeTorrent(
+        final prepared = await _sections.cloud.preparePremiumizeTorrent(
           candidate: next,
           apiKey: apiKey,
           log: log,
@@ -6320,14 +5472,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted) return;
       _sections.feedback.closeProgressDialog();
 
-      if (await handOffToExternalPlayer(
+      if (await _sections.handoff.handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
         return;
       }
 
-      final launchedOnTv = await launchPikPakOnAndroidTv(
+      final launchedOnTv = await _sections.handoff.launchPikPakOnAndroidTv(
         firstStream: first,
         requestNext: requestPremiumizeNext,
         channelName: channelName,
@@ -6499,7 +5651,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       Future<bool> populateQueue() async {
         while (true) {
           if (candidateCursor >= combinedList.length) return false;
-          final window = await fetchPremiumizeCacheWindow(
+          final window = await _sections.cloud.fetchPremiumizeCacheWindow(
             candidates: combinedList,
             startIndex: candidateCursor,
             apiKey: apiKey,
@@ -6592,7 +5744,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           if (_owners.session.watchCancelled) break;
           if (item is! Torrent) continue;
 
-          final result = await preparePremiumizeTorrent(
+          final result = await _sections.cloud.preparePremiumizeTorrent(
             candidate: item,
             apiKey: apiKey,
             log: log,
@@ -6640,14 +5792,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _sections.feedback.closeProgressDialog();
       if (!mounted) return;
 
-      if (await handOffToExternalPlayer(
+      if (await _sections.handoff.handOffToExternalPlayer(
         first['url'] ?? '',
         first['title'] ?? 'Debrify TV',
       )) {
         return;
       }
 
-      final launchedOnTv = await launchPikPakOnAndroidTv(
+      final launchedOnTv = await _sections.handoff.launchPikPakOnAndroidTv(
         firstStream: first,
         requestNext: requestPremiumizeNext,
         showChannelNameOverride: _owners.settings.quickShowChannelName,
@@ -6867,7 +6019,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           }
 
           if (item is Torrent) {
-            final prepared = await resolveAllDebridLinks(item, apiKey);
+            final prepared = await _sections.prefetch.resolveAllDebridLinks(
+              item,
+              apiKey,
+            );
             if (_owners.session.watchCancelled) return null;
             if (prepared == null || prepared.lockedLinks.isEmpty) {
               continue;
@@ -6932,13 +6087,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       _owners.prefetch.activeApiKey = apiKey;
       _owners.prefetch.activeProvider = DebrifyTvConstants.providerAllDebrid;
-      unawaited(startPrefetch());
+      unawaited(_sections.prefetch.startPrefetch());
 
-      if (await handOffToExternalPlayer(first['url'] ?? '', firstTitle)) {
+      if (await _sections.handoff.handOffToExternalPlayer(
+        first['url'] ?? '',
+        firstTitle,
+      )) {
         return;
       }
 
-      final launchedOnTv = await launchRealDebridOnAndroidTv(
+      final launchedOnTv = await _sections.handoff.launchRealDebridOnAndroidTv(
         firstStream: first,
         requestNext: requestMagicNext,
         showChannelNameOverride: _owners.settings.quickShowChannelName,
@@ -6982,7 +6140,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ),
           ),
         );
-        await stopPrefetch();
+        await _sections.prefetch.stopPrefetch();
       }
 
       if (mounted && !_owners.session.watchCancelled) {
@@ -6997,497 +6155,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     } finally {
       _sections.feedback.closeProgressDialog();
       if (mounted) setState(() => _owners.session.isBusy = false);
-    }
-  }
-
-  List<TorboxPlayableEntry> _buildTorboxPlayableEntries(
-    TorboxTorrent torrent,
-    String fallbackTitle, {
-    bool applySizeFilter = true,
-  }) {
-    final entries = <TorboxPlayableEntry>[];
-    final seriesCandidates = <TorboxPlayableEntry>[];
-    final otherCandidates = <TorboxPlayableEntry>[];
-
-    for (final file in torrent.files) {
-      if (!_torboxFileLooksLikeVideo(file)) continue;
-      if (file.size < DebrifyTvConstants.torboxMinVideoSizeBytes) continue;
-      // Per-FILE size filter: a pack's files are individual episodes, so this
-      // compares against the number the user actually meant.
-      if (applySizeFilter &&
-          !_owners.settings.tvFilters.sizeMatchesBytes(file.size))
-        continue;
-
-      final displayName = _torboxDisplayName(file);
-      final info = SeriesParser.parseFilenameConservative(displayName);
-      final title = info.isSeries
-          ? formatTorboxSeriesTitle(info, fallbackTitle)
-          : (displayName.isNotEmpty ? displayName : fallbackTitle);
-      final entry = TorboxPlayableEntry(file: file, title: title, info: info);
-
-      if (info.isSeries && info.season != null && info.episode != null) {
-        seriesCandidates.add(entry);
-      } else {
-        otherCandidates.add(entry);
-      }
-    }
-
-    // Sort series candidates by season and episode
-    seriesCandidates.sort((a, b) {
-      final seasonCompare = (a.info.season ?? 0).compareTo(b.info.season ?? 0);
-      if (seasonCompare != 0) return seasonCompare;
-      return (a.info.episode ?? 0).compareTo(b.info.episode ?? 0);
-    });
-
-    // Sort other candidates alphabetically
-    otherCandidates.sort(
-      (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
-    );
-
-    entries
-      ..addAll(seriesCandidates)
-      ..addAll(otherCandidates);
-    entries.shuffle(Random());
-    // Nothing in THIS torrent matched the size filter — take it unfiltered
-    // rather than discarding the torrent, so a strict filter narrows what
-    // plays instead of walking the whole queue and playing nothing.
-    if (entries.isEmpty &&
-        applySizeFilter &&
-        _owners.settings.tvFilters.hasSize) {
-      debugPrint(
-        'DebrifyTV/Torbox: no file matched the size filter in '
-        '"$fallbackTitle" — using it unfiltered.',
-      );
-      return _buildTorboxPlayableEntries(
-        torrent,
-        fallbackTitle,
-        applySizeFilter: false,
-      );
-    }
-    return entries;
-  }
-
-  String formatTorboxSeriesTitle(SeriesInfo info, String fallback) {
-    final season = info.season?.toString().padLeft(2, '0');
-    final episode = info.episode?.toString().padLeft(2, '0');
-    final descriptor = info.episodeTitle?.trim().isNotEmpty == true
-        ? info.episodeTitle!.trim()
-        : (info.title?.trim().isNotEmpty == true
-              ? info.title!.trim()
-              : fallback);
-    if (season != null && episode != null) {
-      return 'S${season}E$episode · $descriptor';
-    }
-    return fallback;
-  }
-
-  bool _torboxFileLooksLikeVideo(TorboxFile file) {
-    if (file.zipped) return false;
-    final name = file.shortName.isNotEmpty
-        ? file.shortName
-        : FileUtils.getFileName(file.name);
-    if (FileUtils.isVideoFile(name)) return true;
-    final mime = file.mimetype?.toLowerCase();
-    return mime != null && mime.startsWith('video/');
-  }
-
-  String _torboxDisplayName(TorboxFile file) {
-    if (file.shortName.isNotEmpty) {
-      return file.shortName;
-    }
-    if (file.name.isNotEmpty) {
-      return FileUtils.getFileName(file.name);
-    }
-    return 'File ${file.id}';
-  }
-
-  int? _asIntMapValue(dynamic data, String key) {
-    if (data is Map<String, dynamic>) {
-      final value = data[key];
-      if (value is int) return value;
-      if (value is String) return int.tryParse(value);
-      if (value is num) return value.toInt();
-    }
-    return null;
-  }
-
-  String formatTorboxError(Object error) {
-    return error.toString().replaceFirst('Exception: ', '').trim();
-  }
-
-  // ===================== External player hand-off =====================
-
-  /// Hands one resolved stream to the user's external player when that is
-  /// their default, after warning them what external playback costs here.
-  ///
-  /// Returns true when the caller must abandon its own launch — either the
-  /// stream is now playing in another app, or the user backed out of the
-  /// warning. False means "carry on unchanged": the in-app player is the
-  /// default, or the external launch failed and the built-in player is the
-  /// fallback (same policy as [VideoPlayerLauncher.push]).
-  ///
-  /// Channel rotation dies with the hand-off — nothing outside Debrify can
-  /// call back into `requestMagicNext` — so on any outcome that ends the flow
-  /// this also stops the prefetcher that exists purely to feed it. A failed
-  /// launch leaves the prefetcher running, because the in-app player that
-  /// picks the flow back up still wants it.
-  Future<bool> handOffToExternalPlayer(String url, String title) async {
-    if (url.isEmpty || !mounted) return false;
-    if (!await VideoPlayerLauncher.isExternalPlayerDefault()) return false;
-    if (!mounted) return false;
-
-    _sections.feedback.closeProgressDialog();
-    // The home-screen auto-launch overlay draws above routes, so drop it
-    // before the notice or the notice appears underneath it. Only the overlay
-    // — firing notifyPlayerLaunching here would stop other screens' trailers
-    // for a launch the user may still decline.
-    MainPageBridge.hideAutoLaunchOverlay?.call();
-    if (!mounted) return false;
-
-    // Backing out must not silently fall through to the in-app player — that
-    // is the very thing the user chose against — so a decline reports
-    // "handled" too and every caller stops. Deliberately without touching
-    // _watchCancelled: that flag is only reset by the quick-play and cached-
-    // dialog entry points, so setting it here would leave channel plays
-    // stuck-cancelled on the next attempt.
-    if (!await ExternalPlayerNoticeDialog.confirm(context)) {
-      await stopPrefetch();
-      return true;
-    }
-    if (!mounted) return true;
-
-    final launched = await VideoPlayerLauncher.launchExternalIfConfigured(
-      context,
-      videoUrl: url,
-      title: title.trim().isEmpty ? 'Debrify TV' : title.trim(),
-    );
-    if (launched) {
-      _owners.session.launchedPlayer = true;
-      await stopPrefetch();
-      return true;
-    }
-    return false;
-  }
-
-  // ===================== Prefetcher =====================
-
-  Future<void> startPrefetch() async {
-    if (_owners.prefetch.prefetchRunning ||
-        _owners.prefetch.activeApiKey == null ||
-        _owners.prefetch.activeApiKey!.isEmpty) {
-      return;
-    }
-
-    final startEpoch = _owners.prefetch.prefetchEpoch;
-    final enabled = await _owners.settings.settingsManager
-        .getGlobalBackgroundPrefetchEnabled();
-
-    // Re-check mutable state after the preference read. Multiple playback
-    // paths can request a start at nearly the same time, and playback may
-    // have stopped while this method was awaiting SharedPreferences.
-    if (!mounted ||
-        startEpoch != _owners.prefetch.prefetchEpoch ||
-        _owners.prefetch.prefetchRunning ||
-        _owners.prefetch.activeApiKey == null ||
-        _owners.prefetch.activeApiKey!.isEmpty) {
-      return;
-    }
-    if (!enabled) {
-      debugPrint('MagicTV: Background torrent prefetch is disabled.');
-      return;
-    }
-
-    _owners.prefetch.prefetchRunning = true;
-    _owners.prefetch.prefetchStopRequested = false;
-    debugPrint('MagicTV: Prefetch started.');
-    _owners.prefetch.prefetchTask = _runPrefetchLoop();
-  }
-
-  Future<void> stopPrefetch() async {
-    _owners.prefetch.prefetchEpoch++;
-    if (!_owners.prefetch.prefetchRunning) return;
-    _owners.prefetch.prefetchStopRequested = true;
-    try {
-      await _owners.prefetch.prefetchTask;
-    } catch (_) {}
-    _owners.prefetch.prefetchRunning = false;
-    _owners.prefetch.prefetchTask = null;
-    _owners.prefetch.inflightInfohashes.clear();
-    debugPrint('MagicTV: Prefetch stopped.');
-  }
-
-  Future<void> _runPrefetchLoop() async {
-    while (mounted && !_owners.prefetch.prefetchStopRequested) {
-      try {
-        final prepared = _countPreparedInLookahead();
-        if (prepared >= DebrifyTvConstants.minPrepared) {
-          await Future.delayed(const Duration(milliseconds: 750));
-          continue;
-        }
-
-        // Find first unprepared torrent within lookahead window and prefetch it
-        final idx = _findUnpreparedTorrentIndexInLookahead();
-        if (idx == -1) {
-          // nothing to prefetch near head; small idle
-          await Future.delayed(const Duration(milliseconds: 750));
-          continue;
-        }
-
-        await _prefetchOneAtIndex(idx);
-        // brief yield (faster when under target prepared)
-        await Future.delayed(Duration(milliseconds: prepared <= 2 ? 75 : 150));
-      } catch (e) {
-        debugPrint('MagicTV: Prefetch loop error: $e');
-        await Future.delayed(const Duration(seconds: 1));
-      }
-    }
-  }
-
-  int _countPreparedInLookahead() {
-    final end =
-        _owners.session.queue.length < DebrifyTvConstants.lookaheadWindow
-        ? _owners.session.queue.length
-        : DebrifyTvConstants.lookaheadWindow;
-    int count = 0;
-    for (int i = 0; i < end; i++) {
-      final item = _owners.session.queue[i];
-      if (item is Map &&
-          (item['type'] == 'rd_restricted' || item['type'] == 'ad_locked')) {
-        count++;
-      }
-    }
-    return count;
-  }
-
-  int _findUnpreparedTorrentIndexInLookahead() {
-    final end =
-        _owners.session.queue.length < DebrifyTvConstants.lookaheadWindow
-        ? _owners.session.queue.length
-        : DebrifyTvConstants.lookaheadWindow;
-    for (int i = 0; i < end; i++) {
-      final item = _owners.session.queue[i];
-      if (item is Torrent &&
-          !_owners.prefetch.inflightInfohashes.contains(item.infohash)) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
-  Future<void> _prefetchOneAtIndex(int idx) async {
-    if (_owners.prefetch.activeApiKey == null ||
-        _owners.prefetch.activeApiKey!.isEmpty)
-      return;
-    if (idx < 0 || idx >= _owners.session.queue.length) return;
-    final item = _owners.session.queue[idx];
-    if (item is! Torrent) return;
-    if (_owners.prefetch.activeProvider ==
-        DebrifyTvConstants.providerAllDebrid) {
-      await _prefetchOneAllDebrid(idx, item);
-      return;
-    }
-    final infohash = item.infohash;
-    _owners.prefetch.inflightInfohashes.add(infohash);
-    debugPrint('MagicTV: Prefetching torrent at idx=$idx name="${item.name}"');
-    try {
-      final magnetLink = 'magnet:?xt=urn:btih:$infohash';
-      final result = await DebridService.addTorrentToDebridPreferVideos(
-        _owners.prefetch.activeApiKey!,
-        magnetLink,
-      );
-      final String torrentId = result['torrentId'] as String? ?? '';
-      final List<dynamic> rdLinks =
-          (result['links'] as List<dynamic>? ?? const []);
-
-      if (rdLinks.isEmpty) {
-        // Nothing ready; move to tail to retry later
-        if (idx < _owners.session.queue.length &&
-            identical(_owners.session.queue[idx], item)) {
-          _owners.session.queue.removeAt(idx);
-          _owners.session.queue.add(item);
-        }
-        debugPrint(
-          'MagicTV: Prefetch: no links; moved torrent to tail idx=$idx',
-        );
-        return;
-      }
-
-      // Convert this queue slot to rd_restricted using first link
-      final headLinkCandidates = rdLinks
-          .map((link) => link?.toString() ?? '')
-          .where(
-            (link) =>
-                link.isNotEmpty &&
-                !_owners.session.seenRestrictedLinks.contains(link),
-          )
-          .toList();
-      if (headLinkCandidates.isEmpty) {
-        if (idx < _owners.session.queue.length &&
-            identical(_owners.session.queue[idx], item)) {
-          _owners.session.queue.removeAt(idx);
-          _owners.session.queue.add(item);
-        }
-        return;
-      }
-
-      headLinkCandidates.shuffle(Random());
-      final headLink = headLinkCandidates.removeAt(0);
-      _owners.session.seenRestrictedLinks.add(headLink);
-      _owners.session.seenLinkWithTorrentId.add('$torrentId|$headLink');
-
-      if (idx < _owners.session.queue.length &&
-          identical(_owners.session.queue[idx], item)) {
-        _owners.session.queue[idx] = {
-          'type': 'rd_restricted',
-          'restrictedLink': headLink,
-          'torrentId': torrentId,
-          'displayName': item.name,
-        };
-      }
-
-      if (headLinkCandidates.isNotEmpty) {
-        _owners.session.queue.add(item);
-      }
-    } catch (e) {
-      // On failure, move to tail for retry later
-      if (idx < _owners.session.queue.length &&
-          identical(_owners.session.queue[idx], item)) {
-        _owners.session.queue.removeAt(idx);
-        _owners.session.queue.add(item);
-      }
-      debugPrint('MagicTV: Prefetch failed for $infohash: $e (moved to tail)');
-    } finally {
-      _owners.prefetch.inflightInfohashes.remove(infohash);
-    }
-  }
-
-  /// Adds [candidate] to AllDebrid (trusting the upload `ready` flag — no
-  /// polling) and returns its fresh (unseen) locked video-file links, marking
-  /// them seen. Returns null when the torrent is not cached/ready (the magnet
-  /// is deleted in that case) or has no usable video files. Each returned link
-  /// is still locked and must be unlocked via [AllDebridService.unlockLink]
-  /// before playback — the lazy model mirrors Real-Debrid's restricted links.
-  Future<DebrifyTvAllDebridPrepared?> resolveAllDebridLinks(
-    Torrent candidate,
-    String apiKey,
-  ) async {
-    final magnetLink = 'magnet:?xt=urn:btih:${candidate.infohash}';
-    AllDebridAddResult result;
-    try {
-      result = await AllDebridService.addMagnetAndResolveFiles(
-        apiKey,
-        magnetLink,
-      );
-    } on AllDebridTorrentNotReadyException catch (e) {
-      // Not cached/ready — don't leave it downloading on the account.
-      await AllDebridService.deleteMagnet(e.apiKey, e.magnetId);
-      return null;
-    }
-    // AllDebrid returns a real per-file byte count, so the per-FILE size rules
-    // apply before the files are reduced to bare links (after that reduction
-    // the size is gone). The 50MB floor keeps trailers/samples out, matching
-    // Torbox and Premiumize.
-    List<String> collectLinks({required bool applySizeFilter}) {
-      return result.files
-          .where((f) {
-            if (!FileUtils.isVideoFile(f.fileName)) return false;
-            if (f.size > 0 &&
-                f.size < DebrifyTvConstants.torboxMinVideoSizeBytes)
-              return false;
-            if (applySizeFilter &&
-                !_owners.settings.tvFilters.sizeMatchesBytes(f.size)) {
-              return false;
-            }
-            return true;
-          })
-          .map((f) => f.link)
-          .where(
-            (link) =>
-                link.isNotEmpty &&
-                !_owners.session.seenRestrictedLinks.contains(link),
-          )
-          .toList();
-    }
-
-    var freshLinks = collectLinks(applySizeFilter: true);
-    if (freshLinks.isEmpty && _owners.settings.tvFilters.hasSize) {
-      // Nothing matched in this torrent — take it unfiltered rather than
-      // discarding the torrent (see the Torbox builder).
-      debugPrint(
-        'DebrifyTV/AD: no file matched the size filter in "${result.name}" — '
-        'using it unfiltered.',
-      );
-      freshLinks = collectLinks(applySizeFilter: false);
-    }
-    if (freshLinks.isEmpty) return null;
-    for (final link in freshLinks) {
-      _owners.session.seenRestrictedLinks.add(link);
-    }
-    return DebrifyTvAllDebridPrepared(
-      magnetId: result.magnetId,
-      name: result.name,
-      lockedLinks: freshLinks,
-    );
-  }
-
-  /// AllDebrid analog of the Real-Debrid prefetch path. Converts the [item]
-  /// queue slot into a prepared `ad_locked` entry (a still-locked link), and
-  /// since AllDebrid returns every file at once, enqueues the remaining video
-  /// files immediately rather than re-adding the torrent.
-  Future<void> _prefetchOneAllDebrid(int idx, Torrent item) async {
-    final infohash = item.infohash;
-    _owners.prefetch.inflightInfohashes.add(infohash);
-    debugPrint(
-      'MagicTV: Prefetching AllDebrid torrent at idx=$idx name="${item.name}"',
-    );
-    try {
-      final prepared = await resolveAllDebridLinks(
-        item,
-        _owners.prefetch.activeApiKey!,
-      );
-      if (prepared == null || prepared.lockedLinks.isEmpty) {
-        // Not ready / no usable video; move to tail to retry later.
-        if (idx < _owners.session.queue.length &&
-            identical(_owners.session.queue[idx], item)) {
-          _owners.session.queue.removeAt(idx);
-          _owners.session.queue.add(item);
-        }
-        debugPrint(
-          'MagicTV: AllDebrid prefetch: not ready/no links; moved to tail idx=$idx',
-        );
-        return;
-      }
-
-      final links = List<String>.from(prepared.lockedLinks);
-      final headLink = links.removeAt(0);
-      Map<String, dynamic> lockedEntry(String link) => {
-        'type': 'ad_locked',
-        'allDebridLink': link,
-        'magnetId': prepared.magnetId,
-        'displayName': item.name,
-      };
-
-      if (idx < _owners.session.queue.length &&
-          identical(_owners.session.queue[idx], item)) {
-        _owners.session.queue[idx] = lockedEntry(headLink);
-      } else {
-        // Slot shifted out from under us; don't lose the resolved head link.
-        _owners.session.queue.add(lockedEntry(headLink));
-      }
-      for (final link in links) {
-        _owners.session.queue.add(lockedEntry(link));
-      }
-    } catch (e) {
-      if (idx < _owners.session.queue.length &&
-          identical(_owners.session.queue[idx], item)) {
-        _owners.session.queue.removeAt(idx);
-        _owners.session.queue.add(item);
-      }
-      debugPrint(
-        'MagicTV: AllDebrid prefetch failed for $infohash: $e (moved to tail)',
-      );
-    } finally {
-      _owners.prefetch.inflightInfohashes.remove(infohash);
     }
   }
 }

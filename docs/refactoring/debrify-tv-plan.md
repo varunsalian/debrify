@@ -1735,6 +1735,31 @@ the facade are shape-registered. All Found-not-fixed behaviors remain; no
 protected player/launcher/bridge/native code, dependency upgrade, push or
 branch switch. Device-only playback, remote CI and integration remain pending.
 
+### Step 5 — extract resolvers, prefetch and player handoff, 2026-10-05
+
+Previous checkpoint: `a8d3d243c59feb9e4c68bae3bf5eb855c059495a`. The resumed capacity interruption left step 5 source and static evidence intact. Preserve incomplete characterization and parser logs as capacity-interrupted evidence, retain the completed VPL self-test and strict Linux replay, and rerun only unfinished checks with fresh isolated parser packages. Preserve resolver request/poll ordering, prefetch queue/epoch mutations, native and external handoff arguments, cancellation, dormant code and unawaited lifecycle stop. All playback API definitions and native code remain untouched.
+
+All 16 manifests pass their existing self-tests with explicit isolated parser
+packages and stale copied kernels deleted; TV checks cover all 265 declarations,
+occurrence/lexical bindings, comments, ownership and 236 callback negatives.
+Profile/source and legacy-pin checks match base2 (**45 success**, the same
+**one known direct-SharedPreferences failure**). Architecture, sizes, storage,
+shape/source guards, theme (**228 sites**), CI
+format and scoped analyzer/allowlist pass. Strict symbol inventory observes
+**64 diagnostics, zero additions** against R/probe maxima.
+The **92** whole-file characterization identities match latest **base2**;
+strict macOS and calibrated Linux goldens pass **6/6 each**. All **490 original
+comments**, **16 shape tokens**, zero bare radii and the **488 global floor
+with zero slack** remain. LF and diff checks pass. Evidence is
+`step5-*` under `refactor-evidence/debrify_tv/`, including wiring review,
+measurement/source hashes, diagnostic identities, manifests and comparisons.
+
+Formatted facade: **6160** lines. AST breakdown: widget 6, state header and close 2, owners composition 16, lifecycle 63, retained original bodies 5968, build 14, imports 43, remaining blank comment lines 48
+(sum 6160). Every actual destination and
+the facade are shape-registered. All Found-not-fixed behaviors remain; no
+protected player/launcher/bridge/native code, dependency upgrade, push or
+branch switch. Device-only playback, remote CI and integration remain pending.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.

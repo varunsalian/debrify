@@ -16,19 +16,21 @@ class DebrifyTvDependencies {
   // TEMP(debrify_tv): exact borrowed State tear-offs until their move step.
   final Future<void> Function(DebrifyTvChannel, {CachedTorrent? leadWith})
   watchChannel;
+  final Future<Map<String, dynamic>?> Function() requestNextChannel;
+  final Future<Map<String, dynamic>?> Function(String) requestChannelById;
   final Widget Function(double) buildTvGridLayout;
   final Future<void> Function() showQuickPlayDialog;
   final Future<void> Function() showGlobalSettingsDialog;
-  final Future<void> Function() stopPrefetch;
   DebrifyTvDependencies({
     required this.owners,
     required this.context,
     required this.mounted,
     required this.setState,
     required this.watchChannel,
+    required this.requestNextChannel,
+    required this.requestChannelById,
     required this.buildTvGridLayout,
     required this.showQuickPlayDialog,
     required this.showGlobalSettingsDialog,
-    required this.stopPrefetch,
   });
 }

@@ -35,3 +35,7 @@ warning | unused_field | lib/features/catalog_detail/presentation/legacy_catalog
 
 # 2026-10-05 debrify_tv step 1: ORIGINAL 991029f6 unused parser retained verbatim.
 warning | unused_element | lib/features/debrify_tv/application/debrify_tv_random_start.dart | The declaration '_parseRandomStartPercent' isn't referenced. Try removing the declaration of '_parseRandomStartPercent'
+
+# 2026-10-05 debrify_tv step 5: relocated ORIGINAL 991029f6 warnings.
+# _DebrifyTVScreenState._playNextFromQueue
+warning | unused_element | lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart | The declaration '_playNextFromQueue' isn't referenced. Try removing the declaration of '_playNextFromQueue'

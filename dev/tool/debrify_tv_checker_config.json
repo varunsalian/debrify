@@ -4,7 +4,7 @@
   "feature": "lib/features/debrify_tv",
   "engine": "sections",
   "context_guard": true,
-  "completed_step": 4,
+  "completed_step": 5,
   "receivers": [
     "_deps",
     "_owners",
@@ -1176,10 +1176,11 @@
   },
   "callback_member_aliases": {
     "_sections.legacy.watchChannel": "_DebrifyTVScreenState._watchChannel",
+    "_sections.legacy.requestNextChannel": "_DebrifyTVScreenState._requestNextChannel",
+    "_sections.legacy.requestChannelById": "_DebrifyTVScreenState._requestChannelById",
     "_sections.legacy.buildTvGridLayout": "_DebrifyTVScreenState._buildTvGridLayout",
     "_sections.legacy.showQuickPlayDialog": "_DebrifyTVScreenState._showQuickPlayDialog",
-    "_sections.legacy.showGlobalSettingsDialog": "_DebrifyTVScreenState._showGlobalSettingsDialog",
-    "_sections.legacy.stopPrefetch": "_DebrifyTVScreenState._stopPrefetch"
+    "_sections.legacy.showGlobalSettingsDialog": "_DebrifyTVScreenState._showGlobalSettingsDialog"
   },
   "debrify_tv_contracts": true,
   "receiver_members": {
@@ -1520,7 +1521,6 @@
     ],
     "_DebrifyTVScreenState": [
       "handleChannelSearchBarBack",
-      "fetchTorboxCacheWindow",
       "tvFilterChips",
       "providerChoiceChips",
       "watchChannel",
@@ -1529,15 +1529,11 @@
       "watchWithPikPak",
       "watchWithCachedTorrents",
       "watchAllDebridWithCachedTorrents",
-      "launchTorboxOnAndroidTv",
       "requestNextChannel",
       "requestChannelById",
       "switchToChannel",
-      "launchRealDebridOnAndroidTv",
       "watchTorboxWithCachedTorrents",
       "watchPikPakWithCachedTorrents",
-      "launchPikPakOnAndroidTv",
-      "_playNextFromQueue",
       "_toggleChannelSearchBar",
       "clearChannelSearchAndRefocus",
       "focusBelowChannelSearch",
@@ -1555,31 +1551,9 @@
       "buildSettingsCard",
       "showQuickPlayDialog",
       "showGlobalSettingsDialog",
-      "resolveTorboxQueuedFile",
-      "prepareTorboxTorrent",
-      "preparePikPakTorrent",
-      "fetchPremiumizeCacheWindow",
-      "preparePremiumizeTorrent",
-      "_buildPremiumizePlayableEntries",
-      "_premiumizeFileLooksLikeVideo",
       "watchPremiumizeWithCachedTorrents",
       "watchWithPremiumize",
-      "watchWithAllDebrid",
-      "_buildTorboxPlayableEntries",
-      "formatTorboxSeriesTitle",
-      "_torboxFileLooksLikeVideo",
-      "_torboxDisplayName",
-      "_asIntMapValue",
-      "formatTorboxError",
-      "handOffToExternalPlayer",
-      "startPrefetch",
-      "stopPrefetch",
-      "_runPrefetchLoop",
-      "_countPreparedInLookahead",
-      "_findUnpreparedTorrentIndexInLookahead",
-      "_prefetchOneAtIndex",
-      "resolveAllDebridLinks",
-      "_prefetchOneAllDebrid"
+      "watchWithAllDebrid"
     ]
   },
   "conditional_scaffolds": true,
@@ -1659,6 +1633,26 @@
     {
       "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_import_persistence.dart",
       "owner": "DebrifyTvImportPersistence"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_player_handoff.dart",
+      "owner": "DebrifyTvPlayerHandoff"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_torbox_resolver.dart",
+      "owner": "DebrifyTvTorboxResolver"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cloud_resolvers.dart",
+      "owner": "DebrifyTvCloudResolvers"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch.dart",
+      "owner": "DebrifyTvPrefetcher"
+    },
+    {
+      "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart",
+      "owner": "DebrifyTvDormant"
     },
     {
       "file": "lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_spotlight_stage.dart",

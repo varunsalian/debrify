@@ -260,6 +260,10 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_channel_warmup.dart':
       0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_cloud_resolvers.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_dormant.dart':
+      0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_engine_limits.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_feedback.dart':
@@ -278,6 +282,10 @@ const Map<String, int> kExtractedShapeResidue = {
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_playback_filters.dart':
       0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_player_handoff.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch.dart':
+      0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_prefetch_state.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_progress_state.dart':
@@ -293,6 +301,8 @@ const Map<String, int> kExtractedShapeResidue = {
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_spotlight_stage.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_stage_state.dart':
+      0,
+  'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_torbox_resolver.dart':
       0,
   'lib/features/debrify_tv/presentation/legacy_debrify_tv/debrify_tv_url_import.dart':
       0,
