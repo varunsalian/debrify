@@ -1848,6 +1848,21 @@ the facade are shape-registered. All Found-not-fixed behaviors remain; no
 protected player/launcher/bridge/native code, dependency upgrade, push or
 branch switch. Device-only playback, remote CI and integration remain pending.
 
+### Full-suite gate 2 — committed-tree evidence, 2026-10-05
+
+Tested commit: `3e00b7f1539898ebd38047eeb6990cddeb9fade6`; clean tree `784cf0be842384e6f473a040964e2eafe0d43848`;
+no untracked inputs or tree change during the run. Flutter **3.44.8**, Dart
+**3.12.2**, same SDK as latest base2 at `58e3e599`. The serialized full-suite
+run records `paths: []` and separate flags `--no-pub --concurrency=4`; no
+manifest/AST job runs concurrently. Outcomes by identity: `{'success': 11654, 'failure': 13, 'error': 28, 'skipped': 20}`.
+`gate2-vs-base2.txt` passes with no new failures, missing tests or skips.
+`gate2-vs-gate1.txt` also passes with unchanged identities. All planned
+steps and both full-suite gates are complete.
+Evidence: `gate2.jsonl`, `gate2.env.json`, `gate2-run.txt`, comparisons
+under `refactor-evidence/debrify_tv/`. No baseline recording or regression
+acceptance. All Found-not-fixed behaviors remain. Device-only Debrify TV
+playback, remote CI and integration remain pending; no push or branch switch.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
