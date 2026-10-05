@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:debrify/screens/debrify_tv/widgets/switch_row.dart';
@@ -8,8 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../../support/debrify_tv_fixture.dart';
 
-const _captureLinux = bool.fromEnvironment('DEBRIFY_TV_CAPTURE_ORIGINAL_LINUX');
-const _requireLinux = bool.fromEnvironment('DEBRIFY_TV_REQUIRE_ORIGINAL_LINUX');
 const _reverse = bool.fromEnvironment('DEBRIFY_TV_REVERSE_GOLDENS');
 
 Future<void> fonts(WidgetTester t) async {
@@ -132,28 +129,12 @@ void main() {
         expect(t.view.devicePixelRatio, 1);
         expect(MediaQuery.textScalerOf(f.hostKey.currentContext!).scale(1), 1);
         final platform = Platform.isLinux ? 'linux' : 'macos';
-        final path = 'test/goldens/debrify_tv/$platform/$scene.png';
-        final config =
-            jsonDecode(
-                  File(
-                    'dev/tool/debrify_tv_checker_config.json',
-                  ).readAsStringSync(),
-                )
-                as Map;
-        final strict =
-            !Platform.isLinux ||
-            _captureLinux ||
-            _requireLinux ||
-            File(path).existsSync() ||
-            (config['completed_step'] as int) >= 1;
-        if (strict) {
-          await expectLater(
-            find.byType(MaterialApp),
-            matchesGoldenFile(
-              '../../../../goldens/debrify_tv/$platform/$scene.png',
-            ),
-          );
-        }
+        await expectLater(
+          find.byType(MaterialApp),
+          matchesGoldenFile(
+            '../../../../goldens/debrify_tv/$platform/$scene.png',
+          ),
+        );
       });
     });
   }

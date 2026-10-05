@@ -1618,6 +1618,25 @@ step L, production extraction, full-suite gate, push or branch switch has
 begun. Pending: Linux recapture and Claude's composition review, step L,
 steps 1–8 and both gates, device-only TV playback, remote CI and integration.
 
+### Step L — verified ORIGINAL Linux goldens, 2026-10-05
+
+The supplied recapture is from **`58e3e599c5d5f29b0437b111cca1af9827cc3de1`**,
+whose `lib`, `pubspec.yaml` and lock objects equal R. All six PNGs exactly
+match both identical first/reverse SHA-256 lists. Capture, reverse capture and
+strict replay logs each pass 6/6 in the calibrated `debrify-flutter:3.44.8`
+linux/amd64 image. `linux-original-verification.json` records objects, hashes,
+SDK, Dockerfile and provenance; the superseded capture remains preserved.
+
+Committed the six ORIGINAL Linux PNGs separately. The golden test now always
+asserts its platform's PNG: no missing-file skip, config gate or opt-out define.
+Independent strict replay of these assertions passes **macOS 6/6 and Linux
+6/6**, using the available calibrated Docker image and an owned input copy
+under this worktree's `.dart_tool/debrify_tv_linux/`. Evidence is
+`stepL-{macos,linux}-strict.txt`. No PNG is generated or updated here, and
+production application/dependency objects remain unchanged. Step 0b's Linux
+recapture prerequisite is resolved; proceed with steps 1–8 and both gates.
+Device-only playback, remote CI and integration remain pending.
+
 ## Found, not fixed
 
 All pre-existing; the extraction keeps each exactly.
